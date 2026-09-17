@@ -61,25 +61,29 @@ const FIT_CACHE_SCHEMA = "v1"
 ## the scans are taken from. Neither is read by the model, and hashing 230 MB
 ## of PDFs would refit the whole report each time one is downloaded. An entry
 ## naming a directory drops everything under it.
-const FIT_DATA_EXCLUDE = ("released_estimates.csv",
+const FIT_DATA_EXCLUDE = (
+    "released_estimates.csv",
     "rt_by_release.csv", "r0_by_release.csv",
     "forecast_scores.csv", "forecast_scores_frozen.csv",
     "forecast_overlay.csv", "forecast_overlay_frozen.csv",
     "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv",
     "r0_by_release_by_stream.csv", "province_forecast_scores.csv",
-    "README.md", "sitrep_pdfs")
+    "README.md", "sitrep_pdfs",
+)
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 500, chains::Integer = 2)
-    return content_hash(FIT_SOURCE_FILES;
+    return content_hash(
+        FIT_SOURCE_FILES;
         data_dir = joinpath(_PKG, "data"),
         data_exclude = FIT_DATA_EXCLUDE,
-        extra = string(FIT_CACHE_SCHEMA, ":", samples, "x", chains))
+        extra = string(FIT_CACHE_SCHEMA, ":", samples, "x", chains)
+    )
 end
 
 "Content-addressed cache key for fit `id` at the given sampler settings."
 function fit_key(id; samples::Integer = 500, chains::Integer = 2)
-    string(id, "__", fit_content_hash(; samples, chains))
+    return string(id, "__", fit_content_hash(; samples, chains))
 end
 
 """
@@ -92,7 +96,7 @@ root, not the working directory, because Literate runs a page from
 """
 function fit_cache_dir()
     c = strip(get(ENV, "BVD_FIT_CACHE", ""))
-    if isempty(c)
+    return if isempty(c)
         joinpath(_PKG, "logs", "fit_cache")
     elseif isabspath(c)
         String(c)
@@ -121,7 +125,8 @@ const VALIDATION_STREAM_FITS = (
     ("deaths", :suspected_deaths),
     ("confirmed", :confirmed_cases),
     ("confirmed_deaths", :confirmed_deaths),
-    ("treatment", :isolation_beds))
+    ("treatment", :isolation_beds),
+)
 
 """
 Fit ids of the single-stream models the forecast validation draws, for the
@@ -134,13 +139,15 @@ second hand-maintained one means a stream that starts being reported again
 comes back into validation on its own.
 """
 function validation_stream_ids(obs)
-    return Tuple(id
-    for (id, stream) in VALIDATION_STREAM_FITS
-    if stream_reporting(obs, stream))
+    return Tuple(
+        id
+            for (id, stream) in VALIDATION_STREAM_FITS
+            if stream_reporting(obs, stream)
+    )
 end
 function run_sensitivity_env()
-    lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
-    ("true", "1", "yes", "on")
+    return lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
+        ("true", "1", "yes", "on")
 end
 
 """
@@ -188,23 +195,33 @@ thunk runs. The sensitivity re-fits, including the zone variants
 ##
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
 ## override all three without editing this file.
-joint_target_accept() = parse(Float64,
-    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80"))
-joint_samples(default::Integer) = parse(Int,
-    get(ENV, "BVD_JOINT_SAMPLES", string(default)))
+joint_target_accept() = parse(
+    Float64,
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
+)
+joint_samples(default::Integer) = parse(
+    Int,
+    get(ENV, "BVD_JOINT_SAMPLES", string(default))
+)
 ## `nuts_sample` caps its own default at 200 adaptation steps, which is where
 ## this fit is short.
-joint_warmup(default::Integer) = parse(Int,
-    get(ENV, "BVD_JOINT_WARMUP", string(default)))
+joint_warmup(default::Integer) = parse(
+    Int,
+    get(ENV, "BVD_JOINT_WARMUP", string(default))
+)
 
 ## Sampler settings for the health-zone fits. `BVD_ZONE_SAMPLES` and
 ## `BVD_ZONE_WARMUP` override the draw and adaptation counts. Like
 ## `BVD_JOINT_*` they sit outside the content hash, so a short local run
 ## writes its chain under the production key.
-zone_samples(default::Integer) = parse(Int,
-    get(ENV, "BVD_ZONE_SAMPLES", string(default)))
-zone_warmup(default::Integer) = parse(Int,
-    get(ENV, "BVD_ZONE_WARMUP", string(default)))
+zone_samples(default::Integer) = parse(
+    Int,
+    get(ENV, "BVD_ZONE_SAMPLES", string(default))
+)
+zone_warmup(default::Integer) = parse(
+    Int,
+    get(ENV, "BVD_ZONE_WARMUP", string(default))
+)
 zone_target_accept() = 0.8
 zone_max_depth() = 8
 
@@ -212,12 +229,15 @@ zone_max_depth() = 8
 ## `fit_zone` and tests can inject a double through `zone_fitter`.
 function default_zone_fitter()
     isdefined(BVDOutbreakSize, :fit_zone) ||
-        error("BVDOutbreakSize.fit_zone is not defined: the health-zone " *
-              "model (src/models/zone.jl) is needed to run a dependent fit")
+        error(
+        "BVDOutbreakSize.fit_zone is not defined: the health-zone " *
+            "model (src/models/zone.jl) is needed to run a dependent fit"
+    )
     return BVDOutbreakSize.fit_zone
 end
 
-function build_fit_specs(obs;
+function build_fit_specs(
+        obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
         chamla_cutoff = default_chamla_cutoff(),
@@ -226,7 +246,8 @@ function build_fit_specs(obs;
         samples::Integer = 500,
         chains::Integer = 2,
         zone_fitter = nothing,
-        cache_dir::AbstractString = fit_cache_dir())
+        cache_dir::AbstractString = fit_cache_dir()
+    )
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     ## `patches` turns the spatial structure on for this frozen fit. Only the
@@ -237,16 +258,22 @@ function build_fit_specs(obs;
     function fit_frozen_joint(cutoff_date; patches::Bool = false)
         o = freeze_observations(cutoff_date)
         bp = o.n - o.who_first_sitrep_days
-        pp = province_increment_matrix(o.province_confirmed_history,
-            PROVINCE_NAMES, length(PROVINCE_NAMES))
-        pd = province_increment_matrix(o.province_death_history,
-            PROVINCE_NAMES, length(PROVINCE_NAMES))
+        pp = province_increment_matrix(
+            o.province_confirmed_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES)
+        )
+        pd = province_increment_matrix(
+            o.province_death_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES)
+        )
         patch_args = patches ?
-                     (; n_patches = length(PROVINCE_NAMES),
-            province_increments = pp.increments,
-            province_days = pp.days,
-            province_death_increments = pd.increments,
-            province_death_days = pd.days) : (;)
+            (;
+                n_patches = length(PROVINCE_NAMES),
+                province_increments = pp.increments,
+                province_days = pp.days,
+                province_death_increments = pd.increments,
+                province_death_days = pd.days,
+            ) : (;)
         chn = nuts_sample(
             bvd_joint(
                 o.n, o.exported_cases, o.total_deaths,
@@ -272,9 +299,11 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
-                tmrca_days = o.tmrca_days, patch_args...);
-            samples = samples, chains = chains, target_accept = 0.90,
-            callback = fit_callback("frozen_$(cutoff_date)"))
+                tmrca_days = o.tmrca_days, patch_args...
+            );
+            samples = samples, chains = chains, target_accept = 0.9,
+            callback = fit_callback("frozen_$(cutoff_date)")
+        )
         return (; cutoff = o.cutoff, o, chn)
     end
 
@@ -289,74 +318,94 @@ function build_fit_specs(obs;
         bp = o.n - o.who_first_sitrep_days
         chn = if model_id == "cases"
             nuts_sample(
-                cases_only_model(o.n, o.reported_cases;
+                cases_only_model(
+                    o.n, o.reported_cases;
                     reported_history = o.reported_history,
                     suspected_daily_history = o.suspected_daily_history,
-                    breakpoint = bp);
+                    breakpoint = bp
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("frozen_$(cutoff_date)_cases"))
+                callback = fit_callback("frozen_$(cutoff_date)_cases")
+            )
         elseif model_id == "deaths"
             nuts_sample(
-                deaths_only_model(o.n, o.total_deaths;
+                deaths_only_model(
+                    o.n, o.total_deaths;
                     deaths_history = o.deaths_history,
                     suspected_daily_deaths_history =
-                    o.suspected_daily_deaths_history,
-                    breakpoint = bp);
+                        o.suspected_daily_deaths_history,
+                    breakpoint = bp
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("frozen_$(cutoff_date)_deaths"))
+                callback = fit_callback("frozen_$(cutoff_date)_deaths")
+            )
         elseif model_id == "confirmed"
             nuts_sample(
-                confirmed_only_model(o.n, o.confirmed_cases;
+                confirmed_only_model(
+                    o.n, o.confirmed_cases;
                     confirmed_history = o.confirmed_history,
                     lab_history = o.lab_history,
                     lab_daily_history = o.lab_daily_history,
                     confirmed_break_days = o.confirmed_break_days,
                     confirmed_break_gross_cases = o.confirmed_break_gross_cases,
-                    breakpoint = bp);
+                    breakpoint = bp
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("frozen_$(cutoff_date)_confirmed"))
+                callback = fit_callback("frozen_$(cutoff_date)_confirmed")
+            )
         elseif model_id == "confirmed_deaths"
             nuts_sample(
-                confirmed_deaths_only_model(o.n, o.confirmed_deaths,
+                confirmed_deaths_only_model(
+                    o.n, o.confirmed_deaths,
                     o.total_deaths;
                     deaths_history = o.deaths_history,
                     confirmed_deaths_history = o.confirmed_deaths_history,
                     confirmed_break_days = o.confirmed_break_days,
                     confirmed_break_gross_deaths =
-                    o.confirmed_break_gross_deaths,
-                    breakpoint = bp);
+                        o.confirmed_break_gross_deaths,
+                    breakpoint = bp
+                );
                 samples = samples, chains = chains,
                 callback = fit_callback(
-                    "frozen_$(cutoff_date)_confirmed_deaths"))
+                    "frozen_$(cutoff_date)_confirmed_deaths"
+                )
+            )
         elseif model_id == "treatment"
             nuts_sample(
-                treatment_only_model(o.n;
+                treatment_only_model(
+                    o.n;
                     isolation_history = o.isolation_history,
                     bed_capacity_history = o.bed_capacity_history,
                     treatment_admissions_history =
-                    o.treatment_admissions_history,
+                        o.treatment_admissions_history,
                     treatment_deaths_history = o.treatment_deaths_history,
                     treatment_ruleout_history = o.treatment_ruleout_history,
                     treatment_absconded_history =
-                    o.treatment_absconded_history,
+                        o.treatment_absconded_history,
                     occupancy_break_days = o.occupancy_break_days,
                     confirmed_break_days = o.confirmed_break_days,
                     confirmed_break_gross_cases = o.confirmed_break_gross_cases,
-                    breakpoint = bp);
+                    breakpoint = bp
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("frozen_$(cutoff_date)_treatment"))
+                callback = fit_callback("frozen_$(cutoff_date)_treatment")
+            )
         else
-            error("fit_frozen_stream: no frozen single-stream model for " *
-                  "id '$model_id'")
+            error(
+                "fit_frozen_stream: no frozen single-stream model for " *
+                    "id '$model_id'"
+            )
         end
         return (; cutoff = o.cutoff, o, chn)
     end
 
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
-    function refit_joint_variant(; deaths = deaths_model,
+    function refit_joint_variant(;
+            deaths = deaths_model,
             confirmed = confirmed_cases_model,
-            tmrca_days = obs.tmrca_days, tmrca_days_sd = 16.0)
+            tmrca_days = obs.tmrca_days, tmrca_days_sd = 16.0
+        )
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -372,7 +421,7 @@ function build_fit_specs(obs;
                 lab_daily_history = obs.lab_daily_history,
                 suspected_daily_history = obs.suspected_daily_history,
                 suspected_daily_deaths_history =
-                obs.suspected_daily_deaths_history,
+                    obs.suspected_daily_deaths_history,
                 isolation_history = obs.isolation_history,
                 bed_capacity_history = obs.bed_capacity_history,
                 recovered_history = obs.recovered_history,
@@ -394,18 +443,23 @@ function build_fit_specs(obs;
                 confirmed = confirmed,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
-                tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains, target_accept = 0.90,
-            callback = fit_callback("variant"))
+                tmrca_days_sd = tmrca_days_sd
+            );
+            samples = samples, chains = chains, target_accept = 0.9,
+            callback = fit_callback("variant")
+        )
     end
 
     ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
     deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
         history, total, onsets, k;
-        onset_to_death = gamma_delay_model(40;
+        onset_to_death = gamma_delay_model(
+            40;
             alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-            theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
-        kwargs...)
+            theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)
+        ),
+        kwargs...
+    )
 
     ## Exponential growth tree prior: common ancestor ~7 days earlier than
     ## the Skygrid baseline (2026-03-08 vs 2026-03-15).
@@ -419,10 +473,12 @@ function build_fit_specs(obs;
     ## gradient of the whole joint.
     patch_prov = province_increment_matrix(
         obs.province_confirmed_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES))
+        length(PROVINCE_NAMES)
+    )
     patch_prov_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES))
+        length(PROVINCE_NAMES)
+    )
 
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
@@ -449,9 +505,9 @@ function build_fit_specs(obs;
         treatment_ruleout_history = obs.treatment_ruleout_history,
         treatment_absconded_history = obs.treatment_absconded_history,
         treatment_confirmed_incare_history =
-        obs.treatment_confirmed_incare_history,
+            obs.treatment_confirmed_incare_history,
         treatment_suspect_incare_history =
-        obs.treatment_suspect_incare_history,
+            obs.treatment_suspect_incare_history,
         occupancy_break_days = obs.occupancy_break_days,
         confirmed_break_days = obs.confirmed_break_days,
         confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
@@ -463,7 +519,8 @@ function build_fit_specs(obs;
         background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days,
+    )
 
     ## The only difference between the headline and the control.
     patch_only = (;
@@ -471,7 +528,8 @@ function build_fit_specs(obs;
         province_increments = patch_prov.increments,
         province_days = patch_prov.days,
         province_death_increments = patch_prov_deaths.increments,
-        province_death_days = patch_prov_deaths.days)
+        province_death_days = patch_prov_deaths.days,
+    )
 
     specs = Any[
         ## Headline fit. The patch (meta-population) model is the joint. With
@@ -479,17 +537,22 @@ function build_fit_specs(obs;
         ## model (the sum-to-zero deviations vanish, no importation, no
         ## composition terms), so there is one model rather than two. The
         ## headline runs it over the three affected provinces.
-        (; id = "joint",
+        (;
+            id = "joint",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                bvd_joint(
+                    obs.n, obs.exported_cases, obs.total_deaths,
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
-                    joint_common..., patch_only...);
+                    joint_common..., patch_only...
+                );
                 samples = joint_samples(750), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
-                callback = fit_callback("joint"))),
+                callback = fit_callback("joint")
+            ),
+        ),
         ## Sensitivity: the same model with the spatial structure turned off
         ## (`n_patches` defaults to 1). Splitting the country into provinces
         ## adds no national data, so the two C_T posteriors should agree; a
@@ -502,102 +565,146 @@ function build_fit_specs(obs;
         ## of the provincial Rts rather than at the trend they are centred on;
         ## test/test_patch_model.jl pins the size of that. It runs at the headline's draw
         ## count, not the matrix one, so the comparison is like for like.
-        (; id = "sens_no_patches",
+        (;
+            id = "sens_no_patches",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                bvd_joint(
+                    obs.n, obs.exported_cases, obs.total_deaths,
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
-                    joint_common...);
+                    joint_common...
+                );
                 samples = joint_samples(750), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
-                callback = fit_callback("sens_no_patches"))),
-        (; id = "exports",
+                callback = fit_callback("sens_no_patches")
+            ),
+        ),
+        (;
+            id = "exports",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                exports_joint_only_model(obs.n, obs.exported_cases,
+                exports_joint_only_model(
+                    obs.n, obs.exported_cases,
                     obs.exports_deaths;
                     export_case_days = obs.export_case_days,
                     export_death_days = obs.export_death_days,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                check_model = false, callback = fit_callback("exports"))),
-        (; id = "deaths",
+                check_model = false, callback = fit_callback("exports")
+            ),
+        ),
+        (;
+            id = "deaths",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                deaths_only_model(obs.n, obs.total_deaths;
+                deaths_only_model(
+                    obs.n, obs.total_deaths;
                     deaths_history = obs.deaths_history,
                     suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    breakpoint = breakpoint);
+                        obs.suspected_daily_deaths_history,
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("deaths"))),
-        (; id = "cases",
+                callback = fit_callback("deaths")
+            ),
+        ),
+        (;
+            id = "cases",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                cases_only_model(obs.n, obs.reported_cases;
+                cases_only_model(
+                    obs.n, obs.reported_cases;
                     reported_history = obs.reported_history,
                     suspected_daily_history = obs.suspected_daily_history,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("cases"))),
-        (; id = "confirmed",
+                callback = fit_callback("cases")
+            ),
+        ),
+        (;
+            id = "confirmed",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                confirmed_only_model(obs.n, obs.confirmed_cases;
+                confirmed_only_model(
+                    obs.n, obs.confirmed_cases;
                     confirmed_history = obs.confirmed_history,
                     lab_history = obs.lab_history,
                     lab_daily_history = obs.lab_daily_history,
                     confirmed_break_days = obs.confirmed_break_days,
                     confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                    breakpoint = breakpoint);
+                        obs.confirmed_break_gross_cases,
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("confirmed"))),
-        (; id = "confirmed_deaths",
+                callback = fit_callback("confirmed")
+            ),
+        ),
+        (;
+            id = "confirmed_deaths",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
+                confirmed_deaths_only_model(
+                    obs.n, obs.confirmed_deaths,
                     obs.total_deaths;
                     deaths_history = obs.deaths_history,
                     confirmed_deaths_history = obs.confirmed_deaths_history,
                     confirmed_break_days = obs.confirmed_break_days,
                     confirmed_break_gross_deaths =
-                    obs.confirmed_break_gross_deaths,
-                    breakpoint = breakpoint);
+                        obs.confirmed_break_gross_deaths,
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("confirmed_deaths"))),
-        (; id = "treatment",
+                callback = fit_callback("confirmed_deaths")
+            ),
+        ),
+        (;
+            id = "treatment",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                treatment_only_model(obs.n;
+                treatment_only_model(
+                    obs.n;
                     isolation_history = obs.isolation_history,
                     bed_capacity_history = obs.bed_capacity_history,
                     treatment_admissions_history =
-                    obs.treatment_admissions_history,
+                        obs.treatment_admissions_history,
                     treatment_deaths_history = obs.treatment_deaths_history,
                     treatment_ruleout_history = obs.treatment_ruleout_history,
                     treatment_absconded_history =
-                    obs.treatment_absconded_history,
+                        obs.treatment_absconded_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     confirmed_break_days = obs.confirmed_break_days,
                     confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                    breakpoint = breakpoint);
+                        obs.confirmed_break_gross_cases,
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("treatment"))),
-        (; id = "onsets",
+                callback = fit_callback("treatment")
+            ),
+        ),
+        (;
+            id = "onsets",
             kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
-                onsets_only_model(obs.n;
+                onsets_only_model(
+                    obs.n;
                     onset_curve_history = obs.onset_curve_history,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint
+                );
                 samples = samples, chains = chains,
-                callback = fit_callback("onsets"))),
-        (; id = "frozen_validation", kind = :frozen, needs = String[],
-            thunk = () -> fit_frozen_joint(validation_cutoff;
-                patches = true))
+                callback = fit_callback("onsets")
+            ),
+        ),
+        (;
+            id = "frozen_validation", kind = :frozen, needs = String[],
+            thunk = () -> fit_frozen_joint(
+                validation_cutoff;
+                patches = true
+            ),
+        ),
     ]
     ## One frozen individual fit per still-reported stream at the validation
     ## cut-off, so the "last week versus now" forecast validation can show
@@ -607,78 +714,116 @@ function build_fit_specs(obs;
     ## `forecast_reported`) and there is no individual model for
     ## "recovered".
     for sid in validation_stream_ids(obs)
-        push!(specs,
-            (; id = "frozen_validation_$sid", kind = :frozen, needs = String[],
-                thunk = () -> fit_frozen_stream(sid, validation_cutoff)))
+        push!(
+            specs,
+            (;
+                id = "frozen_validation_$sid", kind = :frozen, needs = String[],
+                thunk = () -> fit_frozen_stream(sid, validation_cutoff),
+            )
+        )
     end
     for c in frozen_cutoffs
-        push!(specs, (; id = "frozen_$c", kind = :frozen, needs = String[],
-            thunk = () -> fit_frozen_joint(c)))
+        push!(
+            specs, (;
+                id = "frozen_$c", kind = :frozen, needs = String[],
+                thunk = () -> fit_frozen_joint(c),
+            )
+        )
     end
     ## Chamla's 8 June anchor, kept out of the McCabe-matched `frozen_cutoffs`;
     ## the estimate-evolution overlay pulls it in explicitly.
-    push!(specs,
-        (; id = "frozen_$chamla_cutoff", kind = :frozen, needs = String[],
-            thunk = () -> fit_frozen_joint(chamla_cutoff)))
+    push!(
+        specs,
+        (;
+            id = "frozen_$chamla_cutoff", kind = :frozen, needs = String[],
+            thunk = () -> fit_frozen_joint(chamla_cutoff),
+        )
+    )
     if run_sensitivity
-        push!(specs,
-            (; id = "sens_community_delay", kind = :chain, needs = String[],
-                thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
-            (; id = "sens_exp_growth_clock", kind = :chain, needs = String[],
+        push!(
+            specs,
+            (;
+                id = "sens_community_delay", kind = :chain, needs = String[],
+                thunk = () -> refit_joint_variant(deaths = deaths_community_delay),
+            ),
+            (;
+                id = "sens_exp_growth_clock", kind = :chain, needs = String[],
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0
+                ),
+            )
+        )
     end
 
     ## The health-zone fits meld from a cached joint chain. The parent is
     ## loaded strictly: a missing parent is an error, not a refit.
     function load_parent(parent_id)
         parent = specs[findfirst(s -> s.id == parent_id, specs)]
-        return fit_or_load(fit_key(parent_id), parent.thunk;
-            cache_dir = cache_dir, strict = true)
+        return fit_or_load(
+            fit_key(parent_id), parent.thunk;
+            cache_dir = cache_dir, strict = true
+        )
     end
     ## `variant` carries the zone model's own switches (`mixing`, `deaths`,
     ## `parent_summary`) for the sensitivity re-fits below.
     function fit_zone_from(parent_chn, o, name; variant...)
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
-        return fitter(parent_chn, o;
+        return fitter(
+            parent_chn, o;
             samples = zone_samples(600), chains = chains,
             n_adapts = zone_warmup(400),
             target_accept = zone_target_accept(),
             max_depth = zone_max_depth(),
-            callback = fit_callback(name), variant...)
+            callback = fit_callback(name), variant...
+        )
     end
     ## A dependent key shares the parent's content hash but says nothing
     ## about the parent chain's bytes, so a parent refit under an unchanged
     ## key pairs with the zone chain already cached against the old parent.
     ## The fixed per-chain seed keeps such a refit near-identical, so the
     ## pairing holds.
-    push!(specs,
+    push!(
+        specs,
         ## The health-zone fit on the current data, melded from the headline.
-        (; id = "local", kind = :chain, needs = ["joint"],
-            thunk = () -> fit_zone_from(load_parent("joint"), obs, "local")),
+        (;
+            id = "local", kind = :chain, needs = ["joint"],
+            thunk = () -> fit_zone_from(load_parent("joint"), obs, "local"),
+        ),
         ## The same fit melded from the validation joint, on the observations
         ## that joint was fitted to, returned in the frozen shape.
-        (; id = "local_frozen_validation", kind = :frozen,
+        (;
+            id = "local_frozen_validation", kind = :frozen,
             needs = ["frozen_validation"],
             thunk = () -> begin
                 parent = load_parent("frozen_validation")
-                chn = fit_zone_from(parent.chn, parent.o,
-                    "local_frozen_validation")
+                chn = fit_zone_from(
+                    parent.chn, parent.o,
+                    "local_frozen_validation"
+                )
                 (; cutoff = parent.cutoff, o = parent.o, chn)
-            end))
+            end,
+        )
+    )
     ## Zone-model sensitivity re-fits, each one switch away from `local`:
     ## between-zone mixing on, the zone deaths stream on, and the parent
     ## summary taken from a low or high draw rather than the mean.
     if run_sensitivity
         for (id, variant) in (
-            ("local_mixing", (; mixing = true)),
-            ("local_no_deaths", (; deaths = false)),
-            ("local_parent_low", (; parent_summary = :draw_low)),
-            ("local_parent_high", (; parent_summary = :draw_high)))
-            push!(specs,
-                (; id, kind = :chain, needs = ["joint"],
-                    thunk = () -> fit_zone_from(load_parent("joint"), obs, id;
-                        variant...)))
+                ("local_mixing", (; mixing = true)),
+                ("local_no_deaths", (; deaths = false)),
+                ("local_parent_low", (; parent_summary = :draw_low)),
+                ("local_parent_high", (; parent_summary = :draw_high)),
+            )
+            push!(
+                specs,
+                (;
+                    id, kind = :chain, needs = ["joint"],
+                    thunk = () -> fit_zone_from(
+                        load_parent("joint"), obs, id;
+                        variant...
+                    ),
+                )
+            )
         end
     end
     validate_fit_specs(specs)
@@ -695,8 +840,10 @@ function validate_fit_specs(specs)
     seen = Set{String}()
     for s in specs
         for parent in s.needs
-            parent in seen || error("fit '$(s.id)' needs '$parent', which " *
-                  "is not listed before it in the registry")
+            parent in seen || error(
+                "fit '$(s.id)' needs '$parent', which " *
+                    "is not listed before it in the registry"
+            )
         end
         push!(seen, s.id)
     end
@@ -721,8 +868,10 @@ function fit_stage_env(default::Symbol)
     isempty(raw) && return default
     stage = Symbol(raw)
     stage in FIT_STAGES ||
-        error("BVD_FIT_STAGE=$raw; expected one of " *
-              join(FIT_STAGES, ", "))
+        error(
+        "BVD_FIT_STAGE=$raw; expected one of " *
+            join(FIT_STAGES, ", ")
+    )
     return stage
 end
 
@@ -731,23 +880,31 @@ function stage_fit_specs(specs, stage::Symbol)
     stage === :all && return specs
     stage === :base && return base_fit_specs(specs)
     stage === :dependent && return dependent_fit_specs(specs)
-    error("unknown fit stage $stage; expected one of " *
-          join(FIT_STAGES, ", "))
+    error(
+        "unknown fit stage $stage; expected one of " *
+            join(FIT_STAGES, ", ")
+    )
 end
 
 "Ordered fit ids for the current data, sensitivity setting and `stage`."
-function fit_ids(obs = load_observations();
-        run_sensitivity = run_sensitivity_env(), stage::Symbol = :all)
+function fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env(), stage::Symbol = :all
+    )
     specs = build_fit_specs(obs; run_sensitivity)
-    [s.id for s in stage_fit_specs(specs, stage)]
+    return [s.id for s in stage_fit_specs(specs, stage)]
 end
 "Ids of the base fits, those with no parent."
-function base_fit_ids(obs = load_observations();
-        run_sensitivity = run_sensitivity_env())
-    fit_ids(obs; run_sensitivity, stage = :base)
+function base_fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env()
+    )
+    return fit_ids(obs; run_sensitivity, stage = :base)
 end
 "Ids of the dependent fits, those melded from a cached parent."
-function dependent_fit_ids(obs = load_observations();
-        run_sensitivity = run_sensitivity_env())
-    fit_ids(obs; run_sensitivity, stage = :dependent)
+function dependent_fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env()
+    )
+    return fit_ids(obs; run_sensitivity, stage = :dependent)
 end

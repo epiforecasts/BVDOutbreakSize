@@ -28,7 +28,7 @@ const BUCKETS = [
     ("⚪ 95–105%", 105.0),
     ("🔴 105–125%", 125.0),
     ("🔴 125–150%", 150.0),
-    ("🔴 >150%", Inf)
+    ("🔴 >150%", Inf),
 ]
 
 # Summary row order: the AD-free evaluation first, then the backends.
@@ -55,14 +55,14 @@ is_ad(name) = startswith(name, "AD gradients")
 
 function fmt_time(ns)
     isnan(ns) && return "—"
-    if ns < 1e3
+    if ns < 1.0e3
         return string(round(ns; digits = 1), " ns")
-    elseif ns < 1e6
-        return string(round(ns / 1e3; digits = 2), " μs")
-    elseif ns < 1e9
-        return string(round(ns / 1e6; digits = 2), " ms")
+    elseif ns < 1.0e6
+        return string(round(ns / 1.0e3; digits = 2), " μs")
+    elseif ns < 1.0e9
+        return string(round(ns / 1.0e6; digits = 2), " ms")
     else
-        return string(round(ns / 1e9; digits = 2), " s")
+        return string(round(ns / 1.0e9; digits = 2), " s")
     end
 end
 
@@ -70,7 +70,7 @@ end
 function fmt_ratio(r)
     isnan(r) && return "—"
     marker = r > 1 + CHANGE_THRESHOLD ? "🔴" :
-             r < 1 - CHANGE_THRESHOLD ? "🟢" : "⚪"
+        r < 1 - CHANGE_THRESHOLD ? "🟢" : "⚪"
     return string(marker, " ", round(r; digits = 2), "×")
 end
 
@@ -116,12 +116,14 @@ function render_table(rows)
     println(io, "|---|---|---|---|---|")
     for r in rows
         memratio = (isnan(r.pr_mem) || isnan(r.main_mem) || r.main_mem == 0) ?
-                   NaN : r.pr_mem / r.main_mem
-        println(io, "| ", r.name, status_note(r),
+            NaN : r.pr_mem / r.main_mem
+        println(
+            io, "| ", r.name, status_note(r),
             " | ", fmt_time(r.main_time),
             " | ", fmt_time(r.pr_time),
             " | ", fmt_ratio(r.time_ratio),
-            " | ", fmt_ratio(memratio), " |")
+            " | ", fmt_ratio(memratio), " |"
+        )
     end
     return String(take!(io))
 end
@@ -172,13 +174,17 @@ function differentiability_note(rows)
     changed = filter(r -> is_ad(r.name) && r.status !== :both, rows)
     isempty(changed) && return ""
     io = IOBuffer()
-    println(io, "\n**Differentiability changed.** ",
+    println(
+        io, "\n**Differentiability changed.** ",
         "A pair is benchmarked only when its gradient smoke test passes, ",
-        "so these components started or stopped differentiating:\n")
+        "so these components started or stopped differentiating:\n"
+    )
     for r in sort(changed; by = x -> x.name)
-        println(io, "- `", r.name, "` — ",
+        println(
+            io, "- `", r.name, "` — ",
             r.status === :new ? "now differentiates" :
-            "no longer differentiates")
+                "no longer differentiates"
+        )
     end
     return String(take!(io))
 end
@@ -197,21 +203,27 @@ println(io, COMMENT_MARKER)
 println(io, "## Benchmark comparison vs `main`\n")
 # Direction is fixed and stated up front: cells are PR time as a percentage
 # of main, so below 100% means the PR is faster.
-println(io,
+println(
+    io,
     "Minimum time per call, per model component. Buckets are **PR time as ",
     "a % of `main`, so lower is faster** (🟢 faster, ⚪ within ",
     round(Int, 100CHANGE_THRESHOLD),
-    "%, 🔴 slower). Counts of benchmarks per bucket:\n")
+    "%, 🔴 slower). Counts of benchmarks per bucket:\n"
+)
 print(io, summary_table(rows))
 print(io, differentiability_note(rows))
 
-println(io, "\n<details><summary><b>Log density</b> — ", length(eval_rows),
-    " benchmarks (by time change)</summary>\n")
+println(
+    io, "\n<details><summary><b>Log density</b> — ", length(eval_rows),
+    " benchmarks (by time change)</summary>\n"
+)
 print(io, render_table(eval_rows))
 println(io, "\n</details>")
 
-println(io, "\n<details><summary><b>AD gradients</b> — ", length(ad_rows),
-    " benchmarks (by time change)</summary>\n")
+println(
+    io, "\n<details><summary><b>AD gradients</b> — ", length(ad_rows),
+    " benchmarks (by time change)</summary>\n"
+)
 print(io, render_table(ad_rows))
 println(io, "\n</details>")
 

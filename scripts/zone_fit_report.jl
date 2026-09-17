@@ -22,8 +22,8 @@
 
 using BVDOutbreakSize
 using BVDOutbreakSize: bvd_zone, zone_forward, zone_initial_shares,
-                       zone_deviation_knots, zone_initial_params,
-                       _zone_draws, _zone_stat, _draws, _has_key
+    zone_deviation_knots, zone_initial_params,
+    _zone_draws, _zone_stat, _draws, _has_key
 using Serialization: serialize, deserialize
 using Statistics: mean, median, quantile
 using Random: Xoshiro
@@ -40,10 +40,12 @@ include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 ## --- Arguments ------------------------------------------------------------
 
 function parse_args(args)
-    opts = Dict{String, String}("out" => "logs/zone_report",
+    opts = Dict{String, String}(
+        "out" => "logs/zone_report",
         "stages" => "a,b,c,d,e", "samples" => "600", "warmup" => "400",
         "recovery-samples" => "200", "recovery-warmup" => "200",
-        "prior-draws" => "200", "top" => "10")
+        "prior-draws" => "200", "top" => "10"
+    )
     i = 1
     while i <= length(args)
         a = args[i]
@@ -82,20 +84,22 @@ const INPUTS = zone_fit_inputs(PARENT, OBS)
 const ZD = INPUTS.model_data
 const NZ = length(INPUTS.zone_keys)
 const K = length(INPUTS.knots)
-log_line("$(NZ) zones, $(count(INPUTS.walking)) walking, $(K) knots, " *
-         "$(length(ZD.cell_patch)) cells")
+log_line(
+    "$(NZ) zones, $(count(INPUTS.walking)) walking, $(K) knots, " *
+        "$(length(ZD.cell_patch)) cells"
+)
 
 ## --- HTML helpers ---------------------------------------------------------
 
 function png_tag(path; width = "100%")
     data = base64encode(read(path))
     return "<img src=\"data:image/png;base64,$(data)\" " *
-           "style=\"width:$(width);max-width:1500px\">"
+        "style=\"width:$(width);max-width:1500px\">"
 end
 
 function html_table(df::DataFrame; digits = 3)
     fmt(x) = x isa AbstractFloat ? (isnan(x) ? "" : string(round(x; digits))) :
-             string(x)
+        string(x)
     io = IOBuffer()
     print(io, "<table><thead><tr>")
     for c in names(df)
@@ -119,14 +123,16 @@ function write_fragment(stage, title, body)
         println(io, body)
         println(io, "<p class=\"stamp\">Written $(now()).</p></section>")
     end
-    assemble_index()
+    return assemble_index()
 end
 
-const TITLES = (("a", "Prior predictive check"),
+const TITLES = (
+    ("a", "Prior predictive check"),
     ("b", "Simulation-based recovery"),
     ("c", "Real-data fit: sampler diagnostics"),
     ("d", "Posterior predictive checks"),
-    ("e", "Zone ranking and map"))
+    ("e", "Zone ranking and map"),
+)
 
 function assemble_index()
     css = """
@@ -143,31 +149,37 @@ function assemble_index()
         println(io, "<title>Health-zone model fit report</title>")
         println(io, "<style>$(css)</style></head><body>")
         println(io, "<h1>Health-zone model fit report</h1>")
-        println(io,
+        println(
+            io,
             "<p>Parent chain <code>$(OPTS["parent"])</code>; " *
-            "observations frozen to $(OBS.cutoff); $(NZ) zones, " *
-            "$(count(INPUTS.walking)) walking, $(K) weekly knots, " *
-            "$(length(ZD.cell_patch)) scored patch-vintage cells.</p>")
+                "observations frozen to $(OBS.cutoff); $(NZ) zones, " *
+                "$(count(INPUTS.walking)) walking, $(K) weekly knots, " *
+                "$(length(ZD.cell_patch)) scored patch-vintage cells.</p>"
+        )
         for (stage, title) in TITLES
             path = joinpath(OUT, "fragment_$(stage).html")
             if isfile(path)
                 print(io, read(path, String))
             else
-                println(io,
-                    "<section><h2>$(title)</h2><p>Not yet run.</p></section>")
+                println(
+                    io,
+                    "<section><h2>$(title)</h2><p>Not yet run.</p></section>"
+                )
             end
         end
         println(io, "</body></html>")
     end
-    log_line("index.html assembled at $(joinpath(OUT, "index.html"))")
+    return log_line("index.html assembled at $(joinpath(OUT, "index.html"))")
 end
 
 ## --- Figure helpers -------------------------------------------------------
 
 ## The composition figures, one per patch, saved and embedded in order.
 function composition_tags(chn, stem; prior_chain = nothing, label)
-    figs = plot_zone_composition_ppc(chn, INPUTS; prior_chain, top = TOP,
-        ncols = NCOLS, label)
+    figs = plot_zone_composition_ppc(
+        chn, INPUTS; prior_chain, top = TOP,
+        ncols = NCOLS, label
+    )
     tags = String[]
     for (i, fig) in enumerate(figs)
         path = joinpath(OUT, "$(stem)_$(i).png")
@@ -181,8 +193,10 @@ function trace_panels(keys_and_labels; path)
     n = length(keys_and_labels)
     fig = Figure(; size = (900, 160 * n + 20))
     for (k, (m, label)) in enumerate(keys_and_labels)
-        ax = Axis(fig[k, 1]; ylabel = label,
-            xlabel = k == n ? "Iteration" : "")
+        ax = Axis(
+            fig[k, 1]; ylabel = label,
+            xlabel = k == n ? "Iteration" : ""
+        )
         for c in 1:size(m, 2)
             lines!(ax, 1:size(m, 1), m[:, c]; linewidth = 0.7)
         end
@@ -195,9 +209,9 @@ end
 ## vector deterministic.
 chain_matrix(chn, key) = Float64.(Array(chn[key]))
 chain_matrix(chn, key, idx) =
-    let m = chn[key]
-        reshape(Float64[v[idx] for v in m], size(m))
-    end
+let m = chn[key]
+    reshape(Float64[v[idx] for v in m], size(m))
+end
 
 ## Divergences per chain.
 function divergences_per_chain(chn, nchains)
@@ -218,16 +232,24 @@ end
 function range_table(chn, inputs)
     zdiag = zone_diagnostics_table(chn, inputs)
     walking = collect(inputs.walking)
-    rows = [("R_T_zone (walking)", "R_T", walking),
+    rows = [
+        ("R_T_zone (walking)", "R_T", walking),
         ("share_T_zone", "share_T", trues(NZ)),
-        ("delta_T_zone", "delta_T", trues(NZ))]
-    return DataFrame(quantity = first.(rows),
-        rhat = [range_string(zdiag, "rhat_$(s)", k) for (_, s, k) in rows],
-        ess_bulk = [range_string(zdiag, "ess_bulk_$(s)", k)
-                    for (_, s, k) in rows],
-        ess_tail = [range_string(zdiag, "ess_tail_$(s)", k)
-                    for (_, s, k) in rows]),
-    zdiag
+        ("delta_T_zone", "delta_T", trues(NZ)),
+    ]
+    return DataFrame(
+            quantity = first.(rows),
+            rhat = [range_string(zdiag, "rhat_$(s)", k) for (_, s, k) in rows],
+            ess_bulk = [
+                range_string(zdiag, "ess_bulk_$(s)", k)
+                for (_, s, k) in rows
+            ],
+            ess_tail = [
+                range_string(zdiag, "ess_tail_$(s)", k)
+                for (_, s, k) in rows
+            ]
+        ),
+        zdiag
 end
 
 ## --- Stage a: prior predictive ---------------------------------------------
@@ -239,8 +261,10 @@ function prior_chain()
     end
     ndraw = parse(Int, OPTS["prior-draws"])
     log_line("sampling $(ndraw) prior draws")
-    chn = sample(bvd_zone(ZD), Prior(), ndraw;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        bvd_zone(ZD), Prior(), ndraw;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     serialize(PRIOR_PATH, chn)
     return chn
 end
@@ -255,7 +279,7 @@ function stage_a()
     patch's allocated confirmed cases at each vintage.</p>
     $(composition_tags(chn, "a_prior_predictive"; label = "prior predictive"))
     """
-    write_fragment("a", "Prior predictive check", body)
+    return write_fragment("a", "Prior predictive check", body)
 end
 
 ## --- Stage b: simulation-based recovery -----------------------------------
@@ -274,57 +298,78 @@ function stage_b()
     z_drift = randn(rng, max(ZD.n_walking * (K - 1), 1))
     φ = exp2(-7 / h)
     w0 = zone_initial_shares(z_w, ZD.patch_ranges, 2.0)
-    δ_knots = zone_deviation_knots(z_level, z_drift, σ_level, σ_δ, φ,
-        ZD.patch_ranges, ZD.walking, ZD.walk_index, ZD.n_walking, K)
+    δ_knots = zone_deviation_knots(
+        z_level, z_drift, σ_level, σ_δ, φ,
+        ZD.patch_ranges, ZD.walking, ZD.walk_index, ZD.n_walking, K
+    )
     fw = zone_forward(ZD, δ_knots, w0, nothing)
     κ = (1 - ρ) / ρ
     counts = zeros(Int, NZ, length(INPUTS.days))
     for c in eachindex(ZD.cell_patch)
         zs = ZD.patch_ranges[ZD.cell_patch[c]]
         v = ZD.cell_vintage[c]
-        π = max.(fw.increments[zs, v], 1e-12)
+        π = max.(fw.increments[zs, v], 1.0e-12)
         π ./= sum(π)
-        counts[zs, v] = rand(rng,
-            DirichletMultinomial(ZD.cell_total[c], κ .* π))
+        counts[zs, v] = rand(
+            rng,
+            DirichletMultinomial(ZD.cell_total[c], κ .* π)
+        )
     end
     ## The simulated observations in the manifest shape.
     hist = Dict{String, Dict{String, NamedTuple}}()
     for z in 1:NZ
         prov = INPUTS.zone_province[z]
         haskey(hist, prov) || (hist[prov] = Dict{String, NamedTuple}())
-        hist[prov][INPUTS.zone_names[z]] = (; days = copy(INPUTS.days),
-            counts = cumsum(counts[z, :]))
+        hist[prov][INPUTS.zone_names[z]] = (;
+            days = copy(INPUTS.days),
+            counts = cumsum(counts[z, :]),
+        )
     end
-    sim_obs = merge(OBS,
-        (; zone_confirmed_history = hist,
-            zone_death_history = Dict{String, Dict{String, NamedTuple}}()))
+    sim_obs = merge(
+        OBS,
+        (;
+            zone_confirmed_history = hist,
+            zone_death_history = Dict{String, Dict{String, NamedTuple}}(),
+        )
+    )
     ## The walking set is data-dependent, so the refit's own inputs say
     ## which zones carry a walk.
     sim_inputs = zone_fit_inputs(PARENT, sim_obs)
     nd = ZD.n - ZD.t0 + 1
-    truth = (; share_T = fw.shares[nd, :], delta_T = δ_knots[:, K],
-        R_T = [fw.infections[nd, z] / max(fw.forces[nd, z], floatmin())
-               for z in 1:NZ],
-        σ_δ, ρ, h, walking = sim_inputs.walking)
+    truth = (;
+        share_T = fw.shares[nd, :], delta_T = δ_knots[:, K],
+        R_T = [
+            fw.infections[nd, z] / max(fw.forces[nd, z], floatmin())
+                for z in 1:NZ
+        ],
+        σ_δ, ρ, h, walking = sim_inputs.walking,
+    )
     serialize(joinpath(OUT, "b_truth.jls"), truth)
     t = time()
-    chn = fit_zone(PARENT, sim_obs;
+    chn = fit_zone(
+        PARENT, sim_obs;
         samples = parse(Int, OPTS["recovery-samples"]),
         n_adapts = parse(Int, OPTS["recovery-warmup"]),
-        callback = progress_callback(; path = joinpath(OUT, "b_fit.log")))
+        callback = progress_callback(; path = joinpath(OUT, "b_fit.log"))
+    )
     minutes = round((time() - t) / 60; digits = 1)
     log_line("recovery fit took $(minutes) min")
     serialize(joinpath(OUT, "b_chain.jls"), chn)
     fig = Figure(; size = (1200, 800))
     cover = Float64[]
     shown = Int[]
-    for (k, (key, tkey, label)) in enumerate((
-        (:share_T_zone, :share_T, "share_T"),
-        (:delta_T_zone, :delta_T, "δ_T"), (:R_T_zone, :R_T, "R_T")))
+    for (k, (key, tkey, label)) in enumerate(
+            (
+                (:share_T_zone, :share_T, "share_T"),
+                (:delta_T_zone, :delta_T, "δ_T"), (:R_T_zone, :R_T, "R_T"),
+            )
+        )
         draws = _zone_draws(chn, key, NZ)
         tr = getfield(truth, tkey)
-        ax = Axis(fig[1, k]; title = label, xlabel = "true",
-            ylabel = "posterior")
+        ax = Axis(
+            fig[1, k]; title = label, xlabel = "true",
+            ylabel = "posterior"
+        )
         lo = Float64[]
         hi = Float64[]
         md = Float64[]
@@ -342,13 +387,17 @@ function stage_b()
         end
         CairoMakie.rangebars!(ax, xs, lo, hi; color = (:steelblue, 0.6))
         scatter!(ax, xs, md; color = :steelblue)
-        lines!(ax, [minimum(xs), maximum(xs)], [minimum(xs), maximum(xs)];
-            color = :black, linestyle = :dash)
+        lines!(
+            ax, [minimum(xs), maximum(xs)], [minimum(xs), maximum(xs)];
+            color = :black, linestyle = :dash
+        )
         push!(cover, mean(lo .<= xs .<= hi))
         push!(shown, length(xs))
     end
-    scalars = ((:region_drift_sd_zone, :σ_δ, "σ_δ"),
-        (:composition_rho_zone, :ρ, "ρ"), (:region_halflife_zone, :h, "h"))
+    scalars = (
+        (:region_drift_sd_zone, :σ_δ, "σ_δ"),
+        (:composition_rho_zone, :ρ, "ρ"), (:region_halflife_zone, :h, "h"),
+    )
     rows = NamedTuple[]
     for (k, (key, tkey, label)) in enumerate(scalars)
         d = _draws(chn, key)
@@ -356,16 +405,21 @@ function stage_b()
         ax = Axis(fig[2, k]; title = label, xlabel = label)
         CairoMakie.hist!(ax, d; bins = 40, color = (:steelblue, 0.6))
         vlines!(ax, [tr]; color = :black, linestyle = :dash)
-        push!(rows,
-            (quantity = label, truth = tr, median = median(d),
+        push!(
+            rows,
+            (
+                quantity = label, truth = tr, median = median(d),
                 lower_90 = quantile(d, 0.05), upper_90 = quantile(d, 0.95),
-                covered = quantile(d, 0.05) <= tr <= quantile(d, 0.95)))
+                covered = quantile(d, 0.05) <= tr <= quantile(d, 0.95),
+            )
+        )
     end
     path = joinpath(OUT, "b_recovery.png")
     save(path, fig)
     cov_df = DataFrame(
         quantity = ["share_T_zone", "delta_T_zone", "R_T_zone (walking)"],
-        zones = shown, coverage_90 = cover)
+        zones = shown, coverage_90 = cover
+    )
     sd = zone_sampler_diagnostics(chn, sim_inputs; max_depth = 8)
     body = """
     <p>One dataset simulated from a known parameter draw on the real design
@@ -383,7 +437,7 @@ function stage_b()
     $(sd.n_divergent), depth-cap fraction
     $(round.(sd.depth_cap_fraction; digits = 2)).</p>
     """
-    write_fragment("b", "Simulation-based recovery", body)
+    return write_fragment("b", "Simulation-based recovery", body)
 end
 
 ## --- Stage c: real-data fit diagnostics -----------------------------------
@@ -395,9 +449,11 @@ function load_or_fit_chain()
     end
     log_line("fitting the zone model at $(OPTS["samples"])/$(OPTS["warmup"])")
     t = time()
-    chn = fit_zone(PARENT, OBS; samples = parse(Int, OPTS["samples"]),
+    chn = fit_zone(
+        PARENT, OBS; samples = parse(Int, OPTS["samples"]),
         n_adapts = parse(Int, OPTS["warmup"]),
-        callback = progress_callback(; path = joinpath(OUT, "zone_fit.log")))
+        callback = progress_callback(; path = joinpath(OUT, "zone_fit.log"))
+    )
     minutes = round((time() - t) / 60; digits = 1)
     log_line("fit took $(minutes) min")
     serialize(CHAIN_PATH, chn)
@@ -410,28 +466,41 @@ function stage_c(chn)
     sd = zone_sampler_diagnostics(chn, INPUTS; max_depth = 8)
     nchains = length(sd.step_size)
     init = zone_initial_params(bvd_zone(ZD), INPUTS; chains = nchains)
-    per_chain = DataFrame(chain = 1:nchains,
+    per_chain = DataFrame(
+        chain = 1:nchains,
         initial_logp = init.logp,
         step_size = sd.step_size,
         depth_cap_fraction = sd.depth_cap_fraction,
         ebfmi = sd.ebfmi,
-        divergences = divergences_per_chain(chn, nchains))
+        divergences = divergences_per_chain(chn, nchains)
+    )
     minutes_path = CHAIN_PATH * ".minutes"
     minutes = isfile(minutes_path) ? read(minutes_path, String) : "unknown"
     overall = DataFrame(
-        quantity = ["max R-hat (all but R_T_zone)",
+        quantity = [
+            "max R-hat (all but R_T_zone)",
             "max R-hat R_T_zone (walking)", "min bulk ESS", "min tail ESS",
-            "divergences", "draws x chains", "wall time (min)"],
-        value = [sd.max_rhat, sd.max_rhat_R_T_walking, sd.min_ess_bulk,
-            sd.min_ess_tail, sd.n_divergent, prod(size(chn)), minutes])
+            "divergences", "draws x chains", "wall time (min)",
+        ],
+        value = [
+            sd.max_rhat, sd.max_rhat_R_T_walking, sd.min_ess_bulk,
+            sd.min_ess_tail, sd.n_divergent, prod(size(chn)), minutes,
+        ]
+    )
     ranges, zdiag = range_table(chn, INPUTS)
     big = sort(1:NZ; by = z -> -INPUTS.cumulative[z])[1:5]
-    traces = [(chain_matrix(chn, :region_drift_sd_zone), "σ_δ"),
+    traces = [
+        (chain_matrix(chn, :region_drift_sd_zone), "σ_δ"),
         (chain_matrix(chn, :composition_rho_zone), "ρ"),
-        (chain_matrix(chn, :region_halflife_zone), "h (days)")]
+        (chain_matrix(chn, :region_halflife_zone), "h (days)"),
+    ]
     for z in big
-        push!(traces, (chain_matrix(chn, :delta_T_zone, z),
-            "δ_T " * INPUTS.zone_labels[z]))
+        push!(
+            traces, (
+                chain_matrix(chn, :delta_T_zone, z),
+                "δ_T " * INPUTS.zone_labels[z],
+            )
+        )
     end
     path = trace_panels(traces; path = joinpath(OUT, "c_traces.png"))
     body = """
@@ -444,15 +513,17 @@ function stage_c(chn)
     <h3>Traces</h3>$(png_tag(path))
     <h3>Per zone</h3>$(html_table(zdiag; digits = 2))
     """
-    write_fragment("c", "Real-data fit: sampler diagnostics", body)
+    return write_fragment("c", "Real-data fit: sampler diagnostics", body)
 end
 
 ## --- Stage d: posterior predictive ----------------------------------------
 
 function stage_d(chn)
     log_line("stage d: posterior predictive")
-    zone_tags = composition_tags(chn, "d_ppc"; prior_chain = prior_chain(),
-        label = "posterior predictive")
+    zone_tags = composition_tags(
+        chn, "d_ppc"; prior_chain = prior_chain(),
+        label = "posterior predictive"
+    )
     ## Patch-level split of the allocated totals against the parent's
     ## modelled province shares at the parent's own vintages.
     np = length(INPUTS.patch_names)
@@ -468,24 +539,34 @@ function stage_d(chn)
     fig = Figure(; size = (300 * np, 260))
     have_parent = _has_key(PARENT, :province_shares)
     ## The parent's spatial vintages, shared by every province it fits.
-    pdays = province_increment_matrix(OBS.province_confirmed_history,
-        INPUTS.patch_names, np).days
+    pdays = province_increment_matrix(
+        OBS.province_confirmed_history,
+        INPUTS.patch_names, np
+    ).days
     for p in 1:np
-        ax = Axis(fig[1, p]; title = INPUTS.patch_labels[p],
-            xlabel = "Grid day", ylabel = "Share of allocated total")
+        ax = Axis(
+            fig[1, p]; title = INPUTS.patch_labels[p],
+            xlabel = "Grid day", ylabel = "Share of allocated total"
+        )
         keep = .!isnan.(obs_patch[p, :])
-        scatter!(ax, x[keep], obs_patch[p, keep]; color = :black,
-            markersize = 5)
+        scatter!(
+            ax, x[keep], obs_patch[p, keep]; color = :black,
+            markersize = 5
+        )
         have_parent || continue
         ms = [collect(v) for v in vec(collect(PARENT[:province_shares]))]
         nvp = min(size(first(ms), 2), length(pdays))
         m = [ms[i][p, v] for i in eachindex(ms), v in 1:nvp]
         xp = float.(pdays[1:nvp])
-        band!(ax, xp, vec(mapslices(v -> quantile(v, 0.05), m; dims = 1)),
+        band!(
+            ax, xp, vec(mapslices(v -> quantile(v, 0.05), m; dims = 1)),
             vec(mapslices(v -> quantile(v, 0.95), m; dims = 1));
-            color = (:firebrick, 0.25))
-        lines!(ax, xp, vec(mapslices(median, m; dims = 1));
-            color = :firebrick)
+            color = (:firebrick, 0.25)
+        )
+        lines!(
+            ax, xp, vec(mapslices(median, m; dims = 1));
+            color = :firebrick
+        )
     end
     path = joinpath(OUT, "d_ppc_patches.png")
     save(path, fig)
@@ -501,7 +582,7 @@ function stage_d(chn)
     the patch totals, so this is the parent's check, shown for context.</p>
     $(png_tag(path))
     """
-    write_fragment("d", "Posterior predictive checks", body)
+    return write_fragment("d", "Posterior predictive checks", body)
 end
 
 ## --- Stage e: ranking and map ---------------------------------------------
@@ -509,8 +590,12 @@ end
 function stage_e(chn)
     log_line("stage e: ranking")
     ov = zone_overview_table(chn, INPUTS; parent_chain = PARENT)
-    shown = ov[:, [:zone, :patch, :cases, :share, :R_T, :p_R_above_1,
-        :delta_T, :walking]]
+    shown = ov[
+        :, [
+            :zone, :patch, :cases, :share, :R_T, :p_R_above_1,
+            :delta_T, :walking,
+        ],
+    ]
     body = """
     <p>The reproduction number pairs each zone draw with a random parent
     draw, so its interval carries the patch uncertainty; a level-only
@@ -518,30 +603,38 @@ function stage_e(chn)
     <h3>Zones ranked by P(R_T &gt; 1)</h3>$(html_table(shown; digits = 2))
     """
     keep = findall(isfinite, ov.rt_median)
-    ranking = DataFrame(label = ov.zone[keep],
+    ranking = DataFrame(
+        label = ov.zone[keep],
         patch = ov.patch_index[keep], rt_median = ov.rt_median[keep],
         rt_lo90 = ov.rt_lo90[keep], rt_hi90 = ov.rt_hi90[keep],
         p_rt_above_one = ov.p_rt_above_one[keep],
-        walking = ov.walking[keep])
+        walking = ov.walking[keep]
+    )
     fig = plot_zone_ranking(ranking; patch_labels = INPUTS.patch_labels)
     path = joinpath(OUT, "e_ranking.png")
     save(path, fig)
     body *= "<h3>Ranking</h3>" * png_tag(path; width = "60%")
     ## The geojson keys a zone without the manifest's province prefix.
-    zone_map_keys = [String(last(split(k, "."; limit = 2)))
-                     for k in INPUTS.zone_keys]
-    rt = [filter(isfinite, m[:, INPUTS.n])
-          for m in reconstruct_zone_rt(chn, INPUTS; parent_chain = PARENT)]
+    zone_map_keys = [
+        String(last(split(k, "."; limit = 2)))
+            for k in INPUTS.zone_keys
+    ]
+    rt = [
+        filter(isfinite, m[:, INPUTS.n])
+            for m in reconstruct_zone_rt(chn, INPUTS; parent_chain = PARENT)
+    ]
     zs = findall(!isempty, rt)
-    fig = plot_zone_map([median(rt[z]) for z in zs],
+    fig = plot_zone_map(
+        [median(rt[z]) for z in zs],
         zone_map_keys[zs]; lower = [quantile(rt[z], 0.05) for z in zs],
         upper = [quantile(rt[z], 0.95) for z in zs], diverging_at = 1.0,
         scale = log10, title = "Reproduction number at the cut-off",
-        colorbar_label = "R")
+        colorbar_label = "R"
+    )
     path = joinpath(OUT, "e_map.png")
     save(path, fig)
     body *= "<h3>Current R_T by zone</h3>" * png_tag(path; width = "70%")
-    write_fragment("e", "Zone ranking and map", body)
+    return write_fragment("e", "Zone ranking and map", body)
 end
 
 ## --- Run ------------------------------------------------------------------

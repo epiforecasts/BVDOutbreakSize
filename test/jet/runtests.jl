@@ -6,11 +6,17 @@ using BVDOutbreakSize
 # into the main test environment. These pure, allocation-light helpers
 # back the generating infection process and the delay convolutions, so
 # they must stay type-stable for the model to differentiate cleanly.
-test_opt(BVDOutbreakSize.euler_lotka_r, (Float64, Vector{Float64});
-    target_modules = (BVDOutbreakSize,))
-test_opt(BVDOutbreakSize.convolve_delay,
+test_opt(
+    BVDOutbreakSize.euler_lotka_r, (Float64, Vector{Float64});
+    target_modules = (BVDOutbreakSize,)
+)
+test_opt(
+    BVDOutbreakSize.convolve_delay,
     (Vector{Float64}, Vector{Float64});
-    target_modules = (BVDOutbreakSize,))
-test_opt(BVDOutbreakSize.renewal_infections,
+    target_modules = (BVDOutbreakSize,)
+)
+test_opt(
+    BVDOutbreakSize.renewal_infections,
     (Vector{Float64}, Vector{Float64}, Vector{Float64});
-    target_modules = (BVDOutbreakSize,))
+    target_modules = (BVDOutbreakSize,)
+)

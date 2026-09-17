@@ -60,10 +60,13 @@ for clean live traces. Parallel chains share one logger and interleave.
 See also: [`progress_callback`](@ref), [`nuts_sample`](@ref).
 """
 function tensorboard_callback(logdir; kwargs...)
-    throw(ErrorException(
-        "tensorboard_callback requires TensorBoardLogger. Load it with " *
-        "`using TensorBoardLogger` (it is an optional dependency) and " *
-        "retry. logdir = $(repr(logdir))"))
+    throw(
+        ErrorException(
+            "tensorboard_callback requires TensorBoardLogger. Load it with " *
+                "`using TensorBoardLogger` (it is an optional dependency) and " *
+                "retry. logdir = $(repr(logdir))"
+        )
+    )
 end
 
 @doc raw"""
@@ -101,12 +104,15 @@ See also: [`tensorboard_callback`](@ref), [`nuts_sample`](@ref).
 function progress_callback(; path::AbstractString, every::Integer = 10)
     lock = ReentrantLock()
     ndivergent = Ref(0)
-    return function (rng, model, sampler, transition, state, iteration;
-            kwargs...)
+    return function (
+            rng, model, sampler, transition, state, iteration;
+            kwargs...,
+        )
         try
             stats = try
                 AbstractMCMC.ParamsWithStats(
-                    model, sampler, transition, state; stats = true).stats
+                    model, sampler, transition, state; stats = true
+                ).stats
             catch
                 (;)
             end
@@ -117,9 +123,11 @@ function progress_callback(; path::AbstractString, every::Integer = 10)
                 lp = get(stats, :logjoint, missing)
                 Base.@lock lock begin
                     open(path, "a") do io
-                        println(io,
+                        println(
+                            io,
                             "iteration=$(iteration) lp=$(lp) " *
-                            "divergences=$(ndivergent[])")
+                                "divergences=$(ndivergent[])"
+                        )
                     end
                 end
             end
@@ -178,9 +186,11 @@ gets the file progress stream.
 
 See also: [`combined_callback`](@ref), [`nuts_sample`](@ref).
 """
-function fit_callback(name::AbstractString;
+function fit_callback(
+        name::AbstractString;
         logdir::AbstractString = "logs",
-        spec::AbstractString = get(ENV, "BVD_FIT_LOG", "all"))
+        spec::AbstractString = get(ENV, "BVD_FIT_LOG", "all")
+    )
     mode = lowercase(strip(spec))
     mode == "none" && return nothing
     want_progress = !(mode in ("tensorboard", "tb"))
@@ -189,8 +199,12 @@ function fit_callback(name::AbstractString;
         mkpath(logdir)
         progress_callback(; path = joinpath(logdir, "$(name).log"))
     end
-    tb = want_tb ? _tensorboard_if_loaded(joinpath(logdir, "tensorboard",
-        name)) : nothing
+    tb = want_tb ? _tensorboard_if_loaded(
+            joinpath(
+                logdir, "tensorboard",
+                name
+            )
+        ) : nothing
     return combined_callback(progress, tb)
 end
 
@@ -198,12 +212,14 @@ end
 ## with a warning. Keeps `fit_callback`'s default `"all"` from erroring when
 ## TensorBoardLogger is not loaded.
 function _tensorboard_if_loaded(logdir)
-    ext = Base.get_extension(@__MODULE__,
-        :BVDOutbreakSizeTensorBoardLoggerExt)
+    ext = Base.get_extension(
+        @__MODULE__,
+        :BVDOutbreakSizeTensorBoardLoggerExt
+    )
     if isnothing(ext)
         @warn "BVD_FIT_LOG requested TensorBoard logging but " *
-              "TensorBoardLogger is not loaded; logging file progress only. " *
-              "Add `using TensorBoardLogger` to enable it."
+            "TensorBoardLogger is not loaded; logging file progress only. " *
+            "Add `using TensorBoardLogger` to enable it."
         return nothing
     end
     return tensorboard_callback(logdir)
@@ -261,8 +277,10 @@ for `ldf`, so a model this guard cannot evaluate still samples as before.
 since construction re-evaluates `model` and so is not part of the guard's
 forward-evaluation-only cost.
 """
-function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
-        ldf = LogDensityFunction(model))
+function viable_prior_init(
+        rng::AbstractRNG, model; attempts::Integer = 8,
+        ldf = LogDensityFunction(model)
+    )
     attempts >= 1 ||
         throw(ArgumentError("attempts must be at least 1, got $attempts"))
     draws = Vector{Float64}[]
@@ -337,7 +355,8 @@ in the returned chain, so the first `n_adapts` draws are adaptation
 steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
 """
-function nuts_sample(model;
+function nuts_sample(
+        model;
         samples::Integer = 500,
         chains::Integer = 2,
         target_accept::Real = 0.85,
@@ -350,7 +369,8 @@ function nuts_sample(model;
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
-        kwargs...)
+        kwargs...
+    )
     rng = MersenneTwister(seed)
     ## Each chain draws and screens its own starting point, so the chains
     ## stay independent and over-dispersed. Any other strategy is shared
@@ -360,12 +380,17 @@ function nuts_sample(model;
     ## cost the guard advertises.
     inits = if init isa ViablePrior
         ldf = LogDensityFunction(model)
-        [viable_prior_init(rng, model; attempts = init.attempts, ldf)
-         for _ in 1:chains]
+        [
+            viable_prior_init(rng, model; attempts = init.attempts, ldf)
+                for _ in 1:chains
+        ]
     elseif init isa AbstractVector
-        length(init) == chains || throw(ArgumentError(
-            "nuts_sample: `init` holds $(length(init)) strategies for " *
-            "$chains chains; pass one per chain."))
+        length(init) == chains || throw(
+            ArgumentError(
+                "nuts_sample: `init` holds $(length(init)) strategies for " *
+                    "$chains chains; pass one per chain."
+            )
+        )
         collect(init)
     else
         fill(init, chains)

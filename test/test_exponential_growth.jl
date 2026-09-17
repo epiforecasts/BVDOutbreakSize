@@ -16,7 +16,7 @@
     ## `r` is sampled (the growth-rate prior), along with `m`.
     ## `to_submodel(x, false)` re-exposes `r`, `m` and the `:=` (`τ`, `G`,
     ## `T`, `C_T`) names at the parent.
-    gi = [0.02, 0.08, 0.16, 0.22, 0.20, 0.15, 0.10, 0.07]
+    gi = [0.02, 0.08, 0.16, 0.22, 0.2, 0.15, 0.1, 0.07]
     gi = gi ./ sum(gi)
     G_true = sum(i * gi[i] for i in eachindex(gi))
 
@@ -25,8 +25,10 @@
         return st
     end
 
-    chn = sample(_wrap(), Prior(), 400;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _wrap(), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     T = vec(Array(chn[:T]))
     C_T = vec(Array(chn[:C_T]))
     τ = vec(Array(chn[:τ]))
@@ -37,14 +39,14 @@
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
     ## τ = log(2)/r, T = m·G and C_T = exp(r·T) hold draw-by-draw.
-    @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
-    @test all(isapprox.(G, G_true; rtol = 1e-8))
-    @test all(isapprox.(T, m .* G_true; rtol = 1e-8))
-    @test all(isapprox.(C_T, exp.(r .* T); rtol = 1e-8))
+    @test all(isapprox.(τ, log(2) ./ r; rtol = 1.0e-8))
+    @test all(isapprox.(G, G_true; rtol = 1.0e-8))
+    @test all(isapprox.(T, m .* G_true; rtol = 1.0e-8))
+    @test all(isapprox.(C_T, exp.(r .* T); rtol = 1.0e-8))
     ## The point of counting generations: elapsed time per generation is the
     ## generation interval, so it is the same for every draw regardless of the
     ## growth rate. Counting doublings would make it log(2)/r and vary.
-    @test all(isapprox.(T ./ m, G_true; rtol = 1e-8))
+    @test all(isapprox.(T ./ m, G_true; rtol = 1.0e-8))
 end
 
 @testitem "exponential_growth_model: r and m priors are wide" begin
@@ -53,7 +55,7 @@ end
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
-    gi = [0.02, 0.08, 0.16, 0.22, 0.20, 0.15, 0.10, 0.07]
+    gi = [0.02, 0.08, 0.16, 0.22, 0.2, 0.15, 0.1, 0.07]
     gi = gi ./ sum(gi)
     G_true = sum(i * gi[i] for i in eachindex(gi))
 
@@ -62,8 +64,10 @@ end
         return st
     end
 
-    chn = sample(_wrap(), Prior(), 4000;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _wrap(), Prior(), 4000;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     m = vec(Array(chn[:m]))
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
@@ -89,11 +93,11 @@ end
     @test 23.6 < quantile(τ, 0.975) < 27.8
     ## The cryptic duration T = m·G is `m`'s own spread scaled by the fixed
     ## generation interval, and carries none of `r`'s.
-    @test isapprox(std(T), std(m) * G_true; rtol = 1e-8)
+    @test isapprox(std(T), std(m) * G_true; rtol = 1.0e-8)
     @test std(T) > 4.0
 end
 
-@testitem "infection_model: two-phase renewal-start seeding" tags=[:slow] begin
+@testitem "infection_model: two-phase renewal-start seeding" tags = [:slow] begin
     using Statistics: mean, std
     using Turing: @model, to_submodel
     import FlexiChains
@@ -131,11 +135,11 @@ end
     ## Elapsed cryptic time is `m` generation intervals, set by the sampled
     ## generation interval alone. Counting doublings instead would make it
     ## log(2)/r and tie the origin date to the growth rate.
-    @test all(isapprox.(T .- τ_obs, m .* G; rtol = 1e-6))
+    @test all(isapprox.(T .- τ_obs, m .* G; rtol = 1.0e-6))
     ## The renewal-start seed is the daily incidence the cryptic phase reaches,
     ## `exp(r·m·G)`, so the origin date and the seed share one growth rate.
     @test all(sa .> 0)
-    @test all(isapprox.(sa, exp.(r0 .* (T .- τ_obs)); rtol = 1e-6))
+    @test all(isapprox.(sa, exp.(r0 .* (T .- τ_obs)); rtol = 1.0e-6))
 end
 
 @testitem "infection_model: rt_walk_start holds Rt flat before the walk" begin
@@ -209,8 +213,8 @@ end
         ((r >= 0) && (R_T < 1)) && (disagree += 1)
         ## `r` is the Euler–Lotka growth implied by `R_T` and `g`, and the
         ## reported doubling time is `log 2 / r`, both consistent with `R_T`.
-        @test isapprox(r, euler_lotka_r(R_T, s.g); atol = 1e-8)
-        @test isapprox(s.doubling_time, doubling_time(r); rtol = 1e-8)
+        @test isapprox(r, euler_lotka_r(R_T, s.g); atol = 1.0e-8)
+        @test isapprox(s.doubling_time, doubling_time(r); rtol = 1.0e-8)
     end
     @test disagree == 0
 end

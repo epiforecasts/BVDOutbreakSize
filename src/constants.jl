@@ -52,7 +52,7 @@ const REPORT_SCENARIOS = [
     ("Method 2 τ= 7 d, CFR 40%", 901),
     ("Method 2 τ=21 d, CFR 26%", 730),
     ("Method 2 τ=21 d, CFR 33%", 575),
-    ("Method 2 τ=21 d, CFR 40%", 474)
+    ("Method 2 τ=21 d, CFR 40%", 474),
 ]
 
 """
@@ -132,7 +132,7 @@ const REPORT_SCENARIOS_CI = [
     ("2026-05-27", "M2 T_d= 7 d, CFR 40%", 491, 432, 556),
     ("2026-05-27", "M2 T_d=14 d, CFR 26%", 471, 413, 533),
     ("2026-05-27", "M2 T_d=14 d, CFR 33%", 371, 326, 420),
-    ("2026-05-27", "M2 T_d=14 d, CFR 40%", 306, 269, 346)
+    ("2026-05-27", "M2 T_d=14 d, CFR 40%", 306, 269, 346),
 ]
 
 """
@@ -222,8 +222,10 @@ order they first appear. These key the per-province blocks of
 [`PROVINCE_NAMES`](@ref) for those and [`PROVINCE_MEMBERS`](@ref) for how
 the two relate.
 """
-const PROVINCE_SOURCE_NAMES = ["ituri", "nord_kivu", "sud_kivu",
-    "haut_uele", "tshopo", "bas_uele", "sud_ubangi"]
+const PROVINCE_SOURCE_NAMES = [
+    "ituri", "nord_kivu", "sud_kivu",
+    "haut_uele", "tshopo", "bas_uele", "sud_ubangi",
+]
 
 """
     PROVINCE_SOURCE_POPULATIONS
@@ -240,8 +242,10 @@ relative sizes enter the model, through the importation kernel and the
 per-capita testing covariate, so consistency between provinces matters
 more than the accuracy of any one of them.
 """
-const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
-    2_046_000, 2_582_000, 1_250_000, 2_755_000]
+const PROVINCE_SOURCE_POPULATIONS = [
+    4_008_000, 7_574_000, 6_565_000,
+    2_046_000, 2_582_000, 1_250_000, 2_755_000,
+]
 
 """
     PROVINCE_SOURCE_CAPITALS
@@ -259,13 +263,13 @@ that the ordering of the distances between them does not depend on the
 choice of point within each one.
 """
 const PROVINCE_SOURCE_CAPITALS = [
-    (1.56667, 30.25000),    # Bunia, Ituri
+    (1.56667, 30.25),    # Bunia, Ituri
     (-1.67918, 29.22195),   # Goma, Nord-Kivu
-    (-2.50000, 28.86667),   # Bukavu, Sud-Kivu
+    (-2.5, 28.86667),   # Bukavu, Sud-Kivu
     (2.77374, 27.61674),    # Isiro, Haut-Uele
     (0.51528, 25.19099),    # Kisangani, Tshopo
     (2.78594, 24.73876),    # Buta, Bas-Uele
-    (3.25651, 19.77234)     # Gemena, Sud-Ubangi
+    (3.25651, 19.77234),     # Gemena, Sud-Ubangi
 ]
 
 """
@@ -291,8 +295,10 @@ const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
 Display names for the patches, in [`PROVINCE_NAMES`](@ref) order, for table
 rows and figure panels.
 """
-const PROVINCE_LABELS = ["Ituri", "Nord-Kivu", "Haut-Uele",
-    "Other provinces"]
+const PROVINCE_LABELS = [
+    "Ituri", "Nord-Kivu", "Haut-Uele",
+    "Other provinces",
+]
 
 """
     PROVINCE_MEMBERS
@@ -306,13 +312,18 @@ const PROVINCE_MEMBERS = Dict(
     "ituri" => ["ituri"],
     "nord_kivu" => ["nord_kivu"],
     "haut_uele" => ["haut_uele"],
-    "other" => ["sud_kivu", "tshopo", "bas_uele", "sud_ubangi"])
+    "other" => ["sud_kivu", "tshopo", "bas_uele", "sud_ubangi"]
+)
 
 ## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
 ## once so the pooled population and capital below, and the pooled increments
 ## in `province_increment_matrix`, all read the same membership.
-const _PROVINCE_MEMBER_IDX = [[findfirst(==(m), PROVINCE_SOURCE_NAMES)
-                               for m in PROVINCE_MEMBERS[name]] for name in PROVINCE_NAMES]
+const _PROVINCE_MEMBER_IDX = [
+    [
+        findfirst(==(m), PROVINCE_SOURCE_NAMES)
+            for m in PROVINCE_MEMBERS[name]
+    ] for name in PROVINCE_NAMES
+]
 
 """
     PROVINCE_POPULATIONS
@@ -322,8 +333,10 @@ over the provinces it pools. Used to put the per-province testing effort on
 a per-capita scale (the covariate for the provincial ascertainment) and to
 weight the between-province importation kernel.
 """
-const PROVINCE_POPULATIONS = [sum(PROVINCE_SOURCE_POPULATIONS[idx])
-                              for idx in _PROVINCE_MEMBER_IDX]
+const PROVINCE_POPULATIONS = [
+    sum(PROVINCE_SOURCE_POPULATIONS[idx])
+        for idx in _PROVINCE_MEMBER_IDX
+]
 
 """
     PROVINCE_CAPITALS
@@ -339,14 +352,21 @@ population is. The pooled patch here spans Bukavu, Kisangani, Buta and
 Gemena, so its point sits between them and its distance to the epicentre is
 a weighted compromise rather than any one province's.
 """
-const PROVINCE_CAPITALS = [(
-                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
-                                   PROVINCE_SOURCE_CAPITALS[i][1]
-                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
-                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
-                                   PROVINCE_SOURCE_CAPITALS[i][2]
-                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]))
-                           for idx in _PROVINCE_MEMBER_IDX]
+const PROVINCE_CAPITALS = [
+    (
+        sum(
+            PROVINCE_SOURCE_POPULATIONS[i] *
+                PROVINCE_SOURCE_CAPITALS[i][1]
+                for i in idx
+        ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
+        sum(
+            PROVINCE_SOURCE_POPULATIONS[i] *
+                PROVINCE_SOURCE_CAPITALS[i][2]
+                for i in idx
+        ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
+    )
+        for idx in _PROVINCE_MEMBER_IDX
+]
 
 """
     PROVINCE_DISTANCE_DECAY
@@ -381,7 +401,8 @@ capitals, as a symmetric matrix with a zero diagonal. Built from
 [`PROVINCE_CAPITALS`](@ref) by [`haversine_km`](@ref).
 """
 function province_distance_matrix(
-        capitals::AbstractVector = PROVINCE_CAPITALS)
+        capitals::AbstractVector = PROVINCE_CAPITALS
+    )
     np = length(capitals)
     D = zeros(Float64, np, np)
     @inbounds for p in 1:np, q in 1:np
@@ -430,14 +451,17 @@ is not.
 function province_importation_kernel(
         pops::AbstractVector = PROVINCE_POPULATIONS;
         distances::AbstractMatrix = province_distance_matrix(
-            PROVINCE_CAPITALS[1:min(length(pops), end)]),
-        decay::Real = PROVINCE_DISTANCE_DECAY)
+            PROVINCE_CAPITALS[1:min(length(pops), end)]
+        ),
+        decay::Real = PROVINCE_DISTANCE_DECAY
+    )
     np = length(pops)
     tot = sum(pops)
     K = zeros(Float64, np, np)
     size(distances) == (np, np) || error(
         "province_importation_kernel: `distances` is $(size(distances)) " *
-        "but there are $np provinces.")
+            "but there are $np provinces."
+    )
     @inbounds for q in 1:np
         ## Relative pull of each destination from origin `q`, by destination
         ## size and by how far it is. A zero distance matrix leaves the
@@ -499,7 +523,7 @@ const CHAMLA_CONFIRMED_CENTRAL = [
     ("2026-06-24", 990, 709, 1293),
     ("2026-07-22", 2114, 1450, 2980),
     ("2026-08-19", 4242, 2748, 6528),
-    ("2026-09-16", 8210, 5063, 13498)
+    ("2026-09-16", 8210, 5063, 13498),
 ]
 
 """
@@ -518,5 +542,5 @@ not ascertainment-corrected total cases.
 const CHAMLA_CONFIRMED_W12 = [
     ("Chamla low (R₀=1.42)", 870, 641, 1133),
     ("Chamla central (R₀=1.71)", 990, 709, 1293),
-    ("Chamla high (R₀=2.08)", 1364, 975, 1807)
+    ("Chamla high (R₀=2.08)", 1364, 975, 1807),
 ]

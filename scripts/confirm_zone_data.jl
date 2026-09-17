@@ -39,9 +39,11 @@ using TOML
 include(joinpath(@__DIR__, "scan_zone_tableau2.jl"))
 
 const BASE_URL = "https://raw.githubusercontent.com/INRB-UMIE/" *
-                 "BDBV2026-Data/main/data/insp_sitrep/processed"
-const FILES = (("zone_confirmed_history", "cumulative_confirmed_cases"),
-    ("zone_death_history", "cumulative_confirmed_deaths"))
+    "BDBV2026-Data/main/data/insp_sitrep/processed"
+const FILES = (
+    ("zone_confirmed_history", "cumulative_confirmed_cases"),
+    ("zone_death_history", "cumulative_confirmed_deaths"),
+)
 
 ## Mirror zone names that are not SitRep spellings of a zone in the
 ## manifest, keyed on their folded form. The mirror disambiguates
@@ -53,8 +55,10 @@ function mirror_rows(stem, dir)
     path = if dir === nothing
         Downloads.download("$(BASE_URL)/insp_sitrep__$(stem)__daily.csv")
     else
-        candidates = [joinpath(dir, "insp_sitrep__$(stem)__daily.csv"),
-            joinpath(dir, "insp_sitrep__$(stem).csv")]
+        candidates = [
+            joinpath(dir, "insp_sitrep__$(stem)__daily.csv"),
+            joinpath(dir, "insp_sitrep__$(stem).csv"),
+        ]
         i = findfirst(isfile, candidates)
         i === nothing && error("no $(stem) CSV under $(dir)")
         candidates[i]
@@ -105,8 +109,10 @@ function main()
             v === nothing && (nd += 1; continue)
             c = canon(nom)
             key = c == "na" ? "unallocated" :
-                  replace(get(MIRROR_NAMES, c, get(ZONE_ALIASES, c, c)),
-                " " => "_")
+                replace(
+                    get(MIRROR_NAMES, c, get(ZONE_ALIASES, c, c)),
+                    " " => "_"
+                )
             haskey(date_idx, date) || continue
             i = date_idx[date]
             ours = if key == "unallocated"
@@ -121,9 +127,11 @@ function main()
         end
 
         println("=== $(block) against the mirror's $(stem) ===")
-        println("$(agree + length(disagree)) zone-dates compared: " *
+        println(
+            "$(agree + length(disagree)) zone-dates compared: " *
                 "$(agree) agree, $(length(disagree)) disagree " *
-                "($(nd) mirror ND cells skipped)")
+                "($(nd) mirror ND cells skipped)"
+        )
         if !isempty(disagree)
             println("\nDisagreements (date, zone, ours, mirror):")
             for (d, k, o, m) in sort(disagree)
@@ -133,12 +141,16 @@ function main()
             for (d, _, _, _) in disagree
                 bydate[d] = get(bydate, d, 0) + 1
             end
-            println("\nDisagreements per date: ",
-                join(("$(d): $(n)" for (d, n) in sort(collect(bydate))), ", "))
+            println(
+                "\nDisagreements per date: ",
+                join(("$(d): $(n)" for (d, n) in sort(collect(bydate))), ", ")
+            )
         end
         if !isempty(unmatched)
-            println("\nMirror zones with no series in the manifest " *
-                    "(name: largest value on a shared date):")
+            println(
+                "\nMirror zones with no series in the manifest " *
+                    "(name: largest value on a shared date):"
+            )
             for (n, v) in sort(collect(unmatched))
                 println("  $(n): $(v)")
             end
@@ -146,11 +158,15 @@ function main()
         only_mirror = sort(collect(setdiff(mirror_dates, dates)))
         only_ours = sort(setdiff(dates, mirror_dates))
         isempty(only_mirror) ||
-            println("\nDates the mirror carries and the manifest does not: ",
-                join(only_mirror, ", "))
+            println(
+            "\nDates the mirror carries and the manifest does not: ",
+            join(only_mirror, ", ")
+        )
         isempty(only_ours) ||
-            println("\nDates the manifest carries and the mirror does not: ",
-                join(only_ours, ", "))
+            println(
+            "\nDates the manifest carries and the mirror does not: ",
+            join(only_ours, ", ")
+        )
         println()
     end
     return nothing

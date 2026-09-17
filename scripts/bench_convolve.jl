@@ -74,8 +74,10 @@ end
 function bench_convolution()
     n = 93
     klens = (30, 40, 30, 30, 30)
-    kernels = [(w = abs.(sin.(1.0:l)) .+ 0.1; w ./ sum(w))
-               for l in klens]
+    kernels = [
+        (w = abs.(sin.(1.0:l)) .+ 0.1; w ./ sum(w))
+            for l in klens
+    ]
     x = abs.(cos.(1.0:n)) .* 10 .+ 1
     f_old = make_conv_objective(conv_old, kernels)
     f_new = make_conv_objective(conv_new, kernels)
@@ -83,9 +85,11 @@ function bench_convolution()
     t_old = time_gradient(f_old, x)
     t_new = time_gradient(f_new, x)
     println("1. convolve_delay gradient, 5-convolution chain (n=$n):")
-    @printf("   scalar double loop  : %8.2f µs\n", t_old * 1e6)
-    @printf("   vectorised lag-AXPY : %8.2f µs  (%.2fx)\n",
-        t_new * 1e6, t_old / t_new)
+    @printf("   scalar double loop  : %8.2f µs\n", t_old * 1.0e6)
+    @printf(
+        "   vectorised lag-AXPY : %8.2f µs  (%.2fx)\n",
+        t_new * 1.0e6, t_old / t_new
+    )
     println("   → no speedup; the scalar loop is kept.\n")
     return nothing
 end
@@ -110,8 +114,8 @@ function bench_discretisation()
         t = time_gradient(f, 11.2, 5.4)
         base === nothing && (base = t)
         tag = nmax == 40 ? "(onset→death, trimmed)" :
-              nmax == 60 ? "(onset→death, original)" : ""
-        @printf("   nmax=%-3d : %8.2f µs  %s\n", nmax, t * 1e6, tag)
+            nmax == 60 ? "(onset→death, original)" : ""
+        @printf("   nmax=%-3d : %8.2f µs  %s\n", nmax, t * 1.0e6, tag)
     end
     println("   → the 60→40 trim removes ~1/3 of the per-delay CDF evals.")
     return nothing

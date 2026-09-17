@@ -11,7 +11,7 @@
     Kc = [1.0]
     Kd = [1.0]
     corrected = delay_corrected_cfr(c_daily, Kc, Kd, 0.9)
-    @test corrected ≈ 0.9 / 3 atol = 1e-10
+    @test corrected ≈ 0.9 / 3 atol = 1.0e-10
 end
 
 @testitem "delay_corrected_cfr lifts the naive ratio under a death delay" begin
@@ -25,7 +25,7 @@ end
     Kd = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
     corrected = delay_corrected_cfr(c_daily, Kc, Kd, 0.9)
     naive = 0.9 / sum(c_daily)
-    @test corrected ≈ 0.9 atol = 1e-10
+    @test corrected ≈ 0.9 atol = 1.0e-10
     @test corrected > naive
 end
 
@@ -80,12 +80,14 @@ end
     )
 end
 
-@testitem "delay_corrected_confirmed_cfr returns aligned draw vectors" setup=[
-    ConfirmedCfrChain
+@testitem "delay_corrected_confirmed_cfr returns aligned draw vectors" setup = [
+    ConfirmedCfrChain,
 ] begin
     chn = _ccfr_chain(300)
-    res = delay_corrected_confirmed_cfr(chn;
-        obs_confirmed = 210, obs_confirmed_deaths = 17)
+    res = delay_corrected_confirmed_cfr(
+        chn;
+        obs_confirmed = 210, obs_confirmed_deaths = 17
+    )
 
     @test length(res.corrected) == 300
     @test length(res.modelled_naive) == 300
@@ -95,21 +97,23 @@ end
     ## cases, so the corrected ratio is at least the uncorrected modelled
     ## ratio on every finite draw.
     ok = isfinite.(res.corrected) .& isfinite.(res.modelled_naive)
-    @test all(res.corrected[ok] .>= res.modelled_naive[ok] .- 1e-8)
+    @test all(res.corrected[ok] .>= res.modelled_naive[ok] .- 1.0e-8)
     ## With a real death delay and a rising confirmed series the correction
     ## is strict in the median.
     using Statistics: median
     @test median(res.corrected[ok]) > median(res.modelled_naive[ok])
 end
 
-@testitem "confirmed_cfr_table summarises the four quantities" setup=[
-    ConfirmedCfrChain
+@testitem "confirmed_cfr_table summarises the four quantities" setup = [
+    ConfirmedCfrChain,
 ] begin
     using DataFrames: DataFrame, nrow, names
     using BVDOutbreakSize: confirmed_cfr_table
     chn = _ccfr_chain(200)
-    res = delay_corrected_confirmed_cfr(chn;
-        obs_confirmed = 210, obs_confirmed_deaths = 17)
+    res = delay_corrected_confirmed_cfr(
+        chn;
+        obs_confirmed = 210, obs_confirmed_deaths = 17
+    )
     tbl = confirmed_cfr_table(res)
     @test tbl isa DataFrame
     @test nrow(tbl) == 4
@@ -118,15 +122,17 @@ end
     @test "Estimate" in names(tbl)
 end
 
-@testitem "plot_confirmed_cfr returns a Makie figure" setup=[
-    ConfirmedCfrChain
+@testitem "plot_confirmed_cfr returns a Makie figure" setup = [
+    ConfirmedCfrChain,
 ] begin
     using CairoMakie
     CairoMakie.activate!(type = "png")
     using BVDOutbreakSize: plot_confirmed_cfr
     chn = _ccfr_chain(200)
-    res = delay_corrected_confirmed_cfr(chn;
-        obs_confirmed = 210, obs_confirmed_deaths = 17)
+    res = delay_corrected_confirmed_cfr(
+        chn;
+        obs_confirmed = 210, obs_confirmed_deaths = 17
+    )
     fig = plot_confirmed_cfr(res)
     @test fig isa CairoMakie.Makie.Figure
 end

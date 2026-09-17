@@ -32,8 +32,14 @@ stages = STAGE === :all ? (:base, :dependent) : (STAGE,)
 for stage in stages
     stage_specs = stage_fit_specs(specs, stage)
     n = length(stage_specs)
-    @info "Fitting $n $stage models into the cache" cache=CACHE refit=REFIT
-    fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
-                      cache_dir = CACHE, refit = REFIT) for s in stage_specs])
+    @info "Fitting $n $stage models into the cache" cache = CACHE refit = REFIT
+    fit_parallel(
+        [
+            () -> fit_or_load(
+                fit_key(s.id), s.thunk;
+                cache_dir = CACHE, refit = REFIT
+            ) for s in stage_specs
+        ]
+    )
 end
-@info "All fits cached" cache=CACHE stages=stages
+@info "All fits cached" cache = CACHE stages = stages

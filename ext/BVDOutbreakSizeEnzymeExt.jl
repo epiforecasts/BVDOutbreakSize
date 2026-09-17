@@ -19,7 +19,8 @@ using Enzyme: Enzyme
 function BVDOutbreakSize.enzyme_adtype()
     return AutoEnzyme(;
         mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
-        function_annotation = Enzyme.Duplicated)
+        function_annotation = Enzyme.Duplicated
+    )
 end
 
 end

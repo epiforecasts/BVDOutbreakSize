@@ -8,9 +8,11 @@
     using DataFrames: DataFrame
     using BVDOutbreakSize: markdown_table
 
-    df = DataFrame("Quantity" => ["Cumulative infections", "Case-fatality"],
+    df = DataFrame(
+        "Quantity" => ["Cumulative infections", "Case-fatality"],
         "Lower 90%" => [1234.0, 0.12],
-        "Upper 90%" => [5678.0, 0.34])
+        "Upper 90%" => [5678.0, 0.34]
+    )
     md = markdown_table(df)
     lines = split(strip(md), "\n")
 
@@ -39,11 +41,11 @@ end
     ## A `|` inside a cell is escaped so it cannot split the row.
     piped = DataFrame("Stream" => ["cases | deaths"])
     @test split(strip(markdown_table(piped)), "\n")[3] ==
-          "| cases \\| deaths |"
+        "| cases \\| deaths |"
 
     ## `Bool` reads as a label rather than a quantity, so it stays left.
     @test split(strip(markdown_table(DataFrame("ok" => [true]))), "\n")[2] ==
-          "| --- |"
+        "| --- |"
 end
 
 @testitem "MarkdownTable shows as markdown and not as html" begin
@@ -65,6 +67,8 @@ end
     ## optional analysis is not run in a given build.
     msg = MarkdownTable(Markdown.md"_Not shown in this build._")
     @test showable(MIME("text/markdown"), msg)
-    @test occursin("Not shown in this build.",
-        sprint(show, MIME("text/markdown"), msg))
+    @test occursin(
+        "Not shown in this build.",
+        sprint(show, MIME("text/markdown"), msg)
+    )
 end

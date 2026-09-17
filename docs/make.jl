@@ -33,12 +33,13 @@ isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 ## combine step assembles the site without re-running any code.
 function render_page(page)
     @info "Literate render" page
-    Literate.markdown(
+    return Literate.markdown(
         joinpath(EXAMPLES, "$page.jl"), LITERATE_OUT;
         name = page,
         flavor = Literate.DocumenterFlavor(),
         execute = true,
-        credit = false)
+        credit = false
+    )
 end
 
 ## Copy the README to the home page, stripping the SHARED-block marker
@@ -63,23 +64,25 @@ function write_index()
     ## data cut-off, so a rebuild refreshes them without editing README.md.
     built = Dates.format(Dates.today(), "d U yyyy")
     asof = Dates.format(load_observations().cutoff, "d U yyyy")
-    readme = replace(readme,
+    readme = replace(
+        readme,
         r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
-        r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.")
+        r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof."
+    )
     readme = replace(
         readme,
         r"\(https?://[^)]*?/(analysis|sensitivity)#([^)]+)\)" =>
             m -> begin
-                slug = match(r"#([^)]+)\)$", m).captures[1]
-                "(@ref \"" * replace(slug, '-' => ' ') * "\")"
-            end
+            slug = match(r"#([^)]+)\)$", m).captures[1]
+            "(@ref \"" * replace(slug, '-' => ' ') * "\")"
+        end
     )
-    write(joinpath(LITERATE_OUT, "index.md"), readme)
+    return write(joinpath(LITERATE_OUT, "index.md"), readme)
 end
 
 ## References page sourced from refs.bib through `@bibliography`.
 function write_references()
-    open(joinpath(LITERATE_OUT, "references.md"), "w") do io
+    return open(joinpath(LITERATE_OUT, "references.md"), "w") do io
         println(io, "# References")
         println(io)
         println(io, "```@bibliography")
@@ -99,7 +102,8 @@ function stage_zone_map()
     mkpath(dest)
     inputs = (
         joinpath(REPO_ROOT, "data", "health_zones.geojson"),
-        joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"))
+        joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"),
+    )
     for src in inputs
         if isfile(src)
             cp(src, joinpath(dest, basename(src)); force = true)
@@ -107,6 +111,7 @@ function stage_zone_map()
             @warn "Zone map input missing; the map will show no estimates" src
         end
     end
+    return
 end
 
 ## Assemble and deploy the Vitepress site from the pre-rendered markdown. The
@@ -115,7 +120,8 @@ end
 ## across all pages in a single pass, so cross-page links resolve.
 function combine()
     bib = CitationBibliography(
-        joinpath(@__DIR__, "src", "refs.bib"); style = :authoryear)
+        joinpath(@__DIR__, "src", "refs.bib"); style = :authoryear
+    )
     write_index()
     write_references()
     stage_zone_map()
@@ -136,7 +142,7 @@ function combine()
             "API" => "api.md",
             "Contributing" => "contributing.md",
             "News" => "news.md",
-            "References" => "references.md"
+            "References" => "references.md",
         ],
         format = DocumenterVitepress.MarkdownVitepress(;
             repo = "github.com/epiforecasts/BVDOutbreakSize",
@@ -154,7 +160,7 @@ function combine()
     ## (docs/build/1/, …) and its deploydocs flattens each build/i/ to
     ## gh-pages/<base>/. Plain deploydocs leaves the numbered subdir, so
     ## the deployed site's asset URLs 404. Ref LuxDL/DocumenterVitepress.jl#280.
-    DocumenterVitepress.deploydocs(;
+    return DocumenterVitepress.deploydocs(;
         repo = "github.com/epiforecasts/BVDOutbreakSize",
         target = "build",
         branch = "gh-pages",
@@ -175,6 +181,8 @@ elseif STAGE == "all"
     end
     combine()
 else
-    error("unknown BVD_DOCS_STAGE=$STAGE; expected one of render-main, " *
-          "render-sensitivity, combine, all")
+    error(
+        "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-main, " *
+            "render-sensitivity, combine, all"
+    )
 end

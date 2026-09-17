@@ -8,10 +8,15 @@
 
     obs = load_observations()
     for (zh, ph, nat) in (
-        (obs.zone_confirmed_history, obs.province_confirmed_history,
-        obs.confirmed_history),
-        (obs.zone_death_history, obs.province_death_history,
-        obs.confirmed_deaths_history))
+            (
+                obs.zone_confirmed_history, obs.province_confirmed_history,
+                obs.confirmed_history,
+            ),
+            (
+                obs.zone_death_history, obs.province_death_history,
+                obs.confirmed_deaths_history,
+            ),
+        )
         @test !isempty(zh)
         @test issubset(keys(zh), PROVINCE_SOURCE_NAMES)
         days = first(values(first(values(zh)))).days
@@ -60,12 +65,14 @@ end
 
 @testitem "health-zone metadata matches the zone blocks" begin
     using BVDOutbreakSize: load_observations, load_health_zones,
-                           PROVINCE_SOURCE_NAMES
+        PROVINCE_SOURCE_NAMES
 
     obs = load_observations()
     rows = load_health_zones()
-    in_blocks = Set((p, z) for (p, zs) in obs.zone_confirmed_history
-    for z in keys(zs) if z != "unallocated")
+    in_blocks = Set(
+        (p, z) for (p, zs) in obs.zone_confirmed_history
+            for z in keys(zs) if z != "unallocated"
+    )
     @test Set((r.province, r.zone) for r in rows) == in_blocks
     @test allunique(r.zone for r in rows)
     @test allunique(r.zscode for r in rows)
@@ -100,13 +107,13 @@ end
     ## The map covers the seven provinces' zones, keyed or not.
     @test count("\"zone\":\"\"", text) > 0
     @test count("\"type\":\"Feature\"", text) ==
-          length(keyed) + count("\"zone\":\"\"", text)
+        length(keyed) + count("\"zone\":\"\"", text)
 end
 
 @testitem "zone_increment_matrix totals equal the zone-sum increments" begin
     using BVDOutbreakSize: load_observations, zone_increment_matrix,
-                           zone_reattribution_days, PROVINCE_NAMES,
-                           PROVINCE_MEMBERS
+        zone_reattribution_days, PROVINCE_NAMES,
+        PROVINCE_MEMBERS
     using Dates: Date, Day
 
     obs = load_observations()
@@ -138,20 +145,22 @@ end
     @test collect(keys(re)) == ["ituri"]
     @test dates(re["ituri"]) == [Date("2026-06-18"), Date("2026-07-22")]
     @test dates(zone_reattribution_days(obs.zone_death_history)["ituri"]) ==
-          [Date("2026-06-18")]
+        [Date("2026-06-18")]
     ituri = res[findfirst(r -> r.patch == "ituri", res)]
     @test dates(ituri.excluded) == [Date("2026-06-18"), Date("2026-07-22")]
     @test all(r -> r.patch == "ituri" || isempty(r.excluded), res)
     ## Without a reattribution table every column is kept.
-    plain = zone_increment_matrix(zh, PROVINCE_NAMES;
-        reattribution = Dict{String, Vector{Int}}())
+    plain = zone_increment_matrix(
+        zh, PROVINCE_NAMES;
+        reattribution = Dict{String, Vector{Int}}()
+    )
     @test all(r -> isempty(r.excluded), plain)
     @test all(>=(0), plain[1].increments)
     ## Every zone lands in exactly one patch.
     all_zones = reduce(vcat, (r.zones for r in res))
     @test allunique(all_zones)
     @test length(all_zones) ==
-          sum(count(!=("unallocated"), keys(zs)) for zs in values(zh))
+        sum(count(!=("unallocated"), keys(zs)) for zs in values(zh))
     ## The unallocated rows are what separate the totals from the province.
     prov = obs.province_confirmed_history["ituri"]
     for (j, day) in enumerate(days)
@@ -159,20 +168,25 @@ end
         k === nothing && continue
         un = zh["ituri"]["unallocated"].counts[j]
         @test sum(zh["ituri"][z].counts[j] for (_, z) in ituri.zones) + un ==
-              prov.counts[k]
+            prov.counts[k]
     end
     ## No data, no rows; a patch with no zone data gets an empty matrix.
     @test isempty(zone_increment_matrix(Dict{String, Any}(), PROVINCE_NAMES))
-    lone = zone_increment_matrix(zh, ["ituri", "nowhere"],
-        Dict("ituri" => ["ituri"], "nowhere" => ["nowhere"]))
+    lone = zone_increment_matrix(
+        zh, ["ituri", "nowhere"],
+        Dict("ituri" => ["ituri"], "nowhere" => ["nowhere"])
+    )
     @test length(lone) == 2
     @test isempty(lone[2].zones)
     @test size(lone[2].increments) == (0, 0)
     ## Zones on different vintages are refused.
     H = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
-    bad = Dict("ituri" => Dict{String, H}(
-        "a" => (; days = [1, 2], counts = [1, 2]),
-        "b" => (; days = [1, 3], counts = [1, 2])))
+    bad = Dict(
+        "ituri" => Dict{String, H}(
+            "a" => (; days = [1, 2], counts = [1, 2]),
+            "b" => (; days = [1, 3], counts = [1, 2])
+        )
+    )
     @test_throws ErrorException zone_increment_matrix(bad, ["ituri"])
 end
 
@@ -196,5 +210,5 @@ end
     ## 15 July is itself a vintage, so it is the last day kept.
     @test zf["ituri"]["bunia"].days[end] == frozen.n
     @test frozen.zone_death_history["ituri"]["bunia"].days ==
-          zf["ituri"]["bunia"].days
+        zf["ituri"]["bunia"].days
 end

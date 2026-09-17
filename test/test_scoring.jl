@@ -8,16 +8,23 @@
     using BVDOutbreakSize: select_daily_releases
 
     entries = [
-        ("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
-            Date(2026, 7, 8)),
-        ("results-1223", DateTime(2026, 7, 14, 12, 16, 30),
-            Date(2026, 7, 11)),
+        (
+            "results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
+            Date(2026, 7, 8),
+        ),
+        (
+            "results-1223", DateTime(2026, 7, 14, 12, 16, 30),
+            Date(2026, 7, 11),
+        ),
         ("v1.9.0", DateTime(2026, 7, 11, 10, 0, 0), Date(2026, 7, 8)),
-        ("some-other-tag", DateTime(2026, 7, 12, 9, 0, 0),
-            Date(2026, 7, 9))]
+        (
+            "some-other-tag", DateTime(2026, 7, 12, 9, 0, 0),
+            Date(2026, 7, 9),
+        ),
+    ]
 
     @test select_daily_releases(entries) ==
-          ["results-1223", "results-v1.9.0"]
+        ["results-1223", "results-v1.9.0"]
 end
 
 @testitem "select_daily_releases keeps the newest build of a data day" begin
@@ -27,12 +34,19 @@ end
     ## Two main builds sharing cut-off 2026-07-03 collapse to the later
     ## one; the build on the next data day is kept alongside it.
     entries = [
-        ("results-1160", DateTime(2026, 7, 6, 13, 36, 42),
-            Date(2026, 7, 3)),
-        ("results-1169", DateTime(2026, 7, 6, 22, 2, 50),
-            Date(2026, 7, 3)),
-        ("results-1172", DateTime(2026, 7, 7, 8, 0, 46),
-            Date(2026, 7, 4))]
+        (
+            "results-1160", DateTime(2026, 7, 6, 13, 36, 42),
+            Date(2026, 7, 3),
+        ),
+        (
+            "results-1169", DateTime(2026, 7, 6, 22, 2, 50),
+            Date(2026, 7, 3),
+        ),
+        (
+            "results-1172", DateTime(2026, 7, 7, 8, 0, 46),
+            Date(2026, 7, 4),
+        ),
+    ]
 
     @test select_daily_releases(entries) == ["results-1172", "results-1169"]
 end
@@ -47,17 +61,25 @@ end
     ## shared cut-off collapses them, and the tag wins.
     entries = [
         ("results-1187", DateTime(2026, 7, 9, 8, 34, 2), Date(2026, 7, 6)),
-        ("results-v1.8.0", DateTime(2026, 7, 10, 10, 1, 25),
-            Date(2026, 7, 6))]
+        (
+            "results-v1.8.0", DateTime(2026, 7, 10, 10, 1, 25),
+            Date(2026, 7, 6),
+        ),
+    ]
     @test select_daily_releases(entries) == ["results-v1.8.0"]
 
     ## Same mechanism between two main builds, with no tag to prefer: the
     ## later build of the same data survives.
     mains = [
-        ("results-750", DateTime(2026, 6, 11, 21, 19, 50),
-            Date(2026, 6, 10)),
-        ("results-762", DateTime(2026, 6, 12, 9, 51, 19),
-            Date(2026, 6, 10))]
+        (
+            "results-750", DateTime(2026, 6, 11, 21, 19, 50),
+            Date(2026, 6, 10),
+        ),
+        (
+            "results-762", DateTime(2026, 6, 12, 9, 51, 19),
+            Date(2026, 6, 10),
+        ),
+    ]
     @test select_daily_releases(mains) == ["results-762"]
 end
 
@@ -68,18 +90,28 @@ end
     ## A tag build and a main build of the same commit publish identical
     ## forecasts under one timestamp; scoring both double-counts them.
     entries = [
-        ("results-1204", DateTime(2026, 7, 11, 10, 24, 23),
-            Date(2026, 7, 8)),
-        ("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
-            Date(2026, 7, 8))]
+        (
+            "results-1204", DateTime(2026, 7, 11, 10, 24, 23),
+            Date(2026, 7, 8),
+        ),
+        (
+            "results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
+            Date(2026, 7, 8),
+        ),
+    ]
     @test select_daily_releases(entries) == ["results-v1.9.0"]
 
     ## The tag wins even when a later main build shares its cut-off.
     later = [
-        ("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
-            Date(2026, 7, 8)),
-        ("results-1210", DateTime(2026, 7, 11, 23, 0, 0),
-            Date(2026, 7, 8))]
+        (
+            "results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
+            Date(2026, 7, 8),
+        ),
+        (
+            "results-1210", DateTime(2026, 7, 11, 23, 0, 0),
+            Date(2026, 7, 8),
+        ),
+    ]
     @test select_daily_releases(later) == ["results-v1.9.0"]
 end
 
@@ -91,19 +123,30 @@ end
     ## version wins. v1.10.0 sorts below v1.9.0 as a string and above it as
     ## a version, so this fails if the version is ever compared as text.
     entries = [
-        ("results-v1.9.0", DateTime(2026, 6, 9, 22, 58, 13),
-            Date(2026, 6, 7)),
-        ("results-706", DateTime(2026, 6, 9, 22, 58, 13),
-            Date(2026, 6, 7)),
-        ("results-v1.10.0", DateTime(2026, 6, 9, 22, 58, 13),
-            Date(2026, 6, 7))]
+        (
+            "results-v1.9.0", DateTime(2026, 6, 9, 22, 58, 13),
+            Date(2026, 6, 7),
+        ),
+        (
+            "results-706", DateTime(2026, 6, 9, 22, 58, 13),
+            Date(2026, 6, 7),
+        ),
+        (
+            "results-v1.10.0", DateTime(2026, 6, 9, 22, 58, 13),
+            Date(2026, 6, 7),
+        ),
+    ]
     @test select_daily_releases(entries) == ["results-v1.10.0"]
 
     ## Main builds sharing a timestamp fall back to the higher run number.
     ## "10" sorts below "9" as a string, so this fails on a text compare.
-    mains = [("results-9", DateTime(2026, 5, 20, 9, 6, 47),
-            Date(2026, 5, 18)),
-        ("results-10", DateTime(2026, 5, 20, 9, 6, 47), Date(2026, 5, 18))]
+    mains = [
+        (
+            "results-9", DateTime(2026, 5, 20, 9, 6, 47),
+            Date(2026, 5, 18),
+        ),
+        ("results-10", DateTime(2026, 5, 20, 9, 6, 47), Date(2026, 5, 18)),
+    ]
     @test select_daily_releases(mains) == ["results-10"]
 end
 
@@ -120,15 +163,22 @@ end
     @test is_results_release("results-1243")
 
     entries = [
-        ("forecasts-backfill", DateTime(2026, 7, 12, 9, 0, 0),
-            Date(2026, 7, 8)),
-        ("v1.9.0", DateTime(2026, 7, 11, 10, 0, 0), Date(2026, 7, 8))]
+        (
+            "forecasts-backfill", DateTime(2026, 7, 12, 9, 0, 0),
+            Date(2026, 7, 8),
+        ),
+        ("v1.9.0", DateTime(2026, 7, 11, 10, 0, 0), Date(2026, 7, 8)),
+    ]
     @test select_daily_releases(entries) == String[]
 
     ## A tagged release must not be read as a main build, which would rank
     ## it below one and compare its run number as a version.
-    tagged = [("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
-        Date(2026, 7, 8))]
+    tagged = [
+        (
+            "results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23),
+            Date(2026, 7, 8),
+        ),
+    ]
     @test select_daily_releases(tagged) == ["results-v1.9.0"]
 end
 
@@ -137,8 +187,14 @@ end
     using BVDOutbreakSize: select_daily_releases
 
     @test select_daily_releases(Tuple{String, DateTime, Date}[]) == String[]
-    @test select_daily_releases([("v1.0.0", DateTime(2026, 5, 1),
-        Date(2026, 4, 28))]) == String[]
+    @test select_daily_releases(
+        [
+            (
+                "v1.0.0", DateTime(2026, 5, 1),
+                Date(2026, 4, 28),
+            ),
+        ]
+    ) == String[]
 end
 
 @testitem "forecast_score_overview aggregates across horizon and release" begin
@@ -154,15 +210,18 @@ end
         release = ["r1", "r1", "r1", "r2", "r2", "r2", "r1", "r1", "r2", "r2"],
         made_date = fill(Date(2026, 6, 1), 10), horizon = fill(7, 10),
         stream = vcat(fill("confirmed cases", 6), fill("recovered", 4)),
-        fit = vcat(["joint", "confirmed", "baseline"],
+        fit = vcat(
             ["joint", "confirmed", "baseline"],
-            ["joint", "baseline"], ["joint", "baseline"]),
+            ["joint", "confirmed", "baseline"],
+            ["joint", "baseline"], ["joint", "baseline"]
+        ),
         crps = [2.0, 4.0, 8.0, 4.0, 6.0, 12.0, 3.0, 6.0, 3.0, 6.0],
         log_crps = [0.2, 0.4, 0.8, 0.4, 0.6, 1.2, 0.3, 0.6, 0.3, 0.6],
         dispersion = fill(0.1, 10), overprediction = fill(0.05, 10),
         underprediction = fill(0.05, 10),
         coverage_50 = fill(1.0, 10), coverage_90 = fill(1.0, 10),
-        bias = fill(0.0, 10))
+        bias = fill(0.0, 10)
+    )
 
     out = forecast_score_overview(scores)
     @test "fit" in names(out)
@@ -171,7 +230,8 @@ end
     @test !("baseline" in out.fit)
 
     row(stream, fit) = only(
-        out[(out.stream .== stream) .& (out.fit .== fit), :])
+        out[(out.stream .== stream) .& (out.fit .== fit), :]
+    )
     ## rel_to_baseline is the ratio of the two fits' mean CRPS over the
     ## matched forecasts, pooled across both releases and horizons: joint
     ## mean (2+4)/2 = 3, baseline mean (8+12)/2 = 10, ratio 0.3. The
@@ -217,7 +277,8 @@ end
         log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
         overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
         coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
-        bias = [0.0, 0.0])
+        bias = [0.0, 0.0]
+    )
 
     out = forecast_score_overview(scores)
     @test isempty(out)
@@ -238,7 +299,8 @@ end
         log_crps = [0.2, 0.0], dispersion = [0.1, 0.0],
         overprediction = [0.05, 0.0], underprediction = [0.05, 0.0],
         coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
-        bias = [0.0, 0.0])
+        bias = [0.0, 0.0]
+    )
 
     out = forecast_score_overview(scores)
     @test ismissing(only(out.rel_to_baseline))
@@ -255,7 +317,8 @@ end
         stream = String[], fit = String[], crps = Float64[],
         log_crps = Float64[], dispersion = Float64[],
         overprediction = Float64[], underprediction = Float64[],
-        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[])
+        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[]
+    )
 
     out = forecast_score_overview(empty_scores)
     @test nrow(out) == 0
@@ -281,7 +344,8 @@ end
         log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
         overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
         coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
-        bias = [0.0, 0.0])
+        bias = [0.0, 0.0]
+    )
 
     table = forecast_score_overview(scores)
     @test "rel_to_individual" in names(table)
@@ -308,7 +372,8 @@ end
         log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
         overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
         coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
-        bias = [0.0, 0.0])
+        bias = [0.0, 0.0]
+    )
     table = forecast_score_overview(scores)
 
     out = drop_degenerate_fit_column(table)
@@ -339,7 +404,8 @@ end
         log_crps = [0.2, 0.25, 0.8], dispersion = fill(0.1, 3),
         overprediction = fill(0.05, 3), underprediction = fill(0.05, 3),
         coverage_50 = fill(1.0, 3), coverage_90 = fill(1.0, 3),
-        bias = fill(0.0, 3))
+        bias = fill(0.0, 3)
+    )
     table = forecast_score_overview(scores)
 
     @test_throws ErrorException drop_degenerate_fit_column(table)
@@ -368,7 +434,8 @@ end
         crps = [2.0, 8.0, 6.0, 12.0], log_crps = [0.2, 0.8, 0.6, 1.2],
         dispersion = fill(0.1, 4), overprediction = fill(0.05, 4),
         underprediction = fill(0.05, 4), coverage_50 = fill(1.0, 4),
-        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4))
+        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4)
+    )
 
     out = forecast_score_by_horizon(scores)
     @test sort(out.horizon) == [7, 14]
@@ -393,7 +460,8 @@ end
         crps = [2.0, 8.0, 6.0, 12.0], log_crps = [0.2, 0.8, 0.6, 1.2],
         dispersion = fill(0.1, 4), overprediction = fill(0.05, 4),
         underprediction = fill(0.05, 4), coverage_50 = fill(1.0, 4),
-        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4))
+        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4)
+    )
 
     out = forecast_score_by_release(scores)
     row = only(out)
@@ -419,29 +487,35 @@ end
     n = 40
     cutoff = Date(2026, 7, 15)
     inc = (; days = [19, 33, 40], counts = [60, 100, 150])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
         recovered_history = inc,
         isolation_history = (; days = [33, 40], counts = [18, 20]),
-        export_case_days = [35, 38, 40])
+        export_case_days = [35, 38, 40],
+    )
     grid_date(day) = obs.cutoff - Day(obs.n - day)
 
     ## A stream_forecasts.csv carrying all six real labels (with two fits of
     ## confirmed cases) plus one unmapped label that must not abort scoring.
     made = string(grid_date(33))
     target = string(grid_date(40))
-    labels = [("reported cases", "cases"), ("suspected deaths", "deaths"),
+    labels = [
+        ("reported cases", "cases"), ("suspected deaths", "deaths"),
         ("confirmed cases", "joint"), ("confirmed cases", "confirmed"),
         ("exports", "exports"), ("isolation beds", "treatment"),
-        ("nonsense stream", "joint")]
+        ("nonsense stream", "joint"),
+    ]
     path = joinpath(mktempdir(), "stream_forecasts.csv")
     open(path, "w") do io
         println(io, "made_date,horizon,target_date,stream,draw,value,fit")
         for (stream, fit) in labels, d in 1:5
 
-            println(io,
-                join((made, 7, target, stream, d, 40 + d, fit), ','))
+            println(
+                io,
+                join((made, 7, target, stream, d, 40 + d, fit), ',')
+            )
         end
     end
 
@@ -451,8 +525,10 @@ end
 
     ## Every mapped stream is scored, including exports (its truth built
     ## from export_case_days) and the two clean additions.
-    for s in ["reported cases", "suspected deaths", "confirmed cases",
-        "exports", "isolation beds"]
+    for s in [
+            "reported cases", "suspected deaths", "confirmed cases",
+            "exports", "isolation beds",
+        ]
         @test s in scored_streams
     end
     ## The unmapped label is dropped, not scored, and did not abort: the
@@ -484,12 +560,14 @@ end
     ## baseline's own lookback window is covered (see
     ## `baseline_window_covered`).
     inc = (; days = [15, 26, 33], counts = [60, 100, 150])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
         recovered_history = inc,
         isolation_history = (; days = [26, 33], counts = [18, 20]),
-        export_case_days = [30, 32])
+        export_case_days = [30, 32],
+    )
     grid_date(day) = obs.cutoff - Day(obs.n - day)
 
     ## A made date one week before the cut-off, so its 7-day target is already
@@ -500,13 +578,17 @@ end
     open(path, "w") do io
         println(io, "made_date,horizon,target_date,stream,draw,value")
         for d in 1:5
-            println(io,
-                join((made, 7, target, "confirmed cases", d, 40 + d), ','))
+            println(
+                io,
+                join((made, 7, target, "confirmed cases", d, 40 + d), ',')
+            )
         end
     end
 
-    result = score_release("results-vT.E.S", path, obs, grid_date;
-        default_fit = "frozen")
+    result = score_release(
+        "results-vT.E.S", path, obs, grid_date;
+        default_fit = "frozen"
+    )
     scored = DataFrame(result.rows)
     ## The fit-less rows are tagged with default_fit, and the persistence
     ## baseline is still produced alongside.
@@ -526,7 +608,7 @@ end
     @test crps_sample(0.0, [-1.0, 1.0]) ≈ 0.5
     ## Order independence.
     @test crps_sample(2.5, [5.0, 1.0, 3.0, 2.0, 4.0]) ≈
-          crps_sample(2.5, [1.0, 2.0, 3.0, 4.0, 5.0])
+        crps_sample(2.5, [1.0, 2.0, 3.0, 4.0, 5.0])
 end
 
 @testitem "crps_sample of a point-mass ensemble is the absolute error" begin
@@ -548,14 +630,14 @@ end
     obs = 120.0
     samples = [10.0, 50.0, 100.0, 150.0, 400.0, 900.0]
     @test log_crps_sample(obs, samples) ==
-          crps_sample(log1p(obs), log1p.(samples))
+        crps_sample(log1p(obs), log1p.(samples))
     @test log_crps_sample(obs, samples) != log(crps_sample(obs, samples))
 end
 
 @testitem "score_draws returns the documented NamedTuple" begin
     using Random: MersenneTwister
     using BVDOutbreakSize: score_draws, crps_sample, log_crps_sample,
-                           bias_sample
+        bias_sample
 
     rng = MersenneTwister(1)
     samples = 100.0 .+ 10.0 .* randn(rng, 500)
@@ -614,7 +696,7 @@ end
     @test d.overprediction >= 0
     @test d.underprediction >= 0
     @test d.dispersion + d.overprediction + d.underprediction ≈
-          crps_sample(obs, samples)
+        crps_sample(obs, samples)
 end
 
 @testitem "crps_decomposition of a point-mass ensemble has no dispersion" begin
@@ -676,7 +758,7 @@ end
     using Dates: Date
     using DataFrames: DataFrame, nrow, names
     using BVDOutbreakSize: forecast_score_overview, forecast_score_by_horizon,
-                           forecast_score_by_release, select_fit_role
+        forecast_score_by_release, select_fit_role
 
     ## "confirmed cases" carries a joint, an individual ("confirmed") and a
     ## baseline fit; "reported cases" carries a joint, a differently named
@@ -685,19 +767,24 @@ end
         release = fill("r1", 6), made_date = fill(Date(2026, 6, 1), 6),
         horizon = fill(7, 6),
         stream = vcat(fill("confirmed cases", 3), fill("reported cases", 3)),
-        fit = ["joint", "confirmed", "baseline",
-            "joint", "cases", "baseline"],
+        fit = [
+            "joint", "confirmed", "baseline",
+            "joint", "cases", "baseline",
+        ],
         crps = [2.0, 4.0, 8.0, 3.0, 6.0, 12.0],
         log_crps = [0.2, 0.4, 0.8, 0.3, 0.6, 1.2],
         dispersion = fill(0.1, 6), overprediction = fill(0.05, 6),
         underprediction = fill(0.05, 6),
         coverage_50 = fill(1.0, 6), coverage_90 = fill(1.0, 6),
-        bias = fill(0.0, 6))
+        bias = fill(0.0, 6)
+    )
 
     ## Each builder keeps every non-baseline fit, so the unfiltered table
     ## carries both roles and the relative-skill figure can compare them.
-    for table in (forecast_score_overview(scores),
-        forecast_score_by_horizon(scores), forecast_score_by_release(scores))
+    for table in (
+            forecast_score_overview(scores),
+            forecast_score_by_horizon(scores), forecast_score_by_release(scores),
+        )
         @test sort(table.fit) == ["cases", "confirmed", "joint", "joint"]
 
         ## The joint role is the joint model's rows alone: no individual
@@ -731,7 +818,8 @@ end
         log_crps = [0.2, 0.8], dispersion = fill(0.1, 2),
         overprediction = fill(0.05, 2), underprediction = fill(0.05, 2),
         coverage_50 = fill(1.0, 2), coverage_90 = fill(1.0, 2),
-        bias = fill(0.0, 2))
+        bias = fill(0.0, 2)
+    )
 
     table = forecast_score_overview(scores)
     @test only(select_fit_role(table, "joint").fit) == "frozen"
@@ -762,21 +850,25 @@ end
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
     cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = cum, deaths_history = cum,
         confirmed_history = cum, confirmed_deaths_history = cum,
         recovered_history = cum, onset_report_history = cum,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
         treatment_confirmed_incare_history =
-        (; days = [26, 33, 40], counts = [8, 9, 12]),
+            (; days = [26, 33, 40], counts = [8, 9, 12]),
         treatment_suspect_incare_history =
-        (; days = [26, 33, 40], counts = [10, 10, 8]),
-        export_case_days = [27, 35, 38, 40])
+            (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40],
+    )
     made_date = grid_date(33)
     target_date = grid_date(40)
 
-    for stream in ("reported cases", "suspected deaths", "confirmed cases",
-        "confirmed deaths", "recovered", "onset reports")
+    for stream in (
+            "reported cases", "suspected deaths", "confirmed cases",
+            "confirmed deaths", "recovered", "onset reports",
+        )
         @test truth_at(obs, grid_date, stream, made_date, target_date) == 50.0
     end
     ## The assembled export stream counts detections the same way: three of
@@ -795,21 +887,29 @@ end
     n = 40
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
         treatment_confirmed_incare_history =
-        (; days = [26, 33, 40], counts = [8, 9, 12]),
+            (; days = [26, 33, 40], counts = [8, 9, 12]),
         treatment_suspect_incare_history =
-        (; days = [26, 33, 40], counts = [10, 10, 8]))
+            (; days = [26, 33, 40], counts = [10, 10, 8]),
+    )
     made_date = grid_date(33)
     target_date = grid_date(40)
 
-    @test truth_at(obs, grid_date, "isolation beds", made_date,
-        target_date) == 20.0
-    @test truth_at(obs, grid_date, "treatment beds", made_date,
-        target_date) == 12.0
-    @test truth_at(obs, grid_date, "isolation beds (suspected)", made_date,
-        target_date) == 8.0
+    @test truth_at(
+        obs, grid_date, "isolation beds", made_date,
+        target_date
+    ) == 20.0
+    @test truth_at(
+        obs, grid_date, "treatment beds", made_date,
+        target_date
+    ) == 12.0
+    @test truth_at(
+        obs, grid_date, "isolation beds (suspected)", made_date,
+        target_date
+    ) == 8.0
 end
 
 @testitem "every scored stream is scored on its declared basis" begin
@@ -831,21 +931,25 @@ end
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
     cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = cum, deaths_history = cum,
         confirmed_history = cum, confirmed_deaths_history = cum,
         recovered_history = cum, onset_report_history = cum,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
         treatment_confirmed_incare_history =
-        (; days = [26, 33, 40], counts = [8, 9, 12]),
+            (; days = [26, 33, 40], counts = [8, 9, 12]),
         treatment_suspect_incare_history =
-        (; days = [26, 33, 40], counts = [10, 10, 8]),
-        export_case_days = [27, 35, 38, 40])
+            (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40],
+    )
     target_date = grid_date(40)
     early, late = grid_date(26), grid_date(33)
 
-    kinds = merge(Dict(k => v[2] for (k, v) in STREAM_HISTORY),
-        Dict(STREAM_ASSEMBLED))
+    kinds = merge(
+        Dict(k => v[2] for (k, v) in STREAM_HISTORY),
+        Dict(STREAM_ASSEMBLED)
+    )
     @test !isempty(kinds)
 
     for (stream, kind) in kinds

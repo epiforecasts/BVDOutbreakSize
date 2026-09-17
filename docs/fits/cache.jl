@@ -13,19 +13,22 @@ using Serialization: serialize, deserialize
 # so a FlexiChains version skew between the fit and render jobs doesn't break
 # `chn[:name]` lookups (the chain loads but its keys can't be indexed).
 function _is_chain(x)
-    hasfield(typeof(x), :_data) && hasfield(typeof(x), :_metadata) &&
+    return hasfield(typeof(x), :_data) && hasfield(typeof(x), :_metadata) &&
         hasfield(typeof(x), :_structures)
 end
 function _rebuild_varname(vn)
-    (APL = parentmodule(typeof(vn));
-        APL.VarName{APL.getsym(vn)}(APL.getoptic(vn)))
+    (
+        APL = parentmodule(typeof(vn));
+        APL.VarName{APL.getsym(vn)}(APL.getoptic(vn))
+    )
 end
 function repair_chain_keys(x)
     if _is_chain(x)
         FC = parentmodule(typeof(x))
         return FC.map_keys(
             k -> k isa FC.Parameter ? FC.Parameter(_rebuild_varname(FC.get_name(k))) :
-                 k, x)
+                k, x
+        )
     elseif x isa NamedTuple && haskey(x, :chn)
         return merge(x, (; chn = repair_chain_keys(x.chn)))
     end
@@ -101,9 +104,11 @@ settings, a schema version, ...). Used to build cache keys, so a change to the
 model source, to any data file that is not excluded, or to the settings yields
 a fresh key.
 """
-function content_hash(source_files;
+function content_hash(
+        source_files;
         data_dir = nothing, data_exclude = (),
-        extra::AbstractString = "", len::Integer = 16)
+        extra::AbstractString = "", len::Integer = 16
+    )
     ctx = SHA256_CTX()
     for f in source_files
         update!(ctx, codeunits(file_sha256(f)))
@@ -134,8 +139,10 @@ means the render is looking in the wrong cache directory (or asking for a fit
 the matrix never made) — a bug that should fail in seconds naming the key and
 the directory, not silently refit the whole report for hours.
 """
-function fit_or_load(key::AbstractString, thunk;
-        cache_dir::AbstractString, refit::Bool = false, strict::Bool = false)
+function fit_or_load(
+        key::AbstractString, thunk;
+        cache_dir::AbstractString, refit::Bool = false, strict::Bool = false
+    )
     mkpath(cache_dir)
     path = joinpath(cache_dir, key * ".jls")
     if !refit && isfile(path)
@@ -143,10 +150,12 @@ function fit_or_load(key::AbstractString, thunk;
         return repair_chain_keys(deserialize(path))
     end
     if strict && !refit
-        error("fit cache MISS for key $key in $cache_dir — expected this fit " *
-              "to have been produced by the CI fit matrix and downloaded here. " *
-              "Refusing to refit inline (strict mode). Check that the render's " *
-              "BVD_FIT_CACHE points at the collected fits.")
+        error(
+            "fit cache MISS for key $key in $cache_dir — expected this fit " *
+                "to have been produced by the CI fit matrix and downloaded here. " *
+                "Refusing to refit inline (strict mode). Check that the render's " *
+                "BVD_FIT_CACHE points at the collected fits."
+        )
     end
     println(stderr, "[fit cache] MISS — fitting $key")
     result = thunk()

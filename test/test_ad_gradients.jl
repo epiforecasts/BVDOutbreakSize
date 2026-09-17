@@ -23,8 +23,8 @@
 ## AD-sensitive items. The gradient pattern mirrors the Enzyme-extension
 ## check in `test/enzyme/runtests.jl`, which validates the same models.
 
-@testitem "AD gradient: every component differentiates (Mooncake)" tags=[
-    :ad
+@testitem "AD gradient: every component differentiates (Mooncake)" tags = [
+    :ad,
 ] begin
     using LogDensityProblems: logdensity_and_gradient
     using BVDOutbreakSize: default_adtype

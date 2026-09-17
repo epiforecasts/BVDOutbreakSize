@@ -2,7 +2,7 @@
 ## hit reuses the serialised result, a miss (or forced refit) runs the thunk,
 ## and the content hash changes when the inputs change.
 
-@testitem "fit_or_load caches, reuses and refits" tags=[:quality] begin
+@testitem "fit_or_load caches, reuses and refits" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     dir = mktempdir()
@@ -19,8 +19,8 @@
     @test isfile(joinpath(dir, key * ".jls"))
 end
 
-@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags=[
-    :quality
+@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags = [
+    :quality,
 ] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
@@ -33,7 +33,8 @@ end
     ## thunk, so a render can fail fast rather than silently refit the whole
     ## report.
     @test_throws Exception fit_or_load(
-        key, thunk; cache_dir = dir, strict = true)
+        key, thunk; cache_dir = dir, strict = true
+    )
     @test calls[] == 0
     @test !isfile(joinpath(dir, key * ".jls"))
 
@@ -44,8 +45,8 @@ end
     @test calls[] == 1                            # only the populating fit ran
 end
 
-@testitem "every score_releases overlay is excluded from the fit hash" tags=[
-    :quality
+@testitem "every score_releases overlay is excluded from the fit hash" tags = [
+    :quality,
 ] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
@@ -60,17 +61,21 @@ end
     ## input from there (the digitised onset triangle), which must stay in
     ## the hash rather than be excluded from it.
     src = read(
-        joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String)
-    written = Set(m.captures[1]
-    for m in eachmatch(
-        r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src))
+        joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String
+    )
+    written = Set(
+        m.captures[1]
+            for m in eachmatch(
+                r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src
+            )
+    )
     @test length(written) >= 4  # guards against a silent regex miss
     for f in written
         @test f in FIT_DATA_EXCLUDE
     end
 end
 
-@testitem "content hash reflects inputs" tags=[:quality] begin
+@testitem "content hash reflects inputs" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     h = content_hash([@__FILE__]; extra = "a")
@@ -91,7 +96,7 @@ end
     @test tree_sha256(d) != t1
 end
 
-@testitem "content hash can exclude non-input data files" tags=[:quality] begin
+@testitem "content hash can exclude non-input data files" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     ## Excluding a file removes it from the tree digest; a fit-input CSV still
@@ -124,7 +129,7 @@ end
     @test content_hash(src; data_dir = d, data_exclude = excl) != h
 end
 
-@testitem "the observation manifest enters the fit hash" tags=[:quality] begin
+@testitem "the observation manifest enters the fit hash" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
     ## `data/observations.toml` is the single source of truth for every
@@ -146,11 +151,13 @@ end
     ## excluded, so it is part of the real fit key.
     data_dir = joinpath(_PKG, "data")
     @test tree_sha256(data_dir; exclude = FIT_DATA_EXCLUDE) !=
-          tree_sha256(data_dir;
-        exclude = (FIT_DATA_EXCLUDE..., "observations.toml"))
+        tree_sha256(
+        data_dir;
+        exclude = (FIT_DATA_EXCLUDE..., "observations.toml")
+    )
 end
 
-@testitem "the fit hash skips excluded directories" tags=[:quality] begin
+@testitem "the fit hash skips excluded directories" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     ## An exclude entry naming a directory drops everything under it. That is
@@ -170,7 +177,7 @@ end
     @test tree_sha256(d) != h
 end
 
-@testitem "validation fits follow the reporting status" tags=[:quality] begin
+@testitem "validation fits follow the reporting status" tags = [:quality] begin
     using Dates
     using Dates: Date, Day
 
@@ -185,13 +192,15 @@ end
     day(d) = n - Dates.value(cutoff - d)
     live = (; days = [day(cutoff - Day(1))], counts = [10.0])
     stale = (; days = [day(cutoff - Day(60))], counts = [10.0])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = stale, deaths_history = stale,
         confirmed_history = live, confirmed_deaths_history = live,
-        isolation_history = live)
+        isolation_history = live,
+    )
 
     @test validation_stream_ids(obs) ==
-          ("confirmed", "confirmed_deaths", "treatment")
+        ("confirmed", "confirmed_deaths", "treatment")
 
     ## A stream that starts being reported again comes back on its own.
     revived = merge(obs, (; reported_history = live))
@@ -205,8 +214,8 @@ end
     end
 end
 
-@testitem "dependent fits follow their parents in the registry" tags=[
-    :quality
+@testitem "dependent fits follow their parents in the registry" tags = [
+    :quality,
 ] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
@@ -223,25 +232,30 @@ end
         push!(seen, s.id)
     end
     @test validate_fit_specs(specs) === specs
-    @test_throws Exception validate_fit_specs([
-        (; id = "child", needs = ["parent"]),
-        (; id = "parent", needs = String[])])
+    @test_throws Exception validate_fit_specs(
+        [
+            (; id = "child", needs = ["parent"]),
+            (; id = "parent", needs = String[]),
+        ]
+    )
 
     ## The health-zone fits are the dependent stage and nothing else is.
     base = base_fit_ids(obs; run_sensitivity = true)
     dependent = dependent_fit_ids(obs; run_sensitivity = true)
-    @test dependent == ["local", "local_frozen_validation", "local_mixing",
-        "local_no_deaths", "local_parent_low", "local_parent_high"]
+    @test dependent == [
+        "local", "local_frozen_validation", "local_mixing",
+        "local_no_deaths", "local_parent_low", "local_parent_high",
+    ]
     @test dependent_fit_ids(obs; run_sensitivity = false) ==
-          ["local", "local_frozen_validation"]
+        ["local", "local_frozen_validation"]
     @test "joint" in base
     @test "frozen_validation" in base
     @test isempty(intersect(base, dependent))
     @test sort(vcat(base, dependent)) ==
-          sort(fit_ids(obs; run_sensitivity = true))
+        sort(fit_ids(obs; run_sensitivity = true))
     @test fit_ids(obs; run_sensitivity = true, stage = :base) == base
     @test fit_ids(obs; run_sensitivity = true, stage = :dependent) ==
-          dependent
+        dependent
     @test_throws Exception fit_ids(obs; stage = :nonsense)
 
     ## `BVD_FIT_STAGE` picks the stage for list.jl and all.jl.
@@ -257,8 +271,8 @@ end
     end
 end
 
-@testitem "dependent thunks load their parent from the cache" tags=[
-    :quality
+@testitem "dependent thunks load their parent from the cache" tags = [
+    :quality,
 ] begin
     using Dates: Date
 
@@ -273,21 +287,25 @@ end
         push!(calls, (; parent, o, kwargs...))
         (; zone = "chain", from = parent)
     end
-    specs = build_fit_specs(obs; run_sensitivity = true,
-        zone_fitter = fake_zone, cache_dir = dir)
+    specs = build_fit_specs(
+        obs; run_sensitivity = true,
+        zone_fitter = fake_zone, cache_dir = dir
+    )
     spec(id) = specs[findfirst(s -> s.id == id, specs)]
 
-    withenv("BVD_FIT_LOG" => "none", "BVD_ZONE_SAMPLES" => nothing,
-        "BVD_ZONE_WARMUP" => nothing) do
+    withenv(
+        "BVD_FIT_LOG" => "none", "BVD_ZONE_SAMPLES" => nothing,
+        "BVD_ZONE_WARMUP" => nothing
+    ) do
         ## A missing parent is a strict cache miss, not a refit: the zone
         ## fitter must not run.
         miss(thunk) =
-            try
-                thunk()
-                nothing
-            catch err
-                err
-            end
+        try
+            thunk()
+            nothing
+        catch err
+            err
+        end
         for id in ("local", "local_frozen_validation")
             err = miss(spec(id).thunk)
             @test err isa ErrorException
@@ -322,10 +340,14 @@ end
         ## The frozen dependent melds from the frozen parent's chain on that
         ## parent's observations and returns the `(; cutoff, o, chn)` shape.
         frozen_o = (; n = 42, cutoff = Date(2026, 9, 1))
-        fake_frozen = (; cutoff = frozen_o.cutoff, o = frozen_o,
-            chn = (; payload = "frozen chain"))
-        fit_or_load(fit_key("frozen_validation"), () -> fake_frozen;
-            cache_dir = dir)
+        fake_frozen = (;
+            cutoff = frozen_o.cutoff, o = frozen_o,
+            chn = (; payload = "frozen chain"),
+        )
+        fit_or_load(
+            fit_key("frozen_validation"), () -> fake_frozen;
+            cache_dir = dir
+        )
         f = spec("local_frozen_validation").thunk()
         @test keys(f) == (:cutoff, :o, :chn)
         @test f.cutoff == frozen_o.cutoff
@@ -336,10 +358,12 @@ end
 
         ## Each zone sensitivity variant melds from the same joint and adds
         ## exactly its own switch to the zone fitter's keywords.
-        variants = (("local_mixing", :mixing, true),
+        variants = (
+            ("local_mixing", :mixing, true),
             ("local_no_deaths", :deaths, false),
             ("local_parent_low", :parent_summary, :draw_low),
-            ("local_parent_high", :parent_summary, :draw_high))
+            ("local_parent_high", :parent_summary, :draw_high),
+        )
         for (id, key, value) in variants
             spec(id).thunk()
             c = calls[end]

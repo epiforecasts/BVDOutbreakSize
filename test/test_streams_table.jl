@@ -13,13 +13,15 @@
 
     @test df isa DataFrame
     @test names(df) ==
-          ["Stream", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%"]
+        [
+        "Stream", "Lower 90%", "Lower 60%", "Lower 30%",
+        "Upper 30%", "Upper 60%", "Upper 90%",
+    ]
     @test nrow(df) == 2
     @test df[!, "Stream"] == ["fit A", "fit B"]
 
     for r in eachrow(df)
         @test r["Lower 90%"] <= r["Lower 60%"] <= r["Lower 30%"] <=
-              r["Upper 30%"] <= r["Upper 60%"] <= r["Upper 90%"]
+            r["Upper 30%"] <= r["Upper 60%"] <= r["Upper 90%"]
     end
 end

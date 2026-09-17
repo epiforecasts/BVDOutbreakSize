@@ -16,5 +16,6 @@ for scen in SCENARIOS
     ## No `adtype`, so the function evaluates the log-joint and nothing else.
     ldf, x = ADFixtures.log_density_function(scen, nothing)
     SUITE["Log density"][scen.group][scen.name] = @benchmarkable logdensity(
-        $ldf, $x)
+        $ldf, $x
+    )
 end

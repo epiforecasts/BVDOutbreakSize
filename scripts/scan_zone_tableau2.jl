@@ -76,17 +76,21 @@ using Printf
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const PDF_DIR = length(ARGS) >= 1 ? ARGS[1] :
-                joinpath(ROOT, "data", "sitrep_pdfs")
+    joinpath(ROOT, "data", "sitrep_pdfs")
 const MANIFEST = joinpath(ROOT, "data", "observations.toml")
 const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 
 ## Provinces in patch order, matching PROVINCE_SOURCE_NAMES.
-const PROVINCES = ["ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi"]
-const NAMES = Dict("ituri" => "ituri", "nord kivu" => "nord_kivu",
+const PROVINCES = [
+    "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
+    "bas_uele", "sud_ubangi",
+]
+const NAMES = Dict(
+    "ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas uele" => "bas_uele",
-    "sud ubangi" => "sud_ubangi")
+    "sud ubangi" => "sud_ubangi"
+)
 
 ## Spelling variants of a zone name, keyed on the canonical (folded) form
 ## of the variant and valued with the canonical form of the name used for
@@ -111,12 +115,15 @@ const ZONE_ALIASES = Dict(
     "mongbalu" => "mongbwalu",
     "tchomai" => "tchomia",
     "wanierukula" => "wanie rukula",
-    "manguripa" => "manguredjipa")
+    "manguripa" => "manguredjipa"
+)
 
 ## Rows of cases and deaths the report could not attribute to a zone. Each
 ## era words the row differently; all become `<province>.unallocated`.
-const UNALLOCATED = (r"^autres zs", r"^autres zones", r"^non identifiees",
-    r"^a ventiler", r"^non ventilees")
+const UNALLOCATED = (
+    r"^autres zs", r"^autres zones", r"^non identifiees",
+    r"^a ventiler", r"^non ventilees",
+)
 
 fold(s) = lowercase(Base.Unicode.normalize(String(s); stripmark = true))
 
@@ -161,9 +168,11 @@ function tableau2_lines(text::AbstractString)
     head = findfirst(lines) do l
         f = fold(l)
         occursin("cas", f) && occursin("deces", f) &&
-            (occursin("par province et zone de", f) ||
-             occursin("par zone de sante et", f) ||
-             endswith(rstrip(f), "par zone de sante"))
+            (
+            occursin("par province et zone de", f) ||
+                occursin("par zone de sante et", f) ||
+                endswith(rstrip(f), "par zone de sante")
+        )
     end
     head === nothing && return (nothing, "no Tableau 2 caption")
     out = String[]
@@ -201,8 +210,10 @@ function parse_row(parts::Vector{<:AbstractString}, start::Int)
         (c === nothing || d === nothing) && return nothing
         return (c, d)
     end
-    nums = [p for p in parts[start:end]
-            if occursin(r"^[0-9][0-9 ]*(,[0-9]+)?$", p)]
+    nums = [
+        p for p in parts[start:end]
+            if occursin(r"^[0-9][0-9 ]*(,[0-9]+)?$", p)
+    ]
     length(nums) >= 2 || return nothing
     (occursin(',', nums[1]) || occursin(',', nums[2])) && return nothing
     return (digits_only(nums[1]), digits_only(nums[2]))
@@ -217,8 +228,10 @@ where the deaths figure can be displaced onto the following line, which
 `next` carries. NA reads as zero. The earlier "Autres ZS" and "Non
 identifiées" rows are ordinary rows.
 """
-function parse_unallocated(parts::Vector{<:AbstractString},
-        next::AbstractString)
+function parse_unallocated(
+        parts::Vector{<:AbstractString},
+        next::AbstractString
+    )
     any(p -> occursin('%', p), parts) && return parse_row(parts, 2)
     cells = String[]
     for p in parts[2:end]
@@ -345,8 +358,10 @@ end
 zsum(z, idx) = sum(v[idx] for v in values(z); init = 0)
 
 function main()
-    isdir(PDF_DIR) || error("no sitrep PDFs at $(PDF_DIR); " *
-          "run `task download-sitreps` first.")
+    isdir(PDF_DIR) || error(
+        "no sitrep PDFs at $(PDF_DIR); " *
+            "run `task download-sitreps` first."
+    )
     Sys.which("pdftotext") === nothing &&
         error("pdftotext not found; install poppler-utils.")
 
@@ -359,8 +374,12 @@ function main()
     duplicates = String[]
     with_pdf = Set{Int}()
 
-    for path in sort(filter(f -> endswith(f, ".pdf"),
-        readdir(PDF_DIR; join = true)))
+    for path in sort(
+            filter(
+                f -> endswith(f, ".pdf"),
+                readdir(PDF_DIR; join = true)
+            )
+        )
         m = match(r"(\d+)[_-]2026", basename(path))
         m === nothing && continue
         sr = parse(Int, m[1])
@@ -388,12 +407,18 @@ function main()
     isempty(scanned) && error("no sitrep yielded a Tableau 2.")
 
     raw = TOML.parsefile(MANIFEST)
-    hist(k) = Dict(String(d) => Int(v)
-    for (d, v) in zip(raw[k]["dates"], raw[k]["values"]))
+    hist(k) = Dict(
+        String(d) => Int(v)
+            for (d, v) in zip(raw[k]["dates"], raw[k]["values"])
+    )
     natc, natd = hist("confirmed_case_history"), hist("confirmed_death_history")
-    provblock(k) = Dict(String(d) => Dict(p => Int(raw[k][p][i])
-                        for p in PROVINCES if haskey(raw[k], p))
-    for (i, d) in enumerate(raw[k]["dates"]))
+    provblock(k) = Dict(
+        String(d) => Dict(
+            p => Int(raw[k][p][i])
+                for p in PROVINCES if haskey(raw[k], p)
+        )
+            for (i, d) in enumerate(raw[k]["dates"])
+    )
     provc = provblock("province_confirmed_history")
     provd = provblock("province_death_history")
 
@@ -415,8 +440,10 @@ function main()
         rows = scanned[d]
         ok = true
         via_province = haskey(provc, d) && haskey(provd, d)
-        for p in union(keys(rows),
-            via_province ? keys(provc[d]) : Set{String}())
+        for p in union(
+                keys(rows),
+                via_province ? keys(provc[d]) : Set{String}()
+            )
             z = get(rows, p, Dict{String, Tuple{Int, Int}}())
             s = (zsum(z, 1), zsum(z, 2))
             pr = get(printed[d], p, nothing)
@@ -429,9 +456,12 @@ function main()
                     push!(internal, (d, "$(p): zones $(s), printed row $(pr)"))
                     ok = false
                 else
-                    push!(bad, (
-                        d, "$(p): zones $(s), printed $(pr), " *
-                           "committed $(committed)"))
+                    push!(
+                        bad, (
+                            d, "$(p): zones $(s), printed $(pr), " *
+                                "committed $(committed)",
+                        )
+                    )
                     ok = false
                 end
             elseif pr === nothing
@@ -442,11 +472,17 @@ function main()
                 ok = false
             end
         end
-        nat = (sum(zsum(z, 1) for z in values(rows)),
-            sum(zsum(z, 2) for z in values(rows)))
+        nat = (
+            sum(zsum(z, 1) for z in values(rows)),
+            sum(zsum(z, 2) for z in values(rows)),
+        )
         if ok && nat != (natc[d], natd[d])
-            push!(bad, (d, "provinces sum to $(nat), national " *
-                           "$((natc[d], natd[d]))"))
+            push!(
+                bad, (
+                    d, "provinces sum to $(nat), national " *
+                        "$((natc[d], natd[d]))",
+                )
+            )
             ok = false
         end
         ok || continue
@@ -455,8 +491,10 @@ function main()
     end
 
     println("Per-zone confirmed cases and deaths (Tableau 2)\n")
-    @printf("%11s %4s | %6s %6s | %6s %6s | %5s %5s | %s\n", "date", "sr",
-        "cases", "nat", "deaths", "nat", "zones", "unall", "note")
+    @printf(
+        "%11s %4s | %6s %6s | %6s %6s | %5s %5s | %s\n", "date", "sr",
+        "cases", "nat", "deaths", "nat", "zones", "unall", "note"
+    )
     println("-"^78)
     for d in checkable
         rows = scanned[d]
@@ -465,11 +503,13 @@ function main()
         nz = sum(count(k -> k != "unallocated", keys(z)) for z in values(rows))
         un = sum(get(z, "unallocated", (0, 0))[1] for z in values(rows))
         note = d in keep ? (d in national_only ? "national only" : "") :
-               any(t -> t[1] == d, internal) ? "table contradicts itself" :
-               "MISMATCH"
-        @printf("%11s %4d | %6d %6s | %6d %6s | %5d %5d | %s\n",
+            any(t -> t[1] == d, internal) ? "table contradicts itself" :
+            "MISMATCH"
+        @printf(
+            "%11s %4d | %6d %6s | %6d %6s | %5d %5d | %s\n",
             d, srs[d], cs, cs == natc[d] ? string(natc[d]) : "!$(natc[d])",
-            ds, ds == natd[d] ? string(natd[d]) : "!$(natd[d])", nz, un, note)
+            ds, ds == natd[d] ? string(natd[d]) : "!$(natd[d])", nz, un, note
+        )
     end
 
     early = sort(unique(sr for (sr, _) in unreadable if sr < 18))
@@ -488,26 +528,32 @@ function main()
     if !isempty(no_pdf)
         println(
             "\nSitreps in $(basename(SITREP_CSV)) with no PDF under " *
-            "$(PDF_DIR) (not scanned): ",
-            join((@sprintf("%03d", x) for x in no_pdf), ", "))
+                "$(PDF_DIR) (not scanned): ",
+            join((@sprintf("%03d", x) for x in no_pdf), ", ")
+        )
     end
     if !isempty(duplicates)
         println(
             "\nDuplicate files that disagree with the file scanned " *
-            "before them for the same sitrep: ",
-            join(duplicates, ", "))
+                "before them for the same sitrep: ",
+            join(duplicates, ", ")
+        )
     end
     if !isempty(internal)
-        println("\nDates whose Tableau 2 contradicts itself, the zone rows " *
-                "not summing to the printed province row (not emitted):")
+        println(
+            "\nDates whose Tableau 2 contradicts itself, the zone rows " *
+                "not summing to the printed province row (not emitted):"
+        )
         for (d, msg) in internal
             @printf("  %11s sitrep %3d  %s\n", d, srs[d], msg)
         end
     end
     if !isempty(off_printed)
-        println("\nDates where the zone rows reconcile with the committed " *
+        println(
+            "\nDates where the zone rows reconcile with the committed " *
                 "province value but the printed province row does not " *
-                "(kept):")
+                "(kept):"
+        )
         for (d, msg) in off_printed
             @printf("  %11s sitrep %3d  %s\n", d, srs[d], msg)
         end
@@ -515,15 +561,17 @@ function main()
     if !isempty(national_only)
         println(
             "\nDates before the province blocks begin, reconciled " *
-            "against the printed province rows and the national " *
-            "totals only (kept): ",
-            join(national_only, ", "))
+                "against the printed province rows and the national " *
+                "totals only (kept): ",
+            join(national_only, ", ")
+        )
     end
     if !isempty(unchecked)
         println(
             "\nDates with no national totals to reconcile against " *
-            "(not emitted): ",
-            join(unchecked, ", "))
+                "(not emitted): ",
+            join(unchecked, ", ")
+        )
     end
 
     ## Every zone key with the spellings that fed it, so a new variant that
@@ -532,8 +580,10 @@ function main()
     for d in keep, (p, z) in scanned[d], k in keys(z)
         k == "unallocated" || push!(zones[p], k)
     end
-    println("\nZones per province (kept dates), with the spellings behind " *
-            "any key fed by more than one:")
+    println(
+        "\nZones per province (kept dates), with the spellings behind " *
+            "any key fed by more than one:"
+    )
     for p in PROVINCES
         isempty(zones[p]) && continue
         ks = sort(collect(zones[p]))
@@ -543,11 +593,15 @@ function main()
             length(sp) > 1 && println("    $(k) <= ", join(sp, " / "))
         end
     end
-    multi = [k for k in union(values(zones)...)
-             if count(p -> k in zones[p], PROVINCES) > 1]
+    multi = [
+        k for k in union(values(zones)...)
+            if count(p -> k in zones[p], PROVINCES) > 1
+    ]
     isempty(multi) ||
-        println("\nZone keys that appear under more than one province: ",
-            join(multi, ", "))
+        println(
+        "\nZone keys that appear under more than one province: ",
+        join(multi, ", ")
+    )
 
     if !isempty(bad)
         println("\nUnexplained disagreements:")
@@ -555,32 +609,41 @@ function main()
             @printf("  %11s sitrep %3d  %s\n", d, srs[d], msg)
         end
         println()
-        error("$(length(bad)) zone/province disagreement(s). The per-zone " *
-              "rows plus the unallocated row partition each province, so " *
-              "a mismatch that the printed province row does not explain " *
-              "is a mis-parse. Not emitting the blocks.")
+        error(
+            "$(length(bad)) zone/province disagreement(s). The per-zone " *
+                "rows plus the unallocated row partition each province, so " *
+                "a mismatch that the printed province row does not explain " *
+                "is a mis-parse. Not emitting the blocks."
+        )
     end
-    println("\nAll $(length(keep)) kept dates reconcile with the province " *
-            "and national confirmed case and death totals.")
+    println(
+        "\nAll $(length(keep)) kept dates reconcile with the province " *
+            "and national confirmed case and death totals."
+    )
 
     fmt(v) = join(v, ", ")
     dropped = sort(unique(srs[d] for (d, _) in internal))
     fmtsr(v) = join((@sprintf("%03d", x) for x in v), ", ")
     natsr = [srs[d] for d in national_only]
     println("\n\n===== paste into data/observations.toml =====\n")
-    for (blk, idx, what) in (("zone_confirmed_history", 1, "cases"),
-        ("zone_death_history", 2, "deaths"))
+    for (blk, idx, what) in (
+            ("zone_confirmed_history", 1, "cases"),
+            ("zone_death_history", 2, "deaths"),
+        )
         println("[$(blk)]")
         println("dates = [", join(["\"$d\"" for d in keep], ", "), "]")
         for p in PROVINCES
             isempty(zones[p]) && continue
             for k in vcat(sort(collect(zones[p])), "unallocated")
-                v = [get(get(scanned[d], p, Dict()), k, (0, 0))[idx]
-                     for d in keep]
+                v = [
+                    get(get(scanned[d], p, Dict()), k, (0, 0))[idx]
+                        for d in keep
+                ]
                 println("$(p).$(k) = [", fmt(v), "]")
             end
         end
-        println("source = \"INSP situation reports, Tableau 2 " *
+        println(
+            "source = \"INSP situation reports, Tableau 2 " *
                 "(Répartition des cas et décès confirmés par province et " *
                 "zone de santé): per-health-zone cumulative confirmed " *
                 "$(what) within each province. A zone absent from a " *
@@ -596,7 +659,8 @@ function main()
                 "the $(length(natsr)) dates it does not (SitReps " *
                 "$(fmtsr(natsr))). SitReps $(fmtsr(dropped)) are left " *
                 "out because their zone rows do not sum to their own " *
-                "printed province row.\"")
+                "printed province row.\""
+        )
         println()
     end
     return nothing

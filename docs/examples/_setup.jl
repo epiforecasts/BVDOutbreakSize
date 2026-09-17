@@ -33,7 +33,8 @@ CairoMakie.activate!(type = "png", px_per_unit = 3)
 CairoMakie.disable_mime!(
     "text/html", "application/vnd.webio.application+html",
     "application/prs.juno.plotpane+html", "juliavscode/html",
-    "svg", "pdf")
+    "svg", "pdf"
+)
 
 Random.seed!(20260518)
 
@@ -60,12 +61,18 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## `scripts/score_releases.jl` withholds the same streams, though by its
     ## own per-target rule rather than this one. Both pages read the split
     ## from here so they agree.
-    forecast_cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
-        :confirmed_deaths_cum, :recovered_cum)
-    reporting_cum_cols = Tuple(c for c in forecast_cum_cols
-    if stream_reporting(obs, c))
-    stopped_cum_cols = Tuple(c for c in forecast_cum_cols
-    if !stream_reporting(obs, c))
+    forecast_cum_cols = (
+        :cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum, :recovered_cum,
+    )
+    reporting_cum_cols = Tuple(
+        c for c in forecast_cum_cols
+            if stream_reporting(obs, c)
+    )
+    stopped_cum_cols = Tuple(
+        c for c in forecast_cum_cols
+            if !stream_reporting(obs, c)
+    )
     ## The matching new-count columns, for a figure that takes the forecast
     ## frame column by column rather than a keyed NamedTuple.
     new_cols(cols) = [stream_forecast_columns(c).new for c in cols]
@@ -74,8 +81,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## or new-count column each side is keyed by.
     function keep_streams(nt, cols)
         ids = [stream_id(c) for c in cols]
-        return NamedTuple(k => v
-        for (k, v) in pairs(nt) if stream_id(k) in ids)
+        return NamedTuple(
+            k => v
+                for (k, v) in pairs(nt) if stream_id(k) in ids
+        )
     end
 
     ## The fits are defined once in `docs/fits/registry.jl` as a registry, so
@@ -99,7 +108,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## renewal), median and the 30/60/90% bounds.
     released_df = CSV.read(
         joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
-        DataFrame)
+        DataFrame
+    )
 
     ## Frozen joint re-fits at the cut-offs McCabe et al. used (27 May matches
     ## the Lancet publication's cut-off), for the matched-in-time comparison
@@ -123,8 +133,14 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## `.github/workflows/docs.yml` sets the var to
     ## `startsWith(github.ref, 'refs/tags/')`. Set `BVD_RUN_SENSITIVITY=true`
     ## to run them locally.
-    RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
-        "false"))) in ("true", "1", "yes", "on")
+    RUN_SENSITIVITY = lowercase(
+        strip(
+            get(
+                ENV, "BVD_RUN_SENSITIVITY",
+                "false"
+            )
+        )
+    ) in ("true", "1", "yes", "on")
 
     ## Every fit is loaded through the content-addressed cache (`fit_or_load`):
     ## reused when a fit with the same model source, data and settings already
@@ -138,29 +154,37 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## Literate runs the page from docs/src.
     _fit_cache_dir = fit_cache_dir()
     _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in
-                 ("all", "true", "1")
+        ("all", "true", "1")
     ## In CI the per-fit matrix produces every fit before the render, so a
     ## render cache miss is a bug (usually a wrong `BVD_FIT_CACHE`).
     ## `BVD_FIT_STRICT` makes such a miss fail in seconds naming the key,
     ## rather than silently refitting the whole report and hitting the
     ## render-job timeout. Off by default so a local cold build still fits.
     _strict = lowercase(strip(get(ENV, "BVD_FIT_STRICT", ""))) in
-              ("all", "true", "1", "yes", "on")
-    _fit_specs = build_fit_specs(obs;
+        ("all", "true", "1", "yes", "on")
+    _fit_specs = build_fit_specs(
+        obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
         validation_cutoff = validation_cutoff,
         run_sensitivity = RUN_SENSITIVITY,
-        cache_dir = _fit_cache_dir)
+        cache_dir = _fit_cache_dir
+    )
     ## Two passes: the base fits, then the dependent fits that meld from a
     ## cached parent, so the second pass finds what the first wrote.
     _fits = Dict{String, Any}()
     for _stage in (base_fit_specs(_fit_specs), dependent_fit_specs(_fit_specs))
-        _results = fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
-                                     cache_dir = _fit_cache_dir,
-                                     refit = _refit_all,
-                                     strict = _strict)
-                                 for s in _stage])
+        _results = fit_parallel(
+            [
+                () -> fit_or_load(
+                    fit_key(s.id), s.thunk;
+                    cache_dir = _fit_cache_dir,
+                    refit = _refit_all,
+                    strict = _strict
+                )
+                    for s in _stage
+            ]
+        )
         for (s, r) in zip(_stage, _results)
             _fits[s.id] = r
         end
@@ -196,7 +220,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## later (see `validation_stream_ids`).
     frozen_lastweek_streams = Dict(
         sid => _fits["frozen_validation_$sid"]
-    for sid in validation_stream_ids(obs))
+            for sid in validation_stream_ids(obs)
+    )
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
@@ -208,7 +233,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## throws rather than reading back empty, so the lookup is probed, the
     ## same way `_has_key` in src/forecast.jl probes a chain key.
     function r0_walk_draws(chn)
-        try
+        return try
             exp.(vec(Array(chn[Symbol("rt_state.log_R0")])))
         catch
             nothing
@@ -235,10 +260,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     N_PATCHES = length(PROVINCE_NAMES)
     province_cases = province_increment_matrix(
         obs.province_confirmed_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES))
+        length(PROVINCE_NAMES)
+    )
     province_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES))
+        length(PROVINCE_NAMES)
+    )
     posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))
@@ -280,10 +307,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
-        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers")
+        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers"
+    )
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
     ## with the model, shared by the main and sensitivity R(t) plots.
     _rt_start_plot = clamp(
-        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n)
+        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n
+    )
 end # _BVD_SETUP_LOADED guard

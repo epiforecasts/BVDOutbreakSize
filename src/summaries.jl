@@ -11,18 +11,19 @@ interval endpoints from a vector of draws.
 function posterior_summary(xs)
     return (
         lo90 = quantile(xs, 0.05),
-        lo60 = quantile(xs, 0.20),
+        lo60 = quantile(xs, 0.2),
         lo30 = quantile(xs, 0.35),
         hi30 = quantile(xs, 0.65),
-        hi60 = quantile(xs, 0.80),
-        hi90 = quantile(xs, 0.95)
+        hi60 = quantile(xs, 0.8),
+        hi90 = quantile(xs, 0.95),
     )
 end
 
 ## Quantities reported as a transform of another parameter rather than from
 ## their own draws, because their own quantiles do not bound them.
 const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
-    :doubling_time => (:r, doubling_time))
+    :doubling_time => (:r, doubling_time)
+)
 
 ## Interval endpoints for one reported quantity. A caller may pass a chain
 ## carrying a derived quantity without the parameter it is derived from, so
@@ -46,8 +47,9 @@ function _scalar_draws(chn, p::Symbol)
     d = _draws(chn, p)
     eltype(d) <: Number || error(
         "summary_table: `$(p)` is vector-valued, not a scalar. " *
-        "Per-patch quantities go in `patch_summary_table`; daily " *
-        "trajectories are read with `_draw_vectors`.")
+            "Per-patch quantities go in `patch_summary_table`; daily " *
+            "trajectories are read with `_draw_vectors`."
+    )
     return d
 end
 
@@ -89,9 +91,11 @@ not sorted by value.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the `Quantity`
 column only. Symbols absent from the map keep their raw name.
 """
-function summary_table(chn, params::AbstractVector{Symbol};
+function summary_table(
+        chn, params::AbstractVector{Symbol};
         digits::Integer = 2,
-        labels::AbstractDict = Dict{Symbol, String}())
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     df = @chain DataFrame(
         quantity = String[],
         lower_90 = Float64[], lower_60 = Float64[],
@@ -101,11 +105,15 @@ function summary_table(chn, params::AbstractVector{Symbol};
         let df = _
             for p in params
                 s = _summary_for(chn, p)
-                push!(df,
-                    (get(labels, p, string(p)),
+                push!(
+                    df,
+                    (
+                        get(labels, p, string(p)),
                         round(s.lo90; digits), round(s.lo60; digits),
                         round(s.lo30; digits), round(s.hi30; digits),
-                        round(s.hi60; digits), round(s.hi90; digits)))
+                        round(s.hi60; digits), round(s.hi90; digits),
+                    )
+                )
             end
             df
         end
@@ -119,20 +127,20 @@ end
 # magnitude and lose the tail. Values below one keep their leading digits, so
 # a small score does not round away to zero.
 _md_round(x::AbstractFloat) = abs(x) < 1 ? round(x; sigdigits = 3) :
-                              round(x; digits = 3)
+    round(x; digits = 3)
 
 # Format one cell for a markdown table. Integer-valued floats print without a
 # trailing `.0`, and a literal `|` is escaped so it cannot split the row.
 _md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
 _md_cell(x::AbstractFloat) = isinteger(x) ? string(Integer(x)) :
-                             string(_md_round(x))
+    string(_md_round(x))
 _md_cell(x) = replace(string(x), "|" => "\\|")
 
 # Right-align numeric columns and left-align everything else. `Bool` is a
 # `Real` but reads as a label rather than a quantity, so it stays left.
 function _md_align(col)
-    eltype(col) <: Union{Missing, Bool} ? "---" :
-    eltype(col) <: Union{Missing, Real} ? "---:" : "---"
+    return eltype(col) <: Union{Missing, Bool} ? "---" :
+        eltype(col) <: Union{Missing, Real} ? "---:" : "---"
 end
 
 """
@@ -177,10 +185,11 @@ end
 
 MarkdownTable(df::DataFrame) = MarkdownTable(markdown_table(df))
 function MarkdownTable(x)
-    MarkdownTable(
+    return MarkdownTable(
         showable(MIME("text/markdown"), x) ?
-        sprint(show, MIME("text/markdown"), x) :
-        sprint(show, MIME("text/plain"), x))
+            sprint(show, MIME("text/markdown"), x) :
+            sprint(show, MIME("text/plain"), x)
+    )
 end
 
 Base.show(io::IO, t::MarkdownTable) = print(io, t.text)
@@ -193,7 +202,8 @@ Base.show(io::IO, ::MIME"text/markdown", t::MarkdownTable) = print(io, t.text)
 # R-hat / ESS would dominate the headline fit summary without reflecting
 # sampler mixing. The sampled random-walk innovations stay in.
 const _DIAGNOSTIC_EXCLUDE = (
-    "cumulative_infections", "cumulative_onsets", "cumulative_expected_deaths")
+    "cumulative_infections", "cumulative_onsets", "cumulative_expected_deaths",
+)
 
 # Flat vector of a scalar diagnostic (R-hat or ESS), one entry per scalar
 # parameter in a FlexiChains summary. Vector-valued sampled parameters
@@ -237,10 +247,12 @@ function fit_diagnostics(chn)
     rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn)))
     bulk = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :bulk)))
     tail = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :tail)))
-    return (max_rhat = isempty(rhats) ? NaN : maximum(rhats),
+    return (
+        max_rhat = isempty(rhats) ? NaN : maximum(rhats),
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
         min_ess_tail = isempty(tail) ? NaN : minimum(tail),
-        n_divergent = _num_divergences(chn))
+        n_divergent = _num_divergences(chn),
+    )
 end
 
 """
@@ -251,10 +263,12 @@ fit as `"label" => chain`. Columns `:fit, :max_rhat, :min_ess_bulk,
 function diagnostics_table(fits::Pair{String}...)
     rows = map(fits) do (label, chn)
         d = fit_diagnostics(chn)
-        (fit = label,
+        (
+            fit = label,
             max_rhat = round(d.max_rhat; digits = 3),
             min_ess_bulk = round(d.min_ess_bulk; digits = 0),
-            divergences = d.n_divergent)
+            divergences = d.n_divergent,
+        )
     end
     return DataFrame(rows)
 end
@@ -263,14 +277,18 @@ end
 Side-by-side credible intervals for `C_T` from several fits. Pass
 each fit as `"label" => draws_vector`.
 """
-function streams_table(streams::Pair{String, <:AbstractVector}...;
-        digits::Integer = 0)
+function streams_table(
+        streams::Pair{String, <:AbstractVector}...;
+        digits::Integer = 0
+    )
     rows = map(streams) do (label, draws)
         s = posterior_summary(draws)
-        (stream = label,
+        (
+            stream = label,
             lower_90 = round(s.lo90; digits), lower_60 = round(s.lo60; digits),
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
-            upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
+            upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits),
+        )
     end
     return _prettify(DataFrame(rows))
 end
@@ -297,16 +315,20 @@ function onsets_over_time(chn; n::Integer, seeding::Date)
     ## carries both onset series side by side.
     function _bounds(prefix, xs)
         s = posterior_summary(xs)
-        cols = (Symbol(prefix, "_lower_90"), Symbol(prefix, "_lower_60"),
+        cols = (
+            Symbol(prefix, "_lower_90"), Symbol(prefix, "_lower_60"),
             Symbol(prefix, "_lower_30"), Symbol(prefix, "_upper_30"),
-            Symbol(prefix, "_upper_60"), Symbol(prefix, "_upper_90"))
+            Symbol(prefix, "_upper_60"), Symbol(prefix, "_upper_90"),
+        )
         return NamedTuple{cols}((s.lo90, s.lo60, s.lo30, s.hi30, s.hi60, s.hi90))
     end
     function _row(d)
         new = Float64[v[d] for v in daily]
         cum = Float64[c[d] for c in cumulative]
-        merge((date = seeding + Day(d - 1),),
-            _bounds("new_onsets", new), _bounds("cumulative_onsets", cum))
+        return merge(
+            (date = seeding + Day(d - 1),),
+            _bounds("new_onsets", new), _bounds("cumulative_onsets", cum)
+        )
     end
     return DataFrame([_row(d) for d in 1:n])
 end
@@ -316,8 +338,10 @@ For each published `C_T` scenario, the narrowest joint posterior
 credible interval (30, 60 or 90%) that contains it, or "outside
 90%".
 """
-function comparison_table(C_draws::AbstractVector;
-        scenarios = REPORT_SCENARIOS)
+function comparison_table(
+        C_draws::AbstractVector;
+        scenarios = REPORT_SCENARIOS
+    )
     s = posterior_summary(C_draws)
     rows = map(scenarios) do (label, val)
         crI = if s.lo30 <= val <= s.hi30
@@ -329,8 +353,10 @@ function comparison_table(C_draws::AbstractVector;
         else
             "outside 90%"
         end
-        (scenario = label, reported_cases = val,
-            narrowest_interval = crI)
+        (
+            scenario = label, reported_cases = val,
+            narrowest_interval = crI,
+        )
     end
     return _prettify(DataFrame(rows))
 end
@@ -377,7 +403,7 @@ function _panel_conditional(panel)
     n = length(observed)
     cumulative = get(panel, :cumulative, true)
     obs_prev = cumulative ?
-               [v == 1 ? 0.0 : observed[v - 1] for v in 1:n] : zeros(n)
+        [v == 1 ? 0.0 : observed[v - 1] for v in 1:n] : zeros(n)
     replicates = [collect(r) for r in vec(collect(panel.replicates))]
     samples = [[obs_prev[v] + r[v] for r in replicates] for v in 1:n]
     return (samples = samples, observed = observed)
@@ -404,10 +430,12 @@ function stream_calibration(panels::AbstractVector)
         biases = [bias_sample(c.observed[v], c.samples[v]) for v in 1:n]
         cov50 = [_covered(c.observed[v], c.samples[v], 0.5) for v in 1:n]
         cov90 = [_covered(c.observed[v], c.samples[v], 0.9) for v in 1:n]
-        (stream = panel.title, n = n,
+        (
+            stream = panel.title, n = n,
             bias = round(n == 0 ? NaN : mean(biases); digits = 2),
             coverage_50 = round(n == 0 ? NaN : mean(cov50); digits = 2),
-            coverage_90 = round(n == 0 ? NaN : mean(cov90); digits = 2))
+            coverage_90 = round(n == 0 ? NaN : mean(cov90); digits = 2),
+        )
     end
     return _prettify(DataFrame(rows))
 end
@@ -435,8 +463,10 @@ end
 ## the six-column interval layout for one column per quantity.
 function _median_ci(draws; digits::Integer = 2)
     fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
-    return string(fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
-        fmt(quantile(draws, 0.95)), ")")
+    return string(
+        fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
+        fmt(quantile(draws, 0.95)), ")"
+    )
 end
 
 """
@@ -453,14 +483,17 @@ independently summarised numbers. Ascertainment and the reproduction number
 must be read together. The case composition identifies only their product,
 and it is the per-province deaths that tilt the balance between them.
 """
-function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+function patch_overview_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
         digits::Integer = 2,
-        patch_labels::AbstractVector = PROVINCE_LABELS)
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
     required = [:C_T_patch, :R_T_patch]
     absent = filter(p -> !_has_key(chn, p), required)
     isempty(absent) || error(
         "chain is missing the per-patch deterministics $(absent); it was " *
-        "not sampled from `bvd_joint`.")
+            "not sampled from `bvd_joint`."
+    )
     np = min(n_patches, length(patch_labels))
     C_T = _per_patch(chn, :C_T_patch, np)
     R_T = _per_patch(chn, :R_T_patch, np)
@@ -469,15 +502,19 @@ function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     totals = sum(C_T)
     share = [100 .* C_T[p] ./ totals for p in 1:np]
     asc = _has_key(chn, :province_ascertainment) ?
-          _per_patch(chn, :province_ascertainment, np) : nothing
-    df = DataFrame("Province" => String[],
+        _per_patch(chn, :province_ascertainment, np) : nothing
+    df = DataFrame(
+        "Province" => String[],
         "Reproduction number" => String[],
         "Cumulative infections" => String[],
-        "Share of infections (%)" => String[])
+        "Share of infections (%)" => String[]
+    )
     asc === nothing || (df[!, "Relative ascertainment"] = String[])
     for p in 1:np
-        row = Any[patch_labels[p], _median_ci(R_T[p]; digits),
-            _median_ci(C_T[p]; digits = 0), _median_ci(share[p]; digits = 1)]
+        row = Any[
+            patch_labels[p], _median_ci(R_T[p]; digits),
+            _median_ci(C_T[p]; digits = 0), _median_ci(share[p]; digits = 1),
+        ]
         asc === nothing || push!(row, _median_ci(asc[p]; digits))
         push!(df, row)
     end
@@ -506,15 +543,18 @@ Expects a chain from [`bvd_joint`](@ref), which stores the per-patch
 quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
 `infections_T_patch`, `delta_patch`), one entry per patch.
 """
-function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+function patch_summary_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
         digits::Integer = 2,
         patch::Union{Nothing, Integer, AbstractString} = nothing,
-        patch_labels::AbstractVector = PROVINCE_LABELS)
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
     required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
     absent = filter(p -> !_has_key(chn, p), required)
     isempty(absent) || error(
         "chain is missing the per-patch deterministics $(absent); it was " *
-        "not sampled from `bvd_joint`.")
+            "not sampled from `bvd_joint`."
+    )
     np = min(n_patches, length(patch_labels))
     ## Which patches to report. A label is matched against `patch_labels`, so
     ## the caller names the province rather than tracking its index.
@@ -522,12 +562,14 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         1:np
     elseif patch isa Integer
         1 <= patch <= np || error(
-            "patch = $patch is out of range; the chain has $np patches.")
+            "patch = $patch is out of range; the chain has $np patches."
+        )
         patch:patch
     else
         i = findfirst(==(patch), patch_labels[1:np])
         i === nothing && error(
-            "patch = \"$patch\" is not one of $(patch_labels[1:np]).")
+            "patch = \"$patch\" is not one of $(patch_labels[1:np])."
+        )
         i:i
     end
     per_patch(sym) = _per_patch(chn, sym, np)
@@ -537,14 +579,14 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     δ = per_patch(:delta_patch)
     ## Absent on a chain fitted without the per-province compositions.
     asc = _has_key(chn, :province_ascertainment) ?
-          per_patch(:province_ascertainment) : nothing
+        per_patch(:province_ascertainment) : nothing
     ## The deviation-walk scale is per patch, so it belongs here rather than
     ## with the scalar hyperparameters. Near zero means that province's Rt
     ## tracks the national trend.
     drift = _has_key(chn, :region_drift_sd) ?
-            per_patch(:region_drift_sd) : nothing
+        per_patch(:region_drift_sd) : nothing
     contrast = _has_key(chn, :log_rt_contrast) ?
-               per_patch(:log_rt_contrast) : nothing
+        per_patch(:log_rt_contrast) : nothing
     df = DataFrame(
         patch = String[],
         quantity = String[],
@@ -552,10 +594,12 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
     )
     for p in selected
-        rows = Any[("Cumulative infections", C_T[p], 0),
+        rows = Any[
+            ("Cumulative infections", C_T[p], 0),
             ("Reproduction number", R_T[p], digits),
             ("Daily infections at cut-off", inf_T[p], 0),
-            ("log-Rt deviation from trend", δ[p], digits)]
+            ("log-Rt deviation from trend", δ[p], digits),
+        ]
         contrast === nothing ||
             push!(rows, ("log-Rt vs primary patch", contrast[p], digits))
         drift === nothing ||
@@ -564,17 +608,21 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
             push!(rows, ("Relative case ascertainment", asc[p], digits))
         for (label, draws, dg) in rows
             s = posterior_summary(draws)
-            push!(df,
-                (patch_labels[p], label,
+            push!(
+                df,
+                (
+                    patch_labels[p], label,
                     round(s.lo90; digits = dg), round(s.lo60; digits = dg),
                     round(s.lo30; digits = dg), round(s.hi30; digits = dg),
-                    round(s.hi60; digits = dg), round(s.hi90; digits = dg)))
+                    round(s.hi60; digits = dg), round(s.hi90; digits = dg),
+                )
+            )
         end
     end
     ## A single-province table would repeat one patch name down every row, so
     ## drop the column. The province belongs in the surrounding heading.
-    patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
-    _prettify(select(df, Not(:patch)))
+    return patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
+        _prettify(select(df, Not(:patch)))
 end
 
 ## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
@@ -613,51 +661,62 @@ back to the national ratio in the structural column.
 confirmed case and death totals over the fitted window, in the order of
 `patch_labels`.
 """
-function province_cfr_table(chn, res;
+function province_cfr_table(
+        chn, res;
         province_cases::AbstractVector, province_deaths::AbstractVector,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        digits::Integer = 1)
+        digits::Integer = 1
+    )
     np = min(n_patches, length(patch_labels))
     _has_key(chn, :province_ascertainment) || error(
         "chain carries no `province_ascertainment`; it was not sampled " *
-        "from `bvd_joint` with the per-province compositions on.")
+            "from `bvd_joint` with the per-province compositions on."
+    )
     case_asc = _per_patch(chn, :province_ascertainment, np)
     death_asc = _has_key(chn, :province_death_ascertainment) ?
-                _per_patch(chn, :province_death_ascertainment, np) :
-                [ones(length(case_asc[1])) for _ in 1:np]
+        _per_patch(chn, :province_death_ascertainment, np) :
+        [ones(length(case_asc[1])) for _ in 1:np]
     ## Per-province lethality contrast, and the per-province structural ratio
     ## it implies. Both absent on a chain that reports the national ratio in
     ## every row.
     sev = _has_key(chn, :province_cfr_relative) ?
-          _per_patch(chn, :province_cfr_relative, np) :
-          [ones(length(case_asc[1])) for _ in 1:np]
+        _per_patch(chn, :province_cfr_relative, np) :
+        [ones(length(case_asc[1])) for _ in 1:np]
     cfr_patch = _has_key(chn, :CFR_patch) ?
-                _per_patch(chn, :CFR_patch, np) : nothing
+        _per_patch(chn, :CFR_patch, np) : nothing
     ## Mask rather than filter, so the corrected draws and the per-province
     ## scaling below stay aligned draw for draw.
     mask = isfinite.(res.corrected)
     corrected = res.corrected[mask]
     structural = filter(isfinite, res.structural)
     pct(x) = round(100 * x; digits)
-    cell(v) = string(pct(quantile(v, 0.5)), "% (",
-        pct(quantile(v, 0.05)), "–", pct(quantile(v, 0.95)), "%)")
-    df = DataFrame("Province" => String[],
+    cell(v) = string(
+        pct(quantile(v, 0.5)), "% (",
+        pct(quantile(v, 0.05)), "–", pct(quantile(v, 0.95)), "%)"
+    )
+    df = DataFrame(
+        "Province" => String[],
         "Naive observed confirmed ratio" => String[],
         "Delay-corrected confirmed CFR" => String[],
-        "Structural (infection-based) CFR" => String[])
+        "Structural (infection-based) CFR" => String[]
+    )
     for p in 1:np
         naive = province_cases[p] > 0 ?
-                string(pct(province_deaths[p] / province_cases[p]), "%") : "—"
+            string(pct(province_deaths[p] / province_cases[p]), "%") : "—"
         ## The delay correction is national, so the province enters only
         ## through the ratio of its relative death confirmation to its
         ## relative case ascertainment. Both are sum-to-zero on the log scale,
         ## so the corrected ratios sit around the national one.
         scale = ((sev[p] .* death_asc[p]) ./ case_asc[p])[mask]
         struc_p = cfr_patch === nothing ? structural :
-                  filter(isfinite, cfr_patch[p])
-        push!(df, (patch_labels[p], naive,
-            cell(corrected .* scale), cell(struc_p)))
+            filter(isfinite, cfr_patch[p])
+        push!(
+            df, (
+                patch_labels[p], naive,
+                cell(corrected .* scale), cell(struc_p),
+            )
+        )
     end
     return df
 end
@@ -668,7 +727,8 @@ end
 ## tables and figure build their headings from it.
 const _PROVINCE_FORECAST_STREAMS = (
     (:confirmed_new, "confirmed cases"),
-    (:confirmed_deaths_new, "confirmed deaths"))
+    (:confirmed_deaths_new, "confirmed deaths"),
+)
 
 ## Per-province forecast draws from one [`forecast_reported`](@ref) result:
 ## the national draw times that province's modelled share at the most recent
@@ -677,15 +737,18 @@ const _PROVINCE_FORECAST_STREAMS = (
 ## `(stream_label, province, draws)` entry per province and per stream the
 ## forecast carries, provinces outer. Shared by the province forecast table,
 ## figure and release archive, so all three read one split.
-function _province_forecast_draws(chn, fc, np::Integer,
-        patch_labels::AbstractVector)
+function _province_forecast_draws(
+        chn, fc, np::Integer,
+        patch_labels::AbstractVector
+    )
     _has_key(chn, :province_shares) || error(
         "chain carries no `province_shares`; it was not sampled from " *
-        "`bvd_joint` with the per-province compositions on.")
+            "`bvd_joint` with the per-province compositions on."
+    )
     case_share = _per_patch_last_share(chn, :province_shares, np)
     death_share = _has_key(chn, :province_death_shares) ?
-                  _per_patch_last_share(chn, :province_death_shares, np) :
-                  case_share
+        _per_patch_last_share(chn, :province_death_shares, np) :
+        case_share
     cols = propertynames(fc)
     out = Tuple{String, String, Vector{Float64}}[]
     for p in 1:np, (col, label) in _PROVINCE_FORECAST_STREAMS
@@ -712,23 +775,30 @@ value over the week rather than projected forward. The provincial
 compositions are fitted only where the spatial tables report, so a province
 whose share is moving is not tracked past the last vintage.
 """
-function province_forecast_table(chn, fc;
+function province_forecast_table(
+        chn, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        digits::Integer = 0)
+        digits::Integer = 0
+    )
     np = min(n_patches, length(patch_labels))
     rows = NamedTuple[]
     for (label, province, draws) in _province_forecast_draws(
-        chn, fc, np, patch_labels)
+            chn, fc, np, patch_labels
+        )
         s = posterior_summary(draws)
-        push!(rows,
-            (province = province, quantity = "New $(label) by T+7",
+        push!(
+            rows,
+            (
+                province = province, quantity = "New $(label) by T+7",
                 lower_90 = round(s.lo90; digits),
                 lower_60 = round(s.lo60; digits),
                 lower_30 = round(s.lo30; digits),
                 upper_30 = round(s.hi30; digits),
                 upper_60 = round(s.hi60; digits),
-                upper_90 = round(s.hi90; digits)))
+                upper_90 = round(s.hi90; digits),
+            )
+        )
     end
     return _prettify(DataFrame(rows))
 end
@@ -749,42 +819,53 @@ Reports the 90% predictive interval, the observed count, and whether the
 observation fell inside the interval, one row per province and stream. No
 central estimate is reported.
 """
-function province_forecast_vs_truth(chn, fc;
+function province_forecast_vs_truth(
+        chn, fc;
         observed::AbstractVector, baseline::AbstractVector,
         death_observed::Union{Nothing, AbstractVector} = nothing,
         death_baseline::Union{Nothing, AbstractVector} = nothing,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        digits::Integer = 0)
+        digits::Integer = 0
+    )
     np = min(n_patches, length(patch_labels))
     _has_key(chn, :province_shares) || error(
         "chain carries no `province_shares`; the frozen fit was not run " *
-        "with the per-province compositions on.")
+            "with the per-province compositions on."
+    )
     case_share = _per_patch_last_share(chn, :province_shares, np)
     death_share = _has_key(chn, :province_death_shares) ?
-                  _per_patch_last_share(chn, :province_death_shares, np) :
-                  case_share
+        _per_patch_last_share(chn, :province_death_shares, np) :
+        case_share
     cols = propertynames(fc)
     rows = NamedTuple[]
     function add!(stream, p, draws, truth)
         s = posterior_summary(draws)
-        push!(rows,
-            (province = patch_labels[p], stream = stream,
+        return push!(
+            rows,
+            (
+                province = patch_labels[p], stream = stream,
                 lower_90 = round(s.lo90; digits),
                 upper_90 = round(s.hi90; digits),
                 observed = truth,
-                within_90 = s.lo90 <= truth <= s.hi90))
+                within_90 = s.lo90 <= truth <= s.hi90,
+            )
+        )
     end
     for p in 1:np
         if :confirmed_new in cols
             v = fc[!, :confirmed_new]
-            add!("Confirmed cases", p, v .* case_share[p][1:length(v)],
-                observed[p] - baseline[p])
+            add!(
+                "Confirmed cases", p, v .* case_share[p][1:length(v)],
+                observed[p] - baseline[p]
+            )
         end
         if :confirmed_deaths_new in cols && death_observed !== nothing
             v = fc[!, :confirmed_deaths_new]
-            add!("Confirmed deaths", p, v .* death_share[p][1:length(v)],
-                death_observed[p] - death_baseline[p])
+            add!(
+                "Confirmed deaths", p, v .* death_share[p][1:length(v)],
+                death_observed[p] - death_baseline[p]
+            )
         end
     end
     return _prettify(DataFrame(rows))

@@ -42,10 +42,12 @@ function fit_summary_markdown(id, chn)
     println(io)
     println(io, "| max R-hat | min ESS bulk | min ESS tail | divergences |")
     println(io, "| --- | --- | --- | --- |")
-    println(io, "| ", _fmt_value(d.max_rhat),
+    println(
+        io, "| ", _fmt_value(d.max_rhat),
         " | ", _fmt_count(d.min_ess_bulk),
         " | ", _fmt_count(d.min_ess_tail),
-        " | ", d.n_divergent, " |")
+        " | ", d.n_divergent, " |"
+    )
     rows = Any[]
     for p in SUMMARY_PARAMETERS
         h = _headline(chn, p)
@@ -56,8 +58,10 @@ function fit_summary_markdown(id, chn)
         println(io, "| quantity | median | 90% credible interval |")
         println(io, "| --- | --- | --- |")
         for (p, (m, lo, hi)) in rows
-            println(io, "| `", p, "` | ", _fmt_value(m),
-                " | ", _fmt_value(lo), " to ", _fmt_value(hi), " |")
+            println(
+                io, "| `", p, "` | ", _fmt_value(m),
+                " | ", _fmt_value(lo), " to ", _fmt_value(hi), " |"
+            )
         end
     end
     println(io)
@@ -79,7 +83,7 @@ function write_fit_summary(id, result)
         path = get(ENV, "GITHUB_STEP_SUMMARY", "")
         isempty(path) || open(io -> print(io, md), path, "a")
     catch e
-        @warn "could not summarise fit" id=id exception=e
+        @warn "could not summarise fit" id = id exception = e
     end
     return nothing
 end

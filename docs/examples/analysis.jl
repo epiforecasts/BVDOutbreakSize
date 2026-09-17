@@ -204,19 +204,19 @@ observations_table = DataFrame(
         "genetic_tmrca_bound",
         "daily_outbound_travellers (prior mean)",
         "daily_outbound_travellers_sd (prior SD)",
-        "source_population"
+        "source_population",
     ],
     date = [
         isempty(obs.export_case_days) ? missing :
-        grid_date(maximum(obs.export_case_days)),
+            grid_date(maximum(obs.export_case_days)),
         isempty(obs.export_death_days) ? missing :
-        grid_date(maximum(obs.export_death_days)),
+            grid_date(maximum(obs.export_death_days)),
         hist_last_date(obs.deaths_history),
         hist_last_date(obs.reported_history),
         hist_last_date(obs.confirmed_history),
         hist_last_date(obs.confirmed_deaths_history),
         isempty(obs.onset_curve_history.report_days) ? missing :
-        grid_date(maximum(obs.onset_curve_history.report_days)),
+            grid_date(maximum(obs.onset_curve_history.report_days)),
         hist_last_date(obs.lab_history),
         hist_last_date(obs.treatment_admissions_history),
         hist_last_date(obs.treatment_deaths_history),
@@ -225,7 +225,7 @@ observations_table = DataFrame(
         grid_date(obs.n - obs.tmrca_days),
         missing,
         missing,
-        missing
+        missing,
     ],
     value = [
         obs.exported_cases,
@@ -237,17 +237,17 @@ observations_table = DataFrame(
         obs.onset_curve_history.last_total,
         obs.tests_analysed,
         isempty(obs.treatment_admissions_history.counts) ? missing :
-        obs.treatment_admissions_history.counts[end],
+            obs.treatment_admissions_history.counts[end],
         isempty(obs.treatment_deaths_history.counts) ? missing :
-        obs.treatment_deaths_history.counts[end],
+            obs.treatment_deaths_history.counts[end],
         isempty(obs.treatment_ruleout_history.counts) ? missing :
-        obs.treatment_ruleout_history.counts[end],
+            obs.treatment_ruleout_history.counts[end],
         isempty(obs.treatment_absconded_history.counts) ? missing :
-        obs.treatment_absconded_history.counts[end],
+            obs.treatment_absconded_history.counts[end],
         obs.tmrca_days,
         ITURI_DAILY_TRAVEL,
         ITURI_DAILY_TRAVEL_SD,
-        ITURI_POPULATION
+        ITURI_POPULATION,
     ]
 );
 
@@ -288,7 +288,7 @@ vintage_table = let
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
         recovered_confirmed = bydate(obs.recovered_history),
         specimens_received = bydate(obs.tests_received_history),
-        specimens_analysed = bydate(obs.lab_history)
+        specimens_analysed = bydate(obs.lab_history),
     )
     dates = sort(collect(union((keys(s) for s in streams)...)))
     at(s) = [haskey(s, d) ? s[d] : missing for d in dates]
@@ -2225,7 +2225,8 @@ cfr_prior_fig #hide
 
 prior_chn = let
     breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(obs.n, missing, missing, missing, missing, missing;
+    m = bvd_joint(
+        obs.n, missing, missing, missing, missing, missing;
         deaths_history = (; days = Int[], counts = Int[]),
         reported_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
@@ -2235,7 +2236,8 @@ prior_chn = let
         background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
     sample(m, Prior(), 2_000; progress = false)
 end;
 
@@ -2261,9 +2263,13 @@ prior_C_table #hide
 #md # <details><summary>Prior pair plot</summary>
 #md # ```
 
-prior_pair_fig = plot_pair(prior_chn,
-    [:C_T, :R_T, :r, :T, :CFR, :k,
-        :p_drc, :p_uganda]);
+prior_pair_fig = plot_pair(
+    prior_chn,
+    [
+        :C_T, :R_T, :r, :T, :CFR, :k,
+        :p_drc, :p_uganda,
+    ]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2280,11 +2286,17 @@ prior_pair_fig #hide
 
 zone_inputs = zone_fit_inputs(chn_joint, obs);
 zone_patch = zone_inputs.patch_of_zone;
-prior_chn_zone = sample(bvd_zone(zone_inputs.model_data), Prior(), 500;
-    progress = false);
-prior_zone_table = summary_table(prior_chn_zone,
-    [:region_sd_zone, :region_drift_sd_zone, :region_halflife_zone,
-        :composition_rho_zone]);
+prior_chn_zone = sample(
+    bvd_zone(zone_inputs.model_data), Prior(), 500;
+    progress = false
+);
+prior_zone_table = summary_table(
+    prior_chn_zone,
+    [
+        :region_sd_zone, :region_drift_sd_zone, :region_halflife_zone,
+        :composition_rho_zone,
+    ]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2335,9 +2347,14 @@ diagnostics_table( #hide
     "frozen (1wk back)" => frozen_lastweek.chn, #hide
     "health zones" => chn_local, #hide
     "health zones (frozen)" => frozen_local.chn, #hide
-    (RUN_SENSITIVITY ? #hide
-     ["delay sensitivity" => chn_joint_community_delay, #hide
-        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] : [])...) #hide
+    (
+        RUN_SENSITIVITY ? #hide
+            [
+                "delay sensitivity" => chn_joint_community_delay, #hide
+                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+            ] : []
+    )...
+) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -2567,8 +2584,10 @@ summary_ranges = let
     iqr(x) = quantile(x, 0.75) - quantile(x, 0.25)
     ## Posterior-minus-prior shift in units of the parameter's prior IQR,
     ## reusing the prior draws so nothing is respecified here.
-    shift(post, prior) = round((med(post) - med(prior)) / iqr(prior);
-        digits = 2)
+    shift(post, prior) = round(
+        (med(post) - med(prior)) / iqr(prior);
+        digits = 2
+    )
 
     C = posterior_C_joint
     Td = vec(Array(chn_joint[:T]))
@@ -2594,31 +2613,44 @@ summary_ranges = let
     ints_i(s) = string(
         "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
         ", 60% ", round(Int, s.lo60), "–", round(Int, s.hi60),
-        ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90))
+        ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90)
+    )
     ## Per-province cumulative infections, read off the patch deterministic
     ## one draw at a time so the provinces stay coupled draw for draw.
     C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
-    sprov = [posterior_summary([v[p] for v in C_patch])
-             for p in 1:N_PATCHES]
+    sprov = [
+        posterior_summary([v[p] for v in C_patch])
+            for p in 1:N_PATCHES
+    ]
     ## The same draws give each province's reproduction number at the cut-off
     ## and its case-fatality ratio, so the three read coupled draw for draw.
     Rt_patch_draws = [collect(v) for v in vec(collect(chn_joint[:R_T_patch]))]
-    sprov_rt = [posterior_summary([v[p] for v in Rt_patch_draws])
-                for p in 1:N_PATCHES]
-    cfr_patch_draws = [collect(v)
-                       for v in vec(collect(chn_joint[:CFR_patch]))]
-    sprov_cfr = [posterior_summary([100 * v[p] for v in cfr_patch_draws])
-                 for p in 1:N_PATCHES]
-    ints_f(s,
-        d) = string(
+    sprov_rt = [
+        posterior_summary([v[p] for v in Rt_patch_draws])
+            for p in 1:N_PATCHES
+    ]
+    cfr_patch_draws = [
+        collect(v)
+            for v in vec(collect(chn_joint[:CFR_patch]))
+    ]
+    sprov_cfr = [
+        posterior_summary([100 * v[p] for v in cfr_patch_draws])
+            for p in 1:N_PATCHES
+    ]
+    ints_f(
+        s,
+        d
+    ) = string(
         "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
         ", 60% ", round(s.lo60; digits = d), "–", round(s.hi60; digits = d),
-        ", 90% ", round(s.lo90; digits = d), "–", round(s.hi90; digits = d))
+        ", 90% ", round(s.lo90; digits = d), "–", round(s.hi90; digits = d)
+    )
     start_from(t) = obs.cutoff - Day(round(Int, t))
     ints_d(s) = string(
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
-        ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
+        ", 90% ", start_from(s.hi90), "–", start_from(s.lo90)
+    )
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
 
@@ -2627,45 +2659,66 @@ summary_ranges = let
     moves = [
         "cumulative infection count" => shift(C, vec(Array(prior_chn[:C_T]))),
         "outbreak age" => shift(Td, vec(Array(prior_chn[:T]))),
-        "doubling time" => shift(dt, vec(Array(prior_chn[:doubling_time])))]
+        "doubling time" => shift(dt, vec(Array(prior_chn[:doubling_time]))),
+    ]
     biggest = argmax(p -> abs(p.second), moves)
 
-    Markdown.parse("""
-    - **Cumulative infections:** the outbreak is estimated to have caused
-      $(ints_i(sC)) infections to date, reported and unreported.
-    - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
-      cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
-      confirmed cases are estimated to capture only a small share of the
-      outbreak.
-    - **Outbreak start and age:** the outbreak is estimated to have begun on
-      a start date of $(ints_d(sT)), an elapsed age to the cut-off of
-      $(ints_i(sT)) days.
-    - **Growth rate and doubling time:** the initial growth rate is
-      estimated to have been $(ints_f(sr0, 3)) per day, an initial doubling
-      time of $(ints_f(sdt0, 1)) days.
-      The latest growth rate is estimated to be $(ints_f(sr, 3)) per day, a
-      latest doubling time of $(ints_f(sdt, 1)) days.
-    - **Reproduction number:** the initial reproduction number is estimated
-      to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
-    - **Case-fatality ratio:** the case-fatality ratio is estimated to be
-      $(ints_f(scfr, 2)).
-    - **By province, infections to date:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, reproduction number at the cut-off:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, case-fatality ratio:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
-            for p in 1:N_PATCHES], "\n"))
-    - **Shift from priors:** how far the data has moved each estimate from
-      its prior, in prior interquartile ranges, where a value of one means
-      the posterior median sits one prior interquartile range from the prior
-      median, zero means unchanged, and the sign gives the direction.
-      The fit moves the cumulative infection count by $(moves[1].second),
-      the outbreak age by $(moves[2].second) and the doubling time by
-      $(moves[3].second); the largest move is in the $(biggest.first).
-    """)
+    Markdown.parse(
+        """
+        - **Cumulative infections:** the outbreak is estimated to have caused
+          $(ints_i(sC)) infections to date, reported and unreported.
+        - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
+          cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
+          confirmed cases are estimated to capture only a small share of the
+          outbreak.
+        - **Outbreak start and age:** the outbreak is estimated to have begun on
+          a start date of $(ints_d(sT)), an elapsed age to the cut-off of
+          $(ints_i(sT)) days.
+        - **Growth rate and doubling time:** the initial growth rate is
+          estimated to have been $(ints_f(sr0, 3)) per day, an initial doubling
+          time of $(ints_f(sdt0, 1)) days.
+          The latest growth rate is estimated to be $(ints_f(sr, 3)) per day, a
+          latest doubling time of $(ints_f(sdt, 1)) days.
+        - **Reproduction number:** the initial reproduction number is estimated
+          to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
+        - **Case-fatality ratio:** the case-fatality ratio is estimated to be
+          $(ints_f(scfr, 2)).
+        - **By province, infections to date:**
+        $(
+            join(
+                [
+                    "  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
+                        for p in 1:N_PATCHES
+                ], "\n"
+            )
+        )
+        - **By province, reproduction number at the cut-off:**
+        $(
+            join(
+                [
+                    "  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
+                        for p in 1:N_PATCHES
+                ], "\n"
+            )
+        )
+        - **By province, case-fatality ratio:**
+        $(
+            join(
+                [
+                    "  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
+                        for p in 1:N_PATCHES
+                ], "\n"
+            )
+        )
+        - **Shift from priors:** how far the data has moved each estimate from
+          its prior, in prior interquartile ranges, where a value of one means
+          the posterior median sits one prior interquartile range from the prior
+          median, zero means unchanged, and the sign gives the direction.
+          The fit moves the cumulative infection count by $(moves[1].second),
+          the outbreak age by $(moves[2].second) and the doubling time by
+          $(moves[3].second); the largest move is in the $(biggest.first).
+        """
+    )
 end;
 
 #md # ```@raw html
@@ -2682,7 +2735,8 @@ summary_ranges #hide
 #md # ```
 
 cumulative_cases_summary = summary_table(
-    chn_joint, [:C_T]; digits = 0);
+    chn_joint, [:C_T]; digits = 0
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2697,8 +2751,10 @@ cumulative_cases_summary #hide
 #md # <details><summary>Cumulative infections, onsets and deaths figure</summary>
 #md # ```
 
-cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
-    n = obs.n, seeding = obs.seeding);
+cumulative_traj_fig = plot_cumulative_trajectories(
+    chn_joint;
+    n = obs.n, seeding = obs.seeding
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2727,8 +2783,10 @@ province_overview_table #hide
 #md # <details><summary>Modelled infections by province</summary>
 #md # ```
 
-province_infections_fig = plot_infections_patches(chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+province_infections_fig = plot_infections_patches(
+    chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2744,12 +2802,16 @@ province_infections_fig #hide
 #md # <details><summary>Importation intensity and imports by province</summary>
 #md # ```
 
-importation_table = summary_table(chn_joint, [:importation_epsilon];
+importation_table = summary_table(
+    chn_joint, [:importation_epsilon];
     digits = 4,
-    labels = Dict(:importation_epsilon => "Importation intensity"));
+    labels = Dict(:importation_epsilon => "Importation intensity")
+);
 
-province_imports_fig = plot_imports_patches(chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+province_imports_fig = plot_imports_patches(
+    chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2767,8 +2829,10 @@ province_imports_fig #hide
 #md # <details><summary>Outbreak start date and seeding-time posterior</summary>
 #md # ```
 
-start_date_fig = plot_start_date_pair(chn_joint;
-    as_of_date = string(obs.cutoff));
+start_date_fig = plot_start_date_pair(
+    chn_joint;
+    as_of_date = string(obs.cutoff)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2783,8 +2847,10 @@ start_date_fig #hide
 #md # <details><summary>Infection-parameter summary table</summary>
 #md # ```
 
-infection_summary = summary_table(chn_joint,
-    [:r, :doubling_time, :T, :R_T, :CFR, :C_T]; digits = 2);
+infection_summary = summary_table(
+    chn_joint,
+    [:r, :doubling_time, :T, :R_T, :CFR, :C_T]; digits = 2
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2796,10 +2862,14 @@ infection_summary #hide
 #md # <details><summary>Infection-parameter pair plot (prior overlaid)</summary>
 #md # ```
 
-infection_pair_fig = plot_pair(chn_joint,
-    [:R_T, :r, :T, :CFR,
-        Symbol("rt_state.sigma_rw"), Symbol("rt_state.intervention_effect")];
-    prior = prior_chn, labels = display_names);
+infection_pair_fig = plot_pair(
+    chn_joint,
+    [
+        :R_T, :r, :T, :CFR,
+        Symbol("rt_state.sigma_rw"), Symbol("rt_state.intervention_effect"),
+    ];
+    prior = prior_chn, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2814,10 +2884,14 @@ infection_pair_fig #hide
 #md # <details><summary>Infection-delay summary table</summary>
 #md # ```
 
-infection_delay_summary = summary_table(chn_joint,
-    [Symbol("gi_state.α"), Symbol("gi_state.θ"),
-        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
-    digits = 2, labels = display_names);
+infection_delay_summary = summary_table(
+    chn_joint,
+    [
+        Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd"),
+    ];
+    digits = 2, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2837,10 +2911,14 @@ infection_delay_summary #hide
 #md # <details><summary>Infection-delay pair plot (prior overlaid)</summary>
 #md # ```
 
-infection_delay_pair_fig = plot_pair(chn_joint,
-    [Symbol("gi_state.α"), Symbol("gi_state.θ"),
-        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
-    prior = prior_chn, labels = display_names);
+infection_delay_pair_fig = plot_pair(
+    chn_joint,
+    [
+        Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd"),
+    ];
+    prior = prior_chn, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2864,12 +2942,14 @@ infection_delay_pair_fig #hide
 ## days (a month) before the first situation report, matching `bvd_joint`'s
 ## `rt_walk_lead` — so the chain reconstruction uses the same knot grid the
 ## model did, floored at the renewal start. R_t is flat at R0 between the two.
-rt_fig = plot_rt(chn_joint;
+rt_fig = plot_rt(
+    chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RT_INTERVENTION_RAMP);
+    ramp = RT_INTERVENTION_RAMP
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2886,14 +2966,16 @@ rt_fig #hide
 #md # <details><summary>Reproduction number by province</summary>
 #md # ```
 
-province_rt_fig = plot_rt_patches(chn_joint;
+province_rt_fig = plot_rt_patches(
+    chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
     n_patches = N_PATCHES,
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     display_start = _rt_start_plot,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RT_INTERVENTION_RAMP);
+    ramp = RT_INTERVENTION_RAMP
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2935,14 +3017,20 @@ province_detail_table #hide
 #md # <details><summary>Spatial hyperparameter summary table</summary>
 #md # ```
 
-spatial_hyper_table = summary_table(chn_joint,
-    [:region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd];
+spatial_hyper_table = summary_table(
+    chn_joint,
+    [
+        :region_sd, :region_halflife, :region_corr_primary_secondary,
+        :province_ascertainment_sd,
+    ];
     digits = 3,
-    labels = Dict(:region_sd => "Rt deviation spread",
+    labels = Dict(
+        :region_sd => "Rt deviation spread",
         :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread"));
+        :province_ascertainment_sd => "Ascertainment spread"
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2956,11 +3044,15 @@ spatial_hyper_table #hide
 #md # <details><summary>Intervention-effect summary table</summary>
 #md # ```
 
-intervention_effect = vec(Array(
-    chn_joint[Symbol("rt_state.intervention_effect")]));
+intervention_effect = vec(
+    Array(
+        chn_joint[Symbol("rt_state.intervention_effect")]
+    )
+);
 intervention_table = streams_table(
     "Rt multiplier exp(effect)" => exp.(intervention_effect);
-    digits = 2);
+    digits = 2
+);
 
 #md # ```@raw html
 #md # </details>
@@ -2980,8 +3072,10 @@ intervention_table #hide
 #md # <details><summary>Observation-delay summary table</summary>
 #md # ```
 
-obs_delay_summary = summary_table(chn_joint,
-    [Symbol("cases_state.report_state.α"),
+obs_delay_summary = summary_table(
+    chn_joint,
+    [
+        Symbol("cases_state.report_state.α"),
         Symbol("cases_state.report_state.θ"),
         Symbol("deaths_state.od_state.oa.α"),
         Symbol("deaths_state.od_state.oa.θ"),
@@ -2993,8 +3087,10 @@ obs_delay_summary = summary_table(chn_joint,
         Symbol("confirmed_state.receipt_state.d.delay_sd"),
         :isolation_bvd_los_mean,
         :isolation_ruleout_los_mean,
-        :recovery_delay_mean];
-    digits = 2, labels = display_names);
+        :recovery_delay_mean,
+    ];
+    digits = 2, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3014,15 +3110,19 @@ obs_delay_summary #hide
 #md # <details><summary>Observation-delay pair plot (prior overlaid)</summary>
 #md # ```
 
-obs_delay_pair_fig = plot_pair(chn_joint,
-    [Symbol("cases_state.report_state.α"),
+obs_delay_pair_fig = plot_pair(
+    chn_joint,
+    [
+        Symbol("cases_state.report_state.α"),
         Symbol("deaths_state.od_state.oa.α"),
         Symbol("exports_state.detect_state.α"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         :isolation_bvd_los_mean,
         :isolation_ruleout_los_mean,
-        :recovery_delay_mean];
-    prior = prior_chn, labels = display_names);
+        :recovery_delay_mean,
+    ];
+    prior = prior_chn, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3042,8 +3142,10 @@ obs_delay_pair_fig #hide
 #md # <details><summary>Surveillance-parameter summary table</summary>
 #md # ```
 
-surveillance_summary = summary_table(chn_joint,
-    [:p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
+surveillance_summary = summary_table(
+    chn_joint,
+    [
+        :p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test,
         :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
@@ -3055,8 +3157,10 @@ surveillance_summary = summary_table(chn_joint,
         :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
         :isolation_death_los_mean,
         :isolation_recovery_los_mean, :abscond_fraction,
-        :recovery_probability, :recovered_dispersion, :expected_recovered_T];
-    digits = 3);
+        :recovery_probability, :recovered_dispersion, :expected_recovered_T,
+    ];
+    digits = 3
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3076,10 +3180,14 @@ surveillance_summary #hide
 #md # <details><summary>Surveillance-parameter pair plot (prior overlaid)</summary>
 #md # ```
 
-surveillance_pair_fig = plot_pair(chn_joint,
-    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg, :test_positivity,
-        :death_confirmation];
-    prior = prior_chn);
+surveillance_pair_fig = plot_pair(
+    chn_joint,
+    [
+        :p_drc, :p_uganda, :k, :tau_test, :lambda_bg, :test_positivity,
+        :death_confirmation,
+    ];
+    prior = prior_chn
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3126,7 +3234,7 @@ pp_joint = predict(
         reported_history = _days_only(obs.reported_history),
         suspected_daily_history = _days_only(obs.suspected_daily_history),
         suspected_daily_deaths_history =
-        _days_only(obs.suspected_daily_deaths_history),
+            _days_only(obs.suspected_daily_deaths_history),
         isolation_history = _days_only(obs.isolation_history),
         bed_capacity_history = _days_only(obs.bed_capacity_history),
         ## Kept so the generator's occupancy-break dimension matches the fitted
@@ -3134,15 +3242,15 @@ pp_joint = predict(
         occupancy_break_days = obs.occupancy_break_days,
         recovered_history = _days_only(obs.recovered_history),
         treatment_admissions_history =
-        _days_only(obs.treatment_admissions_history),
+            _days_only(obs.treatment_admissions_history),
         treatment_deaths_history = _days_only(obs.treatment_deaths_history),
         treatment_ruleout_history = _days_only(obs.treatment_ruleout_history),
         treatment_absconded_history =
-        _days_only(obs.treatment_absconded_history),
+            _days_only(obs.treatment_absconded_history),
         treatment_confirmed_incare_history =
-        _days_only(obs.treatment_confirmed_incare_history),
+            _days_only(obs.treatment_confirmed_incare_history),
         treatment_suspect_incare_history =
-        _days_only(obs.treatment_suspect_incare_history),
+            _days_only(obs.treatment_suspect_incare_history),
         confirmed_history = obs.confirmed_history,
         ## Counts kept, like the confirmed cases above: the cut-off scalar
         ## (`confirmed_deaths = missing`) is this stream's generator gate, so
@@ -3175,7 +3283,8 @@ pp_joint = predict(
             onset_days = obs.onset_curve_history.onset_days,
             report_days = obs.onset_curve_history.report_days,
             prev_report_days = obs.onset_curve_history.prev_report_days,
-            increments = missing),
+            increments = missing,
+        ),
         breakpoint = _BREAKPOINT,
         background_re = true,
         confirmed_positivity_link = :composition,
@@ -3193,8 +3302,10 @@ pp_joint = predict(
         province_increments = missing,
         province_days = province_cases.days,
         province_death_increments = missing,
-        province_death_days = province_deaths.days),
-    chn_joint);
+        province_death_days = province_deaths.days
+    ),
+    chn_joint
+);
 
 ## `predict` stores each stream's per-vintage increments as one
 ## vector-valued variable (`<stream>_increments.increments`); the slice is
@@ -3220,8 +3331,10 @@ reported_panel = (;
     title = "Suspected cases",
     dates = _vintage_dates(obs.reported_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(reported_increments.increments)),
-    observed = obs.reported_history.counts, colour = :steelblue);
+        pp_joint, @varname(reported_increments.increments)
+    ),
+    observed = obs.reported_history.counts, colour = :steelblue,
+);
 ## Daily new-suspect inflow: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily
 ## count against the observed daily count rather than a running total. Its
@@ -3231,9 +3344,11 @@ suspected_daily_panel = (;
     title = "New suspects/day",
     dates = _vintage_dates(obs.suspected_daily_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(suspected_daily.increments)),
+        pp_joint, @varname(suspected_daily.increments)
+    ),
     observed = obs.suspected_daily_history.counts,
-    colour = :slateblue, cumulative = false);
+    colour = :slateblue, cumulative = false,
+);
 ## Isolation/treatment-bed occupancy: a census stock, so the panel is drawn
 ## with `cumulative = false` — each replicate is the modelled bed count on a
 ## report day against the observed "Patients en isolement" count. It is a
@@ -3256,17 +3371,21 @@ isolation_panel = (;
     title = "Patients in isolation",
     dates = _vintage_dates(obs.isolation_history.days[_iso_keep]),
     replicates = _vintage_replicates(
-        pp_joint, @varname(isolation.obs)),
+        pp_joint, @varname(isolation.obs)
+    ),
     observed = obs.isolation_history.counts[_iso_keep],
     colour = :darkorange, cumulative = false,
-    ylabel = "Beds occupied");
+    ylabel = "Beds occupied",
+);
 deaths_panel = (;
     id = :suspected_deaths,
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(death_increments.increments)),
-    observed = obs.deaths_history.counts, colour = :firebrick);
+        pp_joint, @varname(death_increments.increments)
+    ),
+    observed = obs.deaths_history.counts, colour = :firebrick,
+);
 ## Daily new suspected deaths: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily count
 ## against the observed daily count rather than a running total. Its days
@@ -3277,9 +3396,11 @@ suspected_daily_deaths_panel = (;
     title = "New suspected deaths/day",
     dates = _vintage_dates(obs.suspected_daily_deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(suspected_daily_deaths.increments)),
+        pp_joint, @varname(suspected_daily_deaths.increments)
+    ),
     observed = obs.suspected_daily_deaths_history.counts,
-    colour = :indianred, cumulative = false);
+    colour = :indianred, cumulative = false,
+);
 ## Specimens analysed is the single modelled laboratory volume (the
 ## report-to-analysed delay and tested-fraction throughput), fit to the
 ## cumulative analysed series, so it gets the same cumulative conditional
@@ -3290,8 +3411,10 @@ tests_analysed_panel = (;
     title = "Specimens analysed (cumulative)",
     dates = _vintage_dates(obs.lab_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(analysed_increments.increments)),
-    observed = obs.lab_history.counts, colour = :seagreen);
+        pp_joint, @varname(analysed_increments.increments)
+    ),
+    observed = obs.lab_history.counts, colour = :seagreen,
+);
 ## Post-cutoff 24h analysed volume: once the cumulative series stops, INSP
 ## reports a 24h analysed count on some days. These are fitted as per-day
 ## volumes (not cumulative), so the panel is a standalone daily check
@@ -3302,9 +3425,11 @@ tests_analysed_daily_panel = (;
     title = "Specimens analysed (24h)",
     dates = _vintage_dates(obs.lab_daily_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(analysed_daily_increments.increments)),
+        pp_joint, @varname(analysed_daily_increments.increments)
+    ),
     observed = obs.lab_daily_history.counts, colour = :teal,
-    cumulative = false);
+    cumulative = false,
+);
 
 ## Confirmed cases are scored over two groups of laboratory windows: the
 ## early confirmed vintages (no per-vintage analysed denominator, scored
@@ -3316,31 +3441,43 @@ tests_analysed_daily_panel = (;
 ## end-day. The 24-25 May analysis stall merges into 26 May, so the window
 ## grid is slightly coarser than the raw confirmed history.
 _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
-    obs.confirmed_history, obs.lab_history, obs.lab_daily_history);
+    obs.confirmed_history, obs.lab_history, obs.lab_daily_history
+);
 ## Oldest-first: early (no denominator) → observed (analysed Binomial) →
 ## late (post-28 May; trusted 24h-analysed days are Binomial windows, the
 ## rest unanchored windows scored against the modelled volume).
-_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
-    _conf_windows.late_days);
+_conf_window_days = vcat(
+    _conf_windows.early_days, _conf_windows.obs_days,
+    _conf_windows.late_days
+);
 function _confirmed_at(day)
     i = searchsortedlast(obs.confirmed_history.days, day)
     return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
 end;
 _conf_early = _vintage_replicates(
-    pp_joint, @varname(early_increments.increments));
-_conf_obs = collect(first(pp_joint[k]
-for k in keys(pp_joint)
-if occursin("confirmed_state.confirmed_positives.positives", string(k))));
+    pp_joint, @varname(early_increments.increments)
+);
+_conf_obs = collect(
+    first(
+        pp_joint[k]
+            for k in keys(pp_joint)
+            if occursin("confirmed_state.confirmed_positives.positives", string(k))
+    )
+);
 _conf_late = _vintage_replicates(
-    pp_joint, @varname(late_increments.increments));
+    pp_joint, @varname(late_increments.increments)
+);
 confirmed_panel = (;
     id = :confirmed_cases,
     title = "Confirmed cases",
     dates = _vintage_dates(_conf_window_days),
-    replicates = [vcat(collect(e), collect(p), collect(l))
-                  for (e, p, l) in zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
+    replicates = [
+        vcat(collect(e), collect(p), collect(l))
+            for (e, p, l) in zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))
+    ],
     observed = [_confirmed_at(d) for d in _conf_window_days],
-    colour = :goldenrod);
+    colour = :goldenrod,
+);
 
 ## Confirmed deaths are a per-vintage stream, scored as increments of the
 ## modelled confirmed-death trajectory up to the cut-off, so they get the
@@ -3350,8 +3487,10 @@ confirmed_deaths_panel = (;
     title = "Confirmed deaths",
     dates = _vintage_dates(obs.confirmed_deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(cdeath_increments.increments)),
-    observed = obs.confirmed_deaths_history.counts, colour = :purple);
+        pp_joint, @varname(cdeath_increments.increments)
+    ),
+    observed = obs.confirmed_deaths_history.counts, colour = :purple,
+);
 
 ## Recovered among confirmed ("cumul guéris") is a cumulative per-vintage
 ## stream fitted through the increments of the modelled recovered trajectory
@@ -3362,8 +3501,10 @@ recovered_panel = (;
     title = "Recovered (confirmed)",
     dates = _vintage_dates(obs.recovered_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(recovered_increments.increments)),
-    observed = obs.recovered_history.counts, colour = :mediumseagreen);
+        pp_joint, @varname(recovered_increments.increments)
+    ),
+    observed = obs.recovered_history.counts, colour = :mediumseagreen,
+);
 
 ## Tableau 6 treatment-centre daily flows (the new patient-movement data
 ## sources): admissions and the discharge reasons (in-care deaths, rule-outs,
@@ -3375,33 +3516,41 @@ admissions_panel = (;
     title = "Admissions/day",
     dates = _vintage_dates(obs.treatment_admissions_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(admissions.obs)),
+        pp_joint, @varname(admissions.obs)
+    ),
     observed = obs.treatment_admissions_history.counts,
-    colour = :teal, cumulative = false);
+    colour = :teal, cumulative = false,
+);
 incare_deaths_panel = (;
     id = :treatment_deaths,
     title = "In-care deaths/day",
     dates = _vintage_dates(obs.treatment_deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(incare_deaths.increments)),
+        pp_joint, @varname(incare_deaths.increments)
+    ),
     observed = obs.treatment_deaths_history.counts,
-    colour = :darkred, cumulative = false);
+    colour = :darkred, cumulative = false,
+);
 ruleouts_panel = (;
     id = :treatment_ruleouts,
     title = "Rule-outs/day",
     dates = _vintage_dates(obs.treatment_ruleout_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(ruleouts.increments)),
+        pp_joint, @varname(ruleouts.increments)
+    ),
     observed = obs.treatment_ruleout_history.counts,
-    colour = :goldenrod, cumulative = false);
+    colour = :goldenrod, cumulative = false,
+);
 absconded_panel = (;
     id = :treatment_absconded,
     title = "Absconded/day",
     dates = _vintage_dates(obs.treatment_absconded_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(absconded.increments)),
+        pp_joint, @varname(absconded.increments)
+    ),
     observed = obs.treatment_absconded_history.counts,
-    colour = :slategray, cumulative = false);
+    colour = :slategray, cumulative = false,
+);
 
 ## Tableau 6 occupancy split (`dont confirmes` / `dont suspects`): the two
 ## in-care prevalence sub-stocks. Per-day census counts, so drawn with
@@ -3414,19 +3563,23 @@ confirmed_incare_panel = (;
     title = "Confirmed in care",
     dates = _vintage_dates(obs.treatment_confirmed_incare_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(confirmed_incare_obs.increments)),
+        pp_joint, @varname(confirmed_incare_obs.increments)
+    ),
     observed = obs.treatment_confirmed_incare_history.counts,
     colour = :darkgoldenrod, cumulative = false,
-    ylabel = "Beds occupied");
+    ylabel = "Beds occupied",
+);
 suspect_incare_panel = (;
     id = :suspect_beds,
     title = "Suspects in care",
     dates = _vintage_dates(obs.treatment_suspect_incare_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(suspect_incare_obs.increments)),
+        pp_joint, @varname(suspect_incare_obs.increments)
+    ),
     observed = obs.treatment_suspect_incare_history.counts,
     colour = :chocolate, cumulative = false,
-    ylabel = "Beds occupied");
+    ylabel = "Beds occupied",
+);
 
 ## Symptom-onset reporting triangle: one cell per (onset day, report day)
 ## pair, several onset dates per snapshot, unlike every panel above (one
@@ -3437,19 +3590,27 @@ suspect_incare_panel = (;
 ## digitised snapshot figure in the Results section above). Per-day net
 ## correction, not a running total, so `cumulative = false`.
 _onset_ppc_report_days = sort(unique(obs.onset_curve_history.report_days))
-_onset_ppc_groups = [findall(==(r), obs.onset_curve_history.report_days)
-                     for r in _onset_ppc_report_days]
+_onset_ppc_groups = [
+    findall(==(r), obs.onset_curve_history.report_days)
+        for r in _onset_ppc_report_days
+]
 _onset_ppc_replicates_raw = _vintage_replicates(
-    pp_joint, @varname(onset_report_state.increments))
+    pp_joint, @varname(onset_report_state.increments)
+)
 onset_panel = (;
     id = :onset_reports,
     title = "Onset reports (net correction/snapshot)",
     dates = _vintage_dates(_onset_ppc_report_days),
-    replicates = [[sum(collect(rep)[g]) for g in _onset_ppc_groups]
-                  for rep in vec(_onset_ppc_replicates_raw)],
-    observed = [sum(obs.onset_curve_history.increments[g])
-                for g in _onset_ppc_groups],
-    colour = :mediumpurple, cumulative = false);
+    replicates = [
+        [sum(collect(rep)[g]) for g in _onset_ppc_groups]
+            for rep in vec(_onset_ppc_replicates_raw)
+    ],
+    observed = [
+        sum(obs.onset_curve_history.increments[g])
+            for g in _onset_ppc_groups
+    ],
+    colour = :mediumpurple, cumulative = false,
+);
 
 ## Each panel runs to its own last vintage, so a stream that keeps
 ## reporting shows the full series the model is fitting rather than the
@@ -3461,14 +3622,16 @@ vintage_panels = [
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
     admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel,
-    confirmed_incare_panel, suspect_incare_panel, onset_panel];
+    confirmed_incare_panel, suspect_incare_panel, onset_panel,
+];
 ## The incidence view drops the treatment-centre flow and occupancy-split
 ## panels, whose per-day counts are already their own incidence.
 vintage_incidence_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
-    onset_panel];
+    onset_panel,
+];
 ## Whether a panel's stream was still being reported at the cut-off, from
 ## the shared registry rule (last vintage within a week of the cut-off)
 ## rather than a per-page list of dates that goes stale.
@@ -3476,9 +3639,11 @@ _still_reporting(p) = stream_reporting(obs, p.id);
 reporting_panels = filter(_still_reporting, vintage_panels);
 stopped_panels = filter(!_still_reporting, vintage_panels);
 reporting_incidence_panels = filter(
-    _still_reporting, vintage_incidence_panels);
+    _still_reporting, vintage_incidence_panels
+);
 stopped_incidence_panels = filter(
-    !_still_reporting, vintage_incidence_panels);
+    !_still_reporting, vintage_incidence_panels
+);
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(reporting_panels);
 
 #md # ```@raw html
@@ -3498,7 +3663,8 @@ joint_vintage_ppc_fig #hide
 #md # ```
 
 joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
-    reporting_incidence_panels);
+    reporting_incidence_panels
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3531,7 +3697,8 @@ joint_vintage_ppc_stopped_fig #hide
 #md # ```
 
 joint_vintage_incidence_stopped_fig = plot_vintage_incidence_ppc(
-    stopped_incidence_panels);
+    stopped_incidence_panels
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3593,13 +3760,15 @@ end;
 
 pp_exports = _dated_total(pp_joint, @varname(export_obs.counts));
 pp_exports_deaths = _dated_total(
-    pp_joint, @varname(death_obs.counts));
+    pp_joint, @varname(death_obs.counts)
+);
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
     obs.exported_cases, nothing;
     pp_exports_deaths = pp_exports_deaths,
-    obs_exports_deaths = obs.exports_deaths);
+    obs_exports_deaths = obs.exports_deaths
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3624,17 +3793,21 @@ joint_ppc_fig #hide
 #md # <details><summary>Province composition posterior predictive checks</summary>
 #md # ```
 
-province_case_ppc_fig = plot_province_composition_ppc(chn_joint;
+province_case_ppc_fig = plot_province_composition_ppc(
+    chn_joint;
     share_key = :province_shares,
     obs_increments = province_cases.increments,
     days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed case share by province");
+    title = "Confirmed case share by province"
+);
 
-province_death_ppc_fig = plot_province_composition_ppc(chn_joint;
+province_death_ppc_fig = plot_province_composition_ppc(
+    chn_joint;
     share_key = :province_death_shares,
     obs_increments = province_deaths.increments,
     days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed death share by province");
+    title = "Confirmed death share by province"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3661,11 +3834,13 @@ province_death_ppc_fig #hide
 ## `obs.onset_curve_history` rather than pulled from the chain (mirroring
 ## `onset_reporting_model`'s own `grid_start`/`grid_end` construction).
 _onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
-                    minimum(obs.onset_curve_history.onset_days)
+    minimum(obs.onset_curve_history.onset_days)
 _onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
-                  _onset_grid_start :
-                  max(maximum(obs.onset_curve_history.report_days),
-    _onset_grid_start)
+    _onset_grid_start :
+    max(
+        maximum(obs.onset_curve_history.report_days),
+        _onset_grid_start
+    )
 
 ## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
 ## (the report-date calendar walk), rebuilt from the non-centred
@@ -3673,30 +3848,39 @@ _onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
 ## function the onset forecast also uses, so the hazard plotted here and
 ## the one projected forward are the same object rather than two copies of
 ## the same reconstruction that could drift apart.
-_onset_hazard = reconstruct_onset_hazard(chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end)
+_onset_hazard = reconstruct_onset_hazard(
+    chn_joint;
+    grid_start = _onset_grid_start, grid_end = _onset_grid_end
+)
 
 ## A representative onset day (the median scored onset date), so the 7-day
 ## fraction below reflects a typical, not an edge, calendar day.
 _onset_u_ref = isempty(obs.onset_curve_history.onset_days) ?
-               _onset_grid_start :
-               round(Int, quantile(obs.onset_curve_history.onset_days, 0.5))
+    _onset_grid_start :
+    round(Int, quantile(obs.onset_curve_history.onset_days, 0.5))
 ## The delay profile is the normalised delay CDF, which reaches one by
 ## construction, so the 7-day fraction is read straight off it.
-_onset_7d_fraction = [onset_report_G(6, _onset_hazard.logit_h0[i],
-                          _onset_hazard.γ[i], _onset_u_ref,
-                          _onset_grid_start)
-                      for i in eachindex(_onset_hazard.logit_h0)]
+_onset_7d_fraction = [
+    onset_report_G(
+        6, _onset_hazard.logit_h0[i],
+        _onset_hazard.γ[i], _onset_u_ref,
+        _onset_grid_start
+    )
+        for i in eachindex(_onset_hazard.logit_h0)
+]
 filter!(isfinite, _onset_7d_fraction)
 
 ## Per-draw median ascertainment over the onset dates the ascertainment
 ## walk spans, then summarised across draws. Ascertainment is its own
 ## level rather than the delay hazard's asymptote (see the [symptom-onset
 ## reporting delay](@ref "Symptom-onset reporting delay") Methods section).
-_onset_ascertainment_draws = [quantile(_onset_hazard.alpha[i], 0.5)
-                              for i in eachindex(_onset_hazard.alpha)]
+_onset_ascertainment_draws = [
+    quantile(_onset_hazard.alpha[i], 0.5)
+        for i in eachindex(_onset_hazard.alpha)
+]
 
-_onset_labels = merge(display_names,
+_onset_labels = merge(
+    display_names,
     Dict(
         Symbol("onset_report_state.η0") => "onset-report hazard baseline (logit)",
         Symbol("onset_report_state.σ_h0") => "onset-report hazard pooling SD",
@@ -3704,7 +3888,9 @@ _onset_labels = merge(display_names,
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
         Symbol("onset_report_state.σ_mult") => "onset-report scale slack",
-        Symbol("onset_report_state.σ_scan") => "shared per-scan level error"));
+        Symbol("onset_report_state.σ_scan") => "shared per-scan level error"
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3720,27 +3906,40 @@ onset_derived_raw = DataFrame(
     quantity = String[],
     lower_90 = Float64[], lower_60 = Float64[],
     lower_30 = Float64[], upper_30 = Float64[],
-    upper_60 = Float64[], upper_90 = Float64[])
+    upper_60 = Float64[], upper_90 = Float64[]
+)
 for (label, draws) in [
-    ("share of eventual reports arriving within 7 days (median onset date)",
-        _onset_7d_fraction),
-    ("median modelled ascertainment", _onset_ascertainment_draws)]
+        (
+            "share of eventual reports arriving within 7 days (median onset date)",
+            _onset_7d_fraction,
+        ),
+        ("median modelled ascertainment", _onset_ascertainment_draws),
+    ]
     s = posterior_summary(draws)
-    push!(onset_derived_raw,
-        (label, round(s.lo90; digits = 3), round(s.lo60; digits = 3),
+    push!(
+        onset_derived_raw,
+        (
+            label, round(s.lo90; digits = 3), round(s.lo60; digits = 3),
             round(s.lo30; digits = 3), round(s.hi30; digits = 3),
-            round(s.hi60; digits = 3), round(s.hi90; digits = 3)))
+            round(s.hi60; digits = 3), round(s.hi90; digits = 3),
+        )
+    )
 end
 onset_derived_table = BVDOutbreakSize._prettify(onset_derived_raw)
 
 onset_summary = vcat(
-    summary_table(chn_joint,
-        [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
+    summary_table(
+        chn_joint,
+        [
+            Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
             Symbol("onset_report_state.σ_mult"),
-            Symbol("onset_report_state.σ_scan")];
-        digits = 3, labels = _onset_labels),
-    onset_derived_table);
+            Symbol("onset_report_state.σ_scan"),
+        ];
+        digits = 3, labels = _onset_labels
+    ),
+    onset_derived_table
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3760,13 +3959,17 @@ onset_summary #hide
 #md # <details><summary>Symptom-onset reporting-delay pair plot (prior overlaid)</summary>
 #md # ```
 
-onset_pair_fig = plot_pair(chn_joint,
-    [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
+onset_pair_fig = plot_pair(
+    chn_joint,
+    [
+        Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.σ_mult"),
-        Symbol("onset_report_state.σ_scan")];
-    prior = prior_chn, labels = _onset_labels);
+        Symbol("onset_report_state.σ_scan"),
+    ];
+    prior = prior_chn, labels = _onset_labels
+);
 
 #md # ```@raw html
 #md # </details>
@@ -3791,16 +3994,22 @@ onset_pair_fig #hide
 ## increments, so the observed cumulative levels this figure plots are
 ## read back from the source blocks directly rather than reconstructed
 ## from the fitted increments.
-_onset_path = joinpath(pkgdir(BVDOutbreakSize), "data",
-    "onset_curve_scanned.csv")
-_onset_snaps = filter(b -> b.report_date <= obs.cutoff,
+_onset_path = joinpath(
+    pkgdir(BVDOutbreakSize), "data",
+    "onset_curve_scanned.csv"
+)
+_onset_snaps = filter(
+    b -> b.report_date <= obs.cutoff,
     BVDOutbreakSize._dedup_onset_blocks(
-        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)))
+        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)
+    )
+)
 ## Keyed by report day rather than kept in order: a snapshot whose printed
 ## extent misses the scored window contributes no cells, so the panels and
 ## the snapshot blocks are not guaranteed to line up positionally.
 _onset_snap_by_day = Dict(
-    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps)
+    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps
+)
 
 ## Cell indices grouped by their snapshot's report day, and the daily
 ## onsets series per posterior draw (the diff of the chain's stored
@@ -3811,8 +4020,10 @@ for (i, r) in enumerate(obs.onset_curve_history.report_days)
     push!(get!(_onset_cells_by_report, r, Int[]), i)
 end
 _onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
-_onset_daily_draws = [vcat(v[1], diff(v))
-                      for v in vec(collect(chn_joint[:cumulative_onsets]))]
+_onset_daily_draws = [
+    vcat(v[1], diff(v))
+        for v in vec(collect(chn_joint[:cumulative_onsets]))
+]
 
 ## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
 ## the fitted grid the same way the model extrapolates it.
@@ -3835,14 +4046,18 @@ _onset_ppc_rng = Random.MersenneTwister(20260729)
 ## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
 ## from Monte Carlo error alone.
 function _onset_replicated(draws::AbstractVector)
-    return [begin
-                μ = draws[i]
-                σ = _onset_σ_mult[i] *
-                    onset_report_scale(μ, μ, 0.0, 1;
-                    scan_sd = _onset_σ_scan[i])
-                μ + σ * rand(_onset_ppc_rng, TDist(4.0))
-            end
-            for _ in 1:4 for i in eachindex(draws)]
+    return [
+        begin
+            μ = draws[i]
+            σ = _onset_σ_mult[i] *
+                onset_report_scale(
+                μ, μ, 0.0, 1;
+                scan_sd = _onset_σ_scan[i]
+            )
+            μ + σ * rand(_onset_ppc_rng, TDist(4.0))
+        end
+            for _ in 1:4 for i in eachindex(draws)
+    ]
 end
 
 ## Latest printed value for each onset date the digitised figures cover,
@@ -3880,12 +4095,16 @@ _onset_panels = map(_onset_report_grid_days) do R
     snap = _onset_snap_by_day[R]
     us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-    nowcast = onset_nowcast_draws(us, observed, [R - u for u in us],
+    nowcast = onset_nowcast_draws(
+        us, observed, [R - u for u in us],
         _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
-        target_delays = [_onset_last_report_day[u] - u for u in us])
-    (; title = string(snap.report_date), dates = grid_date.(us), observed,
+        target_delays = [_onset_last_report_day[u] - u for u in us]
+    )
+    (;
+        title = string(snap.report_date), dates = grid_date.(us), observed,
         nowcast = [_onset_replicated(d) for d in nowcast],
-        latest = [_onset_last_printed[u] for u in us])
+        latest = [_onset_last_printed[u] for u in us],
+    )
 end
 
 onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
@@ -3912,15 +4131,25 @@ _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 ## band is a predictive for the bar actually plotted rather than for the
 ## eventual total. `onset_report_F` holds the calendar walk flat past its
 ## fitted support, which the most recent onset dates run into.
-_onset_by_date_onsets = [[_onset_daily_draws[i][u]
-                          for i in eachindex(_onset_daily_draws)]
-                         for u in _onset_by_date_days]
-_onset_by_date_printed = [[_onset_daily_draws[i][u] *
-                           onset_report_F(_onset_grid_end - u,
-                               _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
-                               u, _onset_grid_start, _onset_alpha(i, u))
-                           for i in eachindex(_onset_daily_draws)]
-                          for u in _onset_by_date_days]
+_onset_by_date_onsets = [
+    [
+        _onset_daily_draws[i][u]
+            for i in eachindex(_onset_daily_draws)
+    ]
+        for u in _onset_by_date_days
+]
+_onset_by_date_printed = [
+    [
+        _onset_daily_draws[i][u] *
+            onset_report_F(
+            _onset_grid_end - u,
+            _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
+            u, _onset_grid_start, _onset_alpha(i, u)
+        )
+            for i in eachindex(_onset_daily_draws)
+    ]
+        for u in _onset_by_date_days
+]
 ## That count put through the same measurement error a single digitised
 ## bar carries (`onset_report_scale`'s level case, as above the snapshot
 ## grid), replicated four times per draw for the same reason.
@@ -3928,35 +4157,52 @@ _onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
 
 onset_ppc_by_date_fig = let
     fig = CairoMakie.Figure(; size = (900, 380))
-    ax = CairoMakie.Axis(fig[1, 1];
+    ax = CairoMakie.Axis(
+        fig[1, 1];
         title = "Symptom onsets by date of onset: modelled vs digitised",
-        xlabel = "onset date", ylabel = "cases")
+        xlabel = "onset date", ylabel = "cases"
+    )
     xs = Float64.(_onset_by_date_days)
     q(ds, p) = [quantile(d, p) for d in ds]
-    CairoMakie.band!(ax, xs, q(_onset_by_date_onsets, 0.05),
-        q(_onset_by_date_onsets, 0.95); color = (:seagreen, 0.20))
-    CairoMakie.lines!(ax, xs, q(_onset_by_date_onsets, 0.5);
-        color = :seagreen, linewidth = 2)
-    CairoMakie.band!(ax, xs, q(_onset_by_date_reps, 0.05),
-        q(_onset_by_date_reps, 0.95); color = (:mediumpurple, 0.20))
-    CairoMakie.lines!(ax, xs, q(_onset_by_date_reps, 0.5);
-        color = :mediumpurple, linewidth = 2)
-    CairoMakie.scatter!(ax, xs,
+    CairoMakie.band!(
+        ax, xs, q(_onset_by_date_onsets, 0.05),
+        q(_onset_by_date_onsets, 0.95); color = (:seagreen, 0.2)
+    )
+    CairoMakie.lines!(
+        ax, xs, q(_onset_by_date_onsets, 0.5);
+        color = :seagreen, linewidth = 2
+    )
+    CairoMakie.band!(
+        ax, xs, q(_onset_by_date_reps, 0.05),
+        q(_onset_by_date_reps, 0.95); color = (:mediumpurple, 0.2)
+    )
+    CairoMakie.lines!(
+        ax, xs, q(_onset_by_date_reps, 0.5);
+        color = :mediumpurple, linewidth = 2
+    )
+    CairoMakie.scatter!(
+        ax, xs,
         [_onset_last_printed[u] for u in _onset_by_date_days];
-        color = :black, marker = :cross, markersize = 9)
+        color = :black, marker = :cross, markersize = 9
+    )
     ## Calendar labels on a grid-day axis, at weekly ticks so they do not
     ## collide at this width.
     _ticks = _onset_by_date_days[1:7:end]
     ax.xticks = (Float64.(_ticks), string.(grid_date.(_ticks)))
     ax.xticklabelrotation = pi / 4
-    CairoMakie.Legend(fig[2, 1],
+    CairoMakie.Legend(
+        fig[2, 1],
         [
             CairoMakie.MarkerElement(color = :black, marker = :cross),
-            CairoMakie.PolyElement(color = (:mediumpurple, 0.30)),
-            CairoMakie.PolyElement(color = (:seagreen, 0.30))],
-        ["digitised (latest)", "modelled posterior predictive",
-            "modelled onsets"];
-        orientation = :horizontal, tellwidth = false, tellheight = true)
+            CairoMakie.PolyElement(color = (:mediumpurple, 0.3)),
+            CairoMakie.PolyElement(color = (:seagreen, 0.3)),
+        ],
+        [
+            "digitised (latest)", "modelled posterior predictive",
+            "modelled onsets",
+        ];
+        orientation = :horizontal, tellwidth = false, tellheight = true
+    )
     fig
 end;
 
@@ -3975,16 +4221,22 @@ onset_ppc_by_date_fig #hide
 #md # <details><summary>Posterior correlation heatmap</summary>
 #md # ```
 
-correlation_fig = plot_correlation_heatmap(chn_joint,
-    [:C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
-        :expected_reports_T, :expected_deaths_T, :expected_confirmed_T];
-    labels = Dict(:C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
+correlation_fig = plot_correlation_heatmap(
+    chn_joint,
+    [
+        :C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
+        :expected_reports_T, :expected_deaths_T, :expected_confirmed_T,
+    ];
+    labels = Dict(
+        :C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
         :CFR => raw"\mathrm{CFR}", :p_drc => raw"p_\mathrm{drc}",
         :p_uganda => raw"p_\mathrm{ug}", :lambda_bg => raw"\lambda_\mathrm{bg}",
         :tau_test => raw"\tau_\mathrm{test}",
         :expected_reports_T => raw"\mathrm{susp.\ cases}",
         :expected_deaths_T => raw"\mathrm{susp.\ deaths}",
-        :expected_confirmed_T => raw"\mathrm{conf.\ cases}"));
+        :expected_confirmed_T => raw"\mathrm{conf.\ cases}"
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4005,19 +4257,21 @@ correlation_fig #hide
 ## reusing the posterior-predictive replicates built for the vintage panels.
 _stream_total(reps) = [sum(Float64.(collect(r))) for r in vec(reps)]
 _conf_baseline = isempty(obs.confirmed_history.counts) ? 0 :
-                 Int(obs.confirmed_history.counts[1])
+    Int(obs.confirmed_history.counts[1])
 stream_totals = (;
     suspected_cases = _stream_total(reported_panel.replicates),
     suspected_deaths = _stream_total(deaths_panel.replicates),
     confirmed_cases = _stream_total(confirmed_panel.replicates) .+ _conf_baseline,
     confirmed_deaths = _stream_total(confirmed_deaths_panel.replicates),
-    analysed = _stream_total(tests_analysed_panel.replicates));
+    analysed = _stream_total(tests_analysed_panel.replicates),
+);
 stream_observed = (;
     suspected_cases = Float64(obs.reported_history.counts[end]),
     suspected_deaths = Float64(obs.deaths_history.counts[end]),
     confirmed_cases = Float64(obs.confirmed_cases),
     confirmed_deaths = Float64(obs.confirmed_deaths_history.counts[end]),
-    analysed = Float64(obs.lab_history.counts[end]));
+    analysed = Float64(obs.lab_history.counts[end]),
+);
 stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
 
 #md # ```@raw html
@@ -4035,11 +4289,13 @@ stream_pairs_fig #hide
 #md # ```
 
 no_onward = predict_no_onward_deaths(
-    chn_joint; obs_deaths = obs.total_deaths);
+    chn_joint; obs_deaths = obs.total_deaths
+);
 
 no_onward_table = streams_table(
     "no-onward total" => no_onward.total_projected;
-    digits = 0);
+    digits = 0
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4055,7 +4311,8 @@ no_onward_table #hide
 #md # ```
 
 no_onward_fig = plot_no_onward_deaths(
-    no_onward; obs_deaths = obs.total_deaths);
+    no_onward; obs_deaths = obs.total_deaths
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4073,9 +4330,11 @@ no_onward_fig #hide
 #md # <details><summary>Compute the confirmed-CFR comparison</summary>
 #md # ```
 
-confirmed_cfr = delay_corrected_confirmed_cfr(chn_joint;
+confirmed_cfr = delay_corrected_confirmed_cfr(
+    chn_joint;
     obs_confirmed = obs.confirmed_cases,
-    obs_confirmed_deaths = obs.confirmed_deaths);
+    obs_confirmed_deaths = obs.confirmed_deaths
+);
 
 confirmed_cfr_summary = confirmed_cfr_table(confirmed_cfr);
 
@@ -4087,13 +4346,16 @@ confirmed_cfr_line = let r = confirmed_cfr
     struc = filter(isfinite, r.structural)
     cs = posterior_summary(corr)
     ss = posterior_summary(struc)
-    Markdown.parse(string(
-        "**Delay-corrected confirmed CFR:** ",
-        pct(quantile(corr, 0.5)), "% (90% CrI ",
-        pct(cs.lo90), "–", pct(cs.hi90), "%), versus a naive confirmed ratio ",
-        "of ", pct(r.naive_observed), "% and a structural (infection-based) ",
-        "CFR of ", pct(quantile(struc, 0.5)), "% (90% CrI ",
-        pct(ss.lo90), "–", pct(ss.hi90), "%)."))
+    Markdown.parse(
+        string(
+            "**Delay-corrected confirmed CFR:** ",
+            pct(quantile(corr, 0.5)), "% (90% CrI ",
+            pct(cs.lo90), "–", pct(cs.hi90), "%), versus a naive confirmed ratio ",
+            "of ", pct(r.naive_observed), "% and a structural (infection-based) ",
+            "CFR of ", pct(quantile(struc, 0.5)), "% (90% CrI ",
+            pct(ss.lo90), "–", pct(ss.hi90), "%)."
+        )
+    )
 end;
 
 #md # ```@raw html
@@ -4135,11 +4397,15 @@ confirmed_cfr_fig #hide
 #md # <details><summary>Province case-fatality spread</summary>
 #md # ```
 
-province_cfr_spread = summary_table(chn_joint,
+province_cfr_spread = summary_table(
+    chn_joint,
     [:province_cfr_sd, :province_death_ascertainment_sd];
     digits = 3,
-    labels = Dict(:province_cfr_sd => "Lethality spread",
-        :province_death_ascertainment_sd => "Death-confirmation spread"));
+    labels = Dict(
+        :province_cfr_sd => "Lethality spread",
+        :province_death_ascertainment_sd => "Death-confirmation spread"
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4151,10 +4417,12 @@ province_cfr_spread #hide
 #md # <details><summary>Province case-fatality table</summary>
 #md # ```
 
-province_cfr = province_cfr_table(chn_joint, confirmed_cfr;
+province_cfr = province_cfr_table(
+    chn_joint, confirmed_cfr;
     province_cases = vec(sum(province_cases.increments; dims = 2)),
     province_deaths = vec(sum(province_deaths.increments; dims = 2)),
-    n_patches = N_PATCHES);
+    n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4173,13 +4441,15 @@ province_cfr #hide
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
 #md # ```
 
-forecast = forecast_reported(chn_joint;
+forecast = forecast_reported(
+    chn_joint;
     horizon = 7,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
     obs_confirmed = obs.confirmed_cases,
     obs_confirmed_deaths = obs.confirmed_deaths,
-    obs_recovered = obs.recovered_cases);
+    obs_recovered = obs.recovered_cases
+);
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
@@ -4264,10 +4534,14 @@ forecast_flows_fig #hide
 #md # <details><summary>Province forecast split</summary>
 #md # ```
 
-province_forecast_fig = plot_province_forecast(chn_joint, forecast;
-    n_patches = N_PATCHES);
-province_forecast = province_forecast_table(chn_joint, forecast;
-    n_patches = N_PATCHES);
+province_forecast_fig = plot_province_forecast(
+    chn_joint, forecast;
+    n_patches = N_PATCHES
+);
+province_forecast = province_forecast_table(
+    chn_joint, forecast;
+    n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4293,10 +4567,12 @@ province_forecast_fig #hide
 ## `onset_reporting_model` derives it, since it is data rather than chain
 ## contents. `_onset_grid_start`/`_onset_grid_end` are already built for the
 ## reporting-delay section above and reused here.
-onset_forecast = forecast_onsets(chn_joint;
+onset_forecast = forecast_onsets(
+    chn_joint;
     grid_start = _onset_grid_start, grid_end = _onset_grid_end,
     n = obs.n, horizon = 7,
-    obs_value = something(obs.onset_curve_history.last_total, 0));
+    obs_value = something(obs.onset_curve_history.last_total, 0)
+);
 onset_forecast_summary = onset_forecast_table(onset_forecast);
 
 #md # ```@raw html
@@ -4329,11 +4605,17 @@ onset_forecast_fig = let
     fig = CairoMakie.Figure(; size = (960, 420))
     ## Two-line tick labels rather than rotated ones: the leftmost rotated
     ## label overhangs the axis and is clipped at the figure edge.
-    ax1 = CairoMakie.Axis(fig[1, 1];
+    ax1 = CairoMakie.Axis(
+        fig[1, 1];
         title = "New onset reports over the coming week",
-        ylabel = "cases", xticks = (1:4,
-            ["already\nhappened", "not yet\nhappened", "sum of\nthe two",
-                "as the next\nfigure reads it"]))
+        ylabel = "cases", xticks = (
+            1:4,
+            [
+                "already\nhappened", "not yet\nhappened", "sum of\nthe two",
+                "as the next\nfigure reads it",
+            ],
+        )
+    )
     ## The first three bars are latent, so the third is exactly the first
     ## two added. The fourth is that same sum replicated through the
     ## observation model, which is the scored quantity and the only one
@@ -4341,41 +4623,67 @@ onset_forecast_fig = let
     ## error, which is why the three latent bars are shown as well rather
     ## than a decomposition that appears not to add up.
     _latent_total = onset_forecast.onset_reports_backfill .+
-                    onset_forecast.onset_reports_future
-    for (i, d, col) in ((1, onset_forecast.onset_reports_backfill,
-        :mediumpurple),
-        (2, onset_forecast.onset_reports_future, :mediumpurple),
-        (3, _latent_total, :mediumpurple),
-        (4, Float64.(onset_forecast.onset_reports_new), :slategray))
+        onset_forecast.onset_reports_future
+    for (i, d, col) in (
+            (
+                1, onset_forecast.onset_reports_backfill,
+                :mediumpurple,
+            ),
+            (2, onset_forecast.onset_reports_future, :mediumpurple),
+            (3, _latent_total, :mediumpurple),
+            (4, Float64.(onset_forecast.onset_reports_new), :slategray),
+        )
         s = posterior_summary(d)
-        CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo90], [s.hi90];
-            color = col, linewidth = 3)
-        CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo60], [s.hi60];
-            color = col, linewidth = 8)
-        CairoMakie.scatter!(ax1, [Float64(i)], [quantile(d, 0.5)];
-            color = :black, markersize = 9)
+        CairoMakie.rangebars!(
+            ax1, [Float64(i)], [s.lo90], [s.hi90];
+            color = col, linewidth = 3
+        )
+        CairoMakie.rangebars!(
+            ax1, [Float64(i)], [s.lo60], [s.hi60];
+            color = col, linewidth = 8
+        )
+        CairoMakie.scatter!(
+            ax1, [Float64(i)], [quantile(d, 0.5)];
+            color = :black, markersize = 9
+        )
     end
-    ax2 = CairoMakie.Axis(fig[1, 2];
+    ax2 = CairoMakie.Axis(
+        fig[1, 2];
         title = "Symptom onsets by the cut-off",
-        ylabel = "cases", xticks = (1:3,
-            ["onsets\nto date", "reported\nby T", "not yet\nreported"]))
-    for (i, d) in enumerate((onset_forecast.onsets_to_date,
-        onset_forecast.onset_reports_to_date,
-        onset_forecast.onsets_unreported))
+        ylabel = "cases", xticks = (
+            1:3,
+            ["onsets\nto date", "reported\nby T", "not yet\nreported"],
+        )
+    )
+    for (i, d) in enumerate(
+            (
+                onset_forecast.onsets_to_date,
+                onset_forecast.onset_reports_to_date,
+                onset_forecast.onsets_unreported,
+            )
+        )
         s = posterior_summary(d)
-        CairoMakie.rangebars!(ax2, [Float64(i)], [s.lo90], [s.hi90];
-            color = :seagreen, linewidth = 3)
-        CairoMakie.rangebars!(ax2, [Float64(i)], [s.lo60], [s.hi60];
-            color = :seagreen, linewidth = 8)
-        CairoMakie.scatter!(ax2, [Float64(i)], [quantile(d, 0.5)];
-            color = :black, markersize = 9)
+        CairoMakie.rangebars!(
+            ax2, [Float64(i)], [s.lo90], [s.hi90];
+            color = :seagreen, linewidth = 3
+        )
+        CairoMakie.rangebars!(
+            ax2, [Float64(i)], [s.lo60], [s.hi60];
+            color = :seagreen, linewidth = 8
+        )
+        CairoMakie.scatter!(
+            ax2, [Float64(i)], [quantile(d, 0.5)];
+            color = :black, markersize = 9
+        )
     end
     ## The digitised total the "reported by T" bar is a model of, so the
     ## reader can see the fitted reported level against the figure itself.
     ismissing(obs.onset_curve_history.last_total) ||
-        CairoMakie.hlines!(ax2,
-            [Float64(obs.onset_curve_history.last_total)];
-            color = :black, linestyle = :dash)
+        CairoMakie.hlines!(
+        ax2,
+        [Float64(obs.onset_curve_history.last_total)];
+        color = :black, linestyle = :dash
+    )
     fig
 end;
 
@@ -4398,15 +4706,19 @@ onset_forecast_fig #hide
 #md # ```
 
 ## The geojson keys a zone without the province prefix the manifest carries.
-zone_map_keys = [String(last(split(k, "."; limit = 2)))
-                 for k in zone_inputs.zone_keys];
+zone_map_keys = [
+    String(last(split(k, "."; limit = 2)))
+        for k in zone_inputs.zone_keys
+];
 ## Daily zone reproduction numbers over the zone grid, each zone draw
 ## paired with a joint draw so the patch uncertainty is carried, and the
 ## cut-off values the map and ranking read. A zone's reproduction number
 ## is reported only in the draws where its cumulative infections reach
 ## the floor; the rest are undefined.
-zone_rt_traj = reconstruct_zone_rt(chn_local, zone_inputs;
-    parent_chain = chn_joint);
+zone_rt_traj = reconstruct_zone_rt(
+    chn_local, zone_inputs;
+    parent_chain = chn_joint
+);
 zone_RT_finite = [filter(isfinite, m[:, obs.n]) for m in zone_rt_traj];
 zone_RT_reported = findall(!isempty, zone_RT_finite);
 zone_share_T = let vs = vec(collect(chn_local[:share_T_zone]))
@@ -4414,34 +4726,50 @@ zone_share_T = let vs = vec(collect(chn_local[:share_T_zone]))
 end;
 _zq(v, p) = quantile(v, p)
 ## The one-week zone forecast, split from the headline forecast above.
-zone_fc_draws = zone_forecast_draws(chn_local, chn_joint, forecast,
-    zone_inputs);
-zone_forecast_summary = zone_forecast_table(chn_local, chn_joint, forecast,
-    zone_inputs);
-zone_overview = zone_overview_table(chn_local, zone_inputs;
-    parent_chain = chn_joint);
+zone_fc_draws = zone_forecast_draws(
+    chn_local, chn_joint, forecast,
+    zone_inputs
+);
+zone_forecast_summary = zone_forecast_table(
+    chn_local, chn_joint, forecast,
+    zone_inputs
+);
+zone_overview = zone_overview_table(
+    chn_local, zone_inputs;
+    parent_chain = chn_joint
+);
 
 zone_map_fig = plot_zone_map_panels(
     [
-        (; values = [median(zone_RT_finite[z]) for z in zone_RT_reported],
+        (;
+            values = [median(zone_RT_finite[z]) for z in zone_RT_reported],
             zones = zone_map_keys[zone_RT_reported],
             lower = [_zq(zone_RT_finite[z], 0.05) for z in zone_RT_reported],
             upper = [_zq(zone_RT_finite[z], 0.95) for z in zone_RT_reported],
             diverging_at = 1.0, scale = log10,
             title = "Reproduction number at the cut-off",
-            colorbar_label = "R"),
-        (; values = [_zq(v, 0.05) for v in zone_fc_draws.zones],
+            colorbar_label = "R",
+        ),
+        (;
+            values = [_zq(v, 0.05) for v in zone_fc_draws.zones],
             zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
             title = "Confirmed cases over the coming week (lower 90%)",
-            colorbar_label = "cases"),
-        (; values = [_zq(v, 0.95) for v in zone_fc_draws.zones],
+            colorbar_label = "cases",
+        ),
+        (;
+            values = [_zq(v, 0.95) for v in zone_fc_draws.zones],
             zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
             title = "Confirmed cases over the coming week (upper 90%)",
-            colorbar_label = "cases"),
-        (; values = Float64.(zone_inputs.cumulative), zones = zone_map_keys,
+            colorbar_label = "cases",
+        ),
+        (;
+            values = Float64.(zone_inputs.cumulative), zones = zone_map_keys,
             scale = CairoMakie.Makie.pseudolog10,
-            title = "Confirmed cases to date", colorbar_label = "cases")];
-    ncols = 2, title = "Health zones at the cut-off");
+            title = "Confirmed cases to date", colorbar_label = "cases",
+        ),
+    ];
+    ncols = 2, title = "Health zones at the cut-off"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4461,22 +4789,27 @@ zone_map_fig #hide
 ## the quantity the zone values average to.
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
-patch_implied_rt = [let m = Matrix{Float64}(undef,
-                            length(_patch_infection_draws), obs.n)
-                        for (i, v) in enumerate(_patch_infection_draws)
-                            I = reshape(Float64.(v), N_PATCHES, obs.n)
-                            m[i, :] .= implied_national_Rt(I[p, :], zone_inputs.g)
-                        end
-                        m
-                    end
-                    for p in 1:N_PATCHES];
+patch_implied_rt = [
+    let m = Matrix{Float64}(
+            undef,
+            length(_patch_infection_draws), obs.n
+        )
+        for (i, v) in enumerate(_patch_infection_draws)
+            I = reshape(Float64.(v), N_PATCHES, obs.n)
+            m[i, :] .= implied_national_Rt(I[p, :], zone_inputs.g)
+        end
+        m
+    end
+        for p in 1:N_PATCHES
+];
 zone_rt_fig = plot_rt_zones(
     [replace(m[:, zone_grid], NaN => missing) for m in zone_rt_traj],
     zone_inputs.zone_labels, zone_patch;
     patch_labels = zone_inputs.patch_labels,
     dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
     cumulative = zone_inputs.cumulative, top = 12,
-    patch_rt = [m[:, zone_grid] for m in patch_implied_rt]);
+    patch_rt = [m[:, zone_grid] for m in patch_implied_rt]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4491,12 +4824,16 @@ zone_rt_fig #hide
 #md # <details><summary>Zone ranking</summary>
 #md # ```
 
-zone_ranking_fig = plot_zone_ranking(zone_overview;
-    patch_labels = zone_inputs.patch_labels);
+zone_ranking_fig = plot_zone_ranking(
+    zone_overview;
+    patch_labels = zone_inputs.patch_labels
+);
 ## The overview as displayed: the interval strings, without the numeric
 ## columns the figure reads.
-zone_overview_display = zone_overview[:,
-    [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T, :walking]];
+zone_overview_display = zone_overview[
+    :,
+    [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T, :walking],
+];
 
 #md # ```@raw html
 #md # </details>
@@ -4537,22 +4874,30 @@ MarkdownTable(zone_overview_display) #hide
 ## from the posterior and from the zone prior, per vintage and cumulative.
 zone_ppc = zone_composition_draws(chn_local, zone_inputs);
 zone_ppc_prior = zone_composition_draws(prior_chn_zone, zone_inputs);
-zone_ppc_cum = zone_composition_draws(chn_local, zone_inputs;
-    cumulative = true);
-zone_ppc_prior_cum = zone_composition_draws(prior_chn_zone, zone_inputs;
-    cumulative = true);
-zone_ppc_fig = plot_zone_shares(zone_ppc.expected, zone_ppc.observed,
+zone_ppc_cum = zone_composition_draws(
+    chn_local, zone_inputs;
+    cumulative = true
+);
+zone_ppc_prior_cum = zone_composition_draws(
+    prior_chn_zone, zone_inputs;
+    cumulative = true
+);
+zone_ppc_fig = plot_zone_shares(
+    zone_ppc.expected, zone_ppc.observed,
     zone_inputs.dates, zone_inputs.zone_labels;
     zone_patch, patch_labels = zone_inputs.patch_labels,
     pred_draws = zone_ppc.predictive_share,
-    prior_draws = zone_ppc_prior.predictive_share, top = 15, ncols = 5);
-zone_ppc_cum_fig = plot_zone_shares(zone_ppc_cum.expected,
+    prior_draws = zone_ppc_prior.predictive_share, top = 15, ncols = 5
+);
+zone_ppc_cum_fig = plot_zone_shares(
+    zone_ppc_cum.expected,
     zone_ppc_cum.observed, zone_inputs.dates, zone_inputs.zone_labels;
     zone_patch, patch_labels = zone_inputs.patch_labels,
     pred_draws = zone_ppc_cum.predictive_share,
     prior_draws = zone_ppc_prior_cum.predictive_share, top = 15, ncols = 5,
     title = "Zone share of the patch's cumulative confirmed cases, " *
-            "modelled against observed");
+        "modelled against observed"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4590,9 +4935,11 @@ zone_calibration_table #hide
 #md # <details><summary>One-week-ahead zone forecast</summary>
 #md # ```
 
-zone_forecast_fig = plot_zone_forecast(zone_fc_draws.zones,
+zone_forecast_fig = plot_zone_forecast(
+    zone_fc_draws.zones,
     zone_inputs.zone_labels, zone_patch;
-    patch_labels = zone_inputs.patch_labels, top = 15);
+    patch_labels = zone_inputs.patch_labels, top = 15
+);
 ## The fifteen largest zone forecasts, then every patch total.
 zone_forecast_display = let t = zone_forecast_summary
     zones = sort(t[t.zone .!= "Patch total", :], :median; rev = true)
@@ -4621,17 +4968,22 @@ MarkdownTable(zone_forecast_display) #hide
 _zone_per_chain(v) = join(string.(round.(v; sigdigits = 3)), " / ")
 function _zone_sampler_row(label, chn)
     d = zone_sampler_diagnostics(chn)
-    (fit = label, max_rhat = round(d.max_rhat; digits = 3),
+    return (
+        fit = label, max_rhat = round(d.max_rhat; digits = 3),
         min_ess_bulk = round(d.min_ess_bulk; digits = 0),
         min_ess_tail = round(d.min_ess_tail; digits = 0),
         divergences = d.n_divergent,
         depth_cap = _zone_per_chain(d.depth_cap_fraction),
         ebfmi = _zone_per_chain(d.ebfmi),
-        step_size = _zone_per_chain(d.step_size))
+        step_size = _zone_per_chain(d.step_size),
+    )
 end
-zone_sampler_table = DataFrame([
-    _zone_sampler_row("health zones", chn_local),
-    _zone_sampler_row("health zones (frozen)", frozen_local.chn)]);
+zone_sampler_table = DataFrame(
+    [
+        _zone_sampler_row("health zones", chn_local),
+        _zone_sampler_row("health zones (frozen)", frozen_local.chn),
+    ]
+);
 zone_diagnostics = let d = zone_diagnostics_table(chn_local, zone_inputs)
     for c in names(d)[3:end]
         d[!, c] = round.(d[!, c]; digits = startswith(c, "rhat") ? 3 : 0)
@@ -4669,24 +5021,34 @@ MarkdownTable(zone_diagnostics) #hide
 ## docs build and Release workflow expect them). Set `BVD_OUTPUT_DIR`
 ## to redirect them, e.g. when running from a read-only package
 ## install.
-output_dir = get(ENV, "BVD_OUTPUT_DIR",
-    joinpath(pkgdir(BVDOutbreakSize), "output"))
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
 mkpath(output_dir)
 
 ## Full parameter summary for the published CSV (infection, surveillance and
 ## export parameters together).
-joint_summary = summary_table(chn_joint,
-    [:r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
+joint_summary = summary_table(
+    chn_joint,
+    [
+        :r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
         :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
-        Symbol("exports_state.travel_state.daily_travellers")]; digits = 2)
+        Symbol("exports_state.travel_state.daily_travellers"),
+    ]; digits = 2
+)
 CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
-CSV.write(joinpath(output_dir, "confirmed_cfr_summary.csv"),
-    confirmed_cfr_summary)
+CSV.write(
+    joinpath(output_dir, "confirmed_cfr_summary.csv"),
+    confirmed_cfr_summary
+)
 
 ## Copy the input data so the release records what produced these
 ## results.
-cp(joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
-    joinpath(output_dir, "observations.toml"); force = true)
+cp(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
+    joinpath(output_dir, "observations.toml"); force = true
+)
 
 ## Thinned posterior draws of the key joint parameters (every 10th
 ## draw) so downstream users can recompute their own summaries.
@@ -4722,26 +5084,38 @@ CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 ## be scored against what is observed. Only the incident and level quantities
 ## are archived (see `forecast_archive`), thinned to keep the asset compact.
 forecast_horizons = (7, 14, 21, 28)
-forecast_runs = [(h,
-                     forecast_reported(chn_joint; horizon = h,
-                         obs_cases = obs.reported_cases,
-                         obs_deaths = obs.total_deaths,
-                         obs_confirmed = obs.confirmed_cases,
-                         obs_confirmed_deaths = obs.confirmed_deaths,
-                         obs_recovered = obs.recovered_cases,
-                         grid_n = obs.n,
-                         onset_grid_start = _onset_grid_start,
-                         onset_grid_end = _onset_grid_end))
-                 for h in forecast_horizons]
-CSV.write(joinpath(output_dir, "forecast.csv"),
-    forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
+forecast_runs = [
+    (
+        h,
+        forecast_reported(
+            chn_joint; horizon = h,
+            obs_cases = obs.reported_cases,
+            obs_deaths = obs.total_deaths,
+            obs_confirmed = obs.confirmed_cases,
+            obs_confirmed_deaths = obs.confirmed_deaths,
+            obs_recovered = obs.recovered_cases,
+            grid_n = obs.n,
+            onset_grid_start = _onset_grid_start,
+            onset_grid_end = _onset_grid_end
+        ),
+    )
+        for h in forecast_horizons
+]
+CSV.write(
+    joinpath(output_dir, "forecast.csv"),
+    forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5)
+);
 
 ## The per-province split of the same forecasts, in the `forecast.csv`
 ## schema plus the province each row is a share of, so a release records the
 ## provincial forecast it made alongside the national one.
-CSV.write(joinpath(output_dir, "province_forecast.csv"),
-    province_forecast_archive(chn_joint, forecast_runs;
-        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5));
+CSV.write(
+    joinpath(output_dir, "province_forecast.csv"),
+    province_forecast_archive(
+        chn_joint, forecast_runs;
+        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5
+    )
+);
 
 ## The same one- to four-week-ahead forecast made from each FROZEN joint
 ## re-fit (the McCabe-matched cut-offs, the Chamla anchor and the one-week-back
@@ -4752,10 +5126,14 @@ CSV.write(joinpath(output_dir, "province_forecast.csv"),
 ## observations for the cut-off counts. The May cut-offs predate the isolation
 ## and recovered streams, so those are simply absent for them; the per-stream
 ## guard in `forecast_archive` skips a stream a fit does not carry.
-frozen_forecast_fits = unique(f -> f.o.cutoff,
-    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek])
-frozen_forecast_archive = DataFrame(made_date = Date[], horizon = Int[],
-    target_date = Date[], stream = String[], draw = Int[], value = Float64[])
+frozen_forecast_fits = unique(
+    f -> f.o.cutoff,
+    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek]
+)
+frozen_forecast_archive = DataFrame(
+    made_date = Date[], horizon = Int[],
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[]
+)
 ## The onset grid belongs to the triangle each frozen fit actually saw, not
 ## to the live one: the May cut-offs predate the digitised figure entirely,
 ## so their grid is empty and the onset block is simply absent for them.
@@ -4766,21 +5144,31 @@ function _frozen_onset_grid(o)
 end
 for f in frozen_forecast_fits
     _fgs, _fge = _frozen_onset_grid(f.o)
-    runs = [(h,
-                forecast_reported(f.chn; horizon = h,
-                    obs_cases = f.o.reported_cases,
-                    obs_deaths = f.o.total_deaths,
-                    obs_confirmed = f.o.confirmed_cases,
-                    obs_confirmed_deaths = f.o.confirmed_deaths,
-                    obs_recovered = f.o.recovered_cases,
-                    grid_n = f.o.n,
-                    onset_grid_start = _fgs, onset_grid_end = _fge))
-            for h in forecast_horizons]
-    append!(frozen_forecast_archive,
-        forecast_archive(runs; made_date = f.o.cutoff, thin = 5))
+    runs = [
+        (
+            h,
+            forecast_reported(
+                f.chn; horizon = h,
+                obs_cases = f.o.reported_cases,
+                obs_deaths = f.o.total_deaths,
+                obs_confirmed = f.o.confirmed_cases,
+                obs_confirmed_deaths = f.o.confirmed_deaths,
+                obs_recovered = f.o.recovered_cases,
+                grid_n = f.o.n,
+                onset_grid_start = _fgs, onset_grid_end = _fge
+            ),
+        )
+            for h in forecast_horizons
+    ]
+    append!(
+        frozen_forecast_archive,
+        forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
+    )
 end
-CSV.write(joinpath(output_dir, "forecast_frozen.csv"),
-    frozen_forecast_archive);
+CSV.write(
+    joinpath(output_dir, "forecast_frozen.csv"),
+    frozen_forecast_archive
+);
 
 ## Per-fit release assets: the reproduction number, outbreak size and forecasts
 ## for every fit rather than the joint alone, so a release records what each
@@ -4795,39 +5183,61 @@ _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 ## Observed bed occupancy at the cut-off, the level the isolation forecast
 ## anchors on.
 _iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
-                 obs.isolation_history.counts[end]
+    obs.isolation_history.counts[end]
 ## The reporting triangle's own cumulative total at the cut-off. It anchors
 ## the reported quantity rather than changing it: the onset forecast is the
 ## INCREMENT this total should add over the horizon, not the level (see the
 ## methods section on the nowcast and forecast).
 _onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
 stream_fits = [
-    (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+    (;
+        fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
-        streams = [(:reported_cases, "reported cases", obs.reported_cases),
+        streams = [
+            (:reported_cases, "reported cases", obs.reported_cases),
             (:suspected_deaths, "suspected deaths", obs.total_deaths),
             (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
             (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
             (:isolation_beds, "isolation beds", _iso_at_cutoff),
             (:exports, "exports", obs.exported_cases),
-            (:onset_reports, "onset reports", _onset_at_cutoff)]),
-    (; fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
-        streams = [(:reported_cases, "reported cases", obs.reported_cases)]),
-    (; fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
-        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)]),
-    (; fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
-        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)]),
-    (; fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
+            (:onset_reports, "onset reports", _onset_at_cutoff),
+        ],
+    ),
+    (;
+        fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
+        streams = [(:reported_cases, "reported cases", obs.reported_cases)],
+    ),
+    (;
+        fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
+        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)],
+    ),
+    (;
+        fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
+        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)],
+    ),
+    (;
+        fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
         rt_walk_start = 1,
-        streams = [(:confirmed_deaths, "confirmed deaths",
-            obs.confirmed_deaths)]),
-    (; fit = "treatment", chn = chn_treatment, rt_start = 1,
+        streams = [
+            (
+                :confirmed_deaths, "confirmed deaths",
+                obs.confirmed_deaths,
+            ),
+        ],
+    ),
+    (;
+        fit = "treatment", chn = chn_treatment, rt_start = 1,
         rt_walk_start = 1,
-        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)]),
-    (; fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
-        streams = [(:exports, "exports", obs.exported_cases)]),
-    (; fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
-        streams = [(:onset_reports, "onset reports", _onset_at_cutoff)])
+        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)],
+    ),
+    (;
+        fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
+        streams = [(:exports, "exports", obs.exported_cases)],
+    ),
+    (;
+        fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
+        streams = [(:onset_reports, "onset reports", _onset_at_cutoff)],
+    ),
 ]
 
 ## Cut-off reproduction number per fit. The joint exposes it as `R_T`; the
@@ -4837,8 +5247,10 @@ stream_fits = [
 ## path. `ramp` matches the model's 21-day intervention scale-up.
 function _fit_rt_draws(f)
     f.fit == "joint" && return vec(Array(f.chn[:R_T]))
-    rt = reconstruct_rt(f.chn; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = RT_INTERVENTION_RAMP)
+    rt = reconstruct_rt(
+        f.chn; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = RT_INTERVENTION_RAMP
+    )
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end
 
@@ -4848,53 +5260,79 @@ end
 ## its own walk base, but `r0_walk_draws` probes rather than assumes, so a
 ## single-stream model built without its own renewal walk drops out of this
 ## quantity instead of breaking the release.
-_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])),
-                          r0_walk_draws(f.chn)) for f in stream_fits]
+_stream_quantities = [
+    (
+        f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])),
+        r0_walk_draws(f.chn),
+    ) for f in stream_fits
+]
 
 ## One row per fit and quantity, with the median and the 30/60/90% credible
 ## bounds the report's tables use.
 function _stream_estimate_row(fit, quantity, draws)
     s = posterior_summary(draws)
-    return (fit = fit, quantity = quantity, median = quantile(draws, 0.5),
+    return (
+        fit = fit, quantity = quantity, median = quantile(draws, 0.5),
         lo30 = s.lo30, hi30 = s.hi30, lo60 = s.lo60, hi60 = s.hi60,
-        lo90 = s.lo90, hi90 = s.hi90)
+        lo90 = s.lo90, hi90 = s.hi90,
+    )
 end
-stream_estimates = DataFrame([_stream_estimate_row(fit, q, d)
-                              for (fit, rt, ct, r0) in _stream_quantities
-                              for (q, d) in (("R_T", rt), ("C_T", ct),
-                                      ("R0", r0))
-                              if !isnothing(d)])
+stream_estimates = DataFrame(
+    [
+        _stream_estimate_row(fit, q, d)
+            for (fit, rt, ct, r0) in _stream_quantities
+            for (q, d) in (
+                ("R_T", rt), ("C_T", ct),
+                ("R0", r0),
+            )
+            if !isnothing(d)
+    ]
+)
 CSV.write(joinpath(output_dir, "stream_estimates.csv"), stream_estimates);
 
 ## Thinned reproduction-number and outbreak-size draws per fit, so downstream
 ## scoring can recompute its own summaries rather than reuse the intervals.
-stream_draws = DataFrame([(fit = fit, quantity = q, draw = d, value = v)
-                          for (fit, rt, ct, r0) in _stream_quantities
-                          for (q, vals) in (("R_T", rt), ("C_T", ct),
-                                  ("R0", r0))
-                          if !isnothing(vals)
-                          for (d, v) in enumerate(vals[1:stream_thin:end])])
+stream_draws = DataFrame(
+    [
+        (fit = fit, quantity = q, draw = d, value = v)
+            for (fit, rt, ct, r0) in _stream_quantities
+            for (q, vals) in (
+                ("R_T", rt), ("C_T", ct),
+                ("R0", r0),
+            )
+            if !isnothing(vals)
+            for (d, v) in enumerate(vals[1:stream_thin:end])
+    ]
+)
 CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
 
 ## Per-fit forecasts of each fit's own observed stream, in the `forecast.csv`
 ## long schema plus the fit that made them. Rebuilding a single-stream fit's
 ## cut-off growth rate needs the grid length and the breakpoint, which are data
 ## rather than chain contents, so both are passed.
-stream_forecasts = DataFrame(made_date = Date[], horizon = Int[],
+stream_forecasts = DataFrame(
+    made_date = Date[], horizon = Int[],
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
-    fit = String[])
+    fit = String[]
+)
 for f in stream_fits, (stream, label, obs_value) in f.streams,
-    h in forecast_horizons
+        h in forecast_horizons
     ## The onset grid is ignored by every other stream, so it is passed
     ## unconditionally rather than branching the loop on the stream name.
-    _vals = forecast_stream(f.chn, stream; horizon = h,
+    _vals = forecast_stream(
+        f.chn, stream; horizon = h,
         obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
         rt_start = f.rt_start, rt_walk_start = f.rt_walk_start,
         onset_grid_start = _onset_grid_start,
-        onset_grid_end = _onset_grid_end)
+        onset_grid_end = _onset_grid_end
+    )
     for (d, i) in enumerate(1:stream_thin:length(_vals))
-        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
-            d, Float64(_vals[i]), f.fit))
+        push!(
+            stream_forecasts, (
+                obs.cutoff, h, obs.cutoff + Day(h), label,
+                d, Float64(_vals[i]), f.fit,
+            )
+        )
     end
 end
 
@@ -4912,14 +5350,20 @@ end
 ## partition it by. Kept, with the guard, so the loop starts writing the
 ## moment `forecast_reported` grows those columns.
 for (h, fc) in forecast_runs,
-    (col, label) in ((:suspect_occupancy, "isolation beds (suspected)"),
-        (:confirmed_occupancy, "treatment beds"))
+        (col, label) in (
+            (:suspect_occupancy, "isolation beds (suspected)"),
+            (:confirmed_occupancy, "treatment beds"),
+        )
 
     col in propertynames(fc) || continue
     _wvals = fc[!, col]
     for (d, i) in enumerate(1:stream_thin:length(_wvals))
-        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
-            d, Float64(_wvals[i]), "joint"))
+        push!(
+            stream_forecasts, (
+                obs.cutoff, h, obs.cutoff + Day(h), label,
+                d, Float64(_wvals[i]), "joint",
+            )
+        )
     end
 end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
@@ -4927,19 +5371,27 @@ CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
 ## showing outbreak growth: one row per grid day with the 30/60/90%
 ## credible intervals of both the daily new and cumulative onsets.
-onsets_over_time_table = onsets_over_time(chn_joint;
-    n = obs.n, seeding = obs.seeding)
-CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
-    onsets_over_time_table);
+onsets_over_time_table = onsets_over_time(
+    chn_joint;
+    n = obs.n, seeding = obs.seeding
+)
+CSV.write(
+    joinpath(output_dir, "onsets_over_time.csv"),
+    onsets_over_time_table
+);
 
 ## The health-zone overview and the per-zone split of the same one- to
 ## four-week-ahead forecasts, in the province archive's schema plus the
 ## zone, so a release records the zone forecast it made.
 CSV.write(joinpath(output_dir, "zone_summary.csv"), zone_overview)
-CSV.write(joinpath(output_dir, "zone_forecast.csv"),
-    zone_forecast_archive(chn_local, chn_joint, forecast_runs, zone_inputs;
+CSV.write(
+    joinpath(output_dir, "zone_forecast.csv"),
+    zone_forecast_archive(
+        chn_local, chn_joint, forecast_runs, zone_inputs;
         made_date = obs.cutoff, horizon = maximum(forecast_horizons),
-        thin = 5));
+        thin = 5
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -4956,7 +5408,8 @@ CSV.write(joinpath(output_dir, "zone_forecast.csv"),
 #md # ```
 
 dashboard_dir = joinpath(
-    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
+)
 mkpath(dashboard_dir)
 
 ## Figures: estimated R(t) nationally and by province, infections by
@@ -4966,34 +5419,49 @@ mkpath(dashboard_dir)
 ## just write them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
-CairoMakie.save(joinpath(dashboard_dir, "infections_provinces.png"),
-    province_infections_fig)
-CairoMakie.save(joinpath(dashboard_dir, "provinces_summary.png"),
-    province_detail_fig)
-CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
-    cumulative_traj_fig)
+CairoMakie.save(
+    joinpath(dashboard_dir, "infections_provinces.png"),
+    province_infections_fig
+)
+CairoMakie.save(
+    joinpath(dashboard_dir, "provinces_summary.png"),
+    province_detail_fig
+)
+CairoMakie.save(
+    joinpath(dashboard_dir, "infections.png"),
+    cumulative_traj_fig
+)
 ## The report splits the surveillance panels by whether the stream was
 ## still reporting at the cut-off. The dashboard shows one grid, so it is
 ## drawn here over the full ordered panel set.
-CairoMakie.save(joinpath(dashboard_dir, "reported_cases.png"),
-    plot_vintage_conditional_ppc(vintage_panels))
+CairoMakie.save(
+    joinpath(dashboard_dir, "reported_cases.png"),
+    plot_vintage_conditional_ppc(vintage_panels)
+)
 ## The health-zone maps and the one-week zone forecast, and the per-zone
 ## estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number, the one-week forecast and the share of the patch's infections.
 ## A zone below the reporting floor carries no reproduction number.
 CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
-CairoMakie.save(joinpath(dashboard_dir, "zone_forecast.png"),
-    zone_forecast_fig)
-_zone_deaths = [let h = obs.zone_death_history
-                    haskey(h, prov) && haskey(h[prov], z) &&
-                    !isempty(h[prov][z].counts) ? Int(h[prov][z].counts[end]) :
-                    0
-                end
-                for (prov, z) in zip(zone_inputs.zone_province,
-    zone_inputs.zone_names)]
+CairoMakie.save(
+    joinpath(dashboard_dir, "zone_forecast.png"),
+    zone_forecast_fig
+)
+_zone_deaths = [
+    let h = obs.zone_death_history
+        haskey(h, prov) && haskey(h[prov], z) &&
+            !isempty(h[prov][z].counts) ? Int(h[prov][z].counts[end]) :
+            0
+    end
+        for (prov, z) in zip(
+            zone_inputs.zone_province,
+            zone_inputs.zone_names
+        )
+]
 _zone_rt_stat(f) = [isempty(r) ? missing : f(r) for r in zone_RT_finite]
-zone_estimates = DataFrame(zone = zone_map_keys,
+zone_estimates = DataFrame(
+    zone = zone_map_keys,
     label = zone_inputs.zone_labels, province = zone_inputs.zone_province,
     patch = zone_inputs.patch_labels[zone_patch],
     cases = zone_inputs.cumulative, deaths = _zone_deaths,
@@ -5005,7 +5473,8 @@ zone_estimates = DataFrame(zone = zone_map_keys,
     forecast_upper = [quantile(v, 0.95) for v in zone_fc_draws.zones],
     share_median = [median(v) for v in zone_share_T],
     share_lower = [quantile(v, 0.05) for v in zone_share_T],
-    share_upper = [quantile(v, 0.95) for v in zone_share_T])
+    share_upper = [quantile(v, 0.95) for v in zone_share_T]
+)
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 
 ## Headline prose: the same bullet summary shown at the top of the Results
@@ -5017,16 +5486,24 @@ end
 ## Headline tables: outbreak size and timing as whole numbers, and the
 ## growth and severity parameters to two decimals, each with reader-friendly
 ## quantity names.
-dashboard_counts = summary_table(chn_joint, [:C_T, :T]; digits = 0,
-    labels = Dict(:C_T => "Cumulative infections",
-        :T => "Outbreak age (days)"))
-dashboard_rates = summary_table(chn_joint,
+dashboard_counts = summary_table(
+    chn_joint, [:C_T, :T]; digits = 0,
+    labels = Dict(
+        :C_T => "Cumulative infections",
+        :T => "Outbreak age (days)"
+    )
+)
+dashboard_rates = summary_table(
+    chn_joint,
     [:R0, :R_T, :r, :doubling_time, :CFR]; digits = 2,
-    labels = Dict(:R0 => "Initial reproduction number",
+    labels = Dict(
+        :R0 => "Initial reproduction number",
         :R_T => "Latest reproduction number",
         :r => "Latest growth rate (per day)",
         :doubling_time => "Latest doubling time (days)",
-        :CFR => "Case-fatality ratio"))
+        :CFR => "Case-fatality ratio"
+    )
+)
 open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
     print(io, markdown_table(dashboard_counts))
 end

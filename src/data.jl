@@ -31,7 +31,7 @@ function confirmed_break_steps(obs; deaths::Bool = false)
     isempty(days) && return out
     hist = deaths ? obs.confirmed_deaths_history : obs.confirmed_history
     gross = deaths ? obs.confirmed_break_gross_deaths :
-            obs.confirmed_break_gross_cases
+        obs.confirmed_break_gross_cases
     isempty(hist.counts) && return out
     hdays = collect(hist.days)
     counts = collect(hist.counts)
@@ -54,8 +54,10 @@ The window is half open on the left, so a break day on the origin belongs to
 the window before it. `deaths` selects the confirmed-death stream rather
 than confirmed cases. Returns zero when the window holds no break day.
 """
-function confirmed_break_correction(obs, from_day::Real, to_day::Real;
-        deaths::Bool = false)
+function confirmed_break_correction(
+        obs, from_day::Real, to_day::Real;
+        deaths::Bool = false
+    )
     total = 0.0
     for (d, c) in confirmed_break_steps(obs; deaths = deaths)
         from_day < d <= to_day && (total += c)
@@ -108,12 +110,17 @@ reported-case vintage to the cut-off). The intervention breakpoint grid
 day is `n - who_first_sitrep_days`.
 """
 function load_observations(
-        path::AbstractString = joinpath(@__DIR__, "..", "data",
-            "observations.toml");
+        path::AbstractString = joinpath(
+            @__DIR__, "..", "data",
+            "observations.toml"
+        );
         seeding_lead::Integer = SEEDING_LEAD_DAYS,
         cutoff_date::Union{Nothing, Date, AbstractString} = nothing,
-        onset_curve_path::AbstractString = joinpath(dirname(path),
-            "onset_curve_scanned.csv"))
+        onset_curve_path::AbstractString = joinpath(
+            dirname(path),
+            "onset_curve_scanned.csv"
+        )
+    )
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
     ## The cut-off is the manifest `as_of_date` unless an earlier
@@ -121,8 +128,10 @@ function load_observations(
     ## moves the cut-off earlier, so the grid stays date-aligned with the
     ## full-data fit.
     cutoff = isnothing(cutoff_date) ? Date(String(raw["as_of_date"])) :
-             (cutoff_date isa Date ? cutoff_date :
-              Date(String(cutoff_date)))
+        (
+            cutoff_date isa Date ? cutoff_date :
+            Date(String(cutoff_date))
+        )
     ## Grid day-index (1-based) of a calendar date: seeding day is day 1.
     _gap(d) = Int(date2epochdays(cutoff) - date2epochdays(Date(String(d))))
     tmrca_date = Date(String(raw["genetic_tmrca"]["date"]))
@@ -187,8 +196,10 @@ function load_observations(
             days = Int[_index(d) for d in ds[keep]]
             (; blk, ds, keep, ord = sortperm(days), days)
         else
-            (; blk = nothing, ds = String[], keep = Bool[], ord = Int[],
-                days = Int[])
+            (;
+                blk = nothing, ds = String[], keep = Bool[], ord = Int[],
+                days = Int[],
+            )
         end
     end
     confirmed_break_days = _brk.days[_brk.ord]
@@ -210,7 +221,8 @@ function load_observations(
         vals = Int.(_brk.blk[key])
         length(vals) == length(_brk.ds) || error(
             "confirmed_break_dates: $key has $(length(vals)) entries for " *
-            "$(length(_brk.ds)) dates")
+                "$(length(_brk.ds)) dates"
+        )
         return vals[_brk.keep][_brk.ord]
     end
     confirmed_break_gross_cases = break_gross("gross_cases")
@@ -260,7 +272,8 @@ function load_observations(
             for (zone, vals) in block[prov]
                 length(vals) == length(block["dates"]) || error(
                     "$key: $prov.$zone has $(length(vals)) entries for " *
-                    "$(length(block["dates"])) dates")
+                        "$(length(block["dates"])) dates"
+                )
                 v = Int.(vals[keep])
                 zones[String(zone)] = (; days = idx[ord], counts = v[ord])
             end
@@ -310,43 +323,49 @@ function load_observations(
             date = confirmed_break_date_labels[i]
             pos = findfirst(==(d), hdays)
             if pos === nothing
-                error("confirmed_break_dates: $date (grid day $d) matches no " *
-                      "vintage in the $label history, so it would be silently " *
-                      "ignored — no step and no de-anchor — while appearing to " *
-                      "absorb a harmonisation. Check the date against the " *
-                      "history's own vintages; a transposed digit or the wrong " *
-                      "month presents exactly like this.")
+                error(
+                    "confirmed_break_dates: $date (grid day $d) matches no " *
+                        "vintage in the $label history, so it would be silently " *
+                        "ignored — no step and no de-anchor — while appearing to " *
+                        "absorb a harmonisation. Check the date against the " *
+                        "history's own vintages; a transposed digit or the wrong " *
+                        "month presents exactly like this."
+                )
             end
             g = i <= length(gross) ? gross[i] : 0
             if g >= inc[pos]
-                error("confirmed_break_dates: $date has a printed 24h $label " *
-                      "count of $g against a net vintage increment of " *
-                      "$(inc[pos]), so the gross does not sit below the net. " *
-                      "That is a provincial transfer, not a base " *
-                      "integration. An integration reattaches records and " *
-                      "so adds to cases and deaths together, whereas a " *
-                      "transfer moves both down (SitRep 065, 18 July " *
-                      "2026: +83 gross vs +77 net " *
-                      "cases and +40 vs +37 net deaths). Listing it de-anchors " *
-                      "the positivity denominator with no backlog to absorb, " *
-                      "which measured 94 divergences and a min bulk ESS of 15 " *
-                      "against 20 and 522 undeclared, and inflated the cut-off " *
-                      "infection count 14%. Remove $date from " *
-                      "[confirmed_break_dates].")
+                error(
+                    "confirmed_break_dates: $date has a printed 24h $label " *
+                        "count of $g against a net vintage increment of " *
+                        "$(inc[pos]), so the gross does not sit below the net. " *
+                        "That is a provincial transfer, not a base " *
+                        "integration. An integration reattaches records and " *
+                        "so adds to cases and deaths together, whereas a " *
+                        "transfer moves both down (SitRep 065, 18 July " *
+                        "2026: +83 gross vs +77 net " *
+                        "cases and +40 vs +37 net deaths). Listing it de-anchors " *
+                        "the positivity denominator with no backlog to absorb, " *
+                        "which measured 94 divergences and a min bulk ESS of 15 " *
+                        "against 20 and 522 undeclared, and inflated the cut-off " *
+                        "infection count 14%. Remove $date from " *
+                        "[confirmed_break_dates]."
+                )
             end
             if g == 0
                 @warn "confirmed_break_dates: no printed 24h $label count for " *
-                      "$date, so its step is centred on the whole increment " *
-                      "and attributes all of it to the harmonisation rather " *
-                      "than splitting it. Supply gross_$label to make the " *
-                      "split data-derived." increment=inc[pos]
+                    "$date, so its step is centred on the whole increment " *
+                    "and attributes all of it to the harmonisation rather " *
+                    "than splitting it. Supply gross_$label to make the " *
+                    "split data-derived." increment = inc[pos]
             end
         end
         return nothing
     end
     check_break_gross(confirmed_break_gross_cases, confirmed_history, "cases")
-    check_break_gross(confirmed_break_gross_deaths, confirmed_deaths_history,
-        "deaths")
+    check_break_gross(
+        confirmed_break_gross_deaths, confirmed_deaths_history,
+        "deaths"
+    )
     ## The analysed-specimen series is the laboratory denominator. The
     ## received series is recorded for the pipeline view but not fitted.
     lab_history = history("tests_analysed_history")
@@ -397,13 +416,16 @@ function load_observations(
     ## same `cutoff` as every history above, so a freeze also freezes this
     ## stream.
     onset_curve_history = load_onset_curve(
-        onset_curve_path; cutoff, seeding)
+        onset_curve_path; cutoff, seeding
+    )
     ## The same triangle's cumulative confirmed-by-onset total, restated in
     ## the shape every other history uses so it is scored by the same
     ## machinery. The fitted stream never sees this series, since it fits the
     ## increments.
-    onset_report_history = (; days = onset_curve_history.total_days,
-        counts = onset_curve_history.total_counts)
+    onset_report_history = (;
+        days = onset_curve_history.total_days,
+        counts = onset_curve_history.total_counts,
+    )
     ## Cut-off scalar from an explicit TOML block, else the final vintage of
     ## the matching history. Under a freeze the TOML scalars hold the
     ## full-data total and no longer match the truncated history, so the
@@ -414,29 +436,32 @@ function load_observations(
     ## The first WHO joint situation report is the earliest reported-case
     ## vintage. Days from it to the cut-off set the intervention breakpoint.
     who_first_sitrep_days = isempty(reported_history.days) ? n :
-                            n - reported_history.days[1] + 1
+        n - reported_history.days[1] + 1
 
     ## Cut-off export scalars. A freeze truncates the dated series, so the
     ## cumulative totals are the number of dated events kept, matching the
     ## per-day series. Otherwise the manifest scalars are used.
     exported_cases = frozen ? length(export_case_days) :
-                     Int(_val("exported_cases"))
+        Int(_val("exported_cases"))
     exports_deaths = frozen ? length(export_death_days) :
-                     Int(_val("exports_deaths"))
+        Int(_val("exports_deaths"))
 
-    return (; n, cutoff, seeding,
+    return (;
+        n, cutoff, seeding,
         exported_cases = exported_cases,
         exports_deaths = exports_deaths,
         export_case_days = export_case_days,
         export_death_days = export_death_days,
         total_deaths = frozen ?
-                       _hist_end(deaths_history) : Int(_val("total_deaths")),
+            _hist_end(deaths_history) : Int(_val("total_deaths")),
         reported_cases = frozen ?
-                         _hist_end(reported_history) :
-                         Int(_val("reported_cases")),
+            _hist_end(reported_history) :
+            Int(_val("reported_cases")),
         confirmed_cases = _scalar("confirmed_cases", confirmed_history),
-        confirmed_deaths = _scalar("confirmed_deaths",
-            confirmed_deaths_history),
+        confirmed_deaths = _scalar(
+            "confirmed_deaths",
+            confirmed_deaths_history
+        ),
         tests_analysed = _scalar("cumulative_tests_analysed", lab_history),
         reported_history = reported_history,
         confirmed_history = confirmed_history,
@@ -455,7 +480,7 @@ function load_observations(
         treatment_ruleout_history = treatment_ruleout_history,
         treatment_absconded_history = treatment_absconded_history,
         treatment_confirmed_incare_history =
-        treatment_confirmed_incare_history,
+            treatment_confirmed_incare_history,
         treatment_suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
         confirmed_break_days = confirmed_break_days,
@@ -470,7 +495,8 @@ function load_observations(
         zone_confirmed_history = zone_history("zone_confirmed_history"),
         zone_death_history = zone_history("zone_death_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
-        who_first_sitrep_days)
+        who_first_sitrep_days,
+    )
 end
 
 """
@@ -489,8 +515,10 @@ silently shift cases into the others. A mismatch is an error.
 Returns `(; days, increments)`. When no per-province data is supplied,
 `days` is empty and the caller skips the composition term.
 """
-function province_increment_matrix(province_history,
-        province_names::AbstractVector, n_patches::Integer)
+function province_increment_matrix(
+        province_history,
+        province_names::AbstractVector, n_patches::Integer
+    )
     empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
     isempty(province_history) && return empty
     names = province_names[1:min(n_patches, length(province_names))]
@@ -508,8 +536,9 @@ function province_increment_matrix(province_history,
 
         h.days == days || error(
             "province `$(m)` is reported on different vintage days to " *
-            "`$(first(members)[1])`; the composition likelihood needs " *
-            "every province on the same vintages.")
+                "`$(first(members)[1])`; the composition likelihood needs " *
+                "every province on the same vintages."
+        )
     end
     ## Cumulative → per-vintage increments. The first increment is the
     ## cumulative to the first vintage day, matching `bin_increments`, which
@@ -548,16 +577,22 @@ without this the revision is absorbed silently. Report these rather than
 let the clamp hide them.
 """
 function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
-    out = @NamedTuple{province::String, zone::String, day::Int,
-        from::Int, to::Int}[]
+    out = @NamedTuple{
+        province::String, zone::String, day::Int,
+        from::Int, to::Int,
+    }[]
     for (prov, zones) in zone_history, (zone, h) in zones
 
         zone == "unallocated" && continue
         for i in 2:length(h.days)
             h.counts[i - 1] - h.counts[i] > min_fall || continue
-            push!(out,
-                (; province = String(prov), zone = String(zone),
-                    day = h.days[i], from = h.counts[i - 1], to = h.counts[i]))
+            push!(
+                out,
+                (;
+                    province = String(prov), zone = String(zone),
+                    day = h.days[i], from = h.counts[i - 1], to = h.counts[i],
+                )
+            )
         end
     end
     return sort!(out; by = x -> (x.day, x.province, x.zone))
@@ -585,14 +620,18 @@ is left out too. It is off by default: the confirmed-case composition
 was fitted under the unallocated rule alone, and widening it there
 changes that stream rather than this one.
 """
-function zone_reattribution_days(zone_history;
-        include_zone_falls::Bool = false, min_fall::Integer = 1)
+function zone_reattribution_days(
+        zone_history;
+        include_zone_falls::Bool = false, min_fall::Integer = 1
+    )
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
         haskey(zones, "unallocated") || continue
         h = zones["unallocated"]
-        falls = [h.days[i] for i in 2:length(h.days)
-                 if h.counts[i] < h.counts[i - 1]]
+        falls = [
+            h.days[i] for i in 2:length(h.days)
+                if h.counts[i] < h.counts[i - 1]
+        ]
         isempty(falls) || (out[String(prov)] = falls)
     end
     if include_zone_falls
@@ -643,12 +682,16 @@ sums, the allocated count each vintage's composition conditions on) and
 has zone data gets an empty matrix. An empty `zone_history` returns an
 empty vector.
 """
-function zone_increment_matrix(zone_history, patch_names::AbstractVector,
+function zone_increment_matrix(
+        zone_history, patch_names::AbstractVector,
         members::AbstractDict = PROVINCE_MEMBERS;
-        reattribution::AbstractDict = zone_reattribution_days(zone_history))
-    out = @NamedTuple{patch::String, zones::Vector{Tuple{String, String}},
+        reattribution::AbstractDict = zone_reattribution_days(zone_history)
+    )
+    out = @NamedTuple{
+        patch::String, zones::Vector{Tuple{String, String}},
         days::Vector{Int}, increments::Matrix{Int}, totals::Vector{Int},
-        excluded::Vector{Int}}[]
+        excluded::Vector{Int},
+    }[]
     isempty(zone_history) && return out
     days = nothing
     for nm in patch_names
@@ -662,10 +705,14 @@ function zone_increment_matrix(zone_history, patch_names::AbstractVector,
             end
         end
         if isempty(keys_)
-            push!(out,
-                (; patch = String(nm), zones = keys_, days = Int[],
+            push!(
+                out,
+                (;
+                    patch = String(nm), zones = keys_, days = Int[],
                     increments = Matrix{Int}(undef, 0, 0), totals = Int[],
-                    excluded = Int[]))
+                    excluded = Int[],
+                )
+            )
             continue
         end
         for (prov, zone) in keys_
@@ -673,25 +720,36 @@ function zone_increment_matrix(zone_history, patch_names::AbstractVector,
             days === nothing && (days = h.days)
             h.days == days || error(
                 "zone `$(prov).$(zone)` is reported on different vintage " *
-                "days to `$(keys_[1][1]).$(keys_[1][2])`; the zone " *
-                "composition needs every zone on the same vintages.")
+                    "days to `$(keys_[1][1]).$(keys_[1][2])`; the zone " *
+                    "composition needs every zone on the same vintages."
+            )
         end
         inc = Matrix{Int}(undef, length(keys_), length(days))
         for (i, (prov, zone)) in enumerate(keys_)
             c = zone_history[prov][zone].counts
             inc[i, :] = max.(diff(vcat(0, c)), 0)
         end
-        excluded = sort!(unique!(Int[d
-                                     for prov in provs
-                                     for d in get(reattribution, prov, Int[])
-                                     if d in days]))
+        excluded = sort!(
+            unique!(
+                Int[
+                    d
+                        for prov in provs
+                        for d in get(reattribution, prov, Int[])
+                        if d in days
+                ]
+            )
+        )
         for d in excluded
             inc[:, findfirst(==(d), days)] .= 0
         end
-        push!(out,
-            (; patch = String(nm), zones = keys_, days = copy(days),
+        push!(
+            out,
+            (;
+                patch = String(nm), zones = keys_, days = copy(days),
                 increments = inc, totals = vec(sum(inc; dims = 1)),
-                excluded))
+                excluded,
+            )
+        )
     end
     return out
 end
@@ -707,24 +765,35 @@ in patch order then alphabetical by key. The file is written by
 `scripts/build_health_zones.py`; see `data/README.md` for its sources.
 """
 function load_health_zones(
-        path::AbstractString = joinpath(@__DIR__, "..", "data",
-        "health_zones.csv"))
-    Row = @NamedTuple{zone::String, label::String, province::String,
-        population::Int, lat::Float64, lon::Float64, zscode::String}
+        path::AbstractString = joinpath(
+            @__DIR__, "..", "data",
+            "health_zones.csv"
+        )
+    )
+    Row = @NamedTuple{
+        zone::String, label::String, province::String,
+        population::Int, lat::Float64, lon::Float64, zscode::String,
+    }
     rows = Row[]
     lines = readlines(path)
     header = split(lines[1], ',')
-    header == ["zone", "label", "province", "population", "lat", "lon",
-        "zscode"] || error("unexpected header in $(path): $(header)")
+    header == [
+        "zone", "label", "province", "population", "lat", "lon",
+        "zscode",
+    ] || error("unexpected header in $(path): $(header)")
     for line in lines[2:end]
         isempty(strip(line)) && continue
         f = split(line, ',')
         length(f) == 7 || error("expected 7 fields in $(path): $(line)")
-        push!(rows,
-            (; zone = String(f[1]), label = String(f[2]),
+        push!(
+            rows,
+            (;
+                zone = String(f[1]), label = String(f[2]),
                 province = String(f[3]), population = parse(Int, f[4]),
                 lat = parse(Float64, f[5]), lon = parse(Float64, f[6]),
-                zscode = String(f[7])))
+                zscode = String(f[7]),
+            )
+        )
     end
     return rows
 end
@@ -746,9 +815,12 @@ and is not a meaningful renewal fit.
 """
 function freeze_observations(
         cutoff_date::Union{Date, AbstractString};
-        path::AbstractString = joinpath(@__DIR__, "..", "data",
-            "observations.toml"),
-        seeding_lead::Integer = SEEDING_LEAD_DAYS)
+        path::AbstractString = joinpath(
+            @__DIR__, "..", "data",
+            "observations.toml"
+        ),
+        seeding_lead::Integer = SEEDING_LEAD_DAYS
+    )
     return load_observations(path; seeding_lead, cutoff_date)
 end
 
@@ -771,67 +843,108 @@ once per consumer. [`stream_id`](@ref) resolves any of the four
 vocabularies back to `id`.
 """
 const OBSERVATION_STREAMS = (
-    (; id = :suspected_cases, field = :reported_history,
+    (;
+        id = :suspected_cases, field = :reported_history,
         label = "Suspected cases", score_label = "reported cases",
-        forecast_prefix = :cases),
-    (; id = :suspected_deaths, field = :deaths_history,
+        forecast_prefix = :cases,
+    ),
+    (;
+        id = :suspected_deaths, field = :deaths_history,
         label = "Suspected deaths", score_label = "suspected deaths",
-        forecast_prefix = :deaths),
-    (; id = :suspected_daily, field = :suspected_daily_history,
+        forecast_prefix = :deaths,
+    ),
+    (;
+        id = :suspected_daily, field = :suspected_daily_history,
         label = "New suspects/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :suspected_daily_deaths, field = :suspected_daily_deaths_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :suspected_daily_deaths, field = :suspected_daily_deaths_history,
         label = "New suspected deaths/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :confirmed_cases, field = :confirmed_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :confirmed_cases, field = :confirmed_history,
         label = "Confirmed cases", score_label = "confirmed cases",
-        forecast_prefix = :confirmed),
-    (; id = :confirmed_deaths, field = :confirmed_deaths_history,
+        forecast_prefix = :confirmed,
+    ),
+    (;
+        id = :confirmed_deaths, field = :confirmed_deaths_history,
         label = "Confirmed deaths", score_label = "confirmed deaths",
-        forecast_prefix = :confirmed_deaths),
-    (; id = :recovered, field = :recovered_history,
+        forecast_prefix = :confirmed_deaths,
+    ),
+    (;
+        id = :recovered, field = :recovered_history,
         label = "Recovered (confirmed)", score_label = "recovered",
-        forecast_prefix = :recovered),
-    (; id = :tests_analysed, field = :lab_history,
+        forecast_prefix = :recovered,
+    ),
+    (;
+        id = :tests_analysed, field = :lab_history,
         label = "Specimens analysed (cumulative)", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :tests_analysed_daily, field = :lab_daily_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :tests_analysed_daily, field = :lab_daily_history,
         label = "Specimens analysed (24h)", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :tests_received, field = :tests_received_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :tests_received, field = :tests_received_history,
         label = "Specimens received", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :isolation_beds, field = :isolation_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :isolation_beds, field = :isolation_history,
         label = "Patients in isolation", score_label = "isolation beds",
-        forecast_prefix = nothing),
-    (; id = :bed_capacity, field = :bed_capacity_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :bed_capacity, field = :bed_capacity_history,
         label = "Bed capacity", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :treatment_admissions, field = :treatment_admissions_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :treatment_admissions, field = :treatment_admissions_history,
         label = "Admissions/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :treatment_deaths, field = :treatment_deaths_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :treatment_deaths, field = :treatment_deaths_history,
         label = "In-care deaths/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :treatment_ruleouts, field = :treatment_ruleout_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :treatment_ruleouts, field = :treatment_ruleout_history,
         label = "Rule-outs/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :treatment_absconded, field = :treatment_absconded_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :treatment_absconded, field = :treatment_absconded_history,
         label = "Absconded/day", score_label = nothing,
-        forecast_prefix = nothing),
-    (; id = :treatment_beds, field = :treatment_confirmed_incare_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :treatment_beds, field = :treatment_confirmed_incare_history,
         label = "Confirmed in care", score_label = "treatment beds",
-        forecast_prefix = nothing),
-    (; id = :suspect_beds, field = :treatment_suspect_incare_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :suspect_beds, field = :treatment_suspect_incare_history,
         label = "Suspects in care",
         score_label = "isolation beds (suspected)",
-        forecast_prefix = nothing),
-    (; id = :onset_reports, field = :onset_report_history,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :onset_reports, field = :onset_report_history,
         label = "Onset reports", score_label = "onset reports",
-        forecast_prefix = nothing),
-    (; id = :exports, field = :export_case_days,
+        forecast_prefix = nothing,
+    ),
+    (;
+        id = :exports, field = :export_case_days,
         label = "Uganda exports", score_label = "exports",
-        forecast_prefix = nothing))
+        forecast_prefix = nothing,
+    ),
+)
 
 """
 Calendar date of a grid day-index, where day `obs.n` is the cut-off and
@@ -879,8 +992,10 @@ stream the forecast does not carry. Built from the registry's
 function stream_forecast_columns(stream)
     e = _stream_entry(stream_id(stream))
     isnothing(e.forecast_prefix) && return nothing
-    return (; cum = Symbol(e.forecast_prefix, "_cum"),
-        new = Symbol(e.forecast_prefix, "_new"))
+    return (;
+        cum = Symbol(e.forecast_prefix, "_cum"),
+        new = Symbol(e.forecast_prefix, "_new"),
+    )
 end
 
 """
@@ -922,8 +1037,10 @@ Whether `stream` was still being reported at the cut-off of `obs`, that
 is whether its last vintage falls within `grace` days of the cut-off. A
 stream `obs` does not carry, or one with no vintages, is not reporting.
 """
-function stream_reporting(obs, stream;
-        grace::Integer = STREAM_REPORTING_GRACE_DAYS)::Bool
+function stream_reporting(
+        obs, stream;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS
+    )::Bool
     d = stream_last_date(obs, stream)
     return !ismissing(d) && (obs.cutoff - d) <= Day(grace)
 end
@@ -935,11 +1052,15 @@ Reporting status of every stream `obs` carries, one row per entry of
 whether it is still `reporting` at the cut-off, and `days_since` that
 last report.
 """
-function stream_report_status(obs;
-        grace::Integer = STREAM_REPORTING_GRACE_DAYS)
+function stream_report_status(
+        obs;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS
+    )
     entries = [e for e in OBSERVATION_STREAMS if hasproperty(obs, e.field)]
-    last_dates = Union{Date, Missing}[stream_last_date(obs, e.id)
-                                      for e in entries]
+    last_dates = Union{Date, Missing}[
+        stream_last_date(obs, e.id)
+            for e in entries
+    ]
     ## Columns are built typed rather than from a row vector, so a stream
     ## with no vintages (a `missing` date) cannot widen the whole table to
     ## `Any` and leave the reporting flag unusable as an index.
@@ -947,11 +1068,16 @@ function stream_report_status(obs;
         stream = Symbol[e.id for e in entries],
         label = String[e.label for e in entries],
         last_date = last_dates,
-        reporting = Bool[stream_reporting(obs, e.id; grace)
-                         for e in entries],
-        days_since = Union{Int, Missing}[ismissing(d) ? missing :
-                                         (obs.cutoff - d).value
-                                         for d in last_dates])
+        reporting = Bool[
+            stream_reporting(obs, e.id; grace)
+                for e in entries
+        ],
+        days_since = Union{Int, Missing}[
+            ismissing(d) ? missing :
+                (obs.cutoff - d).value
+                for d in last_dates
+        ]
+    )
 end
 
 """
@@ -975,10 +1101,12 @@ seed is the daily incidence reached over them, so an advancing
 outbreak-size centre would give a seed of order half a million per day.
 `exponential_growth_model` carries its own default.
 """
-function m_prior_centre(as_of_date::Union{Date, AbstractString};
+function m_prior_centre(
+        as_of_date::Union{Date, AbstractString};
         base_date::AbstractString = M_PRIOR_BASE_DATE,
         m_base::Real = M_PRIOR_BASE,
-        doubling_days::Real = M_PRIOR_DOUBLING_DAYS)
+        doubling_days::Real = M_PRIOR_DOUBLING_DAYS
+    )
     as_of = as_of_date isa Date ? as_of_date : Date(String(as_of_date))
     elapsed = date2epochdays(as_of) - date2epochdays(Date(base_date))
     return m_base + elapsed / doubling_days

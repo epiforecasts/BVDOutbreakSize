@@ -29,13 +29,15 @@
     @test obs.confirmed_cases >= 0
     ## Tests-analysed is an optional scalar laboratory stream.
     @test ismissing(obs.tests_analysed) ||
-          (obs.tests_analysed isa Integer && obs.tests_analysed >= 0)
+        (obs.tests_analysed isa Integer && obs.tests_analysed >= 0)
 
     ## Per-vintage histories: named tuples with `days` and `counts`
-    for key in (:deaths_history, :reported_history, :confirmed_history,
-        :lab_history, :lab_daily_history, :suspected_daily_history,
-        :suspected_daily_deaths_history,
-        :isolation_history, :bed_capacity_history, :recovered_history)
+    for key in (
+            :deaths_history, :reported_history, :confirmed_history,
+            :lab_history, :lab_daily_history, :suspected_daily_history,
+            :suspected_daily_deaths_history,
+            :isolation_history, :bed_capacity_history, :recovered_history,
+        )
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -60,8 +62,10 @@
     ## this would be silently clamped and is the one documented failure mode,
     ## so guarding it here catches a bad data update where the brittle literal
     ## would only have needed re-typing.
-    let w = confirmed_positivity_windows(obs.confirmed_history,
-            obs.lab_history, obs.lab_daily_history)
+    let w = confirmed_positivity_windows(
+            obs.confirmed_history,
+            obs.lab_history, obs.lab_daily_history
+        )
         anchored = findall(>(0), w.late_analysed)
         @test !isempty(anchored)
         @test all(i -> w.late_increments[i] <= w.late_analysed[i], anchored)
@@ -79,7 +83,7 @@
     ## Strictly after the last cumulative suspected vintage (26 May): the two
     ## suspected likelihoods cover disjoint days, so they do not double-count.
     @test minimum(obs.suspected_daily_history.days) >
-          maximum(obs.reported_history.days)
+        maximum(obs.reported_history.days)
 
     ## The post-cutoff daily new suspected deaths ("cas suspects du jour N (M
     ## deces)"): the deaths analogue of the daily new-suspect inflow, a per-day
@@ -94,7 +98,7 @@
     ## two suspected-death likelihoods cover disjoint days, so they do not
     ## double-count.
     @test minimum(obs.suspected_daily_deaths_history.days) >
-          maximum(obs.deaths_history.days)
+        maximum(obs.deaths_history.days)
 
     ## The daily isolation/treatment-bed occupancy ("Patients en isolement"):
     ## a per-day stock (point prevalence, never cumulative), so every count is
@@ -108,7 +112,7 @@
     @test issorted(obs.isolation_history.days)
     @test all(d -> 1 <= d <= obs.n, obs.isolation_history.days)
     @test minimum(obs.isolation_history.days) >
-          maximum(obs.reported_history.days)
+        maximum(obs.reported_history.days)
 
     ## The implied bed-capacity series (occupancy / reported occupancy rate):
     ## positive bed counts, sorted oldest-first and within the grid. An
@@ -118,10 +122,16 @@
     @test all(c -> c > 0, obs.bed_capacity_history.counts)
     @test issorted(obs.bed_capacity_history.days)
     @test all(d -> 1 <= d <= obs.n, obs.bed_capacity_history.days)
-    let isod = Dict(zip(obs.isolation_history.days,
-            obs.isolation_history.counts))
-        for (d, cap) in zip(obs.bed_capacity_history.days,
-            obs.bed_capacity_history.counts)
+    let isod = Dict(
+            zip(
+                obs.isolation_history.days,
+                obs.isolation_history.counts
+            )
+        )
+        for (d, cap) in zip(
+                obs.bed_capacity_history.days,
+                obs.bed_capacity_history.counts
+            )
             haskey(isod, d) && (@test cap >= isod[d])
         end
     end
@@ -140,8 +150,10 @@
     ## Tableau 6 treatment-centre patient-movement flows (per-day counts).
     ## Inflow/outflow streams are positive; absconded may be zero on a day.
     ## All sorted oldest-first and within the grid.
-    for h in (obs.treatment_admissions_history, obs.treatment_deaths_history,
-        obs.treatment_ruleout_history)
+    for h in (
+            obs.treatment_admissions_history, obs.treatment_deaths_history,
+            obs.treatment_ruleout_history,
+        )
         @test !isempty(h.counts)
         @test all(c -> c > 0, h.counts)
         @test issorted(h.days)
@@ -153,7 +165,7 @@
     @test all(d -> 1 <= d <= obs.n, obs.treatment_absconded_history.days)
     ## Flow days fall within the occupancy window (they refine it).
     @test maximum(obs.treatment_admissions_history.days) <=
-          maximum(obs.isolation_history.days)
+        maximum(obs.isolation_history.days)
 
     ## History day indices are in range
     dh = obs.deaths_history
@@ -205,7 +217,7 @@
     @test issorted(obs.tests_received_history.counts)
     @test issorted(obs.lab_history.counts)
     @test length(obs.lab_history.counts) ==
-          length(obs.tests_received_history.counts)
+        length(obs.tests_received_history.counts)
     @test all(obs.lab_history.counts .<= obs.tests_received_history.counts)
     @test obs.lab_history.counts[end] == obs.tests_analysed
 
@@ -225,7 +237,7 @@
     @test all(>(0), diff(obs.export_case_days))
     ## The export death (14 May) falls between imports #1 (11 May) and #2.
     @test obs.export_case_days[1] < obs.export_death_days[1] <
-          obs.export_case_days[2]
+        obs.export_case_days[2]
 
     ## Manual occupancy break days: an opt-in dated list within the grid,
     ## sorted ascending. The 9 and 19 June and 14 July DHIS2
@@ -237,11 +249,17 @@
     @test issorted(obs.occupancy_break_days)
     @test all(1 .<= obs.occupancy_break_days .<= obs.n)
     @test obs.occupancy_break_days ==
-          [obs.n - (Date(obs.cutoff) - Date(d)).value
-           for d in (Date("2026-06-09"), Date("2026-06-19"),
-        Date("2026-07-14"), Date("2026-08-11"))]
-    @test all(minimum(obs.isolation_history.days) .<=
-              obs.occupancy_break_days .<= maximum(obs.isolation_history.days))
+        [
+        obs.n - (Date(obs.cutoff) - Date(d)).value
+            for d in (
+                Date("2026-06-09"), Date("2026-06-19"),
+                Date("2026-07-14"), Date("2026-08-11"),
+            )
+    ]
+    @test all(
+        minimum(obs.isolation_history.days) .<=
+            obs.occupancy_break_days .<= maximum(obs.isolation_history.days)
+    )
 
     ## Manual confirmed harmonisation-break days: the same opt-in dated-list
     ## shape, resolved onto the grid. 22 July 2026 (SitRep 069) is listed —
@@ -253,8 +271,10 @@
     @test issorted(obs.confirmed_break_days)
     @test all(1 .<= obs.confirmed_break_days .<= obs.n)
     @test obs.confirmed_break_days ==
-          [obs.n - (Date(obs.cutoff) - Date(d)).value
-           for d in (Date("2026-07-22"),)]
+        [
+        obs.n - (Date(obs.cutoff) - Date(d)).value
+            for d in (Date("2026-07-22"),)
+    ]
     ## Every break day must land on a confirmed vintage, otherwise it fits an
     ## inert step against no observation.
     @test all(in(obs.confirmed_history.days), obs.confirmed_break_days)
@@ -265,15 +285,21 @@
     ## the step centres on would be negative and the day is not a
     ## harmonisation at all).
     @test length(obs.confirmed_break_gross_cases) ==
-          length(obs.confirmed_break_days)
+        length(obs.confirmed_break_days)
     @test length(obs.confirmed_break_gross_deaths) ==
-          length(obs.confirmed_break_days)
+        length(obs.confirmed_break_days)
     @test all(>(0), obs.confirmed_break_gross_cases)
     @test all(>(0), obs.confirmed_break_gross_deaths)
-    let cmap = Dict(zip(obs.confirmed_history.days,
-            diff(vcat(0, collect(obs.confirmed_history.counts)))))
-        for (d, g) in zip(obs.confirmed_break_days,
-            obs.confirmed_break_gross_cases)
+    let cmap = Dict(
+            zip(
+                obs.confirmed_history.days,
+                diff(vcat(0, collect(obs.confirmed_history.counts)))
+            )
+        )
+        for (d, g) in zip(
+                obs.confirmed_break_days,
+                obs.confirmed_break_gross_cases
+            )
             @test g < cmap[d]
         end
     end
@@ -354,8 +380,10 @@ end
     inc = Int(ch["values"][idx]) - Int(ch["values"][idx - 1])
     @test inc > 0
 
-    write_toml(r) = (p = joinpath(mktempdir(), "observations.toml");
-        open(io -> TOML.print(io, r), p, "w"); p)
+    write_toml(r) = (
+        p = joinpath(mktempdir(), "observations.toml");
+        open(io -> TOML.print(io, r), p, "w"); p
+    )
 
     ## Equal to the increment is already too high: the centre would be zero.
     blk["gross_cases"] = [inc]
@@ -372,7 +400,7 @@ end
 
     ## A zero gross is legal but warns: the whole increment becomes artefact.
     blk["gross_cases"] = [0]
-    @test_logs (:warn, r"no printed 24h cases count") match_mode=:any begin
+    @test_logs (:warn, r"no printed 24h cases count") match_mode = :any begin
         load_observations(write_toml(raw))
     end
 
@@ -416,8 +444,10 @@ end
     ## the confirmed series has no entry for it.
     dates = Set(String.(raw["confirmed_case_history"]["dates"]))
     first_vintage = Date(minimum(dates))
-    absent = first(d for d in first_vintage:Day(1):listed
-    if !(string(d) in dates))
+    absent = first(
+        d for d in first_vintage:Day(1):listed
+            if !(string(d) in dates)
+    )
     @test !(string(absent) in dates)
 
     blk["value"] = [string(absent)]
@@ -499,8 +529,10 @@ end
 
     ## Every retained vintage is dated on or before the freeze date, so
     ## no history extends past the cut-off grid.
-    for key in (:reported_history, :deaths_history, :confirmed_history,
-        :lab_history)
+    for key in (
+            :reported_history, :deaths_history, :confirmed_history,
+            :lab_history,
+        )
         h = getproperty(frozen, key)
         isempty(h.days) && continue
         @test all(1 .<= h.days .<= frozen.n)

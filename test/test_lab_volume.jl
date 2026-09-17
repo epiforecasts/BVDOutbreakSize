@@ -5,7 +5,7 @@
 
 @testitem "confirmed_cases_model fits the analysed volume" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
-                           infection_model, onset_incidence_model
+        infection_model, onset_incidence_model
     using Turing: @model, to_submodel, returned
     using Random: MersenneTwister
 
@@ -20,8 +20,10 @@
     @model function _rep(onsets)
         st ~ to_submodel(
             reported_cases_model(
-                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
-            false)
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3
+            ),
+            false
+        )
         return st
     end
     rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
@@ -34,8 +36,10 @@
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
-                tests_analysed = 9),
-            false)
+                tests_analysed = 9
+            ),
+            false
+        )
         return st
     end
     m = _conf(onsets, rep_state)
@@ -48,7 +52,7 @@ end
 
 @testitem "the analysed series drives the laboratory likelihood" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
-                           infection_model, onset_incidence_model
+        infection_model, onset_incidence_model
     using Turing: @model, to_submodel, returned
     using Turing.DynamicPPL: logjoint
     using Random: MersenneTwister
@@ -64,8 +68,10 @@ end
     @model function _rep(onsets)
         st ~ to_submodel(
             reported_cases_model(
-                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
-            false)
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3
+            ),
+            false
+        )
         return st
     end
     rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
@@ -79,8 +85,10 @@ end
                 confirmed_cases_model(
                     (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                     rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
-                    lab_history = lab, tests_analysed = lab.counts[end]),
-                false)
+                    lab_history = lab, tests_analysed = lab.counts[end]
+                ),
+                false
+            )
             return st
         end
         return _conf(onsets, rep_state)
@@ -98,9 +106,11 @@ end
     using Turing.DynamicPPL: predict
     using Random: MersenneTwister
 
-    hist = (; confirmed_history = (; days = [20, 30, 35], counts = [5, 9, 14]),
+    hist = (;
+        confirmed_history = (; days = [20, 30, 35], counts = [5, 9, 14]),
         lab_history = (; days = [10, 20], counts = [12, 28]),
-        lab_daily_history = (; days = [35], counts = [30]))
+        lab_daily_history = (; days = [35], counts = [30]),
+    )
     m_fit = confirmed_only_model(40, 14; hist...)
     chn = sample(MersenneTwister(1), m_fit, Prior(), 8; progress = false)
     ## In generator mode the per-day volume is resampled, so `predict` emits
@@ -108,12 +118,14 @@ end
     ## fitted stream rather than only a conditioned denominator.
     m_gen = confirmed_only_model(40, missing; hist...)
     pp = predict(MersenneTwister(2), m_gen, chn)
-    @test any(occursin("analysed_daily_increments.increments", string(k))
-    for k in keys(pp))
+    @test any(
+        occursin("analysed_daily_increments.increments", string(k))
+            for k in keys(pp)
+    )
 end
 
-@testitem "bvd_joint fits the analysed volume without a received stream" tags=[
-    :slow
+@testitem "bvd_joint fits the analysed volume without a received stream" tags = [
+    :slow,
 ] begin
     using BVDOutbreakSize: bvd_joint, load_observations
     using Turing.DynamicPPL: logjoint
@@ -132,7 +144,8 @@ end
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
         breakpoint = obs.n - obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
 end

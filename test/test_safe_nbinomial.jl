@@ -25,7 +25,7 @@ end
     ## μ (the NegativeBinomial mean is r(1-p)/p with p = r/(r+μ)).
     d = safe_nbinomial(2.0, 10.0)
     @test params(d)[1] == 2.0
-    @test mean(d) ≈ 10.0 rtol = 1e-6
+    @test mean(d) ≈ 10.0 rtol = 1.0e-6
 end
 
 @testitem "safe_nbinomial: zero mean is handled" begin

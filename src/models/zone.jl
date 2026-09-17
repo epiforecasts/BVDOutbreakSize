@@ -34,7 +34,8 @@ const _ZONE_PARENT_KEYS = (
     infections = :infections_patch,
     death_confirmation = :onset_to_death_confirmation_pmf,
     C_T = :C_T,
-    importation = :importation_epsilon_patch)
+    importation = :importation_epsilon_patch,
+)
 
 ## --- Pure building blocks ------------------------------------------------
 
@@ -47,8 +48,10 @@ centred standard-normal draws `z_w` at a fixed `scale`,
 direction of the softmax. Returns a vector over the zones, summing to one
 within every patch range.
 """
-function zone_initial_shares(z_w::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange}, scale::Real)
+function zone_initial_shares(
+        z_w::AbstractVector,
+        patch_ranges::AbstractVector{<:UnitRange}, scale::Real
+    )
     Tp = promote_type(eltype(z_w), typeof(float(scale)))
     w = zeros(Tp, length(z_w))
     @inbounds for zs in patch_ranges
@@ -84,13 +87,17 @@ among the `n_walking` walking zones (zero for a level-only zone) and
 `z_drift` holds the innovations knot by knot, `(k − 2) n_walking +
 walk_index[z]`.
 """
-function zone_deviation_knots(z_level::AbstractVector, z_drift::AbstractVector,
+function zone_deviation_knots(
+        z_level::AbstractVector, z_drift::AbstractVector,
         σ_level::Real, σ_δ::Real, φ::Real,
         patch_ranges::AbstractVector{<:UnitRange},
         walking::AbstractVector{Bool}, walk_index::AbstractVector{<:Integer},
-        n_walking::Integer, n_knots::Integer)
-    Tp = promote_type(eltype(z_level), eltype(z_drift),
-        typeof(float(σ_level)), typeof(float(σ_δ)), typeof(float(φ)))
+        n_walking::Integer, n_knots::Integer
+    )
+    Tp = promote_type(
+        eltype(z_level), eltype(z_drift),
+        typeof(float(σ_level)), typeof(float(σ_δ)), typeof(float(φ))
+    )
     nz = length(z_level)
     δ = zeros(Tp, nz, n_knots)
     @inbounds for zs in patch_ranges
@@ -118,7 +125,7 @@ function zone_deviation_knots(z_level::AbstractVector, z_drift::AbstractVector,
             bar = nw > 0 ? s / nw : zero(Tp)
             for z in zs
                 innov = walking[z] ?
-                        σ_δ * (z_drift[off + walk_index[z]] - bar) : zero(Tp)
+                    σ_δ * (z_drift[off + walk_index[z]] - bar) : zero(Tp)
                 δ[z, k] = φ * δ[z, k - 1] + innov
             end
         end
@@ -135,8 +142,10 @@ interpolation of every zone is one matrix product. Each column is
 [`interpolate_knots`](@ref) applied to a unit vector. The reverse pass
 over a per-day interpolation loop costs far more than the product.
 """
-function zone_interpolation_weights(knots::AbstractVector{<:Integer},
-        t0::Integer, n::Integer)
+function zone_interpolation_weights(
+        knots::AbstractVector{<:Integer},
+        t0::Integer, n::Integer
+    )
     nb = length(knots)
     nd = n - t0 + 1
     W = zeros(Float64, nd, nb)
@@ -178,8 +187,10 @@ an `(n_days × n_zones)` matrix so that a zone's daily reports are
 `F I[:, z] + w_z(t_0) pre[:, z]`. `report_pre` is the `(n_patches × n)`
 term of [`zone_fixed_terms`](@ref).
 """
-function zone_report_pre_rows(report_pre::AbstractMatrix,
-        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, n::Integer)
+function zone_report_pre_rows(
+        report_pre::AbstractMatrix,
+        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, n::Integer
+    )
     nd = n - t0 + 1
     out = zeros(Float64, nd, length(patch_of_zone))
     for (z, p) in enumerate(patch_of_zone), j in 1:nd
@@ -210,8 +221,10 @@ Returns, with `I_bar` `(n_patches × n)` and PMFs `g` (lag 1) and `f`
 - `infections_pre[p] = Σ_{t < t0} Ī_p(t)`, the patch infections before
   the grid start.
 """
-function zone_fixed_terms(I_bar::AbstractMatrix, g::AbstractVector,
-        f::AbstractVector, t0::Integer)
+function zone_fixed_terms(
+        I_bar::AbstractMatrix, g::AbstractVector,
+        f::AbstractVector, t0::Integer
+    )
     np, n = size(I_bar)
     Tp = promote_type(eltype(I_bar), eltype(g), eltype(f))
     force_pre = zeros(Tp, np, n)
@@ -297,22 +310,24 @@ Returns `(; weights, L, cells_patch, cells_week, midpoints, d, mean_log)`.
 """
 ## Cholesky factor of a covariance, blended toward its own diagonal by
 ## the least amount that factorises.
-function _zone_meld_factor(Σ::AbstractMatrix, d::Integer; ridge::Real = 1e-6)
+function _zone_meld_factor(Σ::AbstractMatrix, d::Integer; ridge::Real = 1.0e-6)
     dg = Diagonal(max.(diag(Σ), eps()))
     λ = 0.0
     while λ <= 1.0
         M = Symmetric((1 - λ) * Σ + λ * Matrix(dg) + ridge * Matrix(dg))
         F = cholesky(M; check = false)
         issuccess(F) && return Matrix(F.L)
-        λ = λ == 0.0 ? 1e-4 : 10λ
+        λ = λ == 0.0 ? 1.0e-4 : 10λ
     end
     return Matrix(cholesky(Symmetric(Matrix(dg))).L)
 end
 
-function zone_meld_block(infections::AbstractVector, np::Integer,
+function zone_meld_block(
+        infections::AbstractVector, np::Integer,
         n::Integer, knots::AbstractVector{<:Integer},
         I_bar::AbstractMatrix, t0::Integer;
-        min_infections::Real = 1.0, ridge::Real = 1e-6)
+        min_infections::Real = 1.0, ridge::Real = 1.0e-6
+    )
     mids = zone_week_midpoints(knots)
     cells_patch = Int[]
     cells_week = Int[]
@@ -325,9 +340,11 @@ function zone_meld_block(infections::AbstractVector, np::Integer,
         push!(cells_week, k)
     end
     d = length(cells_patch)
-    d > 0 || return (; weights = zeros(Float64, np * n, 0),
+    d > 0 || return (;
+        weights = zeros(Float64, np * n, 0),
         L = zeros(Float64, 0, 0), cells_patch, cells_week,
-        midpoints = mids, d = 0, mean_log = Float64[])
+        midpoints = mids, d = 0, mean_log = Float64[],
+    )
     S = Matrix{Float64}(undef, length(infections), d)
     for (i, v) in enumerate(infections)
         M = reshape(Float64.(v), np, n)
@@ -359,12 +376,15 @@ function zone_meld_block(infections::AbstractVector, np::Integer,
 
             weights[(t - 1) * np + p, c] == weights[p, c] || error(
                 "zone_meld_block: patch $p's weekly deformation is not " *
-                "constant before the grid start (day $t0); its first kept " *
-                "week midpoint must fall on or after it.")
+                    "constant before the grid start (day $t0); its first kept " *
+                    "week midpoint must fall on or after it."
+            )
         end
     end
-    return (; weights, L, cells_patch, cells_week, midpoints = mids, d,
-        mean_log)
+    return (;
+        weights, L, cells_patch, cells_week, midpoints = mids, d,
+        mean_log,
+    )
 end
 
 """
@@ -376,8 +396,10 @@ the whitened draw `η`. `weights` and `L` are the corresponding fields of
 [`zone_meld_block`](@ref). One triangular matrix-vector product and one
 interpolation product per forward pass.
 """
-function zone_parent_scale(weights::AbstractMatrix, L::AbstractMatrix,
-        η::AbstractVector, np::Integer, n::Integer)
+function zone_parent_scale(
+        weights::AbstractMatrix, L::AbstractMatrix,
+        η::AbstractVector, np::Integer, n::Integer
+    )
     return reshape(exp.(weights * (L * η)), np, n)
 end
 
@@ -392,8 +414,10 @@ the days before the grid start, every pre-`t0` term of
 [`zone_fixed_terms`](@ref) is the fixed one times one factor per patch.
 """
 function zone_deformation(zd, ::Nothing)
-    base = (; zd.I_bar, zd.force_pre, zd.report_pre_cum, zd.infections_pre,
-        zd.report_pre_rows)
+    base = (;
+        zd.I_bar, zd.force_pre, zd.report_pre_cum, zd.infections_pre,
+        zd.report_pre_rows,
+    )
     hasproperty(zd, :death_pre_cum) || return base
     return merge(base, (; zd.death_pre_cum, zd.death_pre_rows))
 end
@@ -401,17 +425,23 @@ end
 function zone_deformation(zd, scale::AbstractMatrix)
     pre = view(scale, :, 1)
     poz = hasproperty(zd, :patch_of_zone) ? zd.patch_of_zone :
-          _zone_patch_of_zone(zd.patch_ranges)
+        _zone_patch_of_zone(zd.patch_ranges)
     zpre = transpose(view(pre, poz))
-    base = (; I_bar = zd.I_bar .* scale,
+    base = (;
+        I_bar = zd.I_bar .* scale,
         force_pre = zd.force_pre .* pre,
         report_pre_cum = zd.report_pre_cum .* pre,
         infections_pre = zd.infections_pre .* pre,
-        report_pre_rows = zd.report_pre_rows .* zpre)
+        report_pre_rows = zd.report_pre_rows .* zpre,
+    )
     hasproperty(zd, :death_pre_cum) || return base
-    return merge(base,
-        (; death_pre_cum = zd.death_pre_cum .* pre,
-            death_pre_rows = zd.death_pre_rows .* zpre))
+    return merge(
+        base,
+        (;
+            death_pre_cum = zd.death_pre_cum .* pre,
+            death_pre_rows = zd.death_pre_rows .* zpre,
+        )
+    )
 end
 
 """
@@ -430,9 +460,11 @@ correlation between patches, through the parent draw every zone of a
 patch shares. It carries none within a patch, where the zones multiply
 one trajectory and only their deviations separate them.
 """
-function zone_correlate_level(z::AbstractVector, ℓ::Real,
+function zone_correlate_level(
+        z::AbstractVector, ℓ::Real,
         distances::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange}; ridge::Real = 1e-6)
+        patch_ranges::AbstractVector{<:UnitRange}; ridge::Real = 1.0e-6
+    )
     Tp = promote_type(eltype(z), typeof(float(ℓ)))
     out = Vector{Tp}(undef, length(z))
     @inbounds for (i, zs) in enumerate(patch_ranges)
@@ -452,8 +484,10 @@ end
 function _zone_distance_blocks(zones, zone_province, zone_names, patch_ranges)
     zones === nothing && return Matrix{Float64}[]
     lookup = Dict((r.province, r.zone) => r for r in zones)
-    rows = [get(lookup, (zone_province[z], zone_names[z]), nothing)
-            for z in eachindex(zone_names)]
+    rows = [
+        get(lookup, (zone_province[z], zone_names[z]), nothing)
+            for z in eachindex(zone_names)
+    ]
     any(isnothing, rows) && return Matrix{Float64}[]
     coords = [(r.lat, r.lon) for r in rows]
     return [province_distance_matrix(coords[zs]) for zs in patch_ranges]
@@ -498,17 +532,21 @@ zone's force is redistributed within its patch before normalising,
 
 Returns `(; shares, forces, infections)`, each `(n_days × n_zones)`.
 """
-function zone_share_renewal(I_bar::AbstractMatrix, g::AbstractVector,
+function zone_share_renewal(
+        I_bar::AbstractMatrix, g::AbstractVector,
         δ_daily::AbstractMatrix, w0::AbstractVector,
         patch_ranges::AbstractVector{<:UnitRange}, t0::Integer,
         force_pre::AbstractMatrix;
         kernel::Union{Nothing, AbstractMatrix} = nothing,
-        ε::Union{Nothing, AbstractVector} = nothing)
+        ε::Union{Nothing, AbstractVector} = nothing
+    )
     nd, nz = size(δ_daily)
-    Tp = promote_type(eltype(I_bar), eltype(g), eltype(δ_daily),
+    Tp = promote_type(
+        eltype(I_bar), eltype(g), eltype(δ_daily),
         eltype(w0), eltype(force_pre),
         ε === nothing ? Float64 : eltype(ε),
-        kernel === nothing ? Float64 : eltype(kernel))
+        kernel === nothing ? Float64 : eltype(kernel)
+    )
     I = zeros(Tp, nd, nz)
     Λ = zeros(Tp, nd, nz)
     W = zeros(Tp, nd, nz)
@@ -572,10 +610,12 @@ before the grid start `t0` contribute the initial share times the patch's
 pre-`t0` accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)).
 Returns the `(n_zones × n_vintages)` expected increments.
 """
-function zone_report_increments(reports::AbstractMatrix, w0::AbstractVector,
+function zone_report_increments(
+        reports::AbstractMatrix, w0::AbstractVector,
         patch_ranges::AbstractVector{<:UnitRange},
         days::AbstractVector{<:Integer}, t0::Integer,
-        report_pre_cum::AbstractMatrix)
+        report_pre_cum::AbstractMatrix
+    )
     nd, nz = size(reports)
     nv = length(days)
     Tp = promote_type(eltype(reports), eltype(w0), eltype(report_pre_cum))
@@ -590,7 +630,7 @@ function zone_report_increments(reports::AbstractMatrix, w0::AbstractVector,
             if lo < t0
                 top = min(hi, t0 - 1)
                 pre = report_pre_cum[p, top] -
-                      (lo > 1 ? report_pre_cum[p, lo - 1] : zero(Tp))
+                    (lo > 1 ? report_pre_cum[p, lo - 1] : zero(Tp))
             end
             jlo = max(lo, t0) - t0 + 1
             jhi = hi - t0 + 1
@@ -620,8 +660,10 @@ concentration vector `α`, `Σ y` trials:
 
 Plain arithmetic and `loggamma`, so it differentiates under Mooncake.
 """
-function dirichlet_multinomial_logpdf(y::AbstractVector{<:Integer},
-        α::AbstractVector)
+function dirichlet_multinomial_logpdf(
+        y::AbstractVector{<:Integer},
+        α::AbstractVector
+    )
     Tp = float(eltype(α))
     N = 0
     A = zero(Tp)
@@ -647,12 +689,14 @@ where `π` is the modelled expected reports `C` of that patch's zones
 normalised within the patch. `cell_const[c]` is the parameter-free part
 of the mass, `log N! − Σ log y!`.
 """
-function zone_composition_logpdf(counts::AbstractMatrix{<:Integer},
+function zone_composition_logpdf(
+        counts::AbstractMatrix{<:Integer},
         C::AbstractMatrix, cell_patch::AbstractVector{<:Integer},
         cell_vintage::AbstractVector{<:Integer},
         cell_total::AbstractVector{<:Integer},
         cell_const::AbstractVector{<:Real},
-        patch_ranges::AbstractVector{<:UnitRange}, κ::Real)
+        patch_ranges::AbstractVector{<:UnitRange}, κ::Real
+    )
     Tp = promote_type(eltype(C), typeof(float(κ)))
     lp = zero(Tp)
     lgκ = loggamma(κ)
@@ -702,9 +746,11 @@ implies ([`zone_deformation`](@ref)); its default is the cut, the
 province model's posterior mean. Called by the model and, per draw, by the
 render. Returns `(; shares, forces, infections, reports, increments)`.
 """
-function zone_forward(zd, δ_knots::AbstractMatrix, w0::AbstractVector,
+function zone_forward(
+        zd, δ_knots::AbstractMatrix, w0::AbstractVector,
         ε::Union{Nothing, AbstractVector},
-        def = zone_deformation(zd, nothing))
+        def = zone_deformation(zd, nothing)
+    )
     δ_daily = zd.interp * transpose(δ_knots)
     return zone_forward_daily(zd, δ_daily, w0, ε, def)
 end
@@ -716,24 +762,32 @@ $(TYPEDSIGNATURES)
 than knots, for the forecast projection, which continues the deviations
 on their AR mean path day by day.
 """
-function zone_forward_daily(zd, δ_daily::AbstractMatrix, w0::AbstractVector,
+function zone_forward_daily(
+        zd, δ_daily::AbstractMatrix, w0::AbstractVector,
         ε::Union{Nothing, AbstractVector},
-        def = zone_deformation(zd, nothing))
+        def = zone_deformation(zd, nothing)
+    )
     kernel = ε === nothing ? nothing : zd.mixing_kernel
-    st = zone_share_renewal(def.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
-        zd.t0, def.force_pre; kernel, ε)
+    st = zone_share_renewal(
+        def.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
+        zd.t0, def.force_pre; kernel, ε
+    )
     reports = zd.report_matrix * st.infections .+
-              def.report_pre_rows .* transpose(w0)
-    increments = zone_report_increments(reports, w0, zd.patch_ranges,
-        zd.days, zd.t0, def.report_pre_cum)
+        def.report_pre_rows .* transpose(w0)
+    increments = zone_report_increments(
+        reports, w0, zd.patch_ranges,
+        zd.days, zd.t0, def.report_pre_cum
+    )
     return (; st.shares, st.forces, st.infections, reports, increments)
 end
 
 ## Cumulative zone infections to the last grid day: the pre-`t0` patch
 ## infections at the initial share plus the renewal's own days.
-function _zone_cumulative_infections(infections::AbstractMatrix,
+function _zone_cumulative_infections(
+        infections::AbstractMatrix,
         w0::AbstractVector, patch_ranges::AbstractVector{<:UnitRange},
-        infections_pre::AbstractVector)
+        infections_pre::AbstractVector
+    )
     nd, nz = size(infections)
     Tp = promote_type(eltype(infections), eltype(w0), eltype(infections_pre))
     cum = zeros(Tp, nz)
@@ -752,8 +806,10 @@ end
 
 ## Implied zone reproduction number on grid row `j`, `I_z / Λ_z`, `NaN` where
 ## the zone's cumulative infections are below `rt_floor`.
-function _zone_rt_at(infections::AbstractMatrix, forces::AbstractMatrix,
-        cum::AbstractVector, j::Integer, rt_floor::Real)
+function _zone_rt_at(
+        infections::AbstractMatrix, forces::AbstractMatrix,
+        cum::AbstractVector, j::Integer, rt_floor::Real
+    )
     Tp = promote_type(eltype(infections), eltype(forces))
     nz = size(infections, 2)
     out = zeros(Tp, nz)
@@ -773,8 +829,10 @@ contrasts summing to zero inside each patch so the level stays with the
 patch and only the contrasts are identified. This is the province model's
 per-province severity construction over the zones of a patch.
 """
-function zone_relative_multiplier(z::AbstractVector, σ::Real,
-        patch_ranges::AbstractVector{<:UnitRange})
+function zone_relative_multiplier(
+        z::AbstractVector, σ::Real,
+        patch_ranges::AbstractVector{<:UnitRange}
+    )
     Tp = promote_type(eltype(z), typeof(float(σ)))
     out = ones(Tp, length(z))
     @inbounds for zs in patch_ranges
@@ -797,8 +855,10 @@ end
 _zone_kappa(ρ::Real) = safe_rate(one(ρ) - ρ) / safe_rate(ρ)
 
 ## Shares at the knot days as an `(n_zones × n_knots)` matrix.
-function _zone_shares_at_knots(shares::AbstractMatrix,
-        knots::AbstractVector{<:Integer}, t0::Integer)
+function _zone_shares_at_knots(
+        shares::AbstractMatrix,
+        knots::AbstractVector{<:Integer}, t0::Integer
+    )
     nz = size(shares, 2)
     out = zeros(eltype(shares), nz, length(knots))
     @inbounds for (k, d) in enumerate(knots), z in 1:nz
@@ -913,7 +973,8 @@ n_knots)`, `share_knots_zone` `(n_zones × n_knots)`, `delta_T_zone`,
 day) and, with mixing, `mixing_epsilon_zone`. Daily trajectories are
 rebuilt from these by [`zone_forward`](@ref).
 """
-@model function bvd_zone(zd;
+@model function bvd_zone(
+        zd;
         mixing::Bool = false,
         correlation::Bool = true,
         deaths::Bool = true,
@@ -927,7 +988,8 @@ rebuilt from these by [`zone_forward`](@ref).
         severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
         correlation_length_prior = LogNormal(log(50.0), 0.5),
-        offset_prior = Normal(0, 1))
+        offset_prior = Normal(0, 1)
+    )
     nz = size(zd.counts, 1)
     np = length(zd.patch_ranges)
     K = length(zd.knots)
@@ -984,42 +1046,56 @@ rebuilt from these by [`zone_forward`](@ref).
     z_level_c = if correlation && !isempty(zd.zone_distances)
         ℓ_corr ~ correlation_length_prior
         correlation_length_zone := ℓ_corr
-        zone_correlate_level(z_level, ℓ_corr, zd.zone_distances,
-            zd.patch_ranges)
+        zone_correlate_level(
+            z_level, ℓ_corr, zd.zone_distances,
+            zd.patch_ranges
+        )
     else
         z_level
     end
     w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
     φ = exp2(-zd.week / δ_halflife)
-    δ_knots = zone_deviation_knots(z_level_c, z_drift, σ_level, σ_δ, φ,
-        zd.patch_ranges, zd.walking, zd.walk_index, zd.n_walking, K)
+    δ_knots = zone_deviation_knots(
+        z_level_c, z_drift, σ_level, σ_δ, φ,
+        zd.patch_ranges, zd.walking, zd.walk_index, zd.n_walking, K
+    )
     fw = zone_forward(zd, δ_knots, w0, ε_mix, def)
     κ = _zone_kappa(ρ)
-    @addlogprob! zone_composition_logpdf(zd.counts, fw.increments,
+    @addlogprob! zone_composition_logpdf(
+        zd.counts, fw.increments,
         zd.cell_patch, zd.cell_vintage, zd.cell_total, zd.cell_const,
-        zd.patch_ranges, κ)
+        zd.patch_ranges, κ
+    )
     if deaths
         ## The allocated deaths of every vintage, through the
         ## infection-to-confirmed-death delay rather than the case delay.
         death_daily = zd.death_matrix * fw.infections .+
-                      def.death_pre_rows .* transpose(w0)
-        D = zone_report_increments(death_daily, w0, zd.patch_ranges,
-            zd.death_days, zd.t0, def.death_pre_cum)
+            def.death_pre_rows .* transpose(w0)
+        D = zone_report_increments(
+            death_daily, w0, zd.patch_ranges,
+            zd.death_days, zd.t0, def.death_pre_cum
+        )
         if severity
-            sev = zone_relative_multiplier(z_severity, σ_severity,
-                zd.patch_ranges)
+            sev = zone_relative_multiplier(
+                z_severity, σ_severity,
+                zd.patch_ranges
+            )
             zone_severity_sd := σ_severity
             zone_severity_relative := sev
             D = D .* sev
         end
-        @addlogprob! zone_composition_logpdf(zd.death_counts, D,
+        @addlogprob! zone_composition_logpdf(
+            zd.death_counts, D,
             zd.death_cell_patch, zd.death_cell_vintage,
             zd.death_cell_total, zd.death_cell_const, zd.patch_ranges,
-            _zone_kappa(ρ_death))
+            _zone_kappa(ρ_death)
+        )
     end
     nd = zd.n - zd.t0 + 1
-    cum = _zone_cumulative_infections(fw.infections, w0, zd.patch_ranges,
-        def.infections_pre)
+    cum = _zone_cumulative_infections(
+        fw.infections, w0, zd.patch_ranges,
+        def.infections_pre
+    )
     R_T_zone := _zone_rt_at(fw.infections, fw.forces, cum, nd, zd.rt_floor)
     parent_eta_zone := η
     parent_patch_T_zone := def.I_bar[:, zd.n]
@@ -1039,9 +1115,11 @@ rebuilt from these by [`zone_forward`](@ref).
         mixing_epsilon_zone := ε_mix
         mixing_departure_zone := τ_mix
     end
-    return (; shares = fw.shares, forces = fw.forces,
+    return (;
+        shares = fw.shares, forces = fw.forces,
         infections = fw.infections, increments = fw.increments,
-        δ_knots, w0, cum)
+        δ_knots, w0, cum,
+    )
 end
 
 ## --- Fixed inputs from the parent chain ---------------------------------
@@ -1052,7 +1130,8 @@ end
 function _zone_parent_draws(chn, key::Symbol; vectors::Bool = false)
     _has_key(chn, key) || error(
         "zone_fit_inputs: the parent chain carries no `$(key)`; it must be " *
-        "a `bvd_joint` chain sampled with the patch structure on.")
+            "a `bvd_joint` chain sampled with the patch structure on."
+    )
     return vectors ? _draw_vectors(chn, key) : _draws(chn, key)
 end
 
@@ -1062,8 +1141,10 @@ function _zone_parent_index(chn, parent_summary::Symbol)
     parent_summary === :mean && return nothing
     q = parent_summary === :draw_low ? 0.05 :
         parent_summary === :draw_high ? 0.95 :
-        error("zone_fit_inputs: `parent_summary` must be :mean, :draw_low " *
-              "or :draw_high, got $(repr(parent_summary)).")
+        error(
+            "zone_fit_inputs: `parent_summary` must be :mean, :draw_low " *
+            "or :draw_high, got $(repr(parent_summary))."
+        )
     C_T = _zone_parent_draws(chn, _ZONE_PARENT_KEYS.C_T)
     target = quantile(C_T, q)
     return argmin(abs.(C_T .- target))
@@ -1126,15 +1207,21 @@ function zone_parent_inputs(chn; parent_summary::Symbol = :mean)
     rec_m = _zone_parent_draws(chn, keys_.receipt_mean)
     rec_s = _zone_parent_draws(chn, keys_.receipt_sd)
     g = _zone_mean_pmf(i -> _zone_gi_pmf(α[i], θ[i]), ndraws, idx)
-    inc_pmf(i) = discretise_censored(lognormal_meansd(inc_m[i], inc_s[i]),
-        ZONE_INCUBATION_NMAX)
-    rec_pmf(i) = discretise_censored(lognormal_meansd(rec_m[i], rec_s[i]),
-        ZONE_RECEIPT_NMAX)
+    inc_pmf(i) = discretise_censored(
+        lognormal_meansd(inc_m[i], inc_s[i]),
+        ZONE_INCUBATION_NMAX
+    )
+    rec_pmf(i) = discretise_censored(
+        lognormal_meansd(rec_m[i], rec_s[i]),
+        ZONE_RECEIPT_NMAX
+    )
     f = _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), rec_pmf(i)), ndraws, idx)
     death_pmf = if _has_key(chn, keys_.death_confirmation)
         dc = _draw_vectors(chn, keys_.death_confirmation)
-        _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), Float64.(dc[i])),
-            ndraws, idx)
+        _zone_mean_pmf(
+            i -> convolve_pmf(inc_pmf(i), Float64.(dc[i])),
+            ndraws, idx
+        )
     else
         Float64[]
     end
@@ -1150,22 +1237,28 @@ function zone_parent_inputs(chn; parent_summary::Symbol = :mean)
     else
         Float64[]
     end
-    return (; log_infections = logI, g, f, death_pmf, draw = idx,
-        log_importation)
+    return (;
+        log_infections = logI, g, f, death_pmf, draw = idx,
+        log_importation,
+    )
 end
 
 ## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
 ## zero when the zone is absent from the block.
 ## One zone's cumulative series, or `nothing` when the table omits it.
-function _zone_history_series(history, prov::AbstractString,
-        zone::AbstractString)
+function _zone_history_series(
+        history, prov::AbstractString,
+        zone::AbstractString
+    )
     haskey(history, prov) || return nothing
     haskey(history[prov], zone) || return nothing
     return history[prov][zone]
 end
 
-function _zone_last_cumulative(history, prov::AbstractString,
-        zone::AbstractString)
+function _zone_last_cumulative(
+        history, prov::AbstractString,
+        zone::AbstractString
+    )
     haskey(history, prov) || return 0
     haskey(history[prov], zone) || return 0
     c = history[prov][zone].counts
@@ -1174,14 +1267,18 @@ end
 
 ## Within-patch gravity kernel over the zones, column-stochastic within each
 ## patch and zero across patches, from the zone populations and centroids.
-function _zone_mixing_kernel(pops::AbstractVector, coords::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange})
+function _zone_mixing_kernel(
+        pops::AbstractVector, coords::AbstractVector,
+        patch_ranges::AbstractVector{<:UnitRange}
+    )
     nz = length(pops)
     K = zeros(Float64, nz, nz)
     for zs in patch_ranges
         length(zs) >= 2 || continue
-        sub = province_importation_kernel(pops[zs];
-            distances = province_distance_matrix(coords[zs]))
+        sub = province_importation_kernel(
+            pops[zs];
+            distances = province_distance_matrix(coords[zs])
+        )
         for (j, q) in enumerate(zs)
             s = sum(@view sub[:, j])
             s > 0 || continue
@@ -1234,7 +1331,8 @@ index and labels, the vintage days and dates, the cumulative counts, the
 walking mask, the knots, the grid start, the initial-share start values
 and the shared quantity's block.
 """
-function zone_fit_inputs(parent_chain, obs;
+function zone_fit_inputs(
+        parent_chain, obs;
         parent_summary::Symbol = :mean,
         walk_threshold::Integer = 30,
         lead_days::Integer = 42,
@@ -1244,34 +1342,46 @@ function zone_fit_inputs(parent_chain, obs;
         meld_min_infections::Real = 1.0,
         zones = _default_health_zones(),
         patch_names::AbstractVector = PROVINCE_NAMES,
-        patch_labels::AbstractVector = PROVINCE_LABELS)
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
     hasproperty(obs, :zone_confirmed_history) || error(
         "zone_fit_inputs: `obs` carries no `zone_confirmed_history`; load " *
-        "the observations with a manifest that has the zone tables.")
+            "the observations with a manifest that has the zone tables."
+    )
     n = obs.n
     parent = zone_parent_inputs(parent_chain; parent_summary)
     np = length(patch_names)
     length(parent.log_infections) == np * n || error(
         "zone_fit_inputs: the parent's `infections_patch` holds " *
-        "$(length(parent.log_infections)) entries but $np patches by $n " *
-        "days is $(np * n); the parent must be fitted to the same data " *
-        "cut-off.")
+            "$(length(parent.log_infections)) entries but $np patches by $n " *
+            "days is $(np * n); the parent must be fitted to the same data " *
+            "cut-off."
+    )
     I_bar = exp.(reshape(parent.log_infections, np, n))
     ## Zone units and counts, patch by patch. A vintage on which a patch's
     ## unallocated count falls in either block is a reattribution into the
     ## zones and is left out of that patch's composition.
     death_history = hasproperty(obs, :zone_death_history) ?
-                    obs.zone_death_history : Dict{String, Any}()
-    reattribution = mergewith(vcat,
+        obs.zone_death_history : Dict{String, Any}()
+    reattribution = mergewith(
+        vcat,
         zone_reattribution_days(obs.zone_confirmed_history),
-        zone_reattribution_days(death_history))
-    per_patch = zone_increment_matrix(obs.zone_confirmed_history, patch_names;
-        reattribution)
-    excluded = [(; patch = String(entry.patch),
-                    date = obs.seeding + Day(d - 1))
-                for entry in per_patch for d in entry.excluded]
+        zone_reattribution_days(death_history)
+    )
+    per_patch = zone_increment_matrix(
+        obs.zone_confirmed_history, patch_names;
+        reattribution
+    )
+    excluded = [
+        (;
+            patch = String(entry.patch),
+            date = obs.seeding + Day(d - 1),
+        )
+            for entry in per_patch for d in entry.excluded
+    ]
     isempty(per_patch) && error(
-        "zone_fit_inputs: the observations carry no zone histories.")
+        "zone_fit_inputs: the observations carry no zone histories."
+    )
     zone_province = String[]
     zone_names = String[]
     patch_of_zone = Int[]
@@ -1290,9 +1400,11 @@ function zone_fit_inputs(parent_chain, obs;
         if isempty(days)
             days = copy(entry.days)
         elseif entry.days != days
-            error("zone_fit_inputs: patch `$(entry.patch)` is reported on " *
-                  "different vintage days to the first patch with zones; " *
-                  "the zone tables must share one `dates` array.")
+            error(
+                "zone_fit_inputs: patch `$(entry.patch)` is reported on " *
+                    "different vintage days to the first patch with zones; " *
+                    "the zone tables must share one `dates` array."
+            )
         end
         push!(blocks, entry.increments)
     end
@@ -1302,7 +1414,8 @@ function zone_fit_inputs(parent_chain, obs;
     counts = reduce(vcat, blocks)
     size(counts) == (nz, nv) || error(
         "zone_fit_inputs: the zone count blocks do not stack to " *
-        "$(nz) zones by $(nv) vintages.")
+            "$(nz) zones by $(nv) vintages."
+    )
     zone_keys = [zone_province[z] * "." * zone_names[z] for z in 1:nz]
     labels = _zone_labels(zones, zone_province, zone_names)
     ## Scored cells: every (patch, vintage) with a positive allocated total.
@@ -1322,8 +1435,12 @@ function zone_fit_inputs(parent_chain, obs;
     end
     ## Cumulative confirmed at the cut-off, from the manifest rather than the
     ## clamped increments, and the walking set.
-    cumulative = [_zone_last_cumulative(obs.zone_confirmed_history,
-                      zone_province[z], zone_names[z]) for z in 1:nz]
+    cumulative = [
+        _zone_last_cumulative(
+            obs.zone_confirmed_history,
+            zone_province[z], zone_names[z]
+        ) for z in 1:nz
+    ]
     eligible = cumulative .>= walk_threshold
     walking = falses(nz)
     for zs in patch_ranges
@@ -1344,8 +1461,10 @@ function zone_fit_inputs(parent_chain, obs;
     nd = n - t0 + 1
     interp = zone_interpolation_weights(knots, t0, n)
     report_matrix = zone_delay_operator(parent.f, nd)
-    report_pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone,
-        t0, n)
+    report_pre_rows = zone_report_pre_rows(
+        fixed.report_pre, patch_of_zone,
+        t0, n
+    )
     ## Death composition, scored per vintage as the cases are. The rows are
     ## built by looking each zone up by name rather than by restacking the
     ## death table, so they line up with the case rows even where a zone is
@@ -1356,17 +1475,22 @@ function zone_fit_inputs(parent_chain, obs;
     ## deaths out of named zones leaves the unallocated row flat or rising,
     ## so the unallocated rule alone does not see it, and the increment
     ## clamp would absorb the fall silently.
-    death_reattribution = zone_reattribution_days(death_history;
-        include_zone_falls = true)
+    death_reattribution = zone_reattribution_days(
+        death_history;
+        include_zone_falls = true
+    )
     death_counts = zeros(Int, nz, nv)
     for z in 1:nz
-        h = _zone_history_series(death_history, zone_province[z],
-            zone_names[z])
+        h = _zone_history_series(
+            death_history, zone_province[z],
+            zone_names[z]
+        )
         h === nothing && continue
         h.days == days || error(
             "zone_fit_inputs: the death table for `$(zone_province[z])." *
-            "$(zone_names[z])` is reported on different vintage days to " *
-            "the confirmed-case tables; both compositions read one grid.")
+                "$(zone_names[z])` is reported on different vintage days to " *
+                "the confirmed-case tables; both compositions read one grid."
+        )
         prev = 0
         for v in 1:nv
             c = Int(h.counts[v])
@@ -1401,18 +1525,26 @@ function zone_fit_inputs(parent_chain, obs;
     death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
     death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
     death_matrix = zone_delay_operator(death_pmf, nd)
-    death_pre_rows = zone_report_pre_rows(death_fixed.report_pre,
-        patch_of_zone, t0, n)
+    death_pre_rows = zone_report_pre_rows(
+        death_fixed.report_pre,
+        patch_of_zone, t0, n
+    )
     ## Within-patch mixing kernel, when the metadata covers every zone.
     ## Each zone starts from its province's posterior export intensity.
-    mixing_log_centre = [length(parent.log_importation) >= np ?
-                         parent.log_importation[patch_of_zone[z]] :
-                         log(0.01) for z in 1:nz]
+    mixing_log_centre = [
+        length(parent.log_importation) >= np ?
+            parent.log_importation[patch_of_zone[z]] :
+            log(0.01) for z in 1:nz
+    ]
     ## Great-circle distances between the centroids of each patch's zones.
-    zone_distances = _zone_distance_blocks(zones, zone_province, zone_names,
-        patch_ranges)
-    mixing_kernel = _zone_mixing_kernel_or_zeros(zones, zone_province,
-        zone_names, patch_ranges)
+    zone_distances = _zone_distance_blocks(
+        zones, zone_province, zone_names,
+        patch_ranges
+    )
+    mixing_kernel = _zone_mixing_kernel_or_zeros(
+        zones, zone_province,
+        zone_names, patch_ranges
+    )
     ## Data-informed starting point for the initial shares: the log observed
     ## cumulative share at the first vintage with a pseudo-count, centred
     ## within patch and divided by the softmax scale.
@@ -1425,10 +1557,14 @@ function zone_fit_inputs(parent_chain, obs;
     ## The shared quantity: the parent's weekly patch infections, over the
     ## same weekly grid the deviations use, as one multivariate normal.
     meld = zone_meld_block(
-        _zone_parent_draws(parent_chain, _ZONE_PARENT_KEYS.infections;
-            vectors = true),
-        np, n, knots, I_bar, t0; min_infections = meld_min_infections)
-    model_data = (; counts, cell_patch, cell_vintage, cell_total, cell_const,
+        _zone_parent_draws(
+            parent_chain, _ZONE_PARENT_KEYS.infections;
+            vectors = true
+        ),
+        np, n, knots, I_bar, t0; min_infections = meld_min_infections
+    )
+    model_data = (;
+        counts, cell_patch, cell_vintage, cell_total, cell_const,
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, patch_of_zone,
         knots, t0, n,
         week, share_scale, rt_floor,
@@ -1441,9 +1577,11 @@ function zone_fit_inputs(parent_chain, obs;
         death_pre_cum = death_fixed.report_pre_cum, death_matrix,
         death_pre_rows,
         meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d,
-        mixing_log_centre, zone_distances)
+        mixing_log_centre, zone_distances,
+    )
     dates = [obs.seeding + Day(d - 1) for d in days]
-    return (; model_data, zone_keys, zone_labels = labels, zone_province,
+    return (;
+        model_data, zone_keys, zone_labels = labels, zone_province,
         zone_names, patch_of_zone, patch_ranges,
         patch_names = collect(String, patch_names),
         patch_labels = collect(String, patch_labels),
@@ -1451,7 +1589,8 @@ function zone_fit_inputs(parent_chain, obs;
         walk_threshold, knots, t0, n, week, share_scale, rt_floor,
         seeding = obs.seeding, cutoff = obs.cutoff, z_w_start,
         I_bar, g = parent.g, f = parent.f, death_pmf, meld,
-        parent_summary, parent_draw = parent.draw)
+        parent_summary, parent_draw = parent.draw,
+    )
 end
 
 ## The package's health-zone metadata, or `nothing` when the file is absent.
@@ -1462,24 +1601,32 @@ function _default_health_zones()
 end
 
 ## Display label per zone from the metadata, falling back to the key.
-function _zone_labels(zones, zone_province::AbstractVector,
-        zone_names::AbstractVector)
+function _zone_labels(
+        zones, zone_province::AbstractVector,
+        zone_names::AbstractVector
+    )
     fallback(z) = titlecase(replace(zone_names[z], "_" => " "))
     zones === nothing && return [fallback(z) for z in eachindex(zone_names)]
     lookup = Dict((r.province, r.zone) => r.label for r in zones)
-    return [get(lookup, (zone_province[z], zone_names[z]), fallback(z))
-            for z in eachindex(zone_names)]
+    return [
+        get(lookup, (zone_province[z], zone_names[z]), fallback(z))
+            for z in eachindex(zone_names)
+    ]
 end
 
 ## The mixing kernel when every zone has metadata, else an all-zero matrix
 ## (mixing is then refused by `fit_zone`).
-function _zone_mixing_kernel_or_zeros(zones, zone_province, zone_names,
-        patch_ranges)
+function _zone_mixing_kernel_or_zeros(
+        zones, zone_province, zone_names,
+        patch_ranges
+    )
     nz = length(zone_names)
     zones === nothing && return zeros(Float64, nz, nz)
     lookup = Dict((r.province, r.zone) => r for r in zones)
-    rows = [get(lookup, (zone_province[z], zone_names[z]), nothing)
-            for z in 1:nz]
+    rows = [
+        get(lookup, (zone_province[z], zone_names[z]), nothing)
+            for z in 1:nz
+    ]
     any(isnothing, rows) && return zeros(Float64, nz, nz)
     pops = Float64[r.population for r in rows]
     coords = [(r.lat, r.lon) for r in rows]
@@ -1500,16 +1647,20 @@ deaths, and `ε = 0.01` with mixing), built through a `VarInfo`, linked, then ji
 `(; inits, x0, logp)`, the `InitFromVector` strategies, the unjittered
 unconstrained vector and each chain's initial log joint density.
 """
-function zone_initial_params(model, inputs; chains::Integer = 2,
+function zone_initial_params(
+        model, inputs; chains::Integer = 2,
         seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false,
         deaths::Bool = true, severity::Bool = false, meld::Bool = true,
-        correlation::Bool = true)
+        correlation::Bool = true
+    )
     zd = inputs.model_data
     nz = length(inputs.z_w_start)
     K = length(zd.knots)
     n_drift = zd.n_walking * (K - 1)
-    params = (; z_w = inputs.z_w_start, σ_level = 0.2, z_level = zeros(nz),
-        δ_halflife = 42.0, σ_δ = 0.05, ρ = 0.05)
+    params = (;
+        z_w = inputs.z_w_start, σ_level = 0.2, z_level = zeros(nz),
+        δ_halflife = 42.0, σ_δ = 0.05, ρ = 0.05,
+    )
     if n_drift > 0
         params = merge(params, (; z_drift = zeros(n_drift)))
     end
@@ -1522,15 +1673,19 @@ function zone_initial_params(model, inputs; chains::Integer = 2,
         params = merge(params, (; ρ_death = 0.05))
     end
     if deaths && severity
-        params = merge(params,
-            (; σ_severity = 0.1, z_severity = zeros(nz)))
+        params = merge(
+            params,
+            (; σ_severity = 0.1, z_severity = zeros(nz))
+        )
     end
     if correlation && !isempty(zd.zone_distances)
         params = merge(params, (; ℓ_corr = 50.0))
     end
     if mixing
-        params = merge(params,
-            (; τ_mix = 0.2, z_mix = zeros(nz)))
+        params = merge(
+            params,
+            (; τ_mix = 0.2, z_mix = zeros(nz))
+        )
     end
     rng = MersenneTwister(seed)
     vi = VarInfo(rng, model, InitFromParams(params))
@@ -1569,7 +1724,8 @@ and carries none of its uncertainty;
 `patch_names` and `patch_labels` pass through to [`zone_fit_inputs`](@ref)
 and any other keyword to [`nuts_sample`](@ref). Returns the chain.
 """
-function fit_zone(parent_chain, obs;
+function fit_zone(
+        parent_chain, obs;
         samples::Integer = 600,
         chains::Integer = 2,
         n_adapts::Integer = 400,
@@ -1592,29 +1748,37 @@ function fit_zone(parent_chain, obs;
         zones = _default_health_zones(),
         patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        kwargs...)
+        kwargs...
+    )
     meld && parent_summary !== :mean &&
         error(
-            "fit_zone: `parent_summary = $(repr(parent_summary))` replaces " *
+        "fit_zone: `parent_summary = $(repr(parent_summary))` replaces " *
             "the parent's mean trajectory with one of its draws, which the " *
             "shared quantity is a deformation of; pass `meld = false` for " *
-            "that variant.")
-    inputs = zone_fit_inputs(parent_chain, obs; parent_summary,
+            "that variant."
+    )
+    inputs = zone_fit_inputs(
+        parent_chain, obs; parent_summary,
         walk_threshold, lead_days, week, share_scale, rt_floor, zones,
-        patch_names, patch_labels)
+        patch_names, patch_labels
+    )
     zd = inputs.model_data
     mixing && !any(!iszero, zd.mixing_kernel) &&
         error(
-            "fit_zone: mixing needs a population and centroid for every zone " *
-            "in the health-zone metadata.")
+        "fit_zone: mixing needs a population and centroid for every zone " *
+            "in the health-zone metadata."
+    )
     deaths && isempty(zd.death_cell_patch) &&
         error(
-            "fit_zone: deaths = true but the observations carry no allocated " *
-            "zone deaths.")
+        "fit_zone: deaths = true but the observations carry no allocated " *
+            "zone deaths."
+    )
     model = bvd_zone(zd; mixing, deaths, severity, meld, correlation)
-    start = zone_initial_params(model, inputs; chains, seed, jitter,
+    start = zone_initial_params(
+        model, inputs; chains, seed, jitter,
         correlation,
-        mixing, deaths, severity, meld)
+        mixing, deaths, severity, meld
+    )
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)
     n_knots = length(inputs.knots)
@@ -1622,22 +1786,28 @@ function fit_zone(parent_chain, obs;
     n_shared = meld ? zd.meld_d : 0
     dimension = length(start.x0)
     initial_logp = start.logp
-    @info("fit_zone: starting", n_zones, n_walking, n_knots, n_cells,
-        n_shared, dimension, initial_logp)
+    @info(
+        "fit_zone: starting", n_zones, n_walking, n_knots, n_cells,
+        n_shared, dimension, initial_logp
+    )
     t = time()
-    chn = nuts_sample(model; samples, chains, n_adapts, target_accept,
-        max_depth, seed, callback, init = start.inits, kwargs...)
+    chn = nuts_sample(
+        model; samples, chains, n_adapts, target_accept,
+        max_depth, seed, callback, init = start.inits, kwargs...
+    )
     elapsed = time() - t
     steps = _zone_stat(chn, :step_size)
     depth = _zone_stat(chn, :tree_depth)
     div = _zone_stat(chn, :numerical_error)
     per_chain(m, f) = m === nothing ? missing :
-                      [f(view(m, :, c)) for c in 1:size(m, 2)]
+        [f(view(m, :, c)) for c in 1:size(m, 2)]
     minutes = round(elapsed / 60; digits = 1)
     step_size = per_chain(steps, x -> x[end])
     depth_cap_fraction = per_chain(depth, x -> mean(x .>= max_depth))
     divergences = per_chain(div, x -> Int(sum(x)))
-    @info("fit_zone: finished", minutes, step_size, depth_cap_fraction,
-        divergences)
+    @info(
+        "fit_zone: finished", minutes, step_size, depth_cap_fraction,
+        divergences
+    )
     return chn
 end

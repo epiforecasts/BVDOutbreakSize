@@ -21,8 +21,10 @@ priors, so the delay is estimated rather than fixed. Returns
     delay_mean ~ mean_prior
     delay_sd ~ sd_prior
     dist = lognormal_meansd(delay_mean, delay_sd)
-    return (; pmf = discretise_censored(dist, nmax), dist,
-        mean = delay_mean, sd = delay_sd)
+    return (;
+        pmf = discretise_censored(dist, nmax), dist,
+        mean = delay_mean, sd = delay_sd,
+    )
 end
 
 """
@@ -42,16 +44,20 @@ remainder renormalised, left-truncating the generation interval at one day
 so an infectee is infected strictly after its infector. Returns
 `(; g, gi_mean, gi_sd, gi_alpha, gi_theta)`.
 """
-@model function generation_interval_model(nmax::Integer;
+@model function generation_interval_model(
+        nmax::Integer;
         alpha_prior = truncated(Normal(2.71, 0.7); lower = 0.1),
-        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1))
+        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1)
+    )
     α ~ alpha_prior
     θ ~ theta_prior
     dist = Gamma(α, θ)
     pmf = discretise_censored(dist, nmax)
     g = pmf[2:end] ./ sum(pmf[2:end])
-    return (; g, gi_mean = α * θ, gi_sd = sqrt(α) * θ,
-        gi_alpha = α, gi_theta = θ)
+    return (;
+        g, gi_mean = α * θ, gi_sd = sqrt(α) * θ,
+        gi_alpha = α, gi_theta = θ,
+    )
 end
 
 """
@@ -68,8 +74,10 @@ the reported posterior uncertainty. Returns
     α ~ alpha_prior
     θ ~ theta_prior
     dist = Gamma(α, θ)
-    return (; pmf = discretise_censored(dist, nmax), dist,
-        mean = α * θ, sd = sqrt(α) * θ, alpha = α, theta = θ)
+    return (;
+        pmf = discretise_censored(dist, nmax), dist,
+        mean = α * θ, sd = sqrt(α) * θ, alpha = α, theta = θ,
+    )
 end
 
 """
@@ -82,17 +90,29 @@ keeps its own Gamma shape and scale prior with the reanalysis's reported
 uncertainty. The convolved PMF is truncated back to lags `0 … nmax` and
 renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 """
-@model function onset_to_death_model(nmax::Integer;
-        oa_alpha_prior, oa_theta_prior, ad_alpha_prior, ad_theta_prior)
-    oa ~ to_submodel(gamma_delay_model(nmax; alpha_prior = oa_alpha_prior,
-        theta_prior = oa_theta_prior))
-    ad ~ to_submodel(gamma_delay_model(nmax; alpha_prior = ad_alpha_prior,
-        theta_prior = ad_theta_prior))
+@model function onset_to_death_model(
+        nmax::Integer;
+        oa_alpha_prior, oa_theta_prior, ad_alpha_prior, ad_theta_prior
+    )
+    oa ~ to_submodel(
+        gamma_delay_model(
+            nmax; alpha_prior = oa_alpha_prior,
+            theta_prior = oa_theta_prior
+        )
+    )
+    ad ~ to_submodel(
+        gamma_delay_model(
+            nmax; alpha_prior = ad_alpha_prior,
+            theta_prior = ad_theta_prior
+        )
+    )
     full = convolve_pmf(oa.pmf, ad.pmf)
     trimmed = full[1:(nmax + 1)]
     pmf = trimmed ./ sum(trimmed)
-    return (; pmf, mean = oa.mean + ad.mean,
-        sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean)
+    return (;
+        pmf, mean = oa.mean + ad.mean,
+        sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean,
+    )
 end
 
 """
@@ -125,9 +145,11 @@ Returns a NamedTuple
 `(; mean_obs, mean_se, median_obs, median_se)` for
 the `onset_to_sample` argument of [`bvd_joint`](@ref).
 """
-function nejm_onset_to_sample(; mean::Real = 7.4,
+function nejm_onset_to_sample(;
+        mean::Real = 7.4,
         mean_se::Real = (13.5 - 5.3) / 2 / 1.96, median::Real = 4.8,
-        median_se::Real = (7.84 - 3.46) / 2 / 1.96)
+        median_se::Real = (7.84 - 3.46) / 2 / 1.96
+    )
     return (; mean_obs = mean, mean_se, median_obs = median, median_se)
 end
 
@@ -138,13 +160,15 @@ and receipt leg means) and continuous median (from [`gamma_median_wh`](@ref) of
 the summed leg variances) to the reported `mean_obs`/`median_obs` with SDs
 `mean_se`/`median_se`. The fixed Gaussian normalising constants are dropped.
 """
-function onset_to_sample_logweight(report_mean::Real, report_sd::Real,
-        receipt_mean::Real, receipt_sd::Real, cfg)
+function onset_to_sample_logweight(
+        report_mean::Real, report_sd::Real,
+        receipt_mean::Real, receipt_sd::Real, cfg
+    )
     μ = report_mean + receipt_mean
     sd = sqrt(report_sd^2 + receipt_sd^2)
     med = gamma_median_wh(μ, sd)
     return -0.5 * ((cfg.mean_obs - μ) / cfg.mean_se)^2 -
-           0.5 * ((cfg.median_obs - med) / cfg.median_se)^2
+        0.5 * ((cfg.median_obs - med) / cfg.median_se)^2
 end
 
 ## --- Reproduction number ------------------------------------------------
@@ -187,13 +211,15 @@ substantial decline.
 
 Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
-@model function rt_walk_model(n::Integer, log_R0_base::Real;
+@model function rt_walk_model(
+        n::Integer, log_R0_base::Real;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
-        effect_prior = truncated(Normal(0, 0.4); upper = 0))
+        effect_prior = truncated(Normal(0, 0.4); upper = 0)
+    )
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
     ## The established `R0` at the genetic bound is the base the walk grows
@@ -268,9 +294,11 @@ backfill parameterisation where `2^m` is the cut-off cumulative case total
 and would give a renewal seed of order half a million per day. Returns
 `(; τ, r, m, T, C_T, G)`.
 """
-@model function exponential_growth_model(g::AbstractVector;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
-        m_prior = truncated(Normal(2.75, 1.2); lower = 0))
+@model function exponential_growth_model(
+        g::AbstractVector;
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.4),
+        m_prior = truncated(Normal(2.75, 1.2); lower = 0)
+    )
     r ~ r_prior
     m ~ m_prior
     ## Mean generation interval, the unit `m` is counted in. `g` is indexed
@@ -345,14 +373,16 @@ reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
 sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
 implied by `R0`, and `seeding_age` is diagnostic only.
 """
-@model function infection_model(n::Integer;
+@model function infection_model(
+        n::Integer;
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         gi = generation_interval_model,
         growth = exponential_growth_model,
-        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)))
+        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65))
+    )
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
     ## One growth source. The prior is on the cryptic exponential growth rate
@@ -390,12 +420,14 @@ implied by `R0`, and `seeding_age` is diagnostic only.
     ## slope is not used: the intervention ramp depresses the final renewal
     ## step, so that slope can disagree in sign with `R_T`.
     r = euler_lotka_r(@inbounds(Rt[n]), g)
-    return (; infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
+    return (;
+        infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
         doubling_time_initial = doubling_time(r_clock),
         T = T_total, C_T = cumulative[n],
         C_T_prior = growth_state.C_T, doubling_time = doubling_time(r),
-        seeding_age = seeding_age(cumulative, n))
+        seeding_age = seeding_age(cumulative, n),
+    )
 end
 
 """
@@ -411,15 +443,21 @@ SD prior is a weakly-informative choice centred on the CV-implied spread
 (≈ 3.5 d). Returns
 `(; onsets, incubation_pmf, incubation_mean, incubation_sd)`.
 """
-@model function onset_incidence_model(infections::AbstractVector;
-        incubation = (nmax) -> censored_delay_model(nmax;
+@model function onset_incidence_model(
+        infections::AbstractVector;
+        incubation = (nmax) -> censored_delay_model(
+            nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
-            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
-        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)))
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
+        ),
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5))
+    )
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets = convolve_delay(infections, inc_state.pmf)
-    return (; onsets, incubation_pmf = inc_state.pmf,
-        incubation_mean = inc_state.mean, incubation_sd = inc_state.sd)
+    return (;
+        onsets, incubation_pmf = inc_state.pmf,
+        incubation_mean = inc_state.mean, incubation_sd = inc_state.sd,
+    )
 end
 
 ## --- Genetic seeding bound ----------------------------------------------
@@ -431,8 +469,10 @@ reading of the seeding time, so deeper or wider sampling only pushes it
 older. The likelihood contributes `P(read ≥ tmrca_days)`.
 `tmrca_days = missing` makes the submodel a no-op.
 """
-@model function genetic_seeding_model(T::Real,
-        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 16.0)
+@model function genetic_seeding_model(
+        T::Real,
+        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 16.0
+    )
     if !ismissing(tmrca_days)
         tmrca_days ~ censored(Normal(T, tmrca_days_sd); upper = tmrca_days)
     end
@@ -458,7 +498,8 @@ truncated at zero. Sets the per-capita travel rate for the exports stream.
 """
 @model function traveller_volume_model(;
         mean::Real = ITURI_DAILY_TRAVEL,
-        sd::Real = ITURI_DAILY_TRAVEL_SD)
+        sd::Real = ITURI_DAILY_TRAVEL_SD
+    )
     daily_travellers ~ truncated(Normal(mean, sd); lower = 0)
     return (; daily_travellers)
 end
@@ -483,7 +524,8 @@ diffuse prior would let it absorb arbitrarily many suspected deaths. Pass
 `lambda_prior` to override. Returns `(; λ_bg_death)`.
 """
 @model function death_background_model(;
-        lambda_prior = truncated(Normal(0.0, 0.25); lower = 0))
+        lambda_prior = truncated(Normal(0.0, 0.25); lower = 0)
+    )
     λ_bg_death ~ lambda_prior
     return (; λ_bg_death)
 end
@@ -508,7 +550,8 @@ export-death stream and the CFR prior pin the CFR separately. Pass
 `ascertainment_prior` to override. Returns `(; p_death, logit_p_death)`.
 """
 @model function death_ascertainment_model(;
-        ascertainment_prior = Normal(logit(0.9), 0.5))
+        ascertainment_prior = Normal(logit(0.9), 0.5)
+    )
     logit_p_death ~ ascertainment_prior
     p_death := logistic(logit_p_death)
     return (; p_death, logit_p_death)
@@ -568,7 +611,8 @@ The derived per-suspected positivity is exposed inside
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        fraction_tested_prior = Beta(5.0, 2.0))
+        fraction_tested_prior = Beta(5.0, 2.0)
+    )
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
     return (; λ_bg, τ_test)
@@ -616,7 +660,8 @@ carries most of the weight. `δ_iso = 0` recovers a shared admission rate.
 Pass `logodds_prior` to override. Returns `(; δ_iso)`.
 """
 @model function isolation_severity_model(;
-        logodds_prior = truncated(Normal(0.0, 0.75); lower = 0))
+        logodds_prior = truncated(Normal(0.0, 0.75); lower = 0)
+    )
     δ_iso ~ logodds_prior
     return (; δ_iso)
 end
@@ -642,7 +687,8 @@ local saturation, one province full while another has slack. See
 `capacity_prior` to override. Returns `(; capacity)`.
 """
 @model function bed_capacity_model(;
-        capacity_prior = LogNormal(log(450.0), 0.42))
+        capacity_prior = LogNormal(log(450.0), 0.42)
+    )
     capacity ~ capacity_prior
     return (; capacity)
 end
@@ -679,10 +725,12 @@ province full while another has slack. Pass
 `baseline_prior` / `innovation_prior` to override. Returns
 `(; C, C0, σ_cap)` with `C` a length-`n` vector.
 """
-@model function bed_capacity_walk_model(n::Integer; start::Integer = 1,
+@model function bed_capacity_walk_model(
+        n::Integer; start::Integer = 1,
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
-        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0))
+        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0)
+    )
     C0 ~ baseline_prior
     σ_cap ~ innovation_prior
     s = clamp(Int(start), 1, n)
@@ -692,8 +740,12 @@ province full while another has slack. Pass
     ## added over the response and not taken away, so `C(t)` cannot drop
     ## below an already-reached level, and the effective ceiling cannot
     ## jitter down into the observed occupancy.
-    z ~ product_distribution(fill(truncated(Normal(0, 1); lower = 0),
-        max(nb - 1, 1)))
+    z ~ product_distribution(
+        fill(
+            truncated(Normal(0, 1); lower = 0),
+            max(nb - 1, 1)
+        )
+    )
     steps = σ_cap .* z[1:max(nb - 1, 0)]
     log_knots = vcat(zero(σ_cap), cumsum(steps))
     walk = interpolate_knots(log_knots, days, n)
@@ -725,8 +777,10 @@ resolved, so the delay carries the timing and `p_recover` the eventual
 survival fraction. Pass `offset_prior` to override. Returns
 `(; p_recover, recovery_offset)`.
 """
-@model function recovery_probability_model(CFR::Real;
-        offset_prior = Normal(0.0, 0.5))
+@model function recovery_probability_model(
+        CFR::Real;
+        offset_prior = Normal(0.0, 0.5)
+    )
     recovery_offset ~ offset_prior
     base = clamp(1 - CFR, eps(typeof(CFR)), one(CFR) - eps(typeof(CFR)))
     p_recover := logistic(logit(base) + recovery_offset)
@@ -762,8 +816,10 @@ exactly. Each stream still samples its own baseline `λ_mu` and per-vintage
 deviations `z`. `nv` is the number of vintage windows. Returns
 `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of per-vintage rates.
 """
-@model function background_re_model(nv::Integer, σ_bg::Real;
-        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
+@model function background_re_model(
+        nv::Integer, σ_bg::Real;
+        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0)
+    )
     m = max(nv, 1)
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), m))
@@ -793,7 +849,8 @@ the data set the time variation rather than the prior. Returns
 `(; σ_bg)`.
 """
 @model function background_pooling_model(;
-        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0)
+    )
     σ_bg ~ pooling_prior
     return (; σ_bg)
 end
@@ -837,9 +894,11 @@ suspected-case data support. Pass `baseline_prior` to override.
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
 """
-@model function background_walk_model(n::Integer, σ_rw::Real;
+@model function background_walk_model(
+        n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
-        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0)
+    )
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
     ## Weekly knots over the window, linearly interpolated to the daily grid
@@ -885,7 +944,8 @@ severe-first backlog the first vintage's analysed batch is near-pure BVD
 early data. Returns `(; s_test)`.
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(38.0, 2.0))
+        sensitivity_prior = Beta(38.0, 2.0)
+    )
     s_test ~ sensitivity_prior
     return (; s_test)
 end
@@ -923,7 +983,8 @@ scalar is identified across the laboratory windows, so the confirmed
 positives themselves set the spread. Returns `(; ρ)`.
 """
 @model function confirmed_overdispersion_model(;
-        overdispersion_prior = Beta(1.0, 24.0))
+        overdispersion_prior = Beta(1.0, 24.0)
+    )
     ρ ~ overdispersion_prior
     return (; ρ)
 end
@@ -945,7 +1006,8 @@ from it. Returns `(; pmf, dist, mean, sd)`.
 @model function lab_delay_model(
         nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
         mean_prior = truncated(Normal(4.5, 1.0); lower = 1),
-        sd_prior = truncated(Normal(4.0, 0.75); lower = 1))
+        sd_prior = truncated(Normal(4.0, 0.75); lower = 1)
+    )
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
     return (; pmf = d.pmf, dist = d.dist, mean = d.mean, sd = d.sd)
 end
@@ -969,9 +1031,11 @@ outbreak size is pinned by the deaths and exports streams rather than
 forced through the laboratory positivity. Returns `(; p_pos, q_mu, σ_q)`
 with `p_pos` a length-`nv` vector.
 """
-@model function confirmed_positivity_model(nv::Integer;
+@model function confirmed_positivity_model(
+        nv::Integer;
         baseline_prior = Normal(logit(0.28), 0.7),
-        pooling_prior = truncated(Normal(0.0, 1.0); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 1.0); lower = 0)
+    )
     m = max(nv, 1)
     q_mu ~ baseline_prior
     σ_q ~ pooling_prior
@@ -1015,7 +1079,8 @@ Pass `logodds_prior` / `decay_prior` to override. Used by
 """
 @model function severity_enrichment_model(;
         logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
-        decay_prior = truncated(Normal(0.0, 200.0); lower = 0.0))
+        decay_prior = truncated(Normal(0.0, 200.0); lower = 0.0)
+    )
     δ0 ~ logodds_prior
     decay_scale ~ decay_prior
     return (; δ0, decay_scale)
@@ -1050,7 +1115,8 @@ are tested at the case intensity unless the confirmed-death counts pull the
 scaling off one. Pass `scaling_prior` to override. Returns `(; scaling)`.
 """
 @model function death_testing_scaling_model(;
-        scaling_prior = LogNormal(0.0, 0.25))
+        scaling_prior = LogNormal(0.0, 0.25)
+    )
     scaling ~ scaling_prior
     return (; scaling)
 end
@@ -1070,7 +1136,8 @@ as suspects reported, so the ratio can exceed one.
 1.51, matching [`death_testing_scaling_model`](@ref).
 """
 @model function specimen_intensity_model(;
-        intensity_prior = LogNormal(0.0, 0.25))
+        intensity_prior = LogNormal(0.0, 0.25)
+    )
     κ ~ intensity_prior
     return (; κ)
 end
@@ -1083,7 +1150,8 @@ following the Stan prior-choice recommendations. Returns
 `(; k, inv_sqrt_k)`.
 """
 @model function surveillance_dispersion_model(;
-        inv_sqrt_k_prior = truncated(Normal(0.6, 0.2); lower = 0))
+        inv_sqrt_k_prior = truncated(Normal(0.6, 0.2); lower = 0)
+    )
     inv_sqrt_k ~ inv_sqrt_k_prior
     k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
     return (; k, inv_sqrt_k)
@@ -1118,10 +1186,12 @@ them apart. `τ = 0` collapses every stream to the population value, the
 shared-`k` model. Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with `k` a
 length-`n_streams` vector.
 """
-@model function pooled_dispersion_model(n_streams::Integer;
+@model function pooled_dispersion_model(
+        n_streams::Integer;
         mean_prior = Normal(log(0.6), 0.33),
         sd_prior = truncated(Normal(0, 0.6); lower = 0),
-        centred::Bool = true)
+        centred::Bool = true
+    )
     μ_log ~ mean_prior
     τ ~ sd_prior
     m = max(n_streams, 1)
@@ -1129,7 +1199,8 @@ length-`n_streams` vector.
         ## Draw each stream's `log(1/sqrt(k))` directly from the population.
         ## `eps` floors the SD so a `τ ≈ 0` draw stays a proper distribution.
         log_isk ~ product_distribution(
-            fill(Normal(μ_log, τ + eps(typeof(τ))), m))
+            fill(Normal(μ_log, τ + eps(typeof(τ))), m)
+        )
         inv_sqrt_k = exp.(log_isk[1:n_streams])
     else
         z ~ product_distribution(fill(Normal(0, 1), m))
@@ -1157,7 +1228,8 @@ rather than baseline passive surveillance. Pass `drc_prior` /
 """
 @model function independent_ascertainment_model(;
         drc_prior = Normal(logit(0.75), 0.6),
-        uganda_prior = Normal(logit(0.75), 0.6))
+        uganda_prior = Normal(logit(0.75), 0.6)
+    )
     logit_p_drc ~ drc_prior
     logit_p_uganda ~ uganda_prior
     p_drc := logistic(logit_p_drc)
@@ -1178,7 +1250,8 @@ Ebola response. A lower ascertainment inflates the inferred infections
 """
 @model function pooled_ascertainment_model(;
         mu_prior = Normal(logit(0.75), 1.0),
-        tau_prior = truncated(Normal(0, 0.5); lower = 1e-4))
+        tau_prior = truncated(Normal(0, 0.5); lower = 1.0e-4)
+    )
     μ_logit ~ mu_prior
     τ_logit ~ tau_prior
     z_drc ~ Normal(0, 1)
@@ -1274,7 +1347,8 @@ Returns the Rt matrix `(n_patches × n)`, the national trend, the full
 deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch deviation
 scales and the correlation matrix.
 """
-@model function patch_rt_model(n::Integer, n_patches::Integer,
+@model function patch_rt_model(
+        n::Integer, n_patches::Integer,
         log_R0_base::Real;
         breakpoint::Union{Missing, Real} = missing,
         week::Integer = 7,
@@ -1285,7 +1359,8 @@ scales and the correlation matrix.
         region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         lkj_prior = LKJCholesky(max(n_patches, 2), 2.0),
-        region_offset_prior = Normal(0, 1))
+        region_offset_prior = Normal(0, 1)
+    )
     ## Common national trend, the single-patch walk unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
@@ -1295,7 +1370,8 @@ scales and the correlation matrix.
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
     rt_state ~ to_submodel(
-        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start))
+        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start)
+    )
     Rt_national = rt_state.Rt
     log_Rt_national = log.(Rt_national)
     ## The deviations live on the same weekly knots as the national walk, so
@@ -1315,13 +1391,15 @@ scales and the correlation matrix.
         @inbounds for t in 1:n
             Rt_matrix1[1, t] = Rt_national[t]
         end
-        return (; Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
+        return (;
+            Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
             δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
             σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
             Ω = ones(Tp1, 1, 1), δ_halflife = zero(Tp1),
             sigma_rw = rt_state.sigma_rw,
             log_R0 = rt_state.log_R0,
-            intervention_effect = rt_state.intervention_effect)
+            intervention_effect = rt_state.intervention_effect,
+        )
     end
     ## Deviation scales (one per patch) and their cross-patch correlation.
     ## `LKJCholesky` samples the Cholesky factor directly, so the
@@ -1344,9 +1422,12 @@ scales and the correlation matrix.
     ## Standard-normal draws for the level and for each knot's innovation.
     z_level ~ product_distribution(fill(region_offset_prior, n_patches))
     z_drift ~ product_distribution(
-        fill(region_offset_prior, max(n_patches * (nb - 1), 1)))
-    Tp = promote_type(eltype(Rt_national), typeof(float(σ_level)),
-        eltype(σ_δ), eltype(L), eltype(z_level), eltype(z_drift))
+        fill(region_offset_prior, max(n_patches * (nb - 1), 1))
+    )
+    Tp = promote_type(
+        eltype(Rt_national), typeof(float(σ_level)),
+        eltype(σ_δ), eltype(L), eltype(z_level), eltype(z_drift)
+    )
     ## Correlated deviations, centred at every knot so the patches sum to
     ## zero and no province is privileged.
     δ_knots = zeros(Tp, n_patches, nb)
@@ -1399,10 +1480,12 @@ scales and the correlation matrix.
         end
         Ω[i, j] = acc
     end
-    return (; Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
+    return (;
+        Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
         σ_level, σ_δ, Ω, δ_halflife, sigma_rw = rt_state.sigma_rw,
         log_R0 = rt_state.log_R0,
-        intervention_effect = rt_state.intervention_effect)
+        intervention_effect = rt_state.intervention_effect,
+    )
 end
 
 """
@@ -1474,7 +1557,8 @@ by inverting the renewal equation on the summed infections
 `importation_matrix` is the daily infections each province received from
 the others, which is what the imports figure on the analysis page draws.
 """
-@model function patch_infection_model(n::Integer, n_patches::Integer;
+@model function patch_infection_model(
+        n::Integer, n_patches::Integer;
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
@@ -1483,15 +1567,19 @@ the others, which is what the imports figure on the analysis page draws.
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
         importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]),
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]
+        ),
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
-        incubation = (nmax) -> censored_delay_model(nmax;
+        incubation = (nmax) -> censored_delay_model(
+            nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
-            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
-        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)))
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
+        ),
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5))
+    )
     ## 1. Shared generation interval.
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
@@ -1503,7 +1591,8 @@ the others, which is what the imports figure on the analysis page draws.
     R0 = r_to_R0(r_clock, g)
     ## 3. Per-patch Rt: national trend plus per-patch deviations.
     rt_state ~ to_submodel(
-        rt(n, n_patches, log(R0); breakpoint, rt_start, rt_walk_start), false)
+        rt(n, n_patches, log(R0); breakpoint, rt_start, rt_walk_start), false
+    )
     Rt_matrix = rt_state.Rt_matrix
     δ_patch = rt_state.δ_patch
     ## 4. Per-patch seeds. The primary patch takes the cryptic exponential.
@@ -1527,12 +1616,15 @@ the others, which is what the imports figure on the analysis page draws.
     coupled = any(!iszero, importation_kernel)
     if n_patches > 1 && !coupled
         seed_fraction ~ product_distribution(
-            fill(seed_fraction_prior, n_patches - 1))
+            fill(seed_fraction_prior, n_patches - 1)
+        )
     else
         seed_fraction = Float64[]
     end
-    Tp = promote_type(eltype(Rt_matrix), eltype(g), typeof(float(r_clock)),
-        eltype(seed_fraction), typeof(float(seed0_total)))
+    Tp = promote_type(
+        eltype(Rt_matrix), eltype(g), typeof(float(r_clock)),
+        eltype(seed_fraction), typeof(float(seed0_total))
+    )
     ## The fractions partition the national cryptic seed, they do not add to
     ## it. `growth_state.C_T` is `2^m`, and the `m` prior is elicited as a
     ## national quantity, so it is the size of the whole cryptic phase.
@@ -1555,7 +1647,8 @@ the others, which is what the imports figure on the analysis page draws.
         ## of one epidemic, so it grows at the same clock rate `r` over the
         ## cryptic window.
         s_p = seed_infections(
-            seed_shares[p] * seed0_total, r_clock, renewal_start)
+            seed_shares[p] * seed0_total, r_clock, renewal_start
+        )
         for j in 1:renewal_start
             seeds_matrix[p, j] = s_p[j]
         end
@@ -1600,8 +1693,10 @@ the others, which is what the imports figure on the analysis page draws.
     ##    match one. `mu(t)` is a central trend the provinces pool toward, and
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
-    renewal_state = patch_infections(Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix)
+    renewal_state = patch_infections(
+        Rt_matrix, g, seeds_matrix,
+        importation_kernel, ε_matrix
+    )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
     ## 7. Per-patch cumulatives and the national aggregate.
@@ -1621,7 +1716,8 @@ the others, which is what the imports figure on the analysis page draws.
     onsets_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
         @views onsets_matrix[p, :] = convolve_delay(
-            infections_matrix[p, :], inc_state.pmf)
+            infections_matrix[p, :], inc_state.pmf
+        )
     end
     ## 9. Aggregate reproduction number. Inverting the renewal equation on
     ##    the summed infections gives the incidence-weighted mean of the
@@ -1635,7 +1731,8 @@ the others, which is what the imports figure on the analysis page draws.
     ##     patch chain summarises exactly like a single-patch one.
     r = euler_lotka_r(R_T, g)
     T_total = growth_state.T + τ_obs
-    return (; infections_matrix, cumulative_matrix, onsets_matrix,
+    return (;
+        infections_matrix, cumulative_matrix, onsets_matrix,
         Rt_matrix, importation_matrix,
         δ_patch, δ_knots = rt_state.δ_knots,
         C_T_patch,
@@ -1651,7 +1748,8 @@ the others, which is what the imports figure on the analysis page draws.
         doubling_time = doubling_time(r),
         seed_at_renewal_start = seed0_total, seed_fraction,
         seeding_age = seeding_age(cumulative_total, n),
-        incubation_pmf = inc_state.pmf)
+        incubation_pmf = inc_state.pmf,
+    )
 end
 
 """
@@ -1680,15 +1778,19 @@ incidence split rather than the weight itself.
 
 Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
 """
-@model function province_export_pressure_model(n_patches::Integer;
+@model function province_export_pressure_model(
+        n_patches::Integer;
         location_prior = Normal(log(0.15), 1.0),
         pooling_sd_prior = truncated(Normal(0, 0.5); lower = 0),
-        offset_prior = Normal(0, 1))
+        offset_prior = Normal(0, 1)
+    )
     ## One province has nothing to pool with and no secondary weight to
     ## sample, so only the reference weight is returned.
     if n_patches <= 1
-        return (; weights = ones(Float64, max(n_patches, 1)),
-            pooling_sd = 0.0, location = 0.0)
+        return (;
+            weights = ones(Float64, max(n_patches, 1)),
+            pooling_sd = 0.0, location = 0.0,
+        )
     end
     μ_w ~ location_prior
     τ_w ~ pooling_sd_prior

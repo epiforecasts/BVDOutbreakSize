@@ -83,7 +83,7 @@ every delay. It is evaluated once outside the Turing model when each delay
 submodel is constructed, so the PMF length is fixed and AD-safe.
 """
 function cdf_nmax(dist; q::Real = 0.98, cap::Integer = 120, minlag::Integer = 5)
-    clamp(ceil(Int, quantile(dist, q)), minlag, cap)
+    return clamp(ceil(Int, quantile(dist, q)), minlag, cap)
 end
 
 """
@@ -207,8 +207,10 @@ element type is promoted from `Rt`, `g` and `seed`.
     See [`patch_infections`](@ref) for the meta-population extension
     with between-patch importation.
 """
-function renewal_infections(Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector)
+function renewal_infections(
+        Rt::AbstractVector, g::AbstractVector,
+        seed::AbstractVector
+    )
     n = length(Rt)
     L = length(seed)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
@@ -249,8 +251,10 @@ the source patch).
 Returns a length-`n_patches` vector of imported infections expected on the
 current day. AD-transparent under Mooncake.
 """
-function importation_from_kernel(K::AbstractMatrix, I_prev::AbstractVector,
-        epsilon::Real)
+function importation_from_kernel(
+        K::AbstractMatrix, I_prev::AbstractVector,
+        epsilon::Real
+    )
     np = size(K, 1)
     Tp = promote_type(eltype(K), eltype(I_prev), typeof(float(epsilon)))
     imp = zeros(Tp, np)
@@ -321,14 +325,18 @@ the matching matrix of infections each patch received from the others, the
 arrivals term alone rather than the net of arrivals and departures. The
 element type is promoted from all input types. AD-transparent under Mooncake.
 """
-function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
+function patch_infections(
+        Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix})
+        epsilon::Union{Real, AbstractMatrix}
+    )
     np, n = size(Rt_matrix)
     L = size(seeds_matrix, 2)
-    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
+    Tp = promote_type(
+        eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
         eltype(importation_kernel),
-        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon))
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon)
+    )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
     ## What each origin sends away per unit of its own generated infections:
@@ -365,11 +373,11 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
             for q in 1:np
                 q == p && continue
                 arrivals += _eps(epsilon, q, t) *
-                            importation_kernel[p, q] * gen[q]
+                    importation_kernel[p, q] * gen[q]
             end
             imports[p, t] = arrivals
             I[p, t] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
-                      arrivals
+                arrivals
         end
     end
     return (; infections = I, importation = imports)
@@ -538,8 +546,10 @@ rather than extrapolated (the interpolation fraction is clamped to
 hold `R_t` flat at the established `R0` over every earlier day, rather than
 running the first segment's slope backwards off the start of the grid.
 """
-function interpolate_knots(knot_vals::AbstractVector,
-        days::AbstractVector{<:Integer}, n::Integer)
+function interpolate_knots(
+        knot_vals::AbstractVector,
+        days::AbstractVector{<:Integer}, n::Integer
+    )
     Tp = eltype(knot_vals)
     out = Vector{Tp}(undef, n)
     nb = length(days)
@@ -559,7 +569,7 @@ function interpolate_knots(knot_vals::AbstractVector,
         ## Clamp the fraction to `[0, 1]` so days outside the knot span hold
         ## flat at the nearest knot instead of extrapolating the end segment.
         frac = d1 == d0 ? zero(Tp) :
-               clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
+            clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out
@@ -580,8 +590,10 @@ prior infections to divide by). Days where the force of infection is zero
 A model that needs the reproduction number on one day only should call
 [`implied_national_Rt_at`](@ref), which this is the trajectory form of.
 """
-function implied_national_Rt(infections_total::AbstractVector,
-        g::AbstractVector)
+function implied_national_Rt(
+        infections_total::AbstractVector,
+        g::AbstractVector
+    )
     n = length(infections_total)
     Tp = promote_type(eltype(infections_total), eltype(g))
     Rt = zeros(Tp, n)
@@ -602,8 +614,10 @@ The model reports the aggregate reproduction number at the cut-off alone, and
 building the whole trajectory to read its last entry would put `n` divisions
 and `n` force sums on the gradient tape for one number.
 """
-function implied_national_Rt_at(infections_total::AbstractVector,
-        g::AbstractVector, t::Integer)
+function implied_national_Rt_at(
+        infections_total::AbstractVector,
+        g::AbstractVector, t::Integer
+    )
     Tp = promote_type(eltype(infections_total), eltype(g))
     t <= 1 && return zero(Tp)
     force = zero(Tp)
