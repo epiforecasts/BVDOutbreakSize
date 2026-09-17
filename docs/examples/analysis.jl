@@ -2446,12 +2446,9 @@ summary_ranges #hide
 
 # #### Fit diagnostics
 #
-# Those estimates are only as good as the sampling behind them, so the fits that produced them are summarised here rather than left to the end.
-# Each row is one fit.
-# R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
-# The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
-# A divergent transition is a step the sampler could not take accurately, so the region it happened in went unexplored.
-# The [breakdown by parameter](@ref "Fit diagnostics by parameter") on the sensitivity page says which parameters carry these numbers.
+# Fit diagnostics for the joint fit and each individual fit.
+# These indicate how reliable the results are from the perspective of the inference algorithm.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues.
 
 #md # ```@raw html
 #md # <details><summary>Build the fit diagnostics table</summary>
