@@ -248,7 +248,6 @@ The confirmed-deaths assay sensitivity is named `s_test`, as the case model alre
 - Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
 Several carried a meaningless `< 0.0.1` bound on a standard library.
 
-
 ## v1.18.0
 
 Changes since v1.17.0
