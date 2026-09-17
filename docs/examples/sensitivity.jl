@@ -315,8 +315,9 @@ validation_stopped_fig = plot_forecast(
 
 ## See the comment above `validation_table`'s display for why this wraps #src
 ## the table in `MarkdownTable` instead of showing it directly. #src
+## No blank line between the two. A blank line counts as visible, so #src
+## Literate would write an empty code fence where the comment was. #src
 MarkdownTable(validation_stopped_streams) #hide
-
 validation_stopped_fig #hide
 
 # ## Forecast scoring across releases
@@ -435,7 +436,8 @@ MarkdownTable(joint_score_by_release_table) #hide
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
+forecast_overlay_fig = plot_forecast_overlay(
+    scored_overlay(forecast_overlay_df));
 
 #md # ```@raw html
 #md # </details>
@@ -576,7 +578,8 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
 #md # ```
 
-frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
+frozen_overlay_fig = plot_forecast_overlay(
+    scored_overlay(frozen_overlay_df));
 
 #md # ```@raw html
 #md # </details>
@@ -989,6 +992,8 @@ _stream_chains = (
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "confirmed_deaths" => (; chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
     "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))

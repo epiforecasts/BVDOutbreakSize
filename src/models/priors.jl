@@ -656,14 +656,24 @@ being added: SitRep 030 records mattress and bed deliveries and new
 treatment centres opening), so the walk tracks the growth a single scalar
 capacity ([`bed_capacity_model`](@ref)) cannot.
 
-The walk is a non-centred cumulative log-deviation from a baseline bed
-count `C0` on weekly knots, linearly interpolated to the daily grid, the
-same parameterisation as the reproduction-number and background walks. With
-knot values `\\log C` and knot days `d`,
-`C(t) = C0 · exp(\\text{interp}(σ_cap · cumsum(z)))` with `z ~ Normal(0, 1)`
-per knot and a tight innovation SD `σ_cap`, keeping capacity a gentle
-drift rather than per-day jumps. Knots need far fewer innovations than a
-daily walk, avoiding the high-dimensional funnel. The baseline carries
+The walk is a centred cumulative log-deviation from a baseline bed count
+`C0` on weekly knots, linearly interpolated to the daily grid. With knot
+values `\\log C` and knot days `d`,
+`C(t) = C0 · exp(\\text{interp}(\\text{cumsum}(\\text{steps})))`, each step
+drawn at the sampled innovation SD `σ_cap` from a half-normal, keeping
+capacity a gentle drift rather than per-day jumps. Knots need far fewer
+innovations than a daily walk, so the walk stays low-dimensional.
+
+Centred, unlike the reproduction-number and background walks. The two
+forms are the same distribution: a standard half-normal scaled by `σ_cap`
+is a half-normal at `σ_cap`. They differ only in the geometry NUTS
+explores. Non-centring pays off when the prior dominates the walk, and it
+costs when the data pin it, since the sampled scale and the standard
+offsets then have to move together. Here the data pin it. On the 16
+September 2026 joint fit the innovations had lost about 90% of their prior
+variance, and `σ_cap` sat at 0.11 against a prior mean of 0.04, past the
+prior 95th percentile and with about half its spread. That is the regime
+the centred form suits. The baseline carries
 the same weakly-informative `LogNormal(log 450, 0.42)` prior as the
 scalar model (median 450 beds, ≈0.44 CV), so `C0` is sampled on the log
 scale and the whole capacity `log C(t) = log C0 + walk` is fully
@@ -692,10 +702,14 @@ province full while another has slack. Pass
     ## added over the response and not taken away, so `C(t)` cannot drop
     ## below an already-reached level, and the effective ceiling cannot
     ## jitter down into the observed occupancy.
-    z ~ product_distribution(fill(truncated(Normal(0, 1); lower = 0),
+    ##
+    ## Centred: each step is drawn at the sampled scale rather than as a
+    ## standard half-normal multiplied by it. `eps` floors the scale so a
+    ## `σ_cap ≈ 0` draw stays a proper distribution.
+    steps ~ product_distribution(fill(
+        truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
         max(nb - 1, 1)))
-    steps = σ_cap .* z[1:max(nb - 1, 0)]
-    log_knots = vcat(zero(σ_cap), cumsum(steps))
+    log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
@@ -776,15 +790,24 @@ Shared pooling SD `σ_bg` for the per-vintage background random effect
 ([`background_re_model`](@ref)). Sampled once at the composer level and
 passed to both the suspected-case and suspected-death backgrounds, so the
 two streams share one time-variation scale rather than each estimating its
-own from few vintages. The prior is a tight half-normal. The background is
-degenerate with outbreak size, so a wide random effect would let individual
-windows absorb arbitrary suspected counts and re-open the posterior mode in
-which the background explains the majority of suspected cases.
-Regularising `σ_bg` toward zero keeps the time variation a perturbation of
-the informative scalar baselines. Returns `(; σ_bg)`.
+own from few vintages. The prior is a half-normal of scale 0.3.
+
+The background is degenerate with outbreak size, so the prior still
+regularises rather than freeing the scale. A wide random effect would let
+individual windows absorb arbitrary suspected counts and re-open the
+posterior mode in which the background explains the majority of suspected
+cases, and regularising `σ_bg` toward zero keeps the time variation a
+perturbation of the informative scalar baselines.
+
+The scale was 0.1, which the data have outgrown. With the daily
+new-suspect series carried to the cut-off the posterior sits at 0.17 to
+0.22, about twice that scale, and the walk mixes badly against a prior
+pulling the other way. At 0.3 the same posterior sits below the scale, so
+the data set the time variation rather than the prior. Returns
+`(; σ_bg)`.
 """
 @model function background_pooling_model(;
-        pooling_prior = truncated(Normal(0.0, 0.1); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
     σ_bg ~ pooling_prior
     return (; σ_bg)
 end
@@ -810,8 +833,8 @@ in over the first `onset_ramp` days of the window. With knot values
 
 `σ_rw` is the per-knot innovation SD on the log scale, passed in and shared
 across the suspected-case and suspected-death streams via
-[`background_pooling_model`](@ref). A tight prior keeps the background
-close to constant, which regularises the background/outbreak-size
+[`background_pooling_model`](@ref). Its regularising prior keeps the
+background a slow drift, which holds down the background/outbreak-size
 degeneracy and keeps the series smooth, so a death background scaled from
 it carries no steps. Knots run only over the surveillance window
 `[onset, n]`, so the number of innovations is small. `onset ≤ 1` runs it

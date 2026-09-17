@@ -40,23 +40,25 @@ end
     @test maximum(spreads) < 1e-8
 end
 
-@testitem "background_pooling_model default σ_bg is a tight half-normal" tags=[
+@testitem "background_pooling_model default σ_bg regularises the walk" tags=[
     :slow
 ] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
-    using Statistics: median
+    using Statistics: median, quantile
     using BVDOutbreakSize: background_pooling_model
 
-    ## The shared random-walk innovation SD is a half-normal SD 0.1, so its
-    ## median is small (well under 0.2) and it is non-negative — the daily
-    ## background walk is a gentle drift rather than per-day noise, though the
-    ## data can pull it up to a modest rise over the surveillance window.
+    ## The shared random-walk innovation SD is a half-normal of scale 0.3, so
+    ## it is non-negative and its median is about 0.2. The daily background
+    ## walk stays a gentle drift rather than per-day noise, while leaving room
+    ## for the 0.17 to 0.22 the resumed daily new-suspect series pulls it to.
     chn = sample(MersenneTwister(20260604), background_pooling_model(),
         Prior(), 4_000; progress = false)
     σ = vec(Array(chn[:σ_bg]))
     @test all(>=(0), σ)
-    @test median(σ) < 0.2
+    @test median(σ) < 0.3
+    ## Still regularised: the walk is not free to absorb whole windows.
+    @test quantile(σ, 0.95) < 0.7
 end
 
 @testitem "gate_before zeroes a series before the onset day" begin

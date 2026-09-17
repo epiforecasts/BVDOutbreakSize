@@ -2681,7 +2681,7 @@ function plot_forecast(fc::DataFrame)
         (:deaths_new, "New suspected deaths (DRC)", :firebrick),
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
         (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
-        (:recovered_new, "New recovered (DRC)", :seagreen)
+        (:recovered_new, "New recovered among confirmed (DRC)", :seagreen)
     )
         col in propertynames(fc) || continue
         push!(count_cols, (col, title, colour))
@@ -2932,7 +2932,8 @@ function plot_forecast_vs_truth(fc::DataFrame;
         (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)", :goldenrod),
         (:confirmed_deaths_cum, :confirmed_deaths_new,
             "confirmed deaths (DRC)", :darkorange3),
-        (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
+        (:recovered_cum, :recovered_new,
+            "recovered among confirmed (DRC)", :seagreen)
     )
     streams = Vector{
         Tuple{Symbol, Symbol, String, Symbol, Float64, Float64, Float64,

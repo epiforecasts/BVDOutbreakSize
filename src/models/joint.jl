@@ -769,9 +769,9 @@ reproduction number implied by the summed patch infections.
     ## Non-BVD background as a smooth daily lognormal random walk over the
     ## surveillance window ([`background_walk_model`](@ref)), driving the
     ## suspected-case stream. It is gated to zero before the surveillance
-    ## onset, since it does not exist before surveillance began. The tight
-    ## innovation SD `σ_rw` keeps it fairly constant, which regularises the
-    ## background/outbreak-size degeneracy. The suspected-death background is
+    ## onset, since it does not exist before surveillance began. The
+    ## regularised innovation SD `σ_rw` keeps it a slow drift, which holds
+    ## down the background/outbreak-size degeneracy. The suspected-death background is
     ## not a separate random effect. It is tied to the case background by a
     ## background CFR (`cfr_bg · case_bg_daily`, see [`deaths_model`](@ref)),
     ## so it inherits this level and time variation rather than competing as
