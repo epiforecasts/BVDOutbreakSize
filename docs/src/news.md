@@ -12,7 +12,7 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
-- The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#TBD).
+- The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
 
