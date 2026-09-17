@@ -60,7 +60,9 @@ tasks:
       to results.json (pass another path to change it). Times one
       log-density evaluation and one gradient per model component per AD
       backend. Set BVD_BENCH_JOINT=true to add the full bvd_joint, which
-      costs ~18 min of cold compile on its own.
+      costs ~18 min of cold compile on its own, and BVD_BENCH_ENZYME=true
+      to add the Enzyme backend, which did not finish inside a 90 minute
+      CI job.
     cmds:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}

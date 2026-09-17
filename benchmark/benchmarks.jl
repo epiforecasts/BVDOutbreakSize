@@ -12,14 +12,22 @@
 # `test/test_ad_gradients.jl` includes too, so the surface the tests assert
 # is differentiable is the surface timed here.
 #
-# Enzyme is loaded so `BVDOutbreakSize.enzyme_adtype()` resolves and
-# `ADFixtures.backends()` offers it alongside Mooncake. Which pairs
-# actually register is decided by the smoke test in `src/ad_gradients.jl`.
+# Enzyme is the second backend and is off by default. Loading it is what
+# makes `BVDOutbreakSize.enzyme_adtype()` resolve, so leaving it out is
+# what leaves `ADFixtures.backends()` reporting Mooncake alone.
+# `BVD_BENCH_ENZYME=true` turns it on. Both backends together do not fit a
+# CI run: the sweep was cancelled at the 90 minute cap, where Mooncake
+# alone finished in 39 minutes on the same cold runner. Which pairs then
+# register is decided by the smoke test in `src/ad_gradients.jl`.
 
 using BenchmarkTools
-using Enzyme
 
 include(joinpath(@__DIR__, "..", "test", "ad_fixtures.jl"))
+
+const BENCH_ENZYME = lowercase(get(ENV, "BVD_BENCH_ENZYME", "false")) == "true"
+if BENCH_ENZYME
+    @eval using Enzyme
+end
 
 # The full `bvd_joint` is off by default: one gradient is ~14 ms over 76
 # parameters behind a cold compile of ~18 min under Mooncake, which no CI
