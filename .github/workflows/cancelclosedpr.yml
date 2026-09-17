@@ -1,0 +1,82 @@
+name: Cancel Closed PR Runs
+
+# A merged or closed pull request leaves its queued and running jobs holding
+# runners for a result nobody will read. The fit jobs in `docs.yml` run for
+# hours, so on a day with many merges these fill the queue and starve the runs
+# that still matter. This cancels them as soon as the pull request closes,
+# whether it was merged or not.
+
+on:
+  pull_request:
+    types: [closed]
+
+# Cancelling a run needs write access to Actions. Nothing else is touched.
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    name: Cancel runs on the closed head branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # A pull request from a fork gets a read-only token, so the cancel call
+    # would fail. A pull request whose head is the default branch is skipped
+    # because its runs are the default branch own runs.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != github.event.repository.default_branch
+    steps:
+      - name: Cancel queued and running workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          CLOSED_AT: ${{ github.event.pull_request.closed_at }}
+          THIS_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Everything cancelled here has to be on the head branch of this
+          # pull request. The API is asked for that branch and the answer is
+          # checked again per run, so a run on `main`, on another pull
+          # request, or on a `gh-readonly-queue/*` merge queue ref is never a
+          # candidate: none of those carry this head branch.
+          #
+          # The cutoff keeps the two workflows that this same close event
+          # starts, this one and the doc preview cleanup, out of the list.
+          # They are created at or after the close, everything worth
+          # cancelling was created before it. The run id of this run is
+          # dropped as well so it cannot cancel itself.
+          cutoff="${CLOSED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+          echo "branch: $BRANCH"
+          echo "created before: $cutoff"
+
+          active=$(gh api --paginate -X GET "repos/$REPO/actions/runs" \
+            -f branch="$BRANCH" \
+            -f created="<$cutoff" \
+            -f per_page=100 \
+            --jq "
+              .workflow_runs[]
+              | select(.head_branch == env.BRANCH)
+              | select(.id != (env.THIS_RUN | tonumber))
+              | select(.status == \"queued\"
+                       or .status == \"in_progress\"
+                       or .status == \"requested\"
+                       or .status == \"waiting\"
+                       or .status == \"pending\")
+              | \"\(.id) \(.name)\"
+            ")
+
+          if [ -z "$active" ]; then
+            echo "nothing queued or running on $BRANCH"
+            exit 0
+          fi
+
+          echo "$active" | while read -r id name; do
+            [ -n "$id" ] || continue
+            echo "cancelling run $id ($name)"
+            # A run that finished between the listing and now answers 409.
+            # That is not a failure of this job.
+            gh api -X POST "repos/$REPO/actions/runs/$id/cancel" --silent ||
+              echo "run $id was not cancelled, it had probably finished"
+          done
