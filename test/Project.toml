@@ -1,4 +1,5 @@
 [deps]
+ADFixtures = "2a6e9130-0e40-40f4-87ec-f5ea1a9cddde"
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 BVDOutbreakSize = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
@@ -33,6 +34,7 @@ TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [sources]
+ADFixtures = {path = "ADFixtures"}
 BVDOutbreakSize = {path = ".."}
 
 [compat]
