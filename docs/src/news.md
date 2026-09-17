@@ -12,6 +12,15 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
+- The prior on a province's relative case ascertainment carries its laboratory
+throughput per head of population, logged and centred across patches, with a
+sampled coefficient (#410).
+Ituri analyses about 372 samples per 100k over the laboratory window against
+Nord-Kivu's 104, and nothing else in the model represented that contrast, so it
+was free to land in the provincial reproduction number.
+The per-province positives are not fitted.
+They are the differencing of the per-province confirmed counts the case
+composition already scores.
 - The suspected-case background walk is sampled in centred form, each knot step drawn at `Normal(0, σ_bg)` rather than as a standardised innovation rescaled by `σ_bg` (#745).
 The daily new-suspect series now runs to the cut-off, so the walk is strongly informed and the non-centred form funnels.
 That funnel is what stopped the joint fit mixing when the series resumed in #713.
@@ -29,8 +38,15 @@ Every fit-cache key changes, so the next build refits.
 
 ### Report
 
+- The fit diagnostics sit under the headline results rather than in the methods section, and the summary dashboard carries them too (#747).
+A reader meets the estimates and then sees how the fit that produced them behaved.
+- The sensitivity report gains a fit-diagnostics section that works parameter by parameter (#747).
+It counts how many of each fit's parameters exceed an R-hat threshold rather than reporting the worst one, ranks the worst-mixing parameters and groups them, plots mixing along the worst walks by element index, breaks the divergences down by chain and places them against the posterior, and sets the joint fit against each single-stream fit and against the same fit a week earlier.
+A parameter that mixes on its own and not in the joint points at an interaction between streams, and one that mixes a week earlier and not now points at the newest data.
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- The per-province headline is a table per quantity, with a row per province and a column per interval level (#724).
+Infections to date, the reproduction number and the case-fatality ratio were nested bullet lists that repeated the interval level in every cell.
 - Recovered is labelled recovered among confirmed wherever the stream is named (#737).
 It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
 - The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
@@ -40,6 +56,11 @@ Their scored history stays in the released data.
 ### Fixed
 
 - The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
+- The stopped-streams chunk in the sensitivity page no longer renders an empty code block (#736).
+Filtering its explanation comment left a blank line, which Literate counts as visible, so the fence stayed behind once the text went.
+- The province forecast test again catches the share column it guards (#736).
+An overlap check replaced the dropped median assertion, and the wrong column's interval overlaps the band too.
+The whole interval must now sit inside it.
 - The fit cache key covers `data/observations.toml`, the manifest every observation is read from (#738).
 The digest hashed `*.csv` only, so a data update that touched the manifest alone left every key unchanged and served each fit from cache against the previous data.
 Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.

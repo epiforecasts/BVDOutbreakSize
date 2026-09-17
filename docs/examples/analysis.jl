@@ -117,6 +117,8 @@
 #   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
 # - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
 #   Transmission within a patch is well mixed, so spread inside a province is not represented.
+# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
+#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -1901,11 +1903,26 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (z_p - \bar z), \qquad
+# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
 # \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
 # ```
 #
 # with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+#
+# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
+#
+# ```math
+# x_p = \log \frac{A_p}{N_p}
+#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
+# ```
+#
+# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
+# A pooled patch sums its members before the ratio is taken.
+# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
+# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
+# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
+# The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
 # ```math
@@ -1921,6 +1938,7 @@ cfr_prior_fig #hide
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \beta \sim \mathrm{Normal}(0,\ 0.5), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
 # \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
 # ```
@@ -2133,33 +2151,6 @@ prior_pair_fig #hide
 # The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
 # The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
-
-# #### Fit diagnostics
-#
-# Fit-quality diagnostics for the joint and per-stream fits: the worst R-hat, the smallest bulk effective sample size, and the number of divergent transitions.
-
-#md # ```@raw html
-#md # <details><summary>Fit diagnostics</summary>
-#md # ```
-
-diagnostics_table( #hide
-    "joint" => chn_joint, #hide
-    "joint, no patches" => chn_no_patches, #hide
-    "exports" => chn_exports, #hide
-    "deaths (DRC)" => chn_deaths, #hide
-    "cases (DRC)" => chn_cases, #hide
-    "confirmed (DRC)" => chn_confirmed, #hide
-    "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
-    "isolation (DRC)" => chn_treatment, #hide
-    "onsets (DRC)" => chn_onsets, #hide
-    "frozen (1wk back)" => frozen_lastweek.chn, #hide
-    (RUN_SENSITIVITY ? #hide
-     ["delay sensitivity" => chn_joint_community_delay, #hide
-        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] : [])...) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # #### No-onward-transmission counterfactual
 #
@@ -2416,6 +2407,20 @@ summary_ranges = let
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
+    ## One interval as a bare `lo–hi`, for a table cell that takes its level
+    ## from the column header rather than repeating it in every cell.
+    bound(s, lvl, d) = string(
+        round(getproperty(s, Symbol("lo", lvl)); digits = d), "–",
+        round(getproperty(s, Symbol("hi", lvl)); digits = d))
+    bound_i(s, lvl) = string(
+        round(Int, getproperty(s, Symbol("lo", lvl))), "–",
+        round(Int, getproperty(s, Symbol("hi", lvl))))
+    ## One province block of the per-province table: a row per province, a
+    ## column per interval level. Three of these stacked read down each
+    ## province in one pass.
+    prov_rows(cell) = join(
+        ["| $(PROVINCE_LABELS[p]) | $(cell(p, 30)) | $(cell(p, 60)) | " *
+         "$(cell(p, 90)) |" for p in 1:N_PATCHES], "\n")
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
 
@@ -2446,15 +2451,6 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
-    - **By province, infections to date:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, reproduction number at the cut-off:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, case-fatality ratio:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
-            for p in 1:N_PATCHES], "\n"))
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
@@ -2462,6 +2458,26 @@ summary_ranges = let
       The fit moves the cumulative infection count by $(moves[1].second),
       the outbreak age by $(moves[2].second) and the doubling time by
       $(moves[3].second); the largest move is in the $(biggest.first).
+
+    **By province.** Equal-tailed credible intervals at the cut-off.
+
+    Infections to date:
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound_i(sprov[p], l)))
+
+    Reproduction number:
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound(sprov_rt[p], l, 2)))
+
+    Case-fatality ratio (%):
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound(sprov_cfr[p], l, 1)))
     """)
 end;
 
@@ -2470,6 +2486,38 @@ end;
 #md # ```
 
 summary_ranges #hide
+
+# #### Fit diagnostics
+#
+# Fit diagnostics for the joint fit and each individual fit.
+# These indicate how reliable the results are from the perspective of the inference algorithm.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues.
+
+#md # ```@raw html
+#md # <details><summary>Build the fit diagnostics table</summary>
+#md # ```
+
+fit_diagnostics_table = diagnostics_table(
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    (RUN_SENSITIVITY ?
+     ["delay sensitivity" => chn_joint_community_delay,
+        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] :
+     [])...);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+fit_diagnostics_table #hide
 
 # ### Joint model estimates
 #
@@ -2734,12 +2782,13 @@ province_detail_table #hide
 
 spatial_hyper_table = summary_table(chn_joint,
     [:region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd];
+        :province_ascertainment_sd, :province_testing_coefficient];
     digits = 3,
     labels = Dict(:region_sd => "Rt deviation spread",
         :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread"));
+        :province_ascertainment_sd => "Ascertainment spread",
+        :province_testing_coefficient => "Testing effect on ascertainment"));
 
 #md # ```@raw html
 #md # </details>
@@ -2989,6 +3038,7 @@ pp_joint = predict(
         n_patches = N_PATCHES,
         province_increments = missing,
         province_days = province_cases.days,
+        province_testing_covariate = province_testing,
         province_death_increments = missing,
         province_death_days = province_deaths.days),
     chn_joint);
@@ -4531,6 +4581,13 @@ end
 ## which is the by-province counterpart of the two headline tables above.
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, markdown_table(province_overview_table))
+end
+
+## Fit diagnostics: the same table the Results section shows, so the
+## dashboard reports how the fit behind its numbers sampled without
+## building a second table.
+open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
+    print(io, markdown_table(fit_diagnostics_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.

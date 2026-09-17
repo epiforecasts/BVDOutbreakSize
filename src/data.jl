@@ -443,6 +443,21 @@ function load_observations(
 end
 
 """
+    patch_members(province_names)
+
+Source provinces each patch pools, in the order of `province_names`.
+
+A name with no [`PROVINCE_MEMBERS`](@ref) entry is its own province, which
+keeps the province helpers usable with an arbitrary province list.
+[`province_increment_matrix`](@ref) and
+[`province_testing_covariate`](@ref) both resolve patches through this, so
+how a patch maps to the manifest blocks it covers is written once.
+"""
+function patch_members(province_names::AbstractVector)
+    [get(PROVINCE_MEMBERS, nm, [nm]) for nm in province_names]
+end
+
+"""
     province_increment_matrix(province_history, province_names, n_patches)
 
 Reshape the per-province cumulative histories loaded by
@@ -463,11 +478,7 @@ function province_increment_matrix(province_history,
     empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
     isempty(province_history) && return empty
     names = province_names[1:min(n_patches, length(province_names))]
-    ## A patch may pool several source provinces (see `PROVINCE_MEMBERS`),
-    ## so resolve each patch to the manifest blocks it covers. A name with no
-    ## membership entry is its own province, which keeps this usable with an
-    ## arbitrary province list.
-    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in names]
+    members = patch_members(names)
     any(ms -> any(m -> !haskey(province_history, m), ms), members) &&
         return empty
     hists = [[province_history[m] for m in ms] for ms in members]
@@ -500,6 +511,43 @@ function province_increment_matrix(province_history,
         increments[p, :] = max.(diff(vcat(0, pooled)), 0)
     end
     return (; days, increments)
+end
+
+"""
+    province_testing_covariate(province_lab_daily_history, province_names,
+                               populations)
+
+Per-capita laboratory effort in each patch, logged and centred to mean
+zero, for the covariate on the prior for relative case ascertainment in
+[`province_composition_model`](@ref).
+
+Sums each patch's `<province>_analysed` daily counts over the whole
+laboratory window, pooling the source provinces a patch covers (see
+[`PROVINCE_MEMBERS`](@ref)), and divides by `populations[p]`. Centring
+matches the sum-to-zero ascertainment the composition identifies.
+
+Returns a length-`n_patches` vector of zeros when the laboratory history
+is absent, when a patch has no analysed series, or when a patch analysed
+nothing over the window. A zero covariate recovers the model without it.
+"""
+function province_testing_covariate(province_lab_daily_history,
+        province_names::AbstractVector = PROVINCE_NAMES,
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS)
+    np = length(province_names)
+    length(populations) == np || error(
+        "province_testing_covariate: $(length(populations)) populations " *
+        "for $(np) patches.")
+    none = zeros(np)
+    isempty(province_lab_daily_history) && return none
+    members = patch_members(province_names)
+    series = [["$(m)_analysed" for m in ms] for ms in members]
+    any(ks -> any(k -> !haskey(province_lab_daily_history, k), ks), series) &&
+        return none
+    analysed = [sum(sum(province_lab_daily_history[k].counts) for k in ks)
+                for ks in series]
+    any(iszero, analysed) && return none
+    log_rate = log.(analysed ./ populations)
+    return log_rate .- (sum(log_rate) / np)
 end
 
 """

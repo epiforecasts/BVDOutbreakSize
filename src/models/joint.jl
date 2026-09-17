@@ -622,7 +622,10 @@ are skipped. The case composition identifies only the product of a
 province's incidence and its case-finding. The death composition
 identifies the incidence split, since the case-fatality ratio and the
 death-confirmation probability are national, and the case composition then
-identifies the relative case ascertainment as the residual.
+identifies the relative case ascertainment as the residual. The
+`province_testing_covariate` keyword puts each patch's logged tests per
+head ([`province_testing_covariate`](@ref)) on the prior for that
+ascertainment. The death composition takes no covariate.
 
 Uganda exports are driven by the provinces in proportion to sampled
 relative export weights, with Ituri the reference at weight one (see
@@ -682,6 +685,7 @@ reproduction number implied by the summed patch infections.
         province_increments::Union{
             Missing, AbstractMatrix{<:Integer}} = missing,
         province_days::AbstractVector{<:Integer} = Int[],
+        province_testing_covariate::AbstractVector{<:Real} = zeros(n_patches),
         province_death_increments::Union{
             Missing, AbstractMatrix{<:Integer}} = missing,
         province_death_days::AbstractVector{<:Integer} = Int[],
@@ -932,7 +936,8 @@ reproduction number implied by the summed patch infections.
             patch_state.onsets_matrix, confirmed_state.receipt_pmf,
             confirmed_state.s_test, province_days)
         composition_state ~ to_submodel(
-            composition(province_increments, modelled_prov))
+            composition(province_increments, modelled_prov;
+            testing_covariate = province_testing_covariate))
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
         ## Relative province case ascertainment, the probability an
@@ -942,6 +947,9 @@ reproduction number implied by the summed patch infections.
         ## death composition below separates them.
         province_ascertainment := composition_state.province_ascertainment
         province_ascertainment_sd := composition_state.ascertainment_sd
+        ## Elasticity of relative ascertainment on each patch's logged tests
+        ## per head, the covariate on its prior.
+        province_testing_coefficient := composition_state.testing_coefficient
     end
     ## Per-province composition of the confirmed deaths. This is the term
     ## that identifies the provincial split. The case composition weights
