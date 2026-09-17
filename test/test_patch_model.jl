@@ -1500,6 +1500,174 @@ end
     @test all(iszero(r.severity_sd) for r in rets0)
 end
 
+@testitem "province_testing_covariate: logged tests per head, centred" begin
+    using BVDOutbreakSize: province_testing_covariate
+
+    ## Two patches, the second pooling the four source provinces `other`
+    ## covers, so the pooling has to happen before the division by
+    ## population.
+    hist = Dict(
+        "ituri_analysed" => (; days = [1, 2], counts = [100, 200]),
+        "sud_kivu_analysed" => (; days = [1, 2], counts = [10, 20]),
+        "tshopo_analysed" => (; days = [1, 2], counts = [5, 5]),
+        "bas_uele_analysed" => (; days = [1, 2], counts = [0, 0]),
+        "sud_ubangi_analysed" => (; days = [1, 2], counts = [0, 0])
+    )
+    names = ["ituri", "other"]
+    pops = [1_000_000.0, 2_000_000.0]
+
+    got = province_testing_covariate(hist, names, pops)
+    rates = [300 / 1_000_000, 40 / 2_000_000]
+    want = log.(rates) .- (sum(log.(rates)) / 2)
+    @test got ≈ want
+    @test sum(got) ≈ 0 atol = 1.0e-12
+
+    ## Scaling every patch's effort by the same factor is a level shift, which
+    ## the centring removes.
+    doubled = Dict(k => (; v.days, counts = 2 .* v.counts) for (k, v) in hist)
+    @test province_testing_covariate(doubled, names, pops) ≈ got
+
+    ## The cases that leave the model without a covariate rather than with a
+    ## `-Inf` one.
+    empty = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
+    @test province_testing_covariate(empty, names, pops) == zeros(2)
+    @test province_testing_covariate(
+        Dict("ituri_analysed" => hist["ituri_analysed"]), names, pops
+    ) ==
+        zeros(2)
+    untested = merge(
+        hist,
+        Dict(
+            "sud_kivu_analysed" => (; days = [1, 2], counts = [0, 0]),
+            "tshopo_analysed" => (; days = [1, 2], counts = [0, 0])
+        )
+    )
+    @test province_testing_covariate(untested, names, pops) == zeros(2)
+
+    ## A population vector that does not match the patches is an error, not a
+    ## silent broadcast over the shorter of the two.
+    @test_throws ErrorException province_testing_covariate(
+        hist, names, [1_000_000.0]
+    )
+end
+
+@testitem "province_testing_covariate: the patch contrast in the manifest" begin
+    using BVDOutbreakSize
+
+    ## The covariate the headline fit carries. Ituri analyses about 372
+    ## samples per 100k over the laboratory window against Nord-Kivu's 104, a
+    ## contrast nothing else in the model represents.
+    obs = load_observations()
+    cov = province_testing_covariate(obs.province_lab_daily_history)
+    @test length(cov) == length(PROVINCE_NAMES)
+    @test cov ≈ [2.244, 0.974, -0.372, -2.846] atol = 1.0e-3
+    @test sum(cov) ≈ 0 atol = 1.0e-12
+
+    ## Per-capita, not per-patch: the pooled `other` patch is the largest
+    ## population and the smallest covariate.
+    rate = exp.(cov)
+    @test rate[1] / rate[2] ≈ 3.56 atol = 0.01
+    @test argmin(cov) == findfirst(==("other"), PROVINCE_NAMES)
+end
+
+@testitem "province composition: a zero covariate changes nothing" begin
+    using BVDOutbreakSize: province_composition_model
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## The covariate enters as `β_asc * covariate` added to the pooled
+    ## deviation. With the default zero covariate the coefficient is not
+    ## sampled, so every existing caller keeps its parameter set and its
+    ## density, including the death composition, which passes no covariate.
+    obs = [80 40; 15 8; 5 2]
+    modelled = [8.0 4.0; 1.5 0.8; 0.5 0.2]
+
+    base = province_composition_model(obs, modelled)
+    zeroed = province_composition_model(
+        obs, modelled;
+        testing_covariate = zeros(3)
+    )
+    live = province_composition_model(
+        obs, modelled;
+        testing_covariate = [1.0, 0.0, -1.0]
+    )
+
+    keyset(m) = Set(string(k) for k in keys(DynamicPPL.VarInfo(Xoshiro(2), m)))
+    @test keyset(base) == keyset(zeroed)
+    @test !any(k -> occursin("β_asc", k), keyset(base))
+    @test any(k -> occursin("β_asc", k), keyset(live))
+
+    logp(m) = DynamicPPL.loglikelihood(m, DynamicPPL.VarInfo(Xoshiro(2), m))
+    @test logp(base) ≈ logp(zeroed)
+    @test iszero(base().testing_coefficient)
+
+    ## With a real covariate it moves the shares in the covariate's
+    ## direction: the patch with the most testing per head gains share.
+    draws = (; ρ = 0.05, τ_asc = 0.4, z_asc = [-0.8, 0.3, 1.1])
+    shares(β) = DynamicPPL.fix(live; draws..., β_asc = β)().shares
+    lifted = shares(0.5)
+    flat = shares(0.0)
+    @test lifted[1, 1] > flat[1, 1]
+    @test lifted[3, 1] < flat[3, 1]
+    @test all(≈(1.0), sum(lifted; dims = 1))
+    ## A zero coefficient with a live covariate is the pooled deviation on
+    ## its own, which is what the zero-covariate model gives.
+    @test flat ≈ DynamicPPL.fix(zeroed; draws...)().shares
+
+    ## A covariate that does not cover the patches is an error, not a
+    ## length-one broadcast over all of them.
+    @test_throws ErrorException province_composition_model(
+        obs, modelled;
+        testing_covariate = [1.0]
+    )()
+end
+
+@testitem "bvd_joint: the testing covariate reaches the case composition" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## The covariate is built outside the model body (it looks provinces up
+    ## in a `Dict{String}`) and passed in, so the wiring is what needs
+    ## testing: the case composition takes it and the death composition does
+    ## not.
+    obs = load_observations()
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    provd = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    cov = province_testing_covariate(obs.province_lab_daily_history)
+
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        n_patches = length(PROVINCE_NAMES),
+        province_increments = prov.increments, province_days = prov.days,
+        province_death_increments = provd.increments,
+        province_death_days = provd.days,
+        province_testing_covariate = cov,
+        tmrca_days = obs.tmrca_days
+    )
+
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    @test isfinite(DynamicPPL.logjoint(m, vi))
+    ks = Set(string(k) for k in keys(vi))
+    ## The case composition takes the covariate. The death composition takes
+    ## the zero default, so it samples no coefficient.
+    @test count(k -> occursin("β_asc", k), ks) == 1
+    @test any(k -> occursin("composition_state.β_asc", k), ks)
+    @test !any(k -> occursin("death_composition_state.β_asc", k), ks)
+end
+
 @testitem "patch Rt deviations should mean-revert to the national trend" begin
     using BVDOutbreakSize: patch_rt_model
     using Turing: sample, Prior
@@ -1649,9 +1817,12 @@ end
     deaths = df[df[!, "Stream"] .== "Confirmed deaths", :]
     @test deaths[!, "Observed"] == [20, 10]
     ## The shares used are the last vintage's, so province A takes the
-    ## complement of the second column rather than the first.
-    @test cases[1, "Lower 90%"] / 100 < 0.6
-    @test cases[1, "Upper 90%"] / 100 > 0.05
+    ## complement of the second column rather than the first. The whole
+    ## interval must sit inside the band, not merely overlap it. Taking the
+    ## first column instead puts province A above 0.6 and would pass an
+    ## overlap check.
+    @test cases[1, "Lower 90%"] / 100 > 0.05
+    @test cases[1, "Upper 90%"] / 100 < 0.6
     ## Coverage is reported, and the interval is ordered.
     @test all(df[!, "Lower 90%"] .<= df[!, "Upper 90%"])
     ## No central estimate is reported anywhere in the table.

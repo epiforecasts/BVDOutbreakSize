@@ -56,9 +56,10 @@ CI uses `--project=docs` because that environment is already instantiated at tha
 
 ## Formatting
 
-`run_formatter.sh` runs JuliaFormatter over `src/`, `test/`, `docs/` and `scripts/` from its own isolated `test/formatter/` sub-environment.
-The pre-commit hook and `task lint` both call it directly.
+`run_formatter.sh` runs Runic over `src/`, `test/`, `docs/`, `scripts/`, `benchmark/` and `ext/` from its own isolated `test/formatter/` sub-environment.
+`task format` and `task lint` both call it directly.
 It takes no project flag.
+The pre-commit hook does not: pre-commit builds the hook its own environment from the Runic version in `.pre-commit-config.yaml`, and `test/package/CodeFormatting.jl` checks that version against the pin in `test/formatter/Project.toml`.
 
 ## Developer diagnostics (`--project=.`)
 

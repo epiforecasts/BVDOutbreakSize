@@ -273,6 +273,9 @@ function build_fit_specs(
                 province_days = pp.days,
                 province_death_increments = pd.increments,
                 province_death_days = pd.days,
+                province_testing_covariate = province_testing_covariate(
+                    o.province_lab_daily_history
+                ),
             ) : (;)
         chn = nuts_sample(
             bvd_joint(
@@ -479,6 +482,7 @@ function build_fit_specs(
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    patch_testing = province_testing_covariate(obs.province_lab_daily_history)
 
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
@@ -529,6 +533,7 @@ function build_fit_specs(
         province_days = patch_prov.days,
         province_death_increments = patch_prov_deaths.increments,
         province_death_days = patch_prov_deaths.days,
+        province_testing_covariate = patch_testing,
     )
 
     specs = Any[

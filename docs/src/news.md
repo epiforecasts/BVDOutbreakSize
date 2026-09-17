@@ -11,6 +11,16 @@ each push to `main` also republishes the rendered analysis and the
 Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
+
+- The prior on a province's relative case ascertainment carries its laboratory
+throughput per head of population, logged and centred across patches, with a
+sampled coefficient (#410).
+Ituri analyses about 372 samples per 100k over the laboratory window against
+Nord-Kivu's 104, and nothing else in the model represented that contrast, so it
+was free to land in the provincial reproduction number.
+The per-province positives are not fitted.
+They are the differencing of the per-province confirmed counts the case
+composition already scores.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
@@ -53,8 +63,19 @@ population, centroid, DHIS2 code and boundaries.
 `load_observations` exposes the blocks as `zone_confirmed_history` and
 `zone_death_history`, `zone_increment_matrix` reshapes them per patch and
 `load_health_zones` reads the metadata.
+- The bed-capacity walk is sampled centred, each innovation drawn at the sampled step size rather than as a standard half-normal multiplied by it (#743).
+The two forms are the same distribution, so the fit is unchanged in what it estimates and only the geometry the sampler explores differs.
+Non-centring suits a walk the prior dominates, and this is not one: on the 16 September joint fit its innovations had lost about 90% of their prior variance and its step size sat past the prior 95th percentile holding about half the prior spread.
+The gain, if any, is in effective samples per unit time rather than in gradient cost.
+Every fit-cache key changes, so the next build refits.
 
 ### Report
+
+- The fit diagnostics sit under the headline results rather than in the methods section, and the summary dashboard carries them too (#747).
+A reader meets the estimates and then sees how the fit that produced them behaved.
+- The sensitivity report gains a fit-diagnostics section that works parameter by parameter (#747).
+It counts how many of each fit's parameters exceed an R-hat threshold rather than reporting the worst one, ranks the worst-mixing parameters and groups them, plots mixing along the worst walks by element index, breaks the divergences down by chain and places them against the posterior, and sets the joint fit against each single-stream fit and against the same fit a week earlier.
+A parameter that mixes on its own and not in the joint points at an interaction between streams, and one that mixes a week earlier and not now points at the newest data.
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 - The methods carry the health-zone model: the cut two-stage melding, the
@@ -87,16 +108,51 @@ The release adds `zone_forecast_validation.csv` and `zone_forecast_scores.csv`.
 - `scripts/zone_fit_report.jl` writes a standalone fit report for the zone
 model: prior predictive check, simulation-based recovery, sampler diagnostics,
 posterior predictive checks and the ranking and map.
+- The per-province headline is a table per quantity, with a row per province and a column per interval level (#724).
+Infections to date, the reproduction number and the case-fatality ratio were nested bullet lists that repeated the interval level in every cell.
+- Recovered is labelled recovered among confirmed wherever the stream is named (#737).
+It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
+- The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
+Reported cases and suspected deaths froze on 26 May and hold one scored point each with no baseline, so they were two rows of near-empty panels; the score tables already dropped them under the same rule.
+Their scored history stays in the released data.
+- The frozen-fit evaluation reports skill by release as well as pooled (#742).
+Each release re-forecasts the same four fixed cut-offs, so each carries one attempt per release by one version of the model.
+A step at the 17 August release moves confirmed cases from about 3.0 to about 3.7 times the baseline, and confirmed deaths from about 0.79 to about 0.36 on the log scale.
+Pooling hid it.
+- The frozen evaluation scores each stream's own frozen fit alongside the joint (#742).
+`forecast_frozen.csv` carries a `fit` column, which the scorer already read where present.
+Those fits exist only at the one-week-back cut-off and only for still-reported streams.
 
 ### Fixed
 - The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
+- The stopped-streams chunk in the sensitivity page no longer renders an empty code block (#736).
+Filtering its explanation comment left a blank line, which Literate counts as visible, so the fence stayed behind once the text went.
+- The province forecast test again catches the share column it guards (#736).
+An overlap check replaced the dropped median assertion, and the wrong column's interval overlaps the band too.
+The whole interval must now sit inside it.
+- Matched scoring keys on the made date as well as the release and horizon (#742).
+A frozen table carries several made dates per release, and every baseline row was paired against whichever forecast for that horizon was read last.
+Frozen confirmed-death skill against the baseline moves from 3.18 to 1.76 and confirmed cases from 1.76 to 1.91.
+The cross-release tables carry one made date per release and do not move.
 - The fit cache key covers `data/observations.toml`, the manifest every observation is read from (#738).
 The digest hashed `*.csv` only, so a data update that touched the manifest alone left every key unchanged and served each fit from cache against the previous data.
 Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
 The digest now covers every file under `data/` apart from an explicit exclude list, so an input in a format nothing has read before cannot be missed the same way.
 Every key changes, so the next build refits from scratch.
+- Recovered is forecast, archived and scored again (#737).
+`score_releases.jl` prefers `stream_forecasts.csv` over `forecast.csv` where a release ships it, and the joint entry of `stream_fits` never listed recovered, so the stream fell out of scoring from `results-1359` on 23 July.
+Recovered is still published, so this was a gap rather than a frozen stream.
+- The confirmed-deaths panel of the reproduction-number and basic-reproduction-number by-dataset figures draws its current-model reference band (#737).
+`_stream_chains` never named that fit, so the panel showed its per-release points alone.
 
 ### Infrastructure
+
+- A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows (#749).
+The concurrency group falls back to the run id when there is no pull request head branch, so only pull request runs are superseded.
+Fifteen pushes landed on `main` on 17 September and every documentation build was cancelled by the next one, which is why the published site and the results release both went stale.
+- Closing or merging a pull request cancels the runs still queued or in flight on its head branch (#751).
+Around fifteen pull requests merged on 17 September and the queue reached twenty-two runs against three finished, several of them four-hour fit jobs whose results nobody would read.
+Only runs carrying that head branch are cancelled, so runs on `main`, on other pull requests and on merge queue refs are left alone.
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
@@ -104,6 +160,13 @@ The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files ar
 The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
 The zone sensitivity variants `local_mixing`, `local_no_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
 `BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
+- Julia code is formatted with Runic rather than JuliaFormatter (#744).
+The isolated formatter environment existed to hold one exact version, and its compat string `"=2.12.0, 2.12"` did not do that.
+Julia reads a comma-separated compat string as a union, so the exact version unioned with a caret range covering everything below 3.0 and narrowed nothing.
+The environment accepted any 2.x at or above 2.12.0 and resolved 2.14.0 in practice.
+Runic takes no configuration, so the style cannot drift with settings either.
+The pin is now a single `=` string, and a quality test fails when the environment and the pre-commit hook declare different versions.
+The switch reformatted 121 files and added `ext/` to the checked directories.
 
 ### Dependencies
 - The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).

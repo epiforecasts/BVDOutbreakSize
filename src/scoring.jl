@@ -206,20 +206,25 @@ function select_daily_releases(entries)
     return first.(picks)
 end
 
-## Match `dfa` and `dfb` on `(release, horizon)`, which identifies one
-## scored forecast target. Returns the two frames cut down to the keys they
-## share, aligned row for row, so a mean taken over either side is a mean
-## over the identical set of forecasts. Assumes at most one row per key in
-## each frame, true of any single-fit subset of a scored table.
+## Match `dfa` and `dfb` on `(release, made_date, horizon)`, which
+## identifies one scored forecast target. Returns the two frames cut down to
+## the keys they share, aligned row for row, so a mean taken over either
+## side is a mean over the identical set of forecasts. Assumes at most one
+## row per key in each frame, true of any single-fit subset of a scored
+## table.
+##
+## A cross-release table carries one made date per release, so the made date
+## adds nothing there. A frozen table carries several, and a key without it
+## keeps only whichever row was read last.
 function _matched_scores(dfa::DataFrame, dfb::DataFrame)
-    ia = Dict{Tuple{String, Int}, Int}()
+    ia = Dict{Tuple{String, Any, Int}, Int}()
     for i in 1:size(dfa, 1)
-        ia[(dfa.release[i], dfa.horizon[i])] = i
+        ia[(dfa.release[i], dfa.made_date[i], dfa.horizon[i])] = i
     end
     idx_a = Int[]
     idx_b = Int[]
     for j in 1:size(dfb, 1)
-        k = (dfb.release[j], dfb.horizon[j])
+        k = (dfb.release[j], dfb.made_date[j], dfb.horizon[j])
         haskey(ia, k) || continue
         push!(idx_a, ia[k])
         push!(idx_b, j)
@@ -256,11 +261,8 @@ end
 ## `nothing` when `fit` has no forecast in `mask` matched against its
 ## stream's baseline, so the caller can drop the row entirely.
 ##
-## Every relative skill is the ratio of the two aggregate mean scores over
-## the matched set of forecasts both the fit and its comparator scored, so
-## a mean over one set of forecasts is never divided by a mean over
-## another. The individual-fit columns use their own matched set and are
-## only populated on the joint fit's row of a stream that has one.
+## The individual-fit columns use their own matched set and are only
+## populated on the joint fit's row of a stream that has one.
 function _stream_fit_stats(
         scores::DataFrame, stream, fit, mask;
         joint_fit, baseline_fit
@@ -341,11 +343,17 @@ the relative skill against the stream's persistence baseline on both
 scales, and, on the joint row of a stream with an individual single-stream
 fit, the relative skill against that fit.
 
-Every relative skill is the ratio of the two aggregate mean scores over the
-matched set of forecasts both sides scored, not a mean of per-forecast
-ratios, so one forecast whose comparator scored zero cannot make the ratio
-infinite. A ratio is `missing`, never `Inf` or `NaN`, when the comparator's
-mean is zero or the ratio itself is not finite.
+Every relative skill is a ratio of aggregate means over the matched set
+``M`` of forecasts both sides scored, for fit scores ``s`` and comparator
+scores ``b``:
+
+```math
+\\frac{\\sum_{i \\in M} s_i}{\\sum_{i \\in M} b_i}.
+```
+
+It is not a mean of per-forecast ratios, so one forecast whose comparator
+scored zero cannot make it infinite. A ratio is `missing`, never `Inf` or
+`NaN`, when the denominator is zero or the ratio is not finite.
 
 Returns a typed zero-row frame when `scores` is empty, so the report
 renders before any release carries a forecast.
@@ -450,6 +458,99 @@ function forecast_score_by_release(
     return DataFrame(rows)
 end
 
+## Made dates that at least `min_releases` distinct releases forecast. A
+## made date one release carries has no second attempt to compare against.
+function _repeated_made_dates(scores::DataFrame; min_releases::Integer = 2)
+    seen = Dict{Any, Set{String}}()
+    for i in 1:size(scores, 1)
+        push!(
+            get!(seen, scores.made_date[i], Set{String}()),
+            scores.release[i]
+        )
+    end
+    return Set(d for (d, rels) in seen if length(rels) >= min_releases)
+end
+
+## Each release's latest made date, which orders releases in time. Tags mix
+## `results-<build number>` and `results-<version>` and sort into the wrong
+## order as strings. A release archives a frozen forecast at its own
+## validation cut-off, which moves forward with the release. Ties fall back
+## to the tag.
+function _release_order_date(scores::DataFrame)
+    latest = Dict{String, Any}()
+    for i in 1:size(scores, 1)
+        r = scores.release[i]
+        m = scores.made_date[i]
+        latest[r] = haskey(latest, r) ? max(latest[r], m) : m
+    end
+    return latest
+end
+
+"""
+The same columns as [`forecast_score_overview`](@ref), one row per
+`(stream, release, fit)`, plus the `release_date` rows are ordered by.
+
+Restricted to made dates that `min_releases` or more releases forecast,
+the cut-offs every release re-forecasts. A made date one release carries
+has nothing to compare against and is dropped, which on the frozen table
+drops each release's own validation cut-off.
+
+`release_date` is the release's latest made date, which orders releases in
+time where the tag names do not.
+
+Returns a typed zero-row frame when `scores` is empty or carries no
+repeated made date.
+"""
+function forecast_score_by_vintage(
+        scores::DataFrame;
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT,
+        min_releases::Integer = 2
+    )
+    empty = _score_summary_schema(
+        (;
+            stream = String[], release = String[],
+            release_date = Date[], fit = String[],
+        )
+    )
+    isempty(scores) && return empty
+    repeated = _repeated_made_dates(scores; min_releases = min_releases)
+    isempty(repeated) && return empty
+    rep = in.(scores.made_date, Ref(repeated))
+    order = _release_order_date(scores)
+    rows = NamedTuple[]
+    for s in sort(unique(scores.stream))
+        smask = rep .& (scores.stream .== s)
+        any(smask) || continue
+        rels = sort(
+            unique(scores.release[smask]);
+            by = r -> (order[r], r)
+        )
+        for rel in rels
+            mask = smask .& (scores.release .== rel)
+            fits = sort(
+                unique(
+                    scores.fit[mask .& (scores.fit .!= baseline_fit)]
+                )
+            )
+            for f in fits
+                st = _stream_fit_stats(
+                    scores, s, f, mask; joint_fit,
+                    baseline_fit
+                )
+                isnothing(st) && continue
+                push!(
+                    rows, (;
+                        stream = s, release = rel,
+                        release_date = order[rel], fit = f, st...,
+                    )
+                )
+            end
+        end
+    end
+    isempty(rows) && return empty
+    return DataFrame(rows)
+end
+
 const _INDIVIDUAL_FIT_COLUMNS = ("rel_to_individual", "log_rel_to_individual")
 
 """
@@ -470,8 +571,9 @@ end
 [`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
 with its `fit` column dropped. Only for a table whose `fit` column is
 single-valued by construction rather than by the data currently on hand.
-The frozen-fit evaluation, which scores the current joint model alone at
-past cut-offs, is the only such table in this report.
+No table in this report is structurally single-fit any more. The frozen
+evaluation was, until its archive gained a `fit` column and began carrying
+each stream's own frozen single-stream fit alongside the joint.
 
 Every other column is left untouched. `table` is returned with `fit` still
 present when it is empty, since an empty table carries no evidence either
@@ -535,4 +637,35 @@ function select_fit_role(table::DataFrame, role::AbstractString)
             join(repr.(_FIT_ROLES), ", ")
     )
     return table[_fit_role.(table.fit) .== role, :]
+end
+
+"""
+`overlay` (a `data/forecast_overlay.csv`-shaped table) restricted to the
+streams that carry a persistence baseline, dropping every row of a stream
+that carries none.
+
+This is the rule the score summaries already apply. `_stream_fit_stats`
+drops a fit whose matched set against the baseline is empty, so a stream
+with no baseline row never reaches [`forecast_score_overview`](@ref) or
+its by-horizon and by-release counterparts. Applying it to the overlay
+figure too puts the tables and the figure on one definition of what has
+been scored. A stream the situation reports have stopped publishing then
+leaves both together, rather than holding a row of near-empty panels open
+long after its last scored window.
+
+The rule is stated on the baseline rather than on a count of made dates
+because the baseline is what makes a window scoreable at all. A stream
+with no baseline has nothing to be scored against, whatever its history.
+
+Nothing is dropped from the scored data itself. The rows stay in
+`data/forecast_scores.csv` and `data/forecast_overlay.csv`, which record
+what was scored; this selects what is drawn.
+
+Returns `overlay` unchanged when it is empty, so the report renders before
+any release carries a forecast.
+"""
+function scored_overlay(overlay::DataFrame; baseline_fit = BASELINE_FIT)
+    isempty(overlay) && return overlay
+    kept = Set(overlay.stream[overlay.fit .== baseline_fit])
+    return overlay[in.(overlay.stream, Ref(kept)), :]
 end

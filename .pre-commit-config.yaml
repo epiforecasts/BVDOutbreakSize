@@ -14,17 +14,18 @@ repos:
     -   id: mixed-line-ending
     -   id: trailing-whitespace
 #####
-# Julia formatter — runs via the project's pinned test/formatter/
-# sub-environment so the JuliaFormatter version stays in sync with CI
-# and works across the Julia versions the package supports.
--   repo: local
+# Julia
+# The hook uses pre-commit's native `language: julia`, which builds the
+# hook its own environment and installs Runic there from
+# `additional_dependencies`. That environment never reads
+# `test/formatter/`, so the version below is a second declaration of one
+# version rather than a duplicate of the pin there.
+# `test/package/CodeFormatting.jl` fails if the two drift.
+-   repo: https://github.com/fredrikekre/runic-pre-commit
+    rev: v2.2.0
     hooks:
-    -   id: julia-formatter
-        name: julia-formatter (SciML, test/formatter env)
-        entry: scripts/run_formatter.sh
-        language: script
-        types_or: [julia]
-        pass_filenames: false
+    -   id: runic
+        additional_dependencies: ['Runic@1.10.0']
 #####
 # Secrets
 -   repo: https://github.com/Yelp/detect-secrets

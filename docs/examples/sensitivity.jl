@@ -477,8 +477,9 @@ validation_stopped_fig = plot_forecast(
 
 ## See the comment above `validation_table`'s display for why this wraps #src
 ## the table in `MarkdownTable` instead of showing it directly. #src
+## No blank line between the two. A blank line counts as visible, so #src
+## Literate would write an empty code fence where the comment was. #src
 MarkdownTable(validation_stopped_streams) #hide
-
 validation_stopped_fig #hide
 
 # ## Forecast scoring across releases
@@ -609,7 +610,9 @@ MarkdownTable(joint_score_by_release_table) #hide
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
+forecast_overlay_fig = plot_forecast_overlay(
+    scored_overlay(forecast_overlay_df)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -672,7 +675,8 @@ MarkdownTable(province_score_by_horizon_display) #hide
 # ## Frozen-fit forecast evaluation
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
-# Only the joint model is scored here, so no individual single-stream fit appears in the tables and figures below.
+# Each stream's own frozen fit is scored alongside the joint where one exists, at the one-week-back cut-off and for still-reported streams only.
+# Every other cut-off carries the joint alone.
 # The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
 # The baseline carries a weaker data-vintage guarantee than the cross-release one, since its snapshot was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
@@ -701,35 +705,32 @@ frozen_overlay_df = _release_data(
         hi60 = Float64, lo90 = Float64, hi90 = Float64,
     )
 )
-## The frozen evaluation never carries an individual single-stream fit
-## (it scores only the joint model at past cut-offs), so the individual-fit
-## comparison columns are dropped rather than shown as a column of missing.
-frozen_score_overview_table = drop_individual_fit_columns(
-    forecast_score_overview(frozen_scores_df)
+## The frozen joint carries `FROZEN_FIT`, so it is named as the joint role
+## here and compared against each stream's own frozen fit. A release
+## published before the archive had a `fit` column carries joint rows only.
+frozen_score_overview_table = forecast_score_overview(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
-frozen_score_by_horizon_table = drop_individual_fit_columns(
-    forecast_score_by_horizon(frozen_scores_df)
+frozen_score_by_horizon_table = forecast_score_by_horizon(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
-frozen_score_by_release_table = drop_individual_fit_columns(
-    forecast_score_by_release(frozen_scores_df)
+frozen_score_by_release_table = forecast_score_by_release(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
 
-## `fit` is single-valued (`FROZEN_FIT`) by construction in every one of
-## these tables, not just for the releases scored so far, so it is dropped
-## from the display tables below as a degenerate column. The `..._table`
-## frames above keep it and still feed the relative-skill plots, which read
-## it to colour each series in the joint role.
-frozen_score_overview_display = drop_degenerate_fit_column(
-    frozen_score_overview_table
-)
-frozen_score_by_horizon_display = drop_degenerate_fit_column(
-    frozen_score_by_horizon_table
-)
+## `fit` is kept in the display tables. It was single-valued and dropped as
+## degenerate until the archive gained the single-stream fits.
+frozen_score_overview_display = frozen_score_overview_table
+frozen_score_by_horizon_display = frozen_score_by_horizon_table
+frozen_score_by_release_display = frozen_score_by_release_table
+
+## One row per release for the cut-offs more than one release forecast.
 ## See the comment above `joint_score_by_release_table`'s assignment for why
 ## this setup chunk's last statement needs a trailing `;`.
-frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table
-);
+frozen_score_by_vintage_table = forecast_score_by_vintage(
+    frozen_scores_df; joint_fit = FROZEN_FIT
+)
+frozen_score_by_vintage_display = frozen_score_by_vintage_table;
 
 #md # ```@raw html
 #md # </details>
@@ -765,6 +766,35 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # </details>
 #md # ```
 
+# ### Frozen skill by release
+#
+# Skill at each cut-off more than one release forecast, one point per release rather than pooled across releases.
+# Releases run in the order they were cut, evenly spaced rather than to calendar scale.
+
+#md # ```@raw html
+#md # <details><summary>Frozen skill per release</summary>
+#md # ```
+
+frozen_skill_by_vintage_fig = plot_forecast_skill_by_vintage(
+    frozen_score_by_vintage_table
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_skill_by_vintage_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Frozen scores by release</summary>
+#md # ```
+
+MarkdownTable(frozen_score_by_vintage_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
 # Each panel carries the frozen forecast and the persistence baseline, coloured as in the cross-release overlay above, and the x-axis is the cut-off each forecast was made from.
 
@@ -772,7 +802,9 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
 #md # ```
 
-frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
+frozen_overlay_fig = plot_forecast_overlay(
+    scored_overlay(frozen_overlay_df)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1267,6 +1299,10 @@ _stream_chains = (
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "confirmed_deaths" => (;
+        chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1,
+    ),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
     "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1),
@@ -2352,6 +2388,263 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 #md # ```
 
 clock_sensitivity_T_fig #hide
+
+# ## Fit diagnostics by parameter
+#
+# ### One parameter or the whole model
+#
+
+#md # ```@raw html
+#md # <details><summary>Per-parameter diagnostics for every fit</summary>
+#md # ```
+
+## R-hat and both effective sample sizes over several thousand parameters
+## are not free to compute, so each fit's per-parameter frame is built once
+## here and handed to every table and figure in this section.
+diagnostic_fits = [
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    (
+        RUN_SENSITIVITY ?
+            [
+                "delay sensitivity" => chn_joint_community_delay,
+                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+            ] :
+            []
+    )...,
+]
+diagnostic_frames = [
+    label => parameter_diagnostics(chn)
+        for (label, chn) in diagnostic_fits
+]
+diagnostic_frame = Dict(diagnostic_frames)
+joint_diagnostics = diagnostic_frame["joint"]
+diagnostic_spread = MarkdownTable(
+    diagnostic_spread_table(diagnostic_frames...; labels = display_names)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+diagnostic_spread #hide
+
+#md # ```@raw html
+#md # <details><summary>R-hat spread figure</summary>
+#md # ```
+
+rhat_spread_fig = plot_rhat_spread(
+    "joint" => joint_diagnostics,
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "exports" => diagnostic_frame["exports"],
+    "frozen (1wk back)" => diagnostic_frame["frozen (1wk back)"]
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rhat_spread_fig #hide
+
+# ### Which parameters mix worst
+#
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters of the joint fit</summary>
+#md # ```
+
+joint_worst_parameters = MarkdownTable(
+    worst_parameters_table(
+        joint_diagnostics; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_parameters #hide
+
+# The same diagnostics grouped by parameter rather than by element.
+
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters, grouped</summary>
+#md # ```
+
+joint_worst_groups = MarkdownTable(
+    family_diagnostics_table(
+        joint_diagnostics; n = 12,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_groups #hide
+
+#md # ```@raw html
+#md # <details><summary>Mixing over time varying paramters</summary>
+#md # ```
+
+joint_index_fig = plot_parameter_index_diagnostics(
+    joint_diagnostics;
+    n_groups = 3, labels = display_names
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_index_fig #hide
+
+# ### Where the divergent transitions sit
+#
+#md # ```@raw html
+#md # <details><summary>Sampler behaviour by chain</summary>
+#md # ```
+
+joint_chain_table = MarkdownTable(sampler_by_chain_table(chn_joint));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_chain_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Divergence location table</summary>
+#md # ```
+
+joint_divergence_table = MarkdownTable(
+    divergence_location_table(chn_joint; n = 12, labels = display_names)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Divergent draws against the posterior</summary>
+#md # ```
+
+joint_divergence_fig = plot_divergence_locations(
+    chn_joint,
+    [:C_T, :R_T, :r, :T, :CFR, :k];
+    labels = Dict(
+        :C_T => "cumulative infections",
+        :R_T => "reproduction number at the cut-off",
+        :r => "latest growth rate", :T => "outbreak age",
+        :CFR => "case-fatality ratio",
+        :k => "surveillance dispersion"
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_fig #hide
+
+# ### The joint fit against the single-stream fits
+#
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream contrast</summary>
+#md # ```
+
+stream_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "exports" => diagnostic_frame["exports"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "isolation (DRC)" => diagnostic_frame["isolation (DRC)"],
+    "onsets (DRC)" => diagnostic_frame["onsets (DRC)"]
+)
+stream_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(
+        stream_contrast; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream figure</summary>
+#md # ```
+
+stream_contrast_fig = plot_diagnostic_contrast(
+    stream_contrast;
+    xlabel = "Bulk effective sample size, single-stream fit",
+    ylabel = "Bulk effective sample size, joint fit",
+    title = "Mixing in the joint against each stream fitted alone"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_fig #hide
+
+# ### The joint fit against the same fit a week earlier
+#
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen contrast</summary>
+#md # ```
+
+frozen_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "one week earlier" => diagnostic_frame["frozen (1wk back)"]
+)
+frozen_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(
+        frozen_contrast; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen figure</summary>
+#md # ```
+
+frozen_contrast_fig = plot_diagnostic_contrast(
+    frozen_contrast;
+    xlabel = "Bulk effective sample size, fit a week earlier",
+    ylabel = "Bulk effective sample size, live fit",
+    title = "Mixing in the live fit against the same fit a week earlier"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_fig #hide
 
 # ## Saving sensitivity results
 #

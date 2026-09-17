@@ -49,3 +49,66 @@
         end
     end
 end
+
+@testitem "AD gradient: province_composition_model differentiates (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: province_composition_model, default_adtype
+
+    ## The stick-breaking BetaBinomial composition is the likelihood the
+    ## spatial data enter through, so its gradient has to exist.
+    ##
+    ## The reshaping that turns the per-province histories into this matrix
+    ## (`province_increment_matrix`) looks provinces up by name in a
+    ## `Dict{String}`. It must stay OUTSIDE the model body: a string compare
+    ## on the tape is a `memcmp` foreigncall that Mooncake has no rule for,
+    ## and it aborts the gradient of the whole joint.
+    seed!(20260518)
+    obs = [853 21 42; 77 2 5; 3 0 0]
+    modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
+    model = province_composition_model(obs, modelled)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
+end
+
+@testitem "AD gradient: the testing covariate differentiates (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: province_composition_model, default_adtype
+
+    ## The covariate samples `β_asc` and adds a fused broadcast over the
+    ## patches, and that branch is taken only when the covariate is not all
+    ## zeros. The test above passes the zero default, so it differentiates
+    ## the model without the coefficient and leaves this path unproven.
+    seed!(20260518)
+    obs = [853 21 42; 77 2 5; 3 0 0]
+    modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
+    covariate = [0.64, -0.23, -0.41]
+    model = province_composition_model(
+        obs, modelled;
+        testing_covariate = covariate
+    )
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    ## The coefficient is in the parameter vector only on this path, so the
+    ## gradient below covers it.
+    @test any(k -> occursin("β_asc", string(k)), keys(vi))
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
+end

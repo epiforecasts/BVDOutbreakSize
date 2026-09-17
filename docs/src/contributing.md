@@ -60,7 +60,7 @@ task fit-dependent
 task docs-main
 task docs-sensitivity
 
-# Format (SciML style) over src/, test/, docs/, scripts/
+# Format with Runic over src/, test/, docs/, scripts/, benchmark/ and ext/
 task format
 
 # Run the full test suite, or skip the quality checks (Aqua/JET/format)

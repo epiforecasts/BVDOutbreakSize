@@ -20,8 +20,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Superseding a run is right on a pull request and destructive on `main`.
+# `github.head_ref` is set only on a pull request, so a push to `main`, a tag
+# or a manual run falls back to `github.run_id`.
+# That gives each of those a group of its own that nothing supersedes.
+# A cancelled run here also loses the hours of fitting it had done and the
+# results release it would have published.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 # Compile pkgimages for a fixed set of x86-64 targets rather than for the

@@ -1348,6 +1348,114 @@ function plot_forecast_relative_skill(
 end
 
 """
+By-vintage relative-skill figure: one panel per stream, plotting relative
+skill against the persistence baseline against the release that made the
+forecast, with one series per fit role. `scores` is a
+[`forecast_score_by_vintage`](@ref)-shaped table, carrying `stream`,
+`release`, `release_date`, `fit` and the column named by `value_col`.
+
+Releases sit at evenly spaced slots in `release_date` order, not to
+calendar scale, and are labelled with the date each was cut. The skill
+axis is log-scaled about a reference line at one, as in
+[`plot_forecast_relative_skill`](@ref).
+
+A cell whose skill is missing or non-finite is absent from its series.
+`empty_message` replaces the panels when `scores` has no rows.
+"""
+function plot_forecast_skill_by_vintage(
+        scores::DataFrame;
+        value_col::Symbol = :rel_to_baseline,
+        ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
+        title::AbstractString =
+            "Relative skill against the baseline, by release",
+        ncols::Integer = 3,
+        empty_message::AbstractString =
+            "No cut-off has been forecast by more than one release yet."
+    )
+    streams = sort(unique(scores.stream))
+    if isempty(streams)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1], empty_message;
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    role_order = ["individual", "joint"]
+    role_colour = Dict("individual" => :steelblue, "joint" => :firebrick)
+
+    ## One shared slot per release across every panel, so a stream missing a
+    ## release leaves a gap rather than shifting against the others.
+    rel_dates = Dict(
+        scores.release[i] => scores.release_date[i]
+            for i in 1:size(scores, 1)
+    )
+    rels = sort(collect(keys(rel_dates)); by = r -> (rel_dates[r], r))
+    slot = Dict(r => Float64(i) for (i, r) in enumerate(rels))
+    ## Thinned to about eight labels once the history is long enough.
+    step = length(rels) <= 8 ? 1 : cld(length(rels), 8)
+    ticks = 1:step:length(rels)
+    ticklabels = [string(rel_dates[rels[i]]) for i in ticks]
+
+    usedcols = min(ncols, length(streams))
+    nrows = cld(length(streams), usedcols)
+    fig = Figure(; size = (340 * usedcols, 260 * nrows + 90))
+
+    role_handles = Dict{String, Any}()
+    for (i, s) in enumerate(streams)
+        r, c = fldmod1(i, usedcols)
+        cell = scores[scores.stream .== s, :]
+        ax = Axis(
+            fig[r, c]; title = string(s),
+            xlabel = r == nrows ? "Release cut from" : "",
+            ylabel = c == 1 ? ylabel : "",
+            xticks = (Float64.(collect(ticks)), ticklabels),
+            xticklabelrotation = pi / 4,
+            yscale = log10,
+            yticks = (_SKILL_TICKS, _skill_tick_labels),
+            limits = ((0.5, length(rels) + 0.5), nothing)
+        )
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
+            linewidth = 2
+        )
+        for role in role_order
+            rs = select_fit_role(cell, role)
+            isempty(rs) && continue
+            keep = [!ismissing(v) && isfinite(v) for v in rs[!, value_col]]
+            any(keep) || continue
+            xs = [slot[r] for r in rs.release[keep]]
+            ys = Float64.(rs[keep, value_col])
+            ord = sortperm(xs)
+            h = scatterlines!(
+                ax, xs[ord], ys[ord];
+                color = role_colour[role], markersize = 8, linewidth = 2
+            )
+            get!(role_handles, role, h)
+        end
+    end
+
+    handles = Any[]
+    labels = String[]
+    for role in role_order
+        haskey(role_handles, role) || continue
+        push!(handles, role_handles[role])
+        push!(labels, role)
+    end
+    isempty(title) || CairoMakie.Label(
+        fig[0, 1:usedcols], title;
+        font = :bold, tellwidth = false
+    )
+    isempty(handles) ||
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:usedcols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
+    return fig
+end
+
+"""
 Horizontal point-and-interval comparison of cumulative-case estimates from
 several sources. `rows` is a vector of `(label, central, lower, upper)`
 tuples, drawn top to bottom with the central estimate as a point and
@@ -3130,7 +3238,7 @@ function plot_forecast(fc::DataFrame)
             (:deaths_new, "New suspected deaths (DRC)", :firebrick),
             (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
             (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
-            (:recovered_new, "New recovered (DRC)", :seagreen),
+            (:recovered_new, "New recovered among confirmed (DRC)", :seagreen),
         )
         col in propertynames(fc) || continue
         push!(count_cols, (col, title, colour))
@@ -3423,7 +3531,10 @@ function plot_forecast_vs_truth(
             :confirmed_deaths_cum, :confirmed_deaths_new,
             "confirmed deaths (DRC)", :darkorange3,
         ),
-        (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen),
+        (
+            :recovered_cum, :recovered_new,
+            "recovered among confirmed (DRC)", :seagreen,
+        ),
     )
     streams = Vector{
         Tuple{
@@ -5040,5 +5151,317 @@ function plot_zone_ranking(
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:2], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+## --- Per-parameter fit diagnostics --------------------------------------
+
+"""
+Cumulative share of parameters at or below each R-hat, one line per fit.
+Pass each fit as `"label" => chain`, or as `"label" => frame` where the frame
+is one [`parameter_diagnostics`](@ref) has already produced.
+
+A line that climbs to one just past the left edge is a fit where a handful
+of parameters are bad and the rest are fine. A line that stays low across
+the axis is a fit where most of the model has not converged. The axis runs
+to the worst fit's `clip` quantile so one extreme parameter cannot stretch
+it, and anything beyond that is drawn at the right edge.
+"""
+function plot_rhat_spread(
+        fits::Pair{String}...; xmax = nothing,
+        clip::Real = 0.995, thresholds = (1.01, 1.1),
+        title::AbstractString = "Spread of R-hat across parameters"
+    )
+    series = [
+        (f.first, sort(filter(isfinite, _as_diagnostics(f.second).rhat)))
+            for f in fits
+    ]
+    series = [s for s in series if !isempty(s[2])]
+    if isempty(series)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1], "No fit carries R-hat diagnostics.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    hi = isnothing(xmax) ?
+        max(
+            maximum(quantile(v, clip) for (_, v) in series),
+            maximum(thresholds) + 0.01
+        ) : float(xmax)
+    colours = CairoMakie.Makie.wong_colors()
+    fig = Figure(; size = (860, 420))
+    ax = Axis(
+        fig[1, 1]; title = title, xlabel = "R-hat",
+        ylabel = "Share of parameters at or below"
+    )
+    vlines!(
+        ax, collect(thresholds); color = (:grey, 0.6),
+        linestyle = :dash, linewidth = 1.5
+    )
+    handles = Any[]
+    labels = String[]
+    for (i, (label, v)) in enumerate(series)
+        x = clamp.(v, 1.0, hi)
+        y = collect(1:length(x)) ./ length(x)
+        h = lines!(
+            ax, x, y; color = colours[mod1(i, length(colours))],
+            linewidth = 2
+        )
+        push!(handles, h)
+        push!(labels, String(label))
+    end
+    CairoMakie.xlims!(ax, 1.0, hi)
+    CairoMakie.ylims!(ax, 0.0, 1.02)
+    CairoMakie.Legend(
+        fig[2, 1], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false, nbanks = 2
+    )
+    return fig
+end
+
+# Vector-valued parameters with the lowest bulk effective sample size, most
+# degraded first, keeping only those with at least `min_elements` entries so
+# each panel is a series rather than a handful of points. A deterministic
+# copy of a sampled vector carries identical diagnostics, so a parameter
+# whose diagnostics repeat one already picked is dropped rather than drawn
+# twice.
+function _worst_vector_parameters(
+        df::DataFrame, n::Integer;
+        min_elements::Integer = 8
+    )
+    groups = [
+        g for g in unique(df.parameter)
+            if count(==(g), df.parameter) >= min_elements
+    ]
+    isempty(groups) && return String[]
+    mins = [_min_finite(df.ess_bulk[df.parameter .== g]) for g in groups]
+    ord = sortperm(replace(mins, NaN => Inf))
+    picked = String[]
+    seen = Set{Vector{Float64}}()
+    for g in groups[ord]
+        key = sort(df.ess_bulk[df.parameter .== g])
+        key in seen && continue
+        push!(seen, key)
+        push!(picked, String(g))
+        length(picked) == n && break
+    end
+    return picked
+end
+
+"""
+Bulk effective sample size against element index for the vector-valued
+parameters of a fit that mix worst, one panel each. `fit` is a chain or a
+frame [`parameter_diagnostics`](@ref) has already produced. Points are
+coloured by whether the element's R-hat exceeds `rhat_threshold`.
+
+The element index runs in model order, so for a random walk or a daily
+latent series a higher index is later in the outbreak. Bad mixing piled up
+at one end of a panel is a problem confined to that stretch of the window.
+Bad mixing spread evenly across a panel is a problem with the whole walk.
+"""
+function plot_parameter_index_diagnostics(
+        fit;
+        groups::Union{Nothing, AbstractVector} = nothing,
+        n_groups::Integer = 3, min_elements::Integer = 8,
+        rhat_threshold::Real = 1.1, ess_threshold::Real = 100,
+        labels = Dict{Symbol, String}(),
+        title::AbstractString =
+            "Mixing along the worst vector-valued parameters"
+    )
+    df = _as_diagnostics(fit)
+    picked = isnothing(groups) ?
+        _worst_vector_parameters(
+            df, n_groups;
+            min_elements = min_elements
+        ) : [String(g) for g in groups]
+    if isempty(picked)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1],
+            "No vector-valued parameter carries diagnostics.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    fig = Figure(; size = (860, 230 * length(picked) + 110))
+    ok_handle = nothing
+    bad_handle = nothing
+    for (i, g) in enumerate(picked)
+        sub = df[df.parameter .== g, :]
+        sub = sub[sortperm(sub.index), :]
+        ax = Axis(
+            fig[i, 1]; title = String(get(labels, Symbol(g), g)),
+            xlabel = i == length(picked) ? "Element index" : "",
+            ylabel = "Bulk effective sample size", yscale = log10
+        )
+        hlines!(
+            ax, [float(ess_threshold)]; color = (:grey, 0.6),
+            linestyle = :dash, linewidth = 1.5
+        )
+        y = [isnan(v) ? 1.0 : max(v, 1.0) for v in sub.ess_bulk]
+        bad = sub.rhat .> rhat_threshold
+        if any(.!bad)
+            h = scatter!(
+                ax, sub.index[.!bad], y[.!bad];
+                color = :steelblue, markersize = 6
+            )
+            ok_handle = something(ok_handle, h)
+        end
+        if any(bad)
+            h = scatter!(
+                ax, sub.index[bad], y[bad];
+                color = :firebrick, markersize = 6
+            )
+            bad_handle = something(bad_handle, h)
+        end
+    end
+    CairoMakie.Label(fig[0, 1], title; font = :bold, tellwidth = false)
+    handles = Any[]
+    legend_labels = String[]
+    if !isnothing(ok_handle)
+        push!(handles, ok_handle)
+        push!(legend_labels, "R-hat at most $(rhat_threshold)")
+    end
+    if !isnothing(bad_handle)
+        push!(handles, bad_handle)
+        push!(legend_labels, "R-hat above $(rhat_threshold)")
+    end
+    isempty(handles) ||
+        CairoMakie.Legend(
+        fig[length(picked) + 1, 1], handles, legend_labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
+    return fig
+end
+
+"""
+Where the divergent transitions sit against the posterior, one panel per
+parameter in `params`. Each panel draws the full posterior as a density and
+the divergent draws as ticks along the axis, with the middle 90% of the
+divergent draws shaded.
+
+Ticks spread under the whole density are divergences scattered through the
+posterior, which points at the sampler settings. Ticks piled into one shaded
+stretch are divergences confined to one region, which points at the geometry
+there.
+"""
+function plot_divergence_locations(
+        chn, params::AbstractVector;
+        labels = Dict{Symbol, String}(), ncols::Integer = 3,
+        title::AbstractString =
+            "Divergent draws against the full posterior"
+    )
+    flag = _divergent_flags(chn)
+    if !any(flag)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1], "No divergent transitions to place.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    usedcols = min(ncols, length(params))
+    nrows = cld(length(params), usedcols)
+    fig = Figure(; size = (300 * usedcols, 230 * nrows + 100))
+    for (i, p) in enumerate(params)
+        r, c = fldmod1(i, usedcols)
+        x = Float64.(vec(collect(chn[p])))
+        ax = Axis(
+            fig[r, c];
+            title = String(get(labels, Symbol(p), string(p))),
+            ylabel = c == 1 ? "Density" : ""
+        )
+        xd = x[flag]
+        vspan!(
+            ax, quantile(xd, 0.05), quantile(xd, 0.95);
+            color = (:firebrick, 0.12)
+        )
+        density!(
+            ax, x; color = (:steelblue, 0.35),
+            strokecolor = :steelblue, strokewidth = 1.5
+        )
+        scatter!(
+            ax, xd, fill(0.0, length(xd)); color = (:firebrick, 0.6),
+            marker = :vline, markersize = 10
+        )
+    end
+    CairoMakie.Label(
+        fig[0, 1:usedcols], title; font = :bold,
+        tellwidth = false
+    )
+    return fig
+end
+
+"""
+Bulk effective sample size in a reference fit against the same parameter's
+bulk effective sample size in the fits it is compared with, from the frame
+[`diagnostic_contrast`](@ref) returns. Both axes are logarithmic and the
+dashed line is equality.
+
+A point on the line is a parameter the reference fit handles as well as the
+comparison does. A point far below it is a parameter that mixes on its own
+and stops mixing in the reference, so the cause is what the reference adds
+rather than the parameter.
+"""
+function plot_diagnostic_contrast(
+        df::DataFrame;
+        xlabel::AbstractString = "Bulk effective sample size, comparison fit",
+        ylabel::AbstractString = "Bulk effective sample size, reference fit",
+        title::AbstractString = "Mixing in the reference against each fit"
+    )
+    if isempty(df)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1], "No parameter is shared between fits.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    colours = CairoMakie.Makie.wong_colors()
+    fig = Figure(; size = (860, 460))
+    ax = Axis(
+        fig[1, 1]; title = title, xlabel = xlabel, ylabel = ylabel,
+        xscale = log10, yscale = log10
+    )
+    ## Both axes cover the same span so the equality line runs corner to
+    ## corner and the distance below it reads the same on either axis.
+    lo = max(
+        1.0, 0.8 * min(
+            minimum(df.ess_bulk),
+            minimum(df.ess_bulk_reference)
+        )
+    )
+    hi = 1.25 * max(
+        maximum(df.ess_bulk), maximum(df.ess_bulk_reference),
+        lo + 1
+    )
+    lines!(
+        ax, [lo, hi], [lo, hi]; color = (:grey, 0.7), linestyle = :dash,
+        linewidth = 1.5
+    )
+    handles = Any[]
+    labels = String[]
+    for (i, f) in enumerate(unique(df.fit))
+        cell = df[df.fit .== f, :]
+        h = scatter!(
+            ax, clamp.(cell.ess_bulk, lo, hi),
+            clamp.(cell.ess_bulk_reference, lo, hi);
+            color = (colours[mod1(i, length(colours))], 0.6),
+            markersize = 7
+        )
+        push!(handles, h)
+        push!(labels, String(f))
+    end
+    CairoMakie.xlims!(ax, lo, hi)
+    CairoMakie.ylims!(ax, lo, hi)
+    CairoMakie.Legend(
+        fig[2, 1], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false, nbanks = 2
+    )
     return fig
 end

@@ -702,14 +702,24 @@ being added: SitRep 030 records mattress and bed deliveries and new
 treatment centres opening), so the walk tracks the growth a single scalar
 capacity ([`bed_capacity_model`](@ref)) cannot.
 
-The walk is a non-centred cumulative log-deviation from a baseline bed
-count `C0` on weekly knots, linearly interpolated to the daily grid, the
-same parameterisation as the reproduction-number and background walks. With
-knot values `\\log C` and knot days `d`,
-`C(t) = C0 · exp(\\text{interp}(σ_cap · cumsum(z)))` with `z ~ Normal(0, 1)`
-per knot and a tight innovation SD `σ_cap`, keeping capacity a gentle
-drift rather than per-day jumps. Knots need far fewer innovations than a
-daily walk, avoiding the high-dimensional funnel. The baseline carries
+The walk is a centred cumulative log-deviation from a baseline bed count
+`C0` on weekly knots, linearly interpolated to the daily grid. With knot
+values `\\log C` and knot days `d`,
+`C(t) = C0 · exp(\\text{interp}(\\text{cumsum}(\\text{steps})))`, each step
+drawn at the sampled innovation SD `σ_cap` from a half-normal, keeping
+capacity a gentle drift rather than per-day jumps. Knots need far fewer
+innovations than a daily walk, so the walk stays low-dimensional.
+
+Centred, unlike the reproduction-number and background walks. The two
+forms are the same distribution: a standard half-normal scaled by `σ_cap`
+is a half-normal at `σ_cap`. They differ only in the geometry NUTS
+explores. Non-centring pays off when the prior dominates the walk, and it
+costs when the data pin it, since the sampled scale and the standard
+offsets then have to move together. Here the data pin it. On the 16
+September 2026 joint fit the innovations had lost about 90% of their prior
+variance, and `σ_cap` sat at 0.11 against a prior mean of 0.04, past the
+prior 95th percentile and with about half its spread. That is the regime
+the centred form suits. The baseline carries
 the same weakly-informative `LogNormal(log 450, 0.42)` prior as the
 scalar model (median 450 beds, ≈0.44 CV), so `C0` is sampled on the log
 scale and the whole capacity `log C(t) = log C0 + walk` is fully
@@ -740,14 +750,17 @@ province full while another has slack. Pass
     ## added over the response and not taken away, so `C(t)` cannot drop
     ## below an already-reached level, and the effective ceiling cannot
     ## jitter down into the observed occupancy.
-    z ~ product_distribution(
+    ##
+    ## Centred: each step is drawn at the sampled scale rather than as a
+    ## standard half-normal multiplied by it. `eps` floors the scale so a
+    ## `σ_cap ≈ 0` draw stays a proper distribution.
+    steps ~ product_distribution(
         fill(
-            truncated(Normal(0, 1); lower = 0),
+            truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
             max(nb - 1, 1)
         )
     )
-    steps = σ_cap .* z[1:max(nb - 1, 0)]
-    log_knots = vcat(zero(σ_cap), cumsum(steps))
+    log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)

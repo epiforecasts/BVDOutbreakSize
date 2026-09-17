@@ -49,6 +49,20 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 ```
 
+### Fit diagnostics
+
+How the fits behind these numbers sampled.
+R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
+The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
+A divergent transition is a step the sampler could not take accurately.
+The [Sensitivity](sensitivity.md) page breaks these numbers down by parameter.
+
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "diagnostics.md"), String))
+```
+
 ## Estimated reproduction number
 
 The time-varying reproduction number R(t), the average number of further infections caused by each infection.

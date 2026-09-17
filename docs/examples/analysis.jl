@@ -117,6 +117,8 @@
 #   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
 # - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
 #   Transmission within a patch is well mixed, so spread inside a province is not represented.
+# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
+#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -1901,11 +1903,26 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (z_p - \bar z), \qquad
+# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
 # \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
 # ```
 #
 # with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+#
+# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
+#
+# ```math
+# x_p = \log \frac{A_p}{N_p}
+#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
+# ```
+#
+# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
+# A pooled patch sums its members before the ratio is taken.
+# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
+# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
+# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
+# The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
 # ```math
@@ -1921,6 +1938,7 @@ cfr_prior_fig #hide
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \beta \sim \mathrm{Normal}(0,\ 0.5), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
 # \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
 # ```
@@ -2325,41 +2343,6 @@ prior_zone_table #hide
 # Each chain starts from a data-informed point rather than the prior: deviations at zero, initial shares from the observed cumulative zone shares at the first vintage with a pseudo-count of half a case, and the scales at $\sigma_L = 0.2$, $\sigma_\delta = 0.05$, $h_{\text{z}} = 42$ and $\rho = 0.05$.
 # Each chain's start is jittered with normal noise of standard deviation 0.1 in the unconstrained space.
 
-# #### Fit diagnostics
-#
-# Fit-quality diagnostics for the joint and per-stream fits: the worst R-hat, the smallest bulk effective sample size, and the number of divergent transitions.
-# The two zone fits are in the same table, and the [health-zone fit diagnostics](@ref "Health-zone fit diagnostics") give per chain the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size, with a per-zone table of split R-hat and effective sample sizes.
-
-#md # ```@raw html
-#md # <details><summary>Fit diagnostics</summary>
-#md # ```
-
-diagnostics_table( #hide
-    "joint" => chn_joint, #hide
-    "joint, no patches" => chn_no_patches, #hide
-    "exports" => chn_exports, #hide
-    "deaths (DRC)" => chn_deaths, #hide
-    "cases (DRC)" => chn_cases, #hide
-    "confirmed (DRC)" => chn_confirmed, #hide
-    "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
-    "isolation (DRC)" => chn_treatment, #hide
-    "onsets (DRC)" => chn_onsets, #hide
-    "frozen (1wk back)" => frozen_lastweek.chn, #hide
-    "health zones" => chn_local, #hide
-    "health zones (frozen)" => frozen_local.chn, #hide
-    (
-        RUN_SENSITIVITY ? #hide
-            [
-                "delay sensitivity" => chn_joint_community_delay, #hide
-                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
-            ] : []
-    )...
-) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # #### No-onward-transmission counterfactual
 #
 # To bound the deaths already committed at the cut-off, we project the deaths that would still occur if all transmission stopped on the report date.
@@ -2651,6 +2634,25 @@ summary_ranges = let
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90)
     )
+    ## One interval as a bare `lo–hi`, for a table cell that takes its level
+    ## from the column header rather than repeating it in every cell.
+    bound(s, lvl, d) = string(
+        round(getproperty(s, Symbol("lo", lvl)); digits = d), "–",
+        round(getproperty(s, Symbol("hi", lvl)); digits = d)
+    )
+    bound_i(s, lvl) = string(
+        round(Int, getproperty(s, Symbol("lo", lvl))), "–",
+        round(Int, getproperty(s, Symbol("hi", lvl)))
+    )
+    ## One province block of the per-province table: a row per province, a
+    ## column per interval level. Three of these stacked read down each
+    ## province in one pass.
+    prov_rows(cell) = join(
+        [
+            "| $(PROVINCE_LABELS[p]) | $(cell(p, 30)) | $(cell(p, 60)) | " *
+                "$(cell(p, 90)) |" for p in 1:N_PATCHES
+        ], "\n"
+    )
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
 
@@ -2683,33 +2685,6 @@ summary_ranges = let
           to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
         - **Case-fatality ratio:** the case-fatality ratio is estimated to be
           $(ints_f(scfr, 2)).
-        - **By province, infections to date:**
-        $(
-            join(
-                [
-                    "  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
-                        for p in 1:N_PATCHES
-                ], "\n"
-            )
-        )
-        - **By province, reproduction number at the cut-off:**
-        $(
-            join(
-                [
-                    "  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
-                        for p in 1:N_PATCHES
-                ], "\n"
-            )
-        )
-        - **By province, case-fatality ratio:**
-        $(
-            join(
-                [
-                    "  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
-                        for p in 1:N_PATCHES
-                ], "\n"
-            )
-        )
         - **Shift from priors:** how far the data has moved each estimate from
           its prior, in prior interquartile ranges, where a value of one means
           the posterior median sits one prior interquartile range from the prior
@@ -2717,6 +2692,26 @@ summary_ranges = let
           The fit moves the cumulative infection count by $(moves[1].second),
           the outbreak age by $(moves[2].second) and the doubling time by
           $(moves[3].second); the largest move is in the $(biggest.first).
+
+        **By province.** Equal-tailed credible intervals at the cut-off.
+
+        Infections to date:
+
+        | Province | 30% | 60% | 90% |
+        |---|---|---|---|
+        $(prov_rows((p, l) -> bound_i(sprov[p], l)))
+
+        Reproduction number:
+
+        | Province | 30% | 60% | 90% |
+        |---|---|---|---|
+        $(prov_rows((p, l) -> bound(sprov_rt[p], l, 2)))
+
+        Case-fatality ratio (%):
+
+        | Province | 30% | 60% | 90% |
+        |---|---|---|---|
+        $(prov_rows((p, l) -> bound(sprov_cfr[p], l, 1)))
         """
     )
 end;
@@ -2726,6 +2721,45 @@ end;
 #md # ```
 
 summary_ranges #hide
+
+# #### Fit diagnostics
+#
+# Fit diagnostics for the joint fit and each individual fit.
+# These indicate how reliable the results are from the perspective of the inference algorithm.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues.
+
+#md # ```@raw html
+#md # <details><summary>Build the fit diagnostics table</summary>
+#md # ```
+
+fit_diagnostics_table = diagnostics_table(
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    "health zones" => chn_local,
+    "health zones (frozen)" => frozen_local.chn,
+    (
+        RUN_SENSITIVITY ?
+            [
+                "delay sensitivity" => chn_joint_community_delay,
+                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+            ] :
+            []
+    )...
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+fit_diagnostics_table #hide
 
 # ### Joint model estimates
 #
@@ -3021,14 +3055,15 @@ spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd,
+        :province_ascertainment_sd, :province_testing_coefficient,
     ];
     digits = 3,
     labels = Dict(
         :region_sd => "Rt deviation spread",
         :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread"
+        :province_ascertainment_sd => "Ascertainment spread",
+        :province_testing_coefficient => "Testing effect on ascertainment"
     )
 );
 
@@ -3301,6 +3336,7 @@ pp_joint = predict(
         n_patches = N_PATCHES,
         province_increments = missing,
         province_days = province_cases.days,
+        province_testing_covariate = province_testing,
         province_death_increments = missing,
         province_death_days = province_deaths.days
     ),
@@ -5130,9 +5166,14 @@ frozen_forecast_fits = unique(
     f -> f.o.cutoff,
     [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek]
 )
+## The `fit` column tells the frozen joint and each frozen single-stream fit
+## apart when scored. `score_release` falls back to one default where an
+## archive carries no such column, so an older release still scores as the
+## joint.
 frozen_forecast_archive = DataFrame(
     made_date = Date[], horizon = Int[],
-    target_date = Date[], stream = String[], draw = Int[], value = Float64[]
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[],
+    fit = String[]
 )
 ## The onset grid belongs to the triangle each frozen fit actually saw, not
 ## to the live one: the May cut-offs predate the digitised figure entirely,
@@ -5160,10 +5201,54 @@ for f in frozen_forecast_fits
         )
             for h in forecast_horizons
     ]
-    append!(
-        frozen_forecast_archive,
-        forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
-    )
+    _rows = forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
+    _rows[!, :fit] = fill(FROZEN_FIT, nrow(_rows))
+    append!(frozen_forecast_archive, _rows)
+end
+
+## The frozen single-stream fits, forecast from their own chains as
+## `stream_forecasts.csv` forecasts the live ones. They are registered only
+## at the validation cut-off and only for still-reported streams.
+_frozen_stream_of = Dict(
+    "cases" => (:reported_cases, "reported cases"),
+    "deaths" => (:suspected_deaths, "suspected deaths"),
+    "confirmed" => (:confirmed_cases, "confirmed cases"),
+    "confirmed_deaths" => (:confirmed_deaths, "confirmed deaths"),
+    "treatment" => (:isolation_beds, "isolation beds")
+)
+for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
+    _stream, _label = _frozen_stream_of[_sid]
+    _o = _sf.o
+    _bp = _o.n - _o.who_first_sitrep_days
+    ## Each stream on its own cut-off count, the beds on their occupancy.
+    _base = if _stream === :isolation_beds
+        isempty(_o.isolation_history.counts) ? 0 :
+            _o.isolation_history.counts[end]
+    elseif _stream === :reported_cases
+        _o.reported_cases
+    elseif _stream === :suspected_deaths
+        _o.total_deaths
+    elseif _stream === :confirmed_cases
+        _o.confirmed_cases
+    else
+        _o.confirmed_deaths
+    end
+    for h in forecast_horizons
+        _vals = forecast_stream(
+            _sf.chn, _stream; horizon = h,
+            obs_value = _base, n = _o.n, breakpoint = _bp,
+            rt_start = 1, rt_walk_start = 1
+        )
+        for (_d, _i) in enumerate(1:5:length(_vals))
+            push!(
+                frozen_forecast_archive,
+                (
+                    _o.cutoff, h, _o.cutoff + Day(h), _label, _d,
+                    Float64(_vals[_i]), _sid,
+                )
+            )
+        end
+    end
 end
 CSV.write(
     joinpath(output_dir, "forecast_frozen.csv"),
@@ -5177,7 +5262,7 @@ CSV.write(
 ## `RT_WALK_LEAD` days before the first situation report, so each fit carries
 ## the starts its own fit used. Each single-stream fit forecasts only the
 ## dataset it observes; the joint forecasts every shared stream. Recovered has
-## no single-stream fit, so it stays a joint-only stream in `forecast.csv`.
+## no single-stream fit, so the joint is the only fit that carries it.
 stream_thin = 5
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 ## Observed bed occupancy at the cut-off, the level the isolation forecast
@@ -5189,6 +5274,10 @@ _iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
 ## INCREMENT this total should add over the horizon, not the level (see the
 ## methods section on the nowcast and forecast).
 _onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
+## Cumulative recovered at the cut-off. The loader leaves it missing when the
+## manifest carries no recovered vintages, and the forecast returns the
+## increment rather than this base, so a zero stands in for that case.
+_recovered_at_cutoff = coalesce(obs.recovered_cases, 0)
 stream_fits = [
     (;
         fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
@@ -5198,6 +5287,7 @@ stream_fits = [
             (:suspected_deaths, "suspected deaths", obs.total_deaths),
             (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
             (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
+            (:recovered, "recovered", _recovered_at_cutoff),
             (:isolation_beds, "isolation beds", _iso_at_cutoff),
             (:exports, "exports", obs.exported_cases),
             (:onset_reports, "onset reports", _onset_at_cutoff),
@@ -5515,6 +5605,13 @@ end
 ## which is the by-province counterpart of the two headline tables above.
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, markdown_table(province_overview_table))
+end
+
+## Fit diagnostics: the same table the Results section shows, so the
+## dashboard reports how the fit behind its numbers sampled without
+## building a second table.
+open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
+    print(io, markdown_table(fit_diagnostics_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.

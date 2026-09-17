@@ -135,6 +135,14 @@ end
     @test any(k -> occursin("C0", k), ks)
     C0 = vec(Array(chn[:C0]))
     @test all(C0 .> 0)
+
+    ## The innovations are drawn centred, as a half-normal at the sampled
+    ## step size rather than a standard half-normal scaled by it. Both forms
+    ## are the same distribution, and the property that matters downstream is
+    ## that every step is non-negative, so the capacity path cannot fall back
+    ## below a level it has already reached.
+    steps = [collect(s) for s in vec(Array(chn[:steps]))]
+    @test all(s -> all(>=(0), s), steps)
 end
 
 @testitem "isolation occupancy: conditioned fit stays positive" tags = [

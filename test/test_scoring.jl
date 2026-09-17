@@ -963,3 +963,150 @@ end
         end
     end
 end
+
+@testitem "scored_overlay keeps only streams with a baseline" begin
+    using DataFrames: DataFrame, nrow, names
+    using Dates: Date
+    using BVDOutbreakSize: scored_overlay
+
+    ## `reported cases` is frozen: one scored point, joint only, and no
+    ## baseline row, so the score tables already drop it and the overlay
+    ## figure should too. `confirmed cases` and `recovered` both carry a
+    ## baseline and stay, whether or not they carry an individual fit.
+    overlay = DataFrame(
+        release = ["r1", "r1", "r1", "r1", "r2"],
+        made_date = fill(Date(2026, 7, 1), 5),
+        stream = [
+            "reported cases", "confirmed cases", "confirmed cases",
+            "recovered", "recovered",
+        ],
+        horizon = [7, 7, 7, 7, 14],
+        target_date = fill(Date(2026, 7, 8), 5),
+        fit = ["joint", "joint", "baseline", "joint", "baseline"],
+        observed = [1.0, 2.0, 2.0, 3.0, 3.0],
+        median = [1.0, 2.0, 2.0, 3.0, 3.0]
+    )
+
+    kept = scored_overlay(overlay)
+    @test Set(kept.stream) == Set(["confirmed cases", "recovered"])
+    @test nrow(kept) == 4
+    ## The rows that survive keep their order and their columns.
+    @test names(kept) == names(overlay)
+    @test kept.fit == ["joint", "baseline", "joint", "baseline"]
+end
+
+@testitem "scored_overlay passes an empty table through" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: scored_overlay
+
+    ## The report renders before any release carries a forecast, so an
+    ## empty table must come back with its schema intact rather than throw.
+    empty = DataFrame(stream = String[], fit = String[], median = Float64[])
+    @test scored_overlay(empty) === empty
+end
+
+@testitem "scored_overlay drops a stream whose baseline never appears" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: scored_overlay
+
+    ## A stream scored only against itself has nothing to be scored
+    ## against, so it leaves the figure however many rows it carries.
+    overlay = DataFrame(
+        stream = ["suspected deaths", "suspected deaths"],
+        fit = ["joint", "individual"],
+        median = [1.0, 2.0]
+    )
+    @test isempty(scored_overlay(overlay))
+end
+
+@testitem "matched scores key on the made date as well" begin
+    using DataFrames: DataFrame, nrow
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_overview
+
+    ## Frozen-shaped: one release, two fixed cut-offs, one horizon. Without
+    ## the made date in the key the two collapse onto one entry.
+    scores = DataFrame(
+        release = fill("r1", 4),
+        made_date = [
+            Date(2026, 5, 20), Date(2026, 5, 20),
+            Date(2026, 5, 23), Date(2026, 5, 23),
+        ],
+        stream = fill("confirmed cases", 4),
+        horizon = fill(7, 4),
+        fit = ["frozen", "baseline", "frozen", "baseline"],
+        crps = [10.0, 20.0, 30.0, 20.0],
+        log_crps = [0.1, 0.2, 0.3, 0.2],
+        dispersion = zeros(4), overprediction = zeros(4),
+        underprediction = zeros(4), coverage_50 = zeros(4),
+        coverage_90 = zeros(4), bias = zeros(4)
+    )
+
+    out = forecast_score_overview(scores)
+    @test nrow(out) == 1
+    @test out.n[1] == 2
+    @test out.crps[1] == 20.0
+end
+
+@testitem "forecast_score_by_vintage keeps the repeated cut-offs" begin
+    using DataFrames: DataFrame, nrow
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_by_vintage
+
+    ## Two releases sharing one fixed cut-off, each also carrying a
+    ## validation cut-off of its own. Only the shared one is kept.
+    rel = ["r1", "r1", "r1", "r1", "r2", "r2", "r2", "r2"]
+    made = [
+        Date(2026, 5, 20), Date(2026, 5, 20),
+        Date(2026, 7, 1), Date(2026, 7, 1),
+        Date(2026, 5, 20), Date(2026, 5, 20),
+        Date(2026, 7, 8), Date(2026, 7, 8),
+    ]
+    scores = DataFrame(
+        release = rel, made_date = made,
+        stream = fill("confirmed cases", 8),
+        horizon = fill(7, 8),
+        fit = repeat(["frozen", "baseline"], 4),
+        crps = [10.0, 20.0, 1.0, 1.0, 5.0, 20.0, 1.0, 1.0],
+        log_crps = fill(0.1, 8),
+        dispersion = zeros(8), overprediction = zeros(8),
+        underprediction = zeros(8), coverage_50 = zeros(8),
+        coverage_90 = zeros(8), bias = zeros(8)
+    )
+
+    out = forecast_score_by_vintage(scores)
+    @test nrow(out) == 2
+    @test all(out.n .== 1)
+    ## Ordered by each release's latest made date, not by tag string.
+    @test out.release == ["r1", "r2"]
+    @test out.release_date == [Date(2026, 7, 1), Date(2026, 7, 8)]
+    @test out.crps == [10.0, 5.0]
+    @test out.rel_to_baseline == [0.5, 0.25]
+end
+
+@testitem "forecast_score_by_vintage drops unrepeated made dates" begin
+    using DataFrames: DataFrame, nrow, names
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_by_vintage
+
+    ## Every made date carried by one release only, so nothing is kept.
+    scores = DataFrame(
+        release = ["r1", "r1", "r2", "r2"],
+        made_date = [
+            Date(2026, 7, 1), Date(2026, 7, 1),
+            Date(2026, 7, 8), Date(2026, 7, 8),
+        ],
+        stream = fill("confirmed cases", 4),
+        horizon = fill(7, 4),
+        fit = ["frozen", "baseline", "frozen", "baseline"],
+        crps = [1.0, 2.0, 1.0, 2.0], log_crps = fill(0.1, 4),
+        dispersion = zeros(4), overprediction = zeros(4),
+        underprediction = zeros(4), coverage_50 = zeros(4),
+        coverage_90 = zeros(4), bias = zeros(4)
+    )
+
+    out = forecast_score_by_vintage(scores)
+    @test nrow(out) == 0
+    @test "release_date" in names(out)
+    @test "rel_to_baseline" in names(out)
+end
