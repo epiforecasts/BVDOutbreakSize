@@ -315,8 +315,9 @@ validation_stopped_fig = plot_forecast(
 
 ## See the comment above `validation_table`'s display for why this wraps #src
 ## the table in `MarkdownTable` instead of showing it directly. #src
+## No blank line between the two. A blank line counts as visible, so #src
+## Literate would write an empty code fence where the comment was. #src
 MarkdownTable(validation_stopped_streams) #hide
-
 validation_stopped_fig #hide
 
 # ## Forecast scoring across releases
