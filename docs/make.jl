@@ -130,6 +130,7 @@ function combine()
         pages = [
             "Home" => "index.md",
             "Summary" => "summary.md",
+            "Spatial" => "spatial.md",
             "Analysis" => "analysis.md",
             "Sensitivity" => "sensitivity.md",
             "API" => "api.md",
