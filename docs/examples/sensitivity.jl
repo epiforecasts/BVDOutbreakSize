@@ -989,6 +989,8 @@ _stream_chains = (
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "confirmed_deaths" => (; chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
     "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
