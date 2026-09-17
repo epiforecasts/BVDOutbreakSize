@@ -112,8 +112,10 @@ end
     obs = load_observations()
     np = length(PROVINCE_NAMES)
     prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, np
+        obs.province_confirmed_history, PROVINCE_NAMES, np
+    )
+    prov_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES, np
     )
     m = bvd_joint(
         obs.n,
@@ -125,20 +127,30 @@ end
         n_patches = np,
         province_increments = prov.increments,
         province_days = prov.days,
+        province_death_increments = prov_deaths.increments,
+        province_death_days = prov_deaths.days,
         breakpoint = obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days
     )
 
     chn = sample(
-        m, Prior(), 50; chain_type = FlexiChains.VNChain,
-        progress = false
+        m, Prior(), 50; chain_type = FlexiChains.VNChain, progress = false
     )
 
-    ## The infection fatality ratio is the fatality parameter itself: the
-    ## incubation map thins nothing, so the deaths the infections to the
-    ## cut-off go on to cause are that fraction of them. A change that broke
-    ## the identity would be a change in what the ratio means.
+    ## The per-province fatality ratio is the per-province fatality
+    ## parameter: the incubation map thins nothing, so the deaths a
+    ## province's infections go on to cause are that fraction of them, and
+    ## no ascertainment step relates the two. A change that broke the
+    ## identity would be a change in what the ratio means.
+    ifr_patch = vec(collect(chn[:IFR_patch]))
+    cfr_patch = vec(collect(chn[:CFR_patch]))
+    @test all(v -> length(v) == np, ifr_patch)
+    @test ifr_patch == cfr_patch
+    ## It pools through the death composition's sum-to-zero contrast, so it
+    ## is the pooled ratio times a contrast with geometric mean one.
     @test vec(Array(chn[:IFR])) == vec(Array(chn[:CFR]))
+    sev = vec(collect(chn[:province_cfr_relative]))
+    @test all(v -> abs(sum(log.(v))) < 1.0e-8, sev)
 
     asc = vec(Array(chn[:confirmed_ascertainment]))
     @test length(asc) == 50
@@ -150,14 +162,21 @@ end
     @test all(v -> all(x -> isfinite(x) && x > 0, v), per_patch)
 
     d = derived_ratio_draws(chn)
-    @test length(d.IFR) == 50
+    @test length(d.IFR_patch) == np
+    @test d.IFR_patch[2] == [v[2] for v in ifr_patch]
+    @test length(d.ascertainment_patch) == np
+    @test d.ascertainment_patch[2] == [v[2] for v in per_patch]
     @test d.confirmed_ascertainment == asc
-    @test length(d.province_ascertainment) == np
-    @test d.province_ascertainment[2] == [v[2] for v in per_patch]
+    ## The pooling scales come back so a reader can tell a provincial spread
+    ## the data found from one the prior put there.
+    @test length(d.cfr_pooling_sd) == 50
+    @test all(>=(0), d.cfr_pooling_sd)
+    @test all(>=(0), d.ascertainment_pooling_sd)
 
     df = derived_ratio_table(chn)
     @test df isa DataFrame
-    @test nrow(df) == 2 + np
+    ## Two per-province blocks, the two pooled values, the two scales.
+    @test nrow(df) == 2 * np + 4
     ## Intervals only: the table reports no central estimate.
     @test names(df) ==
         [

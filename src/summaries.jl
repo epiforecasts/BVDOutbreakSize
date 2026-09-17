@@ -724,18 +724,30 @@ end
 ## --- Ratios a nested model inherits --------------------------------------
 
 """
-Posterior draws of the ratios a nested model inherits from this fit.
+Posterior draws of the ratios a nested model inherits from this fit. Both
+ratios are per province, since a health zone sits inside a province and a
+national figure cannot tell one province from another.
 
-Returns `(; IFR, confirmed_ascertainment, province_ascertainment)`. `IFR`
-is the infection fatality ratio and `confirmed_ascertainment` the national
-probability that an infection is laboratory-confirmed by the cut-off, both
-vectors of draws. `province_ascertainment` is a vector of draw vectors, one
-per province in the order of `PROVINCE_NAMES`, or `nothing` on a chain
-fitted without the per-province case composition.
+Returns
+`(; IFR_patch, ascertainment_patch, IFR, confirmed_ascertainment,
+cfr_pooling_sd, ascertainment_pooling_sd)`.
+
+`IFR_patch` is the per-province infection fatality ratio and
+`ascertainment_patch` the per-province probability that an infection is
+laboratory-confirmed by the cut-off. Each is a vector of draw vectors, one
+per province in the order of `PROVINCE_NAMES`, and each is `nothing` on a
+chain fitted without the composition that identifies it, the confirmed
+deaths for the first and the confirmed cases for the second.
+
+`IFR` and `confirmed_ascertainment` are the values the provinces pool
+toward, and `cfr_pooling_sd` and `ascertainment_pooling_sd` the log-scale
+spreads of the two sum-to-zero contrasts that carry the pooling. Read a
+pooling scale against its prior. One that has not moved says the provincial
+spread is the prior's, and the provinces will have shrunk toward their
+common value.
 
 The draws are returned rather than summarised so a nested model can fit its
-own priors to them, which is what a health-zone model inside a province
-needs. The definitions are in [`bvd_joint`](@ref).
+own priors to them. The definitions are in [`bvd_joint`](@ref).
 """
 function derived_ratio_draws(
         chn;
@@ -746,22 +758,29 @@ function derived_ratio_draws(
             "chain carries no `$(key)`; it was not sampled from `bvd_joint`."
         )
     end
-    prov = _has_key(chn, :province_confirmed_ascertainment) ?
-        _per_patch(chn, :province_confirmed_ascertainment, n_patches) :
-        nothing
+    per_patch(key) = _has_key(chn, key) ?
+        _per_patch(chn, key, n_patches) : nothing
+    scalar(key) = _has_key(chn, key) ? _draws(chn, key) : nothing
     return (;
+        IFR_patch = per_patch(:IFR_patch),
+        ascertainment_patch = per_patch(:province_confirmed_ascertainment),
         IFR = _draws(chn, :IFR),
         confirmed_ascertainment = _draws(chn, :confirmed_ascertainment),
-        province_ascertainment = prov,
+        cfr_pooling_sd = scalar(:province_cfr_sd),
+        ascertainment_pooling_sd = scalar(:province_ascertainment_sd),
     )
 end
 
 """
 Credible intervals for the ratios a nested model inherits (see
 [`derived_ratio_draws`](@ref)): one row per quantity with the equal-tailed
-30%, 60% and 90% interval endpoints as percentages, and no central
-estimate. The province rows are dropped on a chain fitted without the
-per-province case composition.
+30%, 60% and 90% interval endpoints, and no central estimate.
+
+The province rows come first, since those are the values a nested model
+inherits. The pooled rows are what they pool toward. The two pooling scales
+close the table, on the log scale rather than as percentages, so a reader
+can see whether the provinces separated or shrank together. Rows whose
+composition was not scored are dropped.
 """
 function derived_ratio_table(
         chn;
@@ -775,28 +794,39 @@ function derived_ratio_table(
         lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
     )
-    function add!(label, draws)
-        s = posterior_summary(100 .* draws)
+    function add!(label, draws; scale = 100, dg = digits)
+        s = posterior_summary(scale .* draws)
         return push!(
             df,
             (
-                label, round(s.lo90; digits), round(s.lo60; digits),
-                round(s.lo30; digits), round(s.hi30; digits),
-                round(s.hi60; digits), round(s.hi90; digits),
+                label, round(s.lo90; digits = dg), round(s.lo60; digits = dg),
+                round(s.lo30; digits = dg), round(s.hi30; digits = dg),
+                round(s.hi60; digits = dg), round(s.hi90; digits = dg),
             )
         )
     end
-    add!("Infection fatality ratio (%)", d.IFR)
-    add!("Confirmed-case ascertainment (%)", d.confirmed_ascertainment)
-    if d.province_ascertainment !== nothing
-        np = min(n_patches, length(patch_labels))
+    np = min(n_patches, length(patch_labels))
+    for (per_patch, what) in (
+            (d.IFR_patch, "infection fatality ratio"),
+            (d.ascertainment_patch, "confirmed-case ascertainment"),
+        )
+        per_patch === nothing && continue
         for p in 1:np
-            add!(
-                string(patch_labels[p], " ascertainment (%)"),
-                d.province_ascertainment[p]
-            )
+            add!(string(patch_labels[p], " ", what, " (%)"), per_patch[p])
         end
     end
+    add!("Pooled infection fatality ratio (%)", d.IFR)
+    add!("Pooled confirmed-case ascertainment (%)", d.confirmed_ascertainment)
+    d.cfr_pooling_sd === nothing ||
+        add!(
+        "Fatality pooling scale (log SD)", d.cfr_pooling_sd;
+        scale = 1, dg = 3
+    )
+    d.ascertainment_pooling_sd === nothing ||
+        add!(
+        "Ascertainment pooling scale (log SD)", d.ascertainment_pooling_sd;
+        scale = 1, dg = 3
+    )
     return _prettify(df)
 end
 

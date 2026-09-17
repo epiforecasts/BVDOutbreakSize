@@ -12,22 +12,26 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
-- The joint fit reports an infection fatality ratio, and a confirmed-case
-ascertainment both nationally and per province (#755).
+- The joint fit reports a per-province infection fatality ratio and a
+per-province confirmed-case ascertainment, each partially pooled (#755).
+A health zone sits inside a province, so the provincial layer is what a
+nested zone model can inherit.
 Both are tracked deterministics rather than sampled parameters, so neither
-adds a dimension to the fit.
+adds a dimension to the fit, and both reuse a pooling structure already in
+the model rather than adding one.
 Both divide by the infections that have had time to produce the outcome
 rather than by every infection to the cut-off, so neither is the
 right-censored cut-off ratio.
-The fatality ratio comes out as the fatality parameter itself.
+The fatality ratio comes out as the per-province fatality parameter itself.
 Every infection reaches onset through a delay that thins nothing and then
 dies at that rate, and the model has no asymptomatic fraction to hold the
-two apart.
-The per-province ascertainment pairs the relative contrast the case
-composition samples, which has geometric mean one and is not a probability,
-with the level the national confirmed stream fits.
-A nested health-zone model reads all three off the parent chain rather than
-off its parameterisation.
+two apart, so no ascertainment step relates cases to infections here.
+The ascertainment pairs the relative contrast the case composition samples,
+which has geometric mean one and is not a probability, with the level the
+national confirmed stream fits, leaving its pooling intact.
+The values the provinces pool toward and the two pooling scales are
+reported alongside, so the provincial spread can be read against the priors
+that set it.
 
 - The prior on a province's relative case ascertainment carries its laboratory
 throughput per head of population, logged and centred across patches, with a

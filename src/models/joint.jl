@@ -811,15 +811,28 @@ knots `delta_knots` from which [`reconstruct_patch_rt`](@ref) rebuilds the
 provincial trajectories. `R_T` is the force-of-infection-weighted
 reproduction number implied by the summed patch infections.
 
-Three ratios are exposed for a nested model to inherit, read together by
-[`derived_ratio_draws`](@ref). `IFR` is the infection fatality ratio, the
-BVD deaths the infections to the cut-off go on to cause over those
-infections. `confirmed_ascertainment` is the probability an infection is
-laboratory-confirmed by the cut-off, and
-`province_confirmed_ascertainment` is its per-province counterpart, present
-only when the case composition is scored. Both ascertainments divide by the
-infections that have had time to be confirmed rather than by all of them,
-so neither is the right-censored cut-off ratio.
+Two per-province ratios are exposed for a nested model to inherit, read
+together by [`derived_ratio_draws`](@ref). A health zone sits inside a
+province, so the provincial layer is what a nested model can hang on.
+
+`IFR_patch` is the per-province infection fatality ratio, the BVD deaths
+the infections to the cut-off go on to cause over those infections. It is
+`CFR_patch` under its infection-level name, since the fatality ratio
+multiplies the onsets and the incubation map thins nothing. The provinces
+pool through the one sum-to-zero severity contrast the death composition
+samples, at scale `province_cfr_sd`.
+
+`province_confirmed_ascertainment` is the per-province probability that an
+infection is laboratory-confirmed by the cut-off. It pools through the
+case composition's sum-to-zero ascertainment contrast, at scale
+`province_ascertainment_sd`.
+
+`IFR` and `confirmed_ascertainment` are the values the two sets of
+provinces pool toward. Both ascertainments divide by the infections that
+have had time to be confirmed rather than by all of them, so neither is the
+right-censored cut-off ratio. Each per-province vector is present only when
+the composition that identifies it is scored, the confirmed deaths for the
+fatality ratio and the confirmed cases for the ascertainment.
 """
 @model function bvd_joint(
         n::Integer,
@@ -1251,6 +1264,15 @@ so neither is the right-censored cut-off ratio.
         CFR_patch := deaths_state.CFR .*
             death_composition_state.province_severity
         province_cfr_sd := death_composition_state.severity_sd
+        ## The same vector under its infection-level name, which is what a
+        ## nested model inherits. The fatality ratio multiplies the onsets,
+        ## and the incubation map thins nothing, so every infection reaches
+        ## onset and the per-province ratio is per infection already. There
+        ## is no ascertainment step between the two and no second pooling
+        ## structure: the provinces pool through the one sum-to-zero
+        ## severity contrast above, at scale `province_cfr_sd`.
+        IFR_patch := deaths_state.CFR .*
+            death_composition_state.province_severity
     end
 
     ## Daily cumulative trajectories for the headline 3x2 figure, exposed as

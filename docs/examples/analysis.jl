@@ -2194,7 +2194,8 @@ prior_pair_fig #hide
 #
 # #### Infection fatality ratio and case ascertainment
 #
-# Two ratios are reported for a nested model to inherit.
+# Two ratios are reported per province, for a nested model to inherit.
+# A health zone sits inside a province, so a national figure gives a zone-level model nothing to hang on, while a partially pooled provincial one gives each province its own value with the pooling holding them together.
 # Both divide by the infections that have had time to produce the outcome rather than by every infection to the cut-off.
 # Write $I_p(s)$ for the daily infections in province $p$ and $I(s)$ for their sum, $f_\text{inc}$ for the incubation period, $f_d$ for the onset-to-death delay and $f_c$ for the onset-to-confirmation delay.
 # $F$ with a subscript is the cumulative distribution of the delay named there, and $T$ is the cut-off.
@@ -2214,11 +2215,24 @@ prior_pair_fig #hide
 # Every infection reaches onset through a delay that thins nothing and then dies with probability CFR, so the ratio is the fatality parameter itself.
 # The model carries no asymptomatic fraction, so it cannot hold an infection fatality ratio apart from an onset-level one, and the equality is a property of the model rather than a result.
 #
+# The same argument applies province by province, so the per-province ratio is the per-province fatality parameter, the pooled lethality contrast $\kappa_p$ the death composition samples:
+#
+# ```math
+# \mathrm{IFR}_p(T) = \mathrm{CFR}\, \kappa_p,
+#   \qquad \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}).
+#   \tag{61}
+# ```
+#
+# No ascertainment step relates the two, because the ratio is per infection already.
+# The provinces pool through the one sum-to-zero contrast $\kappa_p$ at scale $\tau_\kappa$, so there is a single pooling structure rather than a second one built for this ratio.
+# Read $\tau_\kappa$ against its half-normal prior of scale 0.3.
+# A posterior that has not moved says the provincial spread is the prior's and the provinces have shrunk toward the pooled value.
+#
 # Confirmed-case ascertainment is the same construction on the confirmed stream, with $C_\text{conf}(T)$ the modelled cumulative confirmed cases:
 #
 # ```math
 # \alpha(T) = \frac{C_\text{conf}(T)}
-#   {\sum_{s \le T} I(s)\, F_{\text{inc} * c}(T - s)}. \tag{61}
+#   {\sum_{s \le T} I(s)\, F_{\text{inc} * c}(T - s)}. \tag{62}
 # ```
 #
 # The provincial version splits that national total between provinces the way the case composition splits it, then divides each province's share by its own denominator:
@@ -2226,13 +2240,14 @@ prior_pair_fig #hide
 # ```math
 # \alpha_p(T) = \frac{C_\text{conf}(T)\, a_p M_p}
 #   {\bigl(\sum_q a_q M_q\bigr)
-#    \sum_{s \le T} I_p(s)\, F_{\text{inc} * c}(T - s)}, \tag{62}
+#    \sum_{s \le T} I_p(s)\, F_{\text{inc} * c}(T - s)}, \tag{63}
 # ```
 #
 # Here $a_p$ is the relative case ascertainment the composition samples and $M_p$ the province's modelled confirmed volume to the cut-off, the quantity $a_p$ weights there.
 # The relative ascertainment is a contrast with geometric mean one, so it carries no level and is not a probability.
-# Equation (62) pairs it with the level the national confirmed stream fits.
-# Weighting the provincial ratios by their own denominators recovers the national confirmed total, so the national ascertainment is their infection-weighted mean.
+# Equation (63) pairs it with the level the national confirmed stream fits.
+# Weighting the provincial ratios by their own denominators recovers the national confirmed total, so the pooled ascertainment of equation (62) is their infection-weighted mean.
+# The provincial spread here is the case composition's own pooling scale $\tau_a$, since equation (63) rescales $a_p$ and leaves its contrast intact.
 #
 # #### One-week-ahead forecast
 #
@@ -4192,10 +4207,11 @@ no_onward_fig #hide
 
 # ### Ratios a nested model inherits
 #
-# The infection fatality ratio and the confirmed-case ascertainment, both defined in the [infection fatality ratio](@ref "Infection fatality ratio and case ascertainment") Methods section.
+# The infection fatality ratio and the confirmed-case ascertainment, per province, both defined in the [infection fatality ratio](@ref "Infection fatality ratio and case ascertainment") Methods section.
 # A model nested inside a province takes its priors from these draws rather than from this model's parameterisation.
-# The fatality ratio is the fatality parameter under the definition above, so it repeats the structural ratio quoted below rather than adding to it.
-# The ascertainment rows are the share of infections laboratory-confirmed by the cut-off, once the infections too recent to have been confirmed are taken out of the denominator.
+# The fatality rows are the province's fatality parameter under the definition above, so they repeat the structural ratios of the [province fatality table](@ref "Confirmed case-fatality ratio") rather than adding to them.
+# The ascertainment rows are the share of that province's infections laboratory-confirmed by the cut-off, once the infections too recent to have been confirmed are taken out of the denominator.
+# The pooled rows are what the provinces pool toward, and the two pooling scales close the table so the provincial spread can be read against the priors that set it.
 # The table gives interval endpoints and no central estimate.
 
 #md # ```@raw html
