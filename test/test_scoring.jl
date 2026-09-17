@@ -910,3 +910,86 @@ end
         median = [1.0, 2.0])
     @test isempty(scored_overlay(overlay))
 end
+
+@testitem "matched scores key on the made date as well" begin
+    using DataFrames: DataFrame, nrow
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_overview
+
+    ## Frozen-shaped: one release, two fixed cut-offs, one horizon. Without
+    ## the made date in the key the two collapse onto one entry.
+    scores = DataFrame(
+        release = fill("r1", 4),
+        made_date = [Date(2026, 5, 20), Date(2026, 5, 20),
+            Date(2026, 5, 23), Date(2026, 5, 23)],
+        stream = fill("confirmed cases", 4),
+        horizon = fill(7, 4),
+        fit = ["frozen", "baseline", "frozen", "baseline"],
+        crps = [10.0, 20.0, 30.0, 20.0],
+        log_crps = [0.1, 0.2, 0.3, 0.2],
+        dispersion = zeros(4), overprediction = zeros(4),
+        underprediction = zeros(4), coverage_50 = zeros(4),
+        coverage_90 = zeros(4), bias = zeros(4))
+
+    out = forecast_score_overview(scores)
+    @test nrow(out) == 1
+    @test out.n[1] == 2
+    @test out.crps[1] == 20.0
+end
+
+@testitem "forecast_score_by_vintage keeps the repeated cut-offs" begin
+    using DataFrames: DataFrame, nrow
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_by_vintage
+
+    ## Two releases sharing one fixed cut-off, each also carrying a
+    ## validation cut-off of its own. Only the shared one is kept.
+    rel = ["r1", "r1", "r1", "r1", "r2", "r2", "r2", "r2"]
+    made = [Date(2026, 5, 20), Date(2026, 5, 20),
+        Date(2026, 7, 1), Date(2026, 7, 1),
+        Date(2026, 5, 20), Date(2026, 5, 20),
+        Date(2026, 7, 8), Date(2026, 7, 8)]
+    scores = DataFrame(
+        release = rel, made_date = made,
+        stream = fill("confirmed cases", 8),
+        horizon = fill(7, 8),
+        fit = repeat(["frozen", "baseline"], 4),
+        crps = [10.0, 20.0, 1.0, 1.0, 5.0, 20.0, 1.0, 1.0],
+        log_crps = fill(0.1, 8),
+        dispersion = zeros(8), overprediction = zeros(8),
+        underprediction = zeros(8), coverage_50 = zeros(8),
+        coverage_90 = zeros(8), bias = zeros(8))
+
+    out = forecast_score_by_vintage(scores)
+    @test nrow(out) == 2
+    @test all(out.n .== 1)
+    ## Ordered by each release's latest made date, not by tag string.
+    @test out.release == ["r1", "r2"]
+    @test out.release_date == [Date(2026, 7, 1), Date(2026, 7, 8)]
+    @test out.crps == [10.0, 5.0]
+    @test out.rel_to_baseline == [0.5, 0.25]
+end
+
+@testitem "forecast_score_by_vintage drops unrepeated made dates" begin
+    using DataFrames: DataFrame, nrow, names
+    using Dates: Date
+    using BVDOutbreakSize: forecast_score_by_vintage
+
+    ## Every made date carried by one release only, so nothing is kept.
+    scores = DataFrame(
+        release = ["r1", "r1", "r2", "r2"],
+        made_date = [Date(2026, 7, 1), Date(2026, 7, 1),
+            Date(2026, 7, 8), Date(2026, 7, 8)],
+        stream = fill("confirmed cases", 4),
+        horizon = fill(7, 4),
+        fit = ["frozen", "baseline", "frozen", "baseline"],
+        crps = [1.0, 2.0, 1.0, 2.0], log_crps = fill(0.1, 4),
+        dispersion = zeros(4), overprediction = zeros(4),
+        underprediction = zeros(4), coverage_50 = zeros(4),
+        coverage_90 = zeros(4), bias = zeros(4))
+
+    out = forecast_score_by_vintage(scores)
+    @test nrow(out) == 0
+    @test "release_date" in names(out)
+    @test "rel_to_baseline" in names(out)
+end
