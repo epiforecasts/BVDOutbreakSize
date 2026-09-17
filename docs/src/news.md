@@ -187,6 +187,14 @@ Those together are the signature of a zero-mean walk carrying a systematic trend
 `SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
 Both environments now read `SHA = "0.7.0, 1"`.
 
+### Dependencies
+
+- The docs, test and scripts environments no longer carry compat entries for
+Julia standard libraries, and Dependabot no longer opens pull requests for them.
+Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no
+version, one of which merged in #699.
+Standard libraries ship with Julia, so these environments have nothing to pin.
+
 ## v1.18.0
 
 Changes since v1.17.0
