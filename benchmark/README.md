@@ -56,7 +56,7 @@ Because a pair is registered only when its smoke test passes, a pair that disapp
 
 ## Shared fixtures
 
-The component list lives in the `ADFixtures` path package at `test/ADFixtures`, not here.
+The component list lives in `test/ad_fixtures.jl`, not here, and this suite includes that file.
 `test/test_ad_gradients.jl` asserts every component differentiates under Mooncake from the same list, so the benchmarked surface and the tested surface cannot drift apart.
 Add a model there and it is both timed and asserted.
 
@@ -69,5 +69,5 @@ They also measure pure helpers below the component level this suite reports.
 
 ## CI
 
-`.github/workflows/benchmark.yaml` runs the suite on pull requests that touch `src/`, `ext/`, `benchmark/` or `test/ADFixtures/`, once per revision in its own job, and posts a single comparison comment.
+`.github/workflows/benchmark.yaml` runs the suite on pull requests that touch `src/`, `ext/`, `benchmark/` or `test/ad_fixtures.jl`, once per revision in its own job, and posts a single comparison comment.
 It does not run on pushes to `main` and records no history.

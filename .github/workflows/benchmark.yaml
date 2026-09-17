@@ -27,7 +27,7 @@ on:
       - 'src/**'
       - 'ext/**'
       - 'benchmark/**'
-      - 'test/ADFixtures/**'
+      - 'test/ad_fixtures.jl'
       - '.github/workflows/benchmark.yaml'
   workflow_dispatch:
 

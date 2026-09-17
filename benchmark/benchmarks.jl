@@ -8,17 +8,18 @@
 #   "AD gradients" — the gradient of that same log-density, per component
 #       per backend, keyed `["AD gradients"][group][component][backend]`.
 #
-# The components come from the `ADFixtures` path package at
-# `test/ADFixtures`, which also drives `test/test_ad_gradients.jl`, so the
-# surface the tests assert is differentiable is the surface timed here.
+# The components come from `test/ad_fixtures.jl`, which
+# `test/test_ad_gradients.jl` includes too, so the surface the tests assert
+# is differentiable is the surface timed here.
 #
 # Enzyme is loaded so `BVDOutbreakSize.enzyme_adtype()` resolves and
 # `ADFixtures.backends()` offers it alongside Mooncake. Which pairs
 # actually register is decided by the smoke test in `src/ad_gradients.jl`.
 
 using BenchmarkTools
-using ADFixtures
 using Enzyme
+
+include(joinpath(@__DIR__, "..", "test", "ad_fixtures.jl"))
 
 # The full `bvd_joint` is off by default: one gradient is ~14 ms over 76
 # parameters behind a cold compile of ~18 min under Mooncake, which no CI
