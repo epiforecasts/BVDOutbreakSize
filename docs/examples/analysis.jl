@@ -2152,33 +2152,6 @@ prior_pair_fig #hide
 # The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
 
-# #### Fit diagnostics
-#
-# Fit-quality diagnostics for the joint and per-stream fits: the worst R-hat, the smallest bulk effective sample size, and the number of divergent transitions.
-
-#md # ```@raw html
-#md # <details><summary>Fit diagnostics</summary>
-#md # ```
-
-diagnostics_table( #hide
-    "joint" => chn_joint, #hide
-    "joint, no patches" => chn_no_patches, #hide
-    "exports" => chn_exports, #hide
-    "deaths (DRC)" => chn_deaths, #hide
-    "cases (DRC)" => chn_cases, #hide
-    "confirmed (DRC)" => chn_confirmed, #hide
-    "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
-    "isolation (DRC)" => chn_treatment, #hide
-    "onsets (DRC)" => chn_onsets, #hide
-    "frozen (1wk back)" => frozen_lastweek.chn, #hide
-    (RUN_SENSITIVITY ? #hide
-     ["delay sensitivity" => chn_joint_community_delay, #hide
-        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] : [])...) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # #### No-onward-transmission counterfactual
 #
 # To bound the deaths already committed at the cut-off, we project the deaths that would still occur if all transmission stopped on the report date.
@@ -2513,6 +2486,38 @@ end;
 #md # ```
 
 summary_ranges #hide
+
+# #### Fit diagnostics
+#
+# Fit diagnostics for the joint fit and each individual fit.
+# These indicate how reliable the results are from the perspective of the inference algorithm.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues.
+
+#md # ```@raw html
+#md # <details><summary>Build the fit diagnostics table</summary>
+#md # ```
+
+fit_diagnostics_table = diagnostics_table(
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    (RUN_SENSITIVITY ?
+     ["delay sensitivity" => chn_joint_community_delay,
+        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] :
+     [])...);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+fit_diagnostics_table #hide
 
 # ### Joint model estimates
 #
@@ -4576,6 +4581,13 @@ end
 ## which is the by-province counterpart of the two headline tables above.
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, markdown_table(province_overview_table))
+end
+
+## Fit diagnostics: the same table the Results section shows, so the
+## dashboard reports how the fit behind its numbers sampled without
+## building a second table.
+open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
+    print(io, markdown_table(fit_diagnostics_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.

@@ -1,8 +1,8 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor, median
+using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
-using DataFrames: DataFrame, rename, select, Not
+using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister
 using Dates: Date, Day, date2epochdays, epochdays2date
@@ -45,6 +45,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        province_cfr_table, province_forecast_table,
        province_forecast_vs_truth, plot_province_forecast,
        fit_diagnostics, diagnostics_table,
+       parameter_diagnostics, worst_parameters_table,
+       family_diagnostics_table, diagnostic_spread_table,
+       sampler_by_chain_table, divergence_location_table,
+       diagnostic_contrast, diagnostic_contrast_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
        crps_sample, log_crps_sample, crps_decomposition, score_draws,
@@ -71,6 +75,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        plot_infections_patches, plot_imports_patches,
        plot_patch_summary,
        plot_province_composition_ppc,
+       plot_rhat_spread, plot_parameter_index_diagnostics,
+       plot_divergence_locations, plot_diagnostic_contrast,
        reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
        onset_nowcast_draws, plot_onset_nowcast_grid,
        predict_no_onward_deaths, plot_no_onward_deaths,
@@ -156,6 +162,7 @@ include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
 include("summaries.jl")
+include("diagnostics.jl")
 include("scoring.jl")
 include("counterfactual.jl")
 include("forecast.jl")
