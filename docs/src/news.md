@@ -34,6 +34,8 @@ Every fit-cache key changes, so the next build refits.
 
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- The per-province headline is a table per quantity, with a row per province and a column per interval level (#724).
+Infections to date, the reproduction number and the case-fatality ratio were nested bullet lists that repeated the interval level in every cell.
 - Recovered is labelled recovered among confirmed wherever the stream is named (#737).
 It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
 - The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
