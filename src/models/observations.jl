@@ -108,9 +108,8 @@ days[i]]` takes `rate[i]`, and any day beyond the last vintage takes the
 last rate (a flat carry-forward of the final window). When `days` is
 empty the whole grid takes `rate[1]` if present, else zero, so a scalar
 background is recovered. Pure and AD-transparent. The element type
-follows `rate`. Used to turn the per-vintage background random effect
-([`background_re_model`](@ref)) into the additive daily background the
-suspected-case and suspected-death streams consume.
+follows `rate`. Used to put the per-window laboratory positivity on the
+daily grid ([`confirmed_cases_model`](@ref)).
 """
 function expand_vintage_rate(
         rate::AbstractVector,

@@ -567,20 +567,6 @@ MarkdownTable(vintage_table) #hide
 # When a secondary patch first carries infections then follows from the kernel and the coupling intensity of the mixing subsection below.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: seed_model</summary>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, CodeTracking, Markdown
-#md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.seed_model()), "\n```"))
-#md # ```
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
 #md # <details><summary>Submodel: exponential_growth_model</summary>
 #md # ```
 
