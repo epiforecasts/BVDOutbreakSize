@@ -2182,6 +2182,29 @@ cfr_prior_fig #hide
 # A revision can move counts out of named zones, which leaves the unallocated row flat and the clamp absorbing the fall.
 # The death composition therefore leaves out any vintage on which a named zone loses more than one death, which is five vintages beyond those the unallocated row identifies; the case composition keeps the unallocated rule.
 # The mixing and the choice of a low or high patch draw in place of the mean, and a cases-only fit without the death composition, are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
+#
+# #### What the zone model takes from the province model, and where it departs
+#
+# The zone model is the province model one level down and follows its choices where they carry over.
+# The deviations are an AR(1) on weekly knots, centred to sum to zero within the group and mean-reverting on a shared half-life, as the provincial deviations are.
+# The gravity term is the province model's own kernel function.
+# The cases and the deaths are separate compositions conditional on the group total, each with its own overdispersion, as the province model scores its two.
+# The identification argument is the same one, and the reporting conventions are the same.
+#
+# Four departures are deliberate, each for a reason that belongs to the zone level rather than to a different reading of the same problem.
+#
+# A zone's infections are a share of its patch's total rather than a renewal in their own right, so no infection crosses a patch boundary and the patch totals are the parent's.
+# The province model runs an absolute renewal coupled by importation.
+# Moving the zones onto that footing is a change of model rather than of setting, and it is deferred.
+#
+# One drift scale is shared across all zones and the deviations are independent, where the province model gives each patch its own drift scale and learns the correlation between patches.
+# A correlation factor over 62 zones is a different object from one over four provinces, on a fit that already sits at its tree-depth cap almost every iteration.
+# A per-patch drift scale is the cheaper half of this and is the more natural thing to adopt next.
+#
+# The deviation scale priors are looser than the province model's, a half-normal at 0.3 and 0.1 against its 0.15 and 0.05, because a health zone is a smaller unit and departs from its patch further than a province departs from the country.
+#
+# Case fatality is assumed constant within a patch rather than partially pooled, which is the departure with the least room to hide, since it is what the death shares rest on.
+# The sensitivity page fits the province choice scaled down and reports whether the data support the assumption.
 
 #md # ```@raw html
 #md # <details><summary>Model: bvd_zone</summary>
