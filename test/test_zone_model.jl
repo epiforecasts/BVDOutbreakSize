@@ -822,7 +822,7 @@ end
         zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"])
 end
 
-@testitem "bvd_zone: deaths add one cumulative composition term" setup=[
+@testitem "bvd_zone: deaths add a per-vintage composition term" setup=[
     ZoneSynthetic
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_composition_logpdf, _zone_kappa
@@ -842,17 +842,22 @@ end
     inputs = zone_fit_inputs(syn.chain, obs; zones = nothing,
         patch_names = ["a", "b"], patch_labels = ["A", "B"])
     zd = inputs.model_data
-    @test vec(zd.death_counts) == cld.(inputs.cumulative, 10)
-    @test zd.death_cell_patch == [1, 2]
-    @test zd.death_days == [inputs.n]
+    ## Deaths are scored per vintage, on the same grid as the cases, and
+    ## the rows sum to the cumulative the table ends on.
+    @test size(zd.death_counts) == size(zd.counts)
+    @test zd.death_days == zd.days
+    @test vec(sum(zd.death_counts; dims = 2)) == cld.(inputs.cumulative, 10)
+    @test length(zd.death_cell_patch) == length(zd.death_cell_vintage)
+    @test length(zd.death_cell_patch) > 2
+    @test all(>(0), zd.death_cell_total)
     truth = syn.truth
     params = (; z_w = truth.z_w, σ_level = truth.σ_level,
         z_level = truth.z_level, δ_halflife = 42.0, σ_δ = truth.σ_δ,
-        z_drift = truth.z_drift, ρ = 0.05)
+        z_drift = truth.z_drift, ρ = 0.05, ρ_death = 0.05)
     loglik(m) = DynamicPPL.loglikelihood(m,
         DynamicPPL.VarInfo(Xoshiro(1), m, DynamicPPL.InitFromParams(params)))
-    base = loglik(bvd_zone(zd))
-    with = loglik(bvd_zone(zd; deaths = true))
+    base = loglik(bvd_zone(zd; deaths = false))
+    with = loglik(bvd_zone(zd))
     @test isfinite(with)
     ## The difference is the death composition at the same forward pass.
     fw = zone_forward(zd, truth.δ_knots, truth.w0, nothing)
@@ -864,7 +869,7 @@ end
         zd.death_cell_vintage, zd.death_cell_total, zd.death_cell_const,
         zd.patch_ranges, _zone_kappa(0.05))
     @test with - base ≈ extra rtol = 1e-8
-    ## Without allocated zone deaths the fit refuses the variant.
+    ## Without allocated zone deaths the fit refuses the stream.
     @test_throws ErrorException fit_zone(syn.chain, syn.obs; deaths = true,
         zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"])
 end
@@ -883,7 +888,7 @@ end
     zd = inputs.model_data
     K = length(zd.knots)
     model = bvd_zone(zd)
-    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 4
+    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 5
     st = zone_initial_params(model, inputs; chains = 3, jitter = 0.1)
     @test length(st.x0) == dim
     @test all(isfinite, st.x0)
@@ -907,7 +912,7 @@ end
     @test zd0.n_walking == 0
     model0 = bvd_zone(zd0)
     st_level = zone_initial_params(model0, inputs0)
-    @test length(st_level.x0) == 2 * syn.nz + 4
+    @test length(st_level.x0) == 2 * syn.nz + 5
     chn0 = sample(model0, Prior(), 3; chain_type = FlexiChains.VNChain,
         progress = false)
     @test !any(p -> string(p) == "z_drift", FlexiChains.parameters(chn0))

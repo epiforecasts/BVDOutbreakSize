@@ -592,12 +592,22 @@ allocated total with concentration `κ π`
 ([`zone_composition_logpdf`](@ref)), as one `@addlogprob!` over every
 cell.
 
+Deaths are fitted jointly with the cases and are on by default. The
+allocated zone deaths of every vintage follow a second
+Dirichlet-multinomial, on the infection-to-confirmed-death PMF rather than
+the case delay, with its own concentration from `ρ_death`.
+
+Both compositions are normalised within a patch, so a per-zone lethality
+multiplier would cancel from the case shares and be absorbed by the death
+shares, reabsorbing the signal the deaths carry. There is none: zone case
+fatality is assumed constant within a patch. That assumption is what makes
+the death shares weight zones by incidence alone, leaving the case shares
+to identify relative ascertainment. It is an assumption here, where the
+province model partially pools its provincial ratios instead.
+
 `mixing = true` adds one shared within-patch mixing fraction per patch,
 `ε_p ~ Beta(1, 100)`, redistributing force through the gravity kernel
-`zd.mixing_kernel`. `deaths = true` adds one Dirichlet-multinomial on the
-cumulative allocated zone deaths at the last vintage, through the
-infection-to-death-confirmation PMF, with no extra multiplier. Both are off
-by default.
+`zd.mixing_kernel`; it is off by default.
 
 ### Deterministics
 
@@ -612,11 +622,12 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
 """
 @model function bvd_zone(zd;
         mixing::Bool = false,
-        deaths::Bool = false,
+        deaths::Bool = true,
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
+        rho_death_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         mixing_prior = Beta(1, 100),
         offset_prior = Normal(0, 1))
     nz = size(zd.counts, 1)
@@ -628,6 +639,11 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     δ_halflife ~ region_halflife_prior
     σ_δ ~ region_drift_sd_prior
     ρ ~ rho_prior
+    ## A case table and a death table do not disperse alike, so the death
+    ## composition carries its own concentration rather than sharing one.
+    if deaths
+        ρ_death ~ rho_death_prior
+    end
     ## Sampled only when used, or they would be prior-only dimensions.
     n_drift = zd.n_walking * (K - 1)
     if n_drift > 0
@@ -650,15 +666,16 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
         zd.cell_patch, zd.cell_vintage, zd.cell_total, zd.cell_const,
         zd.patch_ranges, κ)
     if deaths
-        ## One composition of the cumulative allocated deaths at the last
-        ## vintage, through the death-confirmation delay.
+        ## The allocated deaths of every vintage, through the
+        ## infection-to-confirmed-death delay rather than the case delay.
         death_daily = zd.death_matrix * fw.infections .+
                       zd.death_pre_rows .* transpose(w0)
         D = zone_report_increments(death_daily, w0, zd.patch_ranges,
             zd.death_days, zd.t0, zd.death_pre_cum)
         @addlogprob! zone_composition_logpdf(zd.death_counts, D,
             zd.death_cell_patch, zd.death_cell_vintage,
-            zd.death_cell_total, zd.death_cell_const, zd.patch_ranges, κ)
+            zd.death_cell_total, zd.death_cell_const, zd.patch_ranges,
+            _zone_kappa(ρ_death))
     end
     nd = zd.n - zd.t0 + 1
     cum = _zone_cumulative_infections(fw.infections, w0, zd.patch_ranges,
@@ -673,6 +690,9 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     region_drift_sd_zone := σ_δ
     region_halflife_zone := δ_halflife
     composition_rho_zone := ρ
+    if deaths
+        composition_rho_death_zone := ρ_death
+    end
     if mixing
         mixing_epsilon_zone := ε_mix
     end
@@ -780,6 +800,14 @@ end
 
 ## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
 ## zero when the zone is absent from the block.
+## One zone's cumulative series, or `nothing` when the table omits it.
+function _zone_history_series(history, prov::AbstractString,
+        zone::AbstractString)
+    haskey(history, prov) || return nothing
+    haskey(history[prov], zone) || return nothing
+    return history[prov][zone]
+end
+
 function _zone_last_cumulative(history, prov::AbstractString,
         zone::AbstractString)
     haskey(history, prov) || return 0
@@ -955,21 +983,57 @@ function zone_fit_inputs(parent_chain, obs;
     report_matrix = zone_delay_operator(parent.f, nd)
     report_pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone,
         t0, n)
-    ## Optional death composition: cumulative allocated deaths at the last
-    ## vintage, zones absent from the death table counting zero.
-    death_counts = reshape(
-        [_zone_last_cumulative(death_history, zone_province[z],
-             zone_names[z]) for z in 1:nz], nz, 1)
-    death_cell_patch = Int[]
-    death_cell_total = Int[]
-    death_cell_const = Float64[]
+    ## Death composition, scored per vintage as the cases are. The rows are
+    ## built by looking each zone up by name rather than by restacking the
+    ## death table, so they line up with the case rows even where a zone is
+    ## missing from one table; a zone absent from the death table counts
+    ## zero throughout.
+    ##
+    ## The exclusions widen the unallocated rule. A revision that moves
+    ## deaths out of named zones leaves the unallocated row flat or rising,
+    ## so the unallocated rule alone does not see it, and the increment
+    ## clamp would absorb the fall silently.
+    death_reattribution = zone_reattribution_days(death_history;
+        include_zone_falls = true)
+    death_counts = zeros(Int, nz, nv)
+    for z in 1:nz
+        h = _zone_history_series(death_history, zone_province[z],
+            zone_names[z])
+        h === nothing && continue
+        h.days == days || error(
+            "zone_fit_inputs: the death table for `$(zone_province[z])." *
+            "$(zone_names[z])` is reported on different vintage days to " *
+            "the confirmed-case tables; both compositions read one grid.")
+        prev = 0
+        for v in 1:nv
+            c = Int(h.counts[v])
+            death_counts[z, v] = max(c - prev, 0)
+            prev = c
+        end
+    end
     for (p, zs) in enumerate(patch_ranges)
         isempty(zs) && continue
-        N = sum(@view death_counts[zs, 1])
+        provs = unique(zone_province[z] for z in zs)
+        for pr in provs, d in get(death_reattribution, pr, Int[])
+
+            v = findfirst(==(d), days)
+            v === nothing && continue
+            death_counts[zs, v] .= 0
+        end
+    end
+    death_cell_patch = Int[]
+    death_cell_vintage = Int[]
+    death_cell_total = Int[]
+    death_cell_const = Float64[]
+    for v in 1:nv, (p, zs) in enumerate(patch_ranges)
+
+        isempty(zs) && continue
+        N = sum(@view death_counts[zs, v])
         N > 0 || continue
         push!(death_cell_patch, p)
+        push!(death_cell_vintage, v)
         push!(death_cell_total, N)
-        push!(death_cell_const, _zone_cell_const(death_counts, zs, 1))
+        push!(death_cell_const, _zone_cell_const(death_counts, zs, v))
     end
     death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
     death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
@@ -995,9 +1059,8 @@ function zone_fit_inputs(parent_chain, obs;
         fixed.force_pre, fixed.report_pre_cum,
         fixed.infections_pre, mixing_kernel, interp, report_matrix,
         report_pre_rows,
-        death_counts, death_cell_patch,
-        death_cell_vintage = ones(Int, length(death_cell_patch)),
-        death_cell_total, death_cell_const, death_days = [n],
+        death_counts, death_cell_patch, death_cell_vintage,
+        death_cell_total, death_cell_const, death_days = days,
         death_pre_cum = death_fixed.report_pre_cum, death_matrix,
         death_pre_rows)
     dates = [obs.seeding + Day(d - 1) for d in days]
@@ -1052,14 +1115,15 @@ $(TYPEDSIGNATURES)
 Per-chain starting points for [`bvd_zone`](@ref), in unconstrained space.
 The constrained start is the data-informed point of the specification
 (`δ = 0`, the initial shares from the observed first-vintage cumulative,
-`σ_L = 0.2`, `σ_δ = 0.05`, `h = 42`, `ρ = 0.05`, and `ε = 0.01` with
-mixing), built through a `VarInfo`, linked, then jittered per chain with
+`σ_L = 0.2`, `σ_δ = 0.05`, `h = 42`, `ρ = 0.05`, `ρ_death = 0.05` with
+deaths, and `ε = 0.01` with mixing), built through a `VarInfo`, linked, then jittered per chain with
 `N(0, jitter²)` noise. Returns
 `(; inits, x0, logp)`, the `InitFromVector` strategies, the unjittered
 unconstrained vector and each chain's initial log joint density.
 """
 function zone_initial_params(model, inputs; chains::Integer = 2,
-        seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false)
+        seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false,
+        deaths::Bool = true)
     zd = inputs.model_data
     nz = length(inputs.z_w_start)
     K = length(zd.knots)
@@ -1068,6 +1132,9 @@ function zone_initial_params(model, inputs; chains::Integer = 2,
         δ_halflife = 42.0, σ_δ = 0.05, ρ = 0.05)
     if n_drift > 0
         params = merge(params, (; z_drift = zeros(n_drift)))
+    end
+    if deaths
+        params = merge(params, (; ρ_death = 0.05))
     end
     if mixing
         params = merge(params,
@@ -1117,7 +1184,7 @@ function fit_zone(parent_chain, obs;
         seed::Integer = 20260518,
         callback = nothing,
         mixing::Bool = false,
-        deaths::Bool = false,
+        deaths::Bool = true,
         parent_summary::Symbol = :mean,
         walk_threshold::Integer = 30,
         lead_days::Integer = 42,
@@ -1142,7 +1209,8 @@ function fit_zone(parent_chain, obs;
             "fit_zone: deaths = true but the observations carry no allocated " *
             "zone deaths.")
     model = bvd_zone(zd; mixing, deaths)
-    start = zone_initial_params(model, inputs; chains, seed, jitter, mixing)
+    start = zone_initial_params(model, inputs; chains, seed, jitter,
+        mixing, deaths)
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)
     n_knots = length(inputs.knots)
