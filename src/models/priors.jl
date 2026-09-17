@@ -900,13 +900,20 @@ the walk is strongly informed, and the non-centred form
 `steps = σ_rw .* z` funnels, with `z` diverging as `σ_rw → 0` and
 stretching NUTS trajectories. That funnel is what broke the joint fit
 when the series resumed. The worst R-hat went to 1.6 with 5 bulk
-effective samples, against 1.05 and 65 on the vintage before, and the
-last walk innovation was among the worst-mixing parameters. Pass
-`centred = false` for the non-centred form, the better choice when the
-walk is weakly informed and prior-dominated. Both forms carry the same
-prior, a cumulative sum of `Normal(0, σ_rw)` steps, so only the sampled
-coordinates differ. [`pooled_dispersion_model`](@ref) carries the same
-switch for the same reason.
+effective samples, against 1.05 and 65 on the vintage before.
+
+The funnel shows in the draws. Divergences concentrate at the small end
+of `σ_rw`, at a median of 0.147 against 0.185 over all draws, and the
+correlation between `σ_rw` and its own innovations doubles, mean absolute
+0.159 to 0.323. The walk fails along its whole length rather than at its
+newly informed tail. R-hat runs 1.11 to 1.60 across the knots, against
+1.00 to 1.01 before, and the weakest mixing sits in the middle knots as
+much as the last. Pass `centred = false` for the non-centred form, the
+better choice when the walk is weakly informed and prior-dominated. Both
+forms carry the same prior, a cumulative sum of `Normal(0, σ_rw)` steps,
+so only the sampled coordinates differ.
+[`pooled_dispersion_model`](@ref) carries the same switch for the same
+reason.
 
 Knots run only over the surveillance window `[onset, n]`, so the number
 of innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
