@@ -161,14 +161,14 @@ validation_table = forecast_vs_truth(validation_forecast;
 #md # <details><summary>Forecast-versus-observed validation table</summary>
 #md # ```
 
-## `MarkdownTable` rather than a bare table expression: a DataFrame is
-## `text/html`-showable, Literate prefers that mime, and the `@raw html`
-## block it writes crosses Documenter's raw-block regex limit once the
-## table grows. `MarkdownTable` is markdown-showable and not
-## html-showable, so the table goes out as an ordinary markdown table
-## rather than a fixed-width block of printed output. See its docstring
-## for the mechanism. The same treatment is applied to every DataFrame
-## display in this file and in `analysis.jl`.
+## `MarkdownTable` rather than a bare table expression: a DataFrame is #src
+## `text/html`-showable, Literate prefers that mime, and the `@raw html` #src
+## block it writes crosses Documenter's raw-block regex limit once the #src
+## table grows. `MarkdownTable` is markdown-showable and not #src
+## html-showable, so the table goes out as an ordinary markdown table #src
+## rather than a fixed-width block of printed output. See its docstring #src
+## for the mechanism. The same treatment is applied to every DataFrame #src
+## display in this file and in `analysis.jl`. #src
 MarkdownTable(validation_table) #hide
 
 #md # ```@raw html
@@ -313,8 +313,8 @@ validation_stopped_fig = plot_forecast(
 #md # </details>
 #md # ```
 
-## See the comment above `validation_table`'s display for why this wraps
-## the table in `MarkdownTable` instead of showing it directly.
+## See the comment above `validation_table`'s display for why this wraps #src
+## the table in `MarkdownTable` instead of showing it directly. #src
 MarkdownTable(validation_stopped_streams) #hide
 
 validation_stopped_fig #hide

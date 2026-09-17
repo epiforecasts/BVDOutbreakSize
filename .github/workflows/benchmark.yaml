@@ -1,0 +1,138 @@
+name: Benchmark
+
+# Per-component AD gradient comparison against `main`, posted as a single PR
+# comment. The components are the observation submodels, the latent process
+# and the single-stream composers, not the full `bvd_joint`: the joint's
+# gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, which
+# no CI run can afford (see benchmark/README.md).
+#
+# Paths-filtered, so it runs only when the differentiated surface or the
+# suite itself changes. It does not run on pushes to `main`, and there is no
+# benchmark-history job: the docs workflow already spends hours fitting, and
+# a timeline of these numbers would not pay for the runner time.
+#
+# Each revision is benchmarked in its own job, a fresh runner checked out at
+# that revision, so `main` runs `main`'s model source and fixtures while the
+# PR runs its own. That is what lets a component that changed shape still be
+# compared, and it keeps one runner from compiling two AD stacks at once.
+#
+# Uses `pull_request` (not `pull_request_target`): the comparison runs the
+# PR's own code, so the comment-posting token stays scoped to same-repo PRs.
+# Fork PRs get a read-only token and will not post a comment.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'ext/**'
+      - 'benchmark/**'
+      - 'test/ad_fixtures.jl'
+      - '.github/workflows/benchmark.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # One revision per job. `ref` selects the checkout; `name` labels the
+  # uploaded results artifact.
+  benchmark:
+    name: Benchmark (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pr
+            ref: ${{ github.event.pull_request.head.sha }}
+          - name: main
+            ref: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          # Matches the test workflow: only a job that finished may write the
+          # depot cache, so a run cancelled mid-`Pkg` never becomes the
+          # newest snapshot for the restore key.
+          save-always: false
+          key-prefix: '2026-09-15'
+      # A revision that predates the suite (the `main` baseline until this
+      # lands) has no `benchmark/run.jl`. Write an empty result there rather
+      # than failing: the comparison then reports every benchmark as new.
+      - name: Run benchmark suite
+        run: |
+          if [ ! -f benchmark/run.jl ]; then
+            echo "no benchmark suite at this revision: empty result"
+            julia -e '
+              import Pkg
+              Pkg.activate(; temp = true)
+              Pkg.add("BenchmarkTools")
+              using BenchmarkTools
+              BenchmarkTools.save(ARGS[1], BenchmarkGroup())' \
+              results-${{ matrix.name }}.json
+            exit 0
+          fi
+          julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
+          julia --project=benchmark benchmark/run.jl \
+            results-${{ matrix.name }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ matrix.name }}
+          path: results-${{ matrix.name }}.json
+
+  compare:
+    needs: benchmark
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # PR checkout for `benchmark/compare.jl`.
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Build comparison comment
+        run: |
+          julia -e '
+            import Pkg
+            Pkg.activate(; temp = true)
+            Pkg.add("BenchmarkTools")
+            include("benchmark/compare.jl")' \
+            artifacts/bench-pr/results-pr.json \
+            artifacts/bench-main/results-main.json comment.md
+      - name: Post comparison comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const marker = '<!-- benchmark-comparison -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number });
+            const existing = comments.find(
+              (c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment(
+                { owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment(
+                { owner, repo, issue_number, body });
+            }
