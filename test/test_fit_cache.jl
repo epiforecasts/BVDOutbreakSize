@@ -124,6 +124,52 @@ end
     @test content_hash(src; data_dir = d, data_exclude = excl) != h
 end
 
+@testitem "the observation manifest enters the fit hash" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## `data/observations.toml` is the single source of truth for every
+    ## observation the model conditions on. The digest once covered `*.csv`
+    ## only, so the manifest never entered the key: a data update that touched
+    ## it alone served every fit from cache against the previous data. Four of
+    ## the twenty-five most recent commits to the manifest changed no hashed
+    ## CSV, one of them adding a month of fitted daily new-suspect history.
+    d = mktempdir()
+    write(joinpath(d, "observations.toml"), "cases = 1\n")
+    write(joinpath(d, "onset_curve_scanned.csv"), "day,count\n1,1\n")
+    h = tree_sha256(d; exclude = FIT_DATA_EXCLUDE)
+
+    write(joinpath(d, "observations.toml"), "cases = 2\n")
+    @test tree_sha256(d; exclude = FIT_DATA_EXCLUDE) != h
+
+    ## The same holds for the manifest the repository ships, not just for a
+    ## file of that name: the real data directory hashes differently with it
+    ## excluded, so it is part of the real fit key.
+    data_dir = joinpath(_PKG, "data")
+    @test tree_sha256(data_dir; exclude = FIT_DATA_EXCLUDE) !=
+          tree_sha256(data_dir;
+        exclude = (FIT_DATA_EXCLUDE..., "observations.toml"))
+end
+
+@testitem "the fit hash skips excluded directories" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+
+    ## An exclude entry naming a directory drops everything under it. That is
+    ## what keeps the situation report PDFs out of the key: they are the
+    ## source the scans are taken from rather than something the model reads,
+    ## and they are 230 MB to hash.
+    d = mktempdir()
+    mkpath(joinpath(d, "sitrep_pdfs"))
+    write(joinpath(d, "observations.toml"), "cases = 1\n")
+    write(joinpath(d, "sitrep_pdfs", "059.pdf"), "pdf bytes")
+    h = tree_sha256(d; exclude = ("sitrep_pdfs",))
+
+    write(joinpath(d, "sitrep_pdfs", "060.pdf"), "more pdf bytes")
+    @test tree_sha256(d; exclude = ("sitrep_pdfs",)) == h
+
+    ## Without the exclusion the same directory contributes.
+    @test tree_sha256(d) != h
+end
+
 @testitem "validation fits follow the reporting status" tags=[:quality] begin
     using Dates
     using Dates: Date, Day
