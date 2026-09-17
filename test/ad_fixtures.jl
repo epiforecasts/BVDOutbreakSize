@@ -3,9 +3,13 @@
 
 Shared AD gradient scenarios and backend metadata for BVDOutbreakSize.
 
-One source of scenarios drives `test/test_ad_gradients.jl` and
-`benchmark/src/ad_gradients.jl`, so the surface the tests assert is
-differentiable is the surface the benchmarks time.
+This file is included by `test/test_ad_gradients.jl` and by
+`benchmark/benchmarks.jl`, so the surface the tests assert is
+differentiable is the surface the benchmarks time. It is a plain file
+rather than a path package because `[sources]` needs Julia 1.11 and the
+LTS test cell runs 1.10, where an unregistered path dependency cannot
+resolve. Its imports come from whichever environment includes it, and
+both carry every package named below.
 
 A scenario is one model plus a seeded unconstrained point. The units are
 per component rather than the full joint: the observation submodels from
@@ -24,7 +28,6 @@ seed, so a submodel scenario carries no sampled renewal cost of its own.
 """
 module ADFixtures
 
-using ADTypes: ADTypes
 using BVDOutbreakSize: BVDOutbreakSize, default_adtype, enzyme_adtype,
                        infection_model, onset_incidence_model,
                        patch_infection_model,

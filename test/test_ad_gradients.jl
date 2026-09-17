@@ -5,11 +5,10 @@
 ## fit as a differentiability check: that takes ~25 min and can flake during
 ## sampler adaptation rather than in the gradient itself.
 ##
-## The components come from the `ADFixtures` path package at
-## `test/ADFixtures`, which also drives `benchmark/src/ad_gradients.jl`. One
-## source means a component cannot be benchmarked without also being
-## asserted differentiable, or asserted without being timed. Adding a model
-## there adds it to both.
+## The components come from `test/ad_fixtures.jl`, which
+## `benchmark/benchmarks.jl` includes too. One source means a component
+## cannot be benchmarked without also being asserted differentiable, or
+## asserted without being timed. Adding a model there adds it to both.
 ##
 ## The full `bvd_joint` is not a component here: differentiating it under
 ## Mooncake takes ~10 min and is unstable on the Julia LTS runner (the same
@@ -27,9 +26,9 @@
 @testitem "AD gradient: every component differentiates (Mooncake)" tags=[
     :ad
 ] begin
-    using ADFixtures
     using LogDensityProblems: logdensity_and_gradient
     using BVDOutbreakSize: default_adtype
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
 
     scenarios = ADFixtures.scenarios()
     ## The fixtures are the benchmark suite's component list too, so a
