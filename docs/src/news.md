@@ -18,6 +18,11 @@ The prior still regularises the background against the outbreak-size degeneracy,
 
 ### Report
 
+- The fit diagnostics sit under the headline results rather than in the methods section, and the summary dashboard carries them too (#747).
+A reader meets the estimates and then sees how the fit that produced them behaved.
+- The sensitivity report gains a fit-diagnostics section that works parameter by parameter (#747).
+It counts how many of each fit's parameters exceed an R-hat threshold rather than reporting the worst one, ranks the worst-mixing parameters and groups them, plots mixing along the worst walks by element index, breaks the divergences down by chain and places them against the posterior, and sets the joint fit against each single-stream fit and against the same fit a week earlier.
+A parameter that mixes on its own and not in the joint points at an interaction between streams, and one that mixes a week earlier and not now points at the newest data.
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 
