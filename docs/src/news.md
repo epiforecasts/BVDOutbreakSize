@@ -79,6 +79,9 @@ Recovered is still published, so this was a gap rather than a frozen stream.
 
 ### Infrastructure
 
+- A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows (#749).
+The concurrency group falls back to the run id when there is no pull request head branch, so only pull request runs are superseded.
+Fifteen pushes landed on `main` on 17 September and every documentation build was cancelled by the next one, which is why the published site and the results release both went stale.
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
