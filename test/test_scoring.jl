@@ -859,3 +859,54 @@ end
         end
     end
 end
+
+@testitem "scored_overlay keeps only streams with a baseline" begin
+    using DataFrames: DataFrame, nrow, names
+    using Dates: Date
+    using BVDOutbreakSize: scored_overlay
+
+    ## `reported cases` is frozen: one scored point, joint only, and no
+    ## baseline row, so the score tables already drop it and the overlay
+    ## figure should too. `confirmed cases` and `recovered` both carry a
+    ## baseline and stay, whether or not they carry an individual fit.
+    overlay = DataFrame(
+        release = ["r1", "r1", "r1", "r1", "r2"],
+        made_date = fill(Date(2026, 7, 1), 5),
+        stream = ["reported cases", "confirmed cases", "confirmed cases",
+            "recovered", "recovered"],
+        horizon = [7, 7, 7, 7, 14],
+        target_date = fill(Date(2026, 7, 8), 5),
+        fit = ["joint", "joint", "baseline", "joint", "baseline"],
+        observed = [1.0, 2.0, 2.0, 3.0, 3.0],
+        median = [1.0, 2.0, 2.0, 3.0, 3.0])
+
+    kept = scored_overlay(overlay)
+    @test Set(kept.stream) == Set(["confirmed cases", "recovered"])
+    @test nrow(kept) == 4
+    ## The rows that survive keep their order and their columns.
+    @test names(kept) == names(overlay)
+    @test kept.fit == ["joint", "baseline", "joint", "baseline"]
+end
+
+@testitem "scored_overlay passes an empty table through" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: scored_overlay
+
+    ## The report renders before any release carries a forecast, so an
+    ## empty table must come back with its schema intact rather than throw.
+    empty = DataFrame(stream = String[], fit = String[], median = Float64[])
+    @test scored_overlay(empty) === empty
+end
+
+@testitem "scored_overlay drops a stream whose baseline never appears" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: scored_overlay
+
+    ## A stream scored only against itself has nothing to be scored
+    ## against, so it leaves the figure however many rows it carries.
+    overlay = DataFrame(
+        stream = ["suspected deaths", "suspected deaths"],
+        fit = ["joint", "individual"],
+        median = [1.0, 2.0])
+    @test isempty(scored_overlay(overlay))
+end

@@ -24,6 +24,11 @@ The prior still regularises the background against the outbreak-size degeneracy,
 
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- Recovered is labelled recovered among confirmed wherever the stream is named (#737).
+It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
+- The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
+Reported cases and suspected deaths froze on 26 May and hold one scored point each with no baseline, so they were two rows of near-empty panels; the score tables already dropped them under the same rule.
+Their scored history stays in the released data.
 
 ### Fixed
 
@@ -33,6 +38,11 @@ The digest hashed `*.csv` only, so a data update that touched the manifest alone
 Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
 The digest now covers every file under `data/` apart from an explicit exclude list, so an input in a format nothing has read before cannot be missed the same way.
 Every key changes, so the next build refits from scratch.
+- Recovered is forecast, archived and scored again (#737).
+`score_releases.jl` prefers `stream_forecasts.csv` over `forecast.csv` where a release ships it, and the joint entry of `stream_fits` never listed recovered, so the stream fell out of scoring from `results-1359` on 23 July.
+Recovered is still published, so this was a gap rather than a frozen stream.
+- The confirmed-deaths panel of the reproduction-number and basic-reproduction-number by-dataset figures draws its current-model reference band (#737).
+`_stream_chains` never named that fit, so the panel showed its per-release points alone.
 
 ### Infrastructure
 

@@ -493,3 +493,34 @@ function select_fit_role(table::DataFrame, role::AbstractString)
           join(repr.(_FIT_ROLES), ", "))
     return table[_fit_role.(table.fit) .== role, :]
 end
+
+"""
+`overlay` (a `data/forecast_overlay.csv`-shaped table) restricted to the
+streams that carry a persistence baseline, dropping every row of a stream
+that carries none.
+
+This is the rule the score summaries already apply. `_stream_fit_stats`
+drops a fit whose matched set against the baseline is empty, so a stream
+with no baseline row never reaches [`forecast_score_overview`](@ref) or
+its by-horizon and by-release counterparts. Applying it to the overlay
+figure too puts the tables and the figure on one definition of what has
+been scored. A stream the situation reports have stopped publishing then
+leaves both together, rather than holding a row of near-empty panels open
+long after its last scored window.
+
+The rule is stated on the baseline rather than on a count of made dates
+because the baseline is what makes a window scoreable at all. A stream
+with no baseline has nothing to be scored against, whatever its history.
+
+Nothing is dropped from the scored data itself. The rows stay in
+`data/forecast_scores.csv` and `data/forecast_overlay.csv`, which record
+what was scored; this selects what is drawn.
+
+Returns `overlay` unchanged when it is empty, so the report renders before
+any release carries a forecast.
+"""
+function scored_overlay(overlay::DataFrame; baseline_fit = BASELINE_FIT)
+    isempty(overlay) && return overlay
+    kept = Set(overlay.stream[overlay.fit .== baseline_fit])
+    return overlay[in.(overlay.stream, Ref(kept)), :]
+end
