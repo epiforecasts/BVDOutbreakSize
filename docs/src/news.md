@@ -82,6 +82,9 @@ Recovered is still published, so this was a gap rather than a frozen stream.
 - A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows (#749).
 The concurrency group falls back to the run id when there is no pull request head branch, so only pull request runs are superseded.
 Fifteen pushes landed on `main` on 17 September and every documentation build was cancelled by the next one, which is why the published site and the results release both went stale.
+- Closing or merging a pull request cancels the runs still queued or in flight on its head branch (#TBD).
+Around fifteen pull requests merged on 17 September and the queue reached twenty-two runs against three finished, several of them four-hour fit jobs whose results nobody would read.
+Only runs carrying that head branch are cancelled, so runs on `main`, on other pull requests and on merge queue refs are left alone.
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
