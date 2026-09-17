@@ -776,15 +776,24 @@ Shared pooling SD `σ_bg` for the per-vintage background random effect
 ([`background_re_model`](@ref)). Sampled once at the composer level and
 passed to both the suspected-case and suspected-death backgrounds, so the
 two streams share one time-variation scale rather than each estimating its
-own from few vintages. The prior is a tight half-normal. The background is
-degenerate with outbreak size, so a wide random effect would let individual
-windows absorb arbitrary suspected counts and re-open the posterior mode in
-which the background explains the majority of suspected cases.
-Regularising `σ_bg` toward zero keeps the time variation a perturbation of
-the informative scalar baselines. Returns `(; σ_bg)`.
+own from few vintages. The prior is a half-normal of scale 0.3.
+
+The background is degenerate with outbreak size, so the prior still
+regularises rather than freeing the scale. A wide random effect would let
+individual windows absorb arbitrary suspected counts and re-open the
+posterior mode in which the background explains the majority of suspected
+cases, and regularising `σ_bg` toward zero keeps the time variation a
+perturbation of the informative scalar baselines.
+
+The scale was 0.1, which the data have outgrown. With the daily
+new-suspect series carried to the cut-off the posterior sits at 0.17 to
+0.22, about twice that scale, and the walk mixes badly against a prior
+pulling the other way. At 0.3 the same posterior sits below the scale, so
+the data set the time variation rather than the prior. Returns
+`(; σ_bg)`.
 """
 @model function background_pooling_model(;
-        pooling_prior = truncated(Normal(0.0, 0.1); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
     σ_bg ~ pooling_prior
     return (; σ_bg)
 end
@@ -810,8 +819,8 @@ in over the first `onset_ramp` days of the window. With knot values
 
 `σ_rw` is the per-knot innovation SD on the log scale, passed in and shared
 across the suspected-case and suspected-death streams via
-[`background_pooling_model`](@ref). A tight prior keeps the background
-close to constant, which regularises the background/outbreak-size
+[`background_pooling_model`](@ref). Its regularising prior keeps the
+background a slow drift, which holds down the background/outbreak-size
 degeneracy and keeps the series smooth, so a death background scaled from
 it carries no steps. Knots run only over the surveillance window
 `[onset, n]`, so the number of innovations is small. `onset ≤ 1` runs it
