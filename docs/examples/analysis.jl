@@ -4316,7 +4316,7 @@ CSV.write(joinpath(output_dir, "forecast_frozen.csv"),
 ## `RT_WALK_LEAD` days before the first situation report, so each fit carries
 ## the starts its own fit used. Each single-stream fit forecasts only the
 ## dataset it observes; the joint forecasts every shared stream. Recovered has
-## no single-stream fit, so it stays a joint-only stream in `forecast.csv`.
+## no single-stream fit, so the joint is the only fit that carries it.
 stream_thin = 5
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 ## Observed bed occupancy at the cut-off, the level the isolation forecast
@@ -4328,6 +4328,10 @@ _iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
 ## INCREMENT this total should add over the horizon, not the level (see the
 ## methods section on the nowcast and forecast).
 _onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
+## Cumulative recovered at the cut-off. The loader leaves it missing when the
+## manifest carries no recovered vintages, and the forecast returns the
+## increment rather than this base, so a zero stands in for that case.
+_recovered_at_cutoff = coalesce(obs.recovered_cases, 0)
 stream_fits = [
     (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
@@ -4335,6 +4339,7 @@ stream_fits = [
             (:suspected_deaths, "suspected deaths", obs.total_deaths),
             (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
             (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
+            (:recovered, "recovered", _recovered_at_cutoff),
             (:isolation_beds, "isolation beds", _iso_at_cutoff),
             (:exports, "exports", obs.exported_cases),
             (:onset_reports, "onset reports", _onset_at_cutoff)]),

@@ -802,9 +802,11 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
         _row("DRC isolation rule-outs", "daily at T+7", fc[!, :ruleouts_fc]))
     if :recovered_cum in propertynames(fc)
         push!(rows,
-            _row("DRC recovered", "cumulative by T+7", fc[!, :recovered_cum]))
+            _row("DRC recovered among confirmed", "cumulative by T+7",
+                fc[!, :recovered_cum]))
         :recovered_new in propertynames(fc) && push!(rows,
-            _row("DRC recovered", "new this week", fc[!, :recovered_new]))
+            _row("DRC recovered among confirmed", "new this week",
+                fc[!, :recovered_new]))
     end
     return _prettify(DataFrame(rows))
 end
@@ -906,7 +908,7 @@ function forecast_vs_truth(fc::DataFrame;
         (:deaths_cum, :deaths_new, "DRC suspected deaths"),
         (:confirmed_cum, :confirmed_new, "DRC confirmed cases"),
         (:confirmed_deaths_cum, :confirmed_deaths_new, "DRC confirmed deaths"),
-        (:recovered_cum, :recovered_new, "DRC recovered")
+        (:recovered_cum, :recovered_new, "DRC recovered among confirmed")
     )
     rows = NamedTuple[]
     for (cumcol, newcol, label) in specs
@@ -1006,6 +1008,13 @@ const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
             :expected_confirmed_deaths_T],
         dispersion = [:k_confirmed_deaths, Symbol("dispersion_state.k")],
         trajectory = [:cumulative_confirmed_deaths],
+        kind = :cumulative, noise = :nb),
+    ## Recovered is forecast from the joint alone. The report runs no
+    ## single-stream recovered fit, so only the joint names are listed.
+    :recovered => (
+        expected = [:expected_recovered_T],
+        dispersion = [:recovered_dispersion],
+        trajectory = [:cumulative_recovered],
         kind = :cumulative, noise = :nb),
     :exports => (
         expected = [Symbol("exports_state.expected_exports_T"),
@@ -1163,13 +1172,15 @@ kinds, so each single-stream fit can be scored on forecasting its own
 dataset against the joint and against a baseline.
 
 `stream` is one of `:reported_cases`, `:suspected_deaths`,
-`:confirmed_cases`, `:confirmed_deaths`, `:isolation_beds`, `:exports` and
-`:onset_reports`. The incident streams (everything but `:isolation_beds`)
-return the new count accrued over the horizon, matching
-[`forecast_archive`](@ref)'s convention. `:isolation_beds` returns the
-reported occupancy level at the horizon, the projected demand replicate
-shifted by the fitted reclassification offset standing at the cut-off and
-capped at the bed capacity, `min(demand + Δ, C)` (see
+`:confirmed_cases`, `:confirmed_deaths`, `:recovered`, `:isolation_beds`,
+`:exports` and `:onset_reports`. `:recovered` is carried by the joint
+alone, since the report runs no single-stream recovered fit. The incident
+streams (everything but `:isolation_beds`) return the new count accrued
+over the horizon, matching [`forecast_archive`](@ref)'s convention.
+`:isolation_beds` returns the reported occupancy level at the horizon, the
+projected demand replicate shifted by the fitted reclassification offset
+standing at the cut-off and capped at the bed capacity,
+`min(demand + Δ, C)` (see
 [`cumulative_occupancy_offset`](@ref)).
 
 `:onset_reports` is incident like the rest but projected differently. It is
