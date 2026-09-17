@@ -39,23 +39,47 @@ function file_sha256(path::AbstractString)
 end
 
 """
-    tree_sha256(dir; exts = (".csv",), exclude = ()) -> String
+    _is_excluded(rel, exclude) -> Bool
 
-SHA-256 hex digest over every file under `dir` (recursively) whose name ends in
-one of `exts`, hashing the sorted `(relative path, contents)` pairs so the
-result is order-independent and reproducible. Returns `"absent"` for a missing
-directory. Files whose basename or path relative to `dir` matches an entry of
-`exclude` are skipped, so a directory can hold non-input files (e.g. a
-published-estimate overlay) without them contributing to the digest.
+Whether the path `rel`, relative to the directory being hashed, is covered by
+`exclude`. An entry matches the file's basename, the relative path itself, or
+any directory that contains it, so a whole subdirectory is dropped by naming
+it once.
 """
-function tree_sha256(dir::AbstractString; exts = (".csv",), exclude = ())
+function _is_excluded(rel::AbstractString, exclude)
+    parts = splitpath(rel)
+    last(parts) in exclude && return true
+    for i in eachindex(parts)
+        joinpath(parts[1:i]...) in exclude && return true
+    end
+    return false
+end
+
+"""
+    tree_sha256(dir; exts = nothing, exclude = ()) -> String
+
+SHA-256 hex digest over every file under `dir` (recursively), hashing the
+sorted `(relative path, contents)` pairs so the result is order-independent
+and reproducible. Returns `"absent"` for a missing directory.
+
+A file is skipped when `exclude` names its basename, its path relative to
+`dir`, or a directory that contains it, so a directory can hold non-input
+files (a published-estimate overlay, the scanned source PDFs) without them
+contributing to the digest. The rule is opt-out by name rather than opt-in by
+format, so a new input in a format nothing has read before is hashed rather
+than silently dropped.
+
+`exts` narrows the digest to files whose name ends in one of the given
+suffixes. It defaults to `nothing`, which hashes every file.
+"""
+function tree_sha256(dir::AbstractString; exts = nothing, exclude = ())
     isdir(dir) || return "absent"
     files = String[]
     for (root, _, fs) in walkdir(dir), f in fs
 
-        any(endswith(f, e) for e in exts) || continue
+        exts === nothing || any(endswith(f, e) for e in exts) || continue
         path = joinpath(root, f)
-        (f in exclude || relpath(path, dir) in exclude) && continue
+        _is_excluded(relpath(path, dir), exclude) && continue
         push!(files, path)
     end
     ctx = SHA256_CTX()
@@ -71,10 +95,11 @@ end
                  extra = "", len = 16) -> String
 
 Short content hash combining the digests of each file in `source_files`, the
-`tree_sha256` of `data_dir` (when given, skipping any file matched by
-`data_exclude`) and an `extra` string (sampler settings, a schema version, ...).
-Used to build cache keys so any change to the model source, data or settings
-yields a fresh key.
+`tree_sha256` of `data_dir` (when given: every file under it, whatever its
+format, less anything `data_exclude` names) and an `extra` string (sampler
+settings, a schema version, ...). Used to build cache keys, so a change to the
+model source, to any data file that is not excluded, or to the settings yields
+a fresh key.
 """
 function content_hash(source_files;
         data_dir = nothing, data_exclude = (),
