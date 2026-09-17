@@ -99,6 +99,10 @@ Smoke test for one (scenario, backend) pair: take the gradient once and
 report whether it came back finite and non-trivial. A backend that throws
 returns `false` rather than propagating, so the benchmark suite can omit a
 known-broken pair and keep running unattended.
+
+The error is printed rather than discarded. A caught exception next to a
+quietly shorter result set is how a backend disappears from a run without
+anyone noticing, so the reason for every omitted pair reaches the log.
 """
 function gradient_is_finite(scen::Scenario, adtype)
     return try
@@ -106,7 +110,9 @@ function gradient_is_finite(scen::Scenario, adtype)
         logp, grad = logdensity_and_gradient(ldf, x)
         isfinite(logp) && length(grad) == length(x) &&
             all(isfinite, grad) && any(!iszero, grad)
-    catch
+    catch err
+        println(stderr, "[fixtures] gradient failed for ", scen.name, ": ",
+            sprint(showerror, err))
         false
     end
 end
