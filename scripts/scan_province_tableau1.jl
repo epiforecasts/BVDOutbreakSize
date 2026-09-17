@@ -75,19 +75,23 @@ using Printf
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const PDF_DIR = length(ARGS) >= 1 ? ARGS[1] :
-                joinpath(ROOT, "data", "sitrep_pdfs")
+    joinpath(ROOT, "data", "sitrep_pdfs")
 const MANIFEST = joinpath(ROOT, "data", "observations.toml")
 const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 
 ## Provinces in patch order: the first is the primary (origin) patch.
-const PROVINCES = ["ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi"]
+const PROVINCES = [
+    "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
+    "bas_uele", "sud_ubangi",
+]
 ## Keyed on the folded name with every separator collapsed to one space, so
 ## "Bas Uélé", "Bas-Uélé" and "BAS UELE" all land on the same province.
-const NAMES = Dict("ituri" => "ituri", "nord kivu" => "nord_kivu",
+const NAMES = Dict(
+    "ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas uele" => "bas_uele",
-    "sud ubangi" => "sud_ubangi")
+    "sud ubangi" => "sud_ubangi"
+)
 
 fold(s) = lowercase(Base.Unicode.normalize(String(s); stripmark = true))
 
@@ -121,8 +125,11 @@ row; stopping there keeps the commentary that follows out of the parse.
 function tableau1_lines(text::AbstractString)
     lines = split(text, '\n')
     head = findfirst(
-        l -> occursin(r"repartition des cas et deces confirmes par province",
-            fold(l)), lines)
+        l -> occursin(
+            r"repartition des cas et deces confirmes par province",
+            fold(l)
+        ), lines
+    )
     head === nothing && return nothing
     out = String[]
     for l in lines[(head + 1):min(head + 40, length(lines))]
@@ -207,8 +214,10 @@ function sitrep_dates()
 end
 
 function main()
-    isdir(PDF_DIR) || error("no sitrep PDFs at $(PDF_DIR); " *
-          "run `task download-sitreps` first.")
+    isdir(PDF_DIR) || error(
+        "no sitrep PDFs at $(PDF_DIR); " *
+            "run `task download-sitreps` first."
+    )
     Sys.which("pdftotext") === nothing &&
         error("pdftotext not found; install poppler-utils.")
 
@@ -218,8 +227,12 @@ function main()
     srs = Dict{String, Int}()
     notable = Int[]
 
-    for path in sort(filter(f -> endswith(f, ".pdf"),
-        readdir(PDF_DIR; join = true)))
+    for path in sort(
+            filter(
+                f -> endswith(f, ".pdf"),
+                readdir(PDF_DIR; join = true)
+            )
+        )
         m = match(r"(\d+)[_-]2026", basename(path))
         m === nothing && continue
         sr = parse(Int, m[1])
@@ -239,14 +252,20 @@ function main()
     isempty(scanned) && error("no sitrep yielded a Tableau 1.")
 
     raw = TOML.parsefile(MANIFEST)
-    natc = Dict(String(d) => v
-    for (d, v) in zip(
-        raw["confirmed_case_history"]["dates"],
-        raw["confirmed_case_history"]["values"]))
-    natd = Dict(String(d) => v
-    for (d, v) in zip(
-        raw["confirmed_death_history"]["dates"],
-        raw["confirmed_death_history"]["values"]))
+    natc = Dict(
+        String(d) => v
+            for (d, v) in zip(
+                raw["confirmed_case_history"]["dates"],
+                raw["confirmed_case_history"]["values"]
+            )
+    )
+    natd = Dict(
+        String(d) => v
+            for (d, v) in zip(
+                raw["confirmed_death_history"]["dates"],
+                raw["confirmed_death_history"]["values"]
+            )
+    )
 
     cases(g) = sum(haskey(g, p) ? g[p][1] : 0 for p in PROVINCES)
     deaths(g) = sum(haskey(g, p) ? g[p][2] : 0 for p in PROVINCES)
@@ -280,14 +299,18 @@ function main()
 
     ## A printed Total that misses while the rows reconcile is a typo in the
     ## Total cell alone; the split is still sound, so the date is kept.
-    off_total = [d
-                 for d in keep
-                 if totals[d] !== nothing &&
-        totals[d] != (cases(scanned[d]), deaths(scanned[d]))]
+    off_total = [
+        d
+            for d in keep
+            if totals[d] !== nothing &&
+            totals[d] != (cases(scanned[d]), deaths(scanned[d]))
+    ]
 
     println("Per-province confirmed cases and deaths (Tableau 1)\n")
-    @printf("%11s %4s | %6s %6s | %6s %6s | %3s | %6s %6s\n", "date", "sr",
-        "cases", "nat", "deaths", "nat", "np", "NK c%", "NK d%")
+    @printf(
+        "%11s %4s | %6s %6s | %6s %6s | %3s | %6s %6s\n", "date", "sr",
+        "cases", "nat", "deaths", "nat", "np", "NK c%", "NK d%"
+    )
     println("-"^72)
     for d in sort(vcat(keep, bad))
         g = scanned[d]
@@ -296,80 +319,109 @@ function main()
         okc = cs == nc ? string(nc) : "!$(nc)"
         okd = ds == nd ? string(nd) : "!$(nd)"
         nk = get(g, "nord_kivu", (0, 0))
-        @printf("%11s %4d | %6d %6s | %6d %6s | %3d | %5.1f%% %5.1f%%\n",
+        @printf(
+            "%11s %4d | %6d %6s | %6d %6s | %3d | %5.1f%% %5.1f%%\n",
             d, srs[d], cs, okc, ds, okd, length(g),
-            100 * nk[1] / cs, 100 * nk[2] / ds)
+            100 * nk[1] / cs, 100 * nk[2] / ds
+        )
     end
 
     if !isempty(notable)
-        println("\nSitreps with no readable Tableau 1: ",
-            join(notable, ", "))
+        println(
+            "\nSitreps with no readable Tableau 1: ",
+            join(notable, ", ")
+        )
     end
     if !isempty(internal)
-        println("\nDates whose Tableau 1 contradicts itself, the rows " *
+        println(
+            "\nDates whose Tableau 1 contradicts itself, the rows " *
                 "missing the national totals that its own printed Total " *
-                "matches (not emitted):")
+                "matches (not emitted):"
+        )
         for d in internal
             g, t = scanned[d], totals[d]
-            @printf("  %11s sitrep %3d rows %d/%d, printed Total %d/%d\n",
-                d, srs[d], cases(g), deaths(g), t[1], t[2])
+            @printf(
+                "  %11s sitrep %3d rows %d/%d, printed Total %d/%d\n",
+                d, srs[d], cases(g), deaths(g), t[1], t[2]
+            )
         end
     end
     if !isempty(off_total)
-        println("\nDates where the rows reconcile but the table's own " *
-                "printed Total does not (kept):")
+        println(
+            "\nDates where the rows reconcile but the table's own " *
+                "printed Total does not (kept):"
+        )
         for d in off_total
             g, t = scanned[d], totals[d]
-            @printf("  %11s sitrep %3d rows %d/%d, printed Total %d/%d\n",
-                d, srs[d], cases(g), deaths(g), t[1], t[2])
+            @printf(
+                "  %11s sitrep %3d rows %d/%d, printed Total %d/%d\n",
+                d, srs[d], cases(g), deaths(g), t[1], t[2]
+            )
         end
     end
     if !isempty(unchecked)
         println(
             "\nDates with no national totals to reconcile against " *
-            "(not emitted): ",
-            join(unchecked, ", "))
+                "(not emitted): ",
+            join(unchecked, ", ")
+        )
     end
 
     if !isempty(bad)
         println()
-        error("$(length(bad)) province/national disagreement(s) " *
-              "($(join(bad, ", "))). The per-province " *
-              "figures are an exact partition of the national totals, so a " *
-              "mismatch means a mis-parse. Not emitting the blocks.")
+        error(
+            "$(length(bad)) province/national disagreement(s) " *
+                "($(join(bad, ", "))). The per-province " *
+                "figures are an exact partition of the national totals, so a " *
+                "mismatch means a mis-parse. Not emitting the blocks."
+        )
     end
-    println("\nAll $(length(keep)) dates reconcile with the national " *
-            "confirmed case and death totals.")
+    println(
+        "\nAll $(length(keep)) dates reconcile with the national " *
+            "confirmed case and death totals."
+    )
 
     ## Nord-Kivu's death share sits well above its case share at every
     ## vintage; that gap is the identifying signal, so report it.
-    ncs = [100 * get(scanned[d], "nord_kivu", (0, 0))[1] / cases(scanned[d])
-           for d in keep]
-    nds = [100 * get(scanned[d], "nord_kivu", (0, 0))[2] / deaths(scanned[d])
-           for d in keep]
-    @printf("\nNord-Kivu: case share %.1f-%.1f%%, death share %.1f-%.1f%%\n",
-        minimum(ncs), maximum(ncs), minimum(nds), maximum(nds))
-    @printf("Nord-Kivu death-to-case share ratio %.2fx at the cut-off\n",
-        nds[end] / ncs[end])
+    ncs = [
+        100 * get(scanned[d], "nord_kivu", (0, 0))[1] / cases(scanned[d])
+            for d in keep
+    ]
+    nds = [
+        100 * get(scanned[d], "nord_kivu", (0, 0))[2] / deaths(scanned[d])
+            for d in keep
+    ]
+    @printf(
+        "\nNord-Kivu: case share %.1f-%.1f%%, death share %.1f-%.1f%%\n",
+        minimum(ncs), maximum(ncs), minimum(nds), maximum(nds)
+    )
+    @printf(
+        "Nord-Kivu death-to-case share ratio %.2fx at the cut-off\n",
+        nds[end] / ncs[end]
+    )
 
     fmt(v) = join(v, ", ")
     println("\n\n===== paste into data/observations.toml =====\n")
-    for (blk, idx, what) in (("province_confirmed_history", 1, "cases"),
-        ("province_death_history", 2, "deaths"))
+    for (blk, idx, what) in (
+            ("province_confirmed_history", 1, "cases"),
+            ("province_death_history", 2, "deaths"),
+        )
         println("[$(blk)]")
         println("dates = [", join(["\"$d\"" for d in keep], ", "), "]")
         for p in PROVINCES
             v = [haskey(scanned[d], p) ? scanned[d][p][idx] : 0 for d in keep]
             println("$(p) = [", fmt(v), "]")
         end
-        println("source = \"INSP situation reports, Tableau 1 " *
+        println(
+            "source = \"INSP situation reports, Tableau 1 " *
                 "(Répartition des cas et décès confirmés par province): " *
                 "per-province cumulative confirmed $(what). A province " *
                 "absent from a vintage's table has no confirmed $(what) " *
                 "yet and is recorded as 0. Scanned by " *
                 "scripts/scan_province_tableau1.jl, which requires the " *
                 "per-province figures to sum exactly to the national " *
-                "totals on every date.\"")
+                "totals on every date.\""
+        )
         println()
     end
     return nothing

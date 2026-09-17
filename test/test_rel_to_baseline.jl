@@ -21,11 +21,14 @@
     df = DataFrame(
         release = fill("results-vT", 5),
         made_date = fill(Date(2026, 7, 1), 5),
-        stream = ["confirmed cases", "confirmed cases", "confirmed cases",
-            "recovered", "recovered"],
+        stream = [
+            "confirmed cases", "confirmed cases", "confirmed cases",
+            "recovered", "recovered",
+        ],
         horizon = fill(7, 5),
         fit = ["baseline", "joint", "confirmed", "joint", "baseline"],
-        log_crps = [0.8, 0.2, 0.4, 0.3, 0.6])
+        log_crps = [0.8, 0.2, 0.4, 0.3, 0.6]
+    )
 
     to_base = rel_to_baseline_columns(df)
 
@@ -47,7 +50,8 @@ end
         stream = ["confirmed cases", "confirmed cases"],
         horizon = fill(7, 2),
         fit = ["frozen", "baseline"],
-        log_crps = [0.3, 0.6])
+        log_crps = [0.3, 0.6]
+    )
 
     to_base = rel_to_baseline_columns(df)
     @test to_base == [0.5, 1.0]  # 0.3/0.6, then the baseline itself
@@ -67,7 +71,8 @@ end
         stream = ["confirmed cases", "confirmed cases"],
         horizon = fill(7, 2),
         fit = ["baseline", "joint"],
-        log_crps = [0.0, 0.4])
+        log_crps = [0.0, 0.4]
+    )
 
     to_base = rel_to_baseline_columns(df)
     @test to_base[1] == 1.0  # the baseline row itself is always 1.0
@@ -146,5 +151,5 @@ end
 
     ## A release with no such asset is skipped rather than throwing.
     @test stream_estimate_rows("results-vT", nothing, Date(2026, 7, 1)) ===
-          nothing
+        nothing
 end

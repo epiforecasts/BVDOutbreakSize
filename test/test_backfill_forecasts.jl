@@ -4,8 +4,12 @@
 
 @testitem "backfill parse_args reads only, keep and concurrency" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## Defaults: all releases, worktrees removed, conservative concurrency.
     ## The concurrency default is asserted against its intended literal so a
@@ -31,24 +35,36 @@ end
 
 @testitem "backfill parse_args rejects a non-positive concurrency" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     @test_throws ErrorException parse_args(["--concurrency", "0"])
 end
 
 @testitem "backfill parse_args rejects a non-integer concurrency" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     @test_throws ErrorException parse_args(["--concurrency", "abc"])
 end
 
 @testitem "backfill parse_args rejects a dangling flag value" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## A trailing flag with no value is a user error, not a silent no-op.
     @test_throws ErrorException parse_args(["--only"])
@@ -57,8 +73,12 @@ end
 
 @testitem "backfill routes pre-registry renewal tags to their own driver" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## The pre-registry renewal tags are exactly the ones `preregistry_driver`
     ## records a joint call for; a registry-era tag is not among them, so
@@ -70,8 +90,12 @@ end
 
 @testitem "backfill pre-registry driver source valid and schema-matched" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## Source generation needs no fit: the driver is emitted as text and only
     ## run inside a worktree. Every pre-registry tag emits parseable Julia.
@@ -81,8 +105,10 @@ end
         ## Schema-identical to `backfill_driver`: same archive columns and the
         ## live build's every-fifth-draw thinning.
         @test occursin("made_date = Date[], horizon = Int[]", src)
-        @test occursin("stream = String[], draw = Int[], value = Float64[]",
-            src)
+        @test occursin(
+            "stream = String[], draw = Int[], value = Float64[]",
+            src
+        )
         @test occursin("1:$(THIN):length(vals)", src)
         ## The tag's own headline joint call, not a registry lookup.
         @test occursin("bvd_joint(", src)
@@ -115,8 +141,12 @@ end
 
 @testitem "backfill routes integral-era tags to the integral driver" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## v1.2.0 and v1.3.0 are the integral-era tags `integral_driver`
     ## reconstructs inline; neither is a pre-registry renewal tag and neither
@@ -135,8 +165,12 @@ end
 
 @testitem "backfill integral driver source valid and schema-matched" begin
     using BVDOutbreakSize: BVDOutbreakSize
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "backfill_forecasts.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "backfill_forecasts.jl"
+        )
+    )
 
     ## Source generation needs no fit: the driver is emitted as text and only
     ## run inside a worktree. Both inlined integral tags emit parseable Julia
@@ -154,8 +188,10 @@ end
         @test occursin("bvd_joint(obs.exported_cases", src)
         @test !occursin("build_fit_specs", src)
         @test occursin("serialize(chain_path, chn)", src)
-        for label in ("confirmed cases", "confirmed deaths", "reported cases",
-            "suspected deaths", "exports")
+        for label in (
+                "confirmed cases", "confirmed deaths", "reported cases",
+                "suspected deaths", "exports",
+            )
             @test occursin("\"$(label)\"", src)
         end
         @test occursin("col in propertynames(fc) || continue", src)
@@ -181,6 +217,8 @@ end
     @test !occursin("target_accept", v12)
 
     ## An unrecorded integral tag is a hard error, not a silently empty driver.
-    @test_throws ErrorException integral_fit_forecast("/tmp/f.csv",
-        "v1.99.0", 10, 1)
+    @test_throws ErrorException integral_fit_forecast(
+        "/tmp/f.csv",
+        "v1.99.0", 10, 1
+    )
 end

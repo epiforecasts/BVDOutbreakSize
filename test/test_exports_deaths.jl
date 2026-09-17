@@ -1,8 +1,8 @@
 ## Smoke tests for the deaths-among-exports likelihood exercised
 ## through `exports_deaths_only_model` from `src/models/joint.jl`.
 
-@testitem "exports_deaths_only prior draws produce non-negative counts" tags=[
-    :slow
+@testitem "exports_deaths_only prior draws produce non-negative counts" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -20,8 +20,8 @@
     @test all(C_T .> 0)
 end
 
-@testitem "exports_deaths_only conditioned on zero stays positive" tags=[
-    :slow
+@testitem "exports_deaths_only conditioned on zero stays positive" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -38,8 +38,8 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "exports_deaths_only dated series prior draws are finite" tags=[
-    :slow
+@testitem "exports_deaths_only dated series prior draws are finite" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains

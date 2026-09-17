@@ -65,8 +65,8 @@ end
     g = [0.2, 0.3, 0.3, 0.2]
     n = 80
     mu = fill(1.2, n)
-    delta = [0.15, -0.10, -0.05]
-    @test sum(delta)≈0 atol=1e-12
+    delta = [0.15, -0.1, -0.05]
+    @test sum(delta) ≈ 0 atol = 1.0e-12
     Rt = reduce(vcat, [fill(1.2 * exp(d), n)' for d in delta])
     ## Very unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
@@ -84,9 +84,13 @@ end
     end
     ## It is the force-weighted mean exactly, not some other summary.
     for t in (size(seeds, 2) + 4):n
-        force = [sum(st.infections[p, t - k] * g[k]
-                 for k in 1:min(t - 1, length(g))) for p in 1:3]
-        @test implied[t]≈sum(Rt[:, t] .* force) / sum(force) rtol=1e-10
+        force = [
+            sum(
+                st.infections[p, t - k] * g[k]
+                    for k in 1:min(t - 1, length(g))
+            ) for p in 1:3
+        ]
+        @test implied[t] ≈ sum(Rt[:, t] .* force) / sum(force) rtol = 1.0e-10
     end
     ## Nothing rescales the provinces, so the Rt matrix is used as given.
     @test all(st.infections[p, size(seeds, 2) + 1] > 0 for p in 1:3)
@@ -122,7 +126,7 @@ end
     on = patch_infections(Rt, g, seeds, K, 0.01).infections
 
     ## Moving infections around cannot change how many there are.
-    @test sum(on)≈sum(off) rtol=1e-8
+    @test sum(on) ≈ sum(off) rtol = 1.0e-8
     ## And it must actually move them: the destination patches gain, the
     ## origin that dominates the epidemic loses.
     @test !isapprox(on[1, :], off[1, :])
@@ -130,7 +134,7 @@ end
     @test sum(on[2, :]) > sum(off[2, :])
     ## Conservation must hold day by day, not just in the total.
     for t in 1:n
-        @test sum(@view on[:, t])≈sum(@view off[:, t]) rtol=1e-8
+        @test sum(@view on[:, t]) ≈ sum(@view off[:, t]) rtol = 1.0e-8
     end
 end
 
@@ -167,11 +171,11 @@ end
     force(p, t) = sum(I[p, t - s] * g[s] for s in 1:min(t - 1, length(g)))
     for t in 6:n
         want = (R1 * force(1, t) + R2 * force(2, t)) /
-               (force(1, t) + force(2, t))
-        @test implied[t] ≈ want rtol = 1e-10
+            (force(1, t) + force(2, t))
+        @test implied[t] ≈ want rtol = 1.0e-10
     end
     ## The aggregate must sit between the two patch Rts, never outside.
-    @test all(R2 - 1e-9 .<= implied[6:n] .<= R1 + 1e-9)
+    @test all(R2 - 1.0e-9 .<= implied[6:n] .<= R1 + 1.0e-9)
 end
 
 @testitem "implied_national_Rt: zero force gives zero, never NaN" begin
@@ -192,7 +196,7 @@ end
         res = m()
         ## Sum-to-zero at every time. The national walk is the common trend
         ## and the deviations are contrasts around it.
-        @test maximum(abs, sum(res.δ_patch; dims = 1)) < 1e-10
+        @test maximum(abs, sum(res.δ_patch; dims = 1)) < 1.0e-10
         ## Every patch, INCLUDING the primary, carries its own deviation.
         ## Reference coding (delta_1 = 0) also identifies the model, but it
         ## forces Ituri to BE the national trend while the other provinces
@@ -202,7 +206,7 @@ end
         ## Rt is the common trend times the patch deviation.
         for p in 1:np
             @test res.Rt_matrix[p, :] ≈
-                  res.Rt_national .* exp.(res.δ_patch[p, :])
+                res.Rt_national .* exp.(res.δ_patch[p, :])
         end
         @test all(>(0), res.Rt_matrix)
         @test size(res.δ_patch) == (np, n)
@@ -213,7 +217,7 @@ end
             @test res.Ω[i, i] ≈ 1
             for j in 1:np
                 @test res.Ω[i, j] ≈ res.Ω[j, i]
-                @test -1 - 1e-12 <= res.Ω[i, j] <= 1 + 1e-12
+                @test -1 - 1.0e-12 <= res.Ω[i, j] <= 1 + 1.0e-12
             end
         end
     end
@@ -232,27 +236,31 @@ end
 
     ## sigma_delta -> 0: every province collapses onto the common national
     ## trend, so they share one temporal Rt shape at a fixed ratio.
-    flat = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_sd_prior = truncated(Normal(0, 1e-12); lower = 0),
-        region_drift_sd_prior = truncated(Normal(0, 1e-12); lower = 0))
+    flat = patch_rt_model(
+        n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        region_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0),
+        region_drift_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0)
+    )
     seed!(9)
     rf = flat()
-    @test maximum(abs, rf.δ_patch) < 1e-8
+    @test maximum(abs, rf.δ_patch) < 1.0e-8
     for p in 1:np
         @test rf.Rt_matrix[p, :] ≈ rf.Rt_national
     end
 
     ## A large drift scale lets the provincial trajectories genuinely
     ## separate over time, which a constant modifier could not represent.
-    wide = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_drift_sd_prior = truncated(Normal(0.5, 0.01); lower = 0))
+    wide = patch_rt_model(
+        n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        region_drift_sd_prior = truncated(Normal(0.5, 0.01); lower = 0)
+    )
     seed!(3)
     rw = wide()
     ## The Ituri / Nord-Kivu contrast must actually move over the window.
     contrast(t) = rw.δ_patch[2, t] - rw.δ_patch[1, t]
     @test abs(contrast(n) - contrast(20)) > 0.2
     ## Sum-to-zero survives however wide the walk.
-    @test maximum(abs, sum(rw.δ_patch; dims = 1)) < 1e-10
+    @test maximum(abs, sum(rw.δ_patch; dims = 1)) < 1.0e-10
 end
 
 @testitem "province_increment_matrix: differences cumulative province counts" begin
@@ -261,7 +269,8 @@ end
     hist = Dict(
         "ituri" => (; days = [10, 20, 30], counts = [100, 150, 220]),
         "nord_kivu" => (; days = [10, 20, 30], counts = [10, 12, 20]),
-        "sud_kivu" => (; days = [10, 20, 30], counts = [3, 3, 3]))
+        "sud_kivu" => (; days = [10, 20, 30], counts = [3, 3, 3])
+    )
     names = ["ituri", "nord_kivu", "sud_kivu"]
 
     got = province_increment_matrix(hist, names, 3)
@@ -271,16 +280,20 @@ end
     @test got.increments == [100 50 70; 10 2 8; 3 0 0]
 
     ## No data -> empty, so the caller skips the composition term.
-    @test isempty(province_increment_matrix(
-        Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(),
-        names, 3).days)
+    @test isempty(
+        province_increment_matrix(
+            Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(),
+            names, 3
+        ).days
+    )
 
     ## Provinces on mismatched vintages are an error, not a silent reshape:
     ## the composition allocates each vintage's total across all provinces.
     bad = Dict(
         "ituri" => (; days = [10, 20], counts = [100, 150]),
         "nord_kivu" => (; days = [10, 30], counts = [10, 12]),
-        "sud_kivu" => (; days = [10, 20], counts = [3, 3]))
+        "sud_kivu" => (; days = [10, 20], counts = [3, 3])
+    )
     @test_throws ErrorException province_increment_matrix(bad, names, 3)
 end
 
@@ -304,12 +317,12 @@ end
     end
 
     base = logp(modelled)
-    @test logp(2.0 .* modelled) ≈ base rtol = 1e-10
-    @test logp(100.0 .* modelled) ≈ base rtol = 1e-10
+    @test logp(2.0 .* modelled) ≈ base rtol = 1.0e-10
+    @test logp(100.0 .* modelled) ≈ base rtol = 1.0e-10
 
     ## But it must respond to a change in the split.
     skewed = [8.0 4.0; 5.0 3.0; 0.5 0.2]
-    @test !isapprox(logp(skewed), base; rtol = 1e-6)
+    @test !isapprox(logp(skewed), base; rtol = 1.0e-6)
 
     ## The best-fitting shares are the observed ones: a modelled split equal
     ## to the observed split must beat a badly wrong one.
@@ -359,7 +372,8 @@ end
     n, np = 80, 3
     has_eps(m) = any(
         k -> occursin("ε", string(k)) || occursin("epsilon", string(k)),
-        keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
+        keys(DynamicPPL.VarInfo(Xoshiro(1), m))
+    )
 
     ## Provinces are COUPLED by default: the outbreak spread from Ituri into
     ## Nord-Kivu and Sud-Kivu, so a meta-population model that cannot move
@@ -381,8 +395,12 @@ end
     ## Passing an all-zero kernel switches the coupling off, and then epsilon
     ## must not be sampled. It would multiply zero and be a dimension the
     ## likelihood never touches, whose posterior is exactly its prior.
-    @test !has_eps(patch_infection_model(n, np;
-        importation_kernel = zeros(np, np)))
+    @test !has_eps(
+        patch_infection_model(
+            n, np;
+            importation_kernel = zeros(np, np)
+        )
+    )
 end
 
 @testitem "patch_infection_model: national aggregates are the patch sums" begin
@@ -420,7 +438,8 @@ end
 
     function build(pch)
         prov = province_increment_matrix(pch, PROVINCE_NAMES, np)
-        return bvd_joint(n,
+        return bvd_joint(
+            n,
             obs.exported_cases, obs.total_deaths, obs.reported_cases,
             obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
             confirmed_deaths = obs.confirmed_deaths,
@@ -447,7 +466,8 @@ end
             n_patches = length(PROVINCE_NAMES),
             province_increments = prov.increments,
             province_days = prov.days,
-            tmrca_days = obs.tmrca_days)
+            tmrca_days = obs.tmrca_days
+        )
     end
 
     pch = obs.province_confirmed_history
@@ -459,11 +479,15 @@ end
     ## Reallocating cases BETWEEN provinces, at a fixed national total, must
     ## move the log-density: the spatial split is what this model adds.
     shifted = Dict(k => v for (k, v) in pch)
-    shifted["ituri"] = (; days = pch["ituri"].days,
-        counts = pch["ituri"].counts .- 40)
-    shifted["nord_kivu"] = (; days = pch["nord_kivu"].days,
-        counts = pch["nord_kivu"].counts .+ 40)
-    @test !isapprox(DynamicPPL.logjoint(build(shifted), vi), base; rtol = 1e-8)
+    shifted["ituri"] = (;
+        days = pch["ituri"].days,
+        counts = pch["ituri"].counts .- 40,
+    )
+    shifted["nord_kivu"] = (;
+        days = pch["nord_kivu"].days,
+        counts = pch["nord_kivu"].counts .+ 40,
+    )
+    @test !isapprox(DynamicPPL.logjoint(build(shifted), vi), base; rtol = 1.0e-8)
 
     ## Dropping the per-province data must leave the national streams alone:
     ## the composition term is the only thing it can remove.
@@ -471,7 +495,7 @@ end
     @test isfinite(DynamicPPL.logjoint(build(none), vi))
 end
 
-@testitem "bvd_joint: carries the bvd_joint headline quantities" tags=[:slow] begin
+@testitem "bvd_joint: carries the bvd_joint headline quantities" tags = [:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
@@ -481,9 +505,12 @@ end
     ## keys off these names. Missing any of them silently breaks analysis.jl,
     ## so assert on a real chain rather than on the model's return value.
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    m = bvd_joint(obs.n,
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    m = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -493,10 +520,13 @@ end
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
 
-    chn = sample(m, Prior(), 50; chain_type = FlexiChains.VNChain,
-        progress = false)
+    chn = sample(
+        m, Prior(), 50; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
 
     ## The headline quantities analysis.jl summarises, under the same names
     ## bvd_joint uses.
@@ -509,30 +539,38 @@ end
     @test nrow(summary_table(chn, [:C_T, :R_T, :r, :T, :CFR])) == 5
 
     ## Per-patch vector deterministics, one entry per patch.
-    for q in (:C_T_patch, :R_T_patch, :delta_patch, :infections_T_patch,
-        :region_drift_sd, :log_rt_contrast)
-        @test all(v -> length(v) == length(PROVINCE_NAMES),
-            vec(collect(chn[q])))
+    for q in (
+            :C_T_patch, :R_T_patch, :delta_patch, :infections_T_patch,
+            :region_drift_sd, :log_rt_contrast,
+        )
+        @test all(
+            v -> length(v) == length(PROVINCE_NAMES),
+            vec(collect(chn[q]))
+        )
     end
     ## The deviations are contrasts around the common trend, so they sum to
     ## zero in every draw.
-    @test all(v -> abs(sum(v)) < 1e-10, vec(collect(chn[:delta_patch])))
+    @test all(v -> abs(sum(v)) < 1.0e-10, vec(collect(chn[:delta_patch])))
     ## The contrast is measured against the primary patch, so its own entry
     ## is identically zero and the others are log Rt relative to Ituri.
     @test all(v -> v[1] == 0, vec(collect(chn[:log_rt_contrast])))
     ## The spatial diagnostics the fit is read off.
     @test all(isfinite, vec(Array(chn[:region_sd])))
-    @test all(c -> -1 <= c <= 1,
-        vec(Array(chn[:region_corr_primary_secondary])))
+    @test all(
+        c -> -1 <= c <= 1,
+        vec(Array(chn[:region_corr_primary_secondary]))
+    )
 
     ## The aggregate C_T is the sum over patches.
     C_T = vec(Array(chn[:C_T]))
     per_patch = vec(collect(chn[:C_T_patch]))
-    @test all(i -> isapprox(C_T[i], sum(per_patch[i]); rtol = 1e-8),
-        eachindex(C_T))
+    @test all(
+        i -> isapprox(C_T[i], sum(per_patch[i]); rtol = 1.0e-8),
+        eachindex(C_T)
+    )
 end
 
-@testitem "patch_summary_table: one block per patch, ordered quantiles" tags=[:slow] begin
+@testitem "patch_summary_table: one block per patch, ordered quantiles" tags = [:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior, @model
     using Distributions: Normal
@@ -540,9 +578,12 @@ end
     using DataFrames: DataFrame, nrow
 
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    m = bvd_joint(obs.n,
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    m = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -552,9 +593,12 @@ end
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 100; chain_type = FlexiChains.VNChain,
-        progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 100; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
 
     df = patch_summary_table(chn, length(PROVINCE_NAMES))
     @test df isa DataFrame
@@ -583,21 +627,26 @@ end
     ## A chain without the per-patch deterministics (e.g. a single-patch
     ## bvd_joint chain) must be rejected, not silently summarised.
     @model _no_patches() = x ~ Normal(0.0, 1.0)
-    plain = sample(_no_patches(), Prior(), 5;
-        chain_type = FlexiChains.VNChain, progress = false)
+    plain = sample(
+        _no_patches(), Prior(), 5;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     @test_throws ErrorException patch_summary_table(plain, 3)
 end
 
-@testitem "patch reporting: one table per province, and an overview" tags=[:slow] begin
+@testitem "patch reporting: one table per province, and an overview" tags = [:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
     using DataFrames: DataFrame, nrow, names
 
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    m = bvd_joint(obs.n,
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    m = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -607,9 +656,12 @@ end
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 100; chain_type = FlexiChains.VNChain,
-        progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 100; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
 
     ## The cross-province overview is one ROW per province, not one row per
     ## (province, quantity). This is the whole point of it: the long-format
@@ -646,16 +698,19 @@ end
     @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = 9)
 end
 
-@testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags=[:slow] begin
+@testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags = [:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
     using Statistics: median
 
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    m = bvd_joint(obs.n,
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    m = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -665,20 +720,28 @@ end
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
-        progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 40; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
 
     ## The same renewal start and walk start the model derives internally.
-    rt_start = clamp(obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD,
-        1, obs.n)
+    rt_start = clamp(
+        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD,
+        1, obs.n
+    )
     rt_walk_start = clamp(
-        round(Int, obs.who_first_sitrep_days) - RT_WALK_LEAD, rt_start, obs.n)
+        round(Int, obs.who_first_sitrep_days) - RT_WALK_LEAD, rt_start, obs.n
+    )
 
-    rt = reconstruct_patch_rt(chn; n = obs.n,
+    rt = reconstruct_patch_rt(
+        chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         n_patches = length(PROVINCE_NAMES),
-        rt_start = rt_start, rt_walk_start = rt_walk_start)
+        rt_start = rt_start, rt_walk_start = rt_walk_start
+    )
     @test length(rt) == length(PROVINCE_NAMES)
     @test all(size(r) == (40, obs.n) for r in rt)
 
@@ -690,45 +753,53 @@ end
     npr = length(PROVINCE_NAMES)
     for p in 1:npr, i in 1:length(rtp)
 
-        @test rt[p][i, obs.n] ≈ rtp[i][p] rtol=1e-8
+        @test rt[p][i, obs.n] ≈ rtp[i][p] rtol = 1.0e-8
     end
 
     ## The deviations sum to zero and nothing rescales the provinces, so the
     ## unweighted geometric mean of the provincial Rt is the central trend
     ## exactly. That is the whole construction, and it is what makes the grey
     ## reference in the figure readable against the panels.
-    nat = reconstruct_rt(chn; n = obs.n,
+    nat = reconstruct_rt(
+        chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
-        rt_start = rt_start, rt_walk_start = rt_walk_start)
+        rt_start = rt_start, rt_walk_start = rt_walk_start
+    )
     for i in 1:5, d in (obs.n, obs.n - 7)
 
         gm = exp(sum(log(rt[p][i, d]) for p in 1:npr) / npr)
-        @test gm≈nat[i, d] rtol=1e-8
+        @test gm ≈ nat[i, d] rtol = 1.0e-8
     end
 
     ## A chain with no patch structure carries no deviation knots, so the
     ## provincial trajectories cannot be rebuilt. That must be an error rather
     ## than three copies of the national trajectory.
-    single = bvd_joint(obs.n,
+    single = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
-    chn1 = sample(single, Prior(), 5; chain_type = FlexiChains.VNChain,
-        progress = false)
-    @test_throws ErrorException reconstruct_patch_rt(chn1; n = obs.n,
+        tmrca_days = obs.tmrca_days
+    )
+    chn1 = sample(
+        single, Prior(), 5; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
+    @test_throws ErrorException reconstruct_patch_rt(
+        chn1; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         n_patches = length(PROVINCE_NAMES),
-        rt_start = rt_start, rt_walk_start = rt_walk_start)
+        rt_start = rt_start, rt_walk_start = rt_walk_start
+    )
 end
 
 @testitem "the free patches should run above the trend by exp(max delta)" begin
     using BVDOutbreakSize: patch_infections, renewal_infections,
-                           seed_infections, province_importation_kernel,
-                           implied_national_Rt
+        seed_infections, province_importation_kernel,
+        implied_national_Rt
 
     ## The provinces run free and the national trajectory is their sum, so the
     ## country does not run at the trend the deviations are centred on. It
@@ -751,33 +822,39 @@ end
     L, seed0, r = 40, 32.0, 0.06
     fracs = [0.17, 0.04]
     shares = [1.0; fracs] ./ (1 + sum(fracs))
-    base = [0.15, -0.10, -0.05]
-    @test sum(base)≈0 atol=1e-12
+    base = [0.15, -0.1, -0.05]
+    @test sum(base) ≈ 0 atol = 1.0e-12
 
     function run(scale, n)
         mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
         single = renewal_infections(mu, g, seed_infections(seed0, r, L))
-        seeds = reduce(vcat,
-            [seed_infections(s * seed0, r, L)' for s in shares])
+        seeds = reduce(
+            vcat,
+            [seed_infections(s * seed0, r, L)' for s in shares]
+        )
         Rt = reduce(vcat, [(mu .* exp(scale * d))' for d in base])
-        st = patch_infections(Rt, g, seeds,
-            province_importation_kernel(), 0.01)
+        st = patch_infections(
+            Rt, g, seeds,
+            province_importation_kernel(), 0.01
+        )
         tot = vec(sum(st.infections; dims = 1))
-        return (ratio = sum(tot) / sum(single),
+        return (
+            ratio = sum(tot) / sum(single),
             excess = implied_national_Rt(tot, g)[n] / mu[n],
-            infections = st.infections)
+            infections = st.infections,
+        )
     end
 
     ## Zero deviations: the provinces are one population split three ways, so
     ## the totals match to machine precision. This is what pins the seed
     ## partition and the conserved importation; without either, the national
     ## total would grow with the patch count before any deviation existed.
-    @test run(0.0, 206).ratio≈1 atol=1e-10
+    @test run(0.0, 206).ratio ≈ 1 atol = 1.0e-10
 
     ## The excess over the trend converges on the fastest province, within a
     ## per cent of `exp(max delta)` by the end of the window, at every scale.
     for sc in (0.25, 0.5, 1.0)
-        @test run(sc, 206).excess≈exp(sc * maximum(base)) rtol=0.02
+        @test run(sc, 206).excess ≈ exp(sc * maximum(base)) rtol = 0.02
     end
 
     ## First order, not second: halving the deviations roughly halves the
@@ -832,9 +909,9 @@ end
     ## very differently-selected pools, so confirmed-case share is not
     ## infection share. Ituri runs ~32% positivity against Nord-Kivu's ~6%.
     it_pos = sum(lab["ituri_positive"].counts) /
-             sum(lab["ituri_analysed"].counts)
+        sum(lab["ituri_analysed"].counts)
     nk_pos = sum(lab["nord_kivu_positive"].counts) /
-             sum(lab["nord_kivu_analysed"].counts)
+        sum(lab["nord_kivu_analysed"].counts)
     ## Ituri ran 24.3% positivity against Nord-Kivu's 11.1% over the window.
     ## The gap has narrowed as Nord-Kivu's epidemic grew, from better than
     ## threefold when the series stopped in July to roughly twofold now, so
@@ -842,7 +919,7 @@ end
     @test it_pos > 2 * nk_pos
 end
 
-@testitem "patch_rt_model: the drift prior permits real divergence" tags=[:slow] begin
+@testitem "patch_rt_model: the drift prior permits real divergence" tags = [:slow] begin
     using BVDOutbreakSize
     using BVDOutbreakSize: patch_rt_model, knot_days
     using Distributions: Normal, truncated
@@ -884,8 +961,8 @@ end
 @testitem "patch_infection_model: the seed prior can reach the observed split" begin
     using BVDOutbreakSize
     using BVDOutbreakSize: patch_infections, seed_infections,
-                           seed_at_renewal_start, generation_interval_model,
-                           r_to_R0, cdf_nmax
+        seed_at_renewal_start, generation_interval_model,
+        r_to_R0, cdf_nmax
     using Distributions: Gamma, LogNormal, quantile
     using Random: seed!
 
@@ -908,15 +985,17 @@ end
     rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
 
     ## The observed Nord-Kivu share of confirmed cases.
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
     it = sum(prov.increments[1, :])
     nk = sum(prov.increments[2, :])
     obs_share = nk / (it + nk)
     ## ~17% over the full window, up from ~9% when the series stopped in
     ## July. Guards the fixture, so a scan that silently changed the split
     ## would be caught here rather than in a fit.
-    @test 0.10 < obs_share < 0.25
+    @test 0.1 < obs_share < 0.25
 
     seed!(1)
     g = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))().g
@@ -961,10 +1040,14 @@ end
     ## common factors and cancel out of the normalised death shares, leaving
     ## the provincial INCIDENCE split free of case-ascertainment.
     obs = load_observations()
-    cases = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    deaths = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
+    cases = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    deaths = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
 
     ## Both are exact partitions of their national totals (the scanner gates
     ## on this), and they share a vintage grid so the two compositions line up.
@@ -982,14 +1065,22 @@ end
     ## cumulative therefore runs 6 cases above the national one from that date
     ## on, and exactly equal before it.
     natc = Dict(zip(obs.confirmed_history.days, obs.confirmed_history.counts))
-    natd = Dict(zip(obs.confirmed_deaths_history.days,
-        obs.confirmed_deaths_history.counts))
+    natd = Dict(
+        zip(
+            obs.confirmed_deaths_history.days,
+            obs.confirmed_deaths_history.counts
+        )
+    )
     cum_cases = cumsum(vec(sum(cases.increments; dims = 1)))
     cum_deaths = cumsum(vec(sum(deaths.increments; dims = 1)))
-    case_gaps = [cum_cases[i] - natc[d]
-                 for (i, d) in enumerate(cases.days) if haskey(natc, d)]
-    death_gaps = [cum_deaths[i] - natd[d]
-                  for (i, d) in enumerate(deaths.days) if haskey(natd, d)]
+    case_gaps = [
+        cum_cases[i] - natc[d]
+            for (i, d) in enumerate(cases.days) if haskey(natc, d)
+    ]
+    death_gaps = [
+        cum_deaths[i] - natd[d]
+            for (i, d) in enumerate(deaths.days) if haskey(natd, d)
+    ]
     ## Non-decreasing and bounded by the size of the revision, never negative,
     ## and zero for the early vintages before it.
     @test all(0 .<= case_gaps .<= 6)
@@ -1015,7 +1106,7 @@ end
     @test nk_death_share > 1.15 * nk_case_share
 end
 
-@testitem "bvd_joint: a patch chain carries every headline quantity" tags=[:slow] begin
+@testitem "bvd_joint: a patch chain carries every headline quantity" tags = [:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
@@ -1030,12 +1121,17 @@ end
     ## deterministics off the chain; if any is absent the one-week-ahead
     ## forecast cannot be produced from a patch fit at all.
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    provd = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    provd = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
 
-    m = bvd_joint(obs.n,
+    m = bvd_joint(
+        obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -1061,10 +1157,13 @@ end
         province_increments = prov.increments, province_days = prov.days,
         province_death_increments = provd.increments,
         province_death_days = provd.days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
 
-    chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
-        progress = false)
+    chn = sample(
+        m, Prior(), 40; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
 
     ## THE CHAIN READ CONTRACT. Every key that src/ or docs/ pulls off a joint
     ## chain. Two CI render failures in a row came from keys the model tests
@@ -1080,41 +1179,49 @@ end
     ##
     ## Both are invisible to a test that asserts what the author remembers.
     ## Assert against what is actually READ.
-    for q in (:bed_capacity, :CFR, :C_T, :cumulative_confirmed,
-        :cumulative_infections, :cumulative_onsets,
-        :cumulative_expected_deaths, :doubling_time, :expected_admissions_T,
-        :expected_bed_demand_T, :expected_confirmed_deaths_T,
-        :expected_confirmed_T, :expected_deaths_T, :expected_incare_deaths_T,
-        :expected_infections_T, :expected_recovered_T, :expected_reports_T,
-        :expected_ruleouts_T, :isolation_dispersion, :k,
-        :onset_to_confirmation_pmf, :onset_to_death_confirmation_pmf,
-        :p_drc, :p_uganda, :r, :r0, :R0, :recovered_dispersion, :R_T, :T,
-        :lambda_bg, :lambda_bg_death, :tau_death, :tau_test)
+    for q in (
+            :bed_capacity, :CFR, :C_T, :cumulative_confirmed,
+            :cumulative_infections, :cumulative_onsets,
+            :cumulative_expected_deaths, :doubling_time, :expected_admissions_T,
+            :expected_bed_demand_T, :expected_confirmed_deaths_T,
+            :expected_confirmed_T, :expected_deaths_T, :expected_incare_deaths_T,
+            :expected_infections_T, :expected_recovered_T, :expected_reports_T,
+            :expected_ruleouts_T, :isolation_dispersion, :k,
+            :onset_to_confirmation_pmf, :onset_to_death_confirmation_pmf,
+            :p_drc, :p_uganda, :r, :r0, :R0, :recovered_dispersion, :R_T, :T,
+            :lambda_bg, :lambda_bg_death, :tau_death, :tau_test,
+        )
         @test chn[q] !== nothing
     end
 
     ## Submodel-PREFIXED keys. These are the ones that bite, because a prefix
     ## change leaves the parameter set identical and only breaks the read.
-    for q in ("rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
-        "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
-        "inc_state.delay_mean", "inc_state.delay_sd",
-        "cases_state.report_state.α", "cases_state.report_state.θ",
-        "confirmed_state.receipt_state.d.delay_mean",
-        "confirmed_state.receipt_state.d.delay_sd",
-        "deaths_state.od_state.oa.α", "deaths_state.od_state.oa.θ",
-        "deaths_state.od_state.ad.α", "deaths_state.od_state.ad.θ",
-        "exports_state.detect_state.α", "exports_state.detect_state.θ",
-        "exports_state.travel_state.daily_travellers")
+    for q in (
+            "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
+            "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
+            "inc_state.delay_mean", "inc_state.delay_sd",
+            "cases_state.report_state.α", "cases_state.report_state.θ",
+            "confirmed_state.receipt_state.d.delay_mean",
+            "confirmed_state.receipt_state.d.delay_sd",
+            "deaths_state.od_state.oa.α", "deaths_state.od_state.oa.θ",
+            "deaths_state.od_state.ad.α", "deaths_state.od_state.ad.θ",
+            "exports_state.detect_state.α", "exports_state.detect_state.θ",
+            "exports_state.travel_state.daily_travellers",
+        )
         @test chn[Symbol(q)] !== nothing
     end
 
     ## The scalars must be finite; the trajectories must be non-empty.
-    for q in (:C_T, :R_T, :r, :r0, :R0, :doubling_time, :CFR, :p_drc,
-        :p_uganda, :k)
+    for q in (
+            :C_T, :R_T, :r, :r0, :R0, :doubling_time, :CFR, :p_drc,
+            :p_uganda, :k,
+        )
         @test all(isfinite, vec(Array(chn[q])))
     end
-    for q in (:cumulative_infections, :cumulative_onsets,
-        :cumulative_confirmed, :onset_to_confirmation_pmf)
+    for q in (
+            :cumulative_infections, :cumulative_onsets,
+            :cumulative_confirmed, :onset_to_confirmation_pmf,
+        )
         @test !isempty(vec(collect(chn[q]))[1])
     end
 end
@@ -1135,14 +1242,16 @@ end
     ## machinery still sampled with one patch, it would add prior-only
     ## dimensions the likelihood never touches, and nothing would look wrong.
     obs = load_observations()
-    m1 = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m1 = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
         breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
 
     ks = Set(string(k) for k in keys(DynamicPPL.VarInfo(Xoshiro(1), m1)))
     has(s) = any(k -> occursin(s, k), ks)
@@ -1169,13 +1278,16 @@ end
     ## quietly vanish, and the fit would look perfectly healthy. This exact
     ## mistake was made once already, by a rename that dropped the argument.
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
 
     ## The guard lives in the model body, so it fires on EVALUATION, not on
     ## construction -- which is the right place: it is the fit that would be
     ## silently wrong.
-    bad = bvd_joint(obs.n, obs.exported_cases,
+    bad = bvd_joint(
+        obs.n, obs.exported_cases,
         obs.total_deaths, obs.reported_cases, obs.exports_deaths,
         obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -1184,13 +1296,14 @@ end
         breakpoint = obs.who_first_sitrep_days,
         province_increments = prov.increments,
         province_days = prov.days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
     @test_throws ErrorException DynamicPPL.VarInfo(Xoshiro(1), bad)
 end
 
 @testitem "patch_infections: reported imports are arrivals" begin
     using BVDOutbreakSize: patch_infections,
-                           province_importation_kernel, PROVINCE_POPULATIONS
+        province_importation_kernel, PROVINCE_POPULATIONS
 
     ## The analysis page plots the imports the renewal reports, so they have
     ## to be the arrivals term itself and not a residual reconstructed from
@@ -1212,13 +1325,17 @@ end
     ## Rebuild each day's generated force from the province's own Rt and
     ## check the reported arrivals against it.
     for t in (size(seeds, 2) + 1):n
-        gen = [Rt[p, t] *
-               sum(st.infections[p, t - s] * g[s]
-               for s in 1:min(t - 1, length(g)))
-               for p in 1:3]
+        gen = [
+            Rt[p, t] *
+                sum(
+                st.infections[p, t - s] * g[s]
+                    for s in 1:min(t - 1, length(g))
+            )
+                for p in 1:3
+        ]
         for p in 1:3
             arrivals = eps * sum(K[p, q] * gen[q] for q in 1:3 if q != p)
-            @test st.importation[p, t]≈arrivals rtol=1e-10
+            @test st.importation[p, t] ≈ arrivals rtol = 1.0e-10
         end
     end
 
@@ -1236,7 +1353,7 @@ end
     flat = fill(1.3, 3, n)
     a = patch_infections(flat, g, seeds, K, eps).infections
     b = patch_infections(flat, g, seeds, K, 0.0).infections
-    @test sum(a)≈sum(b) rtol=1e-8
+    @test sum(a) ≈ sum(b) rtol = 1.0e-8
 end
 
 @testitem "province_cfr_table: provinces differ by case-finding" begin
@@ -1248,13 +1365,19 @@ end
     ## death confirmation over the relative case ascertainment. A province
     ## with worse case-finding must come out with a higher corrected ratio.
     nd = 200
-    chn = (; province_ascertainment = [[1.5, 0.8, 0.833] for _ in 1:nd],
-        province_death_ascertainment = [[1.0, 1.0, 1.0] for _ in 1:nd])
-    res = (; corrected = fill(0.4, nd), structural = fill(0.5, nd),
-        modelled_naive = fill(0.3, nd), naive_observed = 0.3)
-    df = province_cfr_table(chn, res;
+    chn = (;
+        province_ascertainment = [[1.5, 0.8, 0.833] for _ in 1:nd],
+        province_death_ascertainment = [[1.0, 1.0, 1.0] for _ in 1:nd],
+    )
+    res = (;
+        corrected = fill(0.4, nd), structural = fill(0.5, nd),
+        modelled_naive = fill(0.3, nd), naive_observed = 0.3,
+    )
+    df = province_cfr_table(
+        chn, res;
         province_cases = [600, 100, 3], province_deaths = [200, 50, 1],
-        n_patches = 3)
+        n_patches = 3
+    )
     @test size(df, 1) == 3
     @test df[1, "Province"] == "Ituri"
     ## 0.4 / 1.5 = 26.7% for the best-ascertained province, 0.4 / 0.8 = 50%
@@ -1275,11 +1398,15 @@ end
     ## at the last vintage, so the provinces partition the national count
     ## exactly. A split that does not add up would double-count or lose cases.
     nd = 200
-    shares = [0.8 0.75; 0.15 0.20; 0.05 0.05]
-    chn = (; province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd])
-    fc = DataFrame(confirmed_new = fill(100.0, nd),
-        confirmed_deaths_new = fill(40.0, nd))
+    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_death_shares = [shares for _ in 1:nd],
+    )
+    fc = DataFrame(
+        confirmed_new = fill(100.0, nd),
+        confirmed_deaths_new = fill(40.0, nd)
+    )
     df = province_forecast_table(chn, fc; n_patches = 3)
     @test size(df, 1) == 6
     cases = df[df[!, "Quantity"] .== "New confirmed cases by T+7", :]
@@ -1292,9 +1419,9 @@ end
 
 @testitem "province kernel: distance should redistribute, not change volume" begin
     using BVDOutbreakSize: province_importation_kernel,
-                           province_distance_matrix, haversine_km,
-                           PROVINCE_POPULATIONS, PROVINCE_CAPITALS,
-                           PROVINCE_SOURCE_CAPITALS
+        province_distance_matrix, haversine_km,
+        PROVINCE_POPULATIONS, PROVINCE_CAPITALS,
+        PROVINCE_SOURCE_CAPITALS
 
     pops = PROVINCE_POPULATIONS
     np = length(pops)
@@ -1306,7 +1433,7 @@ end
     ## summed to. The distance term must not change how much leaves a
     ## province, only where it lands, or `epsilon` changes meaning.
     for q in 1:np
-        @test sum(@view K[:, q])≈1 - pops[q] / tot rtol=1e-12
+        @test sum(@view K[:, q]) ≈ 1 - pops[q] / tot rtol = 1.0e-12
         @test K[q, q] == 0
     end
     ## A zero distance matrix is the population-only kernel exactly.
@@ -1314,7 +1441,7 @@ end
     for p in 1:np, q in 1:np
 
         p == q && continue
-        @test flat[p, q]≈pops[p] / tot rtol=1e-12
+        @test flat[p, q] ≈ pops[p] / tot rtol = 1.0e-12
     end
     ## Direction: of two destinations from the same origin, the nearer one
     ## gains share against the population-only kernel and the further one
@@ -1329,10 +1456,14 @@ end
     ## Bukavu are read off the source capitals, since the patches pool them.
     @test D ≈ D'
     @test all(iszero, [D[i, i] for i in 1:np])
-    @test haversine_km(PROVINCE_SOURCE_CAPITALS[1],
-        PROVINCE_SOURCE_CAPITALS[2])≈379 atol=5
-    @test haversine_km(PROVINCE_SOURCE_CAPITALS[2],
-        PROVINCE_SOURCE_CAPITALS[3])≈99 atol=5
+    @test haversine_km(
+        PROVINCE_SOURCE_CAPITALS[1],
+        PROVINCE_SOURCE_CAPITALS[2]
+    ) ≈ 379 atol = 5
+    @test haversine_km(
+        PROVINCE_SOURCE_CAPITALS[2],
+        PROVINCE_SOURCE_CAPITALS[3]
+    ) ≈ 99 atol = 5
     ## A steeper decay concentrates exports on the nearer destination.
     steep = province_importation_kernel(pops; decay = 2.0)
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
@@ -1350,10 +1481,12 @@ end
     ## actually move the shares.
     modelled = [10.0 12.0; 4.0 5.0; 1.0 1.0]
     obs = [8 9; 3 4; 1 1]
-    m = province_composition_model(obs, modelled;
-        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0))
+    m = province_composition_model(
+        obs, modelled;
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0)
+    )
     rets = vec(returned(m, sample(m, Prior(), 200; progress = false)))
-    @test all(abs(sum(log.(r.province_severity))) < 1e-10 for r in rets)
+    @test all(abs(sum(log.(r.province_severity))) < 1.0e-10 for r in rets)
     @test all(all(≈(1.0), sum(r.shares; dims = 1)) for r in rets)
     ## Spread away from zero on at least some draws, so the multiplier is a
     ## live parameter rather than pinned at one.
@@ -1378,7 +1511,8 @@ end
         "sud_kivu_analysed" => (; days = [1, 2], counts = [10, 20]),
         "tshopo_analysed" => (; days = [1, 2], counts = [5, 5]),
         "bas_uele_analysed" => (; days = [1, 2], counts = [0, 0]),
-        "sud_ubangi_analysed" => (; days = [1, 2], counts = [0, 0]))
+        "sud_ubangi_analysed" => (; days = [1, 2], counts = [0, 0])
+    )
     names = ["ituri", "other"]
     pops = [1_000_000.0, 2_000_000.0]
 
@@ -1386,7 +1520,7 @@ end
     rates = [300 / 1_000_000, 40 / 2_000_000]
     want = log.(rates) .- (sum(log.(rates)) / 2)
     @test got ≈ want
-    @test sum(got) ≈ 0 atol = 1e-12
+    @test sum(got) ≈ 0 atol = 1.0e-12
 
     ## Scaling every patch's effort by the same factor is a level shift, which
     ## the centring removes.
@@ -1398,17 +1532,23 @@ end
     empty = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
     @test province_testing_covariate(empty, names, pops) == zeros(2)
     @test province_testing_covariate(
-        Dict("ituri_analysed" => hist["ituri_analysed"]), names, pops) ==
-          zeros(2)
-    untested = merge(hist,
-        Dict("sud_kivu_analysed" => (; days = [1, 2], counts = [0, 0]),
-            "tshopo_analysed" => (; days = [1, 2], counts = [0, 0])))
+        Dict("ituri_analysed" => hist["ituri_analysed"]), names, pops
+    ) ==
+        zeros(2)
+    untested = merge(
+        hist,
+        Dict(
+            "sud_kivu_analysed" => (; days = [1, 2], counts = [0, 0]),
+            "tshopo_analysed" => (; days = [1, 2], counts = [0, 0])
+        )
+    )
     @test province_testing_covariate(untested, names, pops) == zeros(2)
 
     ## A population vector that does not match the patches is an error, not a
     ## silent broadcast over the shorter of the two.
     @test_throws ErrorException province_testing_covariate(
-        hist, names, [1_000_000.0])
+        hist, names, [1_000_000.0]
+    )
 end
 
 @testitem "province_testing_covariate: the patch contrast in the manifest" begin
@@ -1420,13 +1560,13 @@ end
     obs = load_observations()
     cov = province_testing_covariate(obs.province_lab_daily_history)
     @test length(cov) == length(PROVINCE_NAMES)
-    @test cov≈[2.244, 0.974, -0.372, -2.846] atol=1e-3
-    @test sum(cov) ≈ 0 atol = 1e-12
+    @test cov ≈ [2.244, 0.974, -0.372, -2.846] atol = 1.0e-3
+    @test sum(cov) ≈ 0 atol = 1.0e-12
 
     ## Per-capita, not per-patch: the pooled `other` patch is the largest
     ## population and the smallest covariate.
     rate = exp.(cov)
-    @test rate[1] / rate[2]≈3.56 atol=0.01
+    @test rate[1] / rate[2] ≈ 3.56 atol = 0.01
     @test argmin(cov) == findfirst(==("other"), PROVINCE_NAMES)
 end
 
@@ -1443,10 +1583,14 @@ end
     modelled = [8.0 4.0; 1.5 0.8; 0.5 0.2]
 
     base = province_composition_model(obs, modelled)
-    zeroed = province_composition_model(obs, modelled;
-        testing_covariate = zeros(3))
-    live = province_composition_model(obs, modelled;
-        testing_covariate = [1.0, 0.0, -1.0])
+    zeroed = province_composition_model(
+        obs, modelled;
+        testing_covariate = zeros(3)
+    )
+    live = province_composition_model(
+        obs, modelled;
+        testing_covariate = [1.0, 0.0, -1.0]
+    )
 
     keyset(m) = Set(string(k) for k in keys(DynamicPPL.VarInfo(Xoshiro(2), m)))
     @test keyset(base) == keyset(zeroed)
@@ -1472,8 +1616,10 @@ end
 
     ## A covariate that does not cover the patches is an error, not a
     ## length-one broadcast over all of them.
-    @test_throws ErrorException province_composition_model(obs, modelled;
-        testing_covariate = [1.0])()
+    @test_throws ErrorException province_composition_model(
+        obs, modelled;
+        testing_covariate = [1.0]
+    )()
 end
 
 @testitem "bvd_joint: the testing covariate reaches the case composition" begin
@@ -1486,13 +1632,18 @@ end
     ## testing: the case composition takes it and the death composition does
     ## not.
     obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
-    provd = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES))
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    provd = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
     cov = province_testing_covariate(obs.province_lab_daily_history)
 
-    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         reported_history = obs.reported_history,
@@ -1504,7 +1655,8 @@ end
         province_death_increments = provd.increments,
         province_death_days = provd.days,
         province_testing_covariate = cov,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
 
     vi = DynamicPPL.VarInfo(Xoshiro(1), m)
     @test isfinite(DynamicPPL.logjoint(m, vi))
@@ -1529,12 +1681,20 @@ end
     ## the final knot than a long one, and the sum-to-zero constraint has to
     ## survive the reversion.
     function last_knot_spread(halflife; draws = 500)
-        m = patch_rt_model(206, 3, log(2.0); breakpoint = 100.0,
+        m = patch_rt_model(
+            206, 3, log(2.0); breakpoint = 100.0,
             rt_start = 1, rt_walk_start = 1,
-            region_halflife_prior = Dirac(halflife))
-        ks = [r.δ_knots
-              for r in vec(returned(m,
-            sample(m, Prior(), draws; progress = false)))]
+            region_halflife_prior = Dirac(halflife)
+        )
+        ks = [
+            r.δ_knots
+                for r in vec(
+                    returned(
+                        m,
+                        sample(m, Prior(), draws; progress = false)
+                    )
+                )
+        ]
         nb = size(first(ks), 2)
         worst = maximum(maximum(abs, sum(k; dims = 1)) for k in ks)
         return (spread = std([k[1, nb] for k in ks]), centred = worst)
@@ -1542,8 +1702,8 @@ end
     short = last_knot_spread(14.0)
     long = last_knot_spread(10_000.0)
     ## Sum-to-zero at every knot, both ways.
-    @test short.centred < 1e-10
-    @test long.centred < 1e-10
+    @test short.centred < 1.0e-10
+    @test long.centred < 1.0e-10
     ## Reversion narrows the final deviation. A half-life far longer than the
     ## window is the random-walk limit, which is the wider of the two.
     @test short.spread < long.spread
@@ -1558,7 +1718,8 @@ end
     ## revision as no new cases that vintage.
     hist = Dict(
         "a" => (; days = [1, 2, 3, 4], counts = [10, 22, 16, 20]),
-        "b" => (; days = [1, 2, 3, 4], counts = [1, 2, 3, 4]))
+        "b" => (; days = [1, 2, 3, 4], counts = [1, 2, 3, 4])
+    )
     m = province_increment_matrix(hist, ["a", "b"], 2)
     @test m.days == [1, 2, 3, 4]
     @test m.increments[1, :] == [10, 12, 0, 4]
@@ -1572,11 +1733,11 @@ end
 
 @testitem "the patches should partition the provinces the reports carry" begin
     using BVDOutbreakSize: PROVINCE_NAMES, PROVINCE_LABELS,
-                           PROVINCE_MEMBERS, PROVINCE_POPULATIONS,
-                           PROVINCE_CAPITALS, PROVINCE_SOURCE_NAMES,
-                           PROVINCE_SOURCE_POPULATIONS,
-                           PROVINCE_SOURCE_CAPITALS,
-                           province_increment_matrix
+        PROVINCE_MEMBERS, PROVINCE_POPULATIONS,
+        PROVINCE_CAPITALS, PROVINCE_SOURCE_NAMES,
+        PROVINCE_SOURCE_POPULATIONS,
+        PROVINCE_SOURCE_CAPITALS,
+        province_increment_matrix
 
     ## Every province the reports carry belongs to exactly one patch. If one
     ## were dropped the patches would no longer sum to the national totals and
@@ -1592,8 +1753,10 @@ end
     ## them rather than on any one.
     @test sum(PROVINCE_POPULATIONS) == sum(PROVINCE_SOURCE_POPULATIONS)
     other = findfirst(==("other"), PROVINCE_NAMES)
-    idx = [findfirst(==(m), PROVINCE_SOURCE_NAMES)
-           for m in PROVINCE_MEMBERS["other"]]
+    idx = [
+        findfirst(==(m), PROVINCE_SOURCE_NAMES)
+            for m in PROVINCE_MEMBERS["other"]
+    ]
     @test PROVINCE_POPULATIONS[other] == sum(PROVINCE_SOURCE_POPULATIONS[idx])
     lats = [PROVINCE_SOURCE_CAPITALS[i][1] for i in idx]
     @test minimum(lats) < PROVINCE_CAPITALS[other][1] < maximum(lats)
@@ -1609,7 +1772,8 @@ end
         "sud_ubangi" => (; days = [1, 2, 3], counts = [0, 0, 0]),
         "ituri" => (; days = [1, 2, 3], counts = [10, 20, 30]),
         "nord_kivu" => (; days = [1, 2, 3], counts = [2, 4, 6]),
-        "haut_uele" => (; days = [1, 2, 3], counts = [0, 1, 2]))
+        "haut_uele" => (; days = [1, 2, 3], counts = [0, 1, 2])
+    )
     m = province_increment_matrix(hist, PROVINCE_NAMES, length(PROVINCE_NAMES))
     ## Pooled cumulative is 6, 11, 14, so the increments are 6, 5, 3. Per
     ## member they would have been 6, 5, and (-2 + 4 + 1) clamped to 5.
@@ -1628,15 +1792,24 @@ end
     nd = 400
     shares = hcat(fill(0.6, nd), range(0.5, 0.9; length = nd))
     chn = (;
-        province_shares = [[shares[i, 1] 1-shares[i, 2];
-                            1-shares[i, 1] shares[i, 2]] for i in 1:nd],
-        province_death_shares = [[0.5 0.5; 0.5 0.5] for _ in 1:nd])
-    fc = DataFrame(confirmed_new = collect(range(50.0, 150.0; length = nd)),
-        confirmed_deaths_new = fill(40.0, nd))
-    df = province_forecast_vs_truth(chn, fc;
+        province_shares = [
+            [
+                shares[i, 1] 1 - shares[i, 2];
+                1 - shares[i, 1] shares[i, 2]
+            ] for i in 1:nd
+        ],
+        province_death_shares = [[0.5 0.5; 0.5 0.5] for _ in 1:nd],
+    )
+    fc = DataFrame(
+        confirmed_new = collect(range(50.0, 150.0; length = nd)),
+        confirmed_deaths_new = fill(40.0, nd)
+    )
+    df = province_forecast_vs_truth(
+        chn, fc;
         observed = [900, 100], baseline = [800, 60],
         death_observed = [40, 20], death_baseline = [20, 10],
-        n_patches = 2, patch_labels = ["A", "B"])
+        n_patches = 2, patch_labels = ["A", "B"]
+    )
     @test size(df, 1) == 4
     ## Truth is the difference of the two cumulatives, per province.
     cases = df[df[!, "Stream"] .== "Confirmed cases", :]
@@ -1657,9 +1830,11 @@ end
     @test eltype(df[!, "Within 90% PI"]) == Bool
 
     ## A chain with no compositions cannot be scored by province.
-    @test_throws ErrorException province_forecast_vs_truth((; a = 1), fc;
+    @test_throws ErrorException province_forecast_vs_truth(
+        (; a = 1), fc;
         observed = [1, 2], baseline = [0, 0], n_patches = 2,
-        patch_labels = ["A", "B"])
+        patch_labels = ["A", "B"]
+    )
 end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin
@@ -1671,12 +1846,16 @@ end
     ## A flat kernel, so the importation a province receives is the sum of
     ## what the other two send at their own intensities and nothing else.
     K = [p == q ? 0.0 : 1.0 for p in 1:np, q in 1:np]
-    base = patch_infection_model(n, np; breakpoint = bp, rt_start,
-        importation_kernel = K)
+    base = patch_infection_model(
+        n, np; breakpoint = bp, rt_start,
+        importation_kernel = K
+    )
     ## Everything but the intensity is held at one draw, so the trajectories
     ## differ only through what the intensity does.
-    function run(; ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 0.5, 2.0],
-            β_ε = 0.0)
+    function run(;
+            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 0.5, 2.0],
+            β_ε = 0.0
+        )
         m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
         return returned(m, rand(Xoshiro(7), m))
     end
@@ -1711,28 +1890,31 @@ end
     @test iszero(shared.importation_matrix[1, day])
     @test all(>(0), shared.importation_matrix[2:np, day])
     @test run(β_ε = 0.8).importation_matrix[2, day] >
-          shared.importation_matrix[2, day]
+        shared.importation_matrix[2, day]
 
     ## The intensity is capped at one: an origin cannot send away more than
     ## it generates, so pushing the ramp effect further changes nothing.
     @test run(ε_bar = 0.9, β_ε = 5.0).importation_matrix[:, day] ≈
-          run(ε_bar = 0.9, β_ε = 50.0).importation_matrix[:, day]
+        run(ε_bar = 0.9, β_ε = 50.0).importation_matrix[:, day]
 end
 
 @testitem "patch_infection_model: Ituri alone is seeded when coupled" begin
     using BVDOutbreakSize: patch_infection_model, seed_at_renewal_start,
-                           seed_infections
+        seed_infections
     using Turing: DynamicPPL, returned
     using Random: Xoshiro
 
     n, np, rt_start, bp = 60, 3, 30, 10
-    has_frac(m) = any(v -> occursin("seed_fraction", string(v)),
-        keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
+    has_frac(m) = any(
+        v -> occursin("seed_fraction", string(v)),
+        keys(DynamicPPL.VarInfo(Xoshiro(1), m))
+    )
     ## The national cryptic seed the growth prior speaks to, whatever the
     ## patch count. The model surfaces the anchor it used, so the curve is
     ## rebuilt from that rather than from a second reading of the prior.
     national_seed(s) = seed_infections(
-        s.seed_at_renewal_start, s.r0, rt_start)
+        s.seed_at_renewal_start, s.r0, rt_start
+    )
 
     ## Coupled: the outbreak began in Ituri, so the primary patch takes the
     ## whole cryptic seed and the seed fraction is not a free dimension.
@@ -1750,8 +1932,10 @@ end
 
     ## An all-zero kernel leaves a secondary patch no route to infections,
     ## so the sampled fractions still apply and seed it directly.
-    uncoupled = patch_infection_model(n, np; breakpoint = bp, rt_start,
-        importation_kernel = zeros(np, np))
+    uncoupled = patch_infection_model(
+        n, np; breakpoint = bp, rt_start,
+        importation_kernel = zeros(np, np)
+    )
     @test has_frac(uncoupled)
     su = returned(uncoupled, rand(Xoshiro(9), uncoupled))
     @test length(su.seed_fraction) == np - 1
@@ -1760,7 +1944,7 @@ end
     ## so the patch sum is the same cryptic curve a single patch would run
     ## and `2^m` keeps its meaning as the country's cryptic size.
     @test vec(sum(su.infections_matrix[:, 1:rt_start]; dims = 1)) ≈
-          national_seed(su)
+        national_seed(su)
     ## And each province holds its own share of it, `f_p / (1 + Σf)`.
     denom = 1 + sum(su.seed_fraction)
     shares = su.infections_matrix[:, 1] ./ sum(su.infections_matrix[:, 1])

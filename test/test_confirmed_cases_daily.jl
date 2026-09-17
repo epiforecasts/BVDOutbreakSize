@@ -7,9 +7,11 @@
     ## confirmed_only_model, which draws the shared report kernel, fits the
     ## analysed-specimen volume and scores the confirmed positives as a
     ## Binomial of the observed analysed denominator.
-    m = confirmed_only_model(40, 8;
+    m = confirmed_only_model(
+        40, 8;
         confirmed_history = (; days = [20, 40], counts = [3, 8]),
-        lab_history = (; days = [20, 40], counts = [5, 9]))
+        lab_history = (; days = [20, 40], counts = [5, 9])
+    )
     lp = logjoint(m, rand(MersenneTwister(1), m))
     @test isfinite(lp)
 end
@@ -36,8 +38,10 @@ end
 
     ## A daily count on or before the last laboratory date is ignored: the
     ## cumulative series already covers it.
-    w1 = confirmed_positivity_windows(confirmed, lab,
-        (; days = [15, 22], counts = [99, 40]))
+    w1 = confirmed_positivity_windows(
+        confirmed, lab,
+        (; days = [15, 22], counts = [99, 40])
+    )
     @test w1.late_analysed == [0, 40, 0]
 end
 
@@ -50,21 +54,25 @@ end
     ## 20) where day 35 publishes a 24h analysed count: it is scored as a
     ## Binomial of that observed denominator, the others as modelled-volume
     ## unanchored windows.
-    m = confirmed_only_model(40, 20;
+    m = confirmed_only_model(
+        40, 20;
         confirmed_history =
-        (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
+            (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
         lab_history = (; days = [10, 20], counts = [12, 28]),
-        lab_daily_history = (; days = [35], counts = [30]))
+        lab_daily_history = (; days = [35], counts = [30])
+    )
     lp = logjoint(m, rand(MersenneTwister(1), m))
     @test isfinite(lp)
 
     ## When the confirmed increment exceeds the observed denominator it is
     ## clamped into the Binomial support, so the likelihood stays finite.
-    m2 = confirmed_only_model(40, 20;
+    m2 = confirmed_only_model(
+        40, 20;
         confirmed_history =
-        (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
+            (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
         lab_history = (; days = [10, 20], counts = [12, 28]),
-        lab_daily_history = (; days = [35], counts = [3]))
+        lab_daily_history = (; days = [35], counts = [3])
+    )
     @test isfinite(logjoint(m2, rand(MersenneTwister(2), m2)))
 end
 
@@ -99,10 +107,14 @@ end
 
     ## Empty break days are a no-op, and a break day that matches no late
     ## window is ignored rather than shifting another day's denominator.
-    @test confirmed_positivity_windows(confirmed, lab, daily,
-        Int[]).late_analysed == w.late_analysed
-    @test confirmed_positivity_windows(confirmed, lab, daily,
-        [99]).late_analysed == w.late_analysed
+    @test confirmed_positivity_windows(
+        confirmed, lab, daily,
+        Int[]
+    ).late_analysed == w.late_analysed
+    @test confirmed_positivity_windows(
+        confirmed, lab, daily,
+        [99]
+    ).late_analysed == w.late_analysed
 end
 
 @testitem "confirmed_break_offset places one step on each break window" begin
@@ -113,11 +125,11 @@ end
     ## cumulative (unlike the occupancy reclassification offset).
     late_days = [21, 22, 23, 24]
     @test confirmed_break_offset(late_days, [22], [250.0]) ==
-          [0.0, 250.0, 0.0, 0.0]
+        [0.0, 250.0, 0.0, 0.0]
 
     ## Two break days each get their own step, and later windows stay at zero.
     @test confirmed_break_offset(late_days, [21, 24], [10.0, -5.0]) ==
-          [10.0, 0.0, 0.0, -5.0]
+        [10.0, 0.0, 0.0, -5.0]
 
     ## No break days (or none landing on a late window) is a zero no-op of the
     ## right length.
@@ -142,7 +154,7 @@ end
 
     ## A break day matching no window is dropped, so no inert step is sampled.
     @test break_step_centres([21, 23], [10, 15], [22], [97]) ==
-          (Int[], Float64[])
+        (Int[], Float64[])
 
     ## A missing/short gross is read as a gross of zero, so the centre is the
     ## WHOLE increment: all of it attributed to the artefact rather than
@@ -152,15 +164,15 @@ end
 
     ## No break days at all is empty.
     @test break_step_centres([21, 22], [10, 369], Int[], Int[]) ==
-          (Int[], Float64[])
+        (Int[], Float64[])
 
     ## Generator mode: no counts to difference, so there is no published
     ## discrepancy. The day still gets a step (a predictive keeps the fitted
     ## chain's dimensions) but the centre falls back to zero.
     @test break_step_centres([21, 22, 23], missing, [22], [97]) ==
-          ([22], [0.0])
+        ([22], [0.0])
     @test break_step_centres([21, 23], missing, [22], [97]) ==
-          (Int[], Float64[])
+        (Int[], Float64[])
 end
 
 @testitem "break step centre and offset address the same window" begin
@@ -188,7 +200,7 @@ end
     nbdays, ncentres = break_step_centres(days, increments, [40], [97])
     @test ncentres == [Float64(increments[3] - 97)]
     @test confirmed_break_offset(days, nbdays, ncentres) ==
-          [0.0, 0.0, Float64(increments[3] - 97)]
+        [0.0, 0.0, Float64(increments[3] - 97)]
 end
 
 @testitem "the listed break day is a live late window, not a silent no-op" begin
@@ -200,8 +212,10 @@ end
     ## warning. Assert the wiring against the real data rather than assume it.
     obs = load_observations()
     @test !isempty(obs.confirmed_break_days)
-    w = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history,
-        obs.lab_daily_history, obs.confirmed_break_days)
+    w = confirmed_positivity_windows(
+        obs.confirmed_history, obs.lab_history,
+        obs.lab_daily_history, obs.confirmed_break_days
+    )
     for d in obs.confirmed_break_days
         pos = findfirst(==(d), w.late_days)
         @test pos !== nothing
@@ -220,8 +234,10 @@ end
 
     ## Left undeclared the same day keeps its published denominator, so the
     ## assertions above are testing the break and not a vacuous zero.
-    w0 = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history,
-        obs.lab_daily_history)
+    w0 = confirmed_positivity_windows(
+        obs.confirmed_history, obs.lab_history,
+        obs.lab_daily_history
+    )
     for d in obs.confirmed_break_days
         @test w0.late_analysed[findfirst(==(d), w0.late_days)] > 0
     end
@@ -238,10 +254,12 @@ end
     hist = (; days = [20, 30, 35, 40], counts = [50, 60, 429, 444])
     lab = (; days = [10, 20], counts = [100, 300])
     daily = (; days = [30, 35, 40], counts = [50, 414, 60])
-    build(sd, gross) = confirmed_only_model(40, 444;
+    build(sd, gross) = confirmed_only_model(
+        40, 444;
         confirmed_history = hist, lab_history = lab,
         lab_daily_history = daily, confirmed_break_days = [35],
-        confirmed_break_gross_cases = gross, confirmed_break_sd = sd)
+        confirmed_break_gross_cases = gross, confirmed_break_sd = sd
+    )
 
     m = build(0.0, [97])
     θ = rand(MersenneTwister(1), m)
@@ -266,19 +284,23 @@ end
     hist = (; days = [20, 30, 35, 40], counts = [50, 60, 429, 444])
     lab = (; days = [10, 20], counts = [100, 300])
     daily = (; days = [30, 35, 40], counts = [50, 414, 60])
-    m = confirmed_only_model(40, 444;
+    m = confirmed_only_model(
+        40, 444;
         confirmed_history = hist, lab_history = lab,
         lab_daily_history = daily, confirmed_break_days = [35],
-        confirmed_break_gross_cases = [97])
+        confirmed_break_gross_cases = [97]
+    )
     θ = rand(MersenneTwister(1), m)
     @test any(k -> occursin("confirmed_step", string(k)), keys(θ))
     @test isfinite(logjoint(m, θ))
 
     ## Without a break day no step is sampled — the block is opt-in and empty
     ## by default, so an unlisted vintage's likelihood is unaffected.
-    m0 = confirmed_only_model(40, 444;
+    m0 = confirmed_only_model(
+        40, 444;
         confirmed_history = hist, lab_history = lab,
-        lab_daily_history = daily)
+        lab_daily_history = daily
+    )
     θ0 = rand(MersenneTwister(1), m0)
     @test !any(k -> occursin("confirmed_step", string(k)), keys(θ0))
     @test isfinite(logjoint(m0, θ0))

@@ -46,15 +46,20 @@ model = bvd_joint(
     background_re = true,
     confirmed_positivity_link = PLINK,
     genetic = genetic_seeding_model,
-    tmrca_days = obs.tmrca_days)
+    tmrca_days = obs.tmrca_days
+)
 
 isdir("logs") || mkdir("logs")
 cb = progress_callback(; path = "logs/joint_fit.log", every = 25)
 
-println("Fitting joint ($(SAMPLES)x$(CHAINS), n=$(obs.n), background_re=true, ",
-    "ascertainment≈75%, AD=$(AD)). Tail logs/joint_fit.log for live progress.\n")
-chn = nuts_sample(model; samples = SAMPLES, chains = CHAINS,
-    adtype = adtype, callback = cb, progress = false)
+println(
+    "Fitting joint ($(SAMPLES)x$(CHAINS), n=$(obs.n), background_re=true, ",
+    "ascertainment≈75%, AD=$(AD)). Tail logs/joint_fit.log for live progress.\n"
+)
+chn = nuts_sample(
+    model; samples = SAMPLES, chains = CHAINS,
+    adtype = adtype, callback = cb, progress = false
+)
 
 serialize("logs/joint_chain.jls", chn)
 
@@ -71,18 +76,22 @@ println("  max R-hat                  : ", round(d.max_rhat; digits = 4))
 println("  min bulk ESS               : ", round(d.min_ess_bulk; digits = 1))
 
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")
-for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
-    :lambda_bg, :bg_sigma, :lambda_bg_death,
-    :death_ascertainment, :background_cfr, :tau_death,
-    :death_composition, :death_confirmation,
-    :suspected_positivity, :test_positivity,
-    :expected_reports_T, :expected_deaths_T, :expected_exports_T,
-    :expected_confirmed_T, :expected_confirmed_deaths_T)
+for sym in (
+        :C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
+        :lambda_bg, :bg_sigma, :lambda_bg_death,
+        :death_ascertainment, :background_cfr, :tau_death,
+        :death_composition, :death_confirmation,
+        :suspected_positivity, :test_positivity,
+        :expected_reports_T, :expected_deaths_T, :expected_exports_T,
+        :expected_confirmed_T, :expected_confirmed_deaths_T,
+    )
     try
         m, lo, hi = q(sym)
-        println("  ", rpad(string(sym), 20),
+        println(
+            "  ", rpad(string(sym), 20),
             rpad(round(m; digits = 3), 12),
-            "[", round(lo; digits = 3), ", ", round(hi; digits = 3), "]")
+            "[", round(lo; digits = 3), ", ", round(hi; digits = 3), "]"
+        )
     catch
         println("  ", rpad(string(sym), 20), "(absent)")
     end

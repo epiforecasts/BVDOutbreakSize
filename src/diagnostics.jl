@@ -38,8 +38,10 @@ _at(v, i) = i <= length(v) ? _diag_value(v[i]) : NaN
 function _split_index(name::AbstractString)
     m = match(r"^(.*)\[([0-9]+(?:\s*,\s*[0-9]+)*)\]$", name)
     isnothing(m) && return (String(name), 0)
-    return (String(m.captures[1]),
-        parse(Int, strip(first(split(m.captures[2], ",")))))
+    return (
+        String(m.captures[1]),
+        parse(Int, strip(first(split(m.captures[2], ",")))),
+    )
 end
 
 """
@@ -124,25 +126,40 @@ listed is dropped, since it is the same quantity under a second name.
 
 Columns are `:parameter`, `:rhat`, `:ess_bulk` and `:ess_tail`.
 """
-function worst_parameters_table(fit; n::Integer = 15,
-        collapse_aliases::Bool = true, labels = Dict{Symbol, String}())
+function worst_parameters_table(
+        fit; n::Integer = 15,
+        collapse_aliases::Bool = true, labels = Dict{Symbol, String}()
+    )
     df = _as_diagnostics(fit)
-    isempty(df) && return DataFrame(parameter = String[], rhat = Float64[],
-        ess_bulk = Float64[], ess_tail = Float64[])
+    isempty(df) && return DataFrame(
+        parameter = String[], rhat = Float64[],
+        ess_bulk = Float64[], ess_tail = Float64[]
+    )
     ## A stable sort so two parameters that tie keep model order and
     ## the published table does not reshuffle between builds.
     ranked = df[sortperm(df.ess_bulk; alg = MergeSort), :]
     if collapse_aliases
-        ranked = ranked[_first_occurrence(collect(zip(ranked.rhat,
-            ranked.ess_bulk, ranked.ess_tail))), :]
+        ranked = ranked[
+            _first_occurrence(
+                collect(
+                    zip(
+                        ranked.rhat,
+                        ranked.ess_bulk, ranked.ess_tail
+                    )
+                )
+            ), :,
+        ]
     end
     keep = first(ranked, n)
     return DataFrame(
-        parameter = [_diag_label(r.parameter, r.index; labels = labels)
-                     for r in eachrow(keep)],
+        parameter = [
+            _diag_label(r.parameter, r.index; labels = labels)
+                for r in eachrow(keep)
+        ],
         rhat = round.(keep.rhat; digits = 3),
         ess_bulk = round.(keep.ess_bulk; digits = 0),
-        ess_tail = round.(keep.ess_tail; digits = 0))
+        ess_tail = round.(keep.ess_tail; digits = 0)
+    )
 end
 
 """
@@ -156,25 +173,42 @@ the last column, and `collapse_aliases` drops a parameter whose diagnostics
 repeat those of one already listed. Columns are `:parameter`, `:elements`,
 `:max_rhat`, `:min_ess_bulk` and the count above the threshold.
 """
-function family_diagnostics_table(fit; n::Integer = 10,
+function family_diagnostics_table(
+        fit; n::Integer = 10,
         rhat_threshold::Real = 1.1, collapse_aliases::Bool = true,
-        labels = Dict{Symbol, String}())
+        labels = Dict{Symbol, String}()
+    )
     df = _as_diagnostics(fit)
     groups = unique(df.parameter)
     rows = [df.parameter .== g for g in groups]
     tbl = DataFrame(
         "parameter" => [String(get(labels, Symbol(g), g)) for g in groups],
         "elements" => [count(r) for r in rows],
-        "max_rhat" => [round(_max_finite(df.rhat[r]); digits = 3)
-                       for r in rows],
-        "min_ess_bulk" => [round(_min_finite(df.ess_bulk[r]); digits = 0)
-                           for r in rows],
-        "above_$(rhat_threshold)" => [count(>(rhat_threshold), df.rhat[r])
-                                      for r in rows])
+        "max_rhat" => [
+            round(_max_finite(df.rhat[r]); digits = 3)
+                for r in rows
+        ],
+        "min_ess_bulk" => [
+            round(_min_finite(df.ess_bulk[r]); digits = 0)
+                for r in rows
+        ],
+        "above_$(rhat_threshold)" => [
+            count(>(rhat_threshold), df.rhat[r])
+                for r in rows
+        ]
+    )
     sort!(tbl, :min_ess_bulk; alg = MergeSort)
     if collapse_aliases
-        tbl = tbl[_first_occurrence(collect(zip(tbl.elements, tbl.max_rhat,
-            tbl.min_ess_bulk))), :]
+        tbl = tbl[
+            _first_occurrence(
+                collect(
+                    zip(
+                        tbl.elements, tbl.max_rhat,
+                        tbl.min_ess_bulk
+                    )
+                )
+            ), :,
+        ]
     end
     return first(tbl, n)
 end
@@ -190,9 +224,11 @@ because most of the model is. The counts here separate those two cases. The
 last column names the parameter whose elements reach the lowest bulk
 effective sample size.
 """
-function diagnostic_spread_table(fits::Pair{String}...;
+function diagnostic_spread_table(
+        fits::Pair{String}...;
         rhat_warn::Real = 1.01, rhat_bad::Real = 1.1,
-        ess_low::Integer = 100, labels = Dict{Symbol, String}())
+        ess_low::Integer = 100, labels = Dict{Symbol, String}()
+    )
     dfs = [_as_diagnostics(f.second) for f in fits]
     worst = map(dfs) do df
         isempty(df) && return "none"
@@ -204,16 +240,25 @@ function diagnostic_spread_table(fits::Pair{String}...;
     return DataFrame(
         "fit" => [String(f.first) for f in fits],
         "parameters" => [nrow(df) for df in dfs],
-        "rhat_above_$(rhat_warn)" => [count(>(rhat_warn), df.rhat)
-                                      for df in dfs],
-        "rhat_above_$(rhat_bad)" => [count(>(rhat_bad), df.rhat)
-                                     for df in dfs],
+        "rhat_above_$(rhat_warn)" => [
+            count(>(rhat_warn), df.rhat)
+                for df in dfs
+        ],
+        "rhat_above_$(rhat_bad)" => [
+            count(>(rhat_bad), df.rhat)
+                for df in dfs
+        ],
         "percent_above_$(rhat_bad)" =>
-            [round(100 * count(>(rhat_bad), df.rhat) / max(nrow(df), 1);
-                 digits = 1) for df in dfs],
+            [
+            round(
+                100 * count(>(rhat_bad), df.rhat) / max(nrow(df), 1);
+                digits = 1
+            ) for df in dfs
+        ],
         "ess_bulk_below_$(ess_low)" =>
             [count(x -> !isnan(x) && x < ess_low, df.ess_bulk) for df in dfs],
-        "lowest_ess_parameter" => worst)
+        "lowest_ess_parameter" => worst
+    )
 end
 
 ## --- Divergent transitions ----------------------------------------------
@@ -251,35 +296,44 @@ function sampler_by_chain_table(chn)
     ## Flatten each statistic the way parameter draws flatten, then read one
     ## chain's block out of it, so a chain's draws stay together.
     flat(name) =
-        let x = _extra_values(chn, name)
-            isnothing(x) ? nothing : vec(collect(x))
-        end
+    let x = _extra_values(chn, name)
+        isnothing(x) ? nothing : vec(collect(x))
+    end
     block(v, c) = v[((c - 1) * nd + 1):(c * nd)]
     div = flat(:numerical_error)
     step = flat(:step_size)
     depth = flat(:tree_depth)
-    divergences = [isnothing(div) ? 0 :
-                   count(x -> x === true, block(div, c)) for c in 1:nc]
-    steps = [isnothing(step) ? NaN :
-             _min_finite(Float64.(block(step, c))) for c in 1:nc]
-    depths = [isnothing(depth) ? 0 :
-              round(Int, _max_finite(Float64.(block(depth, c))))
-              for c in 1:nc]
+    divergences = [
+        isnothing(div) ? 0 :
+            count(x -> x === true, block(div, c)) for c in 1:nc
+    ]
+    steps = [
+        isnothing(step) ? NaN :
+            _min_finite(Float64.(block(step, c))) for c in 1:nc
+    ]
+    depths = [
+        isnothing(depth) ? 0 :
+            round(Int, _max_finite(Float64.(block(depth, c))))
+            for c in 1:nc
+    ]
     return DataFrame(
         chain = collect(1:nc),
         draws = fill(nd, nc),
         divergences = divergences,
         percent_divergent = round.(100 .* divergences ./ nd; digits = 1),
         step_size = round.(steps; sigdigits = 3),
-        deepest_tree = depths)
+        deepest_tree = depths
+    )
 end
 
 # Middle `width` interval of `x` as a printable range.
 function _interval_string(x; width::Real = 0.9, digits::Integer = 3)
     lo = quantile(x, (1 - width) / 2)
     hi = quantile(x, 1 - (1 - width) / 2)
-    return string(round(lo; sigdigits = digits), "–",
-        round(hi; sigdigits = digits))
+    return string(
+        round(lo; sigdigits = digits), "–",
+        round(hi; sigdigits = digits)
+    )
 end
 
 """
@@ -296,12 +350,16 @@ divergent draws alone. Vector-valued parameters are skipped, as are
 parameters that never move, and `collapse_aliases` drops a parameter whose
 intervals and separation repeat those of one already listed.
 """
-function divergence_location_table(chn; n::Integer = 10, width::Real = 0.9,
+function divergence_location_table(
+        chn; n::Integer = 10, width::Real = 0.9,
         collapse_aliases::Bool = true, exclude = _DIAGNOSTIC_EXCLUDE,
-        labels = Dict{Symbol, String}())
+        labels = Dict{Symbol, String}()
+    )
     flag = _divergent_flags(chn)
-    empty = DataFrame(parameter = String[], all_draws = String[],
-        divergent_draws = String[], separation = Float64[])
+    empty = DataFrame(
+        parameter = String[], all_draws = String[],
+        divergent_draws = String[], separation = Float64[]
+    )
     any(flag) || return empty
     names_ = String[]
     alls = String[]
@@ -324,12 +382,22 @@ function divergence_location_table(chn; n::Integer = 10, width::Real = 0.9,
         push!(seps, round((median(xs[flag]) - median(xs)) / s; digits = 2))
     end
     isempty(names_) && return empty
-    tbl = DataFrame(parameter = names_, all_draws = alls,
-        divergent_draws = divs, separation = seps)
+    tbl = DataFrame(
+        parameter = names_, all_draws = alls,
+        divergent_draws = divs, separation = seps
+    )
     sort!(tbl, :separation; by = abs, rev = true, alg = MergeSort)
     if collapse_aliases
-        tbl = tbl[_first_occurrence(collect(zip(tbl.all_draws,
-            tbl.divergent_draws, tbl.separation))), :]
+        tbl = tbl[
+            _first_occurrence(
+                collect(
+                    zip(
+                        tbl.all_draws,
+                        tbl.divergent_draws, tbl.separation
+                    )
+                )
+            ), :,
+        ]
     end
     return first(tbl, n)
 end
@@ -378,8 +446,10 @@ function diagnostic_contrast(reference::Pair{String}, fits::Pair{String}...)
             push!(ess_ratio, q.ess_bulk / r.ess_bulk)
         end
     end
-    return DataFrame(; fit, parameter, index, rhat, ess_bulk,
-        rhat_reference, ess_bulk_reference, ess_ratio)
+    return DataFrame(;
+        fit, parameter, index, rhat, ess_bulk,
+        rhat_reference, ess_bulk_reference, ess_ratio
+    )
 end
 
 """
@@ -392,22 +462,37 @@ already listed for the same fit.
 Columns are `:fit`, `:parameter`, `:ess_bulk`, `:ess_bulk_reference` and
 `:ess_ratio`.
 """
-function diagnostic_contrast_table(df::DataFrame; n::Integer = 15,
-        collapse_aliases::Bool = true, labels = Dict{Symbol, String}())
-    isempty(df) && return DataFrame(fit = String[], parameter = String[],
+function diagnostic_contrast_table(
+        df::DataFrame; n::Integer = 15,
+        collapse_aliases::Bool = true, labels = Dict{Symbol, String}()
+    )
+    isempty(df) && return DataFrame(
+        fit = String[], parameter = String[],
         ess_bulk = Float64[], ess_bulk_reference = Float64[],
-        ess_ratio = Float64[])
+        ess_ratio = Float64[]
+    )
     ranked = sort(df, :ess_ratio; alg = MergeSort)
     if collapse_aliases
-        ranked = ranked[_first_occurrence(collect(zip(ranked.fit,
-            ranked.ess_bulk, ranked.ess_bulk_reference))), :]
+        ranked = ranked[
+            _first_occurrence(
+                collect(
+                    zip(
+                        ranked.fit,
+                        ranked.ess_bulk, ranked.ess_bulk_reference
+                    )
+                )
+            ), :,
+        ]
     end
     keep = first(ranked, n)
     return DataFrame(
         fit = keep.fit,
-        parameter = [_diag_label(r.parameter, r.index; labels = labels)
-                     for r in eachrow(keep)],
+        parameter = [
+            _diag_label(r.parameter, r.index; labels = labels)
+                for r in eachrow(keep)
+        ],
         ess_bulk = round.(keep.ess_bulk; digits = 0),
         ess_bulk_reference = round.(keep.ess_bulk_reference; digits = 0),
-        ess_ratio = round.(keep.ess_ratio; digits = 2))
+        ess_ratio = round.(keep.ess_ratio; digits = 2)
+    )
 end

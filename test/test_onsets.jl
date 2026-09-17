@@ -17,25 +17,27 @@
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-01,2026-02-25,2,0,2
-    001,2026-03-01,2026-02-26,1,0,1
-    002,2026-03-02,2026-02-25,2,0,2
-    002,2026-03-02,2026-02-26,1,0,1
-    003,2026-03-04,2026-02-25,3,0,3
-    003,2026-03-04,2026-02-26,2,0,2
-    003,2026-03-04,2026-02-27,1,0,1
-    004,2026-03-06,2026-02-25,4,0,4
-    004,2026-03-06,2026-02-26,2,0,2
-    004,2026-03-06,2026-02-27,2,0,2
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-01,2026-02-25,2,0,2
+        001,2026-03-01,2026-02-26,1,0,1
+        002,2026-03-02,2026-02-25,2,0,2
+        002,2026-03-02,2026-02-26,1,0,1
+        003,2026-03-04,2026-02-25,3,0,3
+        003,2026-03-04,2026-02-26,2,0,2
+        003,2026-03-04,2026-02-27,1,0,1
+        004,2026-03-06,2026-02-25,4,0,4
+        004,2026-03-06,2026-02-26,2,0,2
+        004,2026-03-06,2026-02-27,2,0,2
+        """
+    )
     blocks = _dedup_onset_blocks(_read_onset_curve_blocks(path))
     ## 001/002 reprint the same figure: collapse to 001, the earlier report
     ## date. 003 and 004 are genuinely new content and both survive.
     @test [b.sitrep for b in blocks] == ["001", "003", "004"]
     @test [b.report_date for b in blocks] ==
-          [Date("2026-03-01"), Date("2026-03-04"), Date("2026-03-06")]
+        [Date("2026-03-01"), Date("2026-03-04"), Date("2026-03-06")]
 end
 
 @testitem "_dedup_onset_blocks keeps distinct equal-total split blocks" begin
@@ -45,13 +47,15 @@ end
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    010,2026-04-01,2026-03-30,2,0,2
-    010,2026-04-01,2026-03-31,3,0,3
-    011,2026-04-02,2026-03-30,3,0,3
-    011,2026-04-02,2026-03-31,2,0,2
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        010,2026-04-01,2026-03-30,2,0,2
+        010,2026-04-01,2026-03-31,3,0,3
+        011,2026-04-02,2026-03-30,3,0,3
+        011,2026-04-02,2026-03-31,2,0,2
+        """
+    )
     blocks = _dedup_onset_blocks(_read_onset_curve_blocks(path))
     @test [b.sitrep for b in blocks] == ["010", "011"]
 end
@@ -60,8 +64,10 @@ end
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date
 
-    h = load_onset_curve("/does/not/exist/onset_curve_scanned.csv";
-        cutoff = Date("2026-03-01"), seeding = Date("2026-01-01"))
+    h = load_onset_curve(
+        "/does/not/exist/onset_curve_scanned.csv";
+        cutoff = Date("2026-03-01"), seeding = Date("2026-01-01")
+    )
     @test h.onset_days == Int[]
     @test h.report_days == Int[]
     @test h.prev_report_days == Int[]
@@ -75,17 +81,19 @@ end
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-01,2026-02-25,2,0,2
-    001,2026-03-01,2026-02-26,1,0,1
-    003,2026-03-04,2026-02-25,3,0,3
-    003,2026-03-04,2026-02-26,2,0,2
-    003,2026-03-04,2026-02-27,1,0,1
-    004,2026-03-06,2026-02-25,4,0,4
-    004,2026-03-06,2026-02-26,2,0,2
-    004,2026-03-06,2026-02-27,2,0,2
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-01,2026-02-25,2,0,2
+        001,2026-03-01,2026-02-26,1,0,1
+        003,2026-03-04,2026-02-25,3,0,3
+        003,2026-03-04,2026-02-26,2,0,2
+        003,2026-03-04,2026-02-27,1,0,1
+        004,2026-03-06,2026-02-25,4,0,4
+        004,2026-03-06,2026-02-26,2,0,2
+        004,2026-03-06,2026-02-27,2,0,2
+        """
+    )
     seeding = Date("2026-01-01")
 
     ## Cut-off before 004's report date: 001 and 003 survive, so two
@@ -112,23 +120,28 @@ end
     ## Both blocks print 03-01..03-03; the second omits the middle row
     ## (03-02), a zero-height bar the digitisation drops rather than a date
     ## the figure never covered.
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-05,2026-03-01,1,0,1
-    001,2026-03-05,2026-03-02,1,0,1
-    001,2026-03-05,2026-03-03,1,0,1
-    002,2026-03-07,2026-03-01,2,0,2
-    002,2026-03-07,2026-03-03,1,0,1
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,1,0,1
+        001,2026-03-05,2026-03-02,1,0,1
+        001,2026-03-05,2026-03-03,1,0,1
+        002,2026-03-07,2026-03-01,2,0,2
+        002,2026-03-07,2026-03-03,1,0,1
+        """
+    )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(path; cutoff = Date("2026-03-07"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-07"), seeding,
+        max_delay = 10
+    )
     ## Grid index of 2026-03-02 (seeding 2026-01-01).
     u = Int(date2epochdays(Date("2026-03-02")) - date2epochdays(seeding)) + 1
     R2 = Int(date2epochdays(Date("2026-03-07")) - date2epochdays(seeding)) + 1
     idxs = findall(
         i -> h.onset_days[i] == u && h.report_days[i] == R2,
-        eachindex(h.onset_days))
+        eachindex(h.onset_days)
+    )
     @test !isempty(idxs)
     ## The omitted row reads as a true zero, so the cell scores 0 - 1 = -1,
     ## not a dropped cell and not an error.
@@ -147,42 +160,46 @@ end
     ##   001 report Feb 10 (day 41), extent Feb 1-8   (32-39)
     ##   002 report Feb 12 (day 43), extent Feb 1-10  (32-41)
     ##   003 report Feb 14 (day 45), extent Feb 1-12  (32-43)
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-02-10,2026-02-01,5,0,5
-    001,2026-02-10,2026-02-02,3,0,3
-    001,2026-02-10,2026-02-03,2,0,2
-    001,2026-02-10,2026-02-04,4,0,4
-    001,2026-02-10,2026-02-05,3,0,3
-    001,2026-02-10,2026-02-06,2,0,2
-    001,2026-02-10,2026-02-07,1,0,1
-    001,2026-02-10,2026-02-08,1,0,1
-    002,2026-02-12,2026-02-01,6,0,6
-    002,2026-02-12,2026-02-02,3,0,3
-    002,2026-02-12,2026-02-03,2,0,2
-    002,2026-02-12,2026-02-04,5,0,5
-    002,2026-02-12,2026-02-05,4,0,4
-    002,2026-02-12,2026-02-06,3,0,3
-    002,2026-02-12,2026-02-07,2,0,2
-    002,2026-02-12,2026-02-08,2,0,2
-    002,2026-02-12,2026-02-09,1,0,1
-    002,2026-02-12,2026-02-10,1,0,1
-    003,2026-02-14,2026-02-01,7,0,7
-    003,2026-02-14,2026-02-02,3,0,3
-    003,2026-02-14,2026-02-03,2,0,2
-    003,2026-02-14,2026-02-04,5,0,5
-    003,2026-02-14,2026-02-05,4,0,4
-    003,2026-02-14,2026-02-06,2,0,2
-    003,2026-02-14,2026-02-07,3,0,3
-    003,2026-02-14,2026-02-08,2,0,2
-    003,2026-02-14,2026-02-09,2,0,2
-    003,2026-02-14,2026-02-10,2,0,2
-    003,2026-02-14,2026-02-11,1,0,1
-    003,2026-02-14,2026-02-12,1,0,1
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-02-10,2026-02-01,5,0,5
+        001,2026-02-10,2026-02-02,3,0,3
+        001,2026-02-10,2026-02-03,2,0,2
+        001,2026-02-10,2026-02-04,4,0,4
+        001,2026-02-10,2026-02-05,3,0,3
+        001,2026-02-10,2026-02-06,2,0,2
+        001,2026-02-10,2026-02-07,1,0,1
+        001,2026-02-10,2026-02-08,1,0,1
+        002,2026-02-12,2026-02-01,6,0,6
+        002,2026-02-12,2026-02-02,3,0,3
+        002,2026-02-12,2026-02-03,2,0,2
+        002,2026-02-12,2026-02-04,5,0,5
+        002,2026-02-12,2026-02-05,4,0,4
+        002,2026-02-12,2026-02-06,3,0,3
+        002,2026-02-12,2026-02-07,2,0,2
+        002,2026-02-12,2026-02-08,2,0,2
+        002,2026-02-12,2026-02-09,1,0,1
+        002,2026-02-12,2026-02-10,1,0,1
+        003,2026-02-14,2026-02-01,7,0,7
+        003,2026-02-14,2026-02-02,3,0,3
+        003,2026-02-14,2026-02-03,2,0,2
+        003,2026-02-14,2026-02-04,5,0,5
+        003,2026-02-14,2026-02-05,4,0,4
+        003,2026-02-14,2026-02-06,2,0,2
+        003,2026-02-14,2026-02-07,3,0,3
+        003,2026-02-14,2026-02-08,2,0,2
+        003,2026-02-14,2026-02-09,2,0,2
+        003,2026-02-14,2026-02-10,2,0,2
+        003,2026-02-14,2026-02-11,1,0,1
+        003,2026-02-14,2026-02-12,1,0,1
+        """
+    )
     seeding = Date("2026-01-01")   # Jan 1 = grid day 1
-    h = load_onset_curve(path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-02-14"), seeding,
+        max_delay = 10
+    )
 
     ## V1 (report day 41, virtual empty predecessor): window is its own
     ## extent 32:39 intersected with the trailing 10-day horizon 32:41.
@@ -194,7 +211,8 @@ end
     exp_inc = vcat(
         [5, 3, 2, 4, 3, 2, 1, 1],      # V1 levels vs the virtual empty
         [0, 1, 1, 1, 1, 1],            # V2 vs V1
-        [0, -1, 1, 0, 1, 1])           # V3 vs V2 (Feb 6 revised 3 -> 2)
+        [0, -1, 1, 0, 1, 1]
+    )           # V3 vs V2 (Feb 6 revised 3 -> 2)
 
     @test h.onset_days == exp_onset
     @test h.report_days == exp_report
@@ -218,42 +236,46 @@ end
     ##   001 report Feb 10 (day 41), extent Feb 1-8   (32-39)
     ##   002 report Feb 12 (day 43), extent Feb 1-10  (32-41)
     ##   003 report Feb 14 (day 45), extent Feb 1-12  (32-43)
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-02-10,2026-02-01,5,0,5
-    001,2026-02-10,2026-02-02,3,0,3
-    001,2026-02-10,2026-02-03,2,0,2
-    001,2026-02-10,2026-02-04,4,0,4
-    001,2026-02-10,2026-02-05,3,0,3
-    001,2026-02-10,2026-02-06,2,0,2
-    001,2026-02-10,2026-02-07,1,0,1
-    001,2026-02-10,2026-02-08,1,0,1
-    002,2026-02-12,2026-02-01,6,0,6
-    002,2026-02-12,2026-02-02,3,0,3
-    002,2026-02-12,2026-02-03,2,0,2
-    002,2026-02-12,2026-02-04,5,0,5
-    002,2026-02-12,2026-02-05,4,0,4
-    002,2026-02-12,2026-02-06,3,0,3
-    002,2026-02-12,2026-02-07,2,0,2
-    002,2026-02-12,2026-02-08,2,0,2
-    002,2026-02-12,2026-02-09,1,0,1
-    002,2026-02-12,2026-02-10,1,0,1
-    003,2026-02-14,2026-02-01,7,0,7
-    003,2026-02-14,2026-02-02,3,0,3
-    003,2026-02-14,2026-02-03,2,0,2
-    003,2026-02-14,2026-02-04,5,0,5
-    003,2026-02-14,2026-02-05,4,0,4
-    003,2026-02-14,2026-02-06,2,0,2
-    003,2026-02-14,2026-02-07,3,0,3
-    003,2026-02-14,2026-02-08,2,0,2
-    003,2026-02-14,2026-02-09,2,0,2
-    003,2026-02-14,2026-02-10,2,0,2
-    003,2026-02-14,2026-02-11,1,0,1
-    003,2026-02-14,2026-02-12,1,0,1
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-02-10,2026-02-01,5,0,5
+        001,2026-02-10,2026-02-02,3,0,3
+        001,2026-02-10,2026-02-03,2,0,2
+        001,2026-02-10,2026-02-04,4,0,4
+        001,2026-02-10,2026-02-05,3,0,3
+        001,2026-02-10,2026-02-06,2,0,2
+        001,2026-02-10,2026-02-07,1,0,1
+        001,2026-02-10,2026-02-08,1,0,1
+        002,2026-02-12,2026-02-01,6,0,6
+        002,2026-02-12,2026-02-02,3,0,3
+        002,2026-02-12,2026-02-03,2,0,2
+        002,2026-02-12,2026-02-04,5,0,5
+        002,2026-02-12,2026-02-05,4,0,4
+        002,2026-02-12,2026-02-06,3,0,3
+        002,2026-02-12,2026-02-07,2,0,2
+        002,2026-02-12,2026-02-08,2,0,2
+        002,2026-02-12,2026-02-09,1,0,1
+        002,2026-02-12,2026-02-10,1,0,1
+        003,2026-02-14,2026-02-01,7,0,7
+        003,2026-02-14,2026-02-02,3,0,3
+        003,2026-02-14,2026-02-03,2,0,2
+        003,2026-02-14,2026-02-04,5,0,5
+        003,2026-02-14,2026-02-05,4,0,4
+        003,2026-02-14,2026-02-06,2,0,2
+        003,2026-02-14,2026-02-07,3,0,3
+        003,2026-02-14,2026-02-08,2,0,2
+        003,2026-02-14,2026-02-09,2,0,2
+        003,2026-02-14,2026-02-10,2,0,2
+        003,2026-02-14,2026-02-11,1,0,1
+        003,2026-02-14,2026-02-12,1,0,1
+        """
+    )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-02-14"), seeding,
+        max_delay = 10
+    )
     ## Feb 1-2 (days 32-33) sit 11-12 days before the 002 report day (43):
     ## older than the horizon (10), so their revisions are not re-scored in
     ## the 002 window even though both figures print them.
@@ -280,42 +302,46 @@ end
     ##   001 report Feb 10 (day 41), extent Feb 1-8   (32-39)
     ##   002 report Feb 12 (day 43), extent Feb 1-10  (32-41)
     ##   003 report Feb 14 (day 45), extent Feb 1-12  (32-43)
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-02-10,2026-02-01,5,0,5
-    001,2026-02-10,2026-02-02,3,0,3
-    001,2026-02-10,2026-02-03,2,0,2
-    001,2026-02-10,2026-02-04,4,0,4
-    001,2026-02-10,2026-02-05,3,0,3
-    001,2026-02-10,2026-02-06,2,0,2
-    001,2026-02-10,2026-02-07,1,0,1
-    001,2026-02-10,2026-02-08,1,0,1
-    002,2026-02-12,2026-02-01,6,0,6
-    002,2026-02-12,2026-02-02,3,0,3
-    002,2026-02-12,2026-02-03,2,0,2
-    002,2026-02-12,2026-02-04,5,0,5
-    002,2026-02-12,2026-02-05,4,0,4
-    002,2026-02-12,2026-02-06,3,0,3
-    002,2026-02-12,2026-02-07,2,0,2
-    002,2026-02-12,2026-02-08,2,0,2
-    002,2026-02-12,2026-02-09,1,0,1
-    002,2026-02-12,2026-02-10,1,0,1
-    003,2026-02-14,2026-02-01,7,0,7
-    003,2026-02-14,2026-02-02,3,0,3
-    003,2026-02-14,2026-02-03,2,0,2
-    003,2026-02-14,2026-02-04,5,0,5
-    003,2026-02-14,2026-02-05,4,0,4
-    003,2026-02-14,2026-02-06,2,0,2
-    003,2026-02-14,2026-02-07,3,0,3
-    003,2026-02-14,2026-02-08,2,0,2
-    003,2026-02-14,2026-02-09,2,0,2
-    003,2026-02-14,2026-02-10,2,0,2
-    003,2026-02-14,2026-02-11,1,0,1
-    003,2026-02-14,2026-02-12,1,0,1
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-02-10,2026-02-01,5,0,5
+        001,2026-02-10,2026-02-02,3,0,3
+        001,2026-02-10,2026-02-03,2,0,2
+        001,2026-02-10,2026-02-04,4,0,4
+        001,2026-02-10,2026-02-05,3,0,3
+        001,2026-02-10,2026-02-06,2,0,2
+        001,2026-02-10,2026-02-07,1,0,1
+        001,2026-02-10,2026-02-08,1,0,1
+        002,2026-02-12,2026-02-01,6,0,6
+        002,2026-02-12,2026-02-02,3,0,3
+        002,2026-02-12,2026-02-03,2,0,2
+        002,2026-02-12,2026-02-04,5,0,5
+        002,2026-02-12,2026-02-05,4,0,4
+        002,2026-02-12,2026-02-06,3,0,3
+        002,2026-02-12,2026-02-07,2,0,2
+        002,2026-02-12,2026-02-08,2,0,2
+        002,2026-02-12,2026-02-09,1,0,1
+        002,2026-02-12,2026-02-10,1,0,1
+        003,2026-02-14,2026-02-01,7,0,7
+        003,2026-02-14,2026-02-02,3,0,3
+        003,2026-02-14,2026-02-03,2,0,2
+        003,2026-02-14,2026-02-04,5,0,5
+        003,2026-02-14,2026-02-05,4,0,4
+        003,2026-02-14,2026-02-06,2,0,2
+        003,2026-02-14,2026-02-07,3,0,3
+        003,2026-02-14,2026-02-08,2,0,2
+        003,2026-02-14,2026-02-09,2,0,2
+        003,2026-02-14,2026-02-10,2,0,2
+        003,2026-02-14,2026-02-11,1,0,1
+        003,2026-02-14,2026-02-12,1,0,1
+        """
+    )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-02-14"), seeding,
+        max_delay = 10
+    )
     _day(s) = Int(date2epochdays(Date(s)) - date2epochdays(seeding)) + 1
 
     ## 001's axis ends at Feb 8 (day 39), two days before its report day, so
@@ -366,14 +392,14 @@ end
     for u in grid_start:(grid_start + 5), δ in 0:10
 
         @test onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start) ≈
-              onset_report_cdf(δ, logit_h0, γ, u, grid_start)
+            onset_report_cdf(δ, logit_h0, γ, u, grid_start)
     end
 
     ## Out-of-range on both sides: finite, in [0, 1], no bounds error, and
     ## δ < 0 is still exact right truncation.
     for u in (-20, 0, 1, 5000)
         @test onset_report_cdf_extrapolated(-1, logit_h0, γ, u, grid_start) ==
-              0.0
+            0.0
         for δ in (0, 10, 27, 40)
             v = onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
             @test isfinite(v)
@@ -394,10 +420,14 @@ end
     γ = zeros(60)
     alpha = fill(0.8, 60)
     u = 20
-    early = onset_report_moments(onsets, logit_h0, γ, 1, alpha, [u], [u + 3],
-        [0])
-    late = onset_report_moments(onsets, logit_h0, γ, 1, alpha, [u], [u + 10],
-        [0])
+    early = onset_report_moments(
+        onsets, logit_h0, γ, 1, alpha, [u], [u + 3],
+        [0]
+    )
+    late = onset_report_moments(
+        onsets, logit_h0, γ, 1, alpha, [u], [u + 10],
+        [0]
+    )
     @test late.level_cur[1] >= early.level_cur[1]
 end
 
@@ -412,13 +442,15 @@ end
         D = 28
         logit_h0 = randn(D) .* 1.5 .- 1.0
         γ = randn(60) .* 0.3
-        vals = [onset_report_G(δ, logit_h0, γ, u, grid_start)
-                for δ in (-3):(D + 5)]
+        vals = [
+            onset_report_G(δ, logit_h0, γ, u, grid_start)
+                for δ in (-3):(D + 5)
+        ]
         @test all(==(0.0), vals[1:3])
         @test issorted(vals)
-        @test all(v -> -1e-8 <= v <= 1 + 1e-8, vals)
+        @test all(v -> -1.0e-8 <= v <= 1 + 1.0e-8, vals)
         g_D1 = onset_report_G(D - 1, logit_h0, γ, u, grid_start)
-        @test g_D1 ≈ 1.0 atol=1e-8
+        @test g_D1 ≈ 1.0 atol = 1.0e-8
     end
 
     ## Every hazard underflows to ≈ 0: numerator and denominator both
@@ -444,7 +476,7 @@ end
         γ = randn(40) .* 0.2
         α = rand()
         f_D1 = onset_report_F(D - 1, logit_h0, γ, u, grid_start, α)
-        @test f_D1 ≈ α atol=1e-8
+        @test f_D1 ≈ α atol = 1.0e-8
         @test onset_report_F(-1, logit_h0, γ, u, grid_start, α) == 0.0
     end
 end
@@ -457,7 +489,7 @@ end
     ## gradient is `NaN`, and a `NaN` there would spread to the whole
     ## log-density rather than to this stream alone.
     f(x) = onset_report_ascertainment([x[1]], 0.0, [0.0])[1]
-    for anchor in (0.0, 1e-300, 0.15, 1.0)
+    for anchor in (0.0, 1.0e-300, 0.15, 1.0)
         α = f([anchor])
         @test isfinite(α)
         @test 0.0 < α < 1.0
@@ -504,8 +536,10 @@ end
         nt = max(grid_end - grid_start + 1, 1)
         γ = zeros(nt)
         alpha = fill(0.3, nt)
-        total = onset_report_expected_total(onsets, logit_h0, γ, grid_start,
-            alpha, grid_end)
+        total = onset_report_expected_total(
+            onsets, logit_h0, γ, grid_start,
+            alpha, grid_end
+        )
         @test isfinite(total)
         @test total >= 0
     end
@@ -529,11 +563,16 @@ end
     ## A sum restricted to just `grid_start:grid_end`, for comparison
     ## against the full total below.
     restricted = sum(
-        onsets[u] * onset_report_F(grid_end - u, logit_h0, γ, u, grid_start,
-            alpha[u - grid_start + 1])
-    for u in grid_start:grid_end)
-    total = onset_report_expected_total(onsets, logit_h0, γ, grid_start,
-        alpha, grid_end)
+        onsets[u] * onset_report_F(
+            grid_end - u, logit_h0, γ, u, grid_start,
+            alpha[u - grid_start + 1]
+        )
+            for u in grid_start:grid_end
+    )
+    total = onset_report_expected_total(
+        onsets, logit_h0, γ, grid_start,
+        alpha, grid_end
+    )
 
     ## The onset dates before `grid_start` (days 1:59) are old enough by
     ## `grid_end` that they sit at the ascertainment level and each
@@ -545,8 +584,10 @@ end
     ## The extrapolated contribution for a day well before `grid_start`
     ## should match the flat asymptote computed at the earliest known
     ## calendar day and ascertainment level (both held flat at index 1).
-    F_edge = onset_report_F(length(logit_h0) - 1, logit_h0, γ, grid_start,
-        grid_start, alpha[1])
+    F_edge = onset_report_F(
+        length(logit_h0) - 1, logit_h0, γ, grid_start,
+        grid_start, alpha[1]
+    )
     @test total ≈ restricted + (grid_start - 1) * 5.0 * F_edge
 end
 
@@ -562,29 +603,38 @@ end
     path = joinpath(dir, "onset.csv")
     ## Block 001 covers 03-01..03-03. Block 002 covers only 03-02..03-03,
     ## so 03-01 sits outside its printed extent.
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-05,2026-03-01,4,0,4
-    001,2026-03-05,2026-03-02,2,0,2
-    001,2026-03-05,2026-03-03,1,0,1
-    002,2026-03-07,2026-03-02,3,0,3
-    002,2026-03-07,2026-03-03,2,0,2
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,4,0,4
+        001,2026-03-05,2026-03-02,2,0,2
+        001,2026-03-05,2026-03-03,1,0,1
+        002,2026-03-07,2026-03-02,3,0,3
+        002,2026-03-07,2026-03-03,2,0,2
+        """
+    )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(path; cutoff = Date("2026-03-07"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-07"), seeding,
+        max_delay = 10
+    )
     _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
     u = _day("2026-03-01")
     R2 = _day("2026-03-07")
     ## No cell for 03-01 in the 001-versus-002 pair.
-    @test isempty(findall(i -> h.onset_days[i] == u && h.report_days[i] == R2,
-        eachindex(h.onset_days)))
+    @test isempty(
+        findall(
+            i -> h.onset_days[i] == u && h.report_days[i] == R2,
+            eachindex(h.onset_days)
+        )
+    )
     ## The first pair still scores 03-01 as a level against the empty
     ## predecessor, since block 001 does print it.
     R1 = _day("2026-03-05")
     first_idx = findall(
         i -> h.onset_days[i] == u && h.report_days[i] == R1,
-        eachindex(h.onset_days))
+        eachindex(h.onset_days)
+    )
     @test length(first_idx) == 1
     @test h.increments[first_idx[1]] == 4
     ## Nothing anywhere fabricates the -4 the dropped cell would have given.
@@ -602,27 +652,35 @@ end
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
     ## Both blocks print 03-06, which postdates block 001's own report date.
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-05,2026-03-04,4,0,4
-    001,2026-03-05,2026-03-06,3,0,3
-    002,2026-03-06,2026-03-04,6,0,6
-    002,2026-03-06,2026-03-06,9,0,9
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-04,4,0,4
+        001,2026-03-05,2026-03-06,3,0,3
+        002,2026-03-06,2026-03-04,6,0,6
+        002,2026-03-06,2026-03-06,9,0,9
+        """
+    )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(path; cutoff = Date("2026-03-06"), seeding,
-        max_delay = 10)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-06"), seeding,
+        max_delay = 10
+    )
     _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
     ## No cell for 03-06 in the 001-versus-002 pair.
-    @test isempty(findall(
-        i -> h.onset_days[i] == _day("2026-03-06") &&
-             h.report_days[i] == _day("2026-03-06"),
-        eachindex(h.onset_days)))
+    @test isempty(
+        findall(
+            i -> h.onset_days[i] == _day("2026-03-06") &&
+                h.report_days[i] == _day("2026-03-06"),
+            eachindex(h.onset_days)
+        )
+    )
     ## The 03-04 correction the pair does support is untouched.
     idx = findall(
         i -> h.onset_days[i] == _day("2026-03-04") &&
-             h.report_days[i] == _day("2026-03-06"),
-        eachindex(h.onset_days))
+            h.report_days[i] == _day("2026-03-06"),
+        eachindex(h.onset_days)
+    )
     @test length(idx) == 1
     @test h.increments[idx[1]] == 2
     ## No scored correction cell ever carries a negative previous delay.
@@ -636,10 +694,14 @@ end
     using BVDOutbreakSize: BVDOutbreakSize, load_onset_curve
     using Dates: Date
 
-    path = joinpath(pkgdir(BVDOutbreakSize), "data",
-        "onset_curve_scanned.csv")
-    h = load_onset_curve(path; cutoff = Date("2100-01-01"),
-        seeding = Date("2026-01-01"))
+    path = joinpath(
+        pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv"
+    )
+    h = load_onset_curve(
+        path; cutoff = Date("2100-01-01"),
+        seeding = Date("2026-01-01")
+    )
     corr = findall(!=(0), h.prev_report_days)
     @test !isempty(corr)
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
@@ -654,8 +716,10 @@ end
     ## Cells 1 and 3 have a virtual (empty) predecessor and so score a
     ## level; cell 2 is a correction between two real snapshots.
     prev_idx = [0, 5, 0]
-    s = onset_report_scales(means, level_cur, level_prev, prev_idx;
-        pixel_sd = 2.1, scan_sd = 0.04)
+    s = onset_report_scales(
+        means, level_cur, level_prev, prev_idx;
+        pixel_sd = 2.1, scan_sd = 0.04
+    )
     @test s[1] ≈ sqrt(2.1^2 * 1)
     @test s[2] ≈ sqrt(20.0 + 2.1^2 * 2 + 0.04^2 * (100.0^2 + 80.0^2))
     ## A level cell carries the counting variation of the cases it reports,
@@ -680,8 +744,10 @@ end
     using BVDOutbreakSize: safe_studentt
     using Distributions: mean, std, logpdf
 
-    for (σ, ν) in ((0.0, 4.0), (-1.0, 4.0), (NaN, 4.0), (Inf, 4.0),
-        (1.0, 0.0), (1.0, -2.0), (1.0, NaN))
+    for (σ, ν) in (
+            (0.0, 4.0), (-1.0, 4.0), (NaN, 4.0), (Inf, 4.0),
+            (1.0, 0.0), (1.0, -2.0), (1.0, NaN),
+        )
         d = safe_studentt(3.0, σ, ν)
         ## Mean and variance both exist: a degenerate degrees-of-freedom
         ## argument falls back to 4, not to the Cauchy at the domain edge.
@@ -723,9 +789,11 @@ end
     using LogDensityProblems: logdensity
     using Random: seed!
 
-    base = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    base = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0])
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+    )
     oc = (; base..., increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
     seed!(20260727)
     model = onsets_only_model(40; onset_curve_history = oc)
@@ -740,10 +808,14 @@ end
     model_other = onsets_only_model(40; onset_curve_history = other)
     θ = collect(vi[:])
     lp = logdensity(
-        DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi), θ)
+        DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi), θ
+    )
     lp_other = logdensity(
-        DynamicPPL.LogDensityFunction(model_other, DynamicPPL.getlogjoint,
-            vi), θ)
+        DynamicPPL.LogDensityFunction(
+            model_other, DynamicPPL.getlogjoint,
+            vi
+        ), θ
+    )
     @test isfinite(lp)
     @test isfinite(lp_other)
     @test lp != lp_other
@@ -753,12 +825,16 @@ end
     using BVDOutbreakSize: onsets_only_model
     using Turing: Prior, sample
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
-    chn = sample(onsets_only_model(40; onset_curve_history = oc), Prior(),
-        20; progress = false)
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc), Prior(),
+        20; progress = false
+    )
     et = vec(Array(chn[:expected_onset_reported_T]))
     @test length(et) == 20
     @test all(isfinite, et)
@@ -774,36 +850,44 @@ end
     using Turing: Prior, sample
     using Statistics: median, quantile
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
-    chn = sample(onsets_only_model(40; onset_curve_history = oc), Prior(),
-        2000; progress = false)
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc), Prior(),
+        2000; progress = false
+    )
     flat = reduce(vcat, vec(collect(chn[:onset_ascertainment])))
     @test isapprox(median(flat), 0.15; atol = 0.05)
-    @test 0.02 < quantile(flat, 0.05) < 0.10
+    @test 0.02 < quantile(flat, 0.05) < 0.1
     @test 0.25 < quantile(flat, 0.95) < 0.55
 end
 
 @testitem "AD gradient: onsets_only_model differentiates (Mooncake)" tags = [
-    :ad] begin
+    :ad,
+] begin
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity_and_gradient
     using Random: seed!
     using BVDOutbreakSize: onsets_only_model, default_adtype
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
 
     seed!(20260518)
     model = onsets_only_model(40; onset_curve_history = oc)
     vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
     x0 = collect(vi[:])
     ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
     logp, grad = logdensity_and_gradient(ldf, x0)
     @test isfinite(logp)
     @test length(grad) == length(x0)
@@ -814,19 +898,23 @@ end
 @testitem "onsets_only_model fits under a short NUTS run" tags = [:slow] begin
     using BVDOutbreakSize: onsets_only_model, nuts_sample
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
-    chn = nuts_sample(onsets_only_model(40; onset_curve_history = oc);
-        samples = 25, chains = 1, progress = false)
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    chn = nuts_sample(
+        onsets_only_model(40; onset_curve_history = oc);
+        samples = 25, chains = 1, progress = false
+    )
     et = vec(Array(chn[:expected_onset_reported_T]))
     @test length(et) == 25
     @test all(isfinite, et)
 end
 
 @testitem "bvd_joint: short NUTS run with the onset stream wired in" tags = [
-    :slow
+    :slow,
 ] begin
     using BVDOutbreakSize: bvd_joint, nuts_sample
 
@@ -834,20 +922,25 @@ end
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
     rh = (; days = [13, 18, 40], counts = [340, 516, 905])
     ch = (; days = [13, 18, 40], counts = [9, 17, 27])
-    oc = (; onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
+    oc = (;
+        onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
         report_days = [25, 25, 25, 25, 30, 30, 30, 30, 30],
         prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
-        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2])
+        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2],
+    )
     chn = nuts_sample(
-        bvd_joint(n, 2, 18, 905, 0, 27, 50;
+        bvd_joint(
+            n, 2, 18, 905, 0, 27, 50;
             confirmed_deaths = 5,
             deaths_history = dh,
             reported_history = rh,
             confirmed_history = ch,
             lab_history = (; days = [18, 40], counts = [30, 50]),
             onset_curve_history = oc,
-            breakpoint = 30);
-        samples = 12, chains = 1, progress = false)
+            breakpoint = 30
+        );
+        samples = 12, chains = 1, progress = false
+    )
     C_T = vec(Array(chn[:C_T]))
     et = vec(Array(chn[:expected_onset_reported_T]))
     @test length(C_T) == 12
@@ -869,19 +962,23 @@ end
     ## second, which late reporting cannot produce and the per-scan level
     ## error can: the totals are recorded as read rather than made
     ## monotone.
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-05,2026-03-01,2,0,2
-    001,2026-03-05,2026-03-02,1,0,1
-    002,2026-03-07,2026-03-01,4,0,4
-    002,2026-03-07,2026-03-02,3,0,3
-    002,2026-03-07,2026-03-03,2,0,2
-    003,2026-03-09,2026-03-01,4,0,4
-    003,2026-03-09,2026-03-02,2,0,2
-    003,2026-03-09,2026-03-03,2,0,2
-    """)
-    oc = load_onset_curve(path; cutoff = Date("2026-03-20"),
-        seeding = Date("2026-03-01"))
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,2,0,2
+        001,2026-03-05,2026-03-02,1,0,1
+        002,2026-03-07,2026-03-01,4,0,4
+        002,2026-03-07,2026-03-02,3,0,3
+        002,2026-03-07,2026-03-03,2,0,2
+        003,2026-03-09,2026-03-01,4,0,4
+        003,2026-03-09,2026-03-02,2,0,2
+        003,2026-03-09,2026-03-03,2,0,2
+        """
+    )
+    oc = load_onset_curve(
+        path; cutoff = Date("2026-03-20"),
+        seeding = Date("2026-03-01")
+    )
     ## Seeding day is grid day 1, so 5/7/9 March are grid days 5/7/9.
     @test oc.total_days == [5, 7, 9]
     @test oc.total_counts == [3, 9, 8]
@@ -894,21 +991,27 @@ end
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    write(path, """
-    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-    001,2026-03-05,2026-03-01,2,0,2
-    002,2026-03-09,2026-03-01,5,0,5
-    """)
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,2,0,2
+        002,2026-03-09,2026-03-01,5,0,5
+        """
+    )
     ## The 9 March vintage is past the cut-off, so neither its cells nor its
     ## total survive.
-    oc = load_onset_curve(path; cutoff = Date("2026-03-06"),
-        seeding = Date("2026-03-01"))
+    oc = load_onset_curve(
+        path; cutoff = Date("2026-03-06"),
+        seeding = Date("2026-03-01")
+    )
     @test oc.total_days == [5]
     @test oc.total_counts == [2]
     @test oc.last_total == 2
 
-    noop = load_onset_curve(joinpath(dir, "absent.csv");
-        cutoff = Date("2026-03-06"), seeding = Date("2026-03-01"))
+    noop = load_onset_curve(
+        joinpath(dir, "absent.csv");
+        cutoff = Date("2026-03-06"), seeding = Date("2026-03-01")
+    )
     @test isempty(noop.total_days)
     @test isempty(noop.total_counts)
     @test ismissing(noop.last_total)
@@ -926,44 +1029,60 @@ end
     ## non-centred components, so this also checks it round-trips through
     ## the same total.
     using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
-                           onset_report_expected_total
+        onset_report_expected_total
     using Turing: Prior, sample
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
     n = 40
-    chn = sample(onsets_only_model(n; onset_curve_history = oc), Prior(),
-        20; progress = false)
+    chn = sample(
+        onsets_only_model(n; onset_curve_history = oc), Prior(),
+        20; progress = false
+    )
 
     grid_start = minimum(oc.onset_days)
     grid_end = maximum(oc.report_days)
     hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
-    daily = [(v = collect(t); vcat(v[1], diff(v)))
-             for t in vec(collect(chn[:cumulative_onsets]))]
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
     et = vec(Array(chn[:expected_onset_reported_T]))
 
     @test length(hz.logit_h0) == 20
     @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
     @test all(length(a) == grid_end - grid_start + 1 for a in hz.alpha)
-    rebuilt = [onset_report_expected_total(daily[i], hz.logit_h0[i],
-                   hz.γ[i], grid_start, hz.alpha[i], n) for i in 1:20]
-    @test all(isapprox.(rebuilt, et; rtol = 1e-8))
+    rebuilt = [
+        onset_report_expected_total(
+            daily[i], hz.logit_h0[i],
+            hz.γ[i], grid_start, hz.alpha[i], n
+        ) for i in 1:20
+    ]
+    @test all(isapprox.(rebuilt, et; rtol = 1.0e-8))
 end
 
 @testitem "reconstruct_onset_hazard rejects a grid it was not fitted on" begin
     using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard
     using Turing: Prior, sample
 
-    oc = (; onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
-        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0])
-    chn = sample(onsets_only_model(40; onset_curve_history = oc), Prior(), 5;
-        progress = false)
+    oc = (;
+        onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
+        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0],
+    )
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc), Prior(), 5;
+        progress = false
+    )
     ## A grid four times as long needs more weekly knots than the chain has
     ## innovations for, so this is an error rather than a silently short walk.
-    @test_throws ErrorException reconstruct_onset_hazard(chn;
-        grid_start = 10, grid_end = 110)
+    @test_throws ErrorException reconstruct_onset_hazard(
+        chn;
+        grid_start = 10, grid_end = 110
+    )
 end
 
 @testitem "forecast_onsets separates not-reported from not-yet-happened" begin
@@ -972,21 +1091,28 @@ end
     using DataFrames: nrow
     using Statistics: mean
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
     n = 40
     chn = sample(
         onsets_only_model(n; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 100; progress = false)
-    fc = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = n,
-        horizon = 7, obs_value = 18, breakpoint = 30)
+        Prior(), 100; progress = false
+    )
+    fc = forecast_onsets(
+        chn; grid_start = 10, grid_end = 20, n = n,
+        horizon = 7, obs_value = 18, breakpoint = 30
+    )
 
     @test nrow(fc) == 100
-    for col in (:onsets_to_date, :onset_reports_to_date, :onsets_unreported,
-        :onsets_new, :onset_reports_backfill, :onset_reports_future,
-        :onset_reports_new, :onset_reports_cum)
+    for col in (
+            :onsets_to_date, :onset_reports_to_date, :onsets_unreported,
+            :onsets_new, :onset_reports_backfill, :onset_reports_future,
+            :onset_reports_new, :onset_reports_cum,
+        )
         @test col in propertynames(fc)
         @test all(isfinite, fc[!, col])
     end
@@ -999,7 +1125,7 @@ end
     ## `expected_onset_reported_T`, so a wrong hazard reconstruction, grid or
     ## onset trajectory anywhere between the chain and here breaks this.
     @test fc.onset_reports_to_date ≈
-          vec(Array(chn[:expected_onset_reported_T]))
+        vec(Array(chn[:expected_onset_reported_T]))
     ## Both horizon components are non-negative: F is non-decreasing in the
     ## delay, so a later snapshot never reports fewer of a given onset date.
     @test all(fc.onset_reports_backfill .>= 0)
@@ -1017,17 +1143,24 @@ end
     using Turing: Prior, sample
     using Statistics: mean
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
     chn = sample(
         onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 200; progress = false)
-    f7 = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 7, breakpoint = 30)
-    f21 = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 21, breakpoint = 30)
+        Prior(), 200; progress = false
+    )
+    f7 = forecast_onsets(
+        chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 7, breakpoint = 30
+    )
+    f21 = forecast_onsets(
+        chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 21, breakpoint = 30
+    )
     ## The nowcast is a property of the cut-off, so it does not move with
     ## the horizon; both horizon components do.
     @test f7.onsets_to_date == f21.onsets_to_date
@@ -1039,25 +1172,34 @@ end
 
 @testitem "forecast_stream routes onsets through forecast_onsets" begin
     using BVDOutbreakSize: onsets_only_model, forecast_stream,
-                           forecast_onsets
+        forecast_onsets
     using Turing: Prior, sample
 
-    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
         report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
     chn = sample(
         onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 50; progress = false)
-    got = forecast_stream(chn, :onset_reports; horizon = 7, obs_value = 18,
-        n = 40, breakpoint = 30, onset_grid_start = 10, onset_grid_end = 20)
-    want = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 7, breakpoint = 30)
+        Prior(), 50; progress = false
+    )
+    got = forecast_stream(
+        chn, :onset_reports; horizon = 7, obs_value = 18,
+        n = 40, breakpoint = 30, onset_grid_start = 10, onset_grid_end = 20
+    )
+    want = forecast_onsets(
+        chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 7, breakpoint = 30
+    )
     @test got == want.onset_reports_new
     ## The grid is data rather than chain contents, so omitting it is an
     ## error and never a guess at the triangle's extent.
-    @test_throws ArgumentError forecast_stream(chn, :onset_reports;
-        horizon = 7, obs_value = 18, n = 40, breakpoint = 30)
+    @test_throws ArgumentError forecast_stream(
+        chn, :onset_reports;
+        horizon = 7, obs_value = 18, n = 40, breakpoint = 30
+    )
 end
 
 @testitem "forecast_onsets needs an onset trajectory in the chain" begin
@@ -1069,11 +1211,16 @@ end
     ## hazard's parameters, so this fails rather than forecasting a
     ## reporting process the model never fitted.
     chn = sample(
-        deaths_only_model(33, missing;
-            deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])),
-        Prior(), 5; progress = false)
-    @test_throws Exception forecast_onsets(chn; grid_start = 10,
-        grid_end = 20, n = 33, horizon = 7, breakpoint = 25)
+        deaths_only_model(
+            33, missing;
+            deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
+        ),
+        Prior(), 5; progress = false
+    )
+    @test_throws Exception forecast_onsets(
+        chn; grid_start = 10,
+        grid_end = 20, n = 33, horizon = 7, breakpoint = 25
+    )
 end
 
 @testitem "forecast_archive carries the onset reporting increment" begin
@@ -1081,8 +1228,10 @@ end
     using BVDOutbreakSize: forecast_archive
     using Dates: Date
 
-    fc = DataFrame(onset_reports_new = [10, 12, 14, 9],
-        confirmed_new = [3, 4, 5, 6])
+    fc = DataFrame(
+        onset_reports_new = [10, 12, 14, 9],
+        confirmed_new = [3, 4, 5, 6]
+    )
     arc = forecast_archive([(7, fc)]; made_date = Date("2026-07-25"))
     @test "onset reports" in arc.stream
     rows = arc[arc.stream .== "onset reports", :]
@@ -1096,37 +1245,47 @@ end
     using Turing: Prior, sample
 
     n = 40
-    oc = (; onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
+    oc = (;
+        onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
         report_days = [25, 25, 25, 25, 30, 30, 30, 30, 30],
         prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
-        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2])
-    model = bvd_joint(n, 2, 18, 905, 0, 27, 50;
+        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2],
+    )
+    model = bvd_joint(
+        n, 2, 18, 905, 0, 27, 50;
         confirmed_deaths = 5,
         deaths_history = (; days = [13, 18, 40], counts = [10, 14, 18]),
         reported_history = (; days = [13, 18, 40], counts = [340, 516, 905]),
         confirmed_history = (; days = [13, 18, 40], counts = [9, 17, 27]),
         lab_history = (; days = [18, 40], counts = [30, 50]),
         onset_curve_history = oc,
-        breakpoint = 30)
+        breakpoint = 30
+    )
     chn = sample(model, Prior(), 40; progress = false)
 
     ## The grid is data, so without it the onset block is simply absent and
     ## the rest of the forecast is unchanged.
-    plain = forecast_reported(chn; horizon = 7, obs_cases = 905,
-        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5)
+    plain = forecast_reported(
+        chn; horizon = 7, obs_cases = 905,
+        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5
+    )
     @test !(:onset_reports_new in propertynames(plain))
 
-    withonsets = forecast_reported(chn; horizon = 7, obs_cases = 905,
+    withonsets = forecast_reported(
+        chn; horizon = 7, obs_cases = 905,
         obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5,
-        grid_n = n, onset_grid_start = 20, onset_grid_end = 30)
+        grid_n = n, onset_grid_start = 20, onset_grid_end = 30
+    )
     @test :onset_reports_new in propertynames(withonsets)
     @test :onsets_unreported in propertynames(withonsets)
     @test all(withonsets.onset_reports_new .>= 0)
     ## `grid_n` is the model cut-off, not the draw count: an onset total
     ## summed over 40 draws instead of 40 grid days would be a different
     ## number entirely, so check the block agrees with a direct call.
-    direct = forecast_onsets(chn; grid_start = 20, grid_end = 30, n = n,
-        horizon = 7)
+    direct = forecast_onsets(
+        chn; grid_start = 20, grid_end = 30, n = n,
+        horizon = 7
+    )
     @test withonsets.onsets_to_date == direct.onsets_to_date
     ## `onsets_new` is a column of both, built the same way from the same
     ## cut-off rate and growth path. The block keeps `forecast_reported`'s
@@ -1143,14 +1302,17 @@ end
     ## `:onset` branch. Pin it against a real chain so it cannot rot
     ## unnoticed if the fields are ever wired up.
     using BVDOutbreakSize: onsets_only_model, _STREAM_SPEC, _resolve_draws,
-                           _daily_at_cutoff_any
+        _daily_at_cutoff_any
     using Turing: Prior, sample
 
-    oc = (; onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
-        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0])
+    oc = (;
+        onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
+        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0],
+    )
     chn = sample(
         onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 10; progress = false)
+        Prior(), 10; progress = false
+    )
     spec = _STREAM_SPEC[:onset_reports]
     @test spec.kind === :onset
     @test !isnothing(_resolve_draws(chn, spec.expected))
@@ -1190,8 +1352,10 @@ end
     @test a.means ≈ a.level_cur .- a.level_prev
     ## A scan level of exactly one leaves the levels alone, so the adjusted
     ## means agree with the unadjusted difference.
-    b = onset_scan_adjust(level_cur, level_prev, [1.0, 1.0],
-        [1, 1, 2], [0, 0, 1])
+    b = onset_scan_adjust(
+        level_cur, level_prev, [1.0, 1.0],
+        [1, 1, 2], [0, 0, 1]
+    )
     @test b.means ≈ level_cur .- level_prev
     ## An out-of-range index (the empty-predecessor sentinel) contributes a
     ## multiplier of one rather than indexing out of bounds.
@@ -1211,8 +1375,8 @@ end
     ## too tightly even though its per-cell spread is right, and central
     ## coverage collapses further than the 90% coverage does.
     using BVDOutbreakSize: onset_report_moments, onset_report_scales,
-                           onset_scan_adjust, onset_vintage_indices,
-                           safe_studentt, ONSET_REPORT_MAX_DELAY
+        onset_scan_adjust, onset_vintage_indices,
+        safe_studentt, ONSET_REPORT_MAX_DELAY
     using Random: MersenneTwister, randn
     using Statistics: quantile
     using Distributions: rand
@@ -1256,39 +1420,57 @@ end
     v = onset_vintage_indices(cur_idx, prev_idx)
     groups = [findall(==(s), v.vintage_idx) for s in 1:v.n_vintages]
 
-    m = onset_report_moments(onsets, logit_h0, γ, grid_start, alpha,
-        onset_idx, cur_idx, prev_idx)
+    m = onset_report_moments(
+        onsets, logit_h0, γ, grid_start, alpha,
+        onset_idx, cur_idx, prev_idx
+    )
 
     ## One triangle from the shared-scan truth: each scan gets one level
     ## error, then each cell gets its own independent noise under the same
     ## Student-t the likelihood uses.
     scan_true = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
-    truth = onset_scan_adjust(m.level_cur, m.level_prev, scan_true,
-        v.vintage_idx, v.prev_vintage_idx)
-    truth_sd = onset_report_scales(truth.means, truth.level_cur,
-        truth.level_prev, prev_idx)
-    observed = [rand(rng, safe_studentt(truth.means[i], truth_sd[i], ν))
-                for i in eachindex(truth.means)]
+    truth = onset_scan_adjust(
+        m.level_cur, m.level_prev, scan_true,
+        v.vintage_idx, v.prev_vintage_idx
+    )
+    truth_sd = onset_report_scales(
+        truth.means, truth.level_cur,
+        truth.level_prev, prev_idx
+    )
+    observed = [
+        rand(rng, safe_studentt(truth.means[i], truth_sd[i], ν))
+            for i in eachindex(truth.means)
+    ]
     obs_totals = [sum(observed[g]) for g in groups]
 
     ## Predictive for a snapshot's net correction under each structure.
     ndraw = 1500
-    sd_percell = onset_report_scales(m.means, m.level_cur, m.level_prev,
-        prev_idx; scan_sd = scan_frac)
+    sd_percell = onset_report_scales(
+        m.means, m.level_cur, m.level_prev,
+        prev_idx; scan_sd = scan_frac
+    )
     function coverage(shared::Bool)
         totals = [Vector{Float64}(undef, ndraw) for _ in 1:v.n_vintages]
         for d in 1:ndraw
             rep = if shared
                 cs = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
-                adj = onset_scan_adjust(m.level_cur, m.level_prev, cs,
-                    v.vintage_idx, v.prev_vintage_idx)
-                sds = onset_report_scales(adj.means, adj.level_cur,
-                    adj.level_prev, prev_idx)
-                [rand(rng, safe_studentt(adj.means[i], sds[i], ν))
-                 for i in eachindex(adj.means)]
+                adj = onset_scan_adjust(
+                    m.level_cur, m.level_prev, cs,
+                    v.vintage_idx, v.prev_vintage_idx
+                )
+                sds = onset_report_scales(
+                    adj.means, adj.level_cur,
+                    adj.level_prev, prev_idx
+                )
+                [
+                    rand(rng, safe_studentt(adj.means[i], sds[i], ν))
+                        for i in eachindex(adj.means)
+                ]
             else
-                [rand(rng, safe_studentt(m.means[i], sd_percell[i], ν))
-                 for i in eachindex(m.means)]
+                [
+                    rand(rng, safe_studentt(m.means[i], sd_percell[i], ν))
+                        for i in eachindex(m.means)
+                ]
             end
             for s in 1:v.n_vintages
                 totals[s][d] = sum(rep[groups[s]])
@@ -1309,8 +1491,8 @@ end
     ## Per-cell-only scoring under-covers, and central coverage falls
     ## further than the 90% coverage: the aggregate spread is roughly right
     ## and its shape is wrong.
-    @test percell[1] <= 0.40
-    @test percell[2] <= 0.80
+    @test percell[1] <= 0.4
+    @test percell[2] <= 0.8
     @test percell[1] / 0.5 < percell[2] / 0.9
     ## Splitting the same measured error restores both to about nominal.
     @test 0.42 <= shared[1] <= 0.58
@@ -1335,25 +1517,29 @@ end
     @test n0 > y + 0.8 * onsets_u * α
     ## The correction shrinks monotonically as the delay grows, and never
     ## takes the nowcast below what is already reported.
-    ns = [onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
-          for δ in 0:(D - 1)]
-    @test all(diff(ns) .<= 1e-9)
-    @test all(ns .>= y - 1e-9)
+    ns = [
+        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
+            for δ in 0:(D - 1)
+    ]
+    @test all(diff(ns) .<= 1.0e-9)
+    @test all(ns .>= y - 1.0e-9)
     ## The whole correction is the unreported part of `α`, so the nowcast
     ## agrees with the closed form it is built from.
     δ = 5
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α) ≈
-          y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
+        y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
     ## `until` targets a delay rather than the eventual total: nothing
     ## outstanding when it is the delay already reached, the reporting
     ## between the two delays when it is later, and never less than that.
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ) ≈ y
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ - 2) ≈
-          y
+        y
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = 12) ≈
-          y +
-          onsets_u * (onset_report_F(12, logit_h0, γ, u, gs, α) -
-           onset_report_F(δ, logit_h0, γ, u, gs, α))
+        y +
+        onsets_u * (
+        onset_report_F(12, logit_h0, γ, u, gs, α) -
+            onset_report_F(δ, logit_h0, γ, u, gs, α)
+    )
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
-          onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
+        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end

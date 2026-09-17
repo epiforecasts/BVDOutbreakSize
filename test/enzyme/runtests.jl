@@ -23,7 +23,7 @@ using Turing: DynamicPPL
 using LogDensityProblems: logdensity_and_gradient
 using Random: seed!
 using BVDOutbreakSize: default_adtype, enzyme_adtype,
-                       exports_only_model, bvd_joint
+    exports_only_model, bvd_joint
 
 ## Unconstrained-space gradient of a composer's log-density under a given
 ## AD backend, at a fixed prior draw.
@@ -31,9 +31,13 @@ function adgrad(model, adtype)
     seed!(20260518)
     vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
     x0 = collect(vi[:])
-    return last(logdensity_and_gradient(
-        DynamicPPL.LogDensityFunction(
-            model, DynamicPPL.getlogjoint, vi; adtype = adtype), x0))
+    return last(
+        logdensity_and_gradient(
+            DynamicPPL.LogDensityFunction(
+                model, DynamicPPL.getlogjoint, vi; adtype = adtype
+            ), x0
+        )
+    )
 end
 
 ## True when the Enzyme gradient matches Mooncake, false when Enzyme
@@ -46,7 +50,7 @@ function enzyme_matches_mooncake(model)
         nothing
     end
     return g_enzyme === nothing ? false :
-           isapprox(g_enzyme, g_mooncake; rtol = 1e-6)
+        isapprox(g_enzyme, g_mooncake; rtol = 1.0e-6)
 end
 
 @testset "Enzyme extension" begin
@@ -67,7 +71,8 @@ end
 
     @testset "gradient matches Mooncake on the joint" begin
         if enzyme_matches_mooncake(
-            bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14))
+                bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
+            )
             @test true
         else
             @test_broken false

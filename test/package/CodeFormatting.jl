@@ -1,4 +1,4 @@
-@testitem "Code formatting" tags=[:quality] begin
+@testitem "Code formatting" tags = [:quality] begin
     using Pkg
     formatter_env = joinpath(@__DIR__, "..", "formatter")
     if isdir(formatter_env) && isfile(joinpath(formatter_env, "Project.toml"))
@@ -20,7 +20,8 @@
         run(`julia --project=$formatter_env -e $resolve`)
         cmd = Cmd(
             `julia --project=$formatter_env $(joinpath(formatter_env, "runtests.jl"))`;
-            ignorestatus = true)
+            ignorestatus = true
+        )
         result = run(pipeline(cmd, stdout = stdout, stderr = stderr); wait = true)
         @test result.exitcode == 0
     else

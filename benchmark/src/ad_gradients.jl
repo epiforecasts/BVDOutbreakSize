@@ -21,9 +21,11 @@ for scen in SCENARIOS, entry in BACKENDS
     ## a pair still compiling rather than a stalled run.
     println(stderr, "[benchmark] smoke test $(scen.name) / $(entry.name)")
     if !ADFixtures.gradient_is_finite(scen, entry.adtype)
-        println(stderr,
+        println(
+            stderr,
             "[benchmark] skipping $(scen.name) / $(entry.name): ",
-            "no finite gradient")
+            "no finite gradient"
+        )
         continue
     end
     ldf, x = ADFixtures.log_density_function(scen, entry.adtype)

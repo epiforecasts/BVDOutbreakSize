@@ -47,9 +47,11 @@ end
     hist = (; days = Int[60, 70], counts = Int[120, 180])
     lab = (; days = Int[60, 70], counts = Int[400, 500])
 
-    build(si) = confirmed_cases_model(hist, 180, onsets, 0.1, 0.6,
+    build(si) = confirmed_cases_model(
+        hist, 180, onsets, 0.1, 0.6,
         fill(4.0, 80), 0.8, copy(onsets); lab_history = lab,
-        specimen_intensity = si)
+        specimen_intensity = si
+    )
 
     unit = fix(specimen_intensity_model(), (; κ = 1.0))
     off = returned(build(nothing), rand(MersenneTwister(3), build(nothing)))
@@ -72,9 +74,11 @@ end
     hist = (; days = Int[60, 70], counts = Int[120, 180])
     lab = (; days = Int[60, 70], counts = Int[400, 500])
 
-    build(κ) = confirmed_cases_model(hist, 180, onsets, 0.1, 0.6,
+    build(κ) = confirmed_cases_model(
+        hist, 180, onsets, 0.1, 0.6,
         fill(4.0, 80), 0.8, copy(onsets); lab_history = lab,
-        specimen_intensity = fix(specimen_intensity_model(), (; κ = κ)))
+        specimen_intensity = fix(specimen_intensity_model(), (; κ = κ))
+    )
 
     one_x = returned(build(1.0), rand(MersenneTwister(5), build(1.0)))
     two_x = returned(build(2.0), rand(MersenneTwister(5), build(2.0)))

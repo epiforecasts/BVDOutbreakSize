@@ -12,11 +12,13 @@
 
     ## A two-vintage history with one break day at day 5. The step is 100
     ## against a printed 24h count of 30, so 70 is retrospective.
-    obs = (confirmed_break_days = [5],
+    obs = (
+        confirmed_break_days = [5],
         confirmed_break_gross_cases = [30],
         confirmed_break_gross_deaths = [4],
         confirmed_history = (days = [3, 5], counts = [200, 300]),
-        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]))
+        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]),
+    )
 
     @test confirmed_break_correction(obs, 4, 6) == 70.0
     @test confirmed_break_correction(obs, 4, 6; deaths = true) == 16.0
@@ -37,28 +39,34 @@ end
 @testitem "confirmed_break_correction is zero without a listed break" begin
     using BVDOutbreakSize: confirmed_break_correction
 
-    none = (confirmed_break_days = Int[],
+    none = (
+        confirmed_break_days = Int[],
         confirmed_break_gross_cases = Int[],
         confirmed_break_gross_deaths = Int[],
         confirmed_history = (days = [3, 5], counts = [200, 300]),
-        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]))
+        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]),
+    )
     @test confirmed_break_correction(none, 0, 99) == 0.0
 
     ## A break day the history carries no vintage for has not arrived by this
     ## cut-off, so it contributes nothing rather than erroring.
-    unarrived = (confirmed_break_days = [7],
+    unarrived = (
+        confirmed_break_days = [7],
         confirmed_break_gross_cases = [30],
         confirmed_break_gross_deaths = [4],
         confirmed_history = (days = [3, 5], counts = [200, 300]),
-        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]))
+        confirmed_deaths_history = (days = [3, 5], counts = [50, 70]),
+    )
     @test confirmed_break_correction(unarrived, 0, 99) == 0.0
 
     ## An empty history has no step to correct.
-    empty_hist = (confirmed_break_days = [5],
+    empty_hist = (
+        confirmed_break_days = [5],
         confirmed_break_gross_cases = [30],
         confirmed_break_gross_deaths = [4],
         confirmed_history = (days = Int[], counts = Int[]),
-        confirmed_deaths_history = (days = Int[], counts = Int[]))
+        confirmed_deaths_history = (days = Int[], counts = Int[]),
+    )
     @test confirmed_break_correction(empty_hist, 0, 99) == 0.0
 end
 
@@ -66,14 +74,18 @@ end
     using DataFrames: DataFrame
     using BVDOutbreakSize: forecast_vs_truth
 
-    fc = DataFrame(confirmed_cum = collect(400.0:1.0:499.0),
-        confirmed_new = collect(100.0:1.0:199.0))
+    fc = DataFrame(
+        confirmed_cum = collect(400.0:1.0:499.0),
+        confirmed_new = collect(100.0:1.0:199.0)
+    )
     observed = (confirmed_cum = 500.0,)
     baseline = (confirmed_cum = 300.0,)
 
     plain = forecast_vs_truth(fc; observed = observed, baseline = baseline)
-    corrected = forecast_vs_truth(fc; observed = observed,
-        baseline = baseline, breaks = (confirmed_cum = 70.0,))
+    corrected = forecast_vs_truth(
+        fc; observed = observed,
+        baseline = baseline, breaks = (confirmed_cum = 70.0,)
+    )
 
     newrow(df) = df[df[!, "Quantity"] .== "new this week", "Observed"][1]
     cumrow(df) = df[df[!, "Quantity"] .== "cumulative by T+7", "Observed"][1]
@@ -93,22 +105,30 @@ end
     using CairoMakie: Axis
     using BVDOutbreakSize: plot_forecast_vs_truth
 
-    fc = DataFrame(confirmed_cum = collect(400.0:1.0:499.0),
-        confirmed_new = collect(100.0:1.0:199.0))
+    fc = DataFrame(
+        confirmed_cum = collect(400.0:1.0:499.0),
+        confirmed_new = collect(100.0:1.0:199.0)
+    )
     indiv = (confirmed_new = collect(90.0:1.0:189.0),)
     origin = (confirmed_cum = 300.0,)
 
-    plain = plot_forecast_vs_truth(fc; observed = (confirmed_cum = 500.0,),
-        baseline = origin, individual = indiv)
-    corrected = plot_forecast_vs_truth(fc;
+    plain = plot_forecast_vs_truth(
+        fc; observed = (confirmed_cum = 500.0,),
+        baseline = origin, individual = indiv
+    )
+    corrected = plot_forecast_vs_truth(
+        fc;
         observed = (confirmed_cum = 500.0,), baseline = origin,
-        individual = indiv, breaks = (confirmed_cum = 70.0,))
+        individual = indiv, breaks = (confirmed_cum = 70.0,)
+    )
     ## A break is exactly a reduction of the reported cumulative, so passing
     ## it matches passing a total already net of it. The overlay's origin is
     ## the frozen baseline either way and does not move with it.
-    presubtracted = plot_forecast_vs_truth(fc;
+    presubtracted = plot_forecast_vs_truth(
+        fc;
         observed = (confirmed_cum = 430.0,), baseline = origin,
-        individual = indiv)
+        individual = indiv
+    )
 
     cum_limits(fig) = [c for c in fig.content if c isa Axis][1].limits[]
     @test cum_limits(corrected) == cum_limits(presubtracted)

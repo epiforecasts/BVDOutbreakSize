@@ -25,11 +25,13 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 
 @info "Executing $PAGE.jl (fits are loaded from BVD_FIT_CACHE)…" cache = get(
-    ENV, "BVD_FIT_CACHE", "logs/fit_cache")
+    ENV, "BVD_FIT_CACHE", "logs/fit_cache"
+)
 Literate.markdown(
     LITERATE_SRC, LITERATE_OUT;
     name = PAGE,
     flavor = Literate.DocumenterFlavor(),
     execute = true,
-    credit = false)
+    credit = false
+)
 @info "Done" output = joinpath(LITERATE_OUT, "$PAGE.md")

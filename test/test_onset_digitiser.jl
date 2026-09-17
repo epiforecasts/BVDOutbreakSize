@@ -20,12 +20,14 @@
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
 
-    path = joinpath(pkgdir(BVDOutbreakSize), "data",
-        "onset_curve_scanned.csv")
+    path = joinpath(
+        pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv"
+    )
     lines = readlines(path)
     @test lines[1] ==
-          "sitrep,report_date,onset_date,confirmed_alive," *
-          "confirmed_dead,confirmed_total"
+        "sitrep,report_date,onset_date,confirmed_alive," *
+        "confirmed_dead,confirmed_total"
 
     ## Violations are collected rather than asserted row by row: the file
     ## carries four thousand rows, and a failure should name the offending
@@ -82,8 +84,10 @@ end
     ## scale would post a 284-case fall on onset dates that cannot fall.
     ## The evidence is in data/README.md. Issue #636 tracks the same blur
     ## costing every JPEG vintage a smaller, unmeasured slice of every bar.
-    path = joinpath(pkgdir(BVDOutbreakSize), "data",
-        "onset_curve_scanned.csv")
+    path = joinpath(
+        pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv"
+    )
     rows = filter(!isempty, strip.(readlines(path)[2:end]))
     ids = Set(String(split(l, ',')[1]) for l in rows)
     @test !("098" in ids)
@@ -96,8 +100,12 @@ end
     using BVDOutbreakSize: BVDOutbreakSize
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
 
-    csv = _read_onset_csv(joinpath(pkgdir(BVDOutbreakSize), "data",
-        "onset_curve_scanned.csv"))
+    csv = _read_onset_csv(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "data",
+            "onset_curve_scanned.csv"
+        )
+    )
     ## Reprints are collapsed by exact value equality over the digitised
     ## block, never by a list of vintage ids, so a pair that reprints must
     ## agree on every onset date. 108/109 is the newest such pair: INSP
@@ -116,8 +124,12 @@ end
     using Dates: Day
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
 
-    csv = _read_onset_csv(joinpath(pkgdir(BVDOutbreakSize), "data",
-        "onset_curve_scanned.csv"))
+    csv = _read_onset_csv(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "data",
+            "onset_curve_scanned.csv"
+        )
+    )
 
     ## Consecutive pairs where the check does not land on shift 0. Every one
     ## is investigated and recorded in data/README.md's onset-curve section:
@@ -144,10 +156,12 @@ end
     ## sept 2026), both read off 12x crops of the embedded figures, so the
     ## two axes are calibrated identically and no one-day offset between
     ## them is possible.
-    documented = Dict("093" => "094", "096" => "097", "099" => "100",
+    documented = Dict(
+        "093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
         "119" => "120", "120" => "121", "121" => "122", "122" => "123",
-        "123" => "124")
+        "123" => "124"
+    )
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]
@@ -181,8 +195,12 @@ end
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "digitize_onset_curve.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
 
     bars = [(12, 5) for _ in 1:15]
     R, G, B = _synthetic_chart(bars)
@@ -193,7 +211,7 @@ end
     ## The rightmost bar sits on the rightmost weekly tick, and the rest
     ## step back a day each.
     @test [r[1] for r in drawn] ==
-          [last_tick - Day(length(bars) - j) for j in eachindex(bars)]
+        [last_tick - Day(length(bars) - j) for j in eachindex(bars)]
     ## Bar heights come back through the y-axis scale unchanged, split by
     ## colour into the alive and dead segments.
     @test all(r -> (r[2], r[3]) == (12, 5), drawn)
@@ -203,8 +221,12 @@ end
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
-    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
-        "digitize_onset_curve.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
 
     ## The same drawn pixels under two printed gridline increments. The
     ## geometry cannot tell them apart, which is why Y_AXIS_STEP is a
@@ -231,28 +253,46 @@ end
 
     if !isdir(pdf_dir)
         @info "onset re-digitisation skipped: $pdf_dir absent. Fetch the " *
-              "reports with scripts/download_sitreps.jl to run it."
+            "reports with scripts/download_sitreps.jl to run it."
         @test true
     else
         include(joinpath(root, "scripts", "digitize_onset_curve.jl"))
         want = Dict{String, Vector{Tuple{Date, Int, Int}}}()
-        for line in readlines(joinpath(root, "data",
-            "onset_curve_scanned.csv"))[2:end]
+        for line in readlines(
+                joinpath(
+                    root, "data",
+                    "onset_curve_scanned.csv"
+                )
+            )[2:end]
             isempty(strip(line)) && continue
             f = split(line, ',')
-            push!(get!(want, String(f[1]), Tuple{Date, Int, Int}[]),
-                (Date(f[3]), parse(Int, f[4]), parse(Int, f[5])))
+            push!(
+                get!(want, String(f[1]), Tuple{Date, Int, Int}[]),
+                (Date(f[3]), parse(Int, f[4]), parse(Int, f[5]))
+            )
         end
         ## Three vintages, one per detection path the digitiser has had to
         ## grow: 094 exercises the y-axis label strip, 106 the daily bar
         ## windows, and 108 the near-grey fallback its larger render needs.
-        wanted = (("094", Date(2026, 8, 17)), ("106", Date(2026, 8, 24)),
-            ("108", Date(2026, 8, 31)))
-        available = [(sr, tick, joinpath(pdf_dir,
-                         "SitRep_MVE_$(sr)_2026.pdf"))
-                     for (sr, tick) in wanted
-                     if isfile(joinpath(pdf_dir,
-            "SitRep_MVE_$(sr)_2026.pdf"))]
+        wanted = (
+            ("094", Date(2026, 8, 17)), ("106", Date(2026, 8, 24)),
+            ("108", Date(2026, 8, 31)),
+        )
+        available = [
+            (
+                sr, tick, joinpath(
+                    pdf_dir,
+                    "SitRep_MVE_$(sr)_2026.pdf"
+                ),
+            )
+                for (sr, tick) in wanted
+                if isfile(
+                    joinpath(
+                        pdf_dir,
+                        "SitRep_MVE_$(sr)_2026.pdf"
+                    )
+                )
+        ]
         isempty(available) &&
             @info "no onset SitRep PDFs matched; nothing re-digitised"
         for (sr, last_tick, pdf) in available
@@ -260,7 +300,7 @@ end
             @test img !== nothing
             img === nothing && continue
             @test digitize(img..., last_tick, get(Y_AXIS_STEP, sr, 20)) ==
-                  want[sr]
+                want[sr]
         end
     end
 end
@@ -289,8 +329,12 @@ end
     else
         out = joinpath(mktempdir(), "onset.csv")
         script = joinpath(root, "scripts", "digitize_onset_curve.py")
-        run(pipeline(`$runner $script $pdf_dir $out`;
-            stdout = devnull, stderr = devnull))
+        run(
+            pipeline(
+                `$runner $script $pdf_dir $out`;
+                stdout = devnull, stderr = devnull
+            )
+        )
         committed = joinpath(root, "data", "onset_curve_scanned.csv")
         @test read(out, String) == read(committed, String)
     end

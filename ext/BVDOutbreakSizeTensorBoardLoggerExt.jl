@@ -33,20 +33,28 @@ function BVDOutbreakSize.tensorboard_callback(
         every::Integer = 20,
         histograms::Bool = true,
         params_prefix::AbstractString = "params/",
-        diagnostics_prefix::AbstractString = "diagnostics/")
+        diagnostics_prefix::AbstractString = "diagnostics/"
+    )
     logger = TBLogger(logdir)
     lk = ReentrantLock()
     history = Dict{String, Vector{Float64}}()
-    return function (rng, model, sampler, transition, state, iteration;
-            kwargs...)
+    return function (
+            rng, model, sampler, transition, state, iteration;
+            kwargs...,
+        )
         try
             pws = AbstractMCMC.ParamsWithStats(
-                model, sampler, transition, state; params = true, stats = true)
+                model, sampler, transition, state; params = true, stats = true
+            )
             Base.@lock lk begin
-                _emit!(logger, history, params_prefix, pairs(pws.params),
-                    iteration, every, histograms)
-                _emit!(logger, history, diagnostics_prefix, pairs(pws.stats),
-                    iteration, every, histograms)
+                _emit!(
+                    logger, history, params_prefix, pairs(pws.params),
+                    iteration, every, histograms
+                )
+                _emit!(
+                    logger, history, diagnostics_prefix, pairs(pws.stats),
+                    iteration, every, histograms
+                )
             end
         catch
             # A streaming callback must never abort a fit.
@@ -68,8 +76,10 @@ function _emit!(logger, history, prefix, nt_pairs, iteration, every, histograms)
             draws = get!(() -> Float64[], history, tag)
             push!(draws, v)
             if iteration % every == 0 && length(draws) > 1
-                log_histogram(logger, string(tag, "/distribution"), draws;
-                    step = iteration)
+                log_histogram(
+                    logger, string(tag, "/distribution"), draws;
+                    step = iteration
+                )
             end
         end
     end

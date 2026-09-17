@@ -17,13 +17,21 @@ Pkg.instantiate()
 using BVDOutbreakSize
 include(joinpath(@__DIR__, "registry.jl"))
 
-const CACHE = get(ENV, "BVD_FIT_CACHE",
-    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache"))
+const CACHE = get(
+    ENV, "BVD_FIT_CACHE",
+    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache")
+)
 const REFIT = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
 
 obs = load_observations()
 specs = build_fit_specs(obs)
-@info "Fitting $(length(specs)) models into the cache" cache=CACHE refit=REFIT
-fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
-                  cache_dir = CACHE, refit = REFIT) for s in specs])
-@info "All fits cached" cache=CACHE
+@info "Fitting $(length(specs)) models into the cache" cache = CACHE refit = REFIT
+fit_parallel(
+    [
+        () -> fit_or_load(
+            fit_key(s.id), s.thunk;
+            cache_dir = CACHE, refit = REFIT
+        ) for s in specs
+    ]
+)
+@info "All fits cached" cache = CACHE
