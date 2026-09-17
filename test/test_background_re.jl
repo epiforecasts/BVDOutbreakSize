@@ -94,6 +94,52 @@ end
     @test all(>=(0), λ_mu)
 end
 
+@testitem "background_walk_model samples knot steps, not standard z" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## The centred default draws `steps` at `Normal(0, σ_rw)`. The
+    ## non-centred form draws a standard `z` and rescales it. The sampled
+    ## coordinates are what differ, so the variable names are the check.
+    c = rand(MersenneTwister(3), background_walk_model(40, 0.2; onset = 5))
+    @test haskey(c, :steps)
+    @test !haskey(c, :z)
+    nc = rand(MersenneTwister(3),
+        background_walk_model(40, 0.2; onset = 5, centred = false))
+    @test haskey(nc, :z)
+    @test !haskey(nc, :steps)
+end
+
+@testitem "background_walk_model centred and non-centred share a prior" tags=[
+    :slow
+] begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    using Statistics: mean, std
+
+    n, σ_rw, onset = 60, 0.2, 10
+    ## Accumulated log deviation from the window anchor on the last day. Both
+    ## forms carry the same prior over it, a cumulative sum of
+    ## `Normal(0, σ_rw)` steps, so its mean and spread must agree.
+    function drift(centred)
+        mdl = background_walk_model(n, σ_rw; onset = onset,
+            centred = centred)
+        rng = MersenneTwister(20260917)
+        return [let s = returned(mdl, rand(rng, mdl))
+                    log(s.λ[end] / s.λ_mu)
+                end
+                for _ in 1:8_000]
+    end
+    c = drift(true)
+    nc = drift(false)
+    @test isapprox(mean(c), mean(nc); atol = 0.05)
+    @test isapprox(std(c), std(nc); rtol = 0.1)
+    ## A walk, not noise: the drift accumulates well beyond one step.
+    @test std(c) > σ_rw
+end
+
 @testitem "background_walk_model edge cases (ungated, single day)" begin
     using BVDOutbreakSize: background_walk_model
     using Turing: returned

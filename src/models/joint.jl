@@ -767,12 +767,13 @@ reproduction number implied by the summed patch infections.
     ## suspected-case stream. It is gated to zero before the surveillance
     ## onset, since it does not exist before surveillance began. The
     ## regularised innovation SD `σ_rw` keeps it a slow drift, which holds
-    ## down the background/outbreak-size degeneracy. The suspected-death background is
-    ## not a separate random effect. It is tied to the case background by a
-    ## background CFR (`cfr_bg · case_bg_daily`, see [`deaths_model`](@ref)),
-    ## so it inherits this level and time variation rather than competing as
-    ## a second free, outbreak-size-degenerate rate. With
-    ## `background_re = false` the case stream keeps its scalar `λ_bg`.
+    ## down the background/outbreak-size degeneracy. The suspected-death
+    ## background is not a separate random effect. It is tied to the case
+    ## background by a background CFR (`cfr_bg · case_bg_daily`, see
+    ## [`deaths_model`](@ref)), so it inherits this level and time variation
+    ## rather than competing as a second free, outbreak-size-degenerate
+    ## rate. With `background_re = false` the case stream keeps its scalar
+    ## `λ_bg`.
     ##
     ## The pooling SD is sampled only when the random effect is active, so
     ## the tilde stays gated and the branch is an expression assigned once. A
