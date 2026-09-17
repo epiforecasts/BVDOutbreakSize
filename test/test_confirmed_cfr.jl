@@ -105,7 +105,7 @@ end
 @testitem "confirmed_cfr_table summarises the four quantities" setup=[
     ConfirmedCfrChain
 ] begin
-    using DataFrames: DataFrame, nrow
+    using DataFrames: DataFrame, nrow, names
     using BVDOutbreakSize: confirmed_cfr_table
     chn = _ccfr_chain(200)
     res = delay_corrected_confirmed_cfr(chn;
@@ -113,6 +113,9 @@ end
     tbl = confirmed_cfr_table(res)
     @test tbl isa DataFrame
     @test nrow(tbl) == 4
+    ## Intervals only: a median column would reintroduce a point estimate.
+    @test !("Central estimate" in names(tbl))
+    @test "Estimate" in names(tbl)
 end
 
 @testitem "plot_confirmed_cfr returns a Makie figure" setup=[

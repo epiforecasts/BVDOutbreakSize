@@ -66,8 +66,12 @@ jobs:
           # fails on a missing source file. The failing job saves the same
           # depot again, so the state does not heal on its own.
           save-always: false
-          # Bumped once to drop the Windows depots saved before that rule.
-          key-prefix: '2026-09-15'
+          # Namespaces the depot cache. Bump it to discard every stored
+          # depot, which is the only way out once a bad one is restored,
+          # because the failing job saves no replacement. This was
+          # `key-prefix`, an input julia-actions/cache does not accept,
+          # so the earlier bumps never reached the cache key.
+          cache-name: test-2026-09-17
       - uses: julia-actions/julia-runtest@v1
         with:
           # macOS is the portability cell and the slowest runner: give it

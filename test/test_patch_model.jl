@@ -1470,7 +1470,7 @@ end
 
 @testitem "province_forecast_vs_truth: the split should be scored per draw" begin
     using BVDOutbreakSize: province_forecast_vs_truth
-    using DataFrames: DataFrame
+    using DataFrames: DataFrame, names
 
     ## The province forecast is the national draw times that province's
     ## share, multiplied draw by draw. A share that moves with the national
@@ -1496,10 +1496,12 @@ end
     @test deaths[!, "Observed"] == [20, 10]
     ## The shares used are the last vintage's, so province A takes the
     ## complement of the second column rather than the first.
-    @test 0.05 < cases[1, "Central estimate"] / 100 < 0.6
-    ## Coverage is reported, and the interval brackets the median.
-    @test all(df[!, "Lower 90%"] .<= df[!, "Central estimate"] .<=
-              df[!, "Upper 90%"])
+    @test cases[1, "Lower 90%"] / 100 < 0.6
+    @test cases[1, "Upper 90%"] / 100 > 0.05
+    ## Coverage is reported, and the interval is ordered.
+    @test all(df[!, "Lower 90%"] .<= df[!, "Upper 90%"])
+    ## No central estimate is reported anywhere in the table.
+    @test !("Central estimate" in names(df))
     @test eltype(df[!, "Within 90% PI"]) == Bool
 
     ## A chain with no compositions cannot be scored by province.
