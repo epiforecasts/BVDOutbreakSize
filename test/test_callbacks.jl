@@ -9,7 +9,7 @@
 ## dependency (mirroring how Enzyme covers its extension). Kept fast:
 ## trivial one-parameter Gaussian, few draws.
 
-@testitem "nuts_sample forwards a callback to sample" tags=[:slow] begin
+@testitem "nuts_sample forwards a callback to sample" tags = [:slow] begin
     using Distributions: Normal
     using Turing: @model
     using BVDOutbreakSize: nuts_sample
@@ -19,8 +19,10 @@
     end
 
     calls = Threads.Atomic{Int}(0)
-    cb = (rng, model, sampler, transition, state, iteration;
-        kwargs...) -> Threads.atomic_add!(calls, 1)
+    cb = (
+        rng, model, sampler, transition, state, iteration;
+        kwargs...
+    ) -> Threads.atomic_add!(calls, 1)
 
     nuts_sample(_cb_model(); samples = 20, chains = 1, callback = cb)
     ## One callback per post-warmup draw, so the count is at least the
@@ -28,7 +30,7 @@
     @test calls[] >= 20
 end
 
-@testitem "nuts_sample warmup=true streams adaptation steps" tags=[:slow] begin
+@testitem "nuts_sample warmup=true streams adaptation steps" tags = [:slow] begin
     using Distributions: Normal
     using Turing: @model
     import Turing
@@ -43,16 +45,21 @@ end
     function step_sizes(; warmup)
         sizes = Float64[]
         lk = ReentrantLock()
-        cb = function (rng, model, sampler, transition, state, iteration;
-                kwargs...)
+        cb = function (
+                rng, model, sampler, transition, state, iteration;
+                kwargs...,
+            )
             pws = Turing.AbstractMCMC.ParamsWithStats(
-                model, sampler, transition, state; stats = true)
+                model, sampler, transition, state; stats = true
+            )
             ss = get(pws.stats, :step_size, missing)
             ss isa Real && Base.@lock lk push!(sizes, ss)
             return nothing
         end
-        nuts_sample(_wu_model(); samples = 100, chains = 1,
-            callback = cb, warmup = warmup)
+        nuts_sample(
+            _wu_model(); samples = 100, chains = 1,
+            callback = cb, warmup = warmup
+        )
         return sizes
     end
 
@@ -63,7 +70,7 @@ end
     @test length(unique(step_sizes(; warmup = false))) <= 3
 end
 
-@testitem "progress_callback records real log-density" tags=[:slow] begin
+@testitem "progress_callback records real log-density" tags = [:slow] begin
     using Distributions: Normal
     using Turing: @model
     using BVDOutbreakSize: nuts_sample, progress_callback
@@ -82,8 +89,9 @@ end
     @test length(lines) >= 50 ÷ 5
     @test all(
         l -> occursin("iteration=", l) &&
-             occursin("lp=", l) &&
-             occursin("divergences=", l), lines)
+            occursin("lp=", l) &&
+            occursin("divergences=", l), lines
+    )
     ## The log-density must be a real number pulled from the transition
     ## statistics, not `missing` — a silent failure mode if the stats
     ## interface stops exposing `logjoint`.
@@ -93,8 +101,8 @@ end
     rm(path; force = true)
 end
 
-@testitem "tensorboard_callback streams grouped scalars and histograms" tags=[
-    :slow
+@testitem "tensorboard_callback streams grouped scalars and histograms" tags = [
+    :slow,
 ] begin
     using Distributions: Normal
     using Turing: @model
@@ -156,7 +164,7 @@ end
     @test fit_callback("x"; spec = " NONE ") === nothing
 end
 
-@testitem "fit_callback: progress streams a named log" tags=[:slow] begin
+@testitem "fit_callback: progress streams a named log" tags = [:slow] begin
     using Distributions: Normal
     using Turing: @model
     using BVDOutbreakSize: fit_callback, nuts_sample
@@ -174,8 +182,8 @@ end
     @test !isdir(joinpath(dir, "tensorboard", "unit"))
 end
 
-@testitem "fit_callback: all streams progress and TensorBoard" tags=[
-    :slow
+@testitem "fit_callback: all streams progress and TensorBoard" tags = [
+    :slow,
 ] begin
     using Distributions: Normal
     using Turing: @model

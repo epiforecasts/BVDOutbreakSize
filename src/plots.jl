@@ -32,10 +32,11 @@ function plot_cumulative_cases(
         scenarios = REPORT_SCENARIOS,
         xmax::Union{Nothing, Real} = nothing,
         xlabel::AbstractString = "Cumulative infections",
-        title::AbstractString = "Outbreak size estimated by each data stream")
+        title::AbstractString = "Outbreak size estimated by each data stream"
+    )
     upper = isnothing(xmax) ?
-            1.05 * maximum(quantile(s.second, 0.995) for s in streams) :
-            xmax
+        1.05 * maximum(quantile(s.second, 0.995) for s in streams) :
+        xmax
     df = @chain DataFrame(
         stream = String[], C_T = Float64[]
     ) begin
@@ -50,20 +51,27 @@ function plot_cumulative_cases(
     end
 
     spec = AoG.data(df) *
-           AoG.mapping(:C_T => xlabel,
-               color = :stream => "Data stream") *
-           AoG.AlgebraOfGraphics.density() *
-           AoG.subvisual(:line, linewidth = 2)
-    fg = AoG.draw(spec;
-        axis = (; ylabel = "Posterior density",
+        AoG.mapping(
+        :C_T => xlabel,
+        color = :stream => "Data stream"
+    ) *
+        AoG.AlgebraOfGraphics.density() *
+        AoG.subvisual(:line, linewidth = 2)
+    fg = AoG.draw(
+        spec;
+        axis = (;
+            ylabel = "Posterior density",
             title = title,
-            limits = ((0, upper), nothing)),
+            limits = ((0, upper), nothing),
+        ),
         figure = (; size = (760, 420))
     )
 
     scenario_xs = Float64[val for (_, val) in scenarios if val < upper]
-    isempty(scenario_xs) || vlines!(fg.figure.content[1], scenario_xs;
-        color = (:grey, 0.4), linestyle = :dash)
+    isempty(scenario_xs) || vlines!(
+        fg.figure.content[1], scenario_xs;
+        color = (:grey, 0.4), linestyle = :dash
+    )
     return fg
 end
 
@@ -83,8 +91,10 @@ The chain must carry the vector deterministics `cumulative_infections`,
 quantity upstream of ascertainment, confirmation and reporting delays, so the
 observed counts are not on the same scale.
 """
-function plot_cumulative_trajectories(chn;
-        n::Integer, seeding::Date)
+function plot_cumulative_trajectories(
+        chn;
+        n::Integer, seeding::Date
+    )
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
 
@@ -98,8 +108,8 @@ function plot_cumulative_trajectories(chn;
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
         lo90 = [q(d, 0.05) for d in 1:n]
         hi90 = [q(d, 0.95) for d in 1:n]
-        lo60 = [q(d, 0.20) for d in 1:n]
-        hi60 = [q(d, 0.80) for d in 1:n]
+        lo60 = [q(d, 0.2) for d in 1:n]
+        hi60 = [q(d, 0.8) for d in 1:n]
         lo30 = [q(d, 0.35) for d in 1:n]
         hi30 = [q(d, 0.65) for d in 1:n]
         return lo90, hi90, lo60, hi60, lo30, hi30
@@ -108,36 +118,44 @@ function plot_cumulative_trajectories(chn;
     rows = (
         (:cumulative_infections, "infections", :steelblue),
         (:cumulative_onsets, "symptom onsets", :seagreen),
-        (:cumulative_expected_deaths, "deaths", :firebrick)
+        (:cumulative_expected_deaths, "deaths", :firebrick),
     )
 
     fig = Figure(; size = (940, 1020))
     for (i, (key, name, colour)) in enumerate(rows)
         trajs = _trajectories(key)
         lo90, hi90, lo60, hi60, lo30, hi30 = _ribbon(trajs)
-        ax = Axis(fig[i, 1];
+        ax = Axis(
+            fig[i, 1];
             xlabel = "Date", ylabel = "Cumulative $name",
             title = "Modelled cumulative $name over time",
-            xticklabelrotation = pi / 6)
+            xticklabelrotation = pi / 6
+        )
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
         loax = floor(Int, minimum(x))
         hiax = ceil(Int, maximum(x))
         ax.xticks = collect(loax:14:hiax)
-        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                  for v in vals]
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
 
         ## Deliberately unbounded. These counts sit in the thousands, far
         ## from zero, so anchoring the axis there would squash the posterior
         ## into a spike against the right-hand edge.
         finals = Float64[t[n] for t in trajs]
-        axd = Axis(fig[i, 2];
+        axd = Axis(
+            fig[i, 2];
             xlabel = "Cumulative $name at the cut-off",
             ylabel = "Posterior density",
-            title = "Current cumulative $name")
-        density!(axd, finals; color = (colour, 0.5),
-            strokecolor = colour, strokewidth = 2)
+            title = "Current cumulative $name"
+        )
+        density!(
+            axd, finals; color = (colour, 0.5),
+            strokecolor = colour, strokewidth = 2
+        )
     end
     return fig
 end
@@ -156,17 +174,21 @@ Each `stream` is a `NamedTuple` `(; label, trajs, last_day, colour)`, where
 data last reports (or `nothing` to omit the rule). `seeding` is the
 calendar date of grid day 1, so day `d` is `seeding + (d - 1)`.
 """
-function plot_stream_trajectories(streams::AbstractVector;
+function plot_stream_trajectories(
+        streams::AbstractVector;
         n::Integer, seeding::Date,
         title::AbstractString =
-        "Outbreak size projected to the cut-off by each data stream")
+            "Outbreak size projected to the cut-off by each data stream"
+    )
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
 
     fig = Figure(; size = (900, 480))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = "Date", ylabel = "Cumulative infections",
-        title = title, xticklabelrotation = pi / 6)
+        title = title, xticklabelrotation = pi / 6
+    )
 
     handles = Any[]
     labels = String[]
@@ -176,8 +198,8 @@ function plot_stream_trajectories(streams::AbstractVector;
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
         lo90 = [q(d, 0.05) for d in 1:n]
         hi90 = [q(d, 0.95) for d in 1:n]
-        lo60 = [q(d, 0.20) for d in 1:n]
-        hi60 = [q(d, 0.80) for d in 1:n]
+        lo60 = [q(d, 0.2) for d in 1:n]
+        hi60 = [q(d, 0.8) for d in 1:n]
         lo30 = [q(d, 0.35) for d in 1:n]
         hi30 = [q(d, 0.65) for d in 1:n]
         ymax = max(ymax, maximum(hi90))
@@ -189,18 +211,24 @@ function plot_stream_trajectories(streams::AbstractVector;
         push!(labels, s.label)
         ## Dotted rule in the stream's colour where its data stops reporting.
         ld = get(s, :last_day, nothing)
-        ld === nothing || vlines!(ax, [Float64(epoch + ld - 1)];
-            color = (colour, 0.8), linestyle = :dot, linewidth = 2)
+        ld === nothing || vlines!(
+            ax, [Float64(epoch + ld - 1)];
+            color = (colour, 0.8), linestyle = :dot, linewidth = 2
+        )
     end
 
     loax = floor(Int, minimum(x))
     hiax = ceil(Int, maximum(x))
     ax.xticks = collect(loax:14:hiax)
-    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                              for v in vals]
+    ax.xtickformat = vals -> [
+        string(epochdays2date(round(Int, v)))
+            for v in vals
+    ]
     CairoMakie.ylims!(ax, 0, ymax * 1.05)
-    CairoMakie.axislegend(ax, handles, labels; position = :lt,
-        framevisible = true)
+    CairoMakie.axislegend(
+        ax, handles, labels; position = :lt,
+        framevisible = true
+    )
     return fig
 end
 
@@ -218,7 +246,8 @@ function plot_density_overlay(
         streams::Pair{String, <:AbstractVector}...;
         xlabel::AbstractString = "Value",
         title::AbstractString = "Posterior density",
-        lower::Union{Nothing, Real} = nothing)
+        lower::Union{Nothing, Real} = nothing
+    )
     df = @chain DataFrame(stream = String[], value = Float64[]) begin
         let df = _
             for (label, draws) in streams
@@ -231,13 +260,15 @@ function plot_density_overlay(
     end
 
     spec = AoG.data(df) *
-           AoG.mapping(:value => xlabel, color = :stream => "Fit") *
-           AoG.AlgebraOfGraphics.density() *
-           AoG.subvisual(:line, linewidth = 2)
+        AoG.mapping(:value => xlabel, color = :stream => "Fit") *
+        AoG.AlgebraOfGraphics.density() *
+        AoG.subvisual(:line, linewidth = 2)
     ax = isnothing(lower) ?
-         (; ylabel = "Posterior density", title = title) :
-         (; ylabel = "Posterior density", title = title,
-        limits = ((float(lower), nothing), nothing))
+        (; ylabel = "Posterior density", title = title) :
+        (;
+            ylabel = "Posterior density", title = title,
+            limits = ((float(lower), nothing), nothing),
+        )
     return AoG.draw(spec; axis = ax, figure = (; size = (760, 420)))
 end
 
@@ -263,7 +294,8 @@ function _panel_exports!(fig, pos, pp, obs; predictive_label = "Posterior")
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(20, ceil(Int, quantile(ppf, 0.99)))
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated exported cases",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Exports (cases)",
@@ -274,12 +306,15 @@ function _panel_exports!(fig, pos, pp, obs; predictive_label = "Posterior")
     return ax
 end
 
-function _panel_exports_deaths!(fig, pos, pp, obs;
-        predictive_label = "Posterior")
+function _panel_exports_deaths!(
+        fig, pos, pp, obs;
+        predictive_label = "Posterior"
+    )
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(3, ceil(Int, quantile(ppf, 0.995)))
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated deaths among exports",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Exports (deaths)",
@@ -290,21 +325,26 @@ function _panel_exports_deaths!(fig, pos, pp, obs;
     return ax
 end
 
-function _panel_confirmed_deaths!(fig, pos, pp, obs;
-        predictive_label = "Posterior")
+function _panel_confirmed_deaths!(
+        fig, pos, pp, obs;
+        predictive_label = "Posterior"
+    )
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(3, ceil(Int, quantile(ppf, 0.995)))
     obs === nothing || (upper = max(upper, ceil(Int, 1.1 * obs)))
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated confirmed deaths",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Confirmed deaths (DRC)",
         limits = ((0, upper), nothing)
     )
     hist!(ax, ppf; bins = 0:1:upper, color = (:darkorange3, 0.7))
-    obs === nothing || vlines!(ax, _obs_floats(obs);
-        color = :red, linewidth = 2)
+    obs === nothing || vlines!(
+        ax, _obs_floats(obs);
+        color = :red, linewidth = 2
+    )
     return ax
 end
 
@@ -312,56 +352,69 @@ function _panel_deaths!(fig, pos, pp, obs; predictive_label = "Posterior")
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(1.0, quantile(ppf, 0.995))
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated deaths",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Deaths (DRC)",
         limits = ((0, upper), nothing)
     )
-    hist!(ax, ppf; bins = range(0, upper; length = 40),
-        color = (:firebrick, 0.7))
+    hist!(
+        ax, ppf; bins = range(0, upper; length = 40),
+        color = (:firebrick, 0.7)
+    )
     vlines!(ax, _obs_floats(obs); color = :red, linewidth = 2)
     return ax
 end
 
-function _panel_confirmed!(fig, pos, pp, obs;
-        predictive_label = "Posterior")
+function _panel_confirmed!(
+        fig, pos, pp, obs;
+        predictive_label = "Posterior"
+    )
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(1.0, quantile(ppf, 0.995))
     if obs !== nothing
         upper = max(upper, 1.05 * maximum(_obs_floats(obs)))
     end
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated confirmed cases",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Confirmed cases (DRC)",
         limits = ((0, upper), nothing)
     )
-    hist!(ax, ppf; bins = range(0, upper; length = 40),
-        color = (:goldenrod, 0.7))
+    hist!(
+        ax, ppf; bins = range(0, upper; length = 40),
+        color = (:goldenrod, 0.7)
+    )
     if obs !== nothing
         vlines!(ax, _obs_floats(obs); color = :red, linewidth = 2)
     end
     return ax
 end
 
-function _panel_tests!(fig, pos, pp, obs;
-        predictive_label = "Posterior")
+function _panel_tests!(
+        fig, pos, pp, obs;
+        predictive_label = "Posterior"
+    )
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(1.0, quantile(ppf, 0.995))
     if obs !== nothing
         upper = max(upper, 1.05 * maximum(_obs_floats(obs)))
     end
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated tests analysed",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Tests analysed (DRC)",
         limits = ((0, upper), nothing)
     )
-    hist!(ax, ppf; bins = range(0, upper; length = 40),
-        color = (:teal, 0.7))
+    hist!(
+        ax, ppf; bins = range(0, upper; length = 40),
+        color = (:teal, 0.7)
+    )
     if obs !== nothing
         vlines!(ax, _obs_floats(obs); color = :red, linewidth = 2)
     end
@@ -372,14 +425,17 @@ function _panel_cases!(fig, pos, pp, obs; predictive_label = "Posterior")
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
     upper = max(1.0, quantile(ppf, 0.995))
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Replicated reported cases",
         ylabel = "$(predictive_label) predictive frequency",
         title = "Reported cases (DRC)",
         limits = ((0, upper), nothing)
     )
-    hist!(ax, ppf; bins = range(0, upper; length = 40),
-        color = (:seagreen, 0.7))
+    hist!(
+        ax, ppf; bins = range(0, upper; length = 40),
+        color = (:seagreen, 0.7)
+    )
     if obs !== nothing
         vlines!(ax, _obs_floats(obs); color = :red, linewidth = 2)
     end
@@ -409,16 +465,25 @@ function plot_posterior_predictive(
         obs_confirmed::Union{Nothing, Real} = nothing,
         pp_tests::Union{Nothing, AbstractVector} = nothing,
         obs_tests::Union{Nothing, Real} = nothing,
-        predictive_label::AbstractString = "Posterior")
+        predictive_label::AbstractString = "Posterior"
+    )
     panels = Tuple{Symbol, Any, Any}[]
     pp_exports === nothing ||
         push!(panels, (:exports, pp_exports, obs_exports))
     pp_exports_deaths === nothing ||
-        push!(panels, (:exports_deaths, pp_exports_deaths,
-            obs_exports_deaths))
+        push!(
+        panels, (
+            :exports_deaths, pp_exports_deaths,
+            obs_exports_deaths,
+        )
+    )
     pp_confirmed_deaths === nothing ||
-        push!(panels, (:confirmed_deaths, pp_confirmed_deaths,
-            obs_confirmed_deaths))
+        push!(
+        panels, (
+            :confirmed_deaths, pp_confirmed_deaths,
+            obs_confirmed_deaths,
+        )
+    )
     pp_deaths === nothing ||
         push!(panels, (:deaths, pp_deaths, obs_deaths))
     pp_cases === nothing ||
@@ -429,7 +494,8 @@ function plot_posterior_predictive(
         push!(panels, (:confirmed, pp_confirmed, obs_confirmed))
 
     isempty(panels) && error(
-        "plot_posterior_predictive needs at least one stream")
+        "plot_posterior_predictive needs at least one stream"
+    )
 
     ncols = length(panels) >= 4 ? 3 : length(panels)
     ncols = min(ncols, length(panels))
@@ -463,7 +529,7 @@ const _GRID_PANELS = (
     (:deaths, _panel_deaths!),
     (:cases, _panel_cases!),
     (:tests, _panel_tests!),
-    (:confirmed, _panel_confirmed!)
+    (:confirmed, _panel_confirmed!),
 )
 
 """
@@ -481,18 +547,24 @@ function plot_posterior_predictive_grid(;
         individual::NamedTuple,
         joint::NamedTuple,
         observed::NamedTuple
-)
-    streams = [(key, painter)
-               for (key, painter) in _GRID_PANELS
-               if hasproperty(individual, key)]
+    )
+    streams = [
+        (key, painter)
+            for (key, painter) in _GRID_PANELS
+            if hasproperty(individual, key)
+    ]
     ncols = length(streams)
     fig = Figure(; size = (400 * ncols, 640))
-    rows = ((:individual, individual, "per-stream fit"),
-        (:joint, joint, "joint fit"))
+    rows = (
+        (:individual, individual, "per-stream fit"),
+        (:joint, joint, "joint fit"),
+    )
     for (i, (_, pp, label)) in enumerate(rows)
         for (j, (key, painter)) in enumerate(streams)
-            painter(fig, (i, j), getproperty(pp, key),
-                getproperty(observed, key); predictive_label = label)
+            painter(
+                fig, (i, j), getproperty(pp, key),
+                getproperty(observed, key); predictive_label = label
+            )
         end
     end
     return fig
@@ -512,11 +584,13 @@ function plot_prior_predictive(
         pp_confirmed::Union{Nothing, AbstractVector} = nothing,
         obs_confirmed::Union{Nothing, Real} = nothing,
         pp_tests::Union{Nothing, AbstractVector} = nothing,
-        obs_tests::Union{Nothing, Real} = nothing)
+        obs_tests::Union{Nothing, Real} = nothing
+    )
     return plot_posterior_predictive(
         pp_exports, pp_deaths, obs_exports, obs_deaths;
         pp_cases, obs_cases, pp_confirmed, obs_confirmed,
-        pp_tests, obs_tests, predictive_label = "Prior")
+        pp_tests, obs_tests, predictive_label = "Prior"
+    )
 end
 
 """
@@ -529,19 +603,24 @@ each marginal is visible.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
 only. Symbols absent from the map keep their raw name.
 """
-function plot_pair(chn, params::AbstractVector{Symbol};
+function plot_pair(
+        chn, params::AbstractVector{Symbol};
         thin::Integer = 2, prior = nothing,
-        labels::AbstractDict = Dict{Symbol, String}())
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     _name(p) = Symbol(get(labels, p, string(p)))
     _table(c) = DataFrame(
-        NamedTuple(_name(p) => _draws(c, p) for p in params))[1:thin:end, :]
+        NamedTuple(_name(p) => _draws(c, p) for p in params)
+    )[1:thin:end, :]
     post = _table(chn)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
     return PairPlots.pairplot(
         PairPlots.Series(post; label = "Posterior", color = colours[1]),
-        PairPlots.Series(_table(prior); label = "Prior",
-            color = colours[2])
+        PairPlots.Series(
+            _table(prior); label = "Prior",
+            color = colours[2]
+        )
     )
 end
 
@@ -560,8 +639,10 @@ without the `\$` delimiters, so `"p_\\mathrm{drc}"` renders with a subscript.
 A parameter absent from `labels` falls back to its symbol name. Returns the
 `Figure`.
 """
-function plot_correlation_heatmap(chn, params::AbstractVector{Symbol};
-        labels::AbstractDict = Dict{Symbol, String}())
+function plot_correlation_heatmap(
+        chn, params::AbstractVector{Symbol};
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
     ## properly. Callers pass plain LaTeX math strings.
     name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
@@ -570,17 +651,23 @@ function plot_correlation_heatmap(chn, params::AbstractVector{Symbol};
     n = length(params)
     labs = [name(p) for p in params]
     fig = Figure(; size = (78 * n + 180, 78 * n + 140))
-    ax = Axis(fig[1, 1]; xticks = (1:n, labs), yticks = (1:n, labs),
+    ax = Axis(
+        fig[1, 1]; xticks = (1:n, labs), yticks = (1:n, labs),
         xticklabelrotation = pi / 4, title = "Posterior correlation",
-        aspect = 1)
-    hm = CairoMakie.heatmap!(ax, 1:n, 1:n, R; colormap = :RdBu,
-        colorrange = (-1, 1))
+        aspect = 1
+    )
+    hm = CairoMakie.heatmap!(
+        ax, 1:n, 1:n, R; colormap = :RdBu,
+        colorrange = (-1, 1)
+    )
     for i in 1:n, j in 1:n
 
-        CairoMakie.text!(ax, i, j;
+        CairoMakie.text!(
+            ax, i, j;
             text = string(round(R[i, j]; digits = 2)),
             align = (:center, :center), fontsize = 10,
-            color = abs(R[i, j]) > 0.6 ? :white : :black)
+            color = abs(R[i, j]) > 0.6 ? :white : :black
+        )
     end
     CairoMakie.Colorbar(fig[1, 2], hm)
     return fig
@@ -599,8 +686,10 @@ the counterpart to the parameter-space
 [`plot_correlation_heatmap`](@ref). Returns the `Figure`.
 """
 function plot_stream_pairs(modelled::NamedTuple, observed::NamedTuple)
-    return PairPlots.pairplot(modelled,
-        PairPlots.Truth(observed; label = "observed"))
+    return PairPlots.pairplot(
+        modelled,
+        PairPlots.Truth(observed; label = "observed")
+    )
 end
 
 ## Calendar dates carried by one panel's three series.
@@ -608,7 +697,7 @@ function _evolution_dates(released, renewal, trajectory)
     rdates = [Date(String(r[1])) for r in released]
     ndates = [Date(String(p[1])) for p in renewal]
     tdates = isnothing(trajectory) ? Date[] :
-             [d isa Date ? d : Date(String(d)) for d in trajectory[1]]
+        [d isa Date ? d : Date(String(d)) for d in trajectory[1]]
     return rdates, ndates, tdates
 end
 
@@ -626,8 +715,10 @@ end
 ## faceted plots. `_x` maps a calendar date to the axis' numeric day-offset
 ## and is passed in so faceted panels share one mapping. Returns the legend
 ## handles and labels for the series actually drawn.
-function _evolution_panel!(ax, _x, released, renewal, trajectory,
-        refline, labels::NamedTuple)
+function _evolution_panel!(
+        ax, _x, released, renewal, trajectory,
+        refline, labels::NamedTuple
+    )
     rdates, ndates, tdates = _evolution_dates(released, renewal, trajectory)
 
     ## Each release and each frozen re-fit is its own fit, so collect them as
@@ -658,8 +749,10 @@ function _evolution_panel!(ax, _x, released, renewal, trajectory,
             append!(bx, (x, x))
             append!(by, (lo, hi))
         end
-        return linesegments!(ax, bx, by;
-            color = (colour, alpha), linewidth = lw)
+        return linesegments!(
+            ax, bx, by;
+            color = (colour, alpha), linewidth = lw
+        )
     end
 
     ## One discrete series: nested 30/60/90% bars topped by a median dot.
@@ -668,15 +761,23 @@ function _evolution_panel!(ax, _x, released, renewal, trajectory,
         isempty(sel) && return nothing
         xs = markx[sel]
         ts = [marks[i].t for i in sel]
-        _bars!(xs, [float(t[7]) for t in ts], [float(t[8]) for t in ts],
-            colour, 1.4, 0.45)
-        _bars!(xs, [float(t[5]) for t in ts], [float(t[6]) for t in ts],
-            colour, 3.2, 0.55)
-        _bars!(xs, [float(t[3]) for t in ts], [float(t[4]) for t in ts],
-            colour, 6.5, 0.70)
-        return scatter!(ax, xs, [float(t[2]) for t in ts];
+        _bars!(
+            xs, [float(t[7]) for t in ts], [float(t[8]) for t in ts],
+            colour, 1.4, 0.45
+        )
+        _bars!(
+            xs, [float(t[5]) for t in ts], [float(t[6]) for t in ts],
+            colour, 3.2, 0.55
+        )
+        _bars!(
+            xs, [float(t[3]) for t in ts], [float(t[4]) for t in ts],
+            colour, 6.5, 0.7
+        )
+        return scatter!(
+            ax, xs, [float(t[2]) for t in ts];
             color = colour, markersize = 9,
-            strokecolor = :white, strokewidth = 1)
+            strokecolor = :white, strokewidth = 1
+        )
     end
 
     handles = Any[]
@@ -710,7 +811,7 @@ function _evolution_panel!(ax, _x, released, renewal, trajectory,
             lo90 = fill(lo90[1], 2)
             hi90 = fill(hi90[1], 2)
         end
-        band!(ax, xs, lo90, hi90; color = (cc, 0.10))
+        band!(ax, xs, lo90, hi90; color = (cc, 0.1))
         band!(ax, xs, lo60, hi60; color = (cc, 0.16))
         th = band!(ax, xs, lo30, hi30; color = (cc, 0.24))
         push!(handles, th)
@@ -728,14 +829,18 @@ function _evolution_panel!(ax, _x, released, renewal, trajectory,
     end
 
     ## Dotted vertical rule at each release date.
-    isempty(rdates) || vlines!(ax, _x.(rdates);
-        color = (:grey, 0.55), linestyle = :dot, linewidth = 1)
+    isempty(rdates) || vlines!(
+        ax, _x.(rdates);
+        color = (:grey, 0.55), linestyle = :dot, linewidth = 1
+    )
 
     ## Optional horizontal reference line, e.g. Rt = 1 for a reproduction
     ## number, drawn faint so it reads behind the estimates.
     isnothing(refline) ||
-        hlines!(ax, [float(refline)];
-            color = (:black, 0.4), linestyle = :dash, linewidth = 1)
+        hlines!(
+        ax, [float(refline)];
+        color = (:black, 0.4), linestyle = :dash, linewidth = 1
+    )
     return handles, llabels
 end
 
@@ -772,12 +877,13 @@ function plot_estimate_evolution(
         ylabel::AbstractString = "Cumulative infections",
         title::AbstractString = "Outbreak-size estimate as data accrued",
         released_label::AbstractString =
-        "Released estimates (per project release)",
+            "Released estimates (per project release)",
         renewal_label::AbstractString =
-        "Current model re-fit frozen at each release date",
+            "Current model re-fit frozen at each release date",
         trajectory_label::AbstractString =
-        "Current model, current data",
-        refline::Union{Nothing, Real} = nothing)
+            "Current model, current data",
+        refline::Union{Nothing, Real} = nothing
+    )
     ## Calendar dates → numeric day-offsets so the x-axis is to scale, then
     ## relabel the ticks with the dates. All three series share this one
     ## mapping, so they line up on the same axis.
@@ -791,19 +897,27 @@ function plot_estimate_evolution(
     xlo = _x(ref) - 1
     xhi = _x(maximum(alldates)) + 1
     fig = Figure(; size = (860, 480))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = xlabel, ylabel = ylabel, title = title,
         xticks = (_x.(tickdates), [string(d) for d in tickdates]),
         xticklabelrotation = pi / 4,
-        limits = ((xlo, xhi), (0, upper * 1.08)))
+        limits = ((xlo, xhi), (0, upper * 1.08))
+    )
 
-    handles, labels = _evolution_panel!(ax, _x, released, renewal,
+    handles, labels = _evolution_panel!(
+        ax, _x, released, renewal,
         trajectory, refline,
-        (; released = released_label, renewal = renewal_label,
-            trajectory = trajectory_label))
+        (;
+            released = released_label, renewal = renewal_label,
+            trajectory = trajectory_label,
+        )
+    )
 
-    CairoMakie.axislegend(ax, handles, labels; position = :lt,
-        framevisible = true)
+    CairoMakie.axislegend(
+        ax, handles, labels; position = :lt,
+        framevisible = true
+    )
     return fig
 end
 
@@ -844,14 +958,17 @@ function plot_evolution_by_group(
         refline::Union{Nothing, Real} = nothing,
         ncols::Int = 2,
         shared_yrange::Bool = true,
-        empty_note::AbstractString = "No per-dataset estimates yet.")
+        empty_note::AbstractString = "No per-dataset estimates yet."
+    )
     ## A group with no estimates is dropped, so the panels show only fits
     ## that exist.
     shown = [g for g in groups if !isempty(last(g))]
     if isempty(shown)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], empty_note;
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], empty_note;
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     _traj(g) = get(trajectories, first(g), nothing)
@@ -866,9 +983,13 @@ function plot_evolution_by_group(
     alldates = sort(unique(reduce(vcat, [_group_dates(g) for g in shown])))
     ref = minimum(alldates)
     _x(d) = Float64((d - ref).value)
-    shared_upper = max(1.0,
-        maximum(_evolution_upper(last(g), NamedTuple[], _traj(g))
-        for g in shown))
+    shared_upper = max(
+        1.0,
+        maximum(
+            _evolution_upper(last(g), NamedTuple[], _traj(g))
+                for g in shown
+        )
+    )
     xlo = _x(ref) - 1
     xhi = _x(maximum(alldates)) + 1
 
@@ -886,17 +1007,25 @@ function plot_evolution_by_group(
     for (i, g) in enumerate(shown)
         r, c = fldmod1(i, ncols)
         panel_upper = shared_yrange ? shared_upper :
-                      max(1.0,
-            _evolution_upper(last(g), NamedTuple[], _traj(g)))
-        ax = Axis(fig[r, c]; title = string(first(g)),
+            max(
+                1.0,
+                _evolution_upper(last(g), NamedTuple[], _traj(g))
+            )
+        ax = Axis(
+            fig[r, c]; title = string(first(g)),
             xlabel = r == nrows ? xlabel : "",
             ylabel = c == 1 ? ylabel : "",
             xticks = (_x.(tickdates), [string(d) for d in tickdates]),
             xticklabelrotation = pi / 4,
-            limits = ((xlo, xhi), (0, panel_upper * 1.08)))
-        h, l = _evolution_panel!(ax, _x, last(g), NamedTuple[], _traj(g),
-            refline, (; released = released_label, renewal = "",
-                trajectory = trajectory_label))
+            limits = ((xlo, xhi), (0, panel_upper * 1.08))
+        )
+        h, l = _evolution_panel!(
+            ax, _x, last(g), NamedTuple[], _traj(g),
+            refline, (;
+                released = released_label, renewal = "",
+                trajectory = trajectory_label,
+            )
+        )
         for (hh, ll) in zip(h, l)
             haskey(handle_map, ll) && continue
             handle_map[ll] = hh
@@ -906,12 +1035,16 @@ function plot_evolution_by_group(
     handles = [handle_map[l] for l in order]
     labels = order
 
-    isempty(title) || CairoMakie.Label(fig[0, 1:ncols], title;
-        font = :bold, tellwidth = false)
+    isempty(title) || CairoMakie.Label(
+        fig[0, 1:ncols], title;
+        font = :bold, tellwidth = false
+    )
     isempty(handles) ||
-        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
-            orientation = :horizontal, framevisible = true,
-            tellheight = true, tellwidth = false)
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:ncols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
     return fig
 end
 
@@ -950,15 +1083,19 @@ function plot_forecast_overlay(overlay::DataFrame)
     ## returning a blank panel.
     if isempty(streams)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1],
+        CairoMakie.Label(
+            fig[1, 1],
             "No forecasts scored yet. No release carries a stored forecast.";
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     horizons = sort(unique(overlay.horizon))
     role_order = ["baseline", "individual", "joint"]
-    role_colour = Dict("baseline" => :goldenrod, "individual" => :steelblue,
-        "joint" => :firebrick)
+    role_colour = Dict(
+        "baseline" => :goldenrod, "individual" => :steelblue,
+        "joint" => :firebrick
+    )
 
     ## One made-date axis shared across every cell, with the made dates
     ## evenly spaced rather than placed to calendar scale. The releases are a
@@ -970,7 +1107,7 @@ function plot_forecast_overlay(overlay::DataFrame)
     spacing = 1.0
     ## A fraction of the made-date spacing, so the observed point and the
     ## three fit roles read apart at each made date.
-    dodge = 0.10 * spacing
+    dodge = 0.1 * spacing
     ## Every made date gets its own tick, thinned to about sixteen once the
     ## release history is long enough to crush the labels.
     step = length(alldates) <= 16 ? 1 : cld(length(alldates), 16)
@@ -979,8 +1116,10 @@ function plot_forecast_overlay(overlay::DataFrame)
     ## Fixed x-slot per series, so the observed truth and the three fit roles
     ## each sit at their own offset from the made date, and the slot is stable
     ## across cells whichever roles are present.
-    slot = Dict("observed" => -1.5, "baseline" => -0.5, "individual" => 0.5,
-        "joint" => 1.5)
+    slot = Dict(
+        "observed" => -1.5, "baseline" => -0.5, "individual" => 0.5,
+        "joint" => 1.5
+    )
 
     ncols = length(horizons)
     nrows = length(streams)
@@ -997,36 +1136,50 @@ function plot_forecast_overlay(overlay::DataFrame)
         ## observed values and forecast medians. The bare floor keeps an
         ## empty or all-zero panel off a zero-height axis.
         cap = isempty(cell) ? 1.0 :
-              max(1.0, 3.0 * max(maximum(cell.observed), maximum(cell.median)))
-        ax = Axis(fig[r, c];
+            max(1.0, 3.0 * max(maximum(cell.observed), maximum(cell.median)))
+        ax = Axis(
+            fig[r, c];
             title = r == 1 ? "$(h)-day ahead" : "",
             xlabel = r == nrows ? "Forecast made" : "",
             ylabel = c == 1 ? string(s) : "",
             xticks = (_x.(tickdates), [string(d) for d in tickdates]),
             xticklabelrotation = pi / 4,
-            limits = ((0.5, length(alldates) + 0.5), (0, cap)))
+            limits = ((0.5, length(alldates) + 0.5), (0, cap))
+        )
         ## Every panel shares the one made-date axis, so only the bottom row
         ## carries the rotated date labels.
-        r == nrows || CairoMakie.hidexdecorations!(ax;
+        r == nrows || CairoMakie.hidexdecorations!(
+            ax;
             ticklabels = true, ticks = false, grid = false,
-            label = false, minorgrid = false, minorticks = false)
+            label = false, minorgrid = false, minorticks = false
+        )
         ## A stream and horizon with nothing scored says so rather than
         ## presenting empty axes. Its value ticks go too, there being no
         ## scale to read.
         if isempty(cell)
             CairoMakie.hideydecorations!(ax)
-            CairoMakie.text!(ax, (length(alldates) + 1) / 2, cap / 2;
+            CairoMakie.text!(
+                ax, (length(alldates) + 1) / 2, cap / 2;
                 text = "not scored", align = (:center, :center),
-                color = (:black, 0.4), fontsize = 10)
+                color = (:black, 0.4), fontsize = 10
+            )
             continue
         end
         ## Observed new count over each forecast's own window, one value per
         ## made date within this horizon.
-        od = sort(unique([(Date(string(m)), float(o))
-                          for (m, o) in zip(cell.made_date, cell.observed)]))
-        oh = scatter!(ax,
+        od = sort(
+            unique(
+                [
+                    (Date(string(m)), float(o))
+                        for (m, o) in zip(cell.made_date, cell.observed)
+                ]
+            )
+        )
+        oh = scatter!(
+            ax,
             [_x(m) + slot["observed"] * dodge for (m, _) in od],
-            [o for (_, o) in od]; color = :black, markersize = 7)
+            [o for (_, o) in od]; color = :black, markersize = 7
+        )
         isnothing(obs_handle) && (obs_handle = oh)
         for role in role_order
             rs = select_fit_role(cell, role)
@@ -1053,8 +1206,10 @@ function plot_forecast_overlay(overlay::DataFrame)
             ## clipping does not cut the marker in half.
             marker_y = 0.97 * cap
             isempty(overflow_x) ||
-                scatter!(ax, overflow_x, fill(marker_y, length(overflow_x));
-                    color = col, marker = :utriangle, markersize = 9)
+                scatter!(
+                ax, overflow_x, fill(marker_y, length(overflow_x));
+                color = col, marker = :utriangle, markersize = 9
+            )
             get!(role_handles, role, mh)
         end
     end
@@ -1071,19 +1226,25 @@ function plot_forecast_overlay(overlay::DataFrame)
         push!(labels, role)
     end
     isempty(handles) ||
-        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
-            orientation = :horizontal, framevisible = true,
-            tellheight = true, tellwidth = false)
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:ncols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
     return fig
 end
 
 ## Ratio ticks for a logarithmic skill axis, labelled as the ratios
 ## themselves. Makie places log ticks on round powers of ten, which over a
 ## range of a few leaves only fractional exponents to label.
-const _SKILL_TICKS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
-    20.0, 50.0, 100.0, 200.0, 500.0]
-const _skill_tick_labels = [t >= 1 ? string(round(Int, t)) : string(t)
-                            for t in _SKILL_TICKS]
+const _SKILL_TICKS = [
+    0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
+    20.0, 50.0, 100.0, 200.0, 500.0,
+]
+const _skill_tick_labels = [
+    t >= 1 ? string(round(Int, t)) : string(t)
+        for t in _SKILL_TICKS
+]
 
 """
 By-horizon relative-skill figure: one panel per stream, plotting relative
@@ -1105,19 +1266,23 @@ stream with no individual fit is drawn with the joint series alone.
 The caller sets it, since an empty table can mean either that no release
 carries a stored forecast or that no stored forecast's target has resolved.
 """
-function plot_forecast_relative_skill(scores::DataFrame;
+function plot_forecast_relative_skill(
+        scores::DataFrame;
         value_col::Symbol = :rel_to_baseline,
         ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
         title::AbstractString =
-        "Relative skill against the baseline, by horizon",
+            "Relative skill against the baseline, by horizon",
         ncols::Integer = 3,
         empty_message::AbstractString =
-        "No scored forecasts yet. No release carries a stored forecast.")
+            "No scored forecasts yet. No release carries a stored forecast."
+    )
     streams = sort(unique(scores.stream))
     if isempty(streams)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], empty_message;
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], empty_message;
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     role_order = ["individual", "joint"]
@@ -1134,13 +1299,17 @@ function plot_forecast_relative_skill(scores::DataFrame;
         cell = scores[scores.stream .== s, :]
         ## Skill is a ratio, so the axis is logarithmic to put a factor of
         ## two better and a factor of two worse the same distance from one.
-        ax = Axis(fig[r, c]; title = string(s),
+        ax = Axis(
+            fig[r, c]; title = string(s),
             xlabel = r == nrows ? "Forecast horizon (days)" : "",
             ylabel = c == 1 ? ylabel : "",
             xticks = horizons, yscale = log10,
-            yticks = (_SKILL_TICKS, _skill_tick_labels))
-        hlines!(ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
-            linewidth = 2)
+            yticks = (_SKILL_TICKS, _skill_tick_labels)
+        )
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
+            linewidth = 2
+        )
         for role in role_order
             rs = select_fit_role(cell, role)
             isempty(rs) && continue
@@ -1149,8 +1318,10 @@ function plot_forecast_relative_skill(scores::DataFrame;
             xs = Float64.(rs.horizon[keep])
             ys = Float64.(rs[keep, value_col])
             ord = sortperm(xs)
-            h = scatterlines!(ax, xs[ord], ys[ord];
-                color = role_colour[role], markersize = 8, linewidth = 2)
+            h = scatterlines!(
+                ax, xs[ord], ys[ord];
+                color = role_colour[role], markersize = 8, linewidth = 2
+            )
             get!(role_handles, role, h)
         end
     end
@@ -1162,12 +1333,16 @@ function plot_forecast_relative_skill(scores::DataFrame;
         push!(handles, role_handles[role])
         push!(labels, role)
     end
-    isempty(title) || CairoMakie.Label(fig[0, 1:usedcols], title;
-        font = :bold, tellwidth = false)
+    isempty(title) || CairoMakie.Label(
+        fig[0, 1:usedcols], title;
+        font = :bold, tellwidth = false
+    )
     isempty(handles) ||
-        CairoMakie.Legend(fig[nrows + 1, 1:usedcols], handles, labels;
-            orientation = :horizontal, framevisible = true,
-            tellheight = true, tellwidth = false)
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:usedcols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
     return fig
 end
 
@@ -1186,19 +1361,23 @@ axis is log-scaled about a reference line at one, as in
 A cell whose skill is missing or non-finite is absent from its series.
 `empty_message` replaces the panels when `scores` has no rows.
 """
-function plot_forecast_skill_by_vintage(scores::DataFrame;
+function plot_forecast_skill_by_vintage(
+        scores::DataFrame;
         value_col::Symbol = :rel_to_baseline,
         ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
         title::AbstractString =
-        "Relative skill against the baseline, by release",
+            "Relative skill against the baseline, by release",
         ncols::Integer = 3,
         empty_message::AbstractString =
-        "No cut-off has been forecast by more than one release yet.")
+            "No cut-off has been forecast by more than one release yet."
+    )
     streams = sort(unique(scores.stream))
     if isempty(streams)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], empty_message;
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], empty_message;
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     role_order = ["individual", "joint"]
@@ -1206,8 +1385,10 @@ function plot_forecast_skill_by_vintage(scores::DataFrame;
 
     ## One shared slot per release across every panel, so a stream missing a
     ## release leaves a gap rather than shifting against the others.
-    rel_dates = Dict(scores.release[i] => scores.release_date[i]
-    for i in 1:size(scores, 1))
+    rel_dates = Dict(
+        scores.release[i] => scores.release_date[i]
+            for i in 1:size(scores, 1)
+    )
     rels = sort(collect(keys(rel_dates)); by = r -> (rel_dates[r], r))
     slot = Dict(r => Float64(i) for (i, r) in enumerate(rels))
     ## Thinned to about eight labels once the history is long enough.
@@ -1223,16 +1404,20 @@ function plot_forecast_skill_by_vintage(scores::DataFrame;
     for (i, s) in enumerate(streams)
         r, c = fldmod1(i, usedcols)
         cell = scores[scores.stream .== s, :]
-        ax = Axis(fig[r, c]; title = string(s),
+        ax = Axis(
+            fig[r, c]; title = string(s),
             xlabel = r == nrows ? "Release cut from" : "",
             ylabel = c == 1 ? ylabel : "",
             xticks = (Float64.(collect(ticks)), ticklabels),
             xticklabelrotation = pi / 4,
             yscale = log10,
             yticks = (_SKILL_TICKS, _skill_tick_labels),
-            limits = ((0.5, length(rels) + 0.5), nothing))
-        hlines!(ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
-            linewidth = 2)
+            limits = ((0.5, length(rels) + 0.5), nothing)
+        )
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
+            linewidth = 2
+        )
         for role in role_order
             rs = select_fit_role(cell, role)
             isempty(rs) && continue
@@ -1241,8 +1426,10 @@ function plot_forecast_skill_by_vintage(scores::DataFrame;
             xs = [slot[r] for r in rs.release[keep]]
             ys = Float64.(rs[keep, value_col])
             ord = sortperm(xs)
-            h = scatterlines!(ax, xs[ord], ys[ord];
-                color = role_colour[role], markersize = 8, linewidth = 2)
+            h = scatterlines!(
+                ax, xs[ord], ys[ord];
+                color = role_colour[role], markersize = 8, linewidth = 2
+            )
             get!(role_handles, role, h)
         end
     end
@@ -1254,12 +1441,16 @@ function plot_forecast_skill_by_vintage(scores::DataFrame;
         push!(handles, role_handles[role])
         push!(labels, role)
     end
-    isempty(title) || CairoMakie.Label(fig[0, 1:usedcols], title;
-        font = :bold, tellwidth = false)
+    isempty(title) || CairoMakie.Label(
+        fig[0, 1:usedcols], title;
+        font = :bold, tellwidth = false
+    )
     isempty(handles) ||
-        CairoMakie.Legend(fig[nrows + 1, 1:usedcols], handles, labels;
-            orientation = :horizontal, framevisible = true,
-            tellheight = true, tellwidth = false)
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:usedcols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
     return fig
 end
 
@@ -1280,7 +1471,8 @@ function plot_estimate_comparison(
         xlabel::AbstractString = "Cumulative cases",
         xmax::Union{Nothing, Real} = nothing,
         groups::Union{Nothing, AbstractVector} = nothing,
-        group_colours::AbstractVector = Pair[])
+        group_colours::AbstractVector = Pair[]
+    )
     n = length(rows)
     labels = [String(r[1]) for r in rows]
     central = [float(r[2]) for r in rows]
@@ -1290,10 +1482,11 @@ function plot_estimate_comparison(
 
     cmap = Dict(group_colours)
     _colour(i) = isnothing(groups) ? :steelblue :
-                 get(cmap, groups[i], :steelblue)
+        get(cmap, groups[i], :steelblue)
 
     fig = Figure(; size = (840, 120 + 46n))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = xlabel,
         yticks = (collect(1:n), reverse(labels)),
         limits = ((0, top), (0.5, n + 0.5))
@@ -1304,17 +1497,25 @@ function plot_estimate_comparison(
         ## A deterministic point estimate has no interval, so it gets a bare
         ## marker.
         if hi[i] > lo[i]
-            lines!(ax, [lo[i], hi[i]], [y, y];
-                color = (col, 0.8), linewidth = 3)
+            lines!(
+                ax, [lo[i], hi[i]], [y, y];
+                color = (col, 0.8), linewidth = 3
+            )
         end
         scatter!(ax, [central[i]], [y]; color = col, markersize = 12)
     end
     if !isnothing(groups) && !isempty(group_colours)
-        handles = [CairoMakie.MarkerElement(; color = c, marker = :circle,
-                       markersize = 12) for (_, c) in group_colours]
+        handles = [
+            CairoMakie.MarkerElement(;
+                color = c, marker = :circle,
+                markersize = 12
+            ) for (_, c) in group_colours
+        ]
         glabels = [String(k) for (k, _) in group_colours]
-        CairoMakie.axislegend(ax, handles, glabels; position = :rb,
-            framevisible = true)
+        CairoMakie.axislegend(
+            ax, handles, glabels; position = :rb,
+            framevisible = true
+        )
     end
     return fig
 end
@@ -1342,7 +1543,8 @@ function plot_projection_comparison(;
         external_colour = :steelblue,
         ours_colour = :firebrick,
         ylabel::AbstractString = "Cumulative confirmed cases",
-        title::AbstractString = "Projected versus observed cumulative cases")
+        title::AbstractString = "Projected versus observed cumulative cases"
+    )
     _x(d) = Float64(date2epochdays(Date(String(d))))
 
     fig = Figure(; size = (820, 460))
@@ -1354,8 +1556,10 @@ function plot_projection_comparison(;
     ex_lo = [float(r[3]) for r in external]
     ex_hi = [float(r[4]) for r in external]
     ord = sortperm(ex_x)
-    band!(ax, ex_x[ord], ex_lo[ord], ex_hi[ord];
-        color = (external_colour, 0.15))
+    band!(
+        ax, ex_x[ord], ex_lo[ord], ex_hi[ord];
+        color = (external_colour, 0.15)
+    )
     lines!(ax, ex_x[ord], ex_m[ord]; color = external_colour, linewidth = 2)
     ex_h = scatter!(ax, ex_x, ex_m; color = external_colour, markersize = 8)
 
@@ -1373,20 +1577,28 @@ function plot_projection_comparison(;
     our_lo = [float(r[3]) for r in ours]
     our_hi = [float(r[4]) for r in ours]
     oord = sortperm(our_x)
-    band!(ax, our_x[oord], our_lo[oord], our_hi[oord];
-        color = (ours_colour, 0.15))
+    band!(
+        ax, our_x[oord], our_lo[oord], our_hi[oord];
+        color = (ours_colour, 0.15)
+    )
     lines!(ax, our_x[oord], our_m[oord]; color = ours_colour, linewidth = 2)
-    our_h = scatter!(ax, our_x, our_m;
-        color = ours_colour, markersize = 8, marker = :diamond)
+    our_h = scatter!(
+        ax, our_x, our_m;
+        color = ours_colour, markersize = 8, marker = :diamond
+    )
 
     allx = vcat(ex_x, ob_x, our_x)
     lo, hi = minimum(allx), maximum(allx)
     ax.xticks = collect(lo:14:hi)
-    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                              for v in vals]
-    CairoMakie.axislegend(ax, [ex_h, our_h, ob_h],
+    ax.xtickformat = vals -> [
+        string(epochdays2date(round(Int, v)))
+            for v in vals
+    ]
+    CairoMakie.axislegend(
+        ax, [ex_h, our_h, ob_h],
         [external_label, ours_label, observed_label];
-        position = :lt, framevisible = true)
+        position = :lt, framevisible = true
+    )
     return fig
 end
 
@@ -1404,15 +1616,19 @@ estimate, drawn as a grey reference band with a dashed median in that date's
 panel. `date_titles` are `date => title` pairs giving each panel its
 heading.
 """
-function plot_scenario_comparison(scenarios::AbstractVector;
+function plot_scenario_comparison(
+        scenarios::AbstractVector;
         ours::AbstractDict = Dict{String, Any}(),
-        date_titles::AbstractVector = ["2026-05-18" => "18 May report",
+        date_titles::AbstractVector = [
+            "2026-05-18" => "18 May report",
             "2026-05-20" => "20 May update",
-            "2026-05-27" => "27 May (Lancet)"],
+            "2026-05-27" => "27 May (Lancet)",
+        ],
         method_names = Dict("M1" => "geographic", "M2" => "back-calc"),
         method_colours = Dict("M1" => :steelblue, "M2" => :darkorange),
         xlabel::AbstractString = "Cumulative cases",
-        title::AbstractString = "Published scenarios versus our estimate")
+        title::AbstractString = "Published scenarios versus our estimate"
+    )
     title_of = Dict(date_titles)
     dates = sort(unique(String[String(s[1]) for s in scenarios]))
 
@@ -1446,8 +1662,10 @@ function plot_scenario_comparison(scenarios::AbstractVector;
     maxbc = maximum(countm(d, "M2") for d in dates)
     maxrow = maxgeo + maxbc
 
-    xmax = 1.05 * max(maximum(float(s[5]) for s in scenarios),
-        maximum((float(v[3]) for v in values(ours)); init = 0.0))
+    xmax = 1.05 * max(
+        maximum(float(s[5]) for s in scenarios),
+        maximum((float(v[3]) for v in values(ours)); init = 0.0)
+    )
 
     fig = Figure(; size = (340 * length(dates) + 140, 110 + 70 * maxrow))
     for (j, d) in enumerate(dates)
@@ -1464,19 +1682,25 @@ function plot_scenario_comparison(scenarios::AbstractVector;
             ypos[f] = maxbc - i + 1
         end
         yvals = [ypos[f] for f in fams]
-        ylabels = [string(get(method_names, m, m), " · ", fam)
-                   for (m, fam) in fams]
-        ax = Axis(fig[1, j];
+        ylabels = [
+            string(get(method_names, m, m), " · ", fam)
+                for (m, fam) in fams
+        ]
+        ax = Axis(
+            fig[1, j];
             title = get(title_of, d, d), xlabel = xlabel,
             yticks = (yvals, ylabels),
-            limits = ((0, xmax), (0.4, maxrow + 0.6)))
+            limits = ((0, xmax), (0.4, maxrow + 0.6))
+        )
 
         ## Our matched estimate for this vintage: a reference band + median.
         if haskey(ours, d)
             med, lo, hi = ours[d]
             vspan!(ax, float(lo), float(hi); color = (:grey, 0.18))
-            vlines!(ax, [float(med)];
-                color = :black, linestyle = :dash, linewidth = 1.5)
+            vlines!(
+                ax, [float(med)];
+                color = :black, linestyle = :dash, linewidth = 1.5
+            )
         end
 
         ## Each family row carries its swept levels dodged around the row
@@ -1489,25 +1713,38 @@ function plot_scenario_comparison(scenarios::AbstractVector;
             offs = k == 1 ? [0.0] : collect(LinRange(0.26, -0.26, k))
             for (t, (_, c, lo, hi)) in enumerate(ms)
                 yy = y + offs[t]
-                lines!(ax, [lo, hi], [yy, yy];
-                    color = (col, 0.85), linewidth = 2.5)
+                lines!(
+                    ax, [lo, hi], [yy, yy];
+                    color = (col, 0.85), linewidth = 2.5
+                )
                 scatter!(ax, [c], [yy]; color = col, markersize = 9)
             end
         end
     end
 
-    CairoMakie.Label(fig[0, 1:length(dates)], title;
-        fontsize = 16, font = :bold)
+    CairoMakie.Label(
+        fig[0, 1:length(dates)], title;
+        fontsize = 16, font = :bold
+    )
     handles = [
-        CairoMakie.MarkerElement(; color = method_colours["M1"],
-            marker = :circle, markersize = 11),
-        CairoMakie.MarkerElement(; color = method_colours["M2"],
-            marker = :circle, markersize = 11),
-        CairoMakie.PolyElement(; color = (:grey, 0.4))]
-    labels = [get(method_names, "M1", "M1") * " spread",
-        get(method_names, "M2", "M2") * " spread", "our estimate (90%)"]
-    CairoMakie.Legend(fig[2, 1:length(dates)], handles, labels;
-        orientation = :horizontal, framevisible = false)
+        CairoMakie.MarkerElement(;
+            color = method_colours["M1"],
+            marker = :circle, markersize = 11
+        ),
+        CairoMakie.MarkerElement(;
+            color = method_colours["M2"],
+            marker = :circle, markersize = 11
+        ),
+        CairoMakie.PolyElement(; color = (:grey, 0.4)),
+    ]
+    labels = [
+        get(method_names, "M1", "M1") * " spread",
+        get(method_names, "M2", "M2") * " spread", "our estimate (90%)",
+    ]
+    CairoMakie.Legend(
+        fig[2, 1:length(dates)], handles, labels;
+        orientation = :horizontal, framevisible = false
+    )
     return fig
 end
 
@@ -1523,7 +1760,8 @@ function plot_cfr_prior(prior::Distribution)
     ys = pdf.(Ref(prior), xs)
 
     fig = Figure(; size = (760, 420))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = "Case-fatality ratio (CFR)",
         ylabel = "Prior density",
         title = "Prior over the case-fatality ratio",
@@ -1531,8 +1769,10 @@ function plot_cfr_prior(prior::Distribution)
     )
     lines!(ax, xs, ys; color = colours[1], linewidth = 2)
     vlines!(ax, [55 / 169]; color = :firebrick, linewidth = 2)
-    vlines!(ax, [0.26, 0.40];
-        color = (:grey, 0.6), linestyle = :dash, linewidth = 2)
+    vlines!(
+        ax, [0.26, 0.4];
+        color = (:grey, 0.6), linestyle = :dash, linewidth = 2
+    )
     return fig
 end
 
@@ -1555,25 +1795,36 @@ function plot_confirmed_cfr(res)
 
     hi = max(maximum(corrected), maximum(structural), naive) * 1.05
     fig = Figure(; size = (760, 420))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = "Case-fatality ratio (%)",
         ylabel = "Posterior density",
         title = "Delay-corrected confirmed CFR versus the structural CFR",
         limits = ((0, hi), nothing)
     )
-    h_corr = density!(ax, corrected; color = (colours[1], 0.5),
-        strokecolor = colours[1], strokewidth = 2)
-    h_struct = density!(ax, structural; color = (colours[2], 0.4),
-        strokecolor = colours[2], strokewidth = 2)
+    h_corr = density!(
+        ax, corrected; color = (colours[1], 0.5),
+        strokecolor = colours[1], strokewidth = 2
+    )
+    h_struct = density!(
+        ax, structural; color = (colours[2], 0.4),
+        strokecolor = colours[2], strokewidth = 2
+    )
     h_naive = vlines!(ax, [naive]; color = :firebrick, linewidth = 2)
-    h_mod = vlines!(ax, [modelled_naive];
-        color = (:grey, 0.7), linestyle = :dash, linewidth = 2)
-    CairoMakie.axislegend(ax,
+    h_mod = vlines!(
+        ax, [modelled_naive];
+        color = (:grey, 0.7), linestyle = :dash, linewidth = 2
+    )
+    CairoMakie.axislegend(
+        ax,
         [h_corr, h_struct, h_naive, h_mod],
-        ["Delay-corrected confirmed CFR", "Structural CFR",
+        [
+            "Delay-corrected confirmed CFR", "Structural CFR",
             "Naive observed confirmed ratio",
-            "Uncorrected modelled confirmed ratio (median)"];
-        position = :rt, framevisible = true)
+            "Uncorrected modelled confirmed ratio (median)",
+        ];
+        position = :rt, framevisible = true
+    )
     return fig
 end
 
@@ -1585,21 +1836,26 @@ of the import that started the outbreak, from the outbreak age `T` as
 posterior pair plot. Shorter doubling times mean faster early growth, which
 reaches the same epidemic size in less time.
 """
-function plot_start_date_pair(chn;
-        as_of_date::AbstractString, thin::Integer = 2)
+function plot_start_date_pair(
+        chn;
+        as_of_date::AbstractString, thin::Integer = 2
+    )
     T_draws = _draws(chn, :T)
     cutoff_days = date2epochdays(Date(as_of_date))
     start_days = cutoff_days .- T_draws
 
     fig = Figure(; size = (1100, 460))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = "Outbreak start date",
         ylabel = "Posterior density",
         title = "Estimated outbreak start date",
         xticklabelrotation = π / 6
     )
-    density!(ax, start_days; color = (:steelblue, 0.5),
-        strokecolor = :steelblue, strokewidth = 2)
+    density!(
+        ax, start_days; color = (:steelblue, 0.5),
+        strokecolor = :steelblue, strokewidth = 2
+    )
     ## Date ticks every four weeks across the posterior range, so the axis
     ## does not crowd as the range widens.
     lo = floor(Int, minimum(start_days))
@@ -1630,9 +1886,11 @@ Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
-function reconstruct_rt(chn; n::Integer, breakpoint::Real,
+function reconstruct_rt(
+        chn; n::Integer, breakpoint::Real,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP)
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+    )
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
@@ -1649,10 +1907,12 @@ function reconstruct_rt(chn; n::Integer, breakpoint::Real,
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
     if !isempty(zrows) && length(zrows[1]) != nb - 1
-        error("reconstruct_rt: rt_walk_start = $rt_walk_start gives " *
-              "$(nb - 1) random-walk steps but the chain has " *
-              "$(length(zrows[1])); pass the same walk start the model used " *
-              "(the breakpoint grid day, n - who_first_sitrep_days).")
+        error(
+            "reconstruct_rt: rt_walk_start = $rt_walk_start gives " *
+                "$(nb - 1) random-walk steps but the chain has " *
+                "$(length(zrows[1])); pass the same walk start the model used " *
+                "(the breakpoint grid day, n - who_first_sitrep_days)."
+        )
     end
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
     ndraws = length(log_R0)
@@ -1700,32 +1960,42 @@ Shared by the report's reporting-delay figures and by
 [`forecast_onsets`](@ref), so the fitted hazard the analysis plots and the
 one the forecast projects forward are the same object.
 """
-function reconstruct_onset_hazard(chn; grid_start::Integer,
-        grid_end::Integer, week::Integer = 7)
+function reconstruct_onset_hazard(
+        chn; grid_start::Integer,
+        grid_end::Integer, week::Integer = 7
+    )
     η0 = _draws(chn, Symbol("onset_report_state.η0"))
     σ_h0 = _draws(chn, Symbol("onset_report_state.σ_h0"))
     σ_γ = _draws(chn, Symbol("onset_report_state.σ_γ"))
-    zh0 = [collect(z)
-           for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))]
-    zγ = [collect(z)
-          for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))]
+    zh0 = [
+        collect(z)
+            for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))
+    ]
+    zγ = [
+        collect(z)
+            for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))
+    ]
     alpha = [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
 
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
     days = knot_days(nt; week, start = 1)
     nb = length(days)
     if !isempty(zγ) && length(zγ[1]) != max(nb - 1, 1)
-        error("reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
-              "gives $(max(nb - 1, 1)) calendar-walk steps but the chain " *
-              "has $(length(zγ[1])); pass the same grid the fit used " *
-              "(minimum onset day to maximum report day of the scored " *
-              "cells).")
+        error(
+            "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
+                "gives $(max(nb - 1, 1)) calendar-walk steps but the chain " *
+                "has $(length(zγ[1])); pass the same grid the fit used " *
+                "(minimum onset day to maximum report day of the scored " *
+                "cells)."
+        )
     end
     if !isempty(alpha) && length(alpha[1]) != nt
-        error("reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
-              "gives $nt onset dates but the chain's `onset_ascertainment` " *
-              "has length $(length(alpha[1])); pass the same grid the fit " *
-              "used.")
+        error(
+            "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
+                "gives $nt onset dates but the chain's `onset_ascertainment` " *
+                "has length $(length(alpha[1])); pass the same grid the fit " *
+                "used."
+        )
     end
 
     ndraws = length(η0)
@@ -1759,36 +2029,44 @@ indexed from `grid_start` and held flat outside the fitted grid. The two are
 paired draw by draw and must come from one fit. Summarised by
 [`plot_onset_nowcast_grid`](@ref).
 """
-function onset_nowcast_draws(days::AbstractVector{<:Integer},
+function onset_nowcast_draws(
+        days::AbstractVector{<:Integer},
         observed::AbstractVector{<:Real},
         delays::AbstractVector{<:Integer},
         onsets::AbstractVector{<:AbstractVector{<:Real}},
         hazard::NamedTuple; grid_start::Integer,
-        target_delays::Union{Nothing, AbstractVector{<:Integer}} = nothing)
+        target_delays::Union{Nothing, AbstractVector{<:Integer}} = nothing
+    )
     n = length(days)
     if length(observed) != n || length(delays) != n ||
-       (!isnothing(target_delays) && length(target_delays) != n)
-        error("onset_nowcast_draws: `days`, `observed`, `delays` and any " *
-              "`target_delays` must have the same length, got $n, " *
-              "$(length(observed)), $(length(delays)) and " *
-              "$(isnothing(target_delays) ? "none" : length(target_delays)).")
+            (!isnothing(target_delays) && length(target_delays) != n)
+        error(
+            "onset_nowcast_draws: `days`, `observed`, `delays` and any " *
+                "`target_delays` must have the same length, got $n, " *
+                "$(length(observed)), $(length(delays)) and " *
+                "$(isnothing(target_delays) ? "none" : length(target_delays))."
+        )
     end
     nd = length(onsets)
     if length(hazard.alpha) != nd || length(hazard.logit_h0) != nd ||
-       length(hazard.γ) != nd
-        error("onset_nowcast_draws: `onsets` and `hazard` must come from " *
-              "the same fit, got $nd onset draws against " *
-              "$(length(hazard.alpha)) ascertainment, " *
-              "$(length(hazard.logit_h0)) baseline-hazard and " *
-              "$(length(hazard.γ)) calendar-walk draws.")
+            length(hazard.γ) != nd
+        error(
+            "onset_nowcast_draws: `onsets` and `hazard` must come from " *
+                "the same fit, got $nd onset draws against " *
+                "$(length(hazard.alpha)) ascertainment, " *
+                "$(length(hazard.logit_h0)) baseline-hazard and " *
+                "$(length(hazard.γ)) calendar-walk draws."
+        )
     end
     ## The onset series is indexed by grid day, so name an out-of-range day
     ## rather than raising a bare `BoundsError` inside the draw loop.
     ndays = nd == 0 ? 0 : length(first(onsets))
     for d in days
         (1 <= d <= ndays) ||
-            error("onset_nowcast_draws: day $d is outside the onset " *
-                  "series, which runs 1:$ndays.")
+            error(
+            "onset_nowcast_draws: day $d is outside the onset " *
+                "series, which runs 1:$ndays."
+        )
     end
     out = Vector{Vector{Float64}}(undef, n)
     for k in 1:n
@@ -1796,13 +2074,17 @@ function onset_nowcast_draws(days::AbstractVector{<:Integer},
         δ = Int(delays[k])
         y = float(observed[k])
         until = isnothing(target_delays) ? nothing : Int(target_delays[k])
-        out[k] = [begin
-                      a = hazard.alpha[i]
-                      α = a[clamp(u - Int(grid_start) + 1, 1, length(a))]
-                      onset_nowcast(y, onsets[i][u], δ, hazard.logit_h0[i],
-                          hazard.γ[i], u, grid_start, α; until)
-                  end
-                  for i in eachindex(onsets)]
+        out[k] = [
+            begin
+                a = hazard.alpha[i]
+                α = a[clamp(u - Int(grid_start) + 1, 1, length(a))]
+                onset_nowcast(
+                    y, onsets[i][u], δ, hazard.logit_h0[i],
+                    hazard.γ[i], u, grid_start, α; until
+                )
+            end
+                for i in eachindex(onsets)
+        ]
     end
     return out
 end
@@ -1831,9 +2113,11 @@ the stream's bar measurement error.
 A panel whose series disagree in length raises, and an empty `panels`
 returns a blank figure.
 """
-function plot_onset_nowcast_grid(panels::AbstractVector;
+function plot_onset_nowcast_grid(
+        panels::AbstractVector;
         ncol::Integer = 3, colour = :steelblue,
-        title = "Symptom-onset reporting triangle: nowcast vs digitised")
+        title = "Symptom-onset reporting triangle: nowcast vs digitised"
+    )
     isempty(panels) && return Figure()
     ncols = min(length(panels), Int(ncol))
     nrows = cld(length(panels), ncols)
@@ -1841,11 +2125,13 @@ function plot_onset_nowcast_grid(panels::AbstractVector;
     for (j, p) in enumerate(panels)
         n = length(p.dates)
         if length(p.observed) != n || length(p.nowcast) != n ||
-           length(p.latest) != n
-            error("plot_onset_nowcast_grid: panel $(p.title) must carry " *
-                  "one `observed`, `nowcast` and `latest` entry per onset " *
-                  "date, got $(length(p.observed)), $(length(p.nowcast)) " *
-                  "and $(length(p.latest)) for $n dates.")
+                length(p.latest) != n
+            error(
+                "plot_onset_nowcast_grid: panel $(p.title) must carry " *
+                    "one `observed`, `nowcast` and `latest` entry per onset " *
+                    "date, got $(length(p.observed)), $(length(p.nowcast)) " *
+                    "and $(length(p.latest)) for $n dates."
+            )
         end
         row, col = fldmod1(j, ncols)
         x = collect(1:n)
@@ -1853,36 +2139,50 @@ function plot_onset_nowcast_grid(panels::AbstractVector;
         ## below sort every draw vector seven times.
         sorted = [sort(float.(d)) for d in p.nowcast]
         q(pr) = [quantile(d, pr; sorted = true) for d in sorted]
-        hi60 = q(0.80)
+        hi60 = q(0.8)
         ## The 90% tail on the newest onset dates runs well past the counts
         ## the panel is read on, so the axis is set by the 60% ribbon.
-        yupper = 1.6 * max(1.0,
+        yupper = 1.6 * max(
+            1.0,
             isempty(p.latest) ? 1.0 : maximum(float.(p.latest)),
-            isempty(hi60) ? 1.0 : maximum(hi60))
-        ax = Axis(fig[row, col]; title = string(p.title),
+            isempty(hi60) ? 1.0 : maximum(hi60)
+        )
+        ax = Axis(
+            fig[row, col]; title = string(p.title),
             xlabel = row == nrows ? "onset date" : "",
             ylabel = col == 1 ? "cases at this onset date" : "",
             xticks = _vintage_ticks(p.dates),
             xticklabelrotation = pi / 4, xticklabelsize = 11,
-            limits = (nothing, (0, yupper)))
+            limits = (nothing, (0, yupper))
+        )
         band!(ax, x, q(0.05), q(0.95); color = (colour, 0.15))
-        band!(ax, x, q(0.20), hi60; color = (colour, 0.28))
+        band!(ax, x, q(0.2), hi60; color = (colour, 0.28))
         band!(ax, x, q(0.35), q(0.65); color = (colour, 0.42))
         lines!(ax, x, q(0.5); color = colour, linewidth = 2)
-        scatter!(ax, x, float.(p.observed); color = (:grey40, 0.9),
-            marker = :cross, markersize = 8)
+        scatter!(
+            ax, x, float.(p.observed); color = (:grey40, 0.9),
+            marker = :cross, markersize = 8
+        )
         scatter!(ax, x, float.(p.latest); color = :black, markersize = 6)
     end
-    CairoMakie.Label(fig[0, 1:ncols], title; font = :bold,
-        tellwidth = false)
-    CairoMakie.Legend(fig[nrows + 1, 1:ncols],
-        [CairoMakie.MarkerElement(color = (:grey40, 0.9), marker = :cross),
+    CairoMakie.Label(
+        fig[0, 1:ncols], title; font = :bold,
+        tellwidth = false
+    )
+    CairoMakie.Legend(
+        fig[nrows + 1, 1:ncols],
+        [
+            CairoMakie.MarkerElement(color = (:grey40, 0.9), marker = :cross),
             CairoMakie.LineElement(color = colour),
             CairoMakie.PolyElement(color = (colour, 0.28)),
-            CairoMakie.MarkerElement(color = :black, marker = :circle)],
-        ["digitised at this snapshot", "nowcast median",
-            "nowcast 30/60/90%", "digitised to date"];
-        orientation = :horizontal, tellwidth = false)
+            CairoMakie.MarkerElement(color = :black, marker = :circle),
+        ],
+        [
+            "digitised at this snapshot", "nowcast median",
+            "nowcast 30/60/90%", "digitised to date",
+        ];
+        orientation = :horizontal, tellwidth = false
+    )
     return fig
 end
 
@@ -1905,11 +2205,13 @@ breakpoint, the end of the scale-up (`breakpoint + ramp`, dotted) and the
 cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
 is `seeding + (d - 1)`.
 """
-function plot_rt(chn; n::Integer, breakpoint::Real,
+function plot_rt(
+        chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
-        n_traj::Integer = 100)
+        n_traj::Integer = 100
+    )
     rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
     ndraws = size(rt, 1)
 
@@ -1918,8 +2220,8 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     med = [q(d, 0.5) for d in 1:n]
     lo90 = [q(d, 0.05) for d in 1:n]
     hi90 = [q(d, 0.95) for d in 1:n]
-    lo60 = [q(d, 0.20) for d in 1:n]
-    hi60 = [q(d, 0.80) for d in 1:n]
+    lo60 = [q(d, 0.2) for d in 1:n]
+    hi60 = [q(d, 0.8) for d in 1:n]
     est = findall(!ismissing, med)
 
     lo30 = [q(d, 0.35) for d in 1:n]
@@ -1933,12 +2235,14 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     ## clipped.
     hi90_est = Float64[hi90[d] for d in est if !ismissing(hi90[d])]
     ytop = isempty(hi90_est) ? 4.0 :
-           max(1.2, 1.2 * maximum(hi90_est))
+        max(1.2, 1.2 * maximum(hi90_est))
     fig = Figure(; size = (900, 440))
-    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
+    ax = Axis(
+        fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
         title = "Estimated Rt over the established outbreak",
         limits = (nothing, (0.0, ytop)),
-        xticklabelrotation = pi / 6)
+        xticklabelrotation = pi / 6
+    )
     ## Thin sampled trajectories, faint, so the per-draw spread reads
     ## alongside the ribbons.
     if n_traj > 0 && !isempty(est)
@@ -1948,29 +2252,43 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
             lines!(ax, xe, yi; color = (:purple, 0.15), linewidth = 0.5)
         end
     end
-    band!(ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
-        color = (:purple, 0.15))
-    band!(ax, xe, Float64[lo60[d] for d in est], Float64[hi60[d] for d in est];
-        color = (:purple, 0.28))
-    band!(ax, xe, Float64[lo30[d] for d in est], Float64[hi30[d] for d in est];
-        color = (:purple, 0.42))
+    band!(
+        ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
+        color = (:purple, 0.15)
+    )
+    band!(
+        ax, xe, Float64[lo60[d] for d in est], Float64[hi60[d] for d in est];
+        color = (:purple, 0.28)
+    )
+    band!(
+        ax, xe, Float64[lo30[d] for d in est], Float64[hi30[d] for d in est];
+        color = (:purple, 0.42)
+    )
     ## No-growth threshold at Rt = 1.
     hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash, linewidth = 2)
-    vlines!(ax, [Float64(epoch + breakpoint - 1)];
-        color = :firebrick, linestyle = :dash, linewidth = 2)
+    vlines!(
+        ax, [Float64(epoch + breakpoint - 1)];
+        color = :firebrick, linestyle = :dash, linewidth = 2
+    )
     ## End of the intervention scale-up.
-    vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
-        color = :firebrick, linestyle = :dot, linewidth = 2)
-    vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
-        color = :grey, linestyle = :dash)
+    vlines!(
+        ax, [Float64(epoch + breakpoint - 1 + ramp)];
+        color = :firebrick, linestyle = :dot, linewidth = 2
+    )
+    vlines!(
+        ax, [Float64(date2epochdays(Date(as_of_date)))];
+        color = :grey, linestyle = :dash
+    )
     ## Limit the x-axis to the estimated window.
     lo = isempty(xe) ? floor(Int, minimum(x)) : floor(Int, minimum(xe))
     hi = ceil(Int, maximum(x))
     CairoMakie.xlims!(ax, lo, hi)
     CairoMakie.ylims!(ax, 0, ytop)
     ax.xticks = collect(lo:7:hi)
-    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                              for v in vals]
+    ax.xtickformat = vals -> [
+        string(epochdays2date(round(Int, v)))
+            for v in vals
+    ]
     return fig
 end
 
@@ -1990,22 +2308,32 @@ function _rt_bands_matrix(rt::AbstractMatrix; n, ds)
     q(pr) = [_rt_quantile(rt, d, pr) for d in 1:n]
     med = q(0.5)
     est = findall(d -> d >= ds && !ismissing(med[d]), 1:n)
-    return (; lo90 = q(0.05), hi90 = q(0.95), lo60 = q(0.20), hi60 = q(0.80),
-        lo30 = q(0.35), hi30 = q(0.65), est)
+    return (;
+        lo90 = q(0.05), hi90 = q(0.95), lo60 = q(0.2), hi60 = q(0.8),
+        lo30 = q(0.35), hi30 = q(0.65), est,
+    )
 end
 
 ## Draw nested 30/60/90% credible ribbons (no median line) for one fit's
 ## bands in `colour`.
-function _draw_rt_bands!(ax, x, b, colour;
-        alphas = (0.15, 0.28, 0.42))
+function _draw_rt_bands!(
+        ax, x, b, colour;
+        alphas = (0.15, 0.28, 0.42)
+    )
     isempty(b.est) && return
     xe = x[b.est]
-    band!(ax, xe, Float64[b.lo90[d] for d in b.est],
-        Float64[b.hi90[d] for d in b.est]; color = (colour, alphas[1]))
-    band!(ax, xe, Float64[b.lo60[d] for d in b.est],
-        Float64[b.hi60[d] for d in b.est]; color = (colour, alphas[2]))
-    band!(ax, xe, Float64[b.lo30[d] for d in b.est],
-        Float64[b.hi30[d] for d in b.est]; color = (colour, alphas[3]))
+    band!(
+        ax, xe, Float64[b.lo90[d] for d in b.est],
+        Float64[b.hi90[d] for d in b.est]; color = (colour, alphas[1])
+    )
+    band!(
+        ax, xe, Float64[b.lo60[d] for d in b.est],
+        Float64[b.hi60[d] for d in b.est]; color = (colour, alphas[2])
+    )
+    band!(
+        ax, xe, Float64[b.lo30[d] for d in b.est],
+        Float64[b.hi30[d] for d in b.est]; color = (colour, alphas[3])
+    )
     return
 end
 
@@ -2037,29 +2365,35 @@ marked as in [`plot_rt`](@ref).
 They default to the per-stream reading, and the sensitivity page passes its
 own to set two model structures against each other instead.
 """
-function plot_rt_streams(streams::AbstractVector;
+function plot_rt_streams(
+        streams::AbstractVector;
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         display_start::Integer = 1, week::Integer = 7,
         ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 2, joint_colour = :grey25,
         title::AbstractString =
-        "Implied Rt by data stream, with the joint fit overlaid",
+            "Implied Rt by data stream, with the joint fit overlaid",
         reference_label::AbstractString = "the joint fit",
         panel_label::AbstractString =
-        "the single-stream fit named in the panel title")
+            "the single-stream fit named in the panel title"
+    )
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
     ds = clamp(display_start, 1, n)
 
     ## The joint is the shared reference drawn behind every stream, so
     ## reconstruct it once.
-    bj = _rt_bands(joint.chn; n, breakpoint, rt_start = joint.rt_start,
-        rt_walk_start = joint.rt_walk_start, week, ramp, ds)
+    bj = _rt_bands(
+        joint.chn; n, breakpoint, rt_start = joint.rt_start,
+        rt_walk_start = joint.rt_walk_start, week, ramp, ds
+    )
     sbands = Tuple{Any, NamedTuple}[]
     for s in streams
-        b = _rt_bands(s.chn; n, breakpoint, rt_start = s.rt_start,
-            rt_walk_start = s.rt_walk_start, week, ramp, ds)
+        b = _rt_bands(
+            s.chn; n, breakpoint, rt_start = s.rt_start,
+            rt_walk_start = s.rt_walk_start, week, ramp, ds
+        )
         push!(sbands, (s, b))
     end
 
@@ -2081,32 +2415,48 @@ function plot_rt_streams(streams::AbstractVector;
     for (i, (s, b)) in enumerate(sbands)
         r = cld(i, ncols)
         c = i - (r - 1) * ncols
-        ax = Axis(fig[r, c]; xlabel = "Date", ylabel = "Rt",
+        ax = Axis(
+            fig[r, c]; xlabel = "Date", ylabel = "Rt",
             title = s.label, titlecolor = s.colour,
-            xticklabelrotation = pi / 6)
-        _draw_rt_bands!(ax, x, bj, joint_colour;
-            alphas = (0.10, 0.16, 0.22))
+            xticklabelrotation = pi / 6
+        )
+        _draw_rt_bands!(
+            ax, x, bj, joint_colour;
+            alphas = (0.1, 0.16, 0.22)
+        )
         _draw_rt_bands!(ax, x, b, s.colour)
-        hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
-            linewidth = 2)
-        vlines!(ax, [Float64(epoch + breakpoint - 1)];
-            color = :firebrick, linestyle = :dash, linewidth = 2)
-        vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
-            color = :firebrick, linestyle = :dot, linewidth = 2)
-        vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
-            color = :grey, linestyle = :dash)
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
+            linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(epoch + breakpoint - 1)];
+            color = :firebrick, linestyle = :dash, linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(epoch + breakpoint - 1 + ramp)];
+            color = :firebrick, linestyle = :dot, linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(date2epochdays(Date(as_of_date)))];
+            color = :grey, linestyle = :dash
+        )
         CairoMakie.xlims!(ax, lo, hi)
         CairoMakie.ylims!(ax, 0, ytop)
         ax.xticks = collect(lo:14:hi)
-        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                  for v in vals]
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
     end
 
-    CairoMakie.Label(fig[nrows + 1, 1:ncols],
+    CairoMakie.Label(
+        fig[nrows + 1, 1:ncols],
         "Bands are 30/60/90% credible intervals. Grey is " *
-        reference_label * ", the same in every panel. The coloured band " *
-        "is " * panel_label * ".";
-        fontsize = 12, padding = (0, 0, 0, 6))
+            reference_label * ", the same in every panel. The coloured band " *
+            "is " * panel_label * ".";
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
     CairoMakie.Label(fig[0, 1:ncols], title; fontsize = 16, font = :bold)
     return fig
 end
@@ -2133,31 +2483,40 @@ chain's own national trajectory rather than from these.
 A chain carrying no usable deviations is an error here rather than a silent
 national trajectory repeated per panel.
 """
-function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
+function reconstruct_patch_rt(
+        chn; n::Integer, breakpoint::Real,
         n_patches::Integer = length(PROVINCE_NAMES),
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP)
-    national = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start,
-        week, ramp)
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+    )
+    national = reconstruct_rt(
+        chn; n, breakpoint, rt_start, rt_walk_start,
+        week, ramp
+    )
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
     knots = try
         [collect(v) for v in vec(collect(chn[:delta_knots]))]
     catch
-        error("reconstruct_patch_rt: the chain is missing `delta_knots`, " *
-              "so the provincial Rt trajectories cannot be rebuilt. It was " *
-              "sampled either with `n_patches = 1` or before that was " *
-              "surfaced; refit with the patch structure on.")
+        error(
+            "reconstruct_patch_rt: the chain is missing `delta_knots`, " *
+                "so the provincial Rt trajectories cannot be rebuilt. It was " *
+                "sampled either with `n_patches = 1` or before that was " *
+                "surfaced; refit with the patch structure on."
+        )
     end
     ndraws = size(national, 1)
     expected = n_patches * nb
     isempty(knots) || length(knots[1]) == expected ||
         error(
-            "reconstruct_patch_rt: `delta_knots` holds $(length(knots[1])) " *
+        "reconstruct_patch_rt: `delta_knots` holds $(length(knots[1])) " *
             "entries but $n_patches patches by $nb knots is $expected; " *
-            "pass the same `n_patches` and `rt_walk_start` the model used.")
-    out = [Matrix{Union{Missing, Float64}}(missing, ndraws, n)
-           for _ in 1:n_patches]
+            "pass the same `n_patches` and `rt_walk_start` the model used."
+    )
+    out = [
+        Matrix{Union{Missing, Float64}}(missing, ndraws, n)
+            for _ in 1:n_patches
+    ]
     for i in 1:ndraws
         δ_knots = reshape(knots[i], n_patches, nb)
         for p in 1:n_patches
@@ -2188,7 +2547,8 @@ province or the central trend they pool toward. A panel tracking the grey
 band says that province moves with the country. Separation between panels is
 the spatial signal, and its scale is what `region_drift_sd` estimates.
 """
-function plot_rt_patches(chn; n::Integer, breakpoint::Real,
+function plot_rt_patches(
+        chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
@@ -2197,14 +2557,17 @@ function plot_rt_patches(chn; n::Integer, breakpoint::Real,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 3,
         colours = [:firebrick, :steelblue, :seagreen],
-        national_colour = :grey25)
+        national_colour = :grey25
+    )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
     ds = clamp(display_start, 1, n)
 
-    patch_rt = reconstruct_patch_rt(chn; n, breakpoint, n_patches = np,
-        rt_start, rt_walk_start, week, ramp)
+    patch_rt = reconstruct_patch_rt(
+        chn; n, breakpoint, n_patches = np,
+        rt_start, rt_walk_start, week, ramp
+    )
     bands = [_rt_bands_matrix(patch_rt[p]; n, ds) for p in 1:np]
     bn = _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
 
@@ -2226,34 +2589,52 @@ function plot_rt_patches(chn; n::Integer, breakpoint::Real,
         r = cld(p, ncols)
         c = p - (r - 1) * ncols
         colour = colours[mod1(p, length(colours))]
-        ax = Axis(fig[r, c]; xlabel = "Date", ylabel = "Rt",
+        ax = Axis(
+            fig[r, c]; xlabel = "Date", ylabel = "Rt",
             title = patch_labels[p], titlecolor = colour,
-            xticklabelrotation = pi / 6)
-        _draw_rt_bands!(ax, x, bn, national_colour;
-            alphas = (0.10, 0.16, 0.22))
+            xticklabelrotation = pi / 6
+        )
+        _draw_rt_bands!(
+            ax, x, bn, national_colour;
+            alphas = (0.1, 0.16, 0.22)
+        )
         _draw_rt_bands!(ax, x, bands[p], colour)
-        hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
-            linewidth = 2)
-        vlines!(ax, [Float64(epoch + breakpoint - 1)];
-            color = :firebrick, linestyle = :dash, linewidth = 2)
-        vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
-            color = :firebrick, linestyle = :dot, linewidth = 2)
-        vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
-            color = :grey, linestyle = :dash)
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
+            linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(epoch + breakpoint - 1)];
+            color = :firebrick, linestyle = :dash, linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(epoch + breakpoint - 1 + ramp)];
+            color = :firebrick, linestyle = :dot, linewidth = 2
+        )
+        vlines!(
+            ax, [Float64(date2epochdays(Date(as_of_date)))];
+            color = :grey, linestyle = :dash
+        )
         CairoMakie.xlims!(ax, lo, hi)
         CairoMakie.ylims!(ax, 0, ytop)
         ax.xticks = collect(lo:14:hi)
-        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                  for v in vals]
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
     end
-    CairoMakie.Label(fig[nrows + 1, 1:min(np, ncols)],
+    CairoMakie.Label(
+        fig[nrows + 1, 1:min(np, ncols)],
         "Bands are 30/60/90% credible intervals. Grey is the national " *
-        "trajectory, the same in every panel; the coloured band is the " *
-        "province named in the panel title.";
-        fontsize = 12, padding = (0, 0, 0, 6))
-    CairoMakie.Label(fig[0, 1:min(np, ncols)],
+            "trajectory, the same in every panel; the coloured band is the " *
+            "province named in the panel title.";
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
+    CairoMakie.Label(
+        fig[0, 1:min(np, ncols)],
         "Reproduction number by province";
-        fontsize = 16, font = :bold)
+        fontsize = 16, font = :bold
+    )
     return fig
 end
 
@@ -2265,23 +2646,30 @@ function _patch_daily(chn, sym::Symbol, np::Integer, n::Integer)
     vs = try
         [collect(v) for v in vec(collect(chn[sym]))]
     catch
-        error("plot: the chain carries no `$(sym)`, so the per-province " *
-              "trajectories cannot be drawn. It was sampled either with " *
-              "`n_patches = 1` or before that was surfaced.")
+        error(
+            "plot: the chain carries no `$(sym)`, so the per-province " *
+                "trajectories cannot be drawn. It was sampled either with " *
+                "`n_patches = 1` or before that was surfaced."
+        )
     end
     length(first(vs)) == np * n || error(
         "plot: `$(sym)` holds $(length(first(vs))) entries but $np patches " *
-        "by $n days is $(np * n).")
-    return [[Float64[v[(t - 1) * np + p] for t in 1:n] for v in vs]
-            for p in 1:np]
+            "by $n days is $(np * n)."
+    )
+    return [
+        [Float64[v[(t - 1) * np + p] for t in 1:n] for v in vs]
+            for p in 1:np
+    ]
 end
 
 ## 30/60/90% ribbons of a set of per-draw daily series.
 function _traj_bands(trajs, n::Integer)
     q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
-    return (lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
-        lo60 = [q(d, 0.20) for d in 1:n], hi60 = [q(d, 0.80) for d in 1:n],
-        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n])
+    return (
+        lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
+        lo60 = [q(d, 0.2) for d in 1:n], hi60 = [q(d, 0.8) for d in 1:n],
+        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n],
+    )
 end
 
 function _draw_traj_bands!(ax, x, b, colour)
@@ -2302,10 +2690,12 @@ into the floor. The cross-province comparison belongs in
 [`patch_overview_table`](@ref). Reads the `infections_patch` deterministic,
 the daily per-province infection matrix flattened column-major.
 """
-function plot_infections_patches(chn; n::Integer, seeding::Date,
+function plot_infections_patches(
+        chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen])
+        colours = [:firebrick, :steelblue, :seagreen]
+    )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
@@ -2317,25 +2707,36 @@ function plot_infections_patches(chn; n::Integer, seeding::Date,
     for p in 1:np
         colour = colours[mod1(p, length(colours))]
         for (r, (trajs, lab)) in enumerate(
-            ((daily[p], "Daily infections"),
-            (cumul[p], "Cumulative infections")))
-            ax = Axis(fig[r, p]; xlabel = "Date", ylabel = lab,
+                (
+                    (daily[p], "Daily infections"),
+                    (cumul[p], "Cumulative infections"),
+                )
+            )
+            ax = Axis(
+                fig[r, p]; xlabel = "Date", ylabel = lab,
                 title = r == 1 ? patch_labels[p] : "",
-                titlecolor = colour, xticklabelrotation = pi / 6)
+                titlecolor = colour, xticklabelrotation = pi / 6
+            )
             _draw_traj_bands!(ax, x, _traj_bands(trajs, n), colour)
             CairoMakie.xlims!(ax, lo, hi)
             ax.xticks = collect(lo:28:hi)
-            ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                      for v in vals]
+            ax.xtickformat = vals -> [
+                string(epochdays2date(round(Int, v)))
+                    for v in vals
+            ]
         end
     end
-    CairoMakie.Label(fig[3, 1:np],
+    CairoMakie.Label(
+        fig[3, 1:np],
         "Bands are 30/60/90% credible intervals. Each panel has its own " *
-        "y-axis, so panels are read for shape and timing rather than " *
-        "compared by height.";
-        fontsize = 12, padding = (0, 0, 0, 6))
-    CairoMakie.Label(fig[0, 1:np], "Modelled infections by province";
-        fontsize = 16, font = :bold)
+            "y-axis, so panels are read for shape and timing rather than " *
+            "compared by height.";
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
+    CairoMakie.Label(
+        fig[0, 1:np], "Modelled infections by province";
+        fontsize = 16, font = :bold
+    )
     return fig
 end
 
@@ -2352,10 +2753,12 @@ provinces' seeds, since both raise a secondary province's early incidence, so
 the level is read as the coupling the data tolerate rather than as a measured
 flow. Reads the `importation_patch` deterministic.
 """
-function plot_imports_patches(chn; n::Integer, seeding::Date,
+function plot_imports_patches(
+        chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen])
+        colours = [:firebrick, :steelblue, :seagreen]
+    )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
@@ -2365,23 +2768,31 @@ function plot_imports_patches(chn; n::Integer, seeding::Date,
     fig = Figure(; size = (460 * np, 400))
     for p in 1:np
         colour = colours[mod1(p, length(colours))]
-        ax = Axis(fig[1, p]; xlabel = "Date",
+        ax = Axis(
+            fig[1, p]; xlabel = "Date",
             ylabel = "Imported infections per day",
             title = patch_labels[p], titlecolor = colour,
-            xticklabelrotation = pi / 6)
+            xticklabelrotation = pi / 6
+        )
         _draw_traj_bands!(ax, x, _traj_bands(imports[p], n), colour)
         CairoMakie.xlims!(ax, lo, hi)
         ax.xticks = collect(lo:28:hi)
-        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                  for v in vals]
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
     end
-    CairoMakie.Label(fig[2, 1:np],
+    CairoMakie.Label(
+        fig[2, 1:np],
         "Bands are 30/60/90% credible intervals. Each panel has its own " *
-        "y-axis. Importation relocates transmission between provinces " *
-        "rather than adding it.";
-        fontsize = 12, padding = (0, 0, 0, 6))
-    CairoMakie.Label(fig[0, 1:np], "Imported infections by province";
-        fontsize = 16, font = :bold)
+            "y-axis. Importation relocates transmission between provinces " *
+            "rather than adding it.";
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
+    CairoMakie.Label(
+        fig[0, 1:np], "Imported infections by province";
+        fontsize = 16, font = :bold
+    )
     return fig
 end
 
@@ -2392,8 +2803,10 @@ function _draw_patch_interval!(ax, x, draws, colour)
     q = posterior_summary(draws)
     lines!(ax, [x, x], [q.lo90, q.hi90]; color = (colour, 0.35), linewidth = 2)
     lines!(ax, [x, x], [q.lo60, q.hi60]; color = (colour, 0.55), linewidth = 6)
-    lines!(ax, [x, x], [q.lo30, q.hi30]; color = (colour, 0.85),
-        linewidth = 11)
+    lines!(
+        ax, [x, x], [q.lo30, q.hi30]; color = (colour, 0.85),
+        linewidth = 11
+    )
     return scatter!(ax, [x], [median(draws)]; color = :black, markersize = 8)
 end
 
@@ -2422,16 +2835,19 @@ reproduction number must be read together. The case composition identifies
 only their product, and it is the per-province deaths that tilt the balance
 between them.
 """
-function plot_patch_summary(chn, n_patches::Integer = length(PROVINCE_NAMES);
+function plot_patch_summary(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
         ncols::Integer = 4,
-        title::AbstractString = "Per-province posterior summary")
+        title::AbstractString = "Per-province posterior summary"
+    )
     required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
     absent = filter(q -> !_has_key(chn, q), required)
     isempty(absent) || error(
         "chain is missing the per-patch deterministics $(absent); it was " *
-        "not sampled from `bvd_joint`.")
+            "not sampled from `bvd_joint`."
+    )
     np = min(n_patches, length(patch_labels))
     ## Quantity, panel label, and the reference value worth a rule, in the
     ## order `patch_summary_table` reports them. The optional ones are absent
@@ -2440,10 +2856,13 @@ function plot_patch_summary(chn, n_patches::Integer = length(PROVINCE_NAMES);
         (:C_T_patch, "Cumulative infections", nothing),
         (:R_T_patch, "Reproduction number", 1.0),
         (:infections_T_patch, "Daily infections at cut-off", nothing),
-        (:delta_patch, "log-Rt deviation from trend", 0.0)]
-    optional = [(:log_rt_contrast, "log-Rt vs primary patch", 0.0),
+        (:delta_patch, "log-Rt deviation from trend", 0.0),
+    ]
+    optional = [
+        (:log_rt_contrast, "log-Rt vs primary patch", 0.0),
         (:region_drift_sd, "Rt deviation drift", nothing),
-        (:province_ascertainment, "Relative case ascertainment", 1.0)]
+        (:province_ascertainment, "Relative case ascertainment", 1.0),
+    ]
     for o in optional
         _has_key(chn, first(o)) && push!(panels, o)
     end
@@ -2453,25 +2872,33 @@ function plot_patch_summary(chn, n_patches::Integer = length(PROVINCE_NAMES);
     xs = Float64.(1:np)
     for (k, (sym, label, reference)) in enumerate(panels)
         r, c = cld(k, nc), mod1(k, nc)
-        ax = Axis(fig[r, c]; ylabel = label, title = label,
+        ax = Axis(
+            fig[r, c]; ylabel = label, title = label,
             xticks = (xs, String.(patch_labels[1:np])),
-            xticklabelrotation = pi / 6)
-        reference === nothing || hlines!(ax, [reference]; color = :black,
-            linestyle = :dash, linewidth = 1)
+            xticklabelrotation = pi / 6
+        )
+        reference === nothing || hlines!(
+            ax, [reference]; color = :black,
+            linestyle = :dash, linewidth = 1
+        )
         draws = _per_patch(chn, sym, np)
         for p in 1:np
-            _draw_patch_interval!(ax, xs[p], draws[p],
-                colours[mod1(p, length(colours))])
+            _draw_patch_interval!(
+                ax, xs[p], draws[p],
+                colours[mod1(p, length(colours))]
+            )
         end
         ## A single province would otherwise sit on the axis edge.
         CairoMakie.xlims!(ax, 0.5, np + 0.5)
     end
-    CairoMakie.Label(fig[nr + 1, 1:nc],
+    CairoMakie.Label(
+        fig[nr + 1, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-        "the median as a dot. Each panel has its own y-axis. Dashed rules " *
-        "mark the reference value: one for the reproduction number and the " *
-        "relative ascertainment, zero for the log-Rt deviations.";
-        fontsize = 12, padding = (0, 0, 0, 6))
+            "the median as a dot. Each panel has its own y-axis. Dashed rules " *
+            "mark the reference value: one for the reproduction number and the " *
+            "relative ascertainment, zero for the log-Rt deviations.";
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
     return fig
 end
@@ -2486,9 +2913,11 @@ function _traj_bands_missing(trajs, n::Integer)
         any(isnan, v) && return NaN
         return quantile(v, pr)
     end
-    return (lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
-        lo60 = [q(d, 0.20) for d in 1:n], hi60 = [q(d, 0.80) for d in 1:n],
-        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n])
+    return (
+        lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
+        lo60 = [q(d, 0.2) for d in 1:n], hi60 = [q(d, 0.8) for d in 1:n],
+        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n],
+    )
 end
 
 ## Predictive band behind an expected-value ribbon: the same 30/60/90%
@@ -2496,12 +2925,16 @@ end
 ## legible where the coloured ribbon sits inside it.
 function _draw_pred_bands!(ax, x, b)
     band!(ax, x, b.lo90, b.hi90; color = (:grey30, 0.12))
-    band!(ax, x, b.lo60, b.hi60; color = (:grey30, 0.20))
+    band!(ax, x, b.lo60, b.hi60; color = (:grey30, 0.2))
     band!(ax, x, b.lo30, b.hi30; color = (:grey30, 0.28))
-    lines!(ax, x, b.lo90; color = (:grey20, 0.7), linestyle = :dash,
-        linewidth = 1)
-    lines!(ax, x, b.hi90; color = (:grey20, 0.7), linestyle = :dash,
-        linewidth = 1)
+    lines!(
+        ax, x, b.lo90; color = (:grey20, 0.7), linestyle = :dash,
+        linewidth = 1
+    )
+    lines!(
+        ax, x, b.hi90; color = (:grey20, 0.7), linestyle = :dash,
+        linewidth = 1
+    )
     return ax
 end
 
@@ -2511,9 +2944,11 @@ end
 ## neither still has the submodel's own sampled `rho` under its prefix.
 function _composition_rho_keys(share_key::Symbol)
     return share_key === :province_death_shares ?
-           [:province_death_composition_rho,
-        Symbol("death_composition_state.ρ")] :
-           [:province_composition_rho, Symbol("composition_state.ρ")]
+        [
+            :province_death_composition_rho,
+            Symbol("death_composition_state.ρ"),
+        ] :
+        [:province_composition_rho, Symbol("composition_state.ρ")]
 end
 
 ## Per-draw composition overdispersion, or `nothing` when the chain carries
@@ -2543,8 +2978,10 @@ end
 ##
 ## The seed is fixed so a rebuilt report redraws the same band rather than
 ## moving it by the Monte Carlo error of the simulation.
-function _composition_predictive(ms, rho, totals, nv::Integer;
-        seed::Integer = 20_240)
+function _composition_predictive(
+        ms, rho, totals, nv::Integer;
+        seed::Integer = 20_240
+    )
     rng = MersenneTwister(seed)
     np = size(first(ms), 1)
     nd = length(ms)
@@ -2558,10 +2995,12 @@ function _composition_predictive(ms, rho, totals, nv::Integer;
             tail = 1.0
             for p in 1:(np - 1)
                 p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
-                counts[p] = rand(rng,
-                    safe_betabinomial(max(remaining, 0), p_cond, rho[d]))
+                counts[p] = rand(
+                    rng,
+                    safe_betabinomial(max(remaining, 0), p_cond, rho[d])
+                )
                 remaining -= counts[p]
-                tail = max(tail - m[p, i], 1e-10)
+                tail = max(tail - m[p, i], 1.0e-10)
             end
             counts[np] = max(remaining, 0)
             for p in 1:np
@@ -2603,20 +3042,23 @@ epicentre pinned to the floor.
 to the one matching `share_key`. A chain carrying neither that deterministic
 nor the submodel's own draw is drawn with the expected-share ribbon only.
 """
-function plot_province_composition_ppc(chn; share_key::Symbol,
+function plot_province_composition_ppc(
+        chn; share_key::Symbol,
         obs_increments::AbstractMatrix, days::AbstractVector{<:Integer},
         seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
         rho_key::Union{Nothing, Symbol} = nothing,
-        title::AbstractString = "Province share, modelled against observed")
+        title::AbstractString = "Province share, modelled against observed"
+    )
     np = min(n_patches, length(patch_labels))
     ms = [collect(v) for v in vec(collect(chn[share_key]))]
     nv = size(first(ms), 2)
     nv == length(days) || error(
         "plot_province_composition_ppc: `$(share_key)` holds $nv vintages " *
-        "but `days` holds $(length(days)).")
+            "but `days` holds $(length(days))."
+    )
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in days]
     totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
@@ -2624,45 +3066,53 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
     ## expected to scatter from the modelled ones, so the predictive band
     ## needs it.
     rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
-               [rho_key]
+        [rho_key]
     rho = _composition_rho_draws(chn, rho_keys, length(ms))
     preds = rho === nothing ? nothing :
-            _composition_predictive(ms, rho, totals, nv)
+        _composition_predictive(ms, rho, totals, nv)
     fig = Figure(; size = (460 * np, 400))
     for p in 1:np
         colour = colours[mod1(p, length(colours))]
         trajs = [Float64[m[p, i] for i in 1:nv] for m in ms]
         b = _traj_bands(trajs, nv)
-        ax = Axis(fig[1, p]; xlabel = "Vintage", ylabel = "Share of total",
+        ax = Axis(
+            fig[1, p]; xlabel = "Vintage", ylabel = "Share of total",
             title = patch_labels[p], titlecolor = colour,
-            xticklabelrotation = pi / 6)
+            xticklabelrotation = pi / 6
+        )
         ## Predictive first, so the narrower expected-share ribbon stays
         ## readable on top of it.
         preds === nothing ||
             _draw_pred_bands!(ax, x, _traj_bands_missing(preds[p], nv))
         _draw_traj_bands!(ax, x, b, colour)
-        obs = [totals[i] > 0 ? obs_increments[p, i] / totals[i] : NaN
-               for i in 1:nv]
+        obs = [
+            totals[i] > 0 ? obs_increments[p, i] / totals[i] : NaN
+                for i in 1:nv
+        ]
         CairoMakie.scatter!(ax, x, obs; color = :black, markersize = 8)
         CairoMakie.ylims!(ax, 0, nothing)
         loax = floor(Int, minimum(x))
         hiax = ceil(Int, maximum(x))
         ax.xticks = collect(loax:7:hiax)
-        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                                  for v in vals]
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
     end
     caption = preds === nothing ?
-              "Bands are 30/60/90% credible intervals on the expected " *
-              "share. Black points are the observed share at each vintage. " *
-              "Each panel starts at zero and takes its own upper limit." :
-              "Grey band is the 30/60/90% posterior predictive interval on " *
-              "the observed share, dashed at its 90% edges. The coloured " *
-              "ribbon inside it is the same intervals on the expected " *
-              "share. Black points are the observed share at each vintage " *
-              "and should fall inside the grey band. Each panel starts at " *
-              "zero and takes its own upper limit."
-    CairoMakie.Label(fig[2, 1:np], caption;
-        fontsize = 12, padding = (0, 0, 0, 6))
+        "Bands are 30/60/90% credible intervals on the expected " *
+        "share. Black points are the observed share at each vintage. " *
+        "Each panel starts at zero and takes its own upper limit." :
+        "Grey band is the 30/60/90% posterior predictive interval on " *
+        "the observed share, dashed at its 90% edges. The coloured " *
+        "ribbon inside it is the same intervals on the expected " *
+        "share. Black points are the observed share at each vintage " *
+        "and should fall inside the grey band. Each panel starts at " *
+        "zero and takes its own upper limit."
+    CairoMakie.Label(
+        fig[2, 1:np], caption;
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
     CairoMakie.Label(fig[0, 1:np], title; fontsize = 16, font = :bold)
     return fig
 end
@@ -2681,21 +3131,29 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
 
     ## `delta_deaths` is clamped at zero in `predict_no_onward_deaths`, so the
     ## projected total cannot fall below the deaths already observed.
-    ax1 = Axis(fig[1, 1];
+    ax1 = Axis(
+        fig[1, 1];
         xlabel = "Still expected deaths (beyond those already observed)",
         ylabel = "Posterior density",
-        title = "Still expected (future)")
-    _bounded_density!(ax1, df.delta_deaths; lower = 0,
-        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
+        title = "Still expected (future)"
+    )
+    _bounded_density!(
+        ax1, df.delta_deaths; lower = 0,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2
+    )
 
     ## The axis starts at the deaths already observed, so the left spine is
     ## that reference and a rule drawn on it would be invisible.
-    ax2 = Axis(fig[1, 2];
+    ax2 = Axis(
+        fig[1, 2];
         xlabel = "Projected total deaths, from the $(obs_deaths) observed",
         ylabel = "Posterior density",
-        title = "Projected total")
-    _bounded_density!(ax2, df.total_projected; lower = obs_deaths,
-        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
+        title = "Projected total"
+    )
+    _bounded_density!(
+        ax2, df.total_projected; lower = obs_deaths,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2
+    )
 
     return fig
 end
@@ -2709,9 +3167,11 @@ function _forecast_count_panel!(fig, pos, v, title, colour)
     upper = max(1.0, quantile(v, 0.98))
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = title, ylabel = "Predictive frequency",
-        title = "One week ahead", limits = ((0, upper), nothing))
+        title = "One week ahead", limits = ((0, upper), nothing)
+    )
     vspan!(ax, lo, hi; color = (colour, 0.15))
     hist!(ax, v; bins = range(0, upper; length = 30), color = (colour, 0.7))
     return ax
@@ -2731,7 +3191,7 @@ function plot_forecast_latent(fc::DataFrame)
     count_cols = [
         (:infections_new, "New infections (DRC)", :steelblue),
         (:onsets_new, "New symptom onsets (DRC)", :seagreen),
-        (:deaths_latent_new, "New deaths (DRC)", :firebrick)
+        (:deaths_latent_new, "New deaths (DRC)", :firebrick),
     ]
     npanels = length(count_cols) + 1
     ncols = 2
@@ -2745,13 +3205,17 @@ function plot_forecast_latent(fc::DataFrame)
     i = npanels
     r, c = cld(i, ncols), mod1(i, ncols)
     rt = fc[!, :rt_forecast]
-    ax = Axis(fig[r, c];
+    ax = Axis(
+        fig[r, c];
         xlabel = "Forecast reproduction number (DRC)",
-        ylabel = "Posterior density", title = "One week ahead")
+        ylabel = "Posterior density", title = "One week ahead"
+    )
     ## A reproduction number cannot be negative, and the horizon walk leaves
     ## draws close enough to zero for the kernel to spill past zero.
-    _bounded_density!(ax, rt; lower = 0, color = (:purple, 0.5),
-        strokecolor = :purple, strokewidth = 2)
+    _bounded_density!(
+        ax, rt; lower = 0, color = (:purple, 0.5),
+        strokecolor = :purple, strokewidth = 2
+    )
     vlines!(ax, [1.0]; color = :black, linestyle = :dash, linewidth = 2)
     return fig
 end
@@ -2769,12 +3233,12 @@ shaded. The latent counterparts are in [`plot_forecast_latent`](@ref).
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
     for (col, title, colour) in (
-        (:cases_new, "New reported cases (DRC)", :steelblue),
-        (:deaths_new, "New suspected deaths (DRC)", :firebrick),
-        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
-        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
-        (:recovered_new, "New recovered among confirmed (DRC)", :seagreen)
-    )
+            (:cases_new, "New reported cases (DRC)", :steelblue),
+            (:deaths_new, "New suspected deaths (DRC)", :firebrick),
+            (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
+            (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
+            (:recovered_new, "New recovered among confirmed (DRC)", :seagreen),
+        )
         col in propertynames(fc) || continue
         push!(count_cols, (col, title, colour))
     end
@@ -2801,12 +3265,18 @@ These are the daily-flow counterparts of the bed-stock forecast in
 """
 function plot_forecast_flows(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
-    :admissions_fc in propertynames(fc) && push!(count_cols,
-        (:admissions_fc, "New isolation admissions (DRC)", :steelblue))
-    :incare_deaths_fc in propertynames(fc) && push!(count_cols,
-        (:incare_deaths_fc, "New in-care deaths (DRC)", :firebrick))
-    :ruleouts_fc in propertynames(fc) && push!(count_cols,
-        (:ruleouts_fc, "New rule-outs (DRC)", :seagreen))
+    :admissions_fc in propertynames(fc) && push!(
+        count_cols,
+        (:admissions_fc, "New isolation admissions (DRC)", :steelblue)
+    )
+    :incare_deaths_fc in propertynames(fc) && push!(
+        count_cols,
+        (:incare_deaths_fc, "New in-care deaths (DRC)", :firebrick)
+    )
+    :ruleouts_fc in propertynames(fc) && push!(
+        count_cols,
+        (:ruleouts_fc, "New rule-outs (DRC)", :seagreen)
+    )
     npanels = length(count_cols)
     npanels == 0 && return Figure()
     ncols = min(npanels, 2)
@@ -2840,11 +3310,13 @@ Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
 neither returns an empty figure.
 """
-function plot_province_forecast(chn, fc::DataFrame;
+function plot_province_forecast(
+        chn, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
-        title::AbstractString = "One-week-ahead forecast by province")
+        title::AbstractString = "One-week-ahead forecast by province"
+    )
     np = min(n_patches, length(patch_labels))
     entries = _province_forecast_draws(chn, fc, np, patch_labels)
     isempty(entries) && return Figure()
@@ -2856,13 +3328,17 @@ function plot_province_forecast(chn, fc::DataFrame;
     xs = Float64.(1:np)
     for (k, label) in enumerate(labels)
         sel = [e for e in entries if e[1] == label]
-        ax = Axis(fig[1, k]; ylabel = "Forecast count over the week",
+        ax = Axis(
+            fig[1, k]; ylabel = "Forecast count over the week",
             title = "New $(label) by T+7",
             xticks = (xs, String.(patch_labels[1:np])),
-            xticklabelrotation = pi / 6)
+            xticklabelrotation = pi / 6
+        )
         for (p, e) in enumerate(sel)
-            _draw_patch_interval!(ax, xs[p], e[3],
-                colours[mod1(p, length(colours))])
+            _draw_patch_interval!(
+                ax, xs[p], e[3],
+                colours[mod1(p, length(colours))]
+            )
         end
         ## A single province would otherwise sit on the axis edge.
         CairoMakie.xlims!(ax, 0.5, np + 0.5)
@@ -2872,12 +3348,14 @@ function plot_province_forecast(chn, fc::DataFrame;
     end
     ## Two panels is a narrower figure than the per-province summary grid, so
     ## the caption wraps to the layout width.
-    CairoMakie.Label(fig[2, 1:nc],
+    CairoMakie.Label(
+        fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-        "the median as a dot. Each province's count is the national " *
-        "forecast draw times its modelled share at the last spatial " *
-        "vintage, held over the horizon.";
-        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+            "the median as a dot. Each province's count is the national " *
+            "forecast draw times its modelled share at the last spatial " *
+            "vintage, held over the horizon.";
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
+    )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
     return fig
 end
@@ -2899,33 +3377,43 @@ at 21.9%, and beds free in one province cannot serve patients in another, so
 the national shortfall understates the local unmet need.
 """
 function plot_forecast_beds(fc::DataFrame)
-    (:bed_demand in propertynames(fc) &&
-     :isolation_level in propertynames(fc)) || return Figure()
+    (
+        :bed_demand in propertynames(fc) &&
+            :isolation_level in propertynames(fc)
+    ) || return Figure()
     demand = float.(fc[!, :bed_demand])
     occ = float.(fc[!, :isolation_level])
     ## The shortfall is the need above the beds available. Without that
     ## column the occupancy is the demand capped at the capacity, so their
     ## difference is the same quantity.
     shortfall = :bed_shortfall in propertynames(fc) ?
-                float.(fc[!, :bed_shortfall]) : max.(demand .- occ, 0.0)
+        float.(fc[!, :bed_shortfall]) : max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
     ## Cap the x-axis at the 98th percentile of demand. The unconstrained
     ## projection is heavy-tailed, so its long upper tail otherwise squashes
     ## the readable bulk of both densities. Occupancy is capped at capacity,
     ## so it sits below this bound.
     upper = max(1.0, quantile(demand, 0.98))
-    ax1 = Axis(fig[1, 1];
+    ax1 = Axis(
+        fig[1, 1];
         xlabel = "Isolation beds a week ahead (DRC)",
         ylabel = "Predictive density", title = "Need vs supply-limited use",
-        limits = ((0, upper), nothing))
-    density!(ax1, demand; color = (:darkorange, 0.35),
-        strokecolor = :darkorange, strokewidth = 2, label = "Demand (need)")
-    density!(ax1, occ; color = (:steelblue, 0.35),
+        limits = ((0, upper), nothing)
+    )
+    density!(
+        ax1, demand; color = (:darkorange, 0.35),
+        strokecolor = :darkorange, strokewidth = 2, label = "Demand (need)"
+    )
+    density!(
+        ax1, occ; color = (:steelblue, 0.35),
         strokecolor = :steelblue, strokewidth = 2,
-        label = "Occupancy (supply-limited)")
+        label = "Occupancy (supply-limited)"
+    )
     CairoMakie.axislegend(ax1; position = :rt, framevisible = false)
-    _forecast_count_panel!(fig, (1, 2), shortfall, "Bed shortfall (DRC)",
-        :firebrick)
+    _forecast_count_panel!(
+        fig, (1, 2), shortfall, "Bed shortfall (DRC)",
+        :firebrick
+    )
     return fig
 end
 
@@ -2947,38 +3435,52 @@ the reported occupancy rate starting only on 9 June, so the projected
 occupancy rides the capacity random walk back to the freeze date and the
 interval is wide.
 """
-function plot_forecast_beds_vs_truth(fc::DataFrame;
+function plot_forecast_beds_vs_truth(
+        fc::DataFrame;
         isolation::Union{Real, Missing},
-        individual::Union{Nothing, AbstractVector} = nothing)
+        individual::Union{Nothing, AbstractVector} = nothing
+    )
     (isolation !== missing && :isolation_level in propertynames(fc)) ||
         return Figure()
     v = float.(fc[!, :isolation_level])
     indiv = isnothing(individual) ? nothing : float.(individual)
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
-    upper = max(1.0, quantile(v, 0.995), float(isolation) * 1.05,
+    upper = max(
+        1.0, quantile(v, 0.995), float(isolation) * 1.05,
         isnothing(indiv) || isempty(indiv) ? 0.0 :
-        quantile(indiv, 0.995))
+            quantile(indiv, 0.995)
+    )
     fig = Figure(; size = (440, 360))
-    ax = Axis(fig[1, 1];
+    ax = Axis(
+        fig[1, 1];
         xlabel = "Isolation beds occupied at the target date (DRC)",
         ylabel = "Predictive frequency", title = "Forecast vs observed",
-        limits = ((0, upper), nothing))
+        limits = ((0, upper), nothing)
+    )
     vspan!(ax, lo, hi; color = (:steelblue, 0.15))
-    joint_h = hist!(ax, v; bins = range(0, upper; length = 30),
-        color = (:steelblue, 0.7))
+    joint_h = hist!(
+        ax, v; bins = range(0, upper; length = 30),
+        color = (:steelblue, 0.7)
+    )
     handles = Any[joint_h]
     labels = String["joint"]
     if !isnothing(indiv) && !isempty(indiv) && length(unique(indiv)) > 1
-        indiv_h = density!(ax, indiv; color = (:black, 0.0),
-            strokecolor = :black, strokewidth = 2, linestyle = :dot)
+        indiv_h = density!(
+            ax, indiv; color = (:black, 0.0),
+            strokecolor = :black, strokewidth = 2, linestyle = :dot
+        )
         push!(handles, indiv_h)
         push!(labels, "individual")
     end
-    vlines!(ax, [float(isolation)]; color = :black, linestyle = :dash,
-        linewidth = 2)
-    length(handles) > 1 && CairoMakie.axislegend(ax, handles, labels;
-        position = :rt, framevisible = false)
+    vlines!(
+        ax, [float(isolation)]; color = :black, linestyle = :dash,
+        linewidth = 2
+    )
+    length(handles) > 1 && CairoMakie.axislegend(
+        ax, handles, labels;
+        position = :rt, framevisible = false
+    )
     return fig
 end
 
@@ -3014,22 +3516,31 @@ absent from it draws the joint alone. The latent counterparts are scored
 distribution-versus-distribution by
 [`plot_forecast_vs_truth_latent`](@ref).
 """
-function plot_forecast_vs_truth(fc::DataFrame;
+function plot_forecast_vs_truth(
+        fc::DataFrame;
         observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
         breaks::NamedTuple = NamedTuple(),
-        individual::NamedTuple = NamedTuple())
+        individual::NamedTuple = NamedTuple()
+    )
     specs = (
         (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
         (:deaths_cum, :deaths_new, "suspected deaths (DRC)", :firebrick),
         (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)", :goldenrod),
-        (:confirmed_deaths_cum, :confirmed_deaths_new,
-            "confirmed deaths (DRC)", :darkorange3),
-        (:recovered_cum, :recovered_new,
-            "recovered among confirmed (DRC)", :seagreen)
+        (
+            :confirmed_deaths_cum, :confirmed_deaths_new,
+            "confirmed deaths (DRC)", :darkorange3,
+        ),
+        (
+            :recovered_cum, :recovered_new,
+            "recovered among confirmed (DRC)", :seagreen,
+        ),
     )
     streams = Vector{
-        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64, Float64,
-        Union{Nothing, Vector{Float64}}}}()
+        Tuple{
+            Symbol, Symbol, String, Symbol, Float64, Float64, Float64,
+            Union{Nothing, Vector{Float64}},
+        },
+    }()
     for (cumcol, newcol, name, colour) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
         ## Both truths are what was notified across the week, so a
@@ -3039,10 +3550,14 @@ function plot_forecast_vs_truth(fc::DataFrame;
         obs = float(observed[cumcol]) - brk
         base = float(get(baseline, cumcol, 0))
         indiv_new = haskey(individual, newcol) ?
-                    Float64.(individual[newcol]) : nothing
-        push!(streams,
-            (cumcol, newcol, name, colour, obs, obs - base, base,
-                indiv_new))
+            Float64.(individual[newcol]) : nothing
+        push!(
+            streams,
+            (
+                cumcol, newcol, name, colour, obs, obs - base, base,
+                indiv_new,
+            )
+        )
     end
     ncols = length(streams)
     ncols == 0 && return Figure()
@@ -3051,42 +3566,58 @@ function plot_forecast_vs_truth(fc::DataFrame;
     function panel!(row, col, v, obs, title, colour, indiv)
         lo = quantile(v, 0.05)
         hi = quantile(v, 0.95)
-        upper = max(1.0, quantile(v, 0.995), obs * 1.05,
+        upper = max(
+            1.0, quantile(v, 0.995), obs * 1.05,
             isnothing(indiv) || isempty(indiv) ? 0.0 :
-            quantile(indiv, 0.995))
-        ax = Axis(fig[row, col];
+                quantile(indiv, 0.995)
+        )
+        ax = Axis(
+            fig[row, col];
             xlabel = title, ylabel = "Predictive frequency",
-            limits = ((0, upper), nothing))
+            limits = ((0, upper), nothing)
+        )
         vspan!(ax, lo, hi; color = (colour, 0.15))
-        hist!(ax, v; bins = range(0, upper; length = 30),
-            color = (colour, 0.7))
+        hist!(
+            ax, v; bins = range(0, upper; length = 30),
+            color = (colour, 0.7)
+        )
         ## A dotted density rather than a second histogram, so the two fits'
         ## forecasts read apart.
         if !isnothing(indiv) && !isempty(indiv) && length(unique(indiv)) > 1
-            density!(ax, indiv; color = (:black, 0.0),
-                strokecolor = :black, strokewidth = 2, linestyle = :dot)
+            density!(
+                ax, indiv; color = (:black, 0.0),
+                strokecolor = :black, strokewidth = 2, linestyle = :dot
+            )
             any_indiv = true
         end
-        vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
+        return vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
     for (j, entry) in enumerate(streams)
         ccol, ncol, name, colour, obs_cum, obs_new, origin,
-        indiv_new = entry
+            indiv_new = entry
         ## The individual fit forecasts new counts from the frozen origin, so
         ## its cumulative overlay is anchored there.
         indiv_cum = isnothing(indiv_new) ? nothing : indiv_new .+ origin
-        panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour,
-            indiv_cum)
-        panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour,
-            indiv_new)
+        panel!(
+            1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour,
+            indiv_cum
+        )
+        panel!(
+            2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour,
+            indiv_new
+        )
     end
     if any_indiv
         joint_marker = CairoMakie.PolyElement(; color = (:grey, 0.7))
-        indiv_marker = CairoMakie.LineElement(; color = :black,
-            linestyle = :dot, linewidth = 2)
-        CairoMakie.Legend(fig[0, 1:ncols], [joint_marker, indiv_marker],
+        indiv_marker = CairoMakie.LineElement(;
+            color = :black,
+            linestyle = :dot, linewidth = 2
+        )
+        CairoMakie.Legend(
+            fig[0, 1:ncols], [joint_marker, indiv_marker],
             ["joint", "individual"]; orientation = :horizontal,
-            framevisible = false, tellwidth = false)
+            framevisible = false, tellwidth = false
+        )
     end
     return fig
 end
@@ -3107,7 +3638,7 @@ function plot_forecast_vs_truth_latent(fc::DataFrame; now::NamedTuple)
     panels = [
         (:infections_new, "New infections (DRC)", :steelblue),
         (:onsets_new, "New symptom onsets (DRC)", :seagreen),
-        (:deaths_latent_new, "New deaths (DRC)", :firebrick)
+        (:deaths_latent_new, "New deaths (DRC)", :firebrick),
     ]
     ncols = length(panels)
     fig = Figure(; size = (370 * ncols, 380))
@@ -3116,16 +3647,24 @@ function plot_forecast_vs_truth_latent(fc::DataFrame; now::NamedTuple)
         vf = float.(fc[!, col])
         vn = float.(getproperty(now, col))
         upper = max(1.0, quantile(vf, 0.99), quantile(vn, 0.99))
-        ax = Axis(fig[1, j];
+        ax = Axis(
+            fig[1, j];
             xlabel = title, ylabel = "Posterior density",
-            limits = ((0, upper), nothing))
-        frozen_h = density!(ax, vf; color = (colour, 0.25),
-            strokecolor = colour, strokewidth = 2)
-        now_h = density!(ax, vn; color = (:grey, 0.0),
-            strokecolor = :black, strokewidth = 2, linestyle = :dash)
+            limits = ((0, upper), nothing)
+        )
+        frozen_h = density!(
+            ax, vf; color = (colour, 0.25),
+            strokecolor = colour, strokewidth = 2
+        )
+        now_h = density!(
+            ax, vn; color = (:grey, 0.0),
+            strokecolor = :black, strokewidth = 2, linestyle = :dash
+        )
     end
-    CairoMakie.Legend(fig[1, ncols + 1], [frozen_h, now_h],
-        ["Forecast last week", "Estimated now"])
+    CairoMakie.Legend(
+        fig[1, ncols + 1], [frozen_h, now_h],
+        ["Forecast last week", "Estimated now"]
+    )
     return fig
 end
 
@@ -3136,8 +3675,10 @@ end
 ## the latest vintage, so the last vintage is always labelled. Once a weekly
 ## cadence would need more than `max_ticks` labels the step widens in whole
 ## weeks. A series too short to carry three ticks keeps every vintage.
-function _vintage_ticks(dates::AbstractVector; step_days::Integer = 7,
-        max_ticks::Integer = 18)
+function _vintage_ticks(
+        dates::AbstractVector; step_days::Integer = 7,
+        max_ticks::Integer = 18
+    )
     n = length(dates)
     n == 0 && return (Int[], String[])
     ds = [d isa Date ? d : Date(String(d)) for d in dates]
@@ -3189,9 +3730,10 @@ vintage.
 """
 function plot_vintage_conditional_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
-        max_date::Union{Nothing, Date, AbstractString} = nothing)
+        max_date::Union{Nothing, Date, AbstractString} = nothing
+    )
     cap = isnothing(max_date) ? nothing :
-          (max_date isa Date ? max_date : Date(String(max_date)))
+        (max_date isa Date ? max_date : Date(String(max_date)))
     ## An empty panel set has no grid to lay out, so return a blank figure
     ## rather than dividing by zero.
     isempty(panels) && return Figure()
@@ -3208,7 +3750,7 @@ function plot_vintage_conditional_ppc(
         ## date. The replicates and observed counts are truncated to match,
         ## keeping the conditional baselines aligned.
         keep = isnothing(cap) ? eachindex(p.dates) :
-               [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
+            [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
         dates = p.dates[keep]
         observed = p.observed[keep]
         replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
@@ -3222,11 +3764,13 @@ function plot_vintage_conditional_ppc(
         ## baseline for each step (`y_0 = 0`). `obs_prev[v]` is `y_{v-1}`.
         obs_cum = float.(observed)
         obs_prev = cumulative ?
-                   [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
+            [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
         ## `ylabel` lets a panel that is neither a running total nor a
         ## per-day flow name its own axis.
-        ylabel = get(p, :ylabel,
-            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count")
+        ylabel = get(
+            p, :ylabel,
+            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count"
+        )
         ## Each draw's conditional cumulative at vintage `v` is the observed
         ## previous cumulative plus the drawn increment `Δ_v`, with a zero
         ## baseline for a non-cumulative panel.
@@ -3234,21 +3778,25 @@ function plot_vintage_conditional_ppc(
         q(i, pr) = quantile([c[i] for c in cond], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]
-        lo60 = [q(i, 0.20) for i in 1:n]
-        hi60 = [q(i, 0.80) for i in 1:n]
+        lo60 = [q(i, 0.2) for i in 1:n]
+        hi60 = [q(i, 0.8) for i in 1:n]
         lo30 = [q(i, 0.35) for i in 1:n]
         hi30 = [q(i, 0.65) for i in 1:n]
         x = collect(1:n)
         ## Truncate the y-axis to a ceiling driven by the observed counts and
         ## the 60% band, so a heavy upper tail does not flatten the visible
         ## detail. The band clips at the axis limit.
-        yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
-            isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
-        ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
+        yupper = 1.6 * max(
+            isempty(obs_cum) ? 1.0 : maximum(obs_cum),
+            isempty(hi60) ? 1.0 : maximum(hi60), 1.0
+        )
+        ax = Axis(
+            fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = ylabel,
             xticks = _vintage_ticks(dates),
             xticklabelrotation = pi / 4, xticklabelsize = 11,
-            limits = (nothing, (0, yupper)))
+            limits = (nothing, (0, yupper))
+        )
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
@@ -3275,9 +3823,10 @@ increments, so they are the modelled incidence directly and are summarised as
 """
 function plot_vintage_incidence_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
-        max_date::Union{Nothing, Date, AbstractString} = nothing)
+        max_date::Union{Nothing, Date, AbstractString} = nothing
+    )
     cap = isnothing(max_date) ? nothing :
-          (max_date isa Date ? max_date : Date(String(max_date)))
+        (max_date isa Date ? max_date : Date(String(max_date)))
     ## An empty panel set has no grid to lay out, so return a blank figure
     ## rather than dividing by zero.
     isempty(panels) && return Figure()
@@ -3291,7 +3840,7 @@ function plot_vintage_incidence_ppc(
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
         keep = isnothing(cap) ? eachindex(p.dates) :
-               [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
+            [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
         dates = p.dates[keep]
         observed = p.observed[keep]
         replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
@@ -3303,8 +3852,10 @@ function plot_vintage_incidence_ppc(
         ## standalone count for a non-cumulative panel.
         obs_cum = float.(observed)
         obs_inc = cumulative ?
-                  [v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
-                   for v in 1:n] : obs_cum
+            [
+                v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
+                for v in 1:n
+            ] : obs_cum
         ## As in the conditional view, `ylabel` overrides the default.
         ylabel = get(p, :ylabel, col == 1 ? "New per vintage" : "")
         ## The replicates are already per-vintage increments (per-day counts
@@ -3312,18 +3863,22 @@ function plot_vintage_incidence_ppc(
         q(i, pr) = quantile([r[i] for r in replicates], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]
-        lo60 = [q(i, 0.20) for i in 1:n]
-        hi60 = [q(i, 0.80) for i in 1:n]
+        lo60 = [q(i, 0.2) for i in 1:n]
+        hi60 = [q(i, 0.8) for i in 1:n]
         lo30 = [q(i, 0.35) for i in 1:n]
         hi30 = [q(i, 0.65) for i in 1:n]
         x = collect(1:n)
-        yupper = 1.6 * max(isempty(obs_inc) ? 1.0 : maximum(obs_inc),
-            isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
-        ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
+        yupper = 1.6 * max(
+            isempty(obs_inc) ? 1.0 : maximum(obs_inc),
+            isempty(hi60) ? 1.0 : maximum(hi60), 1.0
+        )
+        ax = Axis(
+            fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = ylabel,
             xticks = _vintage_ticks(dates),
             xticklabelrotation = pi / 4, xticklabelsize = 11,
-            limits = (nothing, (0, yupper)))
+            limits = (nothing, (0, yupper))
+        )
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
@@ -3358,25 +3913,37 @@ function plot_stream_calibration(tbl::DataFrame)
     height = max(360, 60 + 26 * n)
     fig = Figure(; size = (980, height))
 
-    ax1 = Axis(fig[1, 1];
+    ax1 = Axis(
+        fig[1, 1];
         xlabel = "Empirical coverage", title = "Interval coverage",
-        yticks = (y, streams), limits = ((0, 1), nothing))
+        yticks = (y, streams), limits = ((0, 1), nothing)
+    )
     ## Nominal reference lines. A marker on its line is well calibrated.
-    vlines!(ax1, [0.5]; color = (:steelblue, 0.6), linestyle = :dash,
-        linewidth = 2)
-    vlines!(ax1, [0.9]; color = (:seagreen, 0.6), linestyle = :dash,
-        linewidth = 2)
+    vlines!(
+        ax1, [0.5]; color = (:steelblue, 0.6), linestyle = :dash,
+        linewidth = 2
+    )
+    vlines!(
+        ax1, [0.9]; color = (:seagreen, 0.6), linestyle = :dash,
+        linewidth = 2
+    )
     h50 = scatter!(ax1, cov50, y; color = :steelblue, markersize = 11)
-    h90 = scatter!(ax1, cov90, y; color = :seagreen, markersize = 11,
-        marker = :diamond)
-    CairoMakie.axislegend(ax1, [h50, h90], ["50% interval", "90% interval"];
-        position = :lt, framevisible = false)
+    h90 = scatter!(
+        ax1, cov90, y; color = :seagreen, markersize = 11,
+        marker = :diamond
+    )
+    CairoMakie.axislegend(
+        ax1, [h50, h90], ["50% interval", "90% interval"];
+        position = :lt, framevisible = false
+    )
 
     ## Zero is unbiased. The sign flags over- or under-prediction.
     bmax = max(1.0, maximum(abs.(bias)) * 1.1)
-    ax2 = Axis(fig[1, 2];
+    ax2 = Axis(
+        fig[1, 2];
         xlabel = "Mean forecast bias", title = "Forecast bias",
-        yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing))
+        yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing)
+    )
     vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 2)
     scatter!(ax2, bias, y; color = :firebrick, markersize = 11)
     return fig
@@ -3395,42 +3962,58 @@ the axis is a fit where most of the model has not converged. The axis runs
 to the worst fit's `clip` quantile so one extreme parameter cannot stretch
 it, and anything beyond that is drawn at the right edge.
 """
-function plot_rhat_spread(fits::Pair{String}...; xmax = nothing,
+function plot_rhat_spread(
+        fits::Pair{String}...; xmax = nothing,
         clip::Real = 0.995, thresholds = (1.01, 1.1),
-        title::AbstractString = "Spread of R-hat across parameters")
-    series = [(f.first, sort(filter(isfinite, _as_diagnostics(f.second).rhat)))
-              for f in fits]
+        title::AbstractString = "Spread of R-hat across parameters"
+    )
+    series = [
+        (f.first, sort(filter(isfinite, _as_diagnostics(f.second).rhat)))
+            for f in fits
+    ]
     series = [s for s in series if !isempty(s[2])]
     if isempty(series)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], "No fit carries R-hat diagnostics.";
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], "No fit carries R-hat diagnostics.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     hi = isnothing(xmax) ?
-         max(maximum(quantile(v, clip) for (_, v) in series),
-        maximum(thresholds) + 0.01) : float(xmax)
+        max(
+            maximum(quantile(v, clip) for (_, v) in series),
+            maximum(thresholds) + 0.01
+        ) : float(xmax)
     colours = CairoMakie.Makie.wong_colors()
     fig = Figure(; size = (860, 420))
-    ax = Axis(fig[1, 1]; title = title, xlabel = "R-hat",
-        ylabel = "Share of parameters at or below")
-    vlines!(ax, collect(thresholds); color = (:grey, 0.6),
-        linestyle = :dash, linewidth = 1.5)
+    ax = Axis(
+        fig[1, 1]; title = title, xlabel = "R-hat",
+        ylabel = "Share of parameters at or below"
+    )
+    vlines!(
+        ax, collect(thresholds); color = (:grey, 0.6),
+        linestyle = :dash, linewidth = 1.5
+    )
     handles = Any[]
     labels = String[]
     for (i, (label, v)) in enumerate(series)
         x = clamp.(v, 1.0, hi)
         y = collect(1:length(x)) ./ length(x)
-        h = lines!(ax, x, y; color = colours[mod1(i, length(colours))],
-            linewidth = 2)
+        h = lines!(
+            ax, x, y; color = colours[mod1(i, length(colours))],
+            linewidth = 2
+        )
         push!(handles, h)
         push!(labels, String(label))
     end
     CairoMakie.xlims!(ax, 1.0, hi)
     CairoMakie.ylims!(ax, 0.0, 1.02)
-    CairoMakie.Legend(fig[2, 1], handles, labels;
+    CairoMakie.Legend(
+        fig[2, 1], handles, labels;
         orientation = :horizontal, framevisible = true,
-        tellheight = true, tellwidth = false, nbanks = 2)
+        tellheight = true, tellwidth = false, nbanks = 2
+    )
     return fig
 end
 
@@ -3440,10 +4023,14 @@ end
 # copy of a sampled vector carries identical diagnostics, so a parameter
 # whose diagnostics repeat one already picked is dropped rather than drawn
 # twice.
-function _worst_vector_parameters(df::DataFrame, n::Integer;
-        min_elements::Integer = 8)
-    groups = [g for g in unique(df.parameter)
-              if count(==(g), df.parameter) >= min_elements]
+function _worst_vector_parameters(
+        df::DataFrame, n::Integer;
+        min_elements::Integer = 8
+    )
+    groups = [
+        g for g in unique(df.parameter)
+            if count(==(g), df.parameter) >= min_elements
+    ]
     isempty(groups) && return String[]
     mins = [_min_finite(df.ess_bulk[df.parameter .== g]) for g in groups]
     ord = sortperm(replace(mins, NaN => Inf))
@@ -3470,22 +4057,28 @@ latent series a higher index is later in the outbreak. Bad mixing piled up
 at one end of a panel is a problem confined to that stretch of the window.
 Bad mixing spread evenly across a panel is a problem with the whole walk.
 """
-function plot_parameter_index_diagnostics(fit;
+function plot_parameter_index_diagnostics(
+        fit;
         groups::Union{Nothing, AbstractVector} = nothing,
         n_groups::Integer = 3, min_elements::Integer = 8,
         rhat_threshold::Real = 1.1, ess_threshold::Real = 100,
         labels = Dict{Symbol, String}(),
         title::AbstractString =
-        "Mixing along the worst vector-valued parameters")
+            "Mixing along the worst vector-valued parameters"
+    )
     df = _as_diagnostics(fit)
     picked = isnothing(groups) ?
-             _worst_vector_parameters(df, n_groups;
-        min_elements = min_elements) : [String(g) for g in groups]
+        _worst_vector_parameters(
+            df, n_groups;
+            min_elements = min_elements
+        ) : [String(g) for g in groups]
     if isempty(picked)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1],
+        CairoMakie.Label(
+            fig[1, 1],
             "No vector-valued parameter carries diagnostics.";
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     fig = Figure(; size = (860, 230 * length(picked) + 110))
@@ -3494,21 +4087,29 @@ function plot_parameter_index_diagnostics(fit;
     for (i, g) in enumerate(picked)
         sub = df[df.parameter .== g, :]
         sub = sub[sortperm(sub.index), :]
-        ax = Axis(fig[i, 1]; title = String(get(labels, Symbol(g), g)),
+        ax = Axis(
+            fig[i, 1]; title = String(get(labels, Symbol(g), g)),
             xlabel = i == length(picked) ? "Element index" : "",
-            ylabel = "Bulk effective sample size", yscale = log10)
-        hlines!(ax, [float(ess_threshold)]; color = (:grey, 0.6),
-            linestyle = :dash, linewidth = 1.5)
+            ylabel = "Bulk effective sample size", yscale = log10
+        )
+        hlines!(
+            ax, [float(ess_threshold)]; color = (:grey, 0.6),
+            linestyle = :dash, linewidth = 1.5
+        )
         y = [isnan(v) ? 1.0 : max(v, 1.0) for v in sub.ess_bulk]
         bad = sub.rhat .> rhat_threshold
         if any(.!bad)
-            h = scatter!(ax, sub.index[.!bad], y[.!bad];
-                color = :steelblue, markersize = 6)
+            h = scatter!(
+                ax, sub.index[.!bad], y[.!bad];
+                color = :steelblue, markersize = 6
+            )
             ok_handle = something(ok_handle, h)
         end
         if any(bad)
-            h = scatter!(ax, sub.index[bad], y[bad];
-                color = :firebrick, markersize = 6)
+            h = scatter!(
+                ax, sub.index[bad], y[bad];
+                color = :firebrick, markersize = 6
+            )
             bad_handle = something(bad_handle, h)
         end
     end
@@ -3524,9 +4125,11 @@ function plot_parameter_index_diagnostics(fit;
         push!(legend_labels, "R-hat above $(rhat_threshold)")
     end
     isempty(handles) ||
-        CairoMakie.Legend(fig[length(picked) + 1, 1], handles, legend_labels;
-            orientation = :horizontal, framevisible = true,
-            tellheight = true, tellwidth = false)
+        CairoMakie.Legend(
+        fig[length(picked) + 1, 1], handles, legend_labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
     return fig
 end
 
@@ -3541,15 +4144,19 @@ posterior, which points at the sampler settings. Ticks piled into one shaded
 stretch are divergences confined to one region, which points at the geometry
 there.
 """
-function plot_divergence_locations(chn, params::AbstractVector;
+function plot_divergence_locations(
+        chn, params::AbstractVector;
         labels = Dict{Symbol, String}(), ncols::Integer = 3,
         title::AbstractString =
-        "Divergent draws against the full posterior")
+            "Divergent draws against the full posterior"
+    )
     flag = _divergent_flags(chn)
     if !any(flag)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], "No divergent transitions to place.";
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], "No divergent transitions to place.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     usedcols = min(ncols, length(params))
@@ -3558,19 +4165,29 @@ function plot_divergence_locations(chn, params::AbstractVector;
     for (i, p) in enumerate(params)
         r, c = fldmod1(i, usedcols)
         x = Float64.(vec(collect(chn[p])))
-        ax = Axis(fig[r, c];
+        ax = Axis(
+            fig[r, c];
             title = String(get(labels, Symbol(p), string(p))),
-            ylabel = c == 1 ? "Density" : "")
+            ylabel = c == 1 ? "Density" : ""
+        )
         xd = x[flag]
-        vspan!(ax, quantile(xd, 0.05), quantile(xd, 0.95);
-            color = (:firebrick, 0.12))
-        density!(ax, x; color = (:steelblue, 0.35),
-            strokecolor = :steelblue, strokewidth = 1.5)
-        scatter!(ax, xd, fill(0.0, length(xd)); color = (:firebrick, 0.6),
-            marker = :vline, markersize = 10)
+        vspan!(
+            ax, quantile(xd, 0.05), quantile(xd, 0.95);
+            color = (:firebrick, 0.12)
+        )
+        density!(
+            ax, x; color = (:steelblue, 0.35),
+            strokecolor = :steelblue, strokewidth = 1.5
+        )
+        scatter!(
+            ax, xd, fill(0.0, length(xd)); color = (:firebrick, 0.6),
+            marker = :vline, markersize = 10
+        )
     end
-    CairoMakie.Label(fig[0, 1:usedcols], title; font = :bold,
-        tellwidth = false)
+    CairoMakie.Label(
+        fig[0, 1:usedcols], title; font = :bold,
+        tellwidth = false
+    )
     return fig
 end
 
@@ -3585,43 +4202,61 @@ comparison does. A point far below it is a parameter that mixes on its own
 and stops mixing in the reference, so the cause is what the reference adds
 rather than the parameter.
 """
-function plot_diagnostic_contrast(df::DataFrame;
+function plot_diagnostic_contrast(
+        df::DataFrame;
         xlabel::AbstractString = "Bulk effective sample size, comparison fit",
         ylabel::AbstractString = "Bulk effective sample size, reference fit",
-        title::AbstractString = "Mixing in the reference against each fit")
+        title::AbstractString = "Mixing in the reference against each fit"
+    )
     if isempty(df)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1], "No parameter is shared between fits.";
-            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        CairoMakie.Label(
+            fig[1, 1], "No parameter is shared between fits.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
         return fig
     end
     colours = CairoMakie.Makie.wong_colors()
     fig = Figure(; size = (860, 460))
-    ax = Axis(fig[1, 1]; title = title, xlabel = xlabel, ylabel = ylabel,
-        xscale = log10, yscale = log10)
+    ax = Axis(
+        fig[1, 1]; title = title, xlabel = xlabel, ylabel = ylabel,
+        xscale = log10, yscale = log10
+    )
     ## Both axes cover the same span so the equality line runs corner to
     ## corner and the distance below it reads the same on either axis.
-    lo = max(1.0, 0.8 * min(minimum(df.ess_bulk),
-        minimum(df.ess_bulk_reference)))
-    hi = 1.25 * max(maximum(df.ess_bulk), maximum(df.ess_bulk_reference),
-        lo + 1)
-    lines!(ax, [lo, hi], [lo, hi]; color = (:grey, 0.7), linestyle = :dash,
-        linewidth = 1.5)
+    lo = max(
+        1.0, 0.8 * min(
+            minimum(df.ess_bulk),
+            minimum(df.ess_bulk_reference)
+        )
+    )
+    hi = 1.25 * max(
+        maximum(df.ess_bulk), maximum(df.ess_bulk_reference),
+        lo + 1
+    )
+    lines!(
+        ax, [lo, hi], [lo, hi]; color = (:grey, 0.7), linestyle = :dash,
+        linewidth = 1.5
+    )
     handles = Any[]
     labels = String[]
     for (i, f) in enumerate(unique(df.fit))
         cell = df[df.fit .== f, :]
-        h = scatter!(ax, clamp.(cell.ess_bulk, lo, hi),
+        h = scatter!(
+            ax, clamp.(cell.ess_bulk, lo, hi),
             clamp.(cell.ess_bulk_reference, lo, hi);
             color = (colours[mod1(i, length(colours))], 0.6),
-            markersize = 7)
+            markersize = 7
+        )
         push!(handles, h)
         push!(labels, String(f))
     end
     CairoMakie.xlims!(ax, lo, hi)
     CairoMakie.ylims!(ax, lo, hi)
-    CairoMakie.Legend(fig[2, 1], handles, labels;
+    CairoMakie.Legend(
+        fig[2, 1], handles, labels;
         orientation = :horizontal, framevisible = true,
-        tellheight = true, tellwidth = false, nbanks = 2)
+        tellheight = true, tellwidth = false, nbanks = 2
+    )
     return fig
 end

@@ -16,7 +16,7 @@
     df = comparison_table(C)
     @test df isa DataFrame
     @test names(df) ==
-          ["Scenario", "Reported cases", "Narrowest interval"]
+        ["Scenario", "Reported cases", "Narrowest interval"]
     @test nrow(df) == length(REPORT_SCENARIOS)
     @test df[!, "Scenario"] == [label for (label, _) in REPORT_SCENARIOS]
     @test df[!, "Reported cases"] == [val for (_, val) in REPORT_SCENARIOS]

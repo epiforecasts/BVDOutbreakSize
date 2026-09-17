@@ -2,8 +2,8 @@
 ## is fitted with NUTS (two chains) so the chain carries the R-hat,
 ## ESS and numerical-error (divergence) information the helpers read.
 
-@testitem "fit_diagnostics summarises rhat, ess and divergences" tags=[
-    :slow
+@testitem "fit_diagnostics summarises rhat, ess and divergences" tags = [
+    :slow,
 ] begin
     using Distributions: Normal
     using Turing: @model
@@ -25,7 +25,7 @@
     @test d.n_divergent >= 0
 end
 
-@testitem "diagnostics_table has one row per fit" tags=[:slow] begin
+@testitem "diagnostics_table has one row per fit" tags = [:slow] begin
     using DataFrames: DataFrame, nrow
     using Distributions: Normal
     using Turing: @model
@@ -44,6 +44,6 @@ end
     @test tbl isa DataFrame
     @test nrow(tbl) == 2
     @test sort(string.(propertynames(tbl))) ==
-          sort(["fit", "max_rhat", "min_ess_bulk", "divergences"])
+        sort(["fit", "max_rhat", "min_ess_bulk", "divergences"])
     @test all(tbl.divergences .>= 0)
 end

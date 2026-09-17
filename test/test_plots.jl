@@ -8,8 +8,8 @@
     CairoMakie.activate!(type = "png")
 end
 
-@testitem "plot_cumulative_cases returns a figure-grid" setup=[
-    HeadlessMakie
+@testitem "plot_cumulative_cases returns a figure-grid" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_cumulative_cases
@@ -22,22 +22,24 @@ end
     @test fg.figure isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_density_overlay returns a figure-grid" setup=[
-    HeadlessMakie
+@testitem "plot_density_overlay returns a figure-grid" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_density_overlay
     rng = MersenneTwister(14)
     a = randn(rng, 300) .* 5 .+ 50
     b = randn(rng, 300) .* 5 .+ 40
-    fg = plot_density_overlay("fit A" => a, "fit B" => b;
-        xlabel = "Seeding time", title = "by clock rate")
+    fg = plot_density_overlay(
+        "fit A" => a, "fit B" => b;
+        xlabel = "Seeding time", title = "by clock rate"
+    )
     @test fg !== nothing
     @test fg.figure isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_posterior_predictive returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_posterior_predictive
@@ -48,8 +50,8 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive lays out four streams" setup=[
-    HeadlessMakie
+@testitem "plot_posterior_predictive lays out four streams" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_posterior_predictive
@@ -59,12 +61,13 @@ end
         pp_cases = rand(rng, 0:30, 400), obs_cases = 20,
         pp_exports_deaths = rand(rng, 0:3, 400), obs_exports_deaths = 1,
         pp_confirmed_deaths = rand(rng, 0:30, 400),
-        obs_confirmed_deaths = 17)
+        obs_confirmed_deaths = 17
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_prior_predictive returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_prior_predictive returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_prior_predictive
@@ -75,25 +78,30 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive_grid lays out four columns" setup=[
-    HeadlessMakie
+@testitem "plot_posterior_predictive_grid lays out four columns" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize
     rng = MersenneTwister(17)
-    streams = (; exports = rand(rng, 0:10, 300),
+    streams = (;
+        exports = rand(rng, 0:10, 300),
         exports_deaths = rand(rng, 0:3, 300),
         deaths = rand(rng, 0:60, 300),
-        cases = rand(rng, 0:30, 300))
-    observed = (; exports = 2, exports_deaths = 1,
-        deaths = 40, cases = 20)
+        cases = rand(rng, 0:30, 300),
+    )
+    observed = (;
+        exports = 2, exports_deaths = 1,
+        deaths = 40, cases = 20,
+    )
     fig = BVDOutbreakSize.plot_posterior_predictive_grid(;
-        individual = streams, joint = streams, observed = observed)
+        individual = streams, joint = streams, observed = observed
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive_grid floats vector draws" setup=[
-    HeadlessMakie
+@testitem "plot_posterior_predictive_grid floats vector draws" setup = [
+    HeadlessMakie,
 ] begin
     ## predict returns vector-valued observations (e.g. per-vintage
     ## total_deaths) as a Vector{Vector{Int}}; rendering must not throw
@@ -102,14 +110,19 @@ end
     using BVDOutbreakSize
     rng = MersenneTwister(23)
     vecdraws(n, r) = [rand(rng, r, 1) for _ in 1:n]
-    streams = (; exports = rand(rng, 0:10, 300),
+    streams = (;
+        exports = rand(rng, 0:10, 300),
         exports_deaths = rand(rng, 0:3, 300),
         deaths = vecdraws(300, 0:60),
-        cases = vecdraws(300, 0:30))
-    observed = (; exports = 2, exports_deaths = 1,
-        deaths = 40, cases = 20)
+        cases = vecdraws(300, 0:30),
+    )
+    observed = (;
+        exports = 2, exports_deaths = 1,
+        deaths = 40, cases = 20,
+    )
     fig = BVDOutbreakSize.plot_posterior_predictive_grid(;
-        individual = streams, joint = streams, observed = observed)
+        individual = streams, joint = streams, observed = observed
+    )
     @test fig isa CairoMakie.Makie.Figure
     ## Saving forces Makie to compute data limits, where the
     ## isfinite regression manifested.
@@ -118,7 +131,7 @@ end
     @test isfile(path)
 end
 
-@testitem "plot_pair returns a renderable object" setup=[HeadlessMakie] begin
+@testitem "plot_pair returns a renderable object" setup = [HeadlessMakie] begin
     using Distributions: Normal
     using Turing: @model, sample, Prior
     import FlexiChains
@@ -131,13 +144,15 @@ end
         b ~ Normal(2.0, 0.5)
     end
 
-    chn = sample(_plot_model(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _plot_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     obj = plot_pair(chn, [:a, :b]; thin = 4)
     @test obj !== nothing
 end
 
-@testitem "plot_pair overlays a prior series" setup=[HeadlessMakie] begin
+@testitem "plot_pair overlays a prior series" setup = [HeadlessMakie] begin
     using Distributions: Normal
     using Turing: @model, sample, Prior
     import FlexiChains
@@ -150,14 +165,16 @@ end
         b ~ Normal(2.0, 0.5)
     end
 
-    chn = sample(_plot_model(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _plot_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     obj = plot_pair(chn, [:a, :b]; thin = 4, prior = chn)
     @test obj !== nothing
 end
 
-@testitem "plot_correlation_heatmap returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_correlation_heatmap returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Distributions: Normal
     using Turing: @model, sample, Prior
@@ -170,48 +187,54 @@ end
         c ~ Normal(-1.0, 2.0)
     end
 
-    chn = sample(_corr_model(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
-    fig = plot_correlation_heatmap(chn, [:a, :b, :c];
-        labels = Dict(:a => "A", :b => "B"))
+    chn = sample(
+        _corr_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    fig = plot_correlation_heatmap(
+        chn, [:a, :b, :c];
+        labels = Dict(:a => "A", :b => "B")
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_stream_pairs returns a renderable object" setup=[
-    HeadlessMakie
+@testitem "plot_stream_pairs returns a renderable object" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_stream_pairs
     rng = MersenneTwister(7)
-    modelled = (; cases = randn(rng, 300) .* 50 .+ 1000,
-        deaths = randn(rng, 300) .* 20 .+ 250)
+    modelled = (;
+        cases = randn(rng, 300) .* 50 .+ 1000,
+        deaths = randn(rng, 300) .* 20 .+ 250,
+    )
     observed = (; cases = 1077.0, deaths = 246.0)
     obj = plot_stream_pairs(modelled, observed)
     @test obj !== nothing
 end
 
-@testitem "plot_estimate_comparison returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_estimate_comparison returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_estimate_comparison
     rows = [
         ("Source A", 313, 39, 870),
         ("Source B", 501, 402, 612),
-        ("Our model", 240, 150, 400)
+        ("Our model", 240, 150, 400),
     ]
     fig = plot_estimate_comparison(rows)
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_estimate_evolution returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_estimate_evolution returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_estimate_evolution
     ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
     rows = [
         ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
         ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
-        ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
+        ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103),
     ]
     ## Released series only, drawn as discrete per-date marks.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
@@ -220,16 +243,19 @@ end
     renewal = [
         ("2026-05-20", 1666, 1400, 2000, 1100, 2400, 900, 2900),
         ("2026-05-23", 1900, 1600, 2300, 1300, 2700, 1000, 3300),
-        ("2026-05-28", 4000, 3500, 4600, 3000, 5200, 2500, 6000)
+        ("2026-05-28", 4000, 3500, 4600, 3000, 5200, 2500, 6000),
     ]
     ## `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
     trajectory = (
         ["2026-05-20", "2026-05-23", "2026-05-28"],
         [1500, 1800, 3800], [2100, 2400, 4400],
         [1200, 1400, 3200], [2500, 2800, 5000],
-        [900, 1000, 2600], [3000, 3400, 5800])
-    fig = plot_estimate_evolution(rows; renewal = renewal,
-        trajectory = trajectory)
+        [900, 1000, 2600], [3000, 3400, 5800],
+    )
+    fig = plot_estimate_evolution(
+        rows; renewal = renewal,
+        trajectory = trajectory
+    )
     @test fig isa CairoMakie.Makie.Figure
 
     ## Marks sharing a date (two released estimates at one cut-off, and a
@@ -238,28 +264,30 @@ end
         ("2026-05-18", 972, 813, 1170, 668, 1510, 478, 2437),
         ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
         ("2026-06-07", 4509, 4250, 5176, 3845, 5931, 3213, 7665),
-        ("2026-06-07", 4161, 3498, 5018, 2958, 6822, 2345, 12421)
+        ("2026-06-07", 4161, 3498, 5018, 2958, 6822, 2345, 12421),
     ]
     same_date_renewal = [
-        ("2026-05-18", 1100, 900, 1300, 750, 1500, 600, 1900)
+        ("2026-05-18", 1100, 900, 1300, 750, 1500, 600, 1900),
     ]
     @test plot_estimate_evolution(same_date; renewal = same_date_renewal) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
 end
 
-@testitem "plot_estimate_evolution widens a degenerate trajectory" setup=[
-    HeadlessMakie
+@testitem "plot_estimate_evolution widens a degenerate trajectory" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_estimate_evolution
     rows = [
         ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
-        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1),
     ]
     ## Both trajectory dates collapse to the same day, the basic
     ## reproduction number's case where its release history begins at the
     ## current release: a naive band would have zero width and vanish.
-    traj = (["2026-07-08", "2026-07-08"], [1.4, 1.4], [1.6, 1.6],
-        [1.3, 1.3], [1.7, 1.7], [1.1, 1.1], [1.9, 1.9])
+    traj = (
+        ["2026-07-08", "2026-07-08"], [1.4, 1.4], [1.6, 1.6],
+        [1.3, 1.3], [1.7, 1.7], [1.1, 1.1], [1.9, 1.9],
+    )
     fig = plot_estimate_evolution(rows; trajectory = traj)
     @test fig isa CairoMakie.Makie.Figure
     ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
@@ -269,7 +297,7 @@ end
     @test maximum(xs) > minimum(xs)
 end
 
-@testitem "plot_evolution_by_group empty and filled" setup=[HeadlessMakie] begin
+@testitem "plot_evolution_by_group empty and filled" setup = [HeadlessMakie] begin
     using BVDOutbreakSize: plot_evolution_by_group
     ## Every group empty is the state before any per-dataset estimate is
     ## saved: the guard must return the note figure, not throw.
@@ -278,26 +306,26 @@ end
     ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
     joint = [
         ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
-        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1),
     ]
     cases = [
         ("2026-06-21", 1.6, 1.4, 1.8, 1.2, 2.0, 1.0, 2.4),
-        ("2026-07-08", 1.9, 1.7, 2.1, 1.5, 2.4, 1.2, 2.9)
+        ("2026-07-08", 1.9, 1.7, 2.1, 1.5, 2.4, 1.2, 2.9),
     ]
     ## A group with no estimates is dropped rather than drawn as an empty
     ## panel, the recovered case where no individual fit exists.
     groups = ["joint" => joint, "cases" => cases, "recovered" => NamedTuple[]]
     @test plot_evolution_by_group(groups; refline = 1.0) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
 end
 
-@testitem "plot_evolution_by_group draws a per-group trajectory" setup=[
-    HeadlessMakie
+@testitem "plot_evolution_by_group draws a per-group trajectory" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_evolution_by_group
     joint = [
         ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
-        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1),
     ]
     ## A single release, the case a per-dataset history usually starts from
     ## (R22): the group's own trajectory is what makes a one-point panel
@@ -307,16 +335,20 @@ end
 
     ## Both trajectory dates collapse to the single release date, the
     ## degenerate case a single-release history produces.
-    traj = (["2026-07-08", "2026-07-08"], [1.8, 1.8], [2.0, 2.0],
-        [1.6, 1.6], [2.2, 2.2], [1.3, 1.3], [2.6, 2.6])
+    traj = (
+        ["2026-07-08", "2026-07-08"], [1.8, 1.8], [2.0, 2.0],
+        [1.6, 1.6], [2.2, 2.2], [1.3, 1.3], [2.6, 2.6],
+    )
     fig = plot_evolution_by_group(groups; trajectories = Dict("cases" => traj))
     @test fig isa CairoMakie.Makie.Figure
 
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
     cases_ax = only(a for a in axes if a.title[] == "cases")
     joint_ax = only(a for a in axes if a.title[] == "joint")
-    cases_bands = [p for p in cases_ax.scene.plots
-                   if p isa CairoMakie.Makie.Band]
+    cases_bands = [
+        p for p in cases_ax.scene.plots
+            if p isa CairoMakie.Makie.Band
+    ]
     ## The trajectory is drawn in the "cases" panel as a real, non-zero-width
     ## band even though both its dates are the same calendar day.
     @test length(cases_bands) == 3
@@ -326,15 +358,19 @@ end
     @test !any(p -> p isa CairoMakie.Makie.Band, joint_ax.scene.plots)
 end
 
-@testitem "plot_evolution_by_group honours shared_yrange=false" setup=[
-    HeadlessMakie
+@testitem "plot_evolution_by_group honours shared_yrange=false" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_evolution_by_group
 
     ## "joint" reaches far higher than "exports", the outbreak-size case where
     ## a shared axis would squash the small-scale panel to a hairline.
-    joint = [("2026-07-08", 50000.0, 48000.0, 52000.0,
-        46000.0, 54000.0, 44000.0, 56000.0)]
+    joint = [
+        (
+            "2026-07-08", 50000.0, 48000.0, 52000.0,
+            46000.0, 54000.0, 44000.0, 56000.0,
+        ),
+    ]
     exports = [("2026-07-08", 4.0, 3.0, 5.0, 2.0, 6.0, 1.0, 7.0)]
     groups = ["joint" => joint, "exports" => exports]
 
@@ -352,42 +388,52 @@ end
     ## The default (shared_yrange = true) instead gives every panel the
     ## same, joint-dominated limit.
     shared_fig = plot_evolution_by_group(groups)
-    shared_axes = [x for x in shared_fig.content
-                   if x isa CairoMakie.Makie.Axis]
+    shared_axes = [
+        x for x in shared_fig.content
+            if x isa CairoMakie.Makie.Axis
+    ]
     shared_joint = only(a for a in shared_axes if a.title[] == "joint")
     shared_exports = only(a for a in shared_axes if a.title[] == "exports")
     @test shared_joint.limits[][2] == shared_exports.limits[][2]
 end
 
-@testitem "plot_forecast_overlay empty and filled" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_overlay empty and filled" setup = [HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
     using Dates: Date, Day
     ## A zero-row overlay is the state before any release stores a forecast:
     ## the guard must return the note figure, not throw.
-    empty = DataFrame(stream = String[], made_date = Date[], horizon = Int[],
+    empty = DataFrame(
+        stream = String[], made_date = Date[], horizon = Int[],
         target_date = Date[], fit = String[], observed = Float64[],
-        median = Float64[], lo90 = Float64[], hi90 = Float64[])
+        median = Float64[], lo90 = Float64[], hi90 = Float64[]
+    )
     @test plot_forecast_overlay(empty) isa CairoMakie.Makie.Figure
     ## Filled with the fit roles: confirmed_cases carries baseline, its
     ## individual fit and the joint; recovered carries only baseline and the
     ## joint, so its individual role is simply absent.
     rows = NamedTuple[]
-    spec = ["confirmed_cases" => ["baseline", "confirmed", "joint"],
-        "recovered" => ["baseline", "joint"]]
+    spec = [
+        "confirmed_cases" => ["baseline", "confirmed", "joint"],
+        "recovered" => ["baseline", "joint"],
+    ]
     for (stream, fits) in spec, md in [Date(2026, 6, 21), Date(2026, 6, 28)],
-        h in [7, 14], fit in fits
+            h in [7, 14], fit in fits
         med = 20.0 + h
-        push!(rows,
-            (; stream = stream, made_date = md, horizon = h,
+        push!(
+            rows,
+            (;
+                stream = stream, made_date = md, horizon = h,
                 target_date = md + Day(h), fit = fit, observed = 18.0 + h,
-                median = med, lo90 = med * 0.7, hi90 = med * 1.4))
+                median = med, lo90 = med * 0.7, hi90 = med * 1.4,
+            )
+        )
     end
     @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_overlay crops each panel's y-axis" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_overlay crops each panel's y-axis" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
@@ -397,12 +443,16 @@ end
     ## every series in the panel to a line near the bottom.
     md = Date(2026, 6, 21)
     rows = [
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = "baseline", observed = 21.0,
-            median = 20.0, lo90 = 16.0, hi90 = 24.0),
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0,
+        ),
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = "joint", observed = 21.0,
-            median = 22.0, lo90 = 5.0, hi90 = 6000.0)
+            median = 22.0, lo90 = 5.0, hi90 = 6000.0,
+        ),
     ]
     fig = plot_forecast_overlay(DataFrame(rows))
     ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
@@ -423,12 +473,16 @@ end
     ## it, or CairoMakie's plot-area clipping cuts the triangle in half.
     md = Date(2026, 6, 21)
     rows = [
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = "baseline", observed = 21.0,
-            median = 20.0, lo90 = 16.0, hi90 = 24.0),
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0,
+        ),
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = "joint", observed = 21.0,
-            median = 22.0, lo90 = 5.0, hi90 = 6000.0)
+            median = 22.0, lo90 = 5.0, hi90 = 6000.0,
+        ),
     ]
     fig = plot_forecast_overlay(DataFrame(rows))
     ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
@@ -437,8 +491,10 @@ end
     ## Makie converts a marker symbol into a path before it reaches the
     ## plot, so the triangle is matched against the same converted path
     ## rather than against the `:utriangle` symbol.
-    tri = CairoMakie.Makie.convert_attribute(:utriangle,
-        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"())
+    tri = CairoMakie.Makie.convert_attribute(
+        :utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
+    )
     scatters = [x for x in ax.scene.plots if x isa CairoMakie.Makie.Scatter]
     marker = only(s for s in scatters if s.marker[] == tri)
     marker_y = only(unique(last.(marker[1][])))
@@ -446,17 +502,19 @@ end
     @test marker_y > 0.9 * cap
 end
 
-@testitem "plot_forecast_overlay tick density scales with made dates" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_overlay tick density scales with made dates" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
     using Dates: Date, Day
     dates = [Date(2026, 5, 1) + Day(3 * i) for i in 0:14]
 
-    row(md) = (; stream = "confirmed cases", made_date = md, horizon = 7,
+    row(md) = (;
+        stream = "confirmed cases", made_date = md, horizon = 7,
         target_date = md + Day(7), fit = "joint", observed = 20.0,
-        median = 20.0, lo90 = 15.0, hi90 = 25.0)
+        median = 20.0, lo90 = 15.0, hi90 = 25.0,
+    )
 
     ## Few made dates: every one gets its own tick.
     few = DataFrame(row.(dates[1:5]))
@@ -482,8 +540,8 @@ end
     @test nticks < length(longer)
 end
 
-@testitem "plot_forecast_overlay draws a frozen fit as joint" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_overlay draws a frozen fit as joint" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_forecast_overlay, FROZEN_FIT, BASELINE_FIT
     using DataFrames: DataFrame
@@ -493,12 +551,16 @@ end
     ## role's, no individual fit having run at these cut-offs.
     md = Date(2026, 6, 21)
     rows = [
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = BASELINE_FIT, observed = 21.0,
-            median = 20.0, lo90 = 16.0, hi90 = 24.0),
-        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0,
+        ),
+        (;
+            stream = "confirmed cases", made_date = md, horizon = 7,
             target_date = md + Day(7), fit = FROZEN_FIT, observed = 21.0,
-            median = 22.0, lo90 = 18.0, hi90 = 26.0)
+            median = 22.0, lo90 = 18.0, hi90 = 26.0,
+        ),
     ]
     fig = plot_forecast_overlay(DataFrame(rows))
     leg = only(x for x in fig.content if x isa CairoMakie.Legend)
@@ -514,31 +576,45 @@ end
     @test !any(s -> s.color[] == individual_colour, scatters)
 end
 
-@testitem "plot_forecast_relative_skill empty and filled" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_relative_skill empty and filled" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_forecast_relative_skill
     using DataFrames: DataFrame
 
-    empty = DataFrame(stream = String[], horizon = Int[], fit = String[],
-        rel_to_baseline = Union{Missing, Float64}[])
+    empty = DataFrame(
+        stream = String[], horizon = Int[], fit = String[],
+        rel_to_baseline = Union{Missing, Float64}[]
+    )
     @test plot_forecast_relative_skill(empty) isa CairoMakie.Makie.Figure
 
     rows = NamedTuple[]
     for h in [7, 14, 21], (fit, val) in [("confirmed", 0.8), ("joint", 1.3)]
 
-        push!(rows,
-            (; stream = "confirmed cases", horizon = h, fit = fit,
-                rel_to_baseline = val + 0.05 * h))
+        push!(
+            rows,
+            (;
+                stream = "confirmed cases", horizon = h, fit = fit,
+                rel_to_baseline = val + 0.05 * h,
+            )
+        )
     end
     ## Recovered has no individual fit, and one guarded cell is missing
     ## (R20), neither of which should break the render.
-    push!(rows,
-        (; stream = "recovered", horizon = 7, fit = "joint",
-            rel_to_baseline = 1.1))
-    push!(rows,
-        (; stream = "recovered", horizon = 14, fit = "joint",
-            rel_to_baseline = missing))
+    push!(
+        rows,
+        (;
+            stream = "recovered", horizon = 7, fit = "joint",
+            rel_to_baseline = 1.1,
+        )
+    )
+    push!(
+        rows,
+        (;
+            stream = "recovered", horizon = 14, fit = "joint",
+            rel_to_baseline = missing,
+        )
+    )
     df = DataFrame(rows)
     fig = plot_forecast_relative_skill(df)
     @test fig isa CairoMakie.Makie.Figure
@@ -548,12 +624,14 @@ end
     ## The log-scale column plots the same way through `value_col`.
     df2 = copy(df)
     df2.log_rel_to_baseline = df2.rel_to_baseline
-    @test plot_forecast_relative_skill(df2;
-        value_col = :log_rel_to_baseline) isa CairoMakie.Makie.Figure
+    @test plot_forecast_relative_skill(
+        df2;
+        value_col = :log_rel_to_baseline
+    ) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_forecast_relative_skill, FROZEN_FIT
     using DataFrames: DataFrame
@@ -561,16 +639,20 @@ end
     ## The frozen evaluation scores the joint model alone, so its single
     ## series belongs to the joint role rather than reading as an
     ## individual fit that was never run.
-    rows = [(; stream = "confirmed cases", horizon = h, fit = FROZEN_FIT,
-                rel_to_baseline = 0.8 + 0.02 * h) for h in [7, 14, 21]]
+    rows = [
+        (;
+            stream = "confirmed cases", horizon = h, fit = FROZEN_FIT,
+            rel_to_baseline = 0.8 + 0.02 * h,
+        ) for h in [7, 14, 21]
+    ]
     fig = plot_forecast_relative_skill(DataFrame(rows))
     leg = only(x for x in fig.content if x isa CairoMakie.Legend)
     labels = [e.label[] for (_, es) in leg.entrygroups[] for e in es]
     @test labels == ["joint"]
 end
 
-@testitem "plot_cumulative_trajectories returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_cumulative_trajectories returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using Dates: Date
@@ -582,19 +664,25 @@ end
     ## Each cumulative trajectory deterministic is a draws×chains matrix of
     ## per-draw monotone vectors.
     _traj() = reshape(
-        [cumsum(abs.(randn(rng, n))) for _ in 1:ndraws], ndraws, 1)
-    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        [cumsum(abs.(randn(rng, n))) for _ in 1:ndraws], ndraws, 1
+    )
+    chn = FlexiChains.FlexiChain{Symbol}(
+        ndraws, 1,
         Dict(
             FlexiChains.Parameter(:cumulative_infections) => _traj(),
             FlexiChains.Parameter(:cumulative_onsets) => _traj(),
-            FlexiChains.Parameter(:cumulative_expected_deaths) => _traj()))
-    fig = plot_cumulative_trajectories(chn; n = n,
-        seeding = Date("2026-02-23"))
+            FlexiChains.Parameter(:cumulative_expected_deaths) => _traj()
+        )
+    )
+    fig = plot_cumulative_trajectories(
+        chn; n = n,
+        seeding = Date("2026-02-23")
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_start_date_pair returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_start_date_pair returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     import FlexiChains
@@ -603,17 +691,20 @@ end
     n = 200
     vals = hcat(abs.(randn(rng, n)) .+ 7, abs.(randn(rng, n)) .* 30)
     ## :doubling_time replaces the removed :τ parameter
-    chn = FlexiChains.FlexiChain{Symbol}(n,
+    chn = FlexiChains.FlexiChain{Symbol}(
+        n,
         1,
         Dict(
             FlexiChains.Parameter(:doubling_time) => reshape(vals[:, 1], n, 1),
-            FlexiChains.Parameter(:T) => reshape(vals[:, 2], n, 1)))
+            FlexiChains.Parameter(:T) => reshape(vals[:, 2], n, 1)
+        )
+    )
     fig = plot_start_date_pair(chn; as_of_date = "2026-05-20")
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_rt reconstructs and returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_rt reconstructs and returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using Dates: Date
@@ -626,25 +717,32 @@ end
     ## Vector-valued `rt_state.z`: one innovation vector per draw, stored as
     ## a draws×chains matrix of vectors (as the predictive chain returns it).
     zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
-    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+    chn = FlexiChains.FlexiChain{Symbol}(
+        ndraws, 1,
         Dict(
             FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
-                log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+                log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1
+            ),
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
-                abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
+                abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
+            ),
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
                 reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
             FlexiChains.Parameter(:T) =>
-                reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
-    fig = plot_rt(chn; n = n, breakpoint = n - 11,
+                reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)
+        )
+    )
+    fig = plot_rt(
+        chn; n = n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
-        ramp = RT_INTERVENTION_RAMP)
+        ramp = RT_INTERVENTION_RAMP
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_rt_streams overlays streams and joint" setup=[
-    HeadlessMakie
+@testitem "plot_rt_streams overlays streams and joint" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using Dates: Date
@@ -660,55 +758,80 @@ end
     function make_chain(walk_start)
         nz = length(knot_days(n; week = 7, start = walk_start)) - 1
         zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
-        FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        FlexiChains.FlexiChain{Symbol}(
+            ndraws, 1,
             Dict(
                 FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
-                    log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+                    log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1
+                ),
                 FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
-                    abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
+                    abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
+                ),
                 FlexiChains.Parameter(
-                    Symbol("rt_state.intervention_effect")) => reshape(
-                    -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
-                FlexiChains.Parameter(Symbol("rt_state.z")) => zcol))
+                    Symbol("rt_state.intervention_effect")
+                ) => reshape(
+                    -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1
+                ),
+                FlexiChains.Parameter(Symbol("rt_state.z")) => zcol
+            )
+        )
     end
     breakpoint = n - 11
     joint_walk = breakpoint - 14
     streams = [
-        (; label = "cases", chn = make_chain(1), rt_start = 1,
-            rt_walk_start = 1, colour = :steelblue),
-        (; label = "deaths", chn = make_chain(1), rt_start = 1,
-            rt_walk_start = 1, colour = :firebrick)]
-    joint = (; label = "joint", chn = make_chain(joint_walk),
-        rt_start = joint_walk, rt_walk_start = joint_walk)
-    fig = plot_rt_streams(streams; joint = joint, n = n,
+        (;
+            label = "cases", chn = make_chain(1), rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue,
+        ),
+        (;
+            label = "deaths", chn = make_chain(1), rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick,
+        ),
+    ]
+    joint = (;
+        label = "joint", chn = make_chain(joint_walk),
+        rt_start = joint_walk, rt_walk_start = joint_walk,
+    )
+    fig = plot_rt_streams(
+        streams; joint = joint, n = n,
         breakpoint = breakpoint, as_of_date = "2026-05-28",
         seeding = Date("2026-02-23"), display_start = joint_walk,
-        ramp = RT_INTERVENTION_RAMP)
+        ramp = RT_INTERVENTION_RAMP
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(21)
-    dates = ["2026-05-18", "2026-05-19", "2026-05-20",
-        "2026-05-21", "2026-05-22", "2026-05-23"]
+    dates = [
+        "2026-05-18", "2026-05-19", "2026-05-20",
+        "2026-05-21", "2026-05-22", "2026-05-23",
+    ]
     ## Per-draw per-bin increment vectors, as the predictive chain
     ## returns them (here a plain vector of draws).
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
     observed = cumsum([18, 9, 12, 7, 6, 5])
-    fig = plot_vintage_conditional_ppc([
-        (; title = "Suspected", dates = dates,
-            replicates = reps, observed = observed, colour = :steelblue),
-        (; title = "Confirmed", dates = dates,
-            replicates = reps, observed = observed)])
+    fig = plot_vintage_conditional_ppc(
+        [
+            (;
+                title = "Suspected", dates = dates,
+                replicates = reps, observed = observed, colour = :steelblue,
+            ),
+            (;
+                title = "Confirmed", dates = dates,
+                replicates = reps, observed = observed,
+            ),
+        ]
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc draws a non-cumulative panel" setup=[
-    HeadlessMakie
+@testitem "plot_vintage_conditional_ppc draws a non-cumulative panel" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
@@ -719,33 +842,47 @@ end
     dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
     reps = [rand(rng, 80:180, length(dates)) for _ in 1:150]
     observed = [153, 119, 117, 94]
-    fig = plot_vintage_conditional_ppc([
-        (; title = "New suspects/day", dates = dates,
-        replicates = reps, observed = observed,
-        colour = :slateblue, cumulative = false)])
+    fig = plot_vintage_conditional_ppc(
+        [
+            (;
+                title = "New suspects/day", dates = dates,
+                replicates = reps, observed = observed,
+                colour = :slateblue, cumulative = false,
+            ),
+        ]
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_incidence_ppc
     rng = MersenneTwister(23)
-    dates = ["2026-05-18", "2026-05-19", "2026-05-20",
-        "2026-05-21", "2026-05-22", "2026-05-23"]
+    dates = [
+        "2026-05-18", "2026-05-19", "2026-05-20",
+        "2026-05-21", "2026-05-22", "2026-05-23",
+    ]
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
     ## A cumulative panel (observed is the running total; the incidence view
     ## differences it) and a non-cumulative daily panel (observed already a
     ## per-vintage count).
     cum_observed = cumsum([18, 9, 12, 7, 6, 5])
     daily_observed = [18, 9, 12, 7, 6, 5]
-    fig = plot_vintage_incidence_ppc([
-        (; title = "Suspected", dates = dates,
-            replicates = reps, observed = cum_observed, colour = :steelblue),
-        (; title = "New suspects/day", dates = dates,
-            replicates = reps, observed = daily_observed,
-            cumulative = false)])
+    fig = plot_vintage_incidence_ppc(
+        [
+            (;
+                title = "Suspected", dates = dates,
+                replicates = reps, observed = cum_observed, colour = :steelblue,
+            ),
+            (;
+                title = "New suspects/day", dates = dates,
+                replicates = reps, observed = daily_observed,
+                cumulative = false,
+            ),
+        ]
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -755,8 +892,14 @@ end
     ## A long, irregular vintage grid: daily from 14 May with a handful of
     ## days missing, as the situation reports skip days.
     all_dates = [Date("2026-05-14") + Day(i) for i in 0:100]
-    skipped = Set(Date.(["2026-05-24", "2026-05-25", "2026-06-30",
-        "2026-07-01", "2026-08-11"]))
+    skipped = Set(
+        Date.(
+            [
+                "2026-05-24", "2026-05-25", "2026-06-30",
+                "2026-07-01", "2026-08-11",
+            ]
+        )
+    )
     dates = string.(filter(!in(skipped), all_dates))
     pos, labels = _vintage_ticks(dates)
     @test length(pos) == length(labels)
@@ -800,29 +943,31 @@ end
     @test _vintage_ticks(String[]) == (Int[], String[])
 end
 
-@testitem "vintage PPC plots take a long series and an empty group" setup=[
-    HeadlessMakie
+@testitem "vintage PPC plots take a long series and an empty group" setup = [
+    HeadlessMakie,
 ] begin
     using Dates: Date, Day
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc,
-                           plot_vintage_incidence_ppc
+        plot_vintage_incidence_ppc
     rng = MersenneTwister(24)
     dates = string.([Date("2026-05-14") + Day(i) for i in 0:100])
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:60]
     observed = cumsum(rand(rng, 1:30, length(dates)))
-    panel = (; title = "Confirmed", dates = dates,
-        replicates = reps, observed = observed)
+    panel = (;
+        title = "Confirmed", dates = dates,
+        replicates = reps, observed = observed,
+    )
     @test plot_vintage_conditional_ppc([panel]) isa CairoMakie.Makie.Figure
     @test plot_vintage_incidence_ppc([panel]) isa CairoMakie.Makie.Figure
     ## A stream group with no members (an early cut-off where nothing has
     ## stopped reporting yet) renders as a blank figure.
     @test plot_vintage_conditional_ppc(NamedTuple[]) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
     @test plot_vintage_incidence_ppc(NamedTuple[]) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_cfr_prior returns a Makie figure" setup = [HeadlessMakie] begin
     using Distributions: Beta
     using BVDOutbreakSize: plot_cfr_prior
     prior = Beta(6.6, 13.4)
@@ -830,8 +975,8 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_no_onward_deaths returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_no_onward_deaths returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -845,7 +990,7 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_forecast returns a Makie figure" setup = [HeadlessMakie] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast
@@ -888,8 +1033,8 @@ end
     @test naxes(fig_empty) == 0
 end
 
-@testitem "plot_forecast_beds returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_beds returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -905,8 +1050,8 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_beds_vs_truth scores beds against observed" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_beds_vs_truth scores beds against observed" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -914,26 +1059,32 @@ end
     rng = MersenneTwister(34)
     fc = DataFrame(isolation_level = rand(rng, 250:400, 300))
     @test plot_forecast_beds_vs_truth(fc; isolation = 359) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
     ## A missing observed value returns an empty figure rather than erroring.
     @test plot_forecast_beds_vs_truth(fc; isolation = missing) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
     ## An individual-fit forecast overlays a second (dashed) density without
     ## erroring, and without changing the figure type.
     indiv = rand(rng, 200:380, 250)
-    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
-        individual = indiv) isa CairoMakie.Makie.Figure
+    @test plot_forecast_beds_vs_truth(
+        fc; isolation = 359,
+        individual = indiv
+    ) isa CairoMakie.Makie.Figure
     ## A degenerate (single-valued) individual sample is skipped rather than
     ## erroring inside `density!`, which needs more than one distinct value.
-    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
-        individual = fill(300.0, 10)) isa CairoMakie.Makie.Figure
+    @test plot_forecast_beds_vs_truth(
+        fc; isolation = 359,
+        individual = fill(300.0, 10)
+    ) isa CairoMakie.Makie.Figure
     ## An empty individual sample is likewise skipped without erroring.
-    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
-        individual = Float64[]) isa CairoMakie.Makie.Figure
+    @test plot_forecast_beds_vs_truth(
+        fc; isolation = 359,
+        individual = Float64[]
+    ) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_latent returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_latent returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -950,8 +1101,8 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_latent clips the reproduction number at zero" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_latent clips the reproduction number at zero" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -981,8 +1132,8 @@ end
     @test ax.finallimits[].origin[1] == 0.0
 end
 
-@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -997,13 +1148,14 @@ end
     now = (;
         infections_new = abs.(randn(rng, n)) .* 600,
         onsets_new = abs.(randn(rng, n)) .* 350,
-        deaths_latent_new = abs.(randn(rng, n)) .* 35)
+        deaths_latent_new = abs.(randn(rng, n)) .* 35,
+    )
     fig = plot_forecast_vs_truth_latent(fc; now = now)
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_vs_truth returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_vs_truth returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
@@ -1019,8 +1171,10 @@ end
     )
     ## Two confirmed streams supplied observed cumulatives: two columns of a
     ## cumulative-and-new panel each, four axes.
-    fig = plot_forecast_vs_truth(fc;
-        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
+    fig = plot_forecast_vs_truth(
+        fc;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18)
+    )
     @test fig isa CairoMakie.Makie.Figure
     @test naxes(fig) == 4
     ## A stream whose cumulative column is absent is dropped without error even
@@ -1028,9 +1182,12 @@ end
     ## alone (two axes).
     fc_cases = DataFrame(
         confirmed_cum = rand(rng, 20:80, n),
-        confirmed_new = rand(rng, 0:15, n))
-    fig2 = plot_forecast_vs_truth(fc_cases;
-        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
+        confirmed_new = rand(rng, 0:15, n)
+    )
+    fig2 = plot_forecast_vs_truth(
+        fc_cases;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18)
+    )
     @test fig2 isa CairoMakie.Makie.Figure
     @test naxes(fig2) == 2
     ## All five scored streams present with observed cumulatives, one with a
@@ -1047,16 +1204,22 @@ end
         recovered_cum = rand(rng, 10:60, n),
         recovered_new = rand(rng, 0:10, n)
     )
-    fig3 = plot_forecast_vs_truth(fc_all;
-        observed = (cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
-            confirmed_deaths_cum = 18, recovered_cum = 55),
-        baseline = (confirmed_cum = 40,))
+    fig3 = plot_forecast_vs_truth(
+        fc_all;
+        observed = (
+            cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
+            confirmed_deaths_cum = 18, recovered_cum = 55,
+        ),
+        baseline = (confirmed_cum = 40,)
+    )
     @test fig3 isa CairoMakie.Makie.Figure
     @test naxes(fig3) == 10
     ## A stream present in the frame but absent from `observed` stays absent, so
     ## here recovered adds no panel and only the confirmed streams are drawn.
-    fig4 = plot_forecast_vs_truth(fc_all;
-        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
+    fig4 = plot_forecast_vs_truth(
+        fc_all;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18)
+    )
     @test fig4 isa CairoMakie.Makie.Figure
     @test naxes(fig4) == 4
     ## No observed values at all yields an empty figure rather than erroring.
@@ -1069,32 +1232,40 @@ end
     ## driven by `observed`, not by which streams carry an individual
     ## overlay) and without erroring on a stream `individual` has no entry
     ## for (recovered, which has no individual fit).
-    fig6 = plot_forecast_vs_truth(fc_all;
-        observed = (cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
-            confirmed_deaths_cum = 18, recovered_cum = 55),
+    fig6 = plot_forecast_vs_truth(
+        fc_all;
+        observed = (
+            cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
+            confirmed_deaths_cum = 18, recovered_cum = 55,
+        ),
         baseline = (confirmed_cum = 40,),
-        individual = (cases_new = rand(rng, 0:30, n),
-            confirmed_new = rand(rng, 0:15, n)))
+        individual = (
+            cases_new = rand(rng, 0:30, n),
+            confirmed_new = rand(rng, 0:15, n),
+        )
+    )
     @test fig6 isa CairoMakie.Makie.Figure
     @test naxes(fig6) == 10
 
     ## A degenerate (single-valued) individual sample for one stream is
     ## skipped rather than erroring inside `density!`.
-    fig7 = plot_forecast_vs_truth(fc_cases;
+    fig7 = plot_forecast_vs_truth(
+        fc_cases;
         observed = (confirmed_cum = 70, confirmed_deaths_cum = 18),
-        individual = (confirmed_new = fill(5.0, 10),))
+        individual = (confirmed_new = fill(5.0, 10),)
+    )
     @test fig7 isa CairoMakie.Makie.Figure
     @test naxes(fig7) == 2
 end
 
-@testitem "forecast validation splits off the streams that stopped" setup=[
-    HeadlessMakie
+@testitem "forecast validation splits off the streams that stopped" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using Dates: Date, Day
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast, plot_forecast_vs_truth,
-                           stream_reporting, stream_forecast_columns
+        stream_reporting, stream_forecast_columns
     rng = MersenneTwister(35)
     n = 300
     naxes(fig) = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
@@ -1104,21 +1275,30 @@ end
         confirmed_cum = rand(rng, 20:80, n),
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_cum = rand(rng, 1:20, n),
-        confirmed_deaths_new = rand(rng, 0:5, n))
+        confirmed_deaths_new = rand(rng, 0:5, n)
+    )
     ## The suspected streams stopped being reported 60 days before the
     ## cut-off; the confirmed streams run to it.
     grid = 90
     cutoff = Date(2026, 8, 22)
-    obs = (; cutoff = cutoff, n = grid,
+    obs = (;
+        cutoff = cutoff, n = grid,
         reported_history = (; days = [10, grid - 60], counts = [50.0, 90.0]),
         deaths_history = (; days = [10, grid - 60], counts = [5.0, 9.0]),
         confirmed_history = (; days = [10, grid], counts = [20.0, 80.0]),
-        confirmed_deaths_history = (; days = [10, grid],
-            counts = [1.0, 18.0]))
-    observed = (cases_cum = 1077, deaths_cum = 246, confirmed_cum = 70,
-        confirmed_deaths_cum = 18)
-    cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
-        :confirmed_deaths_cum)
+        confirmed_deaths_history = (;
+            days = [10, grid],
+            counts = [1.0, 18.0],
+        ),
+    )
+    observed = (
+        cases_cum = 1077, deaths_cum = 246, confirmed_cum = 70,
+        confirmed_deaths_cum = 18,
+    )
+    cum_cols = (
+        :cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum,
+    )
     reporting = Tuple(c for c in cum_cols if stream_reporting(obs, c))
     stopped = Tuple(c for c in cum_cols if !stream_reporting(obs, c))
     @test reporting == (:confirmed_cum, :confirmed_deaths_cum)
@@ -1137,47 +1317,54 @@ end
     @test naxes(fig_stopped) == 2
 end
 
-@testitem "plot_projection_comparison returns a Makie figure" setup=[
-    HeadlessMakie
+@testitem "plot_projection_comparison returns a Makie figure" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
     ## External projection from the packaged Chamla central trajectory; our
     ## projection as a dated fan (ribbon) including a zero-width anchor;
     ## observed a dated value series, all with dates out of order to
     ## exercise sorting.
-    ours = [("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
+    ours = [
+        ("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
         ("2026-06-10", 700, 500, 950), ("2026-06-03", 430, 330, 560),
-        ("2026-06-17", 930, 660, 1300)]
-    observed = [("2026-06-08", 598), ("2026-05-27", 250),
-        ("2026-06-23", 1118), ("2026-06-15", 850)]
+        ("2026-06-17", 930, 660, 1300),
+    ]
+    observed = [
+        ("2026-06-08", 598), ("2026-05-27", 250),
+        ("2026-06-23", 1118), ("2026-06-15", 850),
+    ]
     fig = plot_projection_comparison(;
         external = CHAMLA_CONFIRMED_CENTRAL[1:4],
-        ours = ours, observed = observed)
+        ours = ours, observed = observed
+    )
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_scenario_comparison facets the published scenarios" setup=[
-    HeadlessMakie
+@testitem "plot_scenario_comparison facets the published scenarios" setup = [
+    HeadlessMakie,
 ] begin
     using BVDOutbreakSize: plot_scenario_comparison, REPORT_SCENARIOS_CI
     ## The real scenario set exercises the parser, the dodge of the swept level,
     ## and the geographic/back-calc block layout (18 May has no geographic row).
-    ours = Dict("2026-05-18" => (520, 320, 860),
+    ours = Dict(
+        "2026-05-18" => (520, 320, 860),
         "2026-05-20" => (760, 470, 1180),
-        "2026-05-27" => (1250, 720, 2050))
+        "2026-05-27" => (1250, 720, 2050)
+    )
     fig = plot_scenario_comparison(REPORT_SCENARIOS_CI; ours = ours)
     @test fig isa CairoMakie.Makie.Figure
     ## Renders without an `ours` overlay too (every panel still draws).
     @test plot_scenario_comparison(REPORT_SCENARIOS_CI) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
 end
 
-@testitem "vintage PPC plots label an occupancy census as a level" setup=[
-    HeadlessMakie
+@testitem "vintage PPC plots label an occupancy census as a level" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc,
-                           plot_vintage_incidence_ppc
+        plot_vintage_incidence_ppc
     rng = MersenneTwister(24)
     ## Bed occupancy is a census stock: a level at the end of each report
     ## day, not a count of new events. It shares `cumulative = false` with
@@ -1188,13 +1375,19 @@ end
     reps = [rand(rng, 200:300, length(dates)) for _ in 1:80]
     occupancy = [258, 267, 283, 260]
     flow = [153, 119, 117, 94]
-    stock = (; title = "Patients in isolation", dates = dates,
+    stock = (;
+        title = "Patients in isolation", dates = dates,
         replicates = reps, observed = occupancy, cumulative = false,
-        ylabel = "Beds occupied")
-    daily = (; title = "New suspects/day", dates = dates,
-        replicates = reps, observed = flow, cumulative = false)
-    ylabels(fig) = [ax.ylabel[] for ax in fig.content
-                    if ax isa CairoMakie.Makie.Axis]
+        ylabel = "Beds occupied",
+    )
+    daily = (;
+        title = "New suspects/day", dates = dates,
+        replicates = reps, observed = flow, cumulative = false,
+    )
+    ylabels(fig) = [
+        ax.ylabel[] for ax in fig.content
+            if ax isa CairoMakie.Makie.Axis
+    ]
 
     ## The census panel keeps its own label in both views; the per-day flow
     ## beside it keeps each view's default.
@@ -1206,12 +1399,14 @@ end
 
     ## A cumulative panel is untouched by the override: it still names the
     ## running total in the first column only.
-    cumulative = (; title = "Confirmed", dates = dates,
-        replicates = reps, observed = cumsum(flow))
+    cumulative = (;
+        title = "Confirmed", dates = dates,
+        replicates = reps, observed = cumsum(flow),
+    )
     @test ylabels(plot_vintage_conditional_ppc([cumulative])) ==
-          ["Cumulative count"]
+        ["Cumulative count"]
     @test ylabels(plot_vintage_incidence_ppc([cumulative])) ==
-          ["New per vintage"]
+        ["New per vintage"]
 end
 
 @testitem "onset_nowcast_draws narrows as the reporting delay grows" begin
@@ -1226,50 +1421,67 @@ end
     hazard = (;
         logit_h0 = [fill(-1.4 + 0.2 * randn(rng), D) for _ in 1:ndraws],
         γ = [zeros(ge) for _ in 1:ndraws],
-        alpha = [fill(0.4 + 0.05 * randn(rng), ge - gs + 1)
-                 for _ in 1:ndraws])
+        alpha = [
+            fill(0.4 + 0.05 * randn(rng), ge - gs + 1)
+                for _ in 1:ndraws
+        ],
+    )
     onsets = [fill(150.0 + 30 * randn(rng), ge) for _ in 1:ndraws]
     ## One onset day per delay, all carrying the same observed count so the
     ## only thing separating them is how much reporting has happened.
     delays = [0, 5, 10, D - 1]
     days = [40, 39, 38, 37]
     observed = fill(50.0, length(days))
-    draws = onset_nowcast_draws(days, observed, delays, onsets, hazard;
-        grid_start = gs)
+    draws = onset_nowcast_draws(
+        days, observed, delays, onsets, hazard;
+        grid_start = gs
+    )
     @test length(draws) == length(days)
     @test all(length(d) == ndraws for d in draws)
     ## Never below what is already reported.
-    @test all(all(d .>= 50.0 - 1e-9) for d in draws)
+    @test all(all(d .>= 50.0 - 1.0e-9) for d in draws)
     ## The interval collapses onto the observed count once the delay has
     ## run out, and widens monotonically as the delay shortens.
     width(d) = quantile(d, 0.95) - quantile(d, 0.05)
     ws = width.(draws)
-    @test ws[end] < 1e-6
+    @test ws[end] < 1.0e-6
     @test all(diff(ws) .< 0)
-    @test all(isapprox.(draws[end], 50.0; atol = 1e-6))
-    @test_throws ErrorException onset_nowcast_draws(days, observed[1:2],
-        delays, onsets, hazard; grid_start = gs)
+    @test all(isapprox.(draws[end], 50.0; atol = 1.0e-6))
+    @test_throws ErrorException onset_nowcast_draws(
+        days, observed[1:2],
+        delays, onsets, hazard; grid_start = gs
+    )
     ## Onsets and hazard must be the same fit's draws, paired one to one.
-    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
-        onsets[1:(ndraws - 1)], hazard; grid_start = gs)
+    @test_throws ErrorException onset_nowcast_draws(
+        days, observed, delays,
+        onsets[1:(ndraws - 1)], hazard; grid_start = gs
+    )
     ## A day off the end of the onset series is named rather than left to a
     ## `BoundsError` from inside the draw loop.
-    @test_throws ErrorException onset_nowcast_draws([ge + 1], [1.0], [0],
-        onsets, hazard; grid_start = gs)
+    @test_throws ErrorException onset_nowcast_draws(
+        [ge + 1], [1.0], [0],
+        onsets, hazard; grid_start = gs
+    )
     ## `target_delays` stops the prediction at a given delay: nothing
     ## outstanding when it is the delay already reached, and no more than
     ## the eventual total when it is the end of the delay axis.
-    same = onset_nowcast_draws(days, observed, delays, onsets, hazard;
-        grid_start = gs, target_delays = delays)
-    @test all(all(isapprox.(d, 50.0; atol = 1e-9)) for d in same)
-    full = onset_nowcast_draws(days, observed, delays, onsets, hazard;
-        grid_start = gs, target_delays = fill(D - 1, length(days)))
-    @test all(all(full[k] .<= draws[k] .+ 1e-9) for k in eachindex(days))
-    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
-        onsets, hazard; grid_start = gs, target_delays = delays[1:2])
+    same = onset_nowcast_draws(
+        days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = delays
+    )
+    @test all(all(isapprox.(d, 50.0; atol = 1.0e-9)) for d in same)
+    full = onset_nowcast_draws(
+        days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = fill(D - 1, length(days))
+    )
+    @test all(all(full[k] .<= draws[k] .+ 1.0e-9) for k in eachindex(days))
+    @test_throws ErrorException onset_nowcast_draws(
+        days, observed, delays,
+        onsets, hazard; grid_start = gs, target_delays = delays[1:2]
+    )
 end
 
-@testitem "plot_onset_nowcast_grid returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_onset_nowcast_grid returns a Makie figure" setup = [HeadlessMakie] begin
     using Random: MersenneTwister
     using Dates: Date, Day
     using BVDOutbreakSize: plot_onset_nowcast_grid
@@ -1277,18 +1489,30 @@ end
     function panel(title, n)
         dates = [Date("2026-07-01") + Day(i) for i in 0:(n - 1)]
         observed = [40.0 + 10 * randn(rng) for _ in dates]
-        nowcast = [observed[k] .+ abs.(randn(rng, 120)) .* k
-                   for k in eachindex(dates)]
+        nowcast = [
+            observed[k] .+ abs.(randn(rng, 120)) .* k
+                for k in eachindex(dates)
+        ]
         return (; title, dates, observed, nowcast, latest = observed .+ 5)
     end
-    fig = plot_onset_nowcast_grid([panel("2026-08-01", 30),
-        panel("2026-08-08", 34)])
+    fig = plot_onset_nowcast_grid(
+        [
+            panel("2026-08-01", 30),
+            panel("2026-08-08", 34),
+        ]
+    )
     @test fig isa CairoMakie.Makie.Figure
     ## No digitised snapshots: a blank figure rather than an empty grid.
     @test plot_onset_nowcast_grid([]) isa CairoMakie.Makie.Figure
     p = panel("2026-08-15", 12)
-    @test_throws ErrorException plot_onset_nowcast_grid([(; p.title, p.dates,
-        observed = p.observed[1:5], p.nowcast, p.latest)])
+    @test_throws ErrorException plot_onset_nowcast_grid(
+        [
+            (;
+                p.title, p.dates,
+                observed = p.observed[1:5], p.nowcast, p.latest,
+            ),
+        ]
+    )
 end
 
 @testitem "_composition_predictive: allocates the observed total, wider with rho" begin
@@ -1306,13 +1530,13 @@ end
     @test length(preds) == 3
     for d in 1:nd, i in 1:2
 
-        @test sum(preds[p][d][i] for p in 1:3)≈1 atol=1e-12
+        @test sum(preds[p][d][i] for p in 1:3) ≈ 1 atol = 1.0e-12
     end
     ## Centred on the expected share: the allocation is unbiased, so only the
     ## scatter around it is new.
     for p in 1:3, i in 1:2
 
-        @test mean(preds[p][d][i] for d in 1:nd)≈shares[p, i] atol=0.03
+        @test mean(preds[p][d][i] for d in 1:nd) ≈ shares[p, i] atol = 0.03
     end
     ## The overdispersion is what the band is for. A larger rho must scatter
     ## the predicted shares further, or the band says nothing the expected
@@ -1328,8 +1552,8 @@ end
     @test all(!isnan(t[2]) for t in empty_v[1])
 end
 
-@testitem "plot_province_composition_ppc: predictive band behind the expected" setup=[
-    HeadlessMakie
+@testitem "plot_province_composition_ppc: predictive band behind the expected" setup = [
+    HeadlessMakie,
 ] begin
     using Dates: Date
     using BVDOutbreakSize: plot_province_composition_ppc
@@ -1339,10 +1563,14 @@ end
     obs = [70 70 60 60; 20 20 25 25; 10 10 15 15]
     days = [7, 14, 21, 28]
     seeding = Date(2025, 8, 1)
-    chn = (; province_shares = [shares for _ in 1:nd],
-        province_composition_rho = fill(0.2, nd))
-    fig = plot_province_composition_ppc(chn; share_key = :province_shares,
-        obs_increments = obs, days, seeding, n_patches = 3)
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_composition_rho = fill(0.2, nd),
+    )
+    fig = plot_province_composition_ppc(
+        chn; share_key = :province_shares,
+        obs_increments = obs, days, seeding, n_patches = 3
+    )
     @test fig isa CairoMakie.Makie.Figure
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
     @test length(axes) == 3
@@ -1352,23 +1580,29 @@ end
     end
     ## The death composition reads its own overdispersion, so a chain
     ## carrying only the case one draws no band on the death panels.
-    death = (; province_death_shares = [shares for _ in 1:nd],
-        province_death_composition_rho = fill(0.2, nd))
-    dfig = plot_province_composition_ppc(death;
+    death = (;
+        province_death_shares = [shares for _ in 1:nd],
+        province_death_composition_rho = fill(0.2, nd),
+    )
+    dfig = plot_province_composition_ppc(
+        death;
         share_key = :province_death_shares, obs_increments = obs, days,
-        seeding, n_patches = 3)
+        seeding, n_patches = 3
+    )
     dax = first(x for x in dfig.content if x isa CairoMakie.Makie.Axis)
     @test count(p -> p isa CairoMakie.Makie.Band, dax.scene.plots) == 6
     ## A chain predating the deterministic still plots the expected share.
     plain = (; province_shares = [shares for _ in 1:nd])
-    pfig = plot_province_composition_ppc(plain; share_key = :province_shares,
-        obs_increments = obs, days, seeding, n_patches = 3)
+    pfig = plot_province_composition_ppc(
+        plain; share_key = :province_shares,
+        obs_increments = obs, days, seeding, n_patches = 3
+    )
     pax = first(x for x in pfig.content if x isa CairoMakie.Makie.Axis)
     @test count(p -> p isa CairoMakie.Makie.Band, pax.scene.plots) == 3
 end
 
-@testitem "plot_patch_summary: one panel per quantity, one interval per province" setup=[
-    HeadlessMakie
+@testitem "plot_patch_summary: one panel per quantity, one interval per province" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_patch_summary, PROVINCE_LABELS
@@ -1377,10 +1611,12 @@ end
     nd = 200
     np = 3
     draws(centre) = [centre .+ 0.1 .* randn(rng, np) for _ in 1:nd]
-    base = (; C_T_patch = draws([900.0, 300.0, 80.0]),
+    base = (;
+        C_T_patch = draws([900.0, 300.0, 80.0]),
         R_T_patch = draws([1.2, 0.9, 0.7]),
         infections_T_patch = draws([40.0, 12.0, 3.0]),
-        delta_patch = draws([0.2, -0.05, -0.15]))
+        delta_patch = draws([0.2, -0.05, -0.15]),
+    )
     fig = plot_patch_summary(base, np)
     @test fig isa CairoMakie.Makie.Figure
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
@@ -1388,7 +1624,7 @@ end
     for ax in axes
         ## Three nested bars and a median dot per province.
         @test count(p -> p isa CairoMakie.Makie.Lines, ax.scene.plots) ==
-              3 * np
+            3 * np
         @test count(p -> p isa CairoMakie.Makie.Scatter, ax.scene.plots) == np
         ## The provinces share the axis, one named tick each, rather than
         ## being stacked on one position.
@@ -1398,13 +1634,17 @@ end
     end
     ## A reference rule only where the quantity has one: the reproduction
     ## number against one, the log-Rt deviation against zero.
-    @test [count(p -> p isa CairoMakie.Makie.HLines, ax.scene.plots)
-           for ax in axes] == [0, 1, 0, 1]
+    @test [
+        count(p -> p isa CairoMakie.Makie.HLines, ax.scene.plots)
+            for ax in axes
+    ] == [0, 1, 0, 1]
     ## The optional quantities gain a panel each when the chain carries them,
     ## matching the seven `patch_summary_table` reports.
-    full = (; base..., log_rt_contrast = draws([0.0, -0.3, -0.5]),
+    full = (;
+        base..., log_rt_contrast = draws([0.0, -0.3, -0.5]),
         region_drift_sd = draws([0.05, 0.04, 0.06]),
-        province_ascertainment = draws([1.4, 0.8, 0.6]))
+        province_ascertainment = draws([1.4, 0.8, 0.6]),
+    )
     ffig = plot_patch_summary(full, np)
     @test count(x -> x isa CairoMakie.Makie.Axis, ffig.content) == 7
     ## A chain that is not from `bvd_joint` says so rather than failing deep
@@ -1416,7 +1656,7 @@ end
     using Random: MersenneTwister
     import FlexiChains
     using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days,
-                           interpolate_knots, RT_INTERVENTION_RAMP
+        interpolate_knots, RT_INTERVENTION_RAMP
 
     rng = MersenneTwister(5)
     nd, n, np = 40, 60, 3
@@ -1431,17 +1671,26 @@ end
         P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
         P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
         P(Symbol("rt_state.intervention_effect")) => reshape(
-            fill(-0.3, nd), nd, 1),
+            fill(-0.3, nd), nd, 1
+        ),
         P(Symbol("rt_state.z")) => reshape(
-            [randn(rng, nb - 1) for _ in 1:nd], nd, 1))
-    chain(knots) = FlexiChains.FlexiChain{Symbol}(nd, 1,
-        merge(rt_keys, Dict(P(:delta_knots) => reshape(knots, nd, 1))))
-    args = (; n, breakpoint = n - 11, n_patches = np, rt_start = walk_start,
-        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP)
+            [randn(rng, nb - 1) for _ in 1:nd], nd, 1
+        )
+    )
+    chain(knots) = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        merge(rt_keys, Dict(P(:delta_knots) => reshape(knots, nd, 1)))
+    )
+    args = (;
+        n, breakpoint = n - 11, n_patches = np, rt_start = walk_start,
+        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP,
+    )
 
-    national = reconstruct_rt(chain([zeros(np * nb) for _ in 1:nd]);
+    national = reconstruct_rt(
+        chain([zeros(np * nb) for _ in 1:nd]);
         n, breakpoint = n - 11, rt_start = walk_start,
-        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP)
+        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP
+    )
     ## Zero deviations leave the national trajectory untouched in every
     ## panel, mask included: nothing rescales a province to the trend.
     flat = reconstruct_patch_rt(chain([zeros(np * nb) for _ in 1:nd]); args...)
@@ -1460,8 +1709,10 @@ end
     rt = reconstruct_patch_rt(chain(knots); args...)
     for p in 1:np
         daily = interpolate_knots([dev(p, k) for k in 1:nb], days, n)
-        @test all(rt[p][i, d] ≈ national[i, d] * exp(daily[d])
-        for i in 1:nd, d in walk_start:n)
+        @test all(
+            rt[p][i, d] ≈ national[i, d] * exp(daily[d])
+                for i in 1:nd, d in walk_start:n
+        )
     end
     ## Province 3 sits above province 1 throughout, since its deviation is
     ## larger at every knot. A transposed reshape would not preserve that.
@@ -1477,14 +1728,14 @@ end
     @test_throws ErrorException reconstruct_patch_rt(chain(short); args...)
 end
 
-@testitem "plot_rt_patches: one panel per province on a shared axis" setup=[
-    HeadlessMakie
+@testitem "plot_rt_patches: one panel per province on a shared axis" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
     using BVDOutbreakSize: plot_rt_patches, knot_days, PROVINCE_LABELS,
-                           RT_INTERVENTION_RAMP
+        RT_INTERVENTION_RAMP
 
     rng = MersenneTwister(23)
     nd, n, np = 40, 60, 3
@@ -1494,20 +1745,27 @@ end
     ## Province 3 runs well above province 1, so a per-panel autoscale would
     ## give the panels different y-limits.
     knots = [vec([0.4 * p for p in 1:np, _ in 1:nb]) for _ in 1:nd]
-    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
+    chn = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
         Dict(
             P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
             P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
             P(Symbol("rt_state.intervention_effect")) => reshape(
-                fill(-0.3, nd), nd, 1),
+                fill(-0.3, nd), nd, 1
+            ),
             P(Symbol("rt_state.z")) => reshape(
-                [randn(rng, nb - 1) for _ in 1:nd], nd, 1),
-            P(:delta_knots) => reshape(knots, nd, 1)))
+                [randn(rng, nb - 1) for _ in 1:nd], nd, 1
+            ),
+            P(:delta_knots) => reshape(knots, nd, 1)
+        )
+    )
 
-    fig = plot_rt_patches(chn; n, breakpoint = n - 11,
+    fig = plot_rt_patches(
+        chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
         n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RT_INTERVENTION_RAMP)
+        ramp = RT_INTERVENTION_RAMP
+    )
     @test fig isa CairoMakie.Makie.Figure
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
     @test length(axes) == np
@@ -1536,10 +1794,12 @@ end
 
     ## The panels wrap onto a second row when the column count does not
     ## divide the provinces.
-    wide = plot_rt_patches(chn; n, breakpoint = n - 11,
+    wide = plot_rt_patches(
+        chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
         n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RT_INTERVENTION_RAMP, ncols = 2)
+        ramp = RT_INTERVENTION_RAMP, ncols = 2
+    )
     @test count(x -> x isa CairoMakie.Makie.Axis, wide.content) == np
 end
 
@@ -1552,8 +1812,10 @@ end
     ## both indices catches a transposed read.
     flat = [Float64[100 * p + t for t in 1:n for p in 1:np] for _ in 1:nd]
     P = FlexiChains.Parameter
-    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
-        Dict(P(:infections_patch) => reshape(flat, nd, 1)))
+    chn = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        Dict(P(:infections_patch) => reshape(flat, nd, 1))
+    )
     out = _patch_daily(chn, :infections_patch, np, n)
     @test length(out) == np
     for p in 1:np
@@ -1566,8 +1828,8 @@ end
     @test_throws ErrorException _patch_daily(chn, :infections_patch, np, n + 1)
 end
 
-@testitem "plot_infections_patches: the cumulative row sums the daily one" setup=[
-    HeadlessMakie
+@testitem "plot_infections_patches: the cumulative row sums the daily one" setup = [
+    HeadlessMakie,
 ] begin
     using Dates: Date
     import FlexiChains
@@ -1580,18 +1842,22 @@ end
     rate(p) = p == 1 ? 1.0 : 0.5
     flat = [Float64[rate(p) for t in 1:n for p in 1:np] for _ in 1:nd]
     P = FlexiChains.Parameter
-    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
-        Dict(P(:infections_patch) => reshape(flat, nd, 1)))
-    fig = plot_infections_patches(chn; n, seeding = Date("2026-02-23"),
-        n_patches = np)
+    chn = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        Dict(P(:infections_patch) => reshape(flat, nd, 1))
+    )
+    fig = plot_infections_patches(
+        chn; n, seeding = Date("2026-02-23"),
+        n_patches = np
+    )
     @test fig isa Mk.Figure
     axes = [x for x in fig.content if x isa Mk.Axis]
     ## A daily and a cumulative panel per province, the province named once.
     @test length(axes) == 2 * np
     @test [ax.ylabel[] for ax in axes] ==
-          repeat(["Daily infections", "Cumulative infections"], np)
+        repeat(["Daily infections", "Cumulative infections"], np)
     @test [ax.title[] for ax in axes] ==
-          vcat([[String(PROVINCE_LABELS[p]), ""] for p in 1:np]...)
+        vcat([[String(PROVINCE_LABELS[p]), ""] for p in 1:np]...)
     for (i, ax) in enumerate(axes)
         @test count(p -> p isa Mk.Band, ax.scene.plots) == 3
         p = cld(i, 2)
@@ -1609,8 +1875,8 @@ end
     end
 end
 
-@testitem "plot_imports_patches: one panel per province" setup=[
-    HeadlessMakie
+@testitem "plot_imports_patches: one panel per province" setup = [
+    HeadlessMakie,
 ] begin
     using Dates: Date
     import FlexiChains
@@ -1622,10 +1888,14 @@ end
     ## reading the wrong slice of the flattened matrix shows it.
     flat = [Float64[p * t for t in 1:n for p in 1:np] for _ in 1:nd]
     P = FlexiChains.Parameter
-    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
-        Dict(P(:importation_patch) => reshape(flat, nd, 1)))
-    fig = plot_imports_patches(chn; n, seeding = Date("2026-02-23"),
-        n_patches = np)
+    chn = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        Dict(P(:importation_patch) => reshape(flat, nd, 1))
+    )
+    fig = plot_imports_patches(
+        chn; n, seeding = Date("2026-02-23"),
+        n_patches = np
+    )
     @test fig isa Mk.Figure
     axes = [x for x in fig.content if x isa Mk.Axis]
     @test length(axes) == np
@@ -1639,8 +1909,8 @@ end
     end
 end
 
-@testitem "plot_forecast_flows: a panel per flow stream carried" setup=[
-    HeadlessMakie
+@testitem "plot_forecast_flows: a panel per flow stream carried" setup = [
+    HeadlessMakie,
 ] begin
     using DataFrames: DataFrame
     using Random: MersenneTwister
@@ -1649,14 +1919,18 @@ end
 
     rng = MersenneTwister(3)
     draws = 400
-    full = DataFrame(admissions_fc = rand(rng, 0:20, draws),
+    full = DataFrame(
+        admissions_fc = rand(rng, 0:20, draws),
         incare_deaths_fc = rand(rng, 0:5, draws),
-        ruleouts_fc = rand(rng, 0:40, draws))
+        ruleouts_fc = rand(rng, 0:40, draws)
+    )
     fig = plot_forecast_flows(full)
     axes = [x for x in fig.content if x isa Mk.Axis]
     @test length(axes) == 3
-    @test [ax.xlabel[] for ax in axes] == ["New isolation admissions (DRC)",
-        "New in-care deaths (DRC)", "New rule-outs (DRC)"]
+    @test [ax.xlabel[] for ax in axes] == [
+        "New isolation admissions (DRC)",
+        "New in-care deaths (DRC)", "New rule-outs (DRC)",
+    ]
     for ax in axes
         ## A histogram of the predictive with its 90% interval shaded.
         @test count(p -> p isa Mk.Hist, ax.scene.plots) == 1
@@ -1665,7 +1939,7 @@ end
     ## Only the streams the forecast carries get a panel.
     part = plot_forecast_flows(full[!, [:admissions_fc, :ruleouts_fc]])
     @test [ax.xlabel[] for ax in part.content if ax isa Mk.Axis] ==
-          ["New isolation admissions (DRC)", "New rule-outs (DRC)"]
+        ["New isolation admissions (DRC)", "New rule-outs (DRC)"]
     ## A forecast without the flow streams draws nothing rather than an
     ## empty grid of axes.
     none = plot_forecast_flows(DataFrame(cases_fc = [1, 2, 3]))
@@ -1673,8 +1947,8 @@ end
     @test count(x -> x isa Mk.Axis, none.content) == 0
 end
 
-@testitem "plot_stream_calibration: streams against their nominal level" setup=[
-    HeadlessMakie
+@testitem "plot_stream_calibration: streams against their nominal level" setup = [
+    HeadlessMakie,
 ] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_stream_calibration, stream_calibration
@@ -1685,10 +1959,15 @@ end
     ## One calibrated stream and one that predicts far too high, so the bias
     ## panel has a sign to place.
     panels = [
-        (; title = "cases", observed = observed,
-            replicates = [10 .+ rand(rng, -5:5, 4) for _ in 1:500]),
-        (; title = "deaths", observed = observed,
-            replicates = [fill(40.0, 4) for _ in 1:200])]
+        (;
+            title = "cases", observed = observed,
+            replicates = [10 .+ rand(rng, -5:5, 4) for _ in 1:500],
+        ),
+        (;
+            title = "deaths", observed = observed,
+            replicates = [fill(40.0, 4) for _ in 1:200],
+        ),
+    ]
     tbl = stream_calibration(panels)
     fig = plot_stream_calibration(tbl)
     @test fig isa Mk.Figure
@@ -1712,8 +1991,8 @@ end
     @test count(p -> p isa Mk.VLines, axes[2].scene.plots) == 1
 end
 
-@testitem "plot_province_forecast draws one panel per stream" setup=[
-    HeadlessMakie
+@testitem "plot_province_forecast draws one panel per stream" setup = [
+    HeadlessMakie,
 ] begin
     using DataFrames: DataFrame
     using CairoMakie: Makie as Mk
@@ -1722,9 +2001,11 @@ end
     ## Deterministic shares against a spread national forecast, so each
     ## province's interval is a known fraction of the national one.
     nd = 200
-    shares = [0.8 0.75; 0.15 0.20; 0.05 0.05]
-    chn = (; province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd])
+    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_death_shares = [shares for _ in 1:nd],
+    )
     v = collect(range(50.0, 150.0; length = nd))
     fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
     fig = plot_province_forecast(chn, fc; n_patches = 3)
@@ -1748,10 +2029,14 @@ end
 
     ## A forecast carrying one stream draws that panel alone, and one
     ## carrying neither returns an empty figure rather than erroring.
-    one = plot_province_forecast(chn,
-        DataFrame(confirmed_new = v); n_patches = 3)
+    one = plot_province_forecast(
+        chn,
+        DataFrame(confirmed_new = v); n_patches = 3
+    )
     @test length([x for x in one.content if x isa Mk.Axis]) == 1
-    none = plot_province_forecast(chn, DataFrame(cases_new = v);
-        n_patches = 3)
+    none = plot_province_forecast(
+        chn, DataFrame(cases_new = v);
+        n_patches = 3
+    )
     @test isempty([x for x in none.content if x isa Mk.Axis])
 end

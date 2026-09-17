@@ -137,9 +137,12 @@ end
 ## entry point the driver needs. Julia runs commands without a shell, so the
 ## `tag:path` revision is passed through literally.
 function has_registry(code_tag)
-    return success(pipeline(
-        `git -C $ROOT cat-file -e $code_tag:docs/fits/registry.jl`;
-        stderr = devnull))
+    return success(
+        pipeline(
+            `git -C $ROOT cat-file -e $code_tag:docs/fits/registry.jl`;
+            stderr = devnull
+        )
+    )
 end
 
 ## Whether the compute budget is clear to start another fit. Best-effort: when
@@ -772,13 +775,13 @@ function run_backfill(tags; keep, concurrency)
                 path = try
                     backfill_one(code_tag; keep)
                 catch e
-                    @warn "backfill failed" code_tag exception=e
+                    @warn "backfill failed" code_tag exception = e
                     :failed
                 end
                 lock(results) do
                     path === :failed ? push!(failed, code_tag) :
-                    isnothing(path) ? push!(manual, code_tag) :
-                    push!(done, code_tag)
+                        isnothing(path) ? push!(manual, code_tag) :
+                        push!(done, code_tag)
                 end
             finally
                 Base.release(gate)
@@ -822,7 +825,7 @@ function main(args = ARGS)
     tags = isnothing(opts.only) ? all_tags : filter(==(opts.only), all_tags)
     isempty(tags) && error("no matching release tags (have $all_tags)")
 
-    @info "backfilling forecasts" tags concurrency=opts.concurrency
+    @info "backfilling forecasts" tags concurrency = opts.concurrency
     r = run_backfill(tags; keep = opts.keep, concurrency = opts.concurrency)
     combined = combine_archives(r.done)
 
@@ -834,15 +837,19 @@ function main(args = ARGS)
         println("Failed (see the log above): ", join(r.failed, ", "))
     println("Combined archive: $combined")
     println()
-    println("Review the archives, then publish them as a dedicated release " *
-            "with:")
+    println(
+        "Review the archives, then publish them as a dedicated release " *
+            "with:"
+    )
     println()
     println("  gh release create forecasts-backfill -R $REPO \\")
     println("    --title 'Backfilled historical forecasts' \\")
-    println("    --notes 'Forecasts reconstructed by re-running each past " *
+    println(
+        "    --notes 'Forecasts reconstructed by re-running each past " *
             "release'\\''s own code on its data, because forecasts were " *
             "shown in the report but never stored. Scored by " *
-            "scripts/score_releases.jl.' \\")
+            "scripts/score_releases.jl.' \\"
+    )
     println("    $OUT_DIR/forecasts_backfill.csv $OUT_DIR/forecast_v*.csv")
     return r
 end

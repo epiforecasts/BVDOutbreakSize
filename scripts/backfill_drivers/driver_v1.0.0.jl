@@ -39,9 +39,13 @@ using BVDOutbreakSize
 const HORIZONS = (7, 14, 21, 28)
 const THIN = 5
 
-DEST = get(ENV, "BVD_BACKFILL_DEST",
-    joinpath(pkgdir(BVDOutbreakSize), "output", "backfill",
-        "forecast_v1.0.0.csv"))
+DEST = get(
+    ENV, "BVD_BACKFILL_DEST",
+    joinpath(
+        pkgdir(BVDOutbreakSize), "output", "backfill",
+        "forecast_v1.0.0.csv"
+    )
+)
 SAMPLES = parse(Int, get(ENV, "BVD_BACKFILL_SAMPLES", "1000"))
 CHAINS = parse(Int, get(ENV, "BVD_BACKFILL_CHAINS", "2"))
 
@@ -59,13 +63,16 @@ const REPORTED_CASES = obs.reported_cases
 
 @model function exponential_growth_model(;
         tau_prior = LogNormal(log(14), 0.4),
-        m_prior = truncated(Normal(7.0, 2.5);
-            lower = 0, upper = 13.0))
+        m_prior = truncated(
+            Normal(7.0, 2.5);
+            lower = 0, upper = 13.0
+        )
+    )
     τ ~ tau_prior
     m ~ m_prior
     r := log(2) / τ
     T := m * τ
-    C_T := 2.0 ^ m
+    C_T := 2.0^m
     cumulative = s -> exp(r * s)
     return (; τ, r, m, T, C_T, cumulative)
 end
@@ -105,7 +112,8 @@ end
 
 @model function delay_model(;
         alpha_prior = truncated(Normal(4.3, 1.22); lower = 0),
-        theta_prior = truncated(Normal(2.6, 0.82); lower = 0))
+        theta_prior = truncated(Normal(2.6, 0.82); lower = 0)
+    )
     α ~ alpha_prior
     θ ~ theta_prior
     return (; α, θ, dist = Gamma(α, θ))
@@ -161,7 +169,8 @@ end
 #md # ```
 
 @model function detection_window_model(;
-        window_prior = truncated(Normal(15.0, 5.0); lower = 0))
+        window_prior = truncated(Normal(15.0, 5.0); lower = 0)
+    )
     w ~ window_prior
     return (; w)
 end
@@ -188,7 +197,8 @@ end
 
 @model function traveller_volume_model(;
         mean::Real = ITURI_DAILY_TRAVEL,
-        sd::Real = ITURI_DAILY_TRAVEL_SD)
+        sd::Real = ITURI_DAILY_TRAVEL_SD
+    )
     daily_travellers ~ truncated(Normal(mean, sd); lower = 0)
     return (; daily_travellers)
 end
@@ -239,7 +249,8 @@ end
 #md # ```
 
 @model function surveillance_dispersion_model(;
-        inv_sqrt_k_prior = truncated(Normal(0.6, 0.2); lower = 0))
+        inv_sqrt_k_prior = truncated(Normal(0.6, 0.2); lower = 0)
+    )
     inv_sqrt_k ~ inv_sqrt_k_prior
     k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
     return (; k, inv_sqrt_k)
@@ -299,7 +310,8 @@ end
 
 @model function pooled_ascertainment_model(;
         mu_prior = Normal(logit(0.25), 1.0),
-        tau_prior = truncated(Normal(0, 0.5); lower = 1e-4))
+        tau_prior = truncated(Normal(0, 0.5); lower = 1.0e-4)
+    )
     μ_logit ~ mu_prior
     τ_logit ~ tau_prior
     z_drc ~ Normal(0, 1)
@@ -414,7 +426,8 @@ end
         growth_state, p_uganda::Real;
         source_population::Real = ITURI_POPULATION,
         window = detection_window_model(),
-        traveller = traveller_volume_model())
+        traveller = traveller_volume_model()
+    )
     cumulative = growth_state.cumulative
     T = growth_state.T
 
@@ -426,17 +439,20 @@ end
 
     window_start = max(T - w, zero(T))
     cumulative_window_integral := integrate_cumulative(
-        cumulative, window_start, T)
+        cumulative, window_start, T
+    )
     expected_exports := max(
         p_uganda * (daily_travellers / source_population) *
-        cumulative_window_integral,
+            cumulative_window_integral,
         eps(typeof(daily_travellers * one(T) * p_uganda))
     )
 
     exported_cases ~ Poisson(expected_exports)
 
-    return (; w, daily_travellers, p_uganda,
-        cumulative_window_integral, expected_exports)
+    return (;
+        w, daily_travellers, p_uganda,
+        cumulative_window_integral, expected_exports,
+    )
 end
 
 #md # ```@raw html
@@ -480,7 +496,8 @@ end
         total_deaths::Union{Missing, Integer},
         growth_state, k::Real;
         delay = delay_model(),
-        cfr = cfr_model())
+        cfr = cfr_model()
+    )
     C_T = growth_state.C_T
     r = growth_state.r
     T = growth_state.T
@@ -494,8 +511,8 @@ end
     ## the expected count to NaN / Inf.
     raw_deaths = expected_deaths(CFR, r, T, delay_state.dist)
     expected_deaths_T := isfinite(raw_deaths) ?
-                         max(raw_deaths, eps(typeof(raw_deaths))) :
-                         eps(typeof(raw_deaths))
+        max(raw_deaths, eps(typeof(raw_deaths))) :
+        eps(typeof(raw_deaths))
 
     total_deaths ~ safe_nbinomial(k, expected_deaths_T)
 
@@ -528,13 +545,14 @@ end
 
 @model function cases_model(
         reported_cases::Union{Missing, Integer},
-        growth_state, k::Real, p_drc::Real)
+        growth_state, k::Real, p_drc::Real
+    )
     C_T = growth_state.C_T
 
     raw_reports = p_drc * C_T
     expected_reports := isfinite(raw_reports) ?
-                        max(raw_reports, eps(typeof(raw_reports))) :
-                        eps(typeof(raw_reports))
+        max(raw_reports, eps(typeof(raw_reports))) :
+        eps(typeof(raw_reports))
 
     reported_cases ~ safe_nbinomial(k, expected_reports)
 
@@ -592,17 +610,19 @@ end
         growth_state, CFR::Real, delay_dist, p_uganda::Real;
         window::Real,
         daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION)
+        source_population::Real = ITURI_POPULATION
+    )
     cumulative = growth_state.cumulative
     T = growth_state.T
 
     window_start = max(T - window, zero(T))
     exports_deaths_integral := integrate_exports_deaths(
-        cumulative, delay_dist, window_start, T, T)
+        cumulative, delay_dist, window_start, T, T
+    )
     q = daily_travellers / source_population
     raw = CFR * p_uganda * q * exports_deaths_integral
     expected_exports_deaths := isfinite(raw) ?
-                               max(raw, eps(typeof(raw))) : eps(typeof(raw))
+        max(raw, eps(typeof(raw))) : eps(typeof(raw))
 
     exports_deaths ~ Poisson(expected_exports_deaths)
 
@@ -645,12 +665,14 @@ end
         exported_cases::Union{Missing, Integer};
         growth = exponential_growth_model(),
         exports = exports_model,
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model()
+    )
     growth_state ~ to_submodel(growth, false)
     asc_state ~ to_submodel(ascertainment, false)
 
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, asc_state.p_uganda), false)
+        exports(exported_cases, growth_state, asc_state.p_uganda), false
+    )
 
     cumulative_cases := growth_state.C_T
 end
@@ -669,13 +691,15 @@ end
         total_deaths::Union{Missing, Integer};
         growth = exponential_growth_model(),
         deaths = deaths_model,
-        dispersion = surveillance_dispersion_model())
+        dispersion = surveillance_dispersion_model()
+    )
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     k = dispersion_state.k
 
     deaths_state ~ to_submodel(
-        deaths(total_deaths, growth_state, k), false)
+        deaths(total_deaths, growth_state, k), false
+    )
 
     cumulative_cases := growth_state.C_T
 end
@@ -695,14 +719,16 @@ end
         growth = exponential_growth_model(),
         cases = cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model()
+    )
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
     k = dispersion_state.k
 
     cases_state ~ to_submodel(
-        cases(reported_cases, growth_state, k, asc_state.p_drc), false)
+        cases(reported_cases, growth_state, k, asc_state.p_drc), false
+    )
 
     cumulative_cases := growth_state.C_T
 end
@@ -726,7 +752,8 @@ end
         traveller = traveller_volume_model(),
         exports_deaths_model = exports_deaths_model,
         ascertainment = pooled_ascertainment_model(),
-        source_population::Real = ITURI_POPULATION)
+        source_population::Real = ITURI_POPULATION
+    )
     growth_state ~ to_submodel(growth, false)
     delay_state ~ to_submodel(delay, false)
     cfr_state ~ to_submodel(cfr, false)
@@ -737,12 +764,15 @@ end
     daily_travellers = travel_state.daily_travellers
 
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, growth_state,
+        exports_deaths_model(
+            exports_deaths, growth_state,
             cfr_state.CFR, delay_state.dist, asc_state.p_uganda;
             window = window_state.w,
             daily_travellers = daily_travellers,
-            source_population = source_population),
-        false)
+            source_population = source_population
+        ),
+        false
+    )
 
     cumulative_cases := growth_state.C_T
 end
@@ -775,7 +805,8 @@ end
         exports_deaths_model = exports_deaths_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        source_population::Real = ITURI_POPULATION)
+        source_population::Real = ITURI_POPULATION
+    )
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
@@ -784,18 +815,24 @@ end
     p_uganda = asc_state.p_uganda
 
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, p_uganda), false)
+        exports(exported_cases, growth_state, p_uganda), false
+    )
     deaths_state ~ to_submodel(
-        deaths(total_deaths, growth_state, k), false)
+        deaths(total_deaths, growth_state, k), false
+    )
     cases_state ~ to_submodel(
-        cases(reported_cases, growth_state, k, p_drc), false)
+        cases(reported_cases, growth_state, k, p_drc), false
+    )
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, growth_state,
+        exports_deaths_model(
+            exports_deaths, growth_state,
             deaths_state.CFR, deaths_state.delay_dist, p_uganda;
             window = exports_state.w,
             daily_travellers = exports_state.daily_travellers,
-            source_population = source_population),
-        false)
+            source_population = source_population
+        ),
+        false
+    )
 
     cumulative_cases := growth_state.C_T
 end
@@ -826,7 +863,8 @@ end
         exports = exports_model,
         deaths = deaths_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model()
+    )
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
@@ -835,24 +873,29 @@ end
 
     if !ismissing(exported_cases)
         exports_state ~ to_submodel(
-            exports(exported_cases, growth_state, p_uganda), false)
+            exports(exported_cases, growth_state, p_uganda), false
+        )
     end
     deaths_state ~ to_submodel(
-        deaths(total_deaths, growth_state, k), false)
+        deaths(total_deaths, growth_state, k), false
+    )
 
     cumulative_cases := growth_state.C_T
 end
 
 ## ---- fit + forecast + archive ----
 
-@info "fitting v1.0.0 integral joint" cutoff samples=SAMPLES chains=CHAINS
+@info "fitting v1.0.0 integral joint" cutoff samples = SAMPLES chains = CHAINS
 
 ## Headline joint call, verbatim from v1.0.0 analysis.jl:1254. v1.0.0's
 ## `bvd_joint` takes four positional streams and no genetic/detection kwargs.
 chn = nuts_sample(
-    bvd_joint(obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths);
-    samples = SAMPLES, chains = CHAINS)
+    bvd_joint(
+        obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths
+    );
+    samples = SAMPLES, chains = CHAINS
+)
 
 ## Keep the chain: this tag has no `fit_or_load`, so a failure in the
 ## forecast/archive step below would otherwise cost a whole refit.
@@ -866,24 +909,33 @@ catch e
 end
 
 ## Forecast call, verbatim from v1.0.0 analysis.jl:1637.
-runs = [(h,
-            forecast_reported(chn;
-                horizon = h,
-                daily_travellers = ITURI_DAILY_TRAVEL,
-                source_population = ITURI_POPULATION,
-                obs_cases = REPORTED_CASES,
-                obs_deaths = TOTAL_DEATHS,
-                obs_exports = EXPORTED_CASES))
-        for h in HORIZONS]
+runs = [
+    (
+        h,
+        forecast_reported(
+            chn;
+            horizon = h,
+            daily_travellers = ITURI_DAILY_TRAVEL,
+            source_population = ITURI_POPULATION,
+            obs_cases = REPORTED_CASES,
+            obs_deaths = TOTAL_DEATHS,
+            obs_exports = EXPORTED_CASES
+        ),
+    )
+        for h in HORIZONS
+]
 
 ## Three scoreable reported/suspected streams; confirmed, recovered and
 ## isolation did not exist yet. Labels match the scorer's STREAM_HISTORY.
 streams = (
     (:cases_new, "reported cases"),
     (:deaths_new, "suspected deaths"),
-    (:exports_new, "exports"))
-out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
-    stream = String[], draw = Int[], value = Float64[])
+    (:exports_new, "exports"),
+)
+out = DataFrame(
+    made_date = Date[], horizon = Int[], target_date = Date[],
+    stream = String[], draw = Int[], value = Float64[]
+)
 for (horizon, fc) in runs
     h = Int(horizon)
     target = cutoff + Day(h)
@@ -897,4 +949,4 @@ for (horizon, fc) in runs
 end
 isempty(out) && error("no archived streams in the forecast")
 CSV.write(DEST, out)
-@info "wrote archive" dest=DEST rows=nrow(out) cutoff streams=unique(out.stream)
+@info "wrote archive" dest = DEST rows = nrow(out) cutoff streams = unique(out.stream)

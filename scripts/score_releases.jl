@@ -69,7 +69,8 @@ const BACKFILL_TAG = "forecasts-backfill"
 ## `load_observations` looks for by default is not beside it (see
 ## `vintage_observations`).
 const ONSET_CURVE_PATH = joinpath(
-    pkgdir(BVDOutbreakSize), "data", "onset_curve_scanned.csv")
+    pkgdir(BVDOutbreakSize), "data", "onset_curve_scanned.csv"
+)
 
 ## Release tags whose forecast is excluded from scoring because the
 ## reconstruction failed, not because the model performed badly: a chain
@@ -82,12 +83,13 @@ const ONSET_CURVE_PATH = joinpath(
 ## and is still scored normally.
 const _FAILED_RECONSTRUCTIONS = Dict(
     "results-v1.6.0" =>
-    "the reconstructed joint chain forecasts a " *
-    "nearly-zero median at every horizon and every stream, with the " *
-    "upper predictive tail occasionally exploding to five- and " *
-    "six-digit values (e.g. a confirmed-cases CRPS above 100000 at " *
-    "the 28-day horizon); that combination is the signature of a " *
-    "chain that failed to sample properly, not a real forecast.")
+        "the reconstructed joint chain forecasts a " *
+        "nearly-zero median at every horizon and every stream, with the " *
+        "upper predictive tail occasionally exploding to five- and " *
+        "six-digit values (e.g. a confirmed-cases CRPS above 100000 at " *
+        "the 28-day horizon); that combination is the signature of a " *
+        "chain that failed to sample properly, not a real forecast."
+)
 
 repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 
@@ -107,9 +109,13 @@ function results_release_entries(repo)
         isempty(strip(line)) && continue
         tag, created = split(line, '\t')
         is_results_release(tag) || continue
-        push!(entries,
-            (String(tag),
-                DateTime(created, dateformat"yyyy-mm-ddTHH:MM:SSZ")))
+        push!(
+            entries,
+            (
+                String(tag),
+                DateTime(created, dateformat"yyyy-mm-ddTHH:MM:SSZ"),
+            )
+        )
     end
     return entries
 end
@@ -135,12 +141,16 @@ function backfill_asset_names(repo)
         read(
             pipeline(
                 `gh release view $BACKFILL_TAG -R $repo --json assets
-          --jq ".assets[].name"`; stderr = devnull), String)
+          --jq ".assets[].name"`; stderr = devnull
+            ), String
+        )
     catch
         return String[]
     end
-    return [String(strip(l)) for l in split(strip(out), '\n')
-            if !isempty(strip(l))]
+    return [
+        String(strip(l)) for l in split(strip(out), '\n')
+            if !isempty(strip(l))
+    ]
 end
 
 ## Download a single asset from a release into `dir`, returning its path
@@ -151,9 +161,12 @@ function fetch_asset(repo, tag, file, dir; attempts = 3)
     dest = joinpath(dir, file)
     for _ in 1:attempts
         try
-            run(pipeline(
-                `gh release download $tag -R $repo -p $file
-       -O $dest --clobber`; stdout = devnull, stderr = devnull))
+            run(
+                pipeline(
+                    `gh release download $tag -R $repo -p $file
+       -O $dest --clobber`; stdout = devnull, stderr = devnull
+                )
+            )
         catch
             continue
         end
@@ -176,8 +189,10 @@ function read_simple_csv(path::AbstractString)
     lines = readlines(path)
     isempty(lines) && return (String[], Vector{String}[])
     header = String.(strip.(split(lines[1], ',')))
-    rows = [String.(strip.(split(l, ',')))
-            for l in lines[2:end] if !isempty(strip(l))]
+    rows = [
+        String.(strip.(split(l, ',')))
+            for l in lines[2:end] if !isempty(strip(l))
+    ]
     return (header, rows)
 end
 
@@ -202,7 +217,7 @@ function write_simple_csv(path::AbstractString, cols)
             println(io, join((string(last(c)[i]) for c in cols), ','))
         end
     end
-    mv(tmp, path; force = true)
+    return mv(tmp, path; force = true)
 end
 
 # ----------------------------------------------------------------------
@@ -273,7 +288,8 @@ const STREAM_HISTORY = Dict(
     "isolation beds" => (:isolation_history, :level),
     "treatment beds" => (:treatment_confirmed_incare_history, :level),
     "isolation beds (suspected)" =>
-        (:treatment_suspect_incare_history, :level))
+        (:treatment_suspect_incare_history, :level)
+)
 
 ## Streams the archive can carry that have no `(; days, counts)` field, so
 ## `stream_history` assembles their truth. "exports" is the dated Uganda
@@ -291,7 +307,8 @@ const STREAM_ASSEMBLED = Dict("exports" => :incident)
 ## column, so these are the labels a composed per-province label is built on.
 const PROVINCE_STREAM_HISTORY = Dict(
     "confirmed cases" => :province_confirmed_history,
-    "confirmed deaths" => :province_death_history)
+    "confirmed deaths" => :province_death_history
+)
 
 ## The scored label for one `(stream, province)` pair of the per-province
 ## archive: the national label with the patch key in square brackets. One
@@ -335,8 +352,9 @@ function province_stream_history(obs, stream, province)
     for (m, h) in zip(members, hs)
         h.days == days || error(
             "province `$m` is reported on different vintage days to " *
-            "`$(first(members))`; a patch pools its members vintage by " *
-            "vintage.")
+                "`$(first(members))`; a patch pools its members vintage by " *
+                "vintage."
+        )
     end
     return (; days, counts = reduce(.+, (collect(h.counts) for h in hs)))
 end
@@ -346,7 +364,7 @@ end
 ## label that is none of those (schema drift, a future stream) has no truth
 ## and is skipped, never scored against a wrong one.
 function has_stream_truth(stream)
-    haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream) ||
+    return haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream) ||
         !isnothing(parse_province_stream(stream))
 end
 
@@ -357,14 +375,18 @@ end
 function stream_history(obs, stream)
     p = parse_province_stream(stream)
     if !isnothing(p)
-        return (province_stream_history(obs, p.stream, p.province),
-            :incident)
+        return (
+            province_stream_history(obs, p.stream, p.province),
+            :incident,
+        )
     end
     if haskey(STREAM_ASSEMBLED, stream)
         stream == "exports" || error("no assembler for stream '$stream'")
         d = obs.export_case_days
-        return ((; days = d, counts = collect(1:length(d))),
-            STREAM_ASSEMBLED[stream])
+        return (
+            (; days = d, counts = collect(1:length(d))),
+            STREAM_ASSEMBLED[stream],
+        )
     end
     field, kind = STREAM_HISTORY[stream]
     return (getproperty(obs, field), kind)
@@ -422,7 +444,7 @@ end
 ## is the occupancy standing there rather than a change over a window. Both
 ## the truth and the baseline centre are measured from this day.
 function window_start(kind, made_date, horizon)
-    kind == :level ? made_date : made_date - Day(horizon)
+    return kind == :level ? made_date : made_date - Day(horizon)
 end
 
 ## Whether the persistence baseline's own window is covered by `stream`'s
@@ -448,14 +470,16 @@ end
 ## `nothing`. So is an `obs` that carries no declaration, or a synthetic one
 ## with no printed 24h counts to split a step by.
 function break_stream_kind(obs, stream)
-    (hasproperty(obs, :confirmed_break_days) &&
-     !isempty(obs.confirmed_break_days)) || return nothing
+    (
+        hasproperty(obs, :confirmed_break_days) &&
+            !isempty(obs.confirmed_break_days)
+    ) || return nothing
     stream == "confirmed cases" &&
         return hasproperty(obs, :confirmed_break_gross_cases) ? :cases :
-               nothing
+        nothing
     stream == "confirmed deaths" &&
         return hasproperty(obs, :confirmed_break_gross_deaths) ? :deaths :
-               nothing
+        nothing
     return nothing
 end
 
@@ -542,7 +566,8 @@ end
 ## persistence baseline can use the same knowledge only negatively, by not
 ## reading a basis change as a day of the walk it is simulating.
 const OCCUPANCY_BREAK_STREAMS = Set(
-    k for (k, (_, kind)) in STREAM_HISTORY if kind == :level)
+    k for (k, (_, kind)) in STREAM_HISTORY if kind == :level
+)
 
 ## Dates of `stream`'s occupancy reclassification breaks, empty for every
 ## stream but the occupancy levels and for an `obs` carrying no declaration.
@@ -617,8 +642,10 @@ function truth_at(obs, grid_date, stream, made_date, target_date)
         return :spans_break
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
-    return window_total_at(obs, grid_date, stream, h, target_date,
-        Dates.value(target_date - made_date))
+    return window_total_at(
+        obs, grid_date, stream, h, target_date,
+        Dates.value(target_date - made_date)
+    )
 end
 
 # ----------------------------------------------------------------------
@@ -693,7 +720,8 @@ function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
         date > made_date && break
         date - Day(horizon) < covered && continue
         spans_confirmed_break(
-            obs, grid_date, stream, date - Day(horizon), date) && continue
+            obs, grid_date, stream, date - Day(horizon), date
+        ) && continue
         total = window_total_at(obs, grid_date, stream, hist, date, horizon)
         gap = isnothing(prev_date) ? 0 : Dates.value(date - prev_date)
         gap > 0 && push!(out, (total - prev_total) / sqrt(gap))
@@ -737,12 +765,15 @@ end
 function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
     h, kind = stream_history(obs, stream)
     centre = kind == :level ? Float64(cum_at(h, made_date, grid_date)) :
-             window_total_at(obs, grid_date, stream, h, made_date, horizon)
+        window_total_at(obs, grid_date, stream, h, made_date, horizon)
 
     steps = if kind == :level
-        [d / sqrt(window)
-         for (d, window) in _history_diffs(
-            obs, grid_date, stream, h, made_date)]
+        [
+            d / sqrt(window)
+                for (d, window) in _history_diffs(
+                    obs, grid_date, stream, h, made_date
+                )
+        ]
     else
         _window_total_steps(obs, grid_date, stream, h, made_date, horizon)
     end
@@ -769,24 +800,32 @@ end
 function push_scored!(out, overlay, tag, key, fit, samples, truth)
     made_date, horizon, target_date, stream = key
     s = score_draws(truth, samples)
-    push!(out,
-        (; release = tag, made_date, stream, horizon, target_date,
+    push!(
+        out,
+        (;
+            release = tag, made_date, stream, horizon, target_date,
             fit, crps = s.crps, log_crps = s.log_crps,
             dispersion = s.dispersion, overprediction = s.overprediction,
             underprediction = s.underprediction,
             coverage_50 = s.coverage_50, coverage_90 = s.coverage_90,
-            bias = s.bias, n_samples = s.n))
+            bias = s.bias, n_samples = s.n,
+        )
+    )
     ## Quantile summary of the same draws for the forecasts-versus-now
     ## overlay plot, alongside the observed truth so the docs build reads a
     ## plain table rather than re-pulling the release assets.
     q = posterior_summary(samples)
     r2(x) = round(x; digits = 2)
-    push!(overlay,
-        (; release = tag, made_date, stream, horizon, target_date,
+    return push!(
+        overlay,
+        (;
+            release = tag, made_date, stream, horizon, target_date,
             fit, observed = r2(truth), median = r2(median(samples)),
             lo30 = r2(q.lo30), hi30 = r2(q.hi30),
             lo60 = r2(q.lo60), hi60 = r2(q.hi60),
-            lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
+            lo90 = r2(q.lo90), hi90 = r2(q.hi90),
+        )
+    )
 end
 
 ## Which of `obs`'s break days `ov` (a snapshot manifest) can hold, as
@@ -816,21 +855,29 @@ end
 ## day's whole step to the artefact.
 function carry_break_days(ov, obs, grid_date)
     keep, days = _carried_break_days(
-        ov, obs, grid_date, :confirmed_break_days)
+        ov, obs, grid_date, :confirmed_break_days
+    )
     gross(name) = hasproperty(obs, name) ?
-                  [getproperty(obs, name)[i] for i in keep] :
-                  zeros(Int, length(keep))
+        [getproperty(obs, name)[i] for i in keep] :
+        zeros(Int, length(keep))
     if hasproperty(obs, :confirmed_break_days)
-        ov = merge(ov,
-            (; confirmed_break_days = days,
+        ov = merge(
+            ov,
+            (;
+                confirmed_break_days = days,
                 confirmed_break_gross_cases = gross(
-                    :confirmed_break_gross_cases),
+                    :confirmed_break_gross_cases
+                ),
                 confirmed_break_gross_deaths = gross(
-                    :confirmed_break_gross_deaths)))
+                    :confirmed_break_gross_deaths
+                ),
+            )
+        )
     end
     if hasproperty(obs, :occupancy_break_days)
         _, occ_days = _carried_break_days(
-            ov, obs, grid_date, :occupancy_break_days)
+            ov, obs, grid_date, :occupancy_break_days
+        )
         ov = merge(ov, (; occupancy_break_days = occ_days))
     end
     return ov
@@ -870,9 +917,12 @@ function vintage_observations(obs_path, made_date, obs, grid_date)
     key = (obs_path, made_date)
     ov = get!(_VINTAGE_CACHE, key) do
         carry_break_days(
-            load_observations(obs_path; cutoff_date = made_date,
-                onset_curve_path = ONSET_CURVE_PATH),
-            obs, grid_date)
+            load_observations(
+                obs_path; cutoff_date = made_date,
+                onset_curve_path = ONSET_CURVE_PATH
+            ),
+            obs, grid_date
+        )
     end
     vintage_grid_date(day) = ov.cutoff - Day(ov.n - day)
     return ov, vintage_grid_date
@@ -897,8 +947,10 @@ end
 ## harmonisation break (`.spans_break`, see `spans_confirmed_break`). A
 ## group whose baseline window is uncovered (`baseline_window_covered`)
 ## keeps its fits' scores and gets no baseline row (`.no_baseline`).
-function score_release(tag, forecast_path, obs, grid_date;
-        default_fit = JOINT_FIT, vintage_obs_path = nothing)
+function score_release(
+        tag, forecast_path, obs, grid_date;
+        default_fit = JOINT_FIT, vintage_obs_path = nothing
+    )
     header, rows = read_simple_csv(forecast_path)
     made_i = col(header, "made_date")
     hor_i = col(header, "horizon")
@@ -921,7 +973,7 @@ function score_release(tag, forecast_path, obs, grid_date;
     seen_unknown = Set{String}()
     for r in rows
         stream = isnothing(prov_i) ? r[str_i] :
-                 province_stream_label(r[str_i], r[prov_i])
+            province_stream_label(r[str_i], r[prov_i])
         if !has_stream_truth(stream)
             unknown += 1
             push!(seen_unknown, stream)
@@ -934,7 +986,8 @@ function score_release(tag, forecast_path, obs, grid_date;
     end
     unknown > 0 && @warn string(
         tag, ": dropped ", unknown, " row(s) with no truth source for ",
-        "stream label(s): ", join(sort(collect(seen_unknown)), ", "))
+        "stream label(s): ", join(sort(collect(seen_unknown)), ", ")
+    )
 
     out = NamedTuple[]
     overlay = NamedTuple[]
@@ -974,18 +1027,23 @@ function score_release(tag, forecast_path, obs, grid_date;
         n = maximum(length, values(byfit))
         rng = MersenneTwister(hash((tag, stream, horizon, made_date)))
         vobs, vgrid_date = vintage_observations(
-            vintage_obs_path, made_date, obs, grid_date)
+            vintage_obs_path, made_date, obs, grid_date
+        )
         if baseline_window_covered(
-            vobs, vgrid_date, stream, made_date, horizon)
+                vobs, vgrid_date, stream, made_date, horizon
+            )
             base = baseline_draws(
-                vobs, vgrid_date, stream, made_date, horizon, n, rng)
+                vobs, vgrid_date, stream, made_date, horizon, n, rng
+            )
             push_scored!(out, overlay, tag, key, BASELINE_FIT, base, truth)
         else
             no_baseline += 1
         end
     end
-    return (; rows = out, overlay, skipped, stopped, unstarted, no_baseline,
-        spans_break)
+    return (;
+        rows = out, overlay, skipped, stopped, unstarted, no_baseline,
+        spans_break,
+    )
 end
 
 ## Score one release's per-province forecast archive, or `nothing` when the
@@ -995,8 +1053,10 @@ end
 ## `province_forecast.csv`, so an absent asset is the ordinary case and a
 ## quiet skip, the same way the frozen archive's absence is. `forecast_path`
 ## is `nothing` exactly when `fetch_asset` found nothing to download.
-function score_province_release(tag, forecast_path, obs, grid_date;
-        vintage_obs_path = nothing)
+function score_province_release(
+        tag, forecast_path, obs, grid_date;
+        vintage_obs_path = nothing
+    )
     isnothing(forecast_path) && return nothing
     return score_release(tag, forecast_path, obs, grid_date; vintage_obs_path)
 end
@@ -1076,8 +1136,10 @@ function rt_row(tag, draws_path, cutoff)
 
     s = posterior_summary(rt)
     r3(x) = round(x; digits = 3)
-    return (tag, date, r3(median(rt)), r3(s.lo30), r3(s.hi30),
-        r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90))
+    return (
+        tag, date, r3(median(rt)), r3(s.lo30), r3(s.hi30),
+        r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90),
+    )
 end
 
 ## The chain key for the renewal walk's base, `exp` of which is the
@@ -1105,8 +1167,10 @@ function r0_row(tag, draws_path, cutoff)
 
     s = posterior_summary(r0)
     r3(x) = round(x; digits = 3)
-    return (tag, date, r3(median(r0)), r3(s.lo30), r3(s.hi30),
-        r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90))
+    return (
+        tag, date, r3(median(r0)), r3(s.lo30), r3(s.hi30),
+        r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90),
+    )
 end
 
 # ----------------------------------------------------------------------
@@ -1122,7 +1186,8 @@ end
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
     "C_T" => "size_by_release_by_stream.csv",
-    "R0" => "r0_by_release_by_stream.csv")
+    "R0" => "r0_by_release_by_stream.csv"
+)
 
 ## The `(release, date, fit, median, lo30, ...)` rows from a release's
 ## `stream_estimates.csv`, one per `(fit, quantity)`, keyed by quantity so
@@ -1135,20 +1200,26 @@ function stream_estimate_rows(tag, estimates_path, cutoff)
     ("fit" in header && "quantity" in header) || return nothing
     fit_i = col(header, "fit")
     qty_i = col(header, "quantity")
-    cols = Dict(c => col(header, c)
-    for c in ("median", "lo30", "hi30", "lo60", "hi60", "lo90", "hi90"))
+    cols = Dict(
+        c => col(header, c)
+            for c in ("median", "lo30", "hi30", "lo60", "hi60", "lo90", "hi90")
+    )
 
     byqty = Dict{String, Vector{NamedTuple}}()
     for r in rows
         qty = r[qty_i]
         haskey(STREAM_QUANTITY_DEST, qty) || continue
         vals = Dict(c => parse(Float64, r[i]) for (c, i) in cols)
-        push!(get!(() -> NamedTuple[], byqty, qty),
-            (; release = tag, date = string(cutoff), fit = r[fit_i],
+        push!(
+            get!(() -> NamedTuple[], byqty, qty),
+            (;
+                release = tag, date = string(cutoff), fit = r[fit_i],
                 median = vals["median"], lo30 = vals["lo30"],
                 hi30 = vals["hi30"], lo60 = vals["lo60"],
                 hi60 = vals["hi60"], lo90 = vals["lo90"],
-                hi90 = vals["hi90"]))
+                hi90 = vals["hi90"],
+            )
+        )
     end
     return byqty
 end
@@ -1183,7 +1254,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     r0_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
     stream_est_rows = Dict(
-        f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST))
+        f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST)
+    )
     n_scored = 0
     n_no_forecast = 0
     n_backfilled = 0
@@ -1235,30 +1307,34 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
         cutoff = release_cutoff(obs_path)
         isnothing(cutoff) ? push!(no_cutoff, tag) :
-        push!(dated, (tag, created, cutoff))
+            push!(dated, (tag, created, cutoff))
     end
     isempty(no_cutoff) || @info string(
         "ignoring ", length(no_cutoff), " release(s) that carry no data ",
-        "cut-off: ", join(no_cutoff, ", "))
+        "cut-off: ", join(no_cutoff, ", ")
+    )
     isempty(unfetched) || @warn string(
         "could not fetch observations.toml for ", length(unfetched),
         " release(s); a distinct forecast may be dropped this run, a re-run ",
-        "recovers it: ", join(unfetched, ", "))
+        "recovers it: ", join(unfetched, ", ")
+    )
 
     tags = select_daily_releases(dated)
     isempty(tags) && error("no results releases with a data cut-off for $repo")
     cutoffs = Dict(t => c for (t, _, c) in dated)
-    println("Scoring $(length(tags)) release(s) of $(length(entries)), " *
-            "one per data day.")
+    println(
+        "Scoring $(length(tags)) release(s) of $(length(entries)), " *
+            "one per data day."
+    )
 
     for tag in tags
         ## A top-level `for` is a soft scope, so the running counters must be
         ## declared global to update the bindings above rather than shadow them.
         global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored,
-        n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
-        n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction,
-        n_province_scored, n_province_no_asset, n_province_breaks,
-        n_province_no_baseline
+            n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
+            n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction,
+            n_province_scored, n_province_no_asset, n_province_breaks,
+            n_province_no_baseline
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -1283,7 +1359,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
         isnothing(tag_obs_path) && @warn string(
             tag, ": no observations.toml on disk for this release; its ",
             "baseline falls back to the current manifest and can leak a ",
-            "later revision or backfill into its persistence baseline")
+            "later revision or backfill into its persistence baseline"
+        )
 
         ## A saved forecast wins; a reconstruction stands in only where the
         ## release never stored one. The per-stream archive carries every fit's
@@ -1296,8 +1373,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
             nothing
         else
             fp = fetch_asset(repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
-            isnothing(fp) && (fp = fetch_asset(
-                repo, tag, FORECAST_ASSET, tagdir(tag)))
+            isnothing(fp) && (
+                fp = fetch_asset(
+                    repo, tag, FORECAST_ASSET, tagdir(tag)
+                )
+            )
             if isnothing(fp)
                 asset = backfill_asset(tag)
                 if !isnothing(asset) && asset in backfill_names
@@ -1310,17 +1390,21 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
         if haskey(_FAILED_RECONSTRUCTIONS, tag)
             n_failed_reconstruction += 1
-            @info string(tag, ": skipping known-failed reconstruction, not ",
-                "scored as a model finding — ", _FAILED_RECONSTRUCTIONS[tag])
+            @info string(
+                tag, ": skipping known-failed reconstruction, not ",
+                "scored as a model finding — ", _FAILED_RECONSTRUCTIONS[tag]
+            )
         elseif isnothing(forecast_path)
             n_no_forecast += 1
             @info "skipping $tag (no stored or reconstructed forecast)"
         else
             result = try
-                score_release(label, forecast_path, obs, grid_date;
-                    vintage_obs_path = tag_obs_path)
+                score_release(
+                    label, forecast_path, obs, grid_date;
+                    vintage_obs_path = tag_obs_path
+                )
             catch e
-                @warn "skipping $label forecast scoring" exception=e
+                @warn "skipping $label forecast scoring" exception = e
                 nothing
             end
             if !isnothing(result)
@@ -1333,17 +1417,21 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 n_no_baseline += result.no_baseline
                 result.skipped > 0 && @info string(
                     label, ": skipped ", result.skipped,
-                    " not-yet-observed group(s)")
+                    " not-yet-observed group(s)"
+                )
                 result.stopped > 0 && @info string(
                     label, ": skipped ", result.stopped,
-                    " group(s) past their stream's reporting coverage")
+                    " group(s) past their stream's reporting coverage"
+                )
                 result.unstarted > 0 && @info string(
                     label, ": skipped ", result.unstarted,
-                    " group(s) before their stream began being reported")
+                    " group(s) before their stream began being reported"
+                )
                 result.no_baseline > 0 && @info string(
                     label, ": drew no baseline for ", result.no_baseline,
                     " group(s) whose baseline window opens before their ",
-                    "stream's first vintage")
+                    "stream's first vintage"
+                )
             end
         end
 
@@ -1356,10 +1444,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
         frozen_path = fetch_asset(repo, tag, FROZEN_FORECAST_ASSET, tagdir(tag))
         if !isnothing(frozen_path)
             fresult = try
-                score_release(tag, frozen_path, obs, grid_date;
-                    default_fit = FROZEN_FIT, vintage_obs_path = tag_obs_path)
+                score_release(
+                    tag, frozen_path, obs, grid_date;
+                    default_fit = FROZEN_FIT, vintage_obs_path = tag_obs_path
+                )
             catch e
-                @warn "skipping $tag frozen forecast scoring" exception=e
+                @warn "skipping $tag frozen forecast scoring" exception = e
                 nothing
             end
             if !isnothing(fresult)
@@ -1371,17 +1461,21 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 n_frozen_no_baseline += fresult.no_baseline
                 fresult.skipped > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.skipped,
-                    " not-yet-observed group(s)")
+                    " not-yet-observed group(s)"
+                )
                 fresult.stopped > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.stopped,
-                    " group(s) past their stream's reporting coverage")
+                    " group(s) past their stream's reporting coverage"
+                )
                 fresult.unstarted > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.unstarted,
-                    " group(s) before their stream began being reported")
+                    " group(s) before their stream began being reported"
+                )
                 fresult.no_baseline > 0 && @info string(
                     tag, " (frozen): drew no baseline for ",
                     fresult.no_baseline, " group(s) whose baseline window ",
-                    "opens before their stream's first vintage")
+                    "opens before their stream's first vintage"
+                )
             end
         end
 
@@ -1389,16 +1483,19 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## province by province into its own table. Absent on every release
         ## published before the asset existed, a clean skip.
         province_path = fetch_asset(
-            repo, tag, PROVINCE_FORECAST_ASSET, tagdir(tag))
+            repo, tag, PROVINCE_FORECAST_ASSET, tagdir(tag)
+        )
         ## Counted off the asset itself, not off a `nothing` result, so a
         ## release whose scoring threw is not logged as one that never
         ## carried the archive.
         isnothing(province_path) && (n_province_no_asset += 1)
         presult = try
-            score_province_release(tag, province_path, obs, grid_date;
-                vintage_obs_path = tag_obs_path)
+            score_province_release(
+                tag, province_path, obs, grid_date;
+                vintage_obs_path = tag_obs_path
+            )
         catch e
-            @warn "skipping $tag province forecast scoring" exception=e
+            @warn "skipping $tag province forecast scoring" exception = e
             nothing
         end
         if !isnothing(presult)
@@ -1408,27 +1505,33 @@ if abspath(PROGRAM_FILE) == @__FILE__
             n_province_no_baseline += presult.no_baseline
             presult.spans_break > 0 && @info string(
                 tag, " (province): skipped ", presult.spans_break,
-                " group(s) whose window holds a harmonisation-break day")
+                " group(s) whose window holds a harmonisation-break day"
+            )
             presult.no_baseline > 0 && @info string(
                 tag, " (province): drew no baseline for ",
                 presult.no_baseline, " group(s) whose baseline window ",
-                "opens before their province's first vintage")
+                "opens before their province's first vintage"
+            )
         end
 
         draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
         r = try
             rt_row(tag, draws_path, cutoffs[tag])
         catch e
-            @warn "skipping $tag R_T summary" exception=e
+            @warn "skipping $tag R_T summary" exception = e
             nothing
         end
         if isnothing(r)
             n_no_rt += 1
         else
-            push!(rt_rows,
-                (; release = r[1], date = r[2], median = r[3],
+            push!(
+                rt_rows,
+                (;
+                    release = r[1], date = r[2], median = r[3],
                     lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
-                    lo90 = r[8], hi90 = r[9]))
+                    lo90 = r[8], hi90 = r[9],
+                )
+            )
         end
 
         ## R0 = exp(rt_state.log_R0) from the same draws asset, the renewal
@@ -1437,13 +1540,17 @@ if abspath(PROGRAM_FILE) == @__FILE__
         r0r = try
             r0_row(tag, draws_path, cutoffs[tag])
         catch e
-            @warn "skipping $tag R0 summary" exception=e
+            @warn "skipping $tag R0 summary" exception = e
             nothing
         end
-        isnothing(r0r) || push!(r0_rows,
-            (; release = r0r[1], date = r0r[2], median = r0r[3],
+        isnothing(r0r) || push!(
+            r0_rows,
+            (;
+                release = r0r[1], date = r0r[2], median = r0r[3],
                 lo30 = r0r[4], hi30 = r0r[5], lo60 = r0r[6], hi60 = r0r[7],
-                lo90 = r0r[8], hi90 = r0r[9]))
+                lo90 = r0r[8], hi90 = r0r[9],
+            )
+        )
 
         ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
         ## every release until P2.2 lands, so a missing asset is a clean skip.
@@ -1451,7 +1558,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         byqty = try
             stream_estimate_rows(tag, est_path, cutoffs[tag])
         catch e
-            @warn "skipping $tag stream estimates" exception=e
+            @warn "skipping $tag stream estimates" exception = e
             nothing
         end
         isnothing(byqty) || for (qty, rows) in byqty
@@ -1459,26 +1566,38 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    println("Scored $n_scored/$(length(tags)) releases " *
+    println(
+        "Scored $n_scored/$(length(tags)) releases " *
             "($n_no_forecast without a stored or reconstructed forecast, " *
             "$n_backfilled from $BACKFILL_TAG, $n_failed_reconstruction " *
-            "excluded as known-failed reconstructions).")
-    println("Dropped $n_stopped group(s) whose target ran past their " *
+            "excluded as known-failed reconstructions)."
+    )
+    println(
+        "Dropped $n_stopped group(s) whose target ran past their " *
             "stream's own reporting coverage ($n_frozen_stopped in the " *
-            "frozen tables).")
-    println("Dropped $n_unstarted group(s) whose window opened before their " *
+            "frozen tables)."
+    )
+    println(
+        "Dropped $n_unstarted group(s) whose window opened before their " *
             "stream began being reported ($n_frozen_unstarted in the " *
-            "frozen tables).")
-    println("Drew no baseline for $n_no_baseline group(s) whose baseline " *
+            "frozen tables)."
+    )
+    println(
+        "Drew no baseline for $n_no_baseline group(s) whose baseline " *
             "window opened before their stream's first vintage " *
-            "($n_frozen_no_baseline in the frozen tables).")
-    println("Scored per-province forecasts for $n_province_scored/" *
+            "($n_frozen_no_baseline in the frozen tables)."
+    )
+    println(
+        "Scored per-province forecasts for $n_province_scored/" *
             "$(length(tags)) releases ($n_province_no_asset without the " *
             "asset), dropping $n_province_breaks group(s) whose window " *
             "holds a harmonisation-break day and drawing no baseline for " *
-            "$n_province_no_baseline.")
-    println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
-            "($n_no_rt without an R_T posterior).")
+            "$n_province_no_baseline."
+    )
+    println(
+        "R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
+            "($n_no_rt without an R_T posterior)."
+    )
 
     ## `data/forecast_scores.csv`: one row per scored (release, made_date,
     ## stream, horizon, fit) group, `fit` the model or `baseline`. The two
@@ -1487,20 +1606,26 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## individual fit is computed at aggregation time by the table builders
     ## in `src/scoring.jl`, not stored per row here.
     scores = if isempty(score_rows)
-        DataFrame(release = String[], made_date = Date[], stream = String[],
+        DataFrame(
+            release = String[], made_date = Date[], stream = String[],
             horizon = Int[], target_date = Date[], fit = String[],
             crps = Float64[], log_crps = Float64[], dispersion = Float64[],
             overprediction = Float64[], underprediction = Float64[],
             coverage_50 = Float64[],
-            coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
+            coverage_90 = Float64[], bias = Float64[], n_samples = Int[]
+        )
     else
-        sort(DataFrame(score_rows),
-            [:release, :made_date, :stream, :horizon, :fit])
+        sort(
+            DataFrame(score_rows),
+            [:release, :made_date, :stream, :horizon, :fit]
+        )
     end
     scores_base = rel_to_baseline_columns(scores)
     scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
-    write_simple_csv(scores_dest,
-        [:release => scores.release,
+    write_simple_csv(
+        scores_dest,
+        [
+            :release => scores.release,
             :made_date => string.(scores.made_date),
             :stream => scores.stream,
             :horizon => scores.horizon,
@@ -1515,25 +1640,35 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :coverage_90 => scores.coverage_90,
             :bias => scores.bias,
             :n_samples => scores.n_samples,
-            :log_rel_to_baseline => rel_to_baseline_cell.(scores_base)])
-    println("Wrote $(nrow(scores)) scored forecasts to " *
-            "data/forecast_scores.csv")
+            :log_rel_to_baseline => rel_to_baseline_cell.(scores_base),
+        ]
+    )
+    println(
+        "Wrote $(nrow(scores)) scored forecasts to " *
+            "data/forecast_scores.csv"
+    )
 
     ## `data/forecast_overlay.csv`: median and 30/60/90% bounds of each
     ## forecast group with the observed truth, for the overlay plots.
     overlay = if isempty(overlay_rows)
-        DataFrame(release = String[], made_date = Date[], stream = String[],
+        DataFrame(
+            release = String[], made_date = Date[], stream = String[],
             horizon = Int[], target_date = Date[], fit = String[],
             observed = Float64[], median = Float64[], lo30 = Float64[],
             hi30 = Float64[], lo60 = Float64[], hi60 = Float64[],
-            lo90 = Float64[], hi90 = Float64[])
+            lo90 = Float64[], hi90 = Float64[]
+        )
     else
-        sort(DataFrame(overlay_rows),
-            [:stream, :made_date, :horizon, :fit])
+        sort(
+            DataFrame(overlay_rows),
+            [:stream, :made_date, :horizon, :fit]
+        )
     end
     overlay_dest = joinpath(@__DIR__, "..", "data", "forecast_overlay.csv")
-    write_simple_csv(overlay_dest,
-        [:release => overlay.release,
+    write_simple_csv(
+        overlay_dest,
+        [
+            :release => overlay.release,
             :made_date => string.(overlay.made_date),
             :stream => overlay.stream,
             :horizon => overlay.horizon,
@@ -1543,9 +1678,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :median => overlay.median,
             :lo30 => overlay.lo30, :hi30 => overlay.hi30,
             :lo60 => overlay.lo60, :hi60 => overlay.hi60,
-            :lo90 => overlay.lo90, :hi90 => overlay.hi90])
-    println("Wrote $(nrow(overlay)) forecast-overlay rows to " *
-            "data/forecast_overlay.csv")
+            :lo90 => overlay.lo90, :hi90 => overlay.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(overlay)) forecast-overlay rows to " *
+            "data/forecast_overlay.csv"
+    )
 
     ## `data/forecast_scores_frozen.csv` and `data/forecast_overlay_frozen.csv`:
     ## the frozen-fit forecasts scored against the now-observed data, kept apart
@@ -1554,23 +1693,29 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## rows tagged `frozen`. Written even when empty (header only), since the
     ## docs build reads them and a missing file would throw.
     function _score_frame(rows)
-        isempty(rows) && return DataFrame(release = String[],
+        isempty(rows) && return DataFrame(
+            release = String[],
             made_date = Date[], stream = String[], horizon = Int[],
             target_date = Date[], fit = String[], crps = Float64[],
             log_crps = Float64[], dispersion = Float64[],
             overprediction = Float64[], underprediction = Float64[],
             coverage_50 = Float64[],
-            coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
-        return sort(DataFrame(rows),
-            [:release, :made_date, :stream, :horizon, :fit])
+            coverage_90 = Float64[], bias = Float64[], n_samples = Int[]
+        )
+        return sort(
+            DataFrame(rows),
+            [:release, :made_date, :stream, :horizon, :fit]
+        )
     end
     function _overlay_frame(rows)
-        isempty(rows) && return DataFrame(release = String[],
+        isempty(rows) && return DataFrame(
+            release = String[],
             made_date = Date[], stream = String[], horizon = Int[],
             target_date = Date[], fit = String[], observed = Float64[],
             median = Float64[], lo30 = Float64[], hi30 = Float64[],
             lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
-            hi90 = Float64[])
+            hi90 = Float64[]
+        )
         return sort(DataFrame(rows), [:stream, :made_date, :horizon, :fit])
     end
 
@@ -1581,7 +1726,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     frozen_base = rel_to_baseline_columns(frozen_scores)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_scores_frozen.csv"),
-        [:release => frozen_scores.release,
+        [
+            :release => frozen_scores.release,
             :made_date => string.(frozen_scores.made_date),
             :stream => frozen_scores.stream,
             :horizon => frozen_scores.horizon,
@@ -1596,11 +1742,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :coverage_90 => frozen_scores.coverage_90,
             :bias => frozen_scores.bias,
             :n_samples => frozen_scores.n_samples,
-            :log_rel_to_baseline => rel_to_baseline_cell.(frozen_base)])
+            :log_rel_to_baseline => rel_to_baseline_cell.(frozen_base),
+        ]
+    )
     frozen_overlay = _overlay_frame(frozen_overlay_rows)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_overlay_frozen.csv"),
-        [:release => frozen_overlay.release,
+        [
+            :release => frozen_overlay.release,
             :made_date => string.(frozen_overlay.made_date),
             :stream => frozen_overlay.stream,
             :horizon => frozen_overlay.horizon,
@@ -1610,9 +1759,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :median => frozen_overlay.median,
             :lo30 => frozen_overlay.lo30, :hi30 => frozen_overlay.hi30,
             :lo60 => frozen_overlay.lo60, :hi60 => frozen_overlay.hi60,
-            :lo90 => frozen_overlay.lo90, :hi90 => frozen_overlay.hi90])
-    println("Wrote $(nrow(frozen_scores)) frozen-fit scores over " *
-            "$n_frozen_scored release(s) to data/forecast_scores_frozen.csv")
+            :lo90 => frozen_overlay.lo90, :hi90 => frozen_overlay.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(frozen_scores)) frozen-fit scores over " *
+            "$n_frozen_scored release(s) to data/forecast_scores_frozen.csv"
+    )
 
     ## `data/province_forecast_scores.csv`: the per-province forecasts scored
     ## the same way, in the same schema as the national table, with each
@@ -1624,7 +1777,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     province_base = rel_to_baseline_columns(province_scores)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "province_forecast_scores.csv"),
-        [:release => province_scores.release,
+        [
+            :release => province_scores.release,
             :made_date => string.(province_scores.made_date),
             :stream => province_scores.stream,
             :horizon => province_scores.horizon,
@@ -1639,45 +1793,65 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :coverage_90 => province_scores.coverage_90,
             :bias => province_scores.bias,
             :n_samples => province_scores.n_samples,
-            :log_rel_to_baseline => rel_to_baseline_cell.(province_base)])
-    println("Wrote $(nrow(province_scores)) per-province scores over " *
+            :log_rel_to_baseline => rel_to_baseline_cell.(province_base),
+        ]
+    )
+    println(
+        "Wrote $(nrow(province_scores)) per-province scores over " *
             "$n_province_scored release(s) to " *
-            "data/province_forecast_scores.csv")
+            "data/province_forecast_scores.csv"
+    )
 
     ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
     rt = if isempty(rt_rows)
-        DataFrame(release = String[], date = String[], median = Float64[],
+        DataFrame(
+            release = String[], date = String[], median = Float64[],
             lo30 = Float64[], hi30 = Float64[], lo60 = Float64[],
-            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[])
+            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[]
+        )
     else
         sort(DataFrame(rt_rows), [:date])
     end
     rt_dest = joinpath(@__DIR__, "..", "data", "rt_by_release.csv")
-    write_simple_csv(rt_dest,
-        [:release => rt.release, :date => rt.date, :median => rt.median,
+    write_simple_csv(
+        rt_dest,
+        [
+            :release => rt.release, :date => rt.date, :median => rt.median,
             :lo30 => rt.lo30, :hi30 => rt.hi30, :lo60 => rt.lo60,
-            :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90])
-    println("Wrote $(nrow(rt)) release R_T summaries to " *
-            "data/rt_by_release.csv")
+            :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(rt)) release R_T summaries to " *
+            "data/rt_by_release.csv"
+    )
 
     ## `data/r0_by_release.csv`: the established initial reproduction number
     ## R0 = exp(rt_state.log_R0) per release, identical schema to
     ## `data/rt_by_release.csv`. Written even when empty, since the docs build
     ## reads it and a missing file throws.
     r0 = if isempty(r0_rows)
-        DataFrame(release = String[], date = String[], median = Float64[],
+        DataFrame(
+            release = String[], date = String[], median = Float64[],
             lo30 = Float64[], hi30 = Float64[], lo60 = Float64[],
-            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[])
+            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[]
+        )
     else
         sort(DataFrame(r0_rows), [:date])
     end
     r0_dest = joinpath(@__DIR__, "..", "data", "r0_by_release.csv")
-    write_simple_csv(r0_dest,
-        [:release => r0.release, :date => r0.date, :median => r0.median,
+    write_simple_csv(
+        r0_dest,
+        [
+            :release => r0.release, :date => r0.date, :median => r0.median,
             :lo30 => r0.lo30, :hi30 => r0.hi30, :lo60 => r0.lo60,
-            :hi60 => r0.hi60, :lo90 => r0.lo90, :hi90 => r0.hi90])
-    println("Wrote $(nrow(r0)) release R0 summaries to " *
-            "data/r0_by_release.csv")
+            :hi60 => r0.hi60, :lo90 => r0.lo90, :hi90 => r0.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(r0)) release R0 summaries to " *
+            "data/r0_by_release.csv"
+    )
 
     ## `data/rt_by_release_by_stream.csv`, `data/size_by_release_by_stream.csv`
     ## and `data/r0_by_release_by_stream.csv`: the R_T, C_T and R0 posteriors
@@ -1687,19 +1861,25 @@ if abspath(PROGRAM_FILE) == @__FILE__
     for file in sort(collect(values(STREAM_QUANTITY_DEST)))
         rows = stream_est_rows[file]
         df = if isempty(rows)
-            DataFrame(release = String[], date = String[], fit = String[],
+            DataFrame(
+                release = String[], date = String[], fit = String[],
                 median = Float64[], lo30 = Float64[], hi30 = Float64[],
                 lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
-                hi90 = Float64[])
+                hi90 = Float64[]
+            )
         else
             sort(DataFrame(rows), [:date, :fit])
         end
         dest = joinpath(@__DIR__, "..", "data", file)
-        write_simple_csv(dest,
-            [:release => df.release, :date => df.date, :fit => df.fit,
+        write_simple_csv(
+            dest,
+            [
+                :release => df.release, :date => df.date, :fit => df.fit,
                 :median => df.median, :lo30 => df.lo30, :hi30 => df.hi30,
                 :lo60 => df.lo60, :hi60 => df.hi60, :lo90 => df.lo90,
-                :hi90 => df.hi90])
+                :hi90 => df.hi90,
+            ]
+        )
         println("Wrote $(nrow(df)) per-stream rows to data/$file")
     end
 end

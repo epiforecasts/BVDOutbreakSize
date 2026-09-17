@@ -2,7 +2,7 @@
 ## hit reuses the serialised result, a miss (or forced refit) runs the thunk,
 ## and the content hash changes when the inputs change.
 
-@testitem "fit_or_load caches, reuses and refits" tags=[:quality] begin
+@testitem "fit_or_load caches, reuses and refits" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     dir = mktempdir()
@@ -19,8 +19,8 @@
     @test isfile(joinpath(dir, key * ".jls"))
 end
 
-@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags=[
-    :quality
+@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags = [
+    :quality,
 ] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
@@ -33,7 +33,8 @@ end
     ## thunk, so a render can fail fast rather than silently refit the whole
     ## report.
     @test_throws Exception fit_or_load(
-        key, thunk; cache_dir = dir, strict = true)
+        key, thunk; cache_dir = dir, strict = true
+    )
     @test calls[] == 0
     @test !isfile(joinpath(dir, key * ".jls"))
 
@@ -44,8 +45,8 @@ end
     @test calls[] == 1                            # only the populating fit ran
 end
 
-@testitem "every score_releases overlay is excluded from the fit hash" tags=[
-    :quality
+@testitem "every score_releases overlay is excluded from the fit hash" tags = [
+    :quality,
 ] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
@@ -60,17 +61,21 @@ end
     ## input from there (the digitised onset triangle), which must stay in
     ## the hash rather than be excluded from it.
     src = read(
-        joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String)
-    written = Set(m.captures[1]
-    for m in eachmatch(
-        r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src))
+        joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String
+    )
+    written = Set(
+        m.captures[1]
+            for m in eachmatch(
+                r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src
+            )
+    )
     @test length(written) >= 4  # guards against a silent regex miss
     for f in written
         @test f in FIT_DATA_EXCLUDE
     end
 end
 
-@testitem "content hash reflects inputs" tags=[:quality] begin
+@testitem "content hash reflects inputs" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     h = content_hash([@__FILE__]; extra = "a")
@@ -91,7 +96,7 @@ end
     @test tree_sha256(d) != t1
 end
 
-@testitem "content hash can exclude non-input data files" tags=[:quality] begin
+@testitem "content hash can exclude non-input data files" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     ## Excluding a file removes it from the tree digest; a fit-input CSV still
@@ -124,7 +129,7 @@ end
     @test content_hash(src; data_dir = d, data_exclude = excl) != h
 end
 
-@testitem "the observation manifest enters the fit hash" tags=[:quality] begin
+@testitem "the observation manifest enters the fit hash" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
     ## `data/observations.toml` is the single source of truth for every
@@ -146,11 +151,13 @@ end
     ## excluded, so it is part of the real fit key.
     data_dir = joinpath(_PKG, "data")
     @test tree_sha256(data_dir; exclude = FIT_DATA_EXCLUDE) !=
-          tree_sha256(data_dir;
-        exclude = (FIT_DATA_EXCLUDE..., "observations.toml"))
+        tree_sha256(
+        data_dir;
+        exclude = (FIT_DATA_EXCLUDE..., "observations.toml")
+    )
 end
 
-@testitem "the fit hash skips excluded directories" tags=[:quality] begin
+@testitem "the fit hash skips excluded directories" tags = [:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     ## An exclude entry naming a directory drops everything under it. That is
@@ -170,7 +177,7 @@ end
     @test tree_sha256(d) != h
 end
 
-@testitem "validation fits follow the reporting status" tags=[:quality] begin
+@testitem "validation fits follow the reporting status" tags = [:quality] begin
     using Dates
     using Dates: Date, Day
 
@@ -185,13 +192,15 @@ end
     day(d) = n - Dates.value(cutoff - d)
     live = (; days = [day(cutoff - Day(1))], counts = [10.0])
     stale = (; days = [day(cutoff - Day(60))], counts = [10.0])
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = stale, deaths_history = stale,
         confirmed_history = live, confirmed_deaths_history = live,
-        isolation_history = live)
+        isolation_history = live,
+    )
 
     @test validation_stream_ids(obs) ==
-          ("confirmed", "confirmed_deaths", "treatment")
+        ("confirmed", "confirmed_deaths", "treatment")
 
     ## A stream that starts being reported again comes back on its own.
     revived = merge(obs, (; reported_history = live))

@@ -3,8 +3,8 @@
 ## series at each report day, the deaths analogue of the daily new-suspect
 ## inflow. Exercised through `deaths_only_model` and `bvd_joint`.
 
-@testitem "suspected daily deaths: conditioned fit stays positive" tags=[
-    :slow
+@testitem "suspected daily deaths: conditioned fit stays positive" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -13,11 +13,15 @@
     ## Cumulative suspected-death history (frozen) plus the disjoint daily
     ## inflow on later days, supplied as observed counts.
     deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
-    suspected_daily_deaths_history = (; days = [30, 31, 32, 33],
-        counts = [35, 41, 30, 50])
+    suspected_daily_deaths_history = (;
+        days = [30, 31, 32, 33],
+        counts = [35, 41, 30, 50],
+    )
     chn = sample(
-        deaths_only_model(33, missing; deaths_history,
-            suspected_daily_deaths_history),
+        deaths_only_model(
+            33, missing; deaths_history,
+            suspected_daily_deaths_history
+        ),
         Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -27,8 +31,8 @@
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily deaths: predictive path samples the counts" tags=[
-    :slow
+@testitem "suspected daily deaths: predictive path samples the counts" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -41,8 +45,10 @@ end
     deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
     suspected_daily_deaths_history = (; days = [30, 31, 32, 33], counts = Int[])
     chn = sample(
-        deaths_only_model(33, missing; deaths_history,
-            suspected_daily_deaths_history),
+        deaths_only_model(
+            33, missing; deaths_history,
+            suspected_daily_deaths_history
+        ),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -50,7 +56,7 @@ end
     @test any(k -> occursin("suspected_daily_deaths", k), ks)
 end
 
-@testitem "suspected daily deaths: empty history is a no-op" tags=[:slow] begin
+@testitem "suspected daily deaths: empty history is a no-op" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: deaths_only_model
@@ -70,8 +76,8 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily deaths: joint prior runs with the live data" tags=[
-    :slow
+@testitem "suspected daily deaths: joint prior runs with the live data" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -80,7 +86,8 @@ end
     obs = load_observations()
     @test !isempty(obs.suspected_daily_deaths_history.counts)
     breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -96,9 +103,12 @@ end
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 30;
-        chain_type = FlexiChains.VNChain, progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 30;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     C_T = vec(Array(chn[:C_T]))
     @test length(C_T) == 30
     @test all(isfinite, C_T)

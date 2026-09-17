@@ -14,7 +14,7 @@ end
     seed!(1)
     d = lab_delay_model(20)()
     @test all(>=(0), d.pmf)
-    @test isapprox(sum(d.pmf), 1; atol = 1e-8)
+    @test isapprox(sum(d.pmf), 1; atol = 1.0e-8)
     @test d.mean > 0
 end
 
@@ -32,14 +32,16 @@ end
     using Turing.DynamicPPL: logjoint
     using Random: MersenneTwister
 
-    m = confirmed_only_model(40, 27;
+    m = confirmed_only_model(
+        40, 27;
         confirmed_history = (; days = [18, 40], counts = [17, 27]),
-        lab_history = (; days = [18, 40], counts = [12, 28]))
+        lab_history = (; days = [18, 40], counts = [12, 28])
+    )
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
 end
 
-@testitem "bvd_joint exposes lab-pipeline deterministics" tags=[:slow] begin
+@testitem "bvd_joint exposes lab-pipeline deterministics" tags = [:slow] begin
     using BVDOutbreakSize: bvd_joint, nuts_sample, load_observations
     using Statistics: mean
 
@@ -56,13 +58,16 @@ end
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
         breakpoint = obs.n - obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
+        tmrca_days = obs.tmrca_days
+    )
     chn = nuts_sample(m; samples = 25, chains = 1, progress = false)
-    for key in (:expected_confirmed_T, :expected_analysed_T,
-        :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
-        :death_ascertainment, :background_cfr, :tau_death,
-        :death_composition, :death_confirmation,
-        :expected_confirmed_deaths_T)
+    for key in (
+            :expected_confirmed_T, :expected_analysed_T,
+            :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
+            :death_ascertainment, :background_cfr, :tau_death,
+            :death_composition, :death_confirmation,
+            :expected_confirmed_deaths_T,
+        )
         v = vec(Array(chn[key]))
         @test all(isfinite, v)
     end

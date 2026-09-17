@@ -70,8 +70,10 @@ With no draws (`isempty(samples)`), every component is `NaN`.
 function crps_decomposition(obs::Real, samples::AbstractVector{<:Real})
     n = length(samples)
     if n == 0
-        return (; dispersion = NaN, overprediction = NaN,
-            underprediction = NaN)
+        return (;
+            dispersion = NaN, overprediction = NaN,
+            underprediction = NaN,
+        )
     end
     x = sort!(Float64.(collect(samples)))
     y = Float64(obs)
@@ -119,7 +121,8 @@ function score_draws(obs::Real, samples::AbstractVector{<:Real})
             crps = NaN, log_crps = NaN,
             dispersion = NaN, overprediction = NaN, underprediction = NaN,
             coverage_50 = false, coverage_90 = false,
-            bias = NaN, n = 0)
+            bias = NaN, n = 0,
+        )
     end
     decomp = crps_decomposition(obs, samples)
     return (;
@@ -131,7 +134,8 @@ function score_draws(obs::Real, samples::AbstractVector{<:Real})
         coverage_50 = _covered(obs, samples, 0.5),
         coverage_90 = _covered(obs, samples, 0.9),
         bias = bias_sample(obs, samples),
-        n = n)
+        n = n,
+    )
 end
 
 ## The two kinds of results release `.github/workflows/docs.yml` publishes:
@@ -145,7 +149,7 @@ const _MAIN_RELEASE = r"^results-([0-9]+)$"
 ## forecasts live under `forecasts-backfill`. Neither is a results release.
 function is_results_release(tag::AbstractString)
     return !isnothing(match(_VERSION_RELEASE, tag)) ||
-           !isnothing(match(_MAIN_RELEASE, tag))
+        !isnothing(match(_MAIN_RELEASE, tag))
 end
 
 ## Rank one results release within its day. Tagged releases sort above
@@ -182,9 +186,11 @@ keeping the selection deterministic.
 Returns the selected tags, newest cut-off first.
 """
 function select_daily_releases(entries)
-    rels = [(String(t), c, Date(d))
+    rels = [
+        (String(t), c, Date(d))
             for (t, c, d) in entries
-            if !isnothing(_release_key(t, c))]
+            if !isnothing(_release_key(t, c))
+    ]
     isempty(rels) && return String[]
 
     days = Dict{Date, typeof(rels)}()
@@ -192,8 +198,10 @@ function select_daily_releases(entries)
         push!(get!(() -> empty(rels), days, r[3]), r)
     end
 
-    picks = [argmax(r -> _release_key(r[1], r[2]), days[d])
-             for d in sort(collect(keys(days)))]
+    picks = [
+        argmax(r -> _release_key(r[1], r[2]), days[d])
+            for d in sort(collect(keys(days)))
+    ]
     sort!(picks; by = r -> r[3], rev = true)
     return first.(picks)
 end
@@ -237,10 +245,12 @@ end
 ## `scores`, besides `joint_fit` and `baseline_fit`, scored anywhere for
 ## that stream. `missing` when the stream has none (e.g. "recovered"),
 ## since a stream is fit by at most one individual model.
-function _individual_fit_id(scores::DataFrame, stream, joint_fit,
-        baseline_fit)
+function _individual_fit_id(
+        scores::DataFrame, stream, joint_fit,
+        baseline_fit
+    )
     not_base_or_joint = (scores.fit .!= joint_fit) .&
-                        (scores.fit .!= baseline_fit)
+        (scores.fit .!= baseline_fit)
     ids = unique(scores.fit[(scores.stream .== stream) .& not_base_or_joint])
     return length(ids) == 1 ? ids[1] : missing
 end
@@ -253,8 +263,10 @@ end
 ##
 ## The individual-fit columns use their own matched set and are only
 ## populated on the joint fit's row of a stream that has one.
-function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
-        joint_fit, baseline_fit)
+function _stream_fit_stats(
+        scores::DataFrame, stream, fit, mask;
+        joint_fit, baseline_fit
+    )
     fit_grp = scores[mask .& (scores.fit .== fit), :]
     isempty(fit_grp) && return nothing
     baseline_grp = scores[mask .& (scores.fit .== baseline_fit), :]
@@ -286,7 +298,8 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
         end
     end
 
-    return (; n,
+    return (;
+        n,
         crps = round(crps; digits = 2),
         rel_to_baseline = _safe_ratio(crps, crps_baseline),
         log_crps = round(log_crps; digits = 3),
@@ -297,7 +310,8 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
         underprediction = round(mean(mfit.underprediction); digits = 2),
         coverage_50 = round(mean(mfit.coverage_50); digits = 2),
         coverage_90 = round(mean(mfit.coverage_90); digits = 2),
-        bias = round(mean(mfit.bias); digits = 2))
+        bias = round(mean(mfit.bias); digits = 2),
+    )
 end
 
 ## Column schema shared by the three score summaries below, `key_cols`
@@ -315,7 +329,8 @@ function _score_summary_schema(key_cols::NamedTuple)
         log_rel_to_individual = Union{Missing, Float64}[],
         dispersion = Float64[], overprediction = Float64[],
         underprediction = Float64[],
-        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[])
+        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[],
+    )
     return DataFrame(; key_cols..., metrics...)
 end
 
@@ -343,8 +358,10 @@ scored zero cannot make it infinite. A ratio is `missing`, never `Inf` or
 Returns a typed zero-row frame when `scores` is empty, so the report
 renders before any release carries a forecast.
 """
-function forecast_score_overview(scores::DataFrame;
-        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
+function forecast_score_overview(
+        scores::DataFrame;
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT
+    )
     empty = _score_summary_schema((; stream = String[], fit = String[]))
     isempty(scores) && return empty
     rows = NamedTuple[]
@@ -366,21 +383,32 @@ The same columns as [`forecast_score_overview`](@ref), one row per
 `(stream, horizon, fit)` rather than pooled across every horizon, so a fit
 that beats the baseline on average but not at every cut-off is visible.
 """
-function forecast_score_by_horizon(scores::DataFrame;
-        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
-    empty = _score_summary_schema((; stream = String[], horizon = Int[],
-        fit = String[]))
+function forecast_score_by_horizon(
+        scores::DataFrame;
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT
+    )
+    empty = _score_summary_schema(
+        (;
+            stream = String[], horizon = Int[],
+            fit = String[],
+        )
+    )
     isempty(scores) && return empty
     rows = NamedTuple[]
     for s in sort(unique(scores.stream))
         smask = scores.stream .== s
         for h in sort(unique(scores.horizon[smask]))
             mask = smask .& (scores.horizon .== h)
-            fits = sort(unique(
-                scores.fit[mask .& (scores.fit .!= baseline_fit)]))
+            fits = sort(
+                unique(
+                    scores.fit[mask .& (scores.fit .!= baseline_fit)]
+                )
+            )
             for f in fits
-                st = _stream_fit_stats(scores, s, f, mask; joint_fit,
-                    baseline_fit)
+                st = _stream_fit_stats(
+                    scores, s, f, mask; joint_fit,
+                    baseline_fit
+                )
                 isnothing(st) && continue
                 push!(rows, (; stream = s, horizon = h, fit = f, st...))
             end
@@ -395,21 +423,32 @@ The same columns as [`forecast_score_overview`](@ref), one row per
 `(stream, fit, made_date)`, averaged across horizons rather than pooled
 over releases too, baseline rows excluded.
 """
-function forecast_score_by_release(scores::DataFrame;
-        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
-    empty = _score_summary_schema((; made_date = Date[], stream = String[],
-        fit = String[]))
+function forecast_score_by_release(
+        scores::DataFrame;
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT
+    )
+    empty = _score_summary_schema(
+        (;
+            made_date = Date[], stream = String[],
+            fit = String[],
+        )
+    )
     isempty(scores) && return empty
     rows = NamedTuple[]
     for s in sort(unique(scores.stream))
         smask = scores.stream .== s
         for d in sort(unique(scores.made_date[smask]))
             mask = smask .& (scores.made_date .== d)
-            fits = sort(unique(
-                scores.fit[mask .& (scores.fit .!= baseline_fit)]))
+            fits = sort(
+                unique(
+                    scores.fit[mask .& (scores.fit .!= baseline_fit)]
+                )
+            )
             for f in fits
-                st = _stream_fit_stats(scores, s, f, mask; joint_fit,
-                    baseline_fit)
+                st = _stream_fit_stats(
+                    scores, s, f, mask; joint_fit,
+                    baseline_fit
+                )
                 isnothing(st) && continue
                 push!(rows, (; made_date = d, stream = s, fit = f, st...))
             end
@@ -424,8 +463,10 @@ end
 function _repeated_made_dates(scores::DataFrame; min_releases::Integer = 2)
     seen = Dict{Any, Set{String}}()
     for i in 1:size(scores, 1)
-        push!(get!(seen, scores.made_date[i], Set{String}()),
-            scores.release[i])
+        push!(
+            get!(seen, scores.made_date[i], Set{String}()),
+            scores.release[i]
+        )
     end
     return Set(d for (d, rels) in seen if length(rels) >= min_releases)
 end
@@ -460,11 +501,17 @@ time where the tag names do not.
 Returns a typed zero-row frame when `scores` is empty or carries no
 repeated made date.
 """
-function forecast_score_by_vintage(scores::DataFrame;
+function forecast_score_by_vintage(
+        scores::DataFrame;
         joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT,
-        min_releases::Integer = 2)
-    empty = _score_summary_schema((; stream = String[], release = String[],
-        release_date = Date[], fit = String[]))
+        min_releases::Integer = 2
+    )
+    empty = _score_summary_schema(
+        (;
+            stream = String[], release = String[],
+            release_date = Date[], fit = String[],
+        )
+    )
     isempty(scores) && return empty
     repeated = _repeated_made_dates(scores; min_releases = min_releases)
     isempty(repeated) && return empty
@@ -474,18 +521,29 @@ function forecast_score_by_vintage(scores::DataFrame;
     for s in sort(unique(scores.stream))
         smask = rep .& (scores.stream .== s)
         any(smask) || continue
-        rels = sort(unique(scores.release[smask]);
-            by = r -> (order[r], r))
+        rels = sort(
+            unique(scores.release[smask]);
+            by = r -> (order[r], r)
+        )
         for rel in rels
             mask = smask .& (scores.release .== rel)
-            fits = sort(unique(
-                scores.fit[mask .& (scores.fit .!= baseline_fit)]))
+            fits = sort(
+                unique(
+                    scores.fit[mask .& (scores.fit .!= baseline_fit)]
+                )
+            )
             for f in fits
-                st = _stream_fit_stats(scores, s, f, mask; joint_fit,
-                    baseline_fit)
+                st = _stream_fit_stats(
+                    scores, s, f, mask; joint_fit,
+                    baseline_fit
+                )
                 isnothing(st) && continue
-                push!(rows, (; stream = s, release = rel,
-                    release_date = order[rel], fit = f, st...))
+                push!(
+                    rows, (;
+                        stream = s, release = rel,
+                        release_date = order[rel], fit = f, st...,
+                    )
+                )
             end
         end
     end
@@ -529,9 +587,11 @@ once a second model is scored, is worse than one that never varies.
 function drop_degenerate_fit_column(table::DataFrame)
     isempty(table.fit) && return table
     length(unique(table.fit)) == 1 ||
-        error("drop_degenerate_fit_column: table's fit column carries " *
-              "more than one value; only call this on a table whose " *
-              "single-fit shape is structural, not incidental")
+        error(
+        "drop_degenerate_fit_column: table's fit column carries " *
+            "more than one value; only call this on a table whose " *
+            "single-fit shape is structural, not incidental"
+    )
     keep = [n for n in names(table) if n != "fit"]
     return table[:, keep]
 end
@@ -571,9 +631,11 @@ a misspelt role and a role with nothing scored are otherwise
 indistinguishable in the rendered report.
 """
 function select_fit_role(table::DataFrame, role::AbstractString)
-    role in _FIT_ROLES || error("select_fit_role: unknown role " *
-          "$(repr(role)); expected one of " *
-          join(repr.(_FIT_ROLES), ", "))
+    role in _FIT_ROLES || error(
+        "select_fit_role: unknown role " *
+            "$(repr(role)); expected one of " *
+            join(repr.(_FIT_ROLES), ", ")
+    )
     return table[_fit_role.(table.fit) .== role, :]
 end
 

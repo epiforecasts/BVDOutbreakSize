@@ -44,14 +44,16 @@ end
 # font files by basename from the same assets directory as the CSS. A
 # referenced font that is not found is left untouched.
 function embed_fonts(css::AbstractString, assets_dir::AbstractString)
-    replace(css,
+    return replace(
+        css,
         r"url\(([^)]*?([^/)]+\.woff2))\)" => function (m)
             name = match(r"url\([^)]*?([^/)]+\.woff2)\)", m).captures[1]
             path = joinpath(assets_dir, name)
             isfile(path) || return m
             data = base64encode(read(path))
-            "url(data:font/woff2;base64,$data)"
-        end)
+            return "url(data:font/woff2;base64,$data)"
+        end
+    )
 end
 
 function find_one(root::AbstractString, name::AbstractString)
@@ -117,10 +119,12 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     root = joinpath(@__DIR__, "..")
     build_dir = length(ARGS) >= 1 ? ARGS[1] :
-                joinpath(root, "docs", "build")
+        joinpath(root, "docs", "build")
     out_file = length(ARGS) >= 2 ? ARGS[2] :
-               joinpath(root, "output", "analysis.html")
+        joinpath(root, "output", "analysis.html")
     out = build_standalone(build_dir, out_file)
-    println("wrote self-contained report: ", out,
-        " (", filesize(out), " bytes)")
+    println(
+        "wrote self-contained report: ", out,
+        " (", filesize(out), " bytes)"
+    )
 end

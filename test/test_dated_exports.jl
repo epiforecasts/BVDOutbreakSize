@@ -30,14 +30,18 @@ end
     means = [1.0, 2.0, 0.5]
 
     ## Observed path: the supplied counts are conditioned, nothing sampled.
-    chn = sample(dated_poisson_model(means, [1, 2, 0]), Prior(), 10;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        dated_poisson_model(means, [1, 2, 0]), Prior(), 10;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     @test chn isa FlexiChains.VNChain
 
     ## Generator path: missing counts are sampled as one per-day vector,
     ## every entry a non-negative integer.
-    gen = sample(dated_poisson_model(means, missing), Prior(), 50;
-        chain_type = FlexiChains.VNChain, progress = false)
+    gen = sample(
+        dated_poisson_model(means, missing), Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     k = first(k for k in keys(gen) if occursin("counts", string(k)))
     draws = vec(Array(gen[k]))
     @test length(draws) == 50
@@ -45,7 +49,7 @@ end
     @test all(v -> all(v .>= 0), draws)
 end
 
-@testitem "exports_only dated series prior draws are finite" tags=[:slow] begin
+@testitem "exports_only dated series prior draws are finite" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: exports_only_model
@@ -63,7 +67,7 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "exports_joint_only fits cases and deaths together" tags=[:slow] begin
+@testitem "exports_joint_only fits cases and deaths together" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: exports_joint_only_model
@@ -72,8 +76,10 @@ end
     ## series over the one travel-gated prevalence; check_model is off (the
     ## predictive deaths/exports leave redundant discrete draws).
     chn = sample(
-        exports_joint_only_model(40, 3, 1; export_case_days = [28, 33, 40],
-            export_death_days = [30]),
+        exports_joint_only_model(
+            40, 3, 1; export_case_days = [28, 33, 40],
+            export_death_days = [30]
+        ),
         Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -83,8 +89,8 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "exports_only last_offset stops the clock before the cut-off" tags=[
-    :slow
+@testitem "exports_only last_offset stops the clock before the cut-off" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
