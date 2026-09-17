@@ -35,6 +35,11 @@ const _ZONE_PARENT_KEYS = (
     death_confirmation = :onset_to_death_confirmation_pmf,
     C_T = :C_T,
     importation = :importation_epsilon_patch,
+    severity_sd = :province_cfr_sd,
+    ascertainment_sd = :province_ascertainment_sd,
+    rho = :province_composition_rho,
+    rho_death = :province_death_composition_rho,
+    drift_sd = :region_drift_sd,
 )
 
 ## --- Pure building blocks ------------------------------------------------
@@ -491,6 +496,32 @@ function _zone_distance_blocks(zones, zone_province, zone_names, patch_ranges)
     any(isnothing, rows) && return Matrix{Float64}[]
     coords = [(r.lat, r.lon) for r in rows]
     return [province_distance_matrix(coords[zs]) for zs in patch_ranges]
+end
+
+## Draws of `key` flattened, whether the chain stores a scalar or a vector.
+function _zone_draw_values(chn, key::Symbol)
+    raw = vec(collect(chn[key]))
+    return eltype(raw) <: AbstractVector ? Float64.(reduce(vcat, raw)) :
+        Float64.(raw)
+end
+
+## Log-normal matched to the parent's draws of a positive scale, so the zone
+## prior carries the province model's centre and its uncertainty.
+function _zone_parent_lognormal(chn, key::Symbol, fallback::NTuple{2, Float64})
+    _has_key(chn, key) || return fallback
+    l = log.(max.(_zone_draw_values(chn, key), floatmin(Float64)))
+    isempty(l) && return fallback
+    return (mean(l), max(length(l) > 1 ? std(l) : 0.5, 0.05))
+end
+
+## Beta matched by moments to the parent's draws of a probability.
+function _zone_parent_beta(chn, key::Symbol, fallback::NTuple{2, Float64})
+    _has_key(chn, key) || return fallback
+    v = _zone_draw_values(chn, key)
+    isempty(v) && return fallback
+    m = clamp(mean(v), 1.0e-6, 1 - 1.0e-6)
+    ν = max(m * (1 - m) / max(var(v), 1.0e-12) - 1, 1.0e-3)
+    return (m * ν, (1 - m) * ν)
 end
 
 ## Patch index of every zone, from the patch ranges.
@@ -978,14 +1009,12 @@ rebuilt from these by [`zone_forward`](@ref).
         mixing::Bool = false,
         correlation::Bool = true,
         deaths::Bool = true,
-        severity::Bool = false,
         meld::Bool = true,
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         rho_death_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
-        severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
         correlation_length_prior = LogNormal(log(50.0), 0.5),
         offset_prior = Normal(0, 1)
@@ -998,17 +1027,25 @@ rebuilt from these by [`zone_forward`](@ref).
     z_level ~ product_distribution(fill(offset_prior, nz))
     δ_halflife ~ region_halflife_prior
     σ_δ ~ region_drift_sd_prior
-    ρ ~ rho_prior
+    ## Every scale below takes its prior from the province posterior, so
+    ## a zone starts at its province's estimate and departs as its own
+    ## data push.
+    pp = zd.parent_priors
+    ρ ~ Beta(pp.rho[1], pp.rho[2])
     ## A case table and a death table do not disperse alike, so the death
     ## composition carries its own concentration rather than sharing one.
-    if deaths
-        ρ_death ~ rho_death_prior
-    end
+
     ## Optional per-zone relative case fatality, partially pooled within the
     ## patch exactly as the province model pools its provincial ratios. Off
     ## by default: see the model docstring.
-    if deaths && severity
-        σ_severity ~ severity_sd_prior
+    ## Relative ascertainment and relative infection fatality per zone,
+    ## each partially pooled within its patch on the scale the province
+    ## model estimated between provinces.
+    σ_ascertainment ~ LogNormal(pp.ascertainment_sd[1], pp.ascertainment_sd[2])
+    z_ascertainment ~ product_distribution(fill(offset_prior, nz))
+    if deaths
+        ρ_death ~ Beta(pp.rho_death[1], pp.rho_death[2])
+        σ_severity ~ LogNormal(pp.severity_sd[1], pp.severity_sd[2])
         z_severity ~ product_distribution(fill(offset_prior, nz))
     end
     ## Sampled only when used, or they would be prior-only dimensions.
@@ -1060,11 +1097,15 @@ rebuilt from these by [`zone_forward`](@ref).
         zd.patch_ranges, zd.walking, zd.walk_index, zd.n_walking, K
     )
     fw = zone_forward(zd, δ_knots, w0, ε_mix, def)
-    κ = _zone_kappa(ρ)
+    asc = zone_relative_multiplier(
+        z_ascertainment, σ_ascertainment, zd.patch_ranges
+    )
+    zone_ascertainment_sd := σ_ascertainment
+    zone_ascertainment_relative := asc
     @addlogprob! zone_composition_logpdf(
-        zd.counts, fw.increments,
+        zd.counts, fw.increments .* asc,
         zd.cell_patch, zd.cell_vintage, zd.cell_total, zd.cell_const,
-        zd.patch_ranges, κ
+        zd.patch_ranges, _zone_kappa(ρ)
     )
     if deaths
         ## The allocated deaths of every vintage, through the
@@ -1075,17 +1116,13 @@ rebuilt from these by [`zone_forward`](@ref).
             death_daily, w0, zd.patch_ranges,
             zd.death_days, zd.t0, def.death_pre_cum
         )
-        if severity
-            sev = zone_relative_multiplier(
-                z_severity, σ_severity,
-                zd.patch_ranges
-            )
-            zone_severity_sd := σ_severity
-            zone_severity_relative := sev
-            D = D .* sev
-        end
+        sev = zone_relative_multiplier(
+            z_severity, σ_severity, zd.patch_ranges
+        )
+        zone_severity_sd := σ_severity
+        zone_severity_relative := sev
         @addlogprob! zone_composition_logpdf(
-            zd.death_counts, D,
+            zd.death_counts, D .* sev,
             zd.death_cell_patch, zd.death_cell_vintage,
             zd.death_cell_total, zd.death_cell_const, zd.patch_ranges,
             _zone_kappa(ρ_death)
@@ -1237,9 +1274,23 @@ function zone_parent_inputs(chn; parent_summary::Symbol = :mean)
     else
         Float64[]
     end
+    ## Priors the zone stage inherits from the province posterior, fitted
+    ## to its draws: a log-normal for each positive scale and a Beta for
+    ## each composition overdispersion.
+    priors = (;
+        severity_sd = _zone_parent_lognormal(
+            chn, keys_.severity_sd, (log(0.2), 0.5)
+        ),
+        ascertainment_sd = _zone_parent_lognormal(
+            chn, keys_.ascertainment_sd, (log(0.2), 0.5)
+        ),
+        drift_sd = _zone_parent_lognormal(chn, keys_.drift_sd, (log(0.05), 0.5)),
+        rho = _zone_parent_beta(chn, keys_.rho, (1.0, 24.0)),
+        rho_death = _zone_parent_beta(chn, keys_.rho_death, (1.0, 24.0)),
+    )
     return (;
         log_infections = logI, g, f, death_pmf, draw = idx,
-        log_importation,
+        log_importation, priors,
     )
 end
 
@@ -1577,7 +1628,7 @@ function zone_fit_inputs(
         death_pre_cum = death_fixed.report_pre_cum, death_matrix,
         death_pre_rows,
         meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d,
-        mixing_log_centre, zone_distances,
+        mixing_log_centre, zone_distances, parent_priors = parent.priors,
     )
     dates = [obs.seeding + Day(d - 1) for d in days]
     return (;
@@ -1650,7 +1701,7 @@ unconstrained vector and each chain's initial log joint density.
 function zone_initial_params(
         model, inputs; chains::Integer = 2,
         seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false,
-        deaths::Bool = true, severity::Bool = false, meld::Bool = true,
+        deaths::Bool = true, meld::Bool = true,
         correlation::Bool = true
     )
     zd = inputs.model_data
@@ -1672,7 +1723,10 @@ function zone_initial_params(
     if deaths
         params = merge(params, (; ρ_death = 0.05))
     end
-    if deaths && severity
+    params = merge(
+        params, (; σ_ascertainment = 0.1, z_ascertainment = zeros(nz))
+    )
+    if deaths
         params = merge(
             params,
             (; σ_severity = 0.1, z_severity = zeros(nz))
@@ -1735,7 +1789,6 @@ function fit_zone(
         callback = nothing,
         mixing::Bool = false,
         deaths::Bool = true,
-        severity::Bool = false,
         meld::Bool = true,
         correlation::Bool = true,
         parent_summary::Symbol = :mean,
@@ -1773,11 +1826,11 @@ function fit_zone(
         "fit_zone: deaths = true but the observations carry no allocated " *
             "zone deaths."
     )
-    model = bvd_zone(zd; mixing, deaths, severity, meld, correlation)
+    model = bvd_zone(zd; mixing, deaths, meld, correlation)
     start = zone_initial_params(
         model, inputs; chains, seed, jitter,
         correlation,
-        mixing, deaths, severity, meld
+        mixing, deaths, meld
     )
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)
