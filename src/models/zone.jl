@@ -33,7 +33,8 @@ const _ZONE_PARENT_KEYS = (
     receipt_sd = Symbol("confirmed_state.receipt_state.d.delay_sd"),
     infections = :infections_patch,
     death_confirmation = :onset_to_death_confirmation_pmf,
-    C_T = :C_T)
+    C_T = :C_T,
+    importation = :importation_epsilon_patch)
 
 ## --- Pure building blocks ------------------------------------------------
 
@@ -413,6 +414,51 @@ function zone_deformation(zd, scale::AbstractMatrix)
             death_pre_rows = zd.death_pre_rows .* zpre))
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Correlate the within-patch level draws by distance, the correlation
+between two zones decaying with the distance between their centroids on
+one shared length scale,
+
+```math
+C_{zq} = \\exp(-d_{zq} / \\ell),
+```
+
+the draws premultiplied by its Cholesky factor. The meld carries
+correlation between patches, through the parent draw every zone of a
+patch shares. It carries none within a patch, where the zones multiply
+one trajectory and only their deviations separate them.
+"""
+function zone_correlate_level(z::AbstractVector, ℓ::Real,
+        distances::AbstractVector,
+        patch_ranges::AbstractVector{<:UnitRange}; ridge::Real = 1e-6)
+    Tp = promote_type(eltype(z), typeof(float(ℓ)))
+    out = Vector{Tp}(undef, length(z))
+    @inbounds for (i, zs) in enumerate(patch_ranges)
+        m = length(zs)
+        if m < 2
+            out[zs] = z[zs]
+            continue
+        end
+        C = exp.(.-distances[i] ./ ℓ) + ridge * Matrix{Float64}(I, m, m)
+        out[zs] = cholesky(Symmetric(C)).L * z[zs]
+    end
+    return out
+end
+
+## Per-patch distance matrices between zone centroids, empty when any zone
+## lacks metadata.
+function _zone_distance_blocks(zones, zone_province, zone_names, patch_ranges)
+    zones === nothing && return Matrix{Float64}[]
+    lookup = Dict((r.province, r.zone) => r for r in zones)
+    rows = [get(lookup, (zone_province[z], zone_names[z]), nothing)
+            for z in eachindex(zone_names)]
+    any(isnothing, rows) && return Matrix{Float64}[]
+    coords = [(r.lat, r.lon) for r in rows]
+    return [province_distance_matrix(coords[zs]) for zs in patch_ranges]
+end
+
 ## Patch index of every zone, from the patch ranges.
 function _zone_patch_of_zone(patch_ranges::AbstractVector{<:UnitRange})
     nz = isempty(patch_ranges) ? 0 : last(last(patch_ranges))
@@ -490,13 +536,15 @@ function zone_share_renewal(I_bar::AbstractMatrix, g::AbstractVector,
                     v[z] = u[z]
                 end
             else
-                e = ε[p]
+                ## Per origin, as the province model exports: zone `q`
+                ## sends `ε_q` of its force through the kernel and keeps
+                ## the rest, so the patch total is conserved exactly.
                 for z in zs
                     mixed = zero(Tp)
                     for q in zs
-                        mixed += kernel[z, q] * u[q]
+                        mixed += kernel[z, q] * ε[q] * u[q]
                     end
-                    v[z] = (one(Tp) - e) * u[z] + e * mixed
+                    v[z] = (one(Tp) - ε[z]) * u[z] + mixed
                 end
             end
             tot = zero(Tp)
@@ -867,6 +915,7 @@ rebuilt from these by [`zone_forward`](@ref).
 """
 @model function bvd_zone(zd;
         mixing::Bool = false,
+        correlation::Bool = true,
         deaths::Bool = true,
         severity::Bool = false,
         meld::Bool = true,
@@ -876,7 +925,8 @@ rebuilt from these by [`zone_forward`](@ref).
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         rho_death_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
-        mixing_prior = Beta(1, 100),
+        mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
+        correlation_length_prior = LogNormal(log(50.0), 0.5),
         offset_prior = Normal(0, 1))
     nz = size(zd.counts, 1)
     np = length(zd.patch_ranges)
@@ -907,7 +957,13 @@ rebuilt from these by [`zone_forward`](@ref).
         z_drift = Float64[]
     end
     if mixing
-        ε_mix ~ product_distribution(fill(mixing_prior, np))
+        ## The province model's posterior export intensity centres the
+        ## prior for the zones inside that province; `τ_mix` is how far a
+        ## zone may depart from its parent. The parent value is a prior
+        ## centre, never scored again.
+        τ_mix ~ mixing_departure_prior
+        z_mix ~ product_distribution(fill(offset_prior, nz))
+        ε_mix = min.(exp.(zd.mixing_log_centre .+ τ_mix .* z_mix), 1.0)
     else
         ε_mix = nothing
     end
@@ -925,9 +981,17 @@ rebuilt from these by [`zone_forward`](@ref).
         scale = nothing
     end
     def = zone_deformation(zd, scale)
+    z_level_c = if correlation && !isempty(zd.zone_distances)
+        ℓ_corr ~ correlation_length_prior
+        correlation_length_zone := ℓ_corr
+        zone_correlate_level(z_level, ℓ_corr, zd.zone_distances,
+            zd.patch_ranges)
+    else
+        z_level
+    end
     w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
     φ = exp2(-zd.week / δ_halflife)
-    δ_knots = zone_deviation_knots(z_level, z_drift, σ_level, σ_δ, φ,
+    δ_knots = zone_deviation_knots(z_level_c, z_drift, σ_level, σ_δ, φ,
         zd.patch_ranges, zd.walking, zd.walk_index, zd.n_walking, K)
     fw = zone_forward(zd, δ_knots, w0, ε_mix, def)
     κ = _zone_kappa(ρ)
@@ -973,6 +1037,7 @@ rebuilt from these by [`zone_forward`](@ref).
     end
     if mixing
         mixing_epsilon_zone := ε_mix
+        mixing_departure_zone := τ_mix
     end
     return (; shares = fw.shares, forces = fw.forces,
         infections = fw.infections, increments = fw.increments,
@@ -1073,7 +1138,20 @@ function zone_parent_inputs(chn; parent_summary::Symbol = :mean)
     else
         Float64[]
     end
-    return (; log_infections = logI, g, f, death_pmf, draw = idx)
+    ## Mean log export intensity per patch, the centre the zone mixing
+    ## prior inherits. Absent from a chain fitted without patches.
+    log_importation = if _has_key(chn, keys_.importation)
+        vs = _draw_vectors(chn, keys_.importation)
+        m = zeros(Float64, length(first(vs)))
+        for v in vs
+            m .+= log.(safe_rate.(Float64.(v)))
+        end
+        m ./ length(vs)
+    else
+        Float64[]
+    end
+    return (; log_infections = logI, g, f, death_pmf, draw = idx,
+        log_importation)
 end
 
 ## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
@@ -1326,6 +1404,13 @@ function zone_fit_inputs(parent_chain, obs;
     death_pre_rows = zone_report_pre_rows(death_fixed.report_pre,
         patch_of_zone, t0, n)
     ## Within-patch mixing kernel, when the metadata covers every zone.
+    ## Each zone starts from its province's posterior export intensity.
+    mixing_log_centre = [length(parent.log_importation) >= np ?
+                         parent.log_importation[patch_of_zone[z]] :
+                         log(0.01) for z in 1:nz]
+    ## Great-circle distances between the centroids of each patch's zones.
+    zone_distances = _zone_distance_blocks(zones, zone_province, zone_names,
+        patch_ranges)
     mixing_kernel = _zone_mixing_kernel_or_zeros(zones, zone_province,
         zone_names, patch_ranges)
     ## Data-informed starting point for the initial shares: the log observed
@@ -1355,7 +1440,8 @@ function zone_fit_inputs(parent_chain, obs;
         death_cell_total, death_cell_const, death_days = days,
         death_pre_cum = death_fixed.report_pre_cum, death_matrix,
         death_pre_rows,
-        meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d)
+        meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d,
+        mixing_log_centre, zone_distances)
     dates = [obs.seeding + Day(d - 1) for d in days]
     return (; model_data, zone_keys, zone_labels = labels, zone_province,
         zone_names, patch_of_zone, patch_ranges,
@@ -1416,7 +1502,8 @@ unconstrained vector and each chain's initial log joint density.
 """
 function zone_initial_params(model, inputs; chains::Integer = 2,
         seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false,
-        deaths::Bool = true, severity::Bool = false, meld::Bool = true)
+        deaths::Bool = true, severity::Bool = false, meld::Bool = true,
+        correlation::Bool = true)
     zd = inputs.model_data
     nz = length(inputs.z_w_start)
     K = length(zd.knots)
@@ -1438,9 +1525,12 @@ function zone_initial_params(model, inputs; chains::Integer = 2,
         params = merge(params,
             (; σ_severity = 0.1, z_severity = zeros(nz)))
     end
+    if correlation && !isempty(zd.zone_distances)
+        params = merge(params, (; ℓ_corr = 50.0))
+    end
     if mixing
         params = merge(params,
-            (; ε_mix = fill(0.01, length(zd.patch_ranges))))
+            (; τ_mix = 0.2, z_mix = zeros(nz)))
     end
     rng = MersenneTwister(seed)
     vi = VarInfo(rng, model, InitFromParams(params))
@@ -1491,6 +1581,7 @@ function fit_zone(parent_chain, obs;
         deaths::Bool = true,
         severity::Bool = false,
         meld::Bool = true,
+        correlation::Bool = true,
         parent_summary::Symbol = :mean,
         walk_threshold::Integer = 30,
         lead_days::Integer = 42,
@@ -1520,8 +1611,9 @@ function fit_zone(parent_chain, obs;
         error(
             "fit_zone: deaths = true but the observations carry no allocated " *
             "zone deaths.")
-    model = bvd_zone(zd; mixing, deaths, severity, meld)
+    model = bvd_zone(zd; mixing, deaths, severity, meld, correlation)
     start = zone_initial_params(model, inputs; chains, seed, jitter,
+        correlation,
         mixing, deaths, severity, meld)
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)

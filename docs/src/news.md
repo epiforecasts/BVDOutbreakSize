@@ -14,6 +14,17 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
+- The health-zone stage is steered by the province model's full posterior rather than its posterior mean (#711).
+The shared quantity is the log weekly patch infections, as one multivariate normal over every kept patch-week cell fitted to the parent draws, sampled whitened.
+It is the only parent term: the weekly sums are not scored again, which would count the parent posterior twice.
+Infections rather than reproduction numbers, because the zone forward pass consumes infections while deriving them from shared reproduction numbers is the absolute renewal; a reproduction number built on a sampled trajectory carries the parent's uncertainty either way.
+Zones in different provinces inherit the parent's learned cross-patch correlation through their shared draw, with nothing new estimated.
+Cost: 72 dimensions and 7% of the gradient.
+- Zone level deviations are correlated within a patch by distance between centroids, `C_zq = exp(-d_zq / ℓ)`, on one sampled length scale (#711).
+The meld correlates zones across patches but not within one, where every zone multiplies the same parent trajectory, so a cluster of neighbouring zones rising together had to be read as coincidence.
+One parameter, no measurable gradient cost.
+- Zone importation is per origin and inherits the province model's posterior export intensity as the centre of its prior, with a sampled departure scale (#711).
+Sixty-two zones cannot each identify an export intensity from the zone tables; they do not have to when the parent sets the centre.
 - The health-zone model conditions on the confirmed cases and the confirmed deaths together (#711).
 The allocated zone deaths of every vintage are a second Dirichlet-multinomial within the patch, on the infection-to-confirmed-death delay rather than the case delay, with its own overdispersion.
 Deaths were previously off by default and, when on, contributed one composition of the cumulative allocated deaths at the final vintage, which saw the end-state allocation and no timing.
