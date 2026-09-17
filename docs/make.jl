@@ -20,7 +20,7 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 const PAGES = ["analysis", "sensitivity"]
 
 ## Build stage, so fitting and rendering can be split across jobs:
-##   render-main         → Literate-execute analysis.jl → docs/src/analysis.md
+##   render-main         → Literate-execute analysis.jl → src/analysis.md
 ##   render-sensitivity  → Literate-execute sensitivity.jl → sensitivity.md
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy

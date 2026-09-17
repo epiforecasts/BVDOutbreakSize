@@ -1,16 +1,14 @@
 # Discrete-time renewal primitives. Pure, allocation-light, and
 # AD-transparent (output element types are promoted from the inputs) so
-# they differentiate cleanly under Mooncake inside a Turing model. These
-# back the renewal architecture: a generating infection process whose
-# expected infections every downstream stream consumes, with delays
-# applied by daily convolution rather than continuous-time integrals.
+# they differentiate cleanly under Mooncake inside a Turing model. Delays
+# are applied by daily convolution.
 
 """
 NaN / Inf-safe positive rate. The renewal recursion can transiently
-overflow on extreme NUTS warmup proposals (large `R_t` compounding),
-giving a non-finite expected count; a plain `max(x, eps)` would
-propagate the NaN (`max(NaN, eps) = NaN`) and trip the Poisson /
-NegativeBinomial domain check.
+overflow on extreme NUTS warmup proposals, giving a non-finite expected
+count. A plain `max(x, eps)` would propagate the NaN
+(`max(NaN, eps) = NaN`) and trip the Poisson / NegativeBinomial domain
+check.
 """
 @inline function safe_rate(x)
     return isfinite(x) ? max(x, eps(typeof(x))) : eps(typeof(x))
@@ -33,19 +31,15 @@ function lognormal_meansd(mean, sd)
 end
 
 """
-Daily probability mass function for the continuous delay `dist` over
-lags `0, 1, …, nmax`, discretised by double interval censoring (uniform
-primary event over a one-day window, then unit-interval censoring of the
-secondary event) via
-`CensoredDistributions.double_interval_censored`. This is the
-discrete analogue of the continuous onset-to-event densities used by the
-integral model, and is the discretisation route the renewal convolutions
-rely on. For a LogNormal primary the CDF differentiates cleanly under
-Mooncake, so this is AD-safe; extreme warmup proposals that drive the
-quadrature to a non-finite or zero total fall back to a uniform PMF so
-the downstream convolution stays finite (the proposal is still rejected
-through its low log-likelihood). Returns a vector whose element type
-follows the delay parameters.
+Daily probability mass function for the continuous delay `dist` over lags
+`0, 1, …, nmax`, discretised by double interval censoring (uniform primary
+event over a one-day window, then unit-interval censoring of the secondary
+event) via `CensoredDistributions.double_interval_censored`. For a LogNormal
+primary the CDF differentiates cleanly under Mooncake, so this is AD-safe.
+Extreme warmup proposals that drive the quadrature to a non-finite or zero
+total fall back to a uniform PMF, so the downstream convolution stays finite
+(the proposal is still rejected through its low log-likelihood). Returns a
+vector whose element type follows the delay parameters.
 """
 function discretise_censored(dist, nmax::Integer)
     dic = double_interval_censored(dist; interval = 1.0, upper = float(nmax))
@@ -53,29 +47,21 @@ function discretise_censored(dist, nmax::Integer)
 end
 
 ## Function barrier: `double_interval_censored` returns a `Union` of solver
-## types, so it is inferred abstractly at the call site above; isolating the
-## PMF loop in its own method lets it specialise on the concrete `dic` type,
-## making the ~`nmax` censored-CDF evaluations type-stable under AD. See
-## CensoredDistributions.jl#367 on the Union return.
+## types, so it is inferred abstractly at the call site above. Isolating
+## the PMF loop in its own method lets it specialise on the concrete `dic`
+## type, making the ~`nmax` censored-CDF evaluations type-stable under AD.
 @inline function _pmf_from_dic(dic, dist, nmax::Integer)
-    ## Differencing one CDF path, not `nmax + 1` overlapping `pdf` calls. The
-    ## interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, and
-    ## `pdf(dic, d)` computes exactly that pair, so the old
-    ## `[pdf(dic, d) for d in 0:nmax]` evaluated every interior integer
-    ## boundary CDF twice. Evaluating the boundary CDFs once over `0:nmax+1`
-    ## and taking adjacent differences halves the censored-CDF evaluations the
-    ## Mooncake reverse pass walks (each CDF is the expensive part: a
-    ## primary-censored, truncation-normalised incomplete-gamma / Normal-CDF
-    ## call), and is numerically identical to the `pdf` differences it
-    ## replaces — `IntervalCensored`'s `cdf` floors to the interval, so at an
-    ## integer boundary it returns the same inner CDF the `pdf` pair reads,
-    ## with the same below-minimum→0 / at-maximum→1 edge handling.
+    ## The interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, so
+    ## evaluating the boundary CDFs once over `0:nmax+1` and differencing
+    ## adjacent entries halves the censored-CDF evaluations the Mooncake
+    ## reverse pass walks. Each CDF is the expensive part, a primary-censored,
+    ## truncation-normalised incomplete-gamma / Normal-CDF call.
+    ## `IntervalCensored`'s `cdf` floors to the interval, so at an integer
+    ## boundary it returns the same inner CDF a `pdf` pair reads.
     ##
-    ## CensoredDistributions' batched `pdf(dic, 0:nmax)` also evaluates each
-    ## boundary CDF once (via a `Dict` cache) and is value-identical, but its
-    ## cache path is not Mooncake-differentiable — it hits a bitcast-to-a-
-    ## differentiable-type error in the reverse pass — so the gradient hot path
-    ## stays on this plain-array CDF difference, which Mooncake handles cleanly.
+    ## CensoredDistributions' batched `pdf(dic, 0:nmax)` is value-identical
+    ## but its `Dict` cache path is not Mooncake-differentiable, so the
+    ## gradient hot path stays on this plain-array CDF difference.
     c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
     z0 = zero(eltype(c))
     raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
@@ -92,11 +78,9 @@ end
 
 Maximum lag for discretising a delay `dist`: the smallest integer covering
 `q` of its CDF (the `q`th quantile rounded up), clamped to `[minlag, cap]`.
-Sizing the truncation by the distribution rather than a hand-set constant
-keeps a consistent tail mass (98% by default) across every delay. This is a
-deterministic function of the PRIOR-centre distribution, evaluated ONCE
-outside the Turing model when each delay submodel is constructed, so the PMF
-length is fixed and AD-safe.
+Sizing the truncation by the distribution keeps a consistent tail mass across
+every delay. It is evaluated once outside the Turing model when each delay
+submodel is constructed, so the PMF length is fixed and AD-safe.
 """
 function cdf_nmax(dist; q::Real = 0.98, cap::Integer = 120, minlag::Integer = 5)
     clamp(ceil(Int, quantile(dist, q)), minlag, cap)
@@ -111,8 +95,7 @@ generation time, then refines with `steps` Newton iterations. The loop
 is unrolled over a fixed step count and uses only arithmetic and `exp`,
 so it is AD-transparent under Mooncake. Mirrors the `R_to_r` seeding
 helper in EpiAware.jl and the implied-growth initialisation in the
-EpiNow2 Stan model, replacing the doubling-time parameterisation of the
-integral model.
+EpiNow2 Stan model.
 """
 function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
     Tp = promote_type(typeof(float(R)), eltype(g))
@@ -137,13 +120,11 @@ end
 
 """
 Reproduction number `R` implied by an exponential growth rate `r` and a
-generation-interval PMF `g` (indexed from lag 1), the FORWARD Euler–Lotka
-relation `R = 1 / Σ_s g_s e^{−r s}`. The inverse of [`euler_lotka_r`](@ref):
-where that solves `R · Σ_s g_s e^{−r s} = 1` for `r` given `R`, this returns
-`R` directly for a given `r`, so the prior can be placed on the growth rate
-and the established reproduction number derived from it under OUR generation
-interval. Uses only arithmetic and `exp`, so it is AD-transparent under
-Mooncake.
+generation-interval PMF `g` (indexed from lag 1), the forward Euler–Lotka
+relation `R = 1 / Σ_s g_s e^{−r s}`. The inverse of [`euler_lotka_r`](@ref),
+so a prior can be placed on the growth rate and the reproduction number
+derived from it under the model's generation interval. Uses only arithmetic
+and `exp`, so it is AD-transparent under Mooncake.
 """
 function r_to_R0(r, g::AbstractVector)
     Tp = promote_type(typeof(float(r)), eltype(g))
@@ -155,10 +136,9 @@ function r_to_R0(r, g::AbstractVector)
 end
 
 """
-Doubling time `log(2) / r` implied by an exponential growth rate `r`,
-the renewal model's reported analogue of the integral model's sampled
-doubling time. Returns a non-finite value as `r` crosses zero, matching
-the limit of an unbounded doubling time at zero growth.
+Doubling time `log(2) / r` implied by an exponential growth rate `r`.
+Returns a non-finite value as `r` crosses zero, matching the limit of an
+unbounded doubling time at zero growth.
 """
 doubling_time(r) = log(oftype(float(r), 2)) / r
 
@@ -166,11 +146,10 @@ doubling_time(r) = log(oftype(float(r), 2)) / r
 Seed the first `len` days of the infection trajectory as exponential
 growth `I_t = I0 · e^{r (t − len)}` at the implied growth rate `r` (see
 [`euler_lotka_r`](@ref)), so the seeding window is pinned at `I0` on
-its last day and tails off backwards. This is the model-based
-initialisation used by EpiNow2 and EpiAware.jl in place of placing the
-whole seed on a single day, which would otherwise inject a transient the
-renewal recursion has to relax away from. Returns a length-`len` vector
-whose element type follows `I0` and `r`.
+its last day and tails off backwards. This is the initialisation used by
+EpiNow2 and EpiAware.jl. Placing the whole seed on a single day instead
+injects a transient the renewal recursion has to relax away from. Returns a
+length-`len` vector whose element type follows `I0` and `r`.
 """
 function seed_infections(I0, r, len::Integer)
     Tp = promote_type(typeof(float(I0)), typeof(float(r)))
@@ -182,30 +161,32 @@ function seed_infections(I0, r, len::Integer)
 end
 
 """
-Renewal-start seed magnitude for the two-phase renewal: the cumulative
-infection count reached by the analytic cryptic phase AT the renewal-start
-day. The renewal is two-phase: an analytic exponential cryptic phase from
-the origin to the renewal start (≈ the genetic TMRCA day, off the renewal
-grid), then the renewal recursion on `[renewal_start, cut-off]`. The
-doubling count `m` counts the doublings DURING the cryptic phase
-(origin → renewal start), so the cryptic phase grows a single import to
+Renewal-start seed magnitude for the two-phase renewal: the daily infection
+incidence the analytic cryptic phase reaches on the renewal-start day.
+
+It is an incidence, not a cumulative count. The cryptic total over the
+`renewal_start` grid days is larger by more than an order of magnitude, so
+reading the seed as cumulative would shift `m` by several generations.
+
+The cryptic phase runs from the origin to the renewal start (≈ the genetic
+TMRCA day, off the renewal grid), spanning `T = m · G` days for `m` generations
+at mean generation interval `G`. A single daily infection at the origin grows
+over it at the cryptic rate `r` to
 
 ```math
-\\text{seed\\_at\\_renewal\\_start} = 2^m,
+\\text{seed\\_at\\_renewal\\_start} = C_T = e^{r T},
 ```
 
-at the renewal start, INDEPENDENT of the growth rate `r`. The rate `r`
-shapes the cryptic exponential history feeding the recursion just before
-the renewal start (see [`seed_infections`](@ref)), but the magnitude at the
-renewal start is fixed by `m` alone. This deliberately keeps `r` (hence the
-single `R0`) OUT of the seed magnitude: an earlier formulation back-scaled
-a cut-off-referenced size `2^m e^{-rτ_obs}`, which put `r` into both the
-seed and the renewal growth so the two cancelled for a fixed realised
-size — a flat ridge along which `R0` slid to the edge. With the magnitude
-`r`-free the renewal grows `2^m` forward over the observation window under
-the time-varying `R_t`, so the realised cut-off size is data-driven through
-`R_t` while the prior fixes only the renewal-start scale. The argument is
-`C_T_prior = 2^m`; returned unchanged, kept as a named helper for the
+which the renewal grows forward under `R_t`, so the realised cut-off size stays
+data-driven while the prior fixes only the renewal-start scale.
+
+The magnitude is referenced to the origin, not the cut-off. A cut-off-referenced
+size would put `r` into the seed and the renewal growth in opposing directions,
+cancelling for a fixed realised size and leaving a flat ridge along which `R0`
+could slide. Referenced to the origin they compound instead, so `r` does enter
+the seed.
+
+`C_T_prior` is returned unchanged. The helper names the quantity at the
 seeding call site.
 """
 @inline function seed_at_renewal_start(C_T_prior)
@@ -219,8 +200,12 @@ Daily latent infections from the renewal equation
 a pre-computed `seed` of length `L < n` filling the first `L` days (see
 [`seed_infections`](@ref)). The recursion runs for days `L+1 … n`, so
 `Rt[1]` (used to imply the seeding growth) and the seed are mutually
-consistent. Returns the length-`n` infection trajectory; the output
+consistent. Returns the length-`n` infection trajectory. The output
 element type is promoted from `Rt`, `g` and `seed`.
+
+!!! note "Multi-patch analogue"
+    See [`patch_infections`](@ref) for the meta-population extension
+    with between-patch importation.
 """
 function renewal_infections(Rt::AbstractVector, g::AbstractVector,
         seed::AbstractVector)
@@ -242,21 +227,161 @@ function renewal_infections(Rt::AbstractVector, g::AbstractVector,
     return I
 end
 
+## --- Multi-patch (meta-population) renewal primitives --------------------
+
+"""
+    importation_from_kernel(K, I_prev, epsilon)
+
+Per-patch importation into each of `n_patches` patches on a single day,
+given the `n_patches x n_patches` importation kernel `K`, the previous
+day's infections per patch `I_prev` (length `n_patches`), and the
+importation intensity `epsilon`.
+
+```math
+\\text{importation}_p = \\varepsilon \\sum_{q} K_{p,q} I_{q,t-1}
+```
+
+`K[p, q]` is the per-capita daily travel rate from patch `q` to patch `p`
+(the first index is the destination). Diagonal entries should be zero (no
+self-importation). Each entry is unitless (a rate per day per traveller in
+the source patch).
+
+Returns a length-`n_patches` vector of imported infections expected on the
+current day. AD-transparent under Mooncake.
+"""
+function importation_from_kernel(K::AbstractMatrix, I_prev::AbstractVector,
+        epsilon::Real)
+    np = size(K, 1)
+    Tp = promote_type(eltype(K), eltype(I_prev), typeof(float(epsilon)))
+    imp = zeros(Tp, np)
+    @inbounds for p in 1:np
+        acc = zero(Tp)
+        for q in 1:np
+            acc += K[p, q] * I_prev[q]
+        end
+        imp[p] = epsilon * acc
+    end
+    return imp
+end
+
+## Importation intensity of origin `q` on day `t`. A scalar applies to every
+## origin and every day; a matrix carries one level per origin over time.
+@inline _eps(e::Real, q::Integer, t::Integer) = e
+@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
+
+"""
+    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
+
+Multi-patch (meta-population) renewal with between-patch importation.
+Each patch `p` follows a modified renewal equation on a shared daily grid:
+
+```math
+I_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t}
+```
+
+where the importation term couples patches through a kernel `K`:
+
+```math
+\\text{importation}_{p,t} =
+    \\varepsilon \\sum_{q} K_{p,q}\\, I_{q,t-1}.
+```
+
+# Arguments
+
+- `Rt_matrix`: `n_patches x n_days` matrix whose `[p, t]` entry is the
+  reproduction number in patch `p` on day `t`. Each row is one patch's
+  daily `R_t` trajectory.
+- `g`: shared generation-interval PMF (indexed from lag 1, so `g[1]` is
+  the probability of a one-day generation interval). Same for all patches.
+- `seeds_matrix`: `n_patches x L` matrix whose `[p, :]` row is the
+  pre-computed seed infection trajectory for patch `p` (see
+  [`seed_infections`](@ref)). The seed fills days `1 ... L` and the renewal
+  recursion begins on day `L+1`.
+- `importation_kernel`: `n_patches x n_patches` matrix `K` where
+  `K[p, q]` is the share of patch `q`'s transmission that lands in patch
+  `p` rather than at home. The diagonal should be zero, and each column's
+  off-diagonal sum times `epsilon` must be at most one, so a patch cannot
+  export more transmission than it generates. Both hold for
+  [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
+- `epsilon`: importation intensity, scaling the whole kernel. Importation
+  is a transfer on the day it happens, so the origin patch is debited exactly
+  what the destination patches are credited and coupling is never a source of
+  infections. It is not conserved across days. The destination grows at its
+  own reproduction number, so relocating infections from a fast patch to a
+  slow one lowers the national total and the reverse raises it. With one
+  shared reproduction number the transfer cancels exactly.
+
+# Returns
+
+`(; infections, importation)`. `infections` is a matrix of shape
+`(n_patches, n_days)` where row `p` is the daily infection trajectory for
+patch `p`. The first `L` days are copied from `seeds_matrix` and the
+remaining days are the renewal recursion with importation. `importation` is
+the matching matrix of infections each patch received from the others, the
+arrivals term alone rather than the net of arrivals and departures. The
+element type is promoted from all input types. AD-transparent under Mooncake.
+"""
+function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        epsilon::Union{Real, AbstractMatrix})
+    np, n = size(Rt_matrix)
+    L = size(seeds_matrix, 2)
+    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
+        eltype(importation_kernel),
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon))
+    I = zeros(Tp, np, n)
+    imports = zeros(Tp, np, n)
+    ## What each origin sends away per unit of its own generated infections:
+    ## the kernel's column sums, constant in time.
+    outflow = zeros(Tp, np)
+    @inbounds for q in 1:np, r in 1:np
+
+        r == q && continue
+        outflow[q] += importation_kernel[r, q]
+    end
+    @inbounds for p in 1:np
+        for j in 1:min(L, n)
+            I[p, j] = seeds_matrix[p, j]
+        end
+    end
+    gen = zeros(Tp, np)
+    @inbounds for t in (L + 1):n
+        ## What each patch generates today from its own renewal force.
+        for p in 1:np
+            force = zero(Tp)
+            kmax = min(t - 1, length(g))
+            for s in 1:kmax
+                force += I[p, t - s] * g[s]
+            end
+            gen[p] = Rt_matrix[p, t] * force
+        end
+        ## Importation redistributes transmission rather than adding to it. A
+        ## fraction `epsilon * K[p, q]` of what `q` generates is realised in
+        ## `p` instead of at home, so `q` is debited exactly what the
+        ## destinations are credited. The intensity belongs to the origin, so
+        ## `p` is debited at its own rate and credited at each sender's.
+        for p in 1:np
+            arrivals = zero(Tp)
+            for q in 1:np
+                q == p && continue
+                arrivals += _eps(epsilon, q, t) *
+                            importation_kernel[p, q] * gen[q]
+            end
+            imports[p, t] = arrivals
+            I[p, t] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
+                      arrivals
+        end
+    end
+    return (; infections = I, importation = imports)
+end
+
 """
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
-over lags `d` that stay in range. This is the discrete convolution that
-replaces the continuous onset-to-event integrals of the integral model,
-and maps infections to onsets, onsets to deaths, onsets to reports and
-onsets to detected exports. Type-stable and AD-transparent.
-
-The scalar double loop is deliberate: a vectorised lag-AXPY rewrite
-(`scripts/bench_convolve.jl`) was no faster under Mooncake (≈0.95x — the
-reverse pass over the scalar loop is already efficient), so the simpler
-form stays. The per-gradient cost the joint actually pays sits in the delay
-discretisation (the censored-distribution CDF evaluations), which the delay
-`nmax` trims target instead.
+over lags `d` that stay in range. Maps infections to onsets, onsets to
+deaths, onsets to reports and onsets to detected exports. Type-stable and
+AD-transparent.
 """
 function convolve_delay(x::AbstractVector, delay::AbstractVector)
     n = length(x)
@@ -284,14 +409,12 @@ daily admission series `x` and a length-of-stay PMF `los` (indexed from lag
 ```
 
 so an admission on day `s` occupies a bed on days `s, s+1, …` until it is
-discharged: the admission day is always counted (`S(0) = 1`) and a stay of
-`LOS` days contributes to `LOS + 1` daily occupancies. This is the
-prevalence analogue of [`convolve_delay`](@ref)'s incidence convolution —
-the length-of-stay survival replaces the onset-to-event delay PMF, turning
-an inflow into a stock. The survival weights are the reverse-cumulative
-tail sums of the PMF (`S(τ) = Σ_{j ≥ τ} los[j]`), so for a normalised PMF
-`S(0) = 1`, and the occupancy is `convolve_delay(x, S)`. Type-stable and
-AD-transparent; the element type follows the inputs.
+discharged. The admission day is always counted (`S(0) = 1`) and a stay of
+`LOS` days contributes to `LOS + 1` daily occupancies. The survival weights
+are the reverse-cumulative tail sums of the PMF (`S(τ) = Σ_{j ≥ τ} los[j]`),
+so for a normalised PMF `S(0) = 1`, and the occupancy is
+`convolve_delay(x, S)`. Type-stable and AD-transparent. The element type
+follows the inputs.
 """
 function convolve_survival(x::AbstractVector, los::AbstractVector)
     L = length(los)
@@ -307,7 +430,7 @@ end
 """
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from
 delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
-result has length `length(a) + length(b) - 1`; its mass equals
+result has length `length(a) + length(b) - 1`. Its mass equals
 `sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
 build the infection→detection delay (incubation ⊕ onset-to-detection) and
 the infection→death delay (incubation ⊕ onset-to-death) for the exports
@@ -334,7 +457,7 @@ The first knot sits on day `start` (default 1) and the last knot on day
 and to the end of the grid. With `start > 1` the reproduction number is
 held flat (at the first knot's value) for all days before `start`
 ([`interpolate_knots`](@ref) clamps below the first knot), so the random
-walk only varies `R_t` from `start` onward — used to fix `R_t` over the
+walk only varies `R_t` from `start` onward. This fixes `R_t` over the
 pre-establishment seeding window before the genetic TMRCA bound. Returns a
 sorted vector of unique day indices.
 """
@@ -353,13 +476,21 @@ before `day` to ≈1 well after, with `ramp` setting the transition width
 in days. Multiplied by a sampled effect size and added to log-`R_t`, this
 gives an intervention (e.g. the first WHO situation report) a gradual
 ramped effect on transmission rather than an instantaneous step. Returns
-a length-`n` `Float64` vector; `day = missing` gives an all-zero ramp (no
+a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
 intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
+
+Split into two dispatches on `day`'s concrete type rather than one method
+with a runtime `ismissing(day)` branch. Mooncake cannot build a reverse rule
+for the branching form (`TypeError: non-boolean (Missing) used in boolean
+context`). Dispatch resolves `day`'s type at the call site, so each method
+body is differentiated on its own concretely-typed slot.
 """
-function sigmoid_ramp(n::Integer, day::Union{Missing, Real};
-        ramp::Real = 21.0)
-    ismissing(day) && return zeros(Float64, n)
+function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RT_INTERVENTION_RAMP)
+    return zeros(Float64, n)
+end
+
+function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
     return Float64[logistic((t - day) / ramp) for t in 1:n]
 end
 
@@ -368,9 +499,8 @@ Outbreak age in days: the elapsed time from the model-implied seeding
 day to the cut-off (day `n`), where the seeding day is the smooth
 crossing at which cumulative infections first reach one. The crossing is
 linearly interpolated between the two days that bracket a cumulative of
-one, so it is a continuous function of the trajectory; before the
-trajectory reaches one it returns `n` (the full grid). The renewal
-analogue of the integral model's sampled outbreak age `T`, used for the
+one, so it is a continuous function of the trajectory. Before the
+trajectory reaches one it returns `n` (the full grid). Used for the
 seeding-date plots and the genetic-TMRCA bound.
 """
 function seeding_age(cumulative::AbstractVector, n::Integer)
@@ -381,7 +511,7 @@ function seeding_age(cumulative::AbstractVector, n::Integer)
     @inbounds while j < length(cumulative) && cumulative[j] < one_
         j += 1
     end
-    ## j is the first day at or above one; interpolate within [j-1, j].
+    ## j is the first day at or above one. Interpolate within [j-1, j].
     if j == 1
         cross = one(Tp)
     else
@@ -397,18 +527,16 @@ end
 Linearly interpolate the knot values `knot_vals`, placed on the day
 indices `days`, onto the full daily grid `1:n`, returning the length-`n`
 series. Piecewise-linear between bracketing knots, so the series bends
-only at the knots and is otherwise straight; applied on the log-`R_t`
-scale this gives weekly random-walk knots with within-week linear
+only at the knots and is otherwise straight. Applied on the log-`R_t`
+scale, this gives weekly random-walk knots with within-week linear
 interpolation. Type-stable and AD-transparent (the output element type
 follows `knot_vals`).
 
-Outside the knot span the series is held FLAT at the nearest knot value
-(the interpolation fraction is clamped to `[0, 1]`), not extrapolated: days
-before the first knot take `knot_vals[1]` and days after the last take
-`knot_vals[end]`. This is what lets the reproduction-number walk start at a
-day `> 1` and hold `R_t` flat at the established `R0` (the first knot value)
-over every earlier day, rather than running the first segment's slope
-backwards off the start of the grid.
+Outside the knot span the series is held flat at the nearest knot value
+rather than extrapolated (the interpolation fraction is clamped to
+`[0, 1]`). This lets the reproduction-number walk start at a day `> 1` and
+hold `R_t` flat at the established `R0` over every earlier day, rather than
+running the first segment's slope backwards off the start of the grid.
 """
 function interpolate_knots(knot_vals::AbstractVector,
         days::AbstractVector{<:Integer}, n::Integer)
@@ -435,4 +563,54 @@ function interpolate_knots(knot_vals::AbstractVector,
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out
+end
+
+"""
+Derive the implied national reproduction number from a summed infection
+trajectory by inverting the renewal equation:
+
+    Rt_national(t) = I_total(t) / sum_s I_total(t-s) * g_s
+
+This reconstructs what a single-patch model would estimate as the national
+Rt from the aggregated infection count. The first day is set to zero (no
+prior infections to divide by). Days where the force of infection is zero
+(no prior infections) also return zero. AD-transparent under Mooncake
+(only arithmetic and `@inbounds` loops).
+
+A model that needs the reproduction number on one day only should call
+[`implied_national_Rt_at`](@ref), which this is the trajectory form of.
+"""
+function implied_national_Rt(infections_total::AbstractVector,
+        g::AbstractVector)
+    n = length(infections_total)
+    Tp = promote_type(eltype(infections_total), eltype(g))
+    Rt = zeros(Tp, n)
+    for t in 2:n
+        Rt[t] = implied_national_Rt_at(infections_total, g, t)
+    end
+    return Rt
+end
+
+"""
+    implied_national_Rt_at(infections_total, g, t)
+
+The implied national reproduction number on a single day `t`, the one entry
+[`implied_national_Rt`](@ref) would put at index `t`. Day one and any day whose
+force of infection is zero give zero, as they do there.
+
+The model reports the aggregate reproduction number at the cut-off alone, and
+building the whole trajectory to read its last entry would put `n` divisions
+and `n` force sums on the gradient tape for one number.
+"""
+function implied_national_Rt_at(infections_total::AbstractVector,
+        g::AbstractVector, t::Integer)
+    Tp = promote_type(eltype(infections_total), eltype(g))
+    t <= 1 && return zero(Tp)
+    force = zero(Tp)
+    kmax = min(t - 1, length(g))
+    @inbounds for s in 1:kmax
+        force += infections_total[t - s] * g[s]
+    end
+    force > zero(Tp) || return zero(Tp)
+    return @inbounds(safe_rate(infections_total[t])) / force
 end

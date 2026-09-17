@@ -27,3 +27,43 @@ updates:
     labels:
       - "dependencies"
       - "julia"
+    groups:
+      julia-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # StatsFuns 2.x needs a newer Turing than we pin: Turing 0.45/0.46 caps
+      # StatsFuns at <= 1.5.2, so bumping to 2.x makes the environment
+      # unsatisfiable. Skip StatsFuns >= 2 until Turing supports it.
+      - dependency-name: "StatsFuns"
+        versions: [">=2"]
+      # Julia standard libraries ship with Julia itself, so the Julia release
+      # fixes their version, not the registry. Dependabot finds no usable
+      # version and writes bounds such as "< 0.0.1" that match nothing and
+      # break resolution on other Julia versions. It also pinned Statistics
+      # to a version that fails on the LTS. These environments do not need
+      # compat entries for standard libraries, so skip them all.
+      - dependency-name: "Base64"
+      - dependency-name: "Dates"
+      - dependency-name: "Downloads"
+      - dependency-name: "LinearAlgebra"
+      - dependency-name: "Logging"
+      - dependency-name: "Markdown"
+      - dependency-name: "Pkg"
+      - dependency-name: "Printf"
+      - dependency-name: "Random"
+      - dependency-name: "SHA"
+      - dependency-name: "Serialization"
+      - dependency-name: "SparseArrays"
+      - dependency-name: "Statistics"
+      - dependency-name: "TOML"
+      - dependency-name: "Test"
+      - dependency-name: "UUIDs"
+      # DocumenterCitations 1.5 renders citations as a raw `CitationSiteNode`
+      # struct under DocumenterVitepress, which has no writer method for it.
+      # Skip 1.5 and later until Vitepress handles the node.
+      - dependency-name: "DocumenterCitations"
+        versions: [">=1.5"]

@@ -10,13 +10,64 @@
     thunk = () -> (calls[] += 1; (payload = "chain", n = 42))
     key = "demo__" * content_hash([@__FILE__]; extra = "settings")
 
-    r1 = fit_or_load(key, thunk; cache_dir = dir)                 # miss → fit
-    r2 = fit_or_load(key, thunk; cache_dir = dir)                 # hit  → load
-    r3 = fit_or_load(key, thunk; cache_dir = dir, refit = true)   # forced refit
+    r1 = fit_or_load(key, thunk; cache_dir = dir)                # miss → fit
+    r2 = fit_or_load(key, thunk; cache_dir = dir)                # hit → load
+    r3 = fit_or_load(key, thunk; cache_dir = dir, refit = true)  # forced refit
 
     @test calls[] == 2                     # fit once + forced refit once
     @test r1 == r2 == r3
     @test isfile(joinpath(dir, key * ".jls"))
+end
+
+@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags=[
+    :quality
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+
+    dir = mktempdir()
+    calls = Ref(0)
+    thunk = () -> (calls[] += 1; (payload = "chain", n = 42))
+    key = "demo__" * content_hash([@__FILE__]; extra = "strict")
+
+    ## A strict miss must throw (naming the key and dir) and never run the
+    ## thunk, so a render can fail fast rather than silently refit the whole
+    ## report.
+    @test_throws Exception fit_or_load(
+        key, thunk; cache_dir = dir, strict = true)
+    @test calls[] == 0
+    @test !isfile(joinpath(dir, key * ".jls"))
+
+    ## Once the fit exists, strict mode loads it like a normal hit.
+    fit_or_load(key, thunk; cache_dir = dir)      # populate (non-strict miss)
+    r = fit_or_load(key, thunk; cache_dir = dir, strict = true)
+    @test r == (payload = "chain", n = 42)
+    @test calls[] == 1                            # only the populating fit ran
+end
+
+@testitem "every score_releases overlay is excluded from the fit hash" tags=[
+    :quality
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## score_releases.jl runs in the render job (before rendering) and writes
+    ## overlay CSVs into data/. Every such file must be in FIT_DATA_EXCLUDE, or
+    ## the render's data-dir hash diverges from the fit matrix's, every fit key
+    ## changes, and the render misses the whole cache (a 2h refit / strict-mode
+    ## failure). Auto-derive the written files from the script so a new overlay
+    ## that forgets the exclusion fails here instead of in CI.
+    ## Matched on the script's own write path (`@__DIR__/../data/...`), not
+    ## on any mention of the data directory: the script also reads a fit
+    ## input from there (the digitised onset triangle), which must stay in
+    ## the hash rather than be excluded from it.
+    src = read(
+        joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String)
+    written = Set(m.captures[1]
+    for m in eachmatch(
+        r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src))
+    @test length(written) >= 4  # guards against a silent regex miss
+    for f in written
+        @test f in FIT_DATA_EXCLUDE
+    end
 end
 
 @testitem "content hash reflects inputs" tags=[:quality] begin
@@ -71,4 +122,85 @@ end
     @test content_hash(src; data_dir = d, data_exclude = excl) == h
     write(joinpath(d, "observations.csv"), "3")
     @test content_hash(src; data_dir = d, data_exclude = excl) != h
+end
+
+@testitem "the observation manifest enters the fit hash" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## `data/observations.toml` is the single source of truth for every
+    ## observation the model conditions on. The digest once covered `*.csv`
+    ## only, so the manifest never entered the key: a data update that touched
+    ## it alone served every fit from cache against the previous data. Four of
+    ## the twenty-five most recent commits to the manifest changed no hashed
+    ## CSV, one of them adding a month of fitted daily new-suspect history.
+    d = mktempdir()
+    write(joinpath(d, "observations.toml"), "cases = 1\n")
+    write(joinpath(d, "onset_curve_scanned.csv"), "day,count\n1,1\n")
+    h = tree_sha256(d; exclude = FIT_DATA_EXCLUDE)
+
+    write(joinpath(d, "observations.toml"), "cases = 2\n")
+    @test tree_sha256(d; exclude = FIT_DATA_EXCLUDE) != h
+
+    ## The same holds for the manifest the repository ships, not just for a
+    ## file of that name: the real data directory hashes differently with it
+    ## excluded, so it is part of the real fit key.
+    data_dir = joinpath(_PKG, "data")
+    @test tree_sha256(data_dir; exclude = FIT_DATA_EXCLUDE) !=
+          tree_sha256(data_dir;
+        exclude = (FIT_DATA_EXCLUDE..., "observations.toml"))
+end
+
+@testitem "the fit hash skips excluded directories" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+
+    ## An exclude entry naming a directory drops everything under it. That is
+    ## what keeps the situation report PDFs out of the key: they are the
+    ## source the scans are taken from rather than something the model reads,
+    ## and they are 230 MB to hash.
+    d = mktempdir()
+    mkpath(joinpath(d, "sitrep_pdfs"))
+    write(joinpath(d, "observations.toml"), "cases = 1\n")
+    write(joinpath(d, "sitrep_pdfs", "059.pdf"), "pdf bytes")
+    h = tree_sha256(d; exclude = ("sitrep_pdfs",))
+
+    write(joinpath(d, "sitrep_pdfs", "060.pdf"), "more pdf bytes")
+    @test tree_sha256(d; exclude = ("sitrep_pdfs",)) == h
+
+    ## Without the exclusion the same directory contributes.
+    @test tree_sha256(d) != h
+end
+
+@testitem "validation fits follow the reporting status" tags=[:quality] begin
+    using Dates
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## The validation panels take the still-reported streams, so a stream the
+    ## situation reports have stopped updating must not be fitted at all: its
+    ## fit feeds an overlay that is filtered out, and each one is a NUTS fit
+    ## a docs build runs serially.
+    cutoff = Date(2026, 7, 15)
+    n = 60
+    day(d) = n - Dates.value(cutoff - d)
+    live = (; days = [day(cutoff - Day(1))], counts = [10.0])
+    stale = (; days = [day(cutoff - Day(60))], counts = [10.0])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = stale, deaths_history = stale,
+        confirmed_history = live, confirmed_deaths_history = live,
+        isolation_history = live)
+
+    @test validation_stream_ids(obs) ==
+          ("confirmed", "confirmed_deaths", "treatment")
+
+    ## A stream that starts being reported again comes back on its own.
+    revived = merge(obs, (; reported_history = live))
+    @test "cases" in validation_stream_ids(revived)
+
+    ## Every id names a single-stream fit the registry can build.
+    ids = fit_ids(load_observations(); run_sensitivity = false)
+    for sid in validation_stream_ids(load_observations())
+        @test "frozen_validation_$sid" in ids
+        @test sid in ids
+    end
 end

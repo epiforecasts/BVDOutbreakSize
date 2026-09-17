@@ -1,5 +1,5 @@
-# Prior-vs-posterior sense check for ALL sampled parameters of the joint.
-# Loads the saved posterior chain, samples the SAME model under the prior,
+# Prior-vs-posterior sense check for all sampled parameters of the joint.
+# Loads the saved posterior chain, samples the same model under the prior,
 # and tabulates prior vs posterior median + 90% interval per parameter,
 # flagging which parameters the data actually update (identified) vs those
 # that stay at the prior (unidentified / prior-dominated).

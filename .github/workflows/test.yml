@@ -19,6 +19,9 @@ jobs:
     name: Julia ${{ matrix.julia-version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
+    # Below GitHub's 6h job ceiling, which a stalled cell otherwise sits on
+    # before being reported as cancelled rather than failed.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -37,26 +40,84 @@ jobs:
             experimental: false
     env:
       JULIA_CI_EXPERIMENTAL: ${{ matrix.experimental }}
+      # Pin the pkgimage targets rather than compiling for whichever machine
+      # runs the cell. The hosted fleets are mixed and Julia discards a
+      # pkgimage built for a microarchitecture the host does not match, so a
+      # depot cache restored from an earlier run is thrown away and the whole
+      # stack recompiles. See docs.yml, where that cost the render jobs
+      # ~16 min each. macOS-latest is arm64 and takes `native`, which is the
+      # default and so leaves that cell as it was.
+      JULIA_CPU_TARGET: >-
+        ${{ matrix.os == 'macOS-latest' && 'native' ||
+        'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)' }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.julia-version }}
       - uses: julia-actions/cache@v3
+        with:
+          # Only a job that finished may write the depot cache.
+          # `cancel-in-progress` kills cells mid-`Pkg` install and the default
+          # `save-always: true` then snapshots that depot as the newest cache
+          # for the restore key. Pkg skips downloading any package whose source
+          # path merely exists, so a package directory restored from such a
+          # snapshot without its contents is never repaired and precompilation
+          # fails on a missing source file. The failing job saves the same
+          # depot again, so the state does not heal on its own.
+          save-always: false
+          # Namespaces the depot cache. Bump it to discard every stored
+          # depot, which is the only way out once a bad one is restored,
+          # because the failing job saves no replacement. This was
+          # `key-prefix`, an input julia-actions/cache does not accept,
+          # so the earlier bumps never reached the cache key.
+          cache-name: test-2026-09-17
       - uses: julia-actions/julia-runtest@v1
         with:
-          test_args: ${{ (matrix.julia-version != '1' || matrix.os == 'windows-latest') && 'skip_quality' || '' }}
+          # macOS is the portability cell and the slowest runner: give it
+          # the platform-sensitive items only. Everything tagged `:quality`
+          # runs once in the `quality` job below rather than on any matrix
+          # cell: those items do not vary by platform or Julia version, and
+          # carrying them made the one cell that ran them outgrow the timeout.
+          # See test/runtests.jl.
+          test_args: ${{ matrix.os == 'macOS-latest' && 'fast' || 'skip_quality' }}
+
+  quality:
+    name: Quality (package and docstring checks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    # Pinned pkgimage targets, as on the `test` matrix above.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          save-always: false
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          test_args: 'quality_only'
 
   downgrade-compat:
     name: Downgrade compat (Julia 1.11)
     runs-on: ubuntu-latest
+    # Pinned pkgimage targets, as on the `test` matrix above.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1.11'
       - uses: julia-actions/cache@v3
-      - uses: julia-actions/julia-downgrade-compat@v2
+        with:
+          save-always: false
+      - uses: julia-actions/julia-downgrade-compat@v2.7.0
         with:
           # Mooncake skipped: DynamicPPLMooncakeExt fails to precompile
           # at the bottom of Mooncake's 0.5 range — an upstream extension

@@ -71,10 +71,9 @@ end
     @test all(0 .<= vec(Array(chn[:death_composition])) .<= 1)
     @test all(0 .<= vec(Array(chn[:death_ascertainment])) .<= 1)
     ## `tau_death` here is the realised cut-off death-testing intensity
-    ## (scaling * analysed / suspected), surfaced as a diagnostic only -
-    ## `death_volume` is computed independently of it. It is not a probability
-    ## and can exceed 1 in a backlog/batch regime (more analysed on a day than
-    ## that day's new suspected), so only non-negativity is asserted here
-    ## (finiteness is already checked above).
-    @test all(vec(Array(chn[:tau_death])) .>= 0)
+    ## (scaling * analysed / suspected), surfaced as a diagnostic. The death
+    ## volume is capped at the suspected-death pool each day, so the realised
+    ## intensity stays in [0, 1] (it can sit at 1 on a backlog day, where the
+    ## uncapped intensity would have exceeded the suspected pool).
+    @test all(0 .<= vec(Array(chn[:tau_death])) .<= 1)
 end

@@ -13,21 +13,66 @@ tasks:
 
   download-sitreps:
     desc: >
-      Download the INSP situation-report PDFs from the INRB-UMIE mirror
-      into data/sitrep_pdfs/ (git-ignored) for direct scanning. Skips
-      reports already present, so it fetches only new sitreps.
+      Download the MVE situation-report PDFs from the INSP site (insp.cd,
+      the source of truth) into data/sitrep_pdfs/ (git-ignored) for direct
+      scanning. Skips reports already present, so it fetches only new
+      sitreps.
     cmds:
       - julia --project=scripts scripts/download_sitreps.jl {{.CLI_ARGS}}
 
   confirm-data:
     desc: >
-      Regenerate the [confirmed_case_history] and [confirmed_death_history]
-      blocks for data/observations.toml from the INRB-UMIE national
-      cumulative series (upstream-primary), and confirm them against the
-      hand-scanned headline totals in data/insp_sitrep_scanned.csv. Prints
-      the ready-to-paste blocks and exits non-zero on any disagreement.
+      Cross-check the hand-scanned confirmed-case and confirmed-death
+      totals in data/insp_sitrep_scanned.csv against the INRB-UMIE national
+      cumulative series. Reports the dates each source carries alone and
+      exits non-zero on any disagreement the script does not already
+      document as a mirror transcription error.
     cmds:
       - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
+
+  province-tableau1:
+    desc: >
+      Regenerate the [province_confirmed_history] and [province_death_history]
+      blocks for data/observations.toml by scanning Tableau 1 of the INSP
+      situation reports (per-province confirmed cases AND deaths). Fails
+      unless the per-province figures sum exactly to the national
+      confirmed_case_history and confirmed_death_history on every date. The
+      deaths column is what makes the per-province ascertainment identifiable.
+      Needs the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_province_tableau1.jl {{.CLI_ARGS}}
+
+  province-lab-data:
+    desc: >
+      Regenerate the [province_lab_daily_history] block for
+      data/observations.toml by scanning section 4.3 (Laboratoire) of the
+      INSP situation-report PDFs for the per-province samples analysed and
+      positives. Validates that the per-province analysed counts sum exactly
+      to the national tests_analysed_daily_history on every date (they are an
+      exact partition of it) and exits non-zero on any disagreement. Needs
+      the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_province_lab.jl {{.CLI_ARGS}}
+
+  benchmark:
+    desc: >
+      Run the per-component AD gradient benchmark suite and save the results
+      to results.json (pass another path to change it). Times one
+      log-density evaluation and one gradient per model component per AD
+      backend. Set BVD_BENCH_JOINT=true to add the full bvd_joint, which
+      costs ~18 min of cold compile on its own, and BVD_BENCH_ENZYME=true
+      to add the Enzyme backend, which did not finish inside a 90 minute
+      CI job.
+    cmds:
+      - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
+      - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
+
+  benchmark-compare:
+    desc: >
+      Turn two saved result files into the Markdown comparison CI posts on a
+      PR. Usage: task benchmark-compare -- pr.json main.json comment.md.
+    cmds:
+      - julia --project=benchmark benchmark/compare.jl {{.CLI_ARGS}}
 
   docs:
     desc: >

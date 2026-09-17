@@ -3,11 +3,11 @@
 ## the dispersion `k` to zero (or a non-finite value); the distribution must
 ## stay valid rather than throwing `DomainError: r > 0` and aborting the fit.
 
-@testitem "safe_nbinomial: zero/negative/non-finite dispersion stays valid" begin
+@testitem "safe_nbinomial: zero/negative/non-finite dispersion is valid" begin
     using BVDOutbreakSize: safe_nbinomial
     using Distributions: NegativeBinomial, params, succprob, mean
 
-    ## The regression: k = 0 used to throw `DomainError: r > 0`.
+    ## An unguarded k = 0 would throw `DomainError: r > 0`.
     for k in (0.0, -1.0, -eps(), NaN, Inf)
         d = safe_nbinomial(k, 5.0)
         @test d isa NegativeBinomial

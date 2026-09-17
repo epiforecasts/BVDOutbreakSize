@@ -32,7 +32,9 @@ end
     @test lp == 0.0
 end
 
-@testitem "genetic_seeding composes into bvd_joint via `genetic` kwarg" tags=[:slow] begin
+@testitem "genetic_seeding composes into bvd_joint via `genetic` kwarg" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: bvd_joint, genetic_seeding_model

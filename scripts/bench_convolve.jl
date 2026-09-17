@@ -5,7 +5,7 @@
 #
 #  1. Is `convolve_delay` worth restructuring? A vectorised lag-AXPY form
 #     was tried against the scalar double loop. Mooncake differentiates the
-#     scalar loop about as fast (≈parity), so the convolution is NOT the
+#     scalar loop about as fast (≈parity), so the convolution is not the
 #     bottleneck and the simple loop stays.
 #  2. Where does the per-gradient cost actually sit? The delay discretisation
 #     (`discretise_censored`, censored-distribution CDF evaluations over

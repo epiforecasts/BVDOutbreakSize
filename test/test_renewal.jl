@@ -142,7 +142,7 @@ end
     ## 2^9, the cryptic-phase realised size at the renewal start
     C_T_prior = 512.0
 
-    ## The renewal-start seed magnitude is `2^m` DIRECTLY — passed through
+    ## The renewal-start seed magnitude is `2^m` directly — passed through
     ## unchanged, no back-scaling by a rate. This keeps `r` (hence the
     ## single R0) out of the seed magnitude.
     @test seed_at_renewal_start(C_T_prior) === C_T_prior
@@ -286,7 +286,7 @@ end
     using BVDOutbreakSize: interpolate_knots
 
     ## Knots start at day 5 (a walk that begins after the grid start). Before
-    ## the first knot the series must hold FLAT at the first knot value, not
+    ## the first knot the series must hold flat at the first knot value, not
     ## run the first segment's slope backwards; after the last knot it holds
     ## flat at the last value.
     vals = [1.0, 3.0]

@@ -5,7 +5,9 @@
 ## fixed daily confirmed series, and the stream is exercised through
 ## `bvd_joint`.
 
-@testitem "recovered: conditioned fit tracks a finite recovered total" tags=[:slow] begin
+@testitem "recovered: conditioned fit tracks a finite recovered total" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: recovered_model

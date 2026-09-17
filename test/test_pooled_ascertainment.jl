@@ -15,7 +15,9 @@
     end
 end
 
-@testitem "ascertainment prior draws produce p ∈ (0, 1)" tags=[:slow] setup=[PooledFixtures] begin
+@testitem "ascertainment prior draws produce p ∈ (0, 1)" tags=[:slow] setup=[
+    PooledFixtures
+] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(pooled_ascertainment_model(), Prior(), 200;
@@ -30,7 +32,9 @@ end
     @test all(isfinite, p_uganda)
 end
 
-@testitem "ascertainment composes via to_submodel" tags=[:slow] setup=[PooledFixtures] begin
+@testitem "ascertainment composes via to_submodel" tags=[:slow] setup=[
+    PooledFixtures
+] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(_pooled_test_compose(), Prior(), 100;

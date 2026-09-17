@@ -15,7 +15,9 @@
     end
 end
 
-@testitem "independent_ascertainment prior draws produce p ∈ (0, 1)" tags=[:slow] setup=[IndependentFixtures] begin
+@testitem "independent_ascertainment prior draws produce p ∈ (0, 1)" tags=[
+    :slow
+] setup=[IndependentFixtures] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(independent_ascertainment_model(), Prior(), 200;
@@ -30,7 +32,9 @@ end
     @test all(isfinite, p_uganda)
 end
 
-@testitem "independent_ascertainment composes via to_submodel" tags=[:slow] setup=[IndependentFixtures] begin
+@testitem "independent_ascertainment composes via to_submodel" tags=[
+    :slow
+] setup=[IndependentFixtures] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(_independent_test_compose(), Prior(), 100;

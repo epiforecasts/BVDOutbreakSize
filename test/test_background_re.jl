@@ -20,7 +20,9 @@
           [1.0, 1.0, 2.0, 2.0, 2.0]
 end
 
-@testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags=[:slow] begin
+@testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: std
@@ -38,21 +40,25 @@ end
     @test maximum(spreads) < 1e-8
 end
 
-@testitem "background_pooling_model default σ_bg is a tight half-normal" tags=[:slow] begin
+@testitem "background_pooling_model default σ_bg regularises the walk" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
-    using Statistics: median
+    using Statistics: median, quantile
     using BVDOutbreakSize: background_pooling_model
 
-    ## The shared random-walk innovation SD is a half-normal SD 0.1, so its
-    ## median is small (well under 0.2) and it is non-negative — the daily
-    ## background walk is a gentle drift rather than per-day noise, though the
-    ## data can pull it up to a modest rise over the surveillance window.
+    ## The shared random-walk innovation SD is a half-normal of scale 0.3, so
+    ## it is non-negative and its median is about 0.2. The daily background
+    ## walk stays a gentle drift rather than per-day noise, while leaving room
+    ## for the 0.17 to 0.22 the resumed daily new-suspect series pulls it to.
     chn = sample(MersenneTwister(20260604), background_pooling_model(),
         Prior(), 4_000; progress = false)
     σ = vec(Array(chn[:σ_bg]))
     @test all(>=(0), σ)
-    @test median(σ) < 0.2
+    @test median(σ) < 0.3
+    ## Still regularised: the walk is not free to absorb whole windows.
+    @test quantile(σ, 0.95) < 0.7
 end
 
 @testitem "gate_before zeroes a series before the onset day" begin
@@ -67,6 +73,25 @@ end
     g = gate_before(v, 3)
     @test eltype(g) == eltype(v)
     @test g[3:end] == v[3:end] && all(g[1:2] .== 0)
+end
+
+@testitem "background_walk_model default baseline is a half-normal SD 20" tags=[
+    :slow
+] begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: mean
+    using BVDOutbreakSize: background_walk_model
+
+    ## Default `truncated(Normal(0, 20); lower = 0)` on the window anchor: fold
+    ## the half-normal back to its untruncated SD via E|X| = σ√(2/π). Wide
+    ## enough that the joint posterior for `λ_mu` sits inside it rather than
+    ## against its upper tail.
+    chn = sample(MersenneTwister(20260604), background_walk_model(40, 0.03),
+        Prior(), 40_000; progress = false)
+    λ_mu = vec(Array(chn[:λ_mu]))
+    @test isapprox(mean(λ_mu) * sqrt(pi / 2), 20.0; atol = 1.0)
+    @test all(>=(0), λ_mu)
 end
 
 @testitem "background_walk_model edge cases (ungated, single day)" begin
@@ -94,15 +119,17 @@ end
     ## non-zero day is a small fraction of the baseline and the day-to-day rise
     ## across the boundary is gradual (no one-day jump to the full level).
     n, onset, σ_rw = 40, 18, 0.0
-    st = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
+    st = returned(
+        background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
         rand(MersenneTwister(5),
             background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7)))
     @test all(st.λ[1:(onset - 1)] .== 0)
-    @test st.λ[onset] ≈ st.λ_mu / 7         # first window day is 1/ramp of level
-    @test st.λ[onset + 6] ≈ st.λ_mu          # reaches the level after the ramp
-    @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]   # monotone ramp-in
+    @test st.λ[onset] ≈ st.λ_mu / 7  # first window day is 1/ramp of level
+    @test st.λ[onset + 6] ≈ st.λ_mu  # reaches the level after the ramp
+    @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]  # monotone ramp-in
     ## onset_ramp = 1 recovers the old hard onset (full level on day one).
-    hard = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
+    hard = returned(
+        background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
         rand(MersenneTwister(5),
             background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1)))
     @test hard.λ[onset] ≈ hard.λ_mu
@@ -120,7 +147,8 @@ end
     ## steps.
     n, onset, σ_rw = 30, 8, 0.04
     st = returned(background_walk_model(n, σ_rw; onset = onset),
-        rand(MersenneTwister(11), background_walk_model(n, σ_rw; onset = onset)))
+        rand(MersenneTwister(11),
+            background_walk_model(n, σ_rw; onset = onset)))
     @test length(st.λ) == n
     @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
     @test all(st.λ[onset:end] .> 0)                 # positive after it
@@ -136,7 +164,9 @@ end
     @test all(flat.λ[(onset + 7):end] .≈ flat.λ_mu)
 end
 
-@testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin
+@testitem "background_re_model is a positive perturbation of baseline" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using BVDOutbreakSize: background_re_model
@@ -168,7 +198,9 @@ end
     @test mean(λ) < 0.15
 end
 
-@testitem "death_background_model default is a tight half-normal" tags=[:slow] begin
+@testitem "death_background_model default is a tight half-normal" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: mean, std
@@ -181,4 +213,46 @@ end
     λ = vec(Array(chn[:λ_bg_death]))
     @test isapprox(mean(λ) * sqrt(pi / 2), 0.25; atol = 0.02)
     @test all(>=(0), λ)
+end
+
+@testitem "bvd_joint runs the pooled background branch" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
+
+    ## `background_re = true` is what every registry fit uses and the only
+    ## path that samples the pooling SD, but nothing else in the suite sets it.
+    obs = load_observations()
+    breakpoint = obs.n - obs.who_first_sitrep_days
+    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        breakpoint = breakpoint,
+        background_re = true,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+    chn = sample(m, Prior(), 20;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    ## The pooling SD reaches the chain, so the gated tilde ran.
+    ks = collect(keys(chn))
+    σ_key = only(filter(k -> occursin("σ_bg", string(k)), ks))
+    σ = vec(Array(chn[σ_key]))
+    @test length(σ) == 20
+    @test all(isfinite, σ)
+    @test all(>=(0), σ)
+
+    C_T = vec(Array(chn[:C_T]))
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
 end

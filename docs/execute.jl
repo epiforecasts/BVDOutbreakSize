@@ -6,7 +6,7 @@
 #
 #   BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
 #
-# This is the EXECUTE step only: it runs the literate page (fits loaded from
+# This is the execute step only: it runs the literate page (fits loaded from
 # cache) and writes the markdown plus its figures and its half of the shared
 # `output/` and `docs/src/summary_assets/`. The Vitepress render and deploy
 # (docs/make.jl, which needs Node) is a separate combine step.

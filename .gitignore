@@ -9,6 +9,7 @@ Manifest.toml
 /docs/build/
 /docs/src/analysis.md
 /docs/src/index.md
+/docs/src/sensitivity.md
 /docs/src/references.md
 /docs/src/summary_assets/
 /docs/node_modules/
@@ -20,11 +21,20 @@ CLAUDE.md
 *.swp
 *.swo
 
-# SitRep PDFs fetched by scripts/download_sitreps.jl for scanning
-/data/sitrep_pdfs/
+# SitRep PDFs fetched by scripts/download_sitreps.jl for scanning.
+# No trailing slash: in a worktree the cache is usually a symlink back to the
+# primary checkout, and a directory-only pattern would not match the symlink,
+# letting it be committed with an absolute path that dangles everywhere else.
+/data/sitrep_pdfs
+__pycache__/
 
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
+
+# One-off harnesses written at the repository root rather than in scratch/.
+# Anchored to the root so that scripts/bench_*.jl stays tracked.
+/run_*.jl
+/bench_*.jl
 
 # TensorBoard streaming logs from the diagnostic fit scripts
 /logs/
@@ -34,7 +44,16 @@ logs/
 /scripts/out/*.log
 /scripts/out/*.txt
 
+# Saved benchmark results. `task benchmark` writes results.json to the
+# working directory; the numbers are machine-specific and are compared
+# between two runs, never stored.
+/results.json
+
 *.html
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log
+.pi-subagents/
+
+# Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
+/worktrees/

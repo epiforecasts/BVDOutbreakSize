@@ -2,7 +2,7 @@
 ## correction, a synthetic-chain contract test for the posterior wrapper, and
 ## a smoke test for the summary table.
 
-@testitem "delay_corrected_cfr equals the naive ratio under instant outcomes" begin
+@testitem "delay_corrected_cfr matches the naive ratio with no delay" begin
     using BVDOutbreakSize: delay_corrected_cfr
     ## Confirmation and death both at lag 0: every case has resolved by the
     ## cut-off, so no denominator shrinkage and the corrected ratio is the
@@ -80,7 +80,9 @@ end
     )
 end
 
-@testitem "delay_corrected_confirmed_cfr returns aligned per-draw vectors" setup=[ConfirmedCfrChain] begin
+@testitem "delay_corrected_confirmed_cfr returns aligned draw vectors" setup=[
+    ConfirmedCfrChain
+] begin
     chn = _ccfr_chain(300)
     res = delay_corrected_confirmed_cfr(chn;
         obs_confirmed = 210, obs_confirmed_deaths = 17)
@@ -100,8 +102,10 @@ end
     @test median(res.corrected[ok]) > median(res.modelled_naive[ok])
 end
 
-@testitem "confirmed_cfr_table summarises the four quantities" setup=[ConfirmedCfrChain] begin
-    using DataFrames: DataFrame, nrow
+@testitem "confirmed_cfr_table summarises the four quantities" setup=[
+    ConfirmedCfrChain
+] begin
+    using DataFrames: DataFrame, nrow, names
     using BVDOutbreakSize: confirmed_cfr_table
     chn = _ccfr_chain(200)
     res = delay_corrected_confirmed_cfr(chn;
@@ -109,9 +113,14 @@ end
     tbl = confirmed_cfr_table(res)
     @test tbl isa DataFrame
     @test nrow(tbl) == 4
+    ## Intervals only: a median column would reintroduce a point estimate.
+    @test !("Central estimate" in names(tbl))
+    @test "Estimate" in names(tbl)
 end
 
-@testitem "plot_confirmed_cfr returns a Makie figure" setup=[ConfirmedCfrChain] begin
+@testitem "plot_confirmed_cfr returns a Makie figure" setup=[
+    ConfirmedCfrChain
+] begin
     using CairoMakie
     CairoMakie.activate!(type = "png")
     using BVDOutbreakSize: plot_confirmed_cfr

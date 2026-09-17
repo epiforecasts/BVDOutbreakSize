@@ -22,6 +22,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Compile pkgimages for a fixed set of x86-64 targets rather than for the
+# machine that happens to run the job. GitHub's ubuntu-latest fleet is mixed,
+# and Julia rejects a pkgimage built for a microarchitecture the host does
+# not match, so a depot cache built with the default `native` target restores
+# and is then thrown away. That is what makes the render jobs precompile all
+# 531 packages (~16 min each) from a cache they have just restored, while
+# `combine`, landing on a matching machine, reuses it in 5 seconds. Every job
+# here is ubuntu-latest, so one workflow-level value covers all of them. The
+# string is Julia's own CI multi-target: a generic baseline plus two clones.
+env:
+  JULIA_CPU_TARGET: >-
+    generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
+
 jobs:
   # Resolve and precompile the single shared environment once, list the fit
   # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
@@ -39,6 +52,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
       # Resolve and precompile the ONE environment every job uses (fitting and
       # rendering). Downstream jobs restore this depot cache and the pinned
       # manifest below, so precompilation is shared AND the fit and render jobs
@@ -53,6 +68,16 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
             Pkg.precompile()'
+      # Temporary, and duplicated in the other job on purpose rather than
+      # pulled into a composite action: it exists to confirm the diagnosis
+      # behind JULIA_CPU_TARGET above and comes out once a run shows the
+      # render reusing the depot. Until then it tells a job that recompiled
+      # from a restored depot apart from one that simply landed on a
+      # different machine, which the timings alone cannot do.
+      - name: Record the runner's CPU
+        run: |
+          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
+            >> "$GITHUB_STEP_SUMMARY"
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
@@ -63,11 +88,19 @@ jobs:
       # The docs env is part of the root [workspace] (see Project.toml), so its
       # resolved manifest is the repo-root Manifest.toml, not docs/Manifest.toml.
       # Manifest.toml is git-ignored, hence the artifact.
+      # Every artifact this workflow uploads is a handoff inside the run:
+      # `fit` feeds `render`, `render` feeds `combine`, and nothing reads any
+      # of them afterwards (no step passes a `run-id`). The durable fit cache
+      # is `actions/cache` above, keyed on the model sources and data. Left at
+      # the 90-day default these built up to 6800 artifacts and 36 GB, which
+      # exhausted the storage quota and failed uploads with a 403 on
+      # finalisation. Three days keeps a window for debugging a failed run.
       - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: Manifest.toml
           if-no-files-found: error
+          retention-days: 3
 
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
@@ -92,6 +125,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
           # All matrix jobs share the one env cache (warmed by `list`), so cache
           # it once rather than per-id: per-id copies otherwise overflow the
           # 10 GB repo cache budget and evict the content-addressed fit chains.
@@ -106,7 +141,8 @@ jobs:
           key: >-
             fit-${{ matrix.id }}-${{ hashFiles(
               'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
-              'src/constants.jl', 'src/data.jl', 'docs/fits/registry.jl', 'data/**') }}
+              'src/constants.jl', 'src/data.jl', 'src/onset_curve.jl',
+              'docs/fits/registry.jl', 'data/**') }}
       # Restore the resolved manifest from `list` (after the depot cache step,
       # so this job's cache key still matches) so instantiate installs those
       # exact versions instead of re-resolving and recompiling.
@@ -125,18 +161,88 @@ jobs:
         run: |
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           julia --project=docs docs/fits/one.jl
+      # `one.jl` writes the fit's diagnostics to the job summary itself. A
+      # cache hit skips it, so say so rather than leaving the job blank.
+      - name: Note the cached fit
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          echo '### Fit `${{ matrix.id }}`: cache hit, not refitted' \
+            >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: fit-${{ matrix.id }}
           path: logs/fit_cache/*.jls
           if-no-files-found: error
+          retention-days: 3
+
+  # Rescore the published releases and refresh the release overlays, once, in
+  # parallel with the fits. Both render jobs used to run this identically,
+  # each paying ~6 min on the critical path for the same ten CSVs. Nothing
+  # here reads this run's fits: the scoring compares past releases' saved
+  # forecasts against the current data, so it can start as soon as the
+  # environment is resolved.
+  overlays:
+    name: Refresh release overlays
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
+      - name: Pin the resolved manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: .
+      # Refresh the released-estimate overlay so the sensitivity page's
+      # "Estimate evolution across releases" figure picks up the newest
+      # results-v* release. Best-effort: on any failure it uses the committed
+      # data/released_estimates.csv.
+      - name: Refresh released-estimate and forecast-scoring overlays
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
+           julia --project=scripts scripts/refresh_releases.jl) ||
+            echo "release refresh failed; using committed released_estimates.csv"
+          # Rescore every release's saved forecasts against the now-observed
+          # data and refresh the per-release R_T overlay.
+          #
+          # Not best-effort, deliberately. Falling back to the committed
+          # forecast_scores.csv / forecast_overlay.csv would publish skill
+          # scores and forecast-versus-observed figures against whatever
+          # truth series those files were last written from, with nothing on
+          # the rendered page saying so. This step writes them, so they are
+          # stale by construction. A hard failure is recoverable by
+          # re-running the job; a silent substitution is not detectable from
+          # the page at all.
+          julia --project=docs scripts/score_releases.jl
+      # Every CSV under data/, not just the ten this step rewrites: a new
+      # output would otherwise be left behind silently. The render restores
+      # them over its own checkout, so an untouched file is replaced by an
+      # identical copy. None of them enters a fit cache key (they are all in
+      # `FIT_DATA_EXCLUDE`), so the render's strict cache lookups still hit.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: overlays
+          path: data/*.csv
+          if-no-files-found: error
+          retention-days: 3
 
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
   # and its half of the shared output/ and summary_assets/.
   render:
     name: Render ${{ matrix.page }}
-    needs: fit
+    needs: [fit, overlays]
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
     # `list` did that once), the render is plots/PPCs only. Split across two
@@ -154,11 +260,23 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
           # Restore the one env cache warmed by `list` (and reused by `fit`)
           # rather than keying per-page. Without this the matrix `page` value
           # enters the cache key, so each render misses the shared depot and
           # re-precompiles the whole stack (~530 deps) before rendering.
           include-matrix: false
+      # Temporary, and duplicated in the other job on purpose rather than
+      # pulled into a composite action: it exists to confirm the diagnosis
+      # behind JULIA_CPU_TARGET above and comes out once a run shows the
+      # render reusing the depot. Until then it tells a job that recompiled
+      # from a restored depot apart from one that simply landed on a
+      # different machine, which the timings alone cannot do.
+      - name: Record the runner's CPU
+        run: |
+          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
+            >> "$GITHUB_STEP_SUMMARY"
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:
@@ -176,21 +294,22 @@ jobs:
           pattern: fit-*
           path: logs/fit_cache
           merge-multiple: true
-      # Refresh the released-estimate overlay so the sensitivity page's
-      # "Estimate evolution across releases" figure picks up the newest
-      # results-v* release. Best-effort: on any failure it uses the committed
-      # data/released_estimates.csv.
-      - name: Refresh released-estimate overlay
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
-           julia --project=scripts scripts/refresh_releases.jl) ||
-            echo "release refresh failed; using committed released_estimates.csv"
+      # The release overlays the `overlays` job rescored, over this job's own
+      # checkout of data/.
+      - name: Collect the refreshed release overlays
+        uses: actions/download-artifact@v8
+        with:
+          name: overlays
+          path: data
       - name: Render ${{ matrix.page }}
         env:
           BVD_DOC_PAGE: ${{ matrix.page }}
           BVD_FIT_CACHE: logs/fit_cache
+          # The fit matrix has already produced every fit and they are collected
+          # above, so the render must only ever load from cache. Fail fast and
+          # loud on any miss (naming the key and dir) instead of silently
+          # refitting the whole report into the render-job timeout.
+          BVD_FIT_STRICT: true
           BVD_FIT_LOG: none
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/execute.jl
@@ -204,6 +323,7 @@ jobs:
             docs/src
             output
           if-no-files-found: warn
+          retention-days: 3
 
   # Assemble the Vitepress site from both pre-rendered pages (a single
   # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
@@ -213,10 +333,23 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Every branch's preview lands on the one gh-pages ref, so two PRs
+    # deploying at once race and the loser's push is rejected as
+    # non-fast-forward. The workflow-level group above is keyed on the source
+    # ref and so cannot see that; key this job on the destination instead.
+    # Queue rather than cancel: a superseded deploy still has a preview to
+    # publish, and the job is short.
+    concurrency:
+      group: docs-deploy-gh-pages
+      cancel-in-progress: false
     permissions:
       contents: write
       statuses: write
       pull-requests: write
+    # Dependabot-triggered workflows run with a read-only GITHUB_TOKEN, so
+    # the deploy-and-comment steps below would all fail. Skip the job
+    # entirely; dependabot PRs only need the test results, not a docs preview.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -225,6 +358,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:
@@ -354,7 +489,10 @@ jobs:
 
             Bundles the posterior summary tables, thinned posterior
             draws, the latent symptom-onset ("symptomatic cases")
-            trajectory over time (`onsets_over_time.csv`), a copy of the
+            trajectory over time (`onsets_over_time.csv`), the one- to
+            four-week-ahead forecasts of the observed streams
+            (`forecast.csv`, with the one-week-back validation forecast in
+            `forecast_validation.csv`) for later scoring, a copy of the
             input `observations.toml`, a
             `site.zip` snapshot of the rendered report site, and
             `analysis.html` — a self-contained single-file copy of the

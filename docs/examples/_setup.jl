@@ -1,11 +1,12 @@
 # Shared setup for the analysis and sensitivity report pages. This is plain
 # Julia (not a Literate page): both `analysis.jl` and `sensitivity.jl` include
 # it so each page can render on its own from the same fitted chains. It loads
-# the packages, the observations, the fit registry (`docs/fits/registry.jl`) and every
-# model fit through the content-addressed cache (`fit_or_load`), then unpacks
-# the named chains, cumulative-infection draws and display labels the pages
-# share. In CI the fits are pre-populated by the per-fit matrix and loaded
-# here; locally a missing fit is computed and cached on first use.
+# the packages, the observations, the fit registry (`docs/fits/registry.jl`)
+# and every model fit through the content-addressed cache (`fit_or_load`),
+# then unpacks the named chains, cumulative-infection draws and display
+# labels the pages share. In CI the fits are pre-populated by the per-fit
+# matrix and loaded here; locally a missing fit is computed and cached on
+# first use.
 
 using Turing
 using Distributions
@@ -25,6 +26,15 @@ using TensorBoardLogger
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
+## `activate!(type = "png")` leaves Figures still showable as `MIME"text/html"`,
+## which Literate prefers over `image/png`, and Documenter's raw-block regex
+## hits PCRE's ~64KB limit once a block grows past it. Disabling the
+## html-family mimes forces every Figure display onto the image/png path.
+CairoMakie.disable_mime!(
+    "text/html", "application/vnd.webio.application+html",
+    "application/prs.juno.plotpane+html", "juliavscode/html",
+    "svg", "pdf")
+
 Random.seed!(20260518)
 
 ## Guard the stateful setup against running twice in one module: the Literate
@@ -43,11 +53,37 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## run to it, or the freeze date for streams that stop earlier).
     hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
 
-    ## The fits are defined once in `docs/fits/registry.jl` as a registry, so each can be
-    ## run and cached independently — one per CI matrix job, or an HPC task — and
-    ## loaded here through the content-addressed cache instead of being refitted
-    ## inline. `_BREAKPOINT`, `validation_cutoff` and `frozen_cutoffs` come from the
-    ## same registry so the report and the standalone fits agree.
+    ## The forecast's count streams, split by whether the situation reports
+    ## still update each one (`stream_reporting`). A stream that has stopped
+    ## carries a cumulative total that only repeats its last reported value,
+    ## so it can be projected but not validated against an observation.
+    ## `scripts/score_releases.jl` withholds the same streams, though by its
+    ## own per-target rule rather than this one. Both pages read the split
+    ## from here so they agree.
+    forecast_cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum, :recovered_cum)
+    reporting_cum_cols = Tuple(c for c in forecast_cum_cols
+    if stream_reporting(obs, c))
+    stopped_cum_cols = Tuple(c for c in forecast_cum_cols
+    if !stream_reporting(obs, c))
+    ## The matching new-count columns, for a figure that takes the forecast
+    ## frame column by column rather than a keyed NamedTuple.
+    new_cols(cols) = [stream_forecast_columns(c).new for c in cols]
+    ## Keep the entries of a stream-keyed NamedTuple (`observed`, `baseline`,
+    ## `individual`) belonging to `cols`, whichever of a stream's cumulative
+    ## or new-count column each side is keyed by.
+    function keep_streams(nt, cols)
+        ids = [stream_id(c) for c in cols]
+        return NamedTuple(k => v
+        for (k, v) in pairs(nt) if stream_id(k) in ids)
+    end
+
+    ## The fits are defined once in `docs/fits/registry.jl` as a registry, so
+    ## each can be run and cached independently — one per CI matrix job, or
+    ## an HPC task — and loaded here through the content-addressed cache
+    ## instead of being refitted inline. `_BREAKPOINT`, `validation_cutoff`
+    ## and `frozen_cutoffs` come from the same registry so the report and the
+    ## standalone fits agree.
     include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
     _BREAKPOINT = default_breakpoint(obs)
 
@@ -76,9 +112,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## the estimate-evolution overlay.
     chamla_cutoff = default_chamla_cutoff()
 
-    ## The frozen-joint, sensitivity-variant and delay/clock helpers used by the
-    ## re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so they can be run from
-    ## the standalone per-fit entry point too.
+    ## The frozen-joint, sensitivity-variant and delay/clock helpers used by
+    ## the re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so
+    ## they can be run from the standalone per-fit entry point too.
 
     ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
     ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
@@ -93,11 +129,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## Every fit is loaded through the content-addressed cache (`fit_or_load`):
     ## reused when a fit with the same model source, data and settings already
     ## exists — produced once by the per-fit CI matrix (`.github/workflows/
-    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set `BVD_REFIT=all`
-    ## to force a full refit. The loads still run through `fit_parallel`, so on a
-    ## cold cache the joint overlaps the per-stream, frozen and (gated) sensitivity
-    ## re-fits and keeps all cores busy; on a warm cache they deserialise in
-    ## parallel.
+    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set
+    ## `BVD_REFIT=all` to force a full refit. The loads still run through
+    ## `fit_parallel`, so on a cold cache the joint overlaps the per-stream,
+    ## frozen and (gated) sensitivity re-fits and keeps all cores busy; on a
+    ## warm cache they deserialise in parallel.
     ## Resolve the cache dir against the package root, never the working
     ## directory: Literate executes the page with the cwd changed to docs/src,
     ## so a relative `BVD_FIT_CACHE` (as CI passes) would point at
@@ -113,42 +149,103 @@ if !@isdefined(_BVD_SETUP_LOADED)
             joinpath(pkgdir(BVDOutbreakSize), c)
         end
     end
-    _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
+    _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in
+                 ("all", "true", "1")
+    ## In CI the per-fit matrix produces every fit before the render, so a
+    ## render cache miss is a bug (usually a wrong `BVD_FIT_CACHE`).
+    ## `BVD_FIT_STRICT` makes such a miss fail in seconds naming the key,
+    ## rather than silently refitting the whole report and hitting the
+    ## render-job timeout. Off by default so a local cold build still fits.
+    _strict = lowercase(strip(get(ENV, "BVD_FIT_STRICT", ""))) in
+              ("all", "true", "1", "yes", "on")
     _fit_specs = build_fit_specs(obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
-        validation_cutoff = validation_cutoff, run_sensitivity = RUN_SENSITIVITY)
+        validation_cutoff = validation_cutoff,
+        run_sensitivity = RUN_SENSITIVITY)
     _fit_results = fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
-                                     cache_dir = _fit_cache_dir, refit = _refit_all)
+                                     cache_dir = _fit_cache_dir,
+                                     refit = _refit_all,
+                                     strict = _strict)
                                  for s in _fit_specs])
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
+    ## The headline joint is the patch (meta-population) model, run over the
+    ## three affected provinces. With `n_patches = 1` the same model collapses
+    ## exactly onto the single-population one, so there is one model, not two;
+    ## `sens_no_patches` is that degenerate case, fitted as the sensitivity
+    ## check on the spatial structure.
     chn_joint = _fits["joint"]
+    chn_no_patches = _fits["sens_no_patches"]
     chn_exports = _fits["exports"]
     chn_deaths = _fits["deaths"]
     chn_cases = _fits["cases"]
     chn_confirmed = _fits["confirmed"]
     chn_confirmed_deaths = _fits["confirmed_deaths"]
     chn_treatment = _fits["treatment"]
+    chn_onsets = _fits["onsets"]
     frozen_lastweek = _fits["frozen_validation"]
+    ## One frozen individual fit per stream at the same cut-off as
+    ## `frozen_lastweek`, so the forecast validation section can show each
+    ## stream's own model alongside the frozen joint. Keyed by the same
+    ## `fit` ids the current-data individual fits use (`chn_cases`, …), so
+    ## the two dicts read the same way.
+    ## Only the still-reported streams are fitted, so a stream that has
+    ## stopped is simply absent here rather than present and filtered out
+    ## later (see `validation_stream_ids`).
+    frozen_lastweek_streams = Dict(
+        sid => _fits["frozen_validation_$sid"]
+    for sid in validation_stream_ids(obs))
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
     frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+    ## Basic reproduction number draws from a chain that walks its own
+    ## renewal process, `exp` of the walk's log base `rt_state.log_R0`, the
+    ## walk's starting value and a distinct quantity from the growth-clock
+    ## rate `r0`. `nothing` for a chain carrying no walk base: an absent key
+    ## throws rather than reading back empty, so the lookup is probed, the
+    ## same way `_has_key` in src/forecast.jl probes a chain key.
+    function r0_walk_draws(chn)
+        try
+            exp.(vec(Array(chn[Symbol("rt_state.log_R0")])))
+        catch
+            nothing
+        end
+    end
+    ## Every frozen fit is a full joint fit, so it carries the same walk base
+    ## chn_joint does.
+    frozen_R0(c) = r0_walk_draws(frozen_by_cutoff[c].chn)
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
-        chn_joint_fast_clock = _fits["sens_fast_clock"]
+        chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
         chn_joint_no_contact = _fits["sens_no_contact"]
         chn_joint_no_effort = _fits["sens_no_effort"]
     end
 
-    posterior_C_joint = vec(Array(chn_joint[:C_T]));
-    posterior_C_exports = vec(Array(chn_exports[:C_T]));
-    posterior_C_deaths = vec(Array(chn_deaths[:C_T]));
-    posterior_C_cases = vec(Array(chn_cases[:C_T]));
-    posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
-    posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
-    posterior_C_treatment = vec(Array(chn_treatment[:C_T]));
+    ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
+    ## inside a model body puts a memcmp foreigncall on the AD tape).
+    ## `N_PATCHES` is the report's single source for the patch count, so a
+    ## change to `PROVINCE_NAMES` reaches every table and figure at once.
+    N_PATCHES = length(PROVINCE_NAMES)
+    province_cases = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
+    province_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
+    province_testing = province_testing_covariate(
+        obs.province_lab_daily_history)
+    posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
+
+    posterior_C_joint = vec(Array(chn_joint[:C_T]))
+    posterior_C_exports = vec(Array(chn_exports[:C_T]))
+    posterior_C_deaths = vec(Array(chn_deaths[:C_T]))
+    posterior_C_cases = vec(Array(chn_cases[:C_T]))
+    posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
+    posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]))
+    posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
+    posterior_C_onsets = vec(Array(chn_onsets[:C_T]))
 
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
@@ -177,12 +274,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
         :incare_cfr => "in-care fatality (CFR_iso)",
         :incare_cfr_modifier => "in-care fatality log-odds modifier",
+        :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
-        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
+        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers")
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
     ## with the model, shared by the main and sensitivity R(t) plots.
     _rt_start_plot = clamp(
-        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n);
+        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n)
 end # _BVD_SETUP_LOADED guard
