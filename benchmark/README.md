@@ -20,9 +20,10 @@ The joint is available as a component but off by default.
 ## Running
 
 ```bash
-task benchmark                       # results.json in the working directory
-task benchmark -- out.json           # somewhere else
-BVD_BENCH_JOINT=true task benchmark  # plus the full joint
+task benchmark                        # results.json in the working directory
+task benchmark -- out.json            # somewhere else
+BVD_BENCH_JOINT=true task benchmark   # plus the full joint
+BVD_BENCH_ENZYME=true task benchmark  # plus the Enzyme backend
 
 # Compare two saved runs the way CI does
 task benchmark-compare -- pr.json main.json comment.md
@@ -42,6 +43,8 @@ AD gradients/
 ```
 
 Backends are Mooncake, the package default, and Enzyme, the opt-in backend from the package's Enzyme extension.
+Enzyme is off unless `BVD_BENCH_ENZYME=true` is set.
+Both backends over every component do not fit a CI run: that sweep was cancelled at the 90 minute cap, where Mooncake alone finished in 39 minutes on the same cold runner.
 
 ## Known-broken pairs
 
