@@ -7,8 +7,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Superseding a run is right on a pull request and destructive on `main`.
+# `github.head_ref` is set only on a pull request, so a push to `main`, a tag
+# or a manual run falls back to `github.run_id`.
+# That gives each of those a group of its own that nothing supersedes.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
