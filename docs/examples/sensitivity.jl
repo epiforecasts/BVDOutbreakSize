@@ -435,7 +435,8 @@ MarkdownTable(joint_score_by_release_table) #hide
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
+forecast_overlay_fig = plot_forecast_overlay(
+    scored_overlay(forecast_overlay_df));
 
 #md # ```@raw html
 #md # </details>
@@ -576,7 +577,8 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
 #md # ```
 
-frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
+frozen_overlay_fig = plot_forecast_overlay(
+    scored_overlay(frozen_overlay_df));
 
 #md # ```@raw html
 #md # </details>
@@ -989,6 +991,8 @@ _stream_chains = (
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "confirmed_deaths" => (; chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
     "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))

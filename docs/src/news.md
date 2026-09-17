@@ -21,11 +21,21 @@ Both forms carry the same prior, so only the sampled coordinates change.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
+- The bed-capacity walk is sampled centred, each innovation drawn at the sampled step size rather than as a standard half-normal multiplied by it (#743).
+The two forms are the same distribution, so the fit is unchanged in what it estimates and only the geometry the sampler explores differs.
+Non-centring suits a walk the prior dominates, and this is not one: on the 16 September joint fit its innovations had lost about 90% of their prior variance and its step size sat past the prior 95th percentile holding about half the prior spread.
+The gain, if any, is in effective samples per unit time rather than in gradient cost.
+Every fit-cache key changes, so the next build refits.
 
 ### Report
 
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- Recovered is labelled recovered among confirmed wherever the stream is named (#737).
+It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
+- The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
+Reported cases and suspected deaths froze on 26 May and hold one scored point each with no baseline, so they were two rows of near-empty panels; the score tables already dropped them under the same rule.
+Their scored history stays in the released data.
 
 ### Fixed
 
@@ -35,6 +45,11 @@ The digest hashed `*.csv` only, so a data update that touched the manifest alone
 Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
 The digest now covers every file under `data/` apart from an explicit exclude list, so an input in a format nothing has read before cannot be missed the same way.
 Every key changes, so the next build refits from scratch.
+- Recovered is forecast, archived and scored again (#737).
+`score_releases.jl` prefers `stream_forecasts.csv` over `forecast.csv` where a release ships it, and the joint entry of `stream_fits` never listed recovered, so the stream fell out of scoring from `results-1359` on 23 July.
+Recovered is still published, so this was a gap rather than a frozen stream.
+- The confirmed-deaths panel of the reproduction-number and basic-reproduction-number by-dataset figures draws its current-model reference band (#737).
+`_stream_chains` never named that fit, so the panel showed its per-release points alone.
 
 ### Infrastructure
 
