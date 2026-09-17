@@ -6,12 +6,14 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v2.1.0
 
-Changes since v2.0.0
+Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
-
+- The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
+The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
+The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
 - A health-zone model disaggregates each patch of the headline joint model over the health zones that have reported a confirmed case (#711).
 It is a two-stage Markov melding in which the zone stage receives the patch posterior and feeds nothing back: patch infections, the generation interval and the infection-to-report delay are fixed at the joint posterior means, each zone's infections are a share of its patch's, the shares follow a renewal on the zone's own force of infection scaled by a weekly-knot deviation walk, and the per-vintage zone increments are scored with a Dirichlet-multinomial composition conditional on the allocated patch total.
 Zone reproduction numbers invert the zone renewal and are paired with joint draws for every reported quantity.
@@ -19,7 +21,6 @@ Zones with fewer than 30 confirmed cases carry a decaying level rather than a wa
 `fit_zone` fits it from a parent chain with a data-informed start, two chains, 600 draws after 400 adaptation steps and a tree-depth cap of 8.
 
 ### Data
-
 - Added per-health-zone confirmed cases and deaths from Tableau 2 as
 `[zone_confirmed_history]` and `[zone_death_history]`, 86 vintages from 1 June
 to 13 September over 62 zones, each province's unallocated row kept so the
@@ -34,7 +35,8 @@ population, centroid, DHIS2 code and boundaries.
 `load_health_zones` reads the metadata.
 
 ### Report
-
+- The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
+The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 - The methods carry the health-zone model: the cut two-stage melding, the
 share renewal and its deviation walk, the Dirichlet-multinomial composition,
 the implied zone reproduction number and the assumptions the zone stage makes,
@@ -66,12 +68,28 @@ The release adds `zone_forecast_validation.csv` and `zone_forecast_scores.csv`.
 model: prior predictive check, simulation-based recovery, sampler diagnostics,
 posterior predictive checks and the ranking and map.
 
-### Infrastructure
+### Fixed
+- The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
+- The fit cache key covers `data/observations.toml`, the manifest every observation is read from (#738).
+The digest hashed `*.csv` only, so a data update that touched the manifest alone left every key unchanged and served each fit from cache against the previous data.
+Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
+The digest now covers every file under `data/` apart from an explicit exclude list, so an input in a format nothing has read before cannot be missed the same way.
+Every key changes, so the next build refits from scratch.
 
+### Infrastructure
+- One-off harnesses written at the repository root are ignored (#726).
+Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
+The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
 - The fit registry and the docs workflow gain a dependent stage (#711).
 The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
 The zone sensitivity variants `local_mixing`, `local_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
 `BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
+
+### Dependencies
+- The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).
+Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no version, one of which merged in #699.
+Standard libraries ship with Julia, so these environments have nothing to pin.
+The root `Project.toml` keeps its entries, which Aqua requires and which were never malformed.
 
 ## v2.0.0
 
@@ -112,7 +130,7 @@ detection on the ramp the reproduction number already uses.
 - Ituri carries the whole cryptic seed and the other provinces are seeded by
 importation from it, so when a province first carries infections follows from
 the kernel rather than from a fitted fraction.
-- The headline and its control run at 900 draws with 400 adaptation steps and a
+- The headline and its control run at 750 draws with 500 adaptation steps and a
 target acceptance of 0.80, measured against the fit job's 350-minute budget.
 - `m` counts transmission generations rather than doublings (#672).
 `m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
@@ -146,6 +164,10 @@ transposed, and its validated-suspect columns reproduce the old table's own
 daily suspect total exactly on all 20 vintages that print both.
 SitRep 084 stays out: its Nord-Kivu row both validates and invalidates more
 alerts than the province received.
+- The model cut-off advances to SitRep 122, 13 September (#709).
+Confirmed cases reach 7258 and confirmed deaths 3510.
+Every fitted stream's net change matches that report's own printed 24-hour
+figure, with no harmonisation anywhere in the run.
 
 ### Report
 
@@ -192,6 +214,22 @@ The log density is unchanged bit for bit, but reverse mode accumulates in a
 different order, so a fixed-seed chain no longer reproduces an earlier
 vintage draw for draw.
 Summaries agree within Monte Carlo error rather than exactly.
+- The sampler budget sits in adaptation rather than in draws (#716).
+The headline patch fit returned 48 bulk and 39 tail effective samples at a
+worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population
+control on the same data through the same pipeline.
+Five times the effective sample from the same draw count places the limit at
+adaptation rather than at the draw count.
+The 500 adaptation steps and 750 draws are 1250 iterations, which the fit
+job's 350-minute budget covers.
+- The onset digitisers reuse the vintages the scanned file already holds
+(#707).
+Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run,
+walking the embedded figure pixel by pixel across all 55 vintages, though a
+data update adds one.
+Each run now opens a PDF only for the vintages the file is missing, and an
+incremental run and a full one write the same file.
+`--rebuild` still re-reads every vintage.
 
 ### Fixed
 
@@ -210,8 +248,10 @@ Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 - The quality items run once in their own job rather than on every matrix cell.
 They do not vary by platform or Julia version, and carrying them on top of the
 whole suite took the Linux cell past its 150-minute ceiling.
-- The occupancy-offset forecast test scores both offsets on one set of prior
-draws rather than comparing two independent samples.
+- The documentation build pins the pkgimage targets, and rescores the
+released-estimate and forecast-scoring overlays once (#712).
+Of the 30 minutes the render step took, 23 went on installing dependencies and
+refreshing overlays rather than on rendering.
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
 The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
 It now states the thinned discharge flow and the confirmation-dependent abscond survival.
@@ -253,6 +293,19 @@ Those together are the signature of a zero-mean walk carrying a systematic trend
 - The docs and test environments no longer warn about the SHA compat entry on every resolve.
 `SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
 Both environments now read `SHA = "0.7.0, 1"`.
+- Each single-stream fit is forecast from its own fitted trajectory (#706).
+The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
+That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
+- Four comment-level claims that did not match the code are corrected (#710).
+The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
+The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
+`forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
+- The duplicated comments in `score_releases.jl` are trimmed (#714).
+
+### Dependencies
+
+- Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
+Several carried a meaningless `< 0.0.1` bound on a standard library.
 
 ## v1.18.0
 

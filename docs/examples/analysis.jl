@@ -255,12 +255,12 @@ observations_table = DataFrame(
 #md # </details>
 #md # ```
 
-## `MarkdownTable` rather than a bare `observations_table` expression: a
-## DataFrame is `text/html`-showable, Literate prefers that mime, and the
-## `@raw html` block it writes crosses Documenter's raw-block regex limit
-## once the table grows. `MarkdownTable` is markdown-showable and not
-## html-showable, so the table goes out as an ordinary markdown table. See
-## its docstring for the mechanism.
+## `MarkdownTable` rather than a bare `observations_table` expression: a #src
+## DataFrame is `text/html`-showable, Literate prefers that mime, and the #src
+## `@raw html` block it writes crosses Documenter's raw-block regex limit #src
+## once the table grows. `MarkdownTable` is markdown-showable and not #src
+## html-showable, so the table goes out as an ordinary markdown table. See #src
+## its docstring for the mechanism. #src
 MarkdownTable(observations_table) #hide
 
 # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
@@ -314,11 +314,11 @@ end;
 #md # <details><summary>Per-date situation-report data table</summary>
 #md # ```
 
-## See the comment above `observations_table`'s display: wrapping in
-## `MarkdownTable` instead of showing the DataFrame directly avoids the
-## `@raw html` block that Literate would otherwise emit, which for this
-## table (growing by one row per situation report) would keep exceeding
-## Documenter's raw-block line-relocation regex limit as SitReps accumulate.
+## See the comment above `observations_table`'s display: wrapping in #src
+## `MarkdownTable` instead of showing the DataFrame directly avoids the #src
+## `@raw html` block that Literate would otherwise emit, which for this #src
+## table (growing by one row per situation report) would keep exceeding #src
+## Documenter's raw-block line-relocation regex limit as SitReps accumulate. #src
 MarkdownTable(vintage_table) #hide
 
 #md # ```@raw html

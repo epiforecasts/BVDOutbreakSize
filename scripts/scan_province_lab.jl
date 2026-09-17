@@ -229,12 +229,23 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## while still fixing the positives at zero.
     norendu = occursin(r"aucun nouveau resultat", text)
     ## A batch reported as returned negative has been analysed, however
-    ## loosely the collection itself is worded.
+    ## loosely the collection itself is worded. From SitRep 119 the brief
+    ## format says "reveles" at least as often as "revenus" ("tous se sont
+    ## reveles negatifs" at 119/121/122/123, "tous reveles negatifs" with
+    ## no parenthetical at 124), which the "revenus" spelling alone never
+    ## reached, so every one of those vintages was dropped whole.
     completed = !norendu &&
-                (occursin(r"revenus? negatifs?", text) ||
+                (occursin(r"(?:revenus?|reveles?) negatifs?", text) ||
                  occursin(r"tous negatifs?", text) ||
                  occursin(r"[,(] ?negatif", text) ||
                  occursin(r"aucun[^;]{0,30}positif", text))
+    ## The mirror phrasing, which the same vintages use: every sample in
+    ## the batch came back positive ("tous se sont reveles positifs" at
+    ## 121, the singular "s'est revele positif" at 120). The numerator is
+    ## then the denominator, so this is applied once `analysed` is read.
+    all_positive = occursin(
+        r"(?:tous|toutes) (?:se sont |sont )?(?:revenus?|reveles?) positifs?",
+        text) || occursin(r"s.est (?:revenu|revele) positif", text)
 
     positives = nothing
     for re in POSITIVES
@@ -264,6 +275,17 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
         analysed === nothing || break
     end
 
+    ## "sur l'echantillon analyse": a definite singular names exactly one
+    ## sample, the only denominator in this stream printed without a digit.
+    ## SitRep 119's Sud Ubangi entry uses it, and that date's national
+    ## total counts the sample, so dropping it silently broke the
+    ## partition rather than failing loudly the way an unreadable
+    ## numerator does.
+    if analysed === nothing &&
+       occursin(Regex("sur l." * SAMPLES * " (?:analyse|teste)"), text)
+        analysed = 1
+    end
+
     ## "5 nouveaux echantillons ont ete collectes et tous sont revenus
     ## negatifs": no analysis verb, but a returned result means they were
     ## analysed, as does a stated positive count. Fall back to the collected
@@ -276,6 +298,30 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
             m === nothing && continue
             analysed = parse(Int, m[1])
             break
+        end
+    end
+
+    ## Every sample positive: the numerator is the whole denominator.
+    positives === nothing && all_positive && analysed !== nothing &&
+        (positives = analysed)
+
+    ## SitRep 124's Nord-Kivu bullet leads with its positive count where
+    ## every neighbour leads with "N nouveaux resultats positifs": "21
+    ## echantillons recus et testes (14 vivants et 7 deces) sur 160
+    ## echantillons analyses (positivite de 13,1%)". Nothing in the wording
+    ## says which number is which, so the report's own printed positivity
+    ## decides it: the leading count is read as the numerator only when its
+    ## ratio to the denominator reproduces the printed rate to within that
+    ## rate's own rounding. A vintage writing this shape without a rate
+    ## stays unparsed and is reported rather than guessed at.
+    if positives === nothing && analysed !== nothing && analysed > 0
+        rate = match(r"positivite[^0-9]{0,4}(\d+(?:,\d+)?)", text)
+        lead = match(Regex("^\\D*(\\d+) (?:nouveaux? )?" * SAMPLES), text)
+        if rate !== nothing && lead !== nothing
+            printed = parse(Float64, replace(rate[1], ',' => '.'))
+            n = parse(Int, lead[1])
+            n <= analysed && abs(100 * n / analysed - printed) <= 0.05 &&
+                (positives = n)
         end
     end
 
@@ -447,4 +493,9 @@ function main()
     return nothing
 end
 
-main()
+## Guarded so the parser can be included by test/test_province_lab_parser.jl
+## without rescanning every PDF, the same shape scripts/digitize_onset_curve.jl
+## uses.
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end

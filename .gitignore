@@ -31,6 +31,11 @@ __pycache__/
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
 
+# One-off harnesses written at the repository root rather than in scratch/.
+# Anchored to the root so that scripts/bench_*.jl stays tracked.
+/run_*.jl
+/bench_*.jl
+
 # TensorBoard streaming logs from the diagnostic fit scripts
 /logs/
 logs/
@@ -38,6 +43,11 @@ logs/
 # Transient run logs and result dumps from the diagnostic fit scripts
 /scripts/out/*.log
 /scripts/out/*.txt
+
+# Saved benchmark results. `task benchmark` writes results.json to the
+# working directory; the numbers are machine-specific and are compared
+# between two runs, never stored.
+/results.json
 
 *.html
 

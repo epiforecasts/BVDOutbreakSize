@@ -1,0 +1,21 @@
+[deps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+BVDOutbreakSize = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+LogDensityProblems = "6fdf6af0-433a-55f7-b3ed-c6c6e0b8df7c"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+
+[sources]
+BVDOutbreakSize = {path = ".."}
+
+[compat]
+ADTypes = "1.22"
+BenchmarkTools = "1"
+Enzyme = "0.13"
+LogDensityProblems = "2.2"
+Mooncake = "0.5.33"
+Turing = "0.45.0, 0.46, 0.47, 0.48, 0.49"
+julia = "1.11"

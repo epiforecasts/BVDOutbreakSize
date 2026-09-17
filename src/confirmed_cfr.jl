@@ -121,15 +121,16 @@ end
 
 """
 One-row `DataFrame` summarising the confirmed-CFR comparison from a
-[`delay_corrected_confirmed_cfr`](@ref) result `res`. Carries the median
-and equal-tailed 90% credible interval of the delay-corrected confirmed CFR
-and the structural CFR, the median uncorrected modelled confirmed ratio,
-and the naive observed confirmed ratio. Percentages rounded to `digits`
-decimal places.
+[`delay_corrected_confirmed_cfr`](@ref) result `res`. Carries the
+equal-tailed 90% credible interval of the delay-corrected confirmed CFR,
+the structural CFR and the uncorrected modelled confirmed ratio, and the
+naive observed confirmed ratio. No central estimate is reported: the three
+modelled rows give an interval, and the naive row gives the observed value,
+which carries no uncertainty. Percentages rounded to `digits` decimal
+places.
 """
 function confirmed_cfr_table(res; digits::Integer = 1)
     pct(x) = round(100 * x; digits)
-    med(v) = pct(quantile(filter(isfinite, v), 0.5))
     function ci(v)
         s = posterior_summary(filter(isfinite, v))
         return string(pct(s.lo90), "–", pct(s.hi90), "%")
@@ -139,11 +140,8 @@ function confirmed_cfr_table(res; digits::Integer = 1)
             "Structural (infection-based) CFR",
             "Uncorrected modelled confirmed ratio",
             "Naive observed confirmed ratio"],
-        central_estimate = [string(med(res.corrected), "%"),
-            string(med(res.structural), "%"),
-            string(med(res.modelled_naive), "%"),
-            string(pct(res.naive_observed), "%")],
-        narrowest_interval = [ci(res.corrected), ci(res.structural),
-            ci(res.modelled_naive), "—"]
+        estimate = [ci(res.corrected), ci(res.structural),
+            ci(res.modelled_naive),
+            string(pct(res.naive_observed), "%")]
     ) |> _prettify
 end

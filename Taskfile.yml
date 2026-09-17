@@ -84,6 +84,26 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_province_lab.jl {{.CLI_ARGS}}
 
+  benchmark:
+    desc: >
+      Run the per-component AD gradient benchmark suite and save the results
+      to results.json (pass another path to change it). Times one
+      log-density evaluation and one gradient per model component per AD
+      backend. Set BVD_BENCH_JOINT=true to add the full bvd_joint, which
+      costs ~18 min of cold compile on its own, and BVD_BENCH_ENZYME=true
+      to add the Enzyme backend, which did not finish inside a 90 minute
+      CI job.
+    cmds:
+      - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
+      - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
+
+  benchmark-compare:
+    desc: >
+      Turn two saved result files into the Markdown comparison CI posts on a
+      PR. Usage: task benchmark-compare -- pr.json main.json comment.md.
+    cmds:
+      - julia --project=benchmark benchmark/compare.jl {{.CLI_ARGS}}
+
   docs:
     desc: >
       Build the full docs site locally: render both literate pages (analysis
