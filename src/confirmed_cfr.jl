@@ -38,8 +38,10 @@ at t)`, smaller than the raw cumulative confirmed cases, so the corrected
 ratio `deaths_total / denominator` lifts the naive ratio toward the eventual
 confirmed CFR. Returns `NaN` when no confirmed cases have had time to resolve.
 """
-function delay_corrected_cfr(c_daily::AbstractVector, Kc::AbstractVector,
-        Kd::AbstractVector, deaths_total::Real)
+function delay_corrected_cfr(
+        c_daily::AbstractVector, Kc::AbstractVector,
+        Kd::AbstractVector, deaths_total::Real
+    )
     T = length(c_daily)
     (T == 0 || isempty(Kc) || isempty(Kd)) && return NaN
     Fd = cumsum(Kd)
@@ -87,8 +89,10 @@ confirmed CFR), `modelled_naive` (uncorrected modelled confirmed deaths over
 confirmed cases) and `structural` (the model's infection/onset-level `CFR`),
 and the scalar `naive_observed = obs_confirmed_deaths / obs_confirmed`.
 """
-function delay_corrected_confirmed_cfr(chn;
-        obs_confirmed::Real, obs_confirmed_deaths::Real)
+function delay_corrected_confirmed_cfr(
+        chn;
+        obs_confirmed::Real, obs_confirmed_deaths::Real
+    )
     cum_conf = _draw_vectors(chn, :cumulative_confirmed)
     Kc = _draw_vectors(chn, :onset_to_confirmation_pmf)
     Kd = _draw_vectors(chn, :onset_to_death_confirmation_pmf)
@@ -115,7 +119,7 @@ function delay_corrected_confirmed_cfr(chn;
         modelled_naive[i] = cases_T[i] > 0 ? deaths_T[i] / cases_T[i] : NaN
     end
     naive_observed = obs_confirmed > 0 ?
-                     float(obs_confirmed_deaths) / float(obs_confirmed) : NaN
+        float(obs_confirmed_deaths) / float(obs_confirmed) : NaN
     return (; corrected, modelled_naive, structural, naive_observed)
 end
 
@@ -136,12 +140,16 @@ function confirmed_cfr_table(res; digits::Integer = 1)
         return string(pct(s.lo90), "–", pct(s.hi90), "%")
     end
     return DataFrame(
-        quantity = ["Delay-corrected confirmed CFR",
+        quantity = [
+            "Delay-corrected confirmed CFR",
             "Structural (infection-based) CFR",
             "Uncorrected modelled confirmed ratio",
-            "Naive observed confirmed ratio"],
-        estimate = [ci(res.corrected), ci(res.structural),
+            "Naive observed confirmed ratio",
+        ],
+        estimate = [
+            ci(res.corrected), ci(res.structural),
             ci(res.modelled_naive),
-            string(pct(res.naive_observed), "%")]
+            string(pct(res.naive_observed), "%"),
+        ]
     ) |> _prettify
 end

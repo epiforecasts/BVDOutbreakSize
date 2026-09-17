@@ -43,13 +43,16 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
         ## `onset_reporting_model` actually runs. An empty history makes that
         ## loop a no-op, and Mooncake never builds a reverse rule for a
         ## branch it never executes.
-        och = (; onset_days = [10, 12], report_days = [18, 40],
-            prev_report_days = [0, 18], increments = [4, 6])
+        och = (;
+            onset_days = [10, 12], report_days = [18, 40],
+            prev_report_days = [0, 18], increments = [4, 6],
+        )
         @compile_workload begin
             ## Mirror the headline `bvd_joint` call for the precompilable
             ## streams, differentiated once under the default (Mooncake)
             ## backend so the report's first joint fit reuses the cached rule.
-            m = bvd_joint(40, 2, 18, 905, 0, 27, 50;
+            m = bvd_joint(
+                40, 2, 18, 905, 0, 27, 50;
                 confirmed_deaths = 5,
                 recovered_cases = 12,
                 deaths_history = dh,
@@ -66,14 +69,16 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
                 onset_curve_history = och,
                 breakpoint = 30,
                 background_re = true,
-                confirmed_positivity_link = :composition)
+                confirmed_positivity_link = :composition
+            )
             ## A rule that cannot be built during precompilation (the
             ## `eval`-into-`Mooncake` barrier) must not break the package.
             ## Cache what compiles and skip the rest.
             try
                 vi = link(VarInfo(m), m)
                 ldf = LogDensityFunction(
-                    m, getlogjoint, vi; adtype = default_adtype())
+                    m, getlogjoint, vi; adtype = default_adtype()
+                )
                 logdensity_and_gradient(ldf, collect(vi[:]))
             catch
             end

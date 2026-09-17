@@ -55,62 +55,79 @@ using Printf
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const PDF_DIR = length(ARGS) >= 1 ? ARGS[1] :
-                joinpath(ROOT, "data", "sitrep_pdfs")
+    joinpath(ROOT, "data", "sitrep_pdfs")
 const MANIFEST = joinpath(ROOT, "data", "observations.toml")
 const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 
 ## Provinces in patch order: the first is the primary (origin) patch.
-const PROVINCES = ["ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi"]
+const PROVINCES = [
+    "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
+    "bas_uele", "sud_ubangi",
+]
 ## A bullet names its province then a colon. The names are matched on the
 ## folded text, so the hyphen/space and accent variants all collapse here.
-const ENTRY = Regex("^[^0-9a-z]*(ituri|nord[ -]?kivu|sud[ -]?kivu|" *
-                    "haut[ -]?uele|tshopo|bas[ -]?uele|" *
-                    "sud[ -]?ubangi)\\s*:+")
-const KEYS = Dict("ituri" => "ituri", "nordkivu" => "nord_kivu",
+const ENTRY = Regex(
+    "^[^0-9a-z]*(ituri|nord[ -]?kivu|sud[ -]?kivu|" *
+        "haut[ -]?uele|tshopo|bas[ -]?uele|" *
+        "sud[ -]?ubangi)\\s*:+"
+)
+const KEYS = Dict(
+    "ituri" => "ituri", "nordkivu" => "nord_kivu",
     "sudkivu" => "sud_kivu", "hautuele" => "haut_uele",
     "tshopo" => "tshopo", "basuele" => "bas_uele",
-    "sudubangi" => "sud_ubangi")
+    "sudubangi" => "sud_ubangi"
+)
 ## Folded spellings of each province, to spot a sentence that has moved on
 ## to another province.
-const NAMES = Dict("ituri" => "ituri", "nord-kivu" => "nord_kivu",
+const NAMES = Dict(
+    "ituri" => "ituri", "nord-kivu" => "nord_kivu",
     "nord kivu" => "nord_kivu", "sud-kivu" => "sud_kivu",
     "sud kivu" => "sud_kivu", "haut-uele" => "haut_uele",
     "haut uele" => "haut_uele", "tshopo" => "tshopo",
     "bas-uele" => "bas_uele", "bas uele" => "bas_uele",
-    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi")
+    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi"
+)
 
 ## A batch of samples goes by several names.
 const SAMPLES = "(?:echantillons?|swabs?|prelevements?)"
 
 ## The phrasings a positive count comes in, specific readings first.
-const POSITIVES = Regex.(["n ?= ?(\\d+)",
-    "(\\d+) ?nouveaux? resultats? positifs?",
-    "dont (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
-    "parmi lesquels (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
-    "soit (\\d+) ?positifs?",
-    "(\\d+) ?(?:sont|est) revenus? positifs?",
-    "(\\d+) ?echantillons? testes? positifs?",
-    "(\\d+) ?resultats? positifs?",
-    "(\\d+) ?positifs?"])
+const POSITIVES = Regex.(
+    [
+        "n ?= ?(\\d+)",
+        "(\\d+) ?nouveaux? resultats? positifs?",
+        "dont (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
+        "parmi lesquels (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
+        "soit (\\d+) ?positifs?",
+        "(\\d+) ?(?:sont|est) revenus? positifs?",
+        "(\\d+) ?echantillons? testes? positifs?",
+        "(\\d+) ?resultats? positifs?",
+        "(\\d+) ?positifs?",
+    ]
+)
 
 ## A batch split between two laboratories is analysed in full, so both
 ## halves count: "132 reçus, dont 47 analysés à Beni et 85 à Butembo".
-const SPLIT_LABS = Regex("dont (\\d+) (?:ont ete )?(?:analyses?|testes?)" *
-                         " a [^;]*? et (\\d+) a ")
+const SPLIT_LABS = Regex(
+    "dont (\\d+) (?:ont ete )?(?:analyses?|testes?)" *
+        " a [^;]*? et (\\d+) a "
+)
 
 ## The phrasings an analysed count comes in. Each is tempered so that it
 ## cannot read across a pending phrase: a count is a denominator only if
 ## its own analysis is done.
-const ANALYSED = Regex.([
-    "dont (\\d+) (?:[a-z]+ ){0,2}?(?:ont ete |sont )?(?:analys|test)",
-    "sur (?:les )?(\\d+) (?:nouveaux? )?(?:echantillons?|swabs?)",
-    "et (\\d+) (?:ont ete )?(?:analyses?|testes?)",
-    "(\\d+) ont ete (?:analyses?|testes?)",
-    "(\\d+) (?:nouveaux? )?" * SAMPLES *
-    "(?:(?!en ?cours|en attente)[^;])*?(?:analys|test)",
-    "(\\d+) ?(?:echantillons? )?testes? positifs?",
-    "(\\d+) (?:ont ete )?(?:analyses?|testes?)\\b(?! (?:restent )?en cours)"])
+const ANALYSED = Regex.(
+    [
+        "dont (\\d+) (?:[a-z]+ ){0,2}?(?:ont ete |sont )?(?:analys|test)",
+        "sur (?:les )?(\\d+) (?:nouveaux? )?(?:echantillons?|swabs?)",
+        "et (\\d+) (?:ont ete )?(?:analyses?|testes?)",
+        "(\\d+) ont ete (?:analyses?|testes?)",
+        "(\\d+) (?:nouveaux? )?" * SAMPLES *
+            "(?:(?!en ?cours|en attente)[^;])*?(?:analys|test)",
+        "(\\d+) ?(?:echantillons? )?testes? positifs?",
+        "(\\d+) (?:ont ete )?(?:analyses?|testes?)\\b(?! (?:restent )?en cours)",
+    ]
+)
 
 """
 Strip accents and lower-case, so the many spellings in the sitreps
@@ -210,7 +227,7 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## is about this province today, so both go before any number is read.
     others = [k for (k, v) in NAMES if v != name]
     keepc(c) = !occursin("cumul", c) &&
-               !any(o -> occursin(o, c), others)
+        !any(o -> occursin(o, c), others)
     clauses = [c for c in clauses if keepc(c)]
     text = join(clauses, " ; ")
 
@@ -218,11 +235,11 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## rendered, is no denominator for this date whatever the collected
     ## count says.
     pending(c) = occursin(r"en ?cours (?:d.)?analys", c) ||
-                 occursin(r"analyses? (?:restent )?en cours", c) ||
-                 occursin(r"en attente", c) ||
-                 occursin(r"resultats? attendus", c) ||
-                 occursin(r"n.a ete rapporte", c) ||
-                 occursin(r"n.a ete rendu", c)
+        occursin(r"analyses? (?:restent )?en cours", c) ||
+        occursin(r"en attente", c) ||
+        occursin(r"resultats? attendus", c) ||
+        occursin(r"n.a ete rapporte", c) ||
+        occursin(r"n.a ete rendu", c)
 
     ## "Aucun nouveau résultat positif" reports that nothing came back, not
     ## a completed batch with no positives, so it blocks the fallback below
@@ -235,17 +252,20 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## no parenthetical at 124), which the "revenus" spelling alone never
     ## reached, so every one of those vintages was dropped whole.
     completed = !norendu &&
-                (occursin(r"(?:revenus?|reveles?) negatifs?", text) ||
-                 occursin(r"tous negatifs?", text) ||
-                 occursin(r"[,(] ?negatif", text) ||
-                 occursin(r"aucun[^;]{0,30}positif", text))
+        (
+        occursin(r"(?:revenus?|reveles?) negatifs?", text) ||
+            occursin(r"tous negatifs?", text) ||
+            occursin(r"[,(] ?negatif", text) ||
+            occursin(r"aucun[^;]{0,30}positif", text)
+    )
     ## The mirror phrasing, which the same vintages use: every sample in
     ## the batch came back positive ("tous se sont reveles positifs" at
     ## 121, the singular "s'est revele positif" at 120). The numerator is
     ## then the denominator, so this is applied once `analysed` is read.
     all_positive = occursin(
         r"(?:tous|toutes) (?:se sont |sont )?(?:revenus?|reveles?) positifs?",
-        text) || occursin(r"s.est (?:revenu|revele) positif", text)
+        text
+    ) || occursin(r"s.est (?:revenu|revele) positif", text)
 
     positives = nothing
     for re in POSITIVES
@@ -282,7 +302,7 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## partition rather than failing loudly the way an unreadable
     ## numerator does.
     if analysed === nothing &&
-       occursin(Regex("sur l." * SAMPLES * " (?:analyse|teste)"), text)
+            occursin(Regex("sur l." * SAMPLES * " (?:analyse|teste)"), text)
         analysed = 1
     end
 
@@ -291,7 +311,7 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## analysed, as does a stated positive count. Fall back to the collected
     ## count, never from a clause whose results have not come back.
     if analysed === nothing && !norendu &&
-       (completed || (positives !== nothing && positives > 0))
+            (completed || (positives !== nothing && positives > 0))
         for c in clauses
             pending(c) && continue
             m = match(Regex("(\\d+) (?:nouveaux? )?" * SAMPLES), c)
@@ -349,8 +369,10 @@ function sitrep_dates()
 end
 
 function main()
-    isdir(PDF_DIR) || error("no sitrep PDFs at $(PDF_DIR); " *
-          "run `task download-sitreps` first.")
+    isdir(PDF_DIR) || error(
+        "no sitrep PDFs at $(PDF_DIR); " *
+            "run `task download-sitreps` first."
+    )
     Sys.which("pdftotext") === nothing &&
         error("pdftotext not found; install poppler-utils.")
 
@@ -361,8 +383,12 @@ function main()
     unparsed = Tuple{Int, String, String}[]
     noentries = Int[]
 
-    for path in sort(filter(f -> endswith(f, ".pdf"),
-        readdir(PDF_DIR; join = true)))
+    for path in sort(
+            filter(
+                f -> endswith(f, ".pdf"),
+                readdir(PDF_DIR; join = true)
+            )
+        )
         m = match(r"(\d+)[_-]2026", basename(path))
         m === nothing && continue
         sr = parse(Int, m[1])
@@ -393,15 +419,20 @@ function main()
         srs[dates[sr]] = sr
     end
 
-    isempty(scanned) && error("no sitrep yielded a usable laboratory " *
-                              "section.")
+    isempty(scanned) && error(
+        "no sitrep yielded a usable laboratory " *
+            "section."
+    )
 
     ## --- Validate against the national daily analysed series -----------
     raw = TOML.parsefile(MANIFEST)
-    nat = Dict(String(d) => v
-    for (d, v) in zip(
-        raw["tests_analysed_daily_history"]["dates"],
-        raw["tests_analysed_daily_history"]["values"]))
+    nat = Dict(
+        String(d) => v
+            for (d, v) in zip(
+                raw["tests_analysed_daily_history"]["dates"],
+                raw["tests_analysed_daily_history"]["values"]
+            )
+    )
 
     analysed(g) = sum(haskey(g, p) ? g[p][1] : 0 for p in PROVINCES)
     all_dates = sort(collect(keys(scanned)))
@@ -411,9 +442,11 @@ function main()
     bad = setdiff(checkable, keep)
 
     println("Per-province laboratory throughput (Laboratoire section)\n")
-    @printf("%11s %4s %6s %6s %6s %6s %6s %6s %6s %7s %9s  %s\n", "date",
+    @printf(
+        "%11s %4s %6s %6s %6s %6s %6s %6s %6s %7s %9s  %s\n", "date",
         "sr", "IT", "NK", "SK", "HU", "TS", "BU", "SU", "sum", "national",
-        "check")
+        "check"
+    )
     println("-"^95)
     for d in checkable
         g = scanned[d]
@@ -421,14 +454,17 @@ function main()
         s = analysed(g)
         n = nat[d]
         note = s == n ? "match" : @sprintf("DIFF %+d", s - n)
-        @printf("%11s %4d %6d %6d %6d %6d %6d %6d %6d %7d %9d  %s\n", d,
-            srs[d], a[1], a[2], a[3], a[4], a[5], a[6], a[7], s, n, note)
+        @printf(
+            "%11s %4d %6d %6d %6d %6d %6d %6d %6d %7d %9d  %s\n", d,
+            srs[d], a[1], a[2], a[3], a[4], a[5], a[6], a[7], s, n, note
+        )
     end
 
     if !isempty(noentries)
         println(
             "\nSitreps whose laboratory section has no per-province " *
-            "bullet: ", join(noentries, ", "))
+                "bullet: ", join(noentries, ", ")
+        )
     end
     if !isempty(unparsed)
         println("\nBullets with no usable counts (whole vintage left out):")
@@ -439,43 +475,50 @@ function main()
     if !isempty(unchecked)
         println(
             "\nDates with no national analysed total to reconcile " *
-            "against (not emitted): ",
-            join(unchecked, ", "))
+                "against (not emitted): ",
+            join(unchecked, ", ")
+        )
     end
 
     if !isempty(bad)
         println()
-        error("$(length(bad)) date(s) where the per-province analysed " *
-              "counts do not sum to the national total " *
-              "($(join(bad, ", "))). The per-province figures are " *
-              "an exact partition of the national series, so a mismatch " *
-              "means a mis-parse. Not emitting the block.")
+        error(
+            "$(length(bad)) date(s) where the per-province analysed " *
+                "counts do not sum to the national total " *
+                "($(join(bad, ", "))). The per-province figures are " *
+                "an exact partition of the national series, so a mismatch " *
+                "means a mis-parse. Not emitting the block."
+        )
     end
-    println("\nAll $(length(keep)) dates reconcile exactly with the " *
-            "national tests_analysed_daily_history.")
+    println(
+        "\nAll $(length(keep)) dates reconcile exactly with the " *
+            "national tests_analysed_daily_history."
+    )
 
     ## --- Emit the TOML block -------------------------------------------
     fmt(v) = join(v, ", ")
     println("\n\n===== paste into data/observations.toml =====\n")
-    println("""
-    # Per-province laboratory throughput from the laboratory section of the
-    # INSP situation reports: samples analysed in the last 24h and how many
-    # were positive, for each province. Generated by
-    # `julia --project=scripts scripts/scan_province_lab.jl`, which fails if
-    # the per-province analysed counts do not sum exactly to the national
-    # `tests_analysed_daily_history` on every date (they are an exact
-    # partition of it, so a mismatch means a mis-parse).
-    #
-    # Dates where a province's samples were only "en cours d'analyse", and
-    # provinces the section does not mention, carry no result, so they have
-    # no denominator and are recorded as 0 analysed / 0 positive: a Binomial
-    # with n = 0 contributes no likelihood.
-    #
-    # The positivity differs sharply between provinces and persistently so.
-    # Nord-Kivu needs several times as many tests per case found as Ituri.
-    # The provinces are testing very differently-selected pools, so the
-    # per-province confirmed counts cannot be read as proportional to
-    # per-province infections without this denominator.""")
+    println(
+        """
+        # Per-province laboratory throughput from the laboratory section of the
+        # INSP situation reports: samples analysed in the last 24h and how many
+        # were positive, for each province. Generated by
+        # `julia --project=scripts scripts/scan_province_lab.jl`, which fails if
+        # the per-province analysed counts do not sum exactly to the national
+        # `tests_analysed_daily_history` on every date (they are an exact
+        # partition of it, so a mismatch means a mis-parse).
+        #
+        # Dates where a province's samples were only "en cours d'analyse", and
+        # provinces the section does not mention, carry no result, so they have
+        # no denominator and are recorded as 0 analysed / 0 positive: a Binomial
+        # with n = 0 contributes no likelihood.
+        #
+        # The positivity differs sharply between provinces and persistently so.
+        # Nord-Kivu needs several times as many tests per case found as Ituri.
+        # The provinces are testing very differently-selected pools, so the
+        # per-province confirmed counts cannot be read as proportional to
+        # per-province infections without this denominator."""
+    )
     println("[province_lab_daily_history]")
     println("dates = [", join(["\"$d\"" for d in keep], ", "), "]")
     for p in PROVINCES
@@ -484,12 +527,14 @@ function main()
         println("$(p)_analysed = [", fmt(an), "]")
         println("$(p)_positive = [", fmt(po), "]")
     end
-    println("source = \"INSP situation reports, laboratory section " *
+    println(
+        "source = \"INSP situation reports, laboratory section " *
             "(4.3, then 3.2, then 1.3 Laboratoire): per-province samples " *
             "analysed in the last 24h and the number positive. Scanned " *
             "from the PDFs by scripts/scan_province_lab.jl. Every date's " *
             "per-province analysed counts sum exactly to the national " *
-            "tests_analysed_daily_history entry for that date.\"")
+            "tests_analysed_daily_history entry for that date.\""
+    )
     return nothing
 end
 

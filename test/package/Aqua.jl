@@ -1,24 +1,24 @@
-@testitem "Aqua: Ambiguities" tags=[:quality] begin
+@testitem "Aqua: Ambiguities" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_ambiguities(BVDOutbreakSize)
 end
 
-@testitem "Aqua: unbound_args" tags=[:quality] begin
+@testitem "Aqua: unbound_args" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_unbound_args(BVDOutbreakSize)
 end
 
-@testitem "Aqua: undefined_exports" tags=[:quality] begin
+@testitem "Aqua: undefined_exports" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_undefined_exports(BVDOutbreakSize)
 end
 
-@testitem "Aqua: project_extras" tags=[:quality] begin
+@testitem "Aqua: project_extras" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_project_extras(BVDOutbreakSize)
 end
 
-@testitem "Aqua: stale_deps" tags=[:quality] begin
+@testitem "Aqua: stale_deps" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     # DataFramesMeta and Chain aren't used in src/ — the data-wrangling
     # macros live in the scripts/ data tooling (confirm_insp_data.jl),
@@ -26,17 +26,17 @@ end
     Aqua.test_stale_deps(BVDOutbreakSize; ignore = [:DataFramesMeta, :Chain])
 end
 
-@testitem "Aqua: deps_compat" tags=[:quality] begin
+@testitem "Aqua: deps_compat" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_deps_compat(BVDOutbreakSize)
 end
 
-@testitem "Aqua: piracies" tags=[:quality] begin
+@testitem "Aqua: piracies" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     Aqua.test_piracies(BVDOutbreakSize)
 end
 
-@testitem "Aqua: persistent_tasks" tags=[:quality] begin
+@testitem "Aqua: persistent_tasks" tags = [:quality] begin
     using Aqua, BVDOutbreakSize
     using Test: collect_test_logs
     # Aqua's probe builds a throwaway package depending on this one,
@@ -74,7 +74,8 @@ end
         ## declared dependency of the test project, so importing it
         ## resolves locally but not in a clean CI environment.
         logs, detected = collect_test_logs(
-            min_level = Base.CoreLogging.Error) do
+            min_level = Base.CoreLogging.Error
+        ) do
             Aqua.has_persistent_tasks(Base.PkgId(BVDOutbreakSize); tmax = 600)
         end
         ## collect_test_logs swallows the records, so re-emit them: the probe's
@@ -87,7 +88,7 @@ end
         end
         if incomplete
             @test_skip "persistent_tasks: probe did not complete, so the " *
-                       "presence of a task is unknown (#495)"
+                "presence of a task is unknown (#495)"
         else
             @test !detected
         end

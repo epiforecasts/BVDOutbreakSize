@@ -6,7 +6,7 @@
 
     pred = collect(1.0:100.0)
     ## Observation at the predictive median → zero bias.
-    @test abs(bias_sample(50.5, pred)) < 1e-9
+    @test abs(bias_sample(50.5, pred)) < 1.0e-9
     ## Observation above the whole sample → the stream is under-predicted.
     @test bias_sample(200.0, pred) == -1.0
     ## Observation below the whole sample → over-predicted.
@@ -31,13 +31,15 @@ end
     observed = [10, 20, 30, 40]
     ndraw = 4_000
     replicates = [10 .+ rand(rng, -5:5, length(observed)) for _ in 1:ndraw]
-    panel = (; title = "Calibrated", observed = observed,
-        replicates = replicates)
+    panel = (;
+        title = "Calibrated", observed = observed,
+        replicates = replicates,
+    )
 
     df = stream_calibration([panel])
     @test df isa DataFrame
     @test names(df) ==
-          ["Stream", "Vintages", "Bias", "50% coverage", "90% coverage"]
+        ["Stream", "Vintages", "Bias", "50% coverage", "90% coverage"]
     @test nrow(df) == 1
     @test df[1, "Stream"] == "Calibrated"
     @test df[1, "Vintages"] == length(observed)
@@ -53,11 +55,15 @@ end
     ## Increments far above the observed increment of 10 → the conditional
     ## cumulative sits above the observed count everywhere → positive bias
     ## (over-prediction) and the observed never falls inside the interval.
-    over = (; title = "Over", observed = observed,
-        replicates = [fill(40.0, length(observed)) for _ in 1:200])
+    over = (;
+        title = "Over", observed = observed,
+        replicates = [fill(40.0, length(observed)) for _ in 1:200],
+    )
     ## Increments far below → negative bias (under-prediction).
-    under = (; title = "Under", observed = observed,
-        replicates = [fill(1.0, length(observed)) for _ in 1:200])
+    under = (;
+        title = "Under", observed = observed,
+        replicates = [fill(1.0, length(observed)) for _ in 1:200],
+    )
 
     df = stream_calibration([over, under])
     @test df[1, "Bias"] == 1.0
@@ -76,8 +82,10 @@ end
     ## daily count. Centre the draws on the observed value for calibration.
     observed = [5, 8, 3, 6]
     replicates = [observed .+ rand(rng, -2:2, length(observed)) for _ in 1:3_000]
-    panel = (; title = "Daily", observed = observed,
-        replicates = replicates, cumulative = false)
+    panel = (;
+        title = "Daily", observed = observed,
+        replicates = replicates, cumulative = false,
+    )
 
     df = stream_calibration([panel])
     @test df[1, "Vintages"] == length(observed)

@@ -37,9 +37,14 @@ end
     ## Typical unguarded prior draws, as the baseline to beat.
     plain = [logjoint(InitFromPrior(), MersenneTwister(s)) for s in 1:200]
 
-    guarded = [logjoint(
-                   viable_prior_init(MersenneTwister(s), model;
-                       attempts = 8), MersenneTwister(1)) for s in 1:200]
+    guarded = [
+        logjoint(
+            viable_prior_init(
+                MersenneTwister(s), model;
+                attempts = 8
+            ), MersenneTwister(1)
+        ) for s in 1:200
+    ]
 
     ## Every guarded start is finite, and the guard lifts the whole
     ## distribution of starting densities, not just its centre.
@@ -50,11 +55,14 @@ end
     ## The guard must not smuggle in a value outside the prior's support.
     @test all(
         s -> begin
-            vi = VarInfo(MersenneTwister(1),
-                model, viable_prior_init(MersenneTwister(s), model))
+            vi = VarInfo(
+                MersenneTwister(1),
+                model, viable_prior_init(MersenneTwister(s), model)
+            )
             only(DynamicPPL.getindex_internal(vi, only(keys(vi)))) > 0
         end,
-        1:50)
+        1:50
+    )
 end
 
 @testitem "viable_prior_init does not concentrate as attempts grow" begin
@@ -71,9 +79,17 @@ end
     end
     model = _wide() | (; y = 0.5)
 
-    draws(n) = [getlogjoint(VarInfo(MersenneTwister(1), model,
-                    viable_prior_init(MersenneTwister(s), model;
-                        attempts = n))) for s in 1:200]
+    draws(n) = [
+        getlogjoint(
+            VarInfo(
+                MersenneTwister(1), model,
+                viable_prior_init(
+                    MersenneTwister(s), model;
+                    attempts = n
+                )
+            )
+        ) for s in 1:200
+    ]
 
     ## Screening to the batch median keeps the upper half of the prior, so
     ## raising `attempts` sharpens the floor estimate without walking the
@@ -85,8 +101,10 @@ end
     d4, d16 = draws(4), draws(16)
     @test std(d16) > 0.5 * std(d4)
 
-    @test_throws ArgumentError viable_prior_init(MersenneTwister(1), model;
-        attempts = 0)
+    @test_throws ArgumentError viable_prior_init(
+        MersenneTwister(1), model;
+        attempts = 0
+    )
 end
 
 @testitem "viable_prior_init falls back when no draw is finite" begin
@@ -105,7 +123,7 @@ end
     end
 
     @test viable_prior_init(MersenneTwister(1), _impossible()) isa
-          InitFromPrior
+        InitFromPrior
 end
 
 @testitem "viable_prior_init gives independent chains different starts" begin
@@ -159,10 +177,10 @@ end
     mismatched_ldf = LogDensityFunction(_three())
 
     @test viable_prior_init(MersenneTwister(1), _one(); ldf = mismatched_ldf) isa
-          InitFromPrior
+        InitFromPrior
 end
 
-@testitem "nuts_sample starts each chain independently" tags=[:slow] begin
+@testitem "nuts_sample starts each chain independently" tags = [:slow] begin
     using Distributions: Normal
     using Turing: @model
     using Turing.DynamicPPL: InitFromPrior
@@ -176,8 +194,10 @@ end
     ## The guarded default samples, and an explicit unguarded strategy
     ## still works, so the `init` keyword stays a pass-through.
     guarded = nuts_sample(_two(); samples = 50, chains = 2)
-    plain = nuts_sample(_two(); samples = 50, chains = 2,
-        init = InitFromPrior())
+    plain = nuts_sample(
+        _two(); samples = 50, chains = 2,
+        init = InitFromPrior()
+    )
     for chn in (guarded, plain)
         xs = vec(Array(chn[:x]))
         @test length(xs) == 50 * 2
@@ -185,8 +205,10 @@ end
     end
 
     ## A single attempt is the unguarded draw, so it must still run.
-    one = nuts_sample(_two(); samples = 50, chains = 2,
-        init = ViablePrior(1))
+    one = nuts_sample(
+        _two(); samples = 50, chains = 2,
+        init = ViablePrior(1)
+    )
     @test all(isfinite, vec(Array(one[:x])))
 end
 
@@ -205,8 +227,10 @@ end
     ## shrink the dispersion split R-hat relies on. Screening to the batch
     ## median must leave the spread of starts close to the prior's own.
     rng = MersenneTwister(7)
-    xs = [only(viable_prior_init(rng, _one(); attempts = 8).vect)
-          for _ in 1:400]
+    xs = [
+        only(viable_prior_init(rng, _one(); attempts = 8).vect)
+            for _ in 1:400
+    ]
     ## The prior is standard normal. Measured over 20 blocks of 400 draws,
     ## argmax-of-8 holds a spread of 0.176-0.207 and the median rule
     ## 0.428-0.493, so the floor sits in the gap rather than on either.

@@ -3,7 +3,7 @@
 ## Prior() on a trivial Turing model so the test does not depend on
 ## NUTS warm-up.
 
-@testitem "summary_table returns expected columns and rows" tags=[:slow] begin
+@testitem "summary_table returns expected columns and rows" tags = [:slow] begin
     using DataFrames: DataFrame, nrow
     using Distributions: Normal
     using Turing: @model, sample, Prior
@@ -18,15 +18,19 @@
         b ~ Normal(2.0, 0.5)
     end
 
-    chn = sample(_summary_model(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _summary_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     params = [:a, :b]
     df = summary_table(chn, params)
 
     @test df isa DataFrame
     @test names(df) ==
-          ["Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%"]
+        [
+        "Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
+        "Upper 30%", "Upper 60%", "Upper 90%",
+    ]
     @test nrow(df) == length(params)
     @test df[!, "Quantity"] == ["a", "b"]
 
@@ -43,8 +47,8 @@ end
 ## its own draws returns endpoints that bound nothing once the posterior for
 ## `r` spans zero. The row is built from `r`'s interval instead.
 
-@testitem "summary_table maps doubling_time through r's interval" tags=[
-    :slow
+@testitem "summary_table maps doubling_time through r's interval" tags = [
+    :slow,
 ] begin
     using DataFrames: DataFrame
     using Distributions: Normal
@@ -59,17 +63,21 @@ end
         doubling_time := log(2) / r
     end
 
-    chn = sample(_growth_model(), Prior(), 2000;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _growth_model(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     df = summary_table(chn, [:r, :doubling_time])
     row = df[2, :]
     @test row["Quantity"] == "doubling_time"
 
     ## Every endpoint is the image of the matching quantile of `r`.
     r_draws = vec(Array(chn[:r]))
-    for (col, p) in [("Lower 90%", 0.05), ("Lower 60%", 0.20),
-        ("Lower 30%", 0.35), ("Upper 30%", 0.65),
-        ("Upper 60%", 0.80), ("Upper 90%", 0.95)]
+    for (col, p) in [
+            ("Lower 90%", 0.05), ("Lower 60%", 0.2),
+            ("Lower 30%", 0.35), ("Upper 30%", 0.65),
+            ("Upper 60%", 0.8), ("Upper 90%", 0.95),
+        ]
         @test row[col] == round(log(2) / quantile(r_draws, p); digits = 2)
     end
 
@@ -85,8 +93,8 @@ end
     @test round(direct.lo90; digits = 2) != row["Lower 90%"]
 end
 
-@testitem "summary_table falls back when the source is absent" tags=[
-    :slow
+@testitem "summary_table falls back when the source is absent" tags = [
+    :slow,
 ] begin
     using Distributions: Normal
     using Turing: @model, sample, Prior
@@ -98,8 +106,10 @@ end
         doubling_time ~ Normal(30.0, 5.0)
     end
 
-    chn = sample(_no_r_model(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _no_r_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     df = summary_table(chn, [:doubling_time])
     @test df[1, "Lower 90%"] <= df[1, "Upper 90%"]
 end
@@ -110,8 +120,8 @@ end
 ## shortest. That ordering is the point of the change, not an accident, so
 ## pin it.
 
-@testitem "summary_table orders doubling_time by r when r is one-signed" tags=[
-    :slow
+@testitem "summary_table orders doubling_time by r when r is one-signed" tags = [
+    :slow,
 ] begin
     using Statistics: quantile
     using Distributions: Normal, truncated
@@ -124,8 +134,10 @@ end
         doubling_time := log(2) / r
     end
 
-    chn = sample(_positive_growth(), Prior(), 2000;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(
+        _positive_growth(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     df = summary_table(chn, [:r, :doubling_time])
     row = df[2, :]
 

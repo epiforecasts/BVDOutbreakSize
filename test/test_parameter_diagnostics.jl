@@ -11,12 +11,15 @@
     ## in for a model that names the same quantity twice.
     function _diag_frame()
         return DataFrame(
-            parameter = ["fast", "slow", "slow_alias",
-                "walk", "walk", "walk", "walk"],
+            parameter = [
+                "fast", "slow", "slow_alias",
+                "walk", "walk", "walk", "walk",
+            ],
             index = [0, 0, 0, 1, 2, 3, 4],
-            rhat = [1.001, 1.30, 1.30, 1.002, 1.05, 1.20, 1.40],
+            rhat = [1.001, 1.3, 1.3, 1.002, 1.05, 1.2, 1.4],
             ess_bulk = [900.0, 20.0, 20.0, 800.0, 300.0, 60.0, 15.0],
-            ess_tail = [850.0, 25.0, 25.0, 700.0, 280.0, 70.0, 18.0])
+            ess_tail = [850.0, 25.0, 25.0, 700.0, 280.0, 70.0, 18.0]
+        )
     end
 end
 
@@ -32,7 +35,7 @@ end
 end
 
 @testitem "worst_parameters_table ranks by bulk effective sample size" setup = [
-    DiagnosticsFrame
+    DiagnosticsFrame,
 ] begin
     using DataFrames: nrow
     using BVDOutbreakSize: worst_parameters_table
@@ -43,17 +46,21 @@ end
     @test tbl.parameter == ["walk[4]", "slow", "walk[3]"]
     @test tbl.ess_bulk == [15.0, 20.0, 60.0]
 
-    kept = worst_parameters_table(_diag_frame(); n = 3,
-        collapse_aliases = false)
+    kept = worst_parameters_table(
+        _diag_frame(); n = 3,
+        collapse_aliases = false
+    )
     @test kept.parameter == ["walk[4]", "slow", "slow_alias"]
 
-    labelled = worst_parameters_table(_diag_frame(); n = 1,
-        labels = Dict(:walk => "the walk"))
+    labelled = worst_parameters_table(
+        _diag_frame(); n = 1,
+        labels = Dict(:walk => "the walk")
+    )
     @test labelled.parameter == ["the walk[4]"]
 end
 
 @testitem "family_diagnostics_table groups a walk into one row" setup = [
-    DiagnosticsFrame
+    DiagnosticsFrame,
 ] begin
     using DataFrames: nrow
     using BVDOutbreakSize: family_diagnostics_table
@@ -70,14 +77,16 @@ end
 end
 
 @testitem "diagnostic_spread_table counts bad parameters per fit" setup = [
-    DiagnosticsFrame
+    DiagnosticsFrame,
 ] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: diagnostic_spread_table
 
-    good = DataFrame(parameter = ["a", "b"], index = [0, 0],
+    good = DataFrame(
+        parameter = ["a", "b"], index = [0, 0],
         rhat = [1.001, 1.002], ess_bulk = [900.0, 800.0],
-        ess_tail = [850.0, 750.0])
+        ess_tail = [850.0, 750.0]
+    )
     tbl = diagnostic_spread_table("bad" => _diag_frame(), "good" => good)
     @test nrow(tbl) == 2
     @test tbl.parameters == [7, 2]
@@ -87,18 +96,20 @@ end
 end
 
 @testitem "diagnostic_contrast pairs shared parameters" setup = [
-    DiagnosticsFrame
+    DiagnosticsFrame,
 ] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: diagnostic_contrast, diagnostic_contrast_table
 
     ## The comparison fit mixes the walk well and does not carry `fast`,
     ## so only the parameters both fits hold are paired.
-    alone = DataFrame(parameter = ["slow", "walk", "walk", "walk", "walk"],
+    alone = DataFrame(
+        parameter = ["slow", "walk", "walk", "walk", "walk"],
         index = [0, 1, 2, 3, 4],
         rhat = fill(1.001, 5),
         ess_bulk = [400.0, 900.0, 900.0, 900.0, 900.0],
-        ess_tail = fill(900.0, 5))
+        ess_tail = fill(900.0, 5)
+    )
     df = diagnostic_contrast("joint" => _diag_frame(), "alone" => alone)
     @test nrow(df) == 5
     @test all(df.fit .== "alone")
@@ -111,12 +122,12 @@ end
 end
 
 @testitem "diagnostic figures build from a diagnostics frame" setup = [
-    DiagnosticsFrame, HeadlessMakie
+    DiagnosticsFrame, HeadlessMakie,
 ] begin
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_rhat_spread, diagnostic_contrast,
-                           plot_parameter_index_diagnostics,
-                           plot_diagnostic_contrast
+        plot_parameter_index_diagnostics,
+        plot_diagnostic_contrast
 
     df = _diag_frame()
     @test plot_rhat_spread("joint" => df) isa CairoMakie.Makie.Figure
@@ -127,26 +138,28 @@ end
     ## With no group long enough the figure still builds, carrying the
     ## placeholder message instead of panels.
     @test plot_parameter_index_diagnostics(df; min_elements = 50) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
 
-    alone = DataFrame(parameter = ["slow"], index = [0], rhat = [1.001],
-        ess_bulk = [400.0], ess_tail = [900.0])
+    alone = DataFrame(
+        parameter = ["slow"], index = [0], rhat = [1.001],
+        ess_bulk = [400.0], ess_tail = [900.0]
+    )
     contrast = diagnostic_contrast("joint" => df, "alone" => alone)
     @test plot_diagnostic_contrast(contrast) isa CairoMakie.Makie.Figure
     @test plot_diagnostic_contrast(contrast[1:0, :]) isa
-          CairoMakie.Makie.Figure
+        CairoMakie.Makie.Figure
 end
 
-@testitem "parameter diagnostics read a fitted chain" tags=[:slow] setup=[
-    HeadlessMakie
+@testitem "parameter diagnostics read a fitted chain" tags = [:slow] setup = [
+    HeadlessMakie,
 ] begin
     using DataFrames: DataFrame, nrow
     using Distributions: Normal, product_distribution
     using Turing: @model
     using BVDOutbreakSize: nuts_sample, parameter_diagnostics,
-                           sampler_by_chain_table,
-                           divergence_location_table,
-                           plot_divergence_locations
+        sampler_by_chain_table,
+        divergence_location_table,
+        plot_divergence_locations
 
     ## kept: a trivial Gaussian with one scalar and one three-element
     ## vector gives NUTS a fast target that still exercises the indexed
@@ -156,9 +169,9 @@ end
         z ~ product_distribution([Normal(0, 1) for _ in 1:3])
     end
 
-    chn=nuts_sample(_param_diag_synthetic(); samples = 200, chains = 2)
+    chn = nuts_sample(_param_diag_synthetic(); samples = 200, chains = 2)
 
-    df=parameter_diagnostics(chn)
+    df = parameter_diagnostics(chn)
     @test df isa DataFrame
     @test nrow(df) == 4
     @test sort(unique(df.parameter)) == ["x", "z"]
@@ -167,7 +180,7 @@ end
     @test all(isfinite, df.rhat)
     @test all(df.ess_bulk .> 0)
 
-    chains=sampler_by_chain_table(chn)
+    chains = sampler_by_chain_table(chn)
     @test nrow(chains) == 2
     @test chains.chain == [1, 2]
     @test all(chains.draws .== 200)
@@ -175,8 +188,8 @@ end
 
     ## A well-behaved target usually has no divergence at all, so the
     ## location table is only required to carry the right columns.
-    loc=divergence_location_table(chn)
+    loc = divergence_location_table(chn)
     @test sort(string.(propertynames(loc))) ==
-          sort(["parameter", "all_draws", "divergent_draws", "separation"])
+        sort(["parameter", "all_draws", "divergent_draws", "separation"])
     @test plot_divergence_locations(chn, [:x]) isa CairoMakie.Makie.Figure
 end

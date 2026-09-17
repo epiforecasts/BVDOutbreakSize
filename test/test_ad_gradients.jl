@@ -23,8 +23,8 @@
 ## AD-sensitive items. The gradient pattern mirrors the Enzyme-extension
 ## check in `test/enzyme/runtests.jl`, which validates the same models.
 
-@testitem "AD gradient: every component differentiates (Mooncake)" tags=[
-    :ad
+@testitem "AD gradient: every component differentiates (Mooncake)" tags = [
+    :ad,
 ] begin
     using LogDensityProblems: logdensity_and_gradient
     using BVDOutbreakSize: default_adtype
@@ -71,7 +71,8 @@ end
     vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
     x0 = collect(vi[:])
     ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
     logp, grad = logdensity_and_gradient(ldf, x0)
     @test isfinite(logp)
     @test length(grad) == length(x0)
@@ -93,15 +94,18 @@ end
     obs = [853 21 42; 77 2 5; 3 0 0]
     modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
     covariate = [0.64, -0.23, -0.41]
-    model = province_composition_model(obs, modelled;
-        testing_covariate = covariate)
+    model = province_composition_model(
+        obs, modelled;
+        testing_covariate = covariate
+    )
     vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
     ## The coefficient is in the parameter vector only on this path, so the
     ## gradient below covers it.
     @test any(k -> occursin("β_asc", string(k)), keys(vi))
     x0 = collect(vi[:])
     ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
     logp, grad = logdensity_and_gradient(ldf, x0)
     @test isfinite(logp)
     @test length(grad) == length(x0)

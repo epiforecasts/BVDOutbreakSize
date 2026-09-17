@@ -29,7 +29,8 @@ model = bvd_joint(
     export_case_days = obs.export_case_days,
     export_death_days = obs.export_death_days,
     breakpoint = BP, background_re = true,
-    genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days)
+    genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days
+)
 
 prior = sample(MersenneTwister(20260605), model, Prior(), 2000; progress = false)
 
@@ -51,23 +52,35 @@ for k in postkeys
     priorw = qhi - qlo
     postw = phi - plo
     shrink = priorw > 0 ? postw / priorw : NaN
-    push!(rows,
-        (name = replace(string(k), "Parameter(" => "", ")" => ""),
-            prior = (qm, qlo, qhi), post = (pm, plo, phi), shrink = shrink))
+    push!(
+        rows,
+        (
+            name = replace(string(k), "Parameter(" => "", ")" => ""),
+            prior = (qm, qlo, qhi), post = (pm, plo, phi), shrink = shrink,
+        )
+    )
 end
 sort!(rows, by = r -> r.shrink)
 
 function fmt(t)
-    string(round(t[1]; sigdigits = 3), " [", round(t[2]; sigdigits = 3),
-        ", ", round(t[3]; sigdigits = 3), "]")
+    return string(
+        round(t[1]; sigdigits = 3), " [", round(t[2]; sigdigits = 3),
+        ", ", round(t[3]; sigdigits = 3), "]"
+    )
 end
-println(rpad("parameter", 34), rpad("prior med[90%]", 26),
-    rpad("posterior med[90%]", 26), "shrink(post/prior width)")
+println(
+    rpad("parameter", 34), rpad("prior med[90%]", 26),
+    rpad("posterior med[90%]", 26), "shrink(post/prior width)"
+)
 println("-"^110)
 for r in rows
     flag = isnan(r.shrink) ? "" :
-           (r.shrink > 0.85 ? "  <- prior-dominated" :
-            (r.shrink < 0.4 ? "  <- well identified" : ""))
-    println(rpad(r.name, 34), rpad(fmt(r.prior), 26),
-        rpad(fmt(r.post), 26), round(r.shrink; digits = 2), flag)
+        (
+            r.shrink > 0.85 ? "  <- prior-dominated" :
+            (r.shrink < 0.4 ? "  <- well identified" : "")
+        )
+    println(
+        rpad(r.name, 34), rpad(fmt(r.prior), 26),
+        rpad(fmt(r.post), 26), round(r.shrink; digits = 2), flag
+    )
 end

@@ -5,8 +5,8 @@
 ## fixed daily confirmed series, and the stream is exercised through
 ## `bvd_joint`.
 
-@testitem "recovered: conditioned fit tracks a finite recovered total" tags=[
-    :slow
+@testitem "recovered: conditioned fit tracks a finite recovered total" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -32,7 +32,7 @@
     @test all(0 .<= pr .<= 1)
 end
 
-@testitem "recovered: predictive path samples the increments" tags=[:slow] begin
+@testitem "recovered: predictive path samples the increments" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: recovered_model
@@ -50,15 +50,17 @@ end
     @test any(k -> occursin("recovered_increments", k), ks)
 end
 
-@testitem "recovered: empty history is a no-op" tags=[:slow] begin
+@testitem "recovered: empty history is a no-op" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: recovered_model
 
     confirmed_daily = fill(8.0, 33)
     chn = sample(
-        recovered_model((; days = Int[], counts = Int[]), missing,
-            confirmed_daily, 0.3),
+        recovered_model(
+            (; days = Int[], counts = Int[]), missing,
+            confirmed_daily, 0.3
+        ),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -66,7 +68,7 @@ end
     @test !any(k -> occursin("recovered_increments.increments", k), ks)
 end
 
-@testitem "recovered: joint prior runs with the live data" tags=[:slow] begin
+@testitem "recovered: joint prior runs with the live data" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
@@ -74,7 +76,8 @@ end
     obs = load_observations()
     @test !isempty(obs.recovered_history.counts)
     breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -92,9 +95,12 @@ end
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 30;
-        chain_type = FlexiChains.VNChain, progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 30;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     rec = vec(Array(chn[:expected_recovered_T]))
     @test length(rec) == 30
     @test all(isfinite, rec)

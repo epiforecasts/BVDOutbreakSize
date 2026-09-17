@@ -49,7 +49,7 @@ using Base64
 const MEDIA_API = "https://insp.cd/wp-json/wp/v2/media"
 const POSTS_API = "https://insp.cd/wp-json/wp/v2/posts"
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " *
-           "AppleWebKit/605.1.15"
+    "AppleWebKit/605.1.15"
 const REQUEST_TIMEOUT = 180.0
 # insp.cd runs on modest infrastructure mid-outbreak: give it more time to
 # answer and more space between retries before giving up, rather than
@@ -75,7 +75,7 @@ end
 parsed = parse_args(ARGS)
 only_numbers = parsed.only_numbers
 outdir = length(parsed.rest) >= 1 ? parsed.rest[1] :
-         joinpath(@__DIR__, "..", "data", "sitrep_pdfs")
+    joinpath(@__DIR__, "..", "data", "sitrep_pdfs")
 mkpath(outdir)
 
 # Decode the JSON string escapes WordPress returns in source_url (`\/` and
@@ -84,9 +84,17 @@ mkpath(outdir)
 # they are hexadecimal: `parse` defaults to base 10 and rejects `00b0`.
 function json_unescape(s)
     s = replace(s, "\\/" => "/")
-    replace(s,
-        r"\\u([0-9a-fA-F]{4})" => m -> string(Char(parse(UInt16, m[3:6];
-            base = 16))))
+    return replace(
+        s,
+        r"\\u([0-9a-fA-F]{4})" => m -> string(
+            Char(
+                parse(
+                    UInt16, m[3:6];
+                    base = 16
+                )
+            )
+        )
+    )
 end
 
 # Pull the SitRep number out of a filename, tolerating the inconsistent
@@ -99,7 +107,7 @@ end
 # `mvebdb[...]` alternative below recovers that convention too.
 function sitrep_number(name)
     m = match(r"(?i)sitrep.*?(?:n[°o._\- ]*|mvebdb[_\- ]*)0*(\d{2,3})", name)
-    m === nothing ? nothing : lpad(m.captures[1], 3, '0')
+    return m === nothing ? nothing : lpad(m.captures[1], 3, '0')
 end
 
 # One media-API page. Returns the body with the HTTP status and, when the
@@ -114,8 +122,10 @@ function api_page(url)
     for attempt in 1:ATTEMPTS
         io = IOBuffer()
         res = try
-            Downloads.request(url; output = io, throw = false,
-                headers = ["User-Agent" => UA], timeout = REQUEST_TIMEOUT)
+            Downloads.request(
+                url; output = io, throw = false,
+                headers = ["User-Agent" => UA], timeout = REQUEST_TIMEOUT
+            )
         catch err
             last_err = err
             nothing
@@ -152,14 +162,21 @@ function collect_sitrep_urls()
         ## is a real failure and must not silently truncate the listing.
         if res.status == 400
             occursin("rest_post_invalid_page_number", res.body) && break
-            error("media API returned HTTP 400 at $MEDIA_API (page " *
-                  "$page) without the end-of-listing code: $(res.body)")
+            error(
+                "media API returned HTTP 400 at $MEDIA_API (page " *
+                    "$page) without the end-of-listing code: $(res.body)"
+            )
         end
         res.status == 200 || error(
             "media API request failed after $ATTEMPTS attempts at " *
-            "$MEDIA_API (page $page): $(page_failure(res))")
-        hits = collect(eachmatch(r"\"source_url\":\"([^\"]*?\.pdf)\"",
-            res.body))
+                "$MEDIA_API (page $page): $(page_failure(res))"
+        )
+        hits = collect(
+            eachmatch(
+                r"\"source_url\":\"([^\"]*?\.pdf)\"",
+                res.body
+            )
+        )
         isempty(hits) && break
         for h in hits
             url = json_unescape(h.captures[1])
@@ -175,7 +192,8 @@ function collect_sitrep_urls()
         end
         page == MAX_PAGES && error(
             "media API still returning results after $MAX_PAGES pages at " *
-            "$MEDIA_API: pagination is not advancing?")
+                "$MEDIA_API: pagination is not advancing?"
+        )
     end
     return (; urls, rejected = sort!(unique(rejected)))
 end
@@ -184,8 +202,10 @@ function fetch_pdf(url, dest)
     last_err = nothing
     for attempt in 1:ATTEMPTS
         try
-            Downloads.download(url, dest; headers = ["User-Agent" => UA],
-                timeout = REQUEST_TIMEOUT)
+            Downloads.download(
+                url, dest; headers = ["User-Agent" => UA],
+                timeout = REQUEST_TIMEOUT
+            )
             return (; ok = true, err = nothing)
         catch err
             last_err = err
@@ -204,16 +224,22 @@ function published_posts()
     res = api_page("$POSTS_API?search=sitrep&per_page=100&_fields=id,slug,date")
     res.status == 200 || error(
         "posts API request failed after $ATTEMPTS attempts at " *
-        "$POSTS_API: $(page_failure(res))")
+            "$POSTS_API: $(page_failure(res))"
+    )
     out = Tuple{String, Int, String}[]
     for m in eachmatch(
-        r"\{\"id\":(\d+),\"date\":\"[^\"]*\",\"slug\":\"(sitrep[^\"]*)\"\}",
-        res.body)
+            r"\{\"id\":(\d+),\"date\":\"[^\"]*\",\"slug\":\"(sitrep[^\"]*)\"\}",
+            res.body
+        )
         slug = m.captures[2]
         num = match(r"-n0*(\d+)", slug)
         num === nothing && continue
-        push!(out, (lpad(num.captures[1], 3, '0'), parse(Int, m.captures[1]),
-            slug))
+        push!(
+            out, (
+                lpad(num.captures[1], 3, '0'), parse(Int, m.captures[1]),
+                slug,
+            )
+        )
     end
     return out
 end
@@ -236,7 +262,8 @@ function fetch_post_pdf_url(id)
     res = api_page("$POSTS_API/$id?_fields=content")
     res.status == 200 || error(
         "post fetch failed after $ATTEMPTS attempts at $POSTS_API/" *
-        "$id: $(page_failure(res))")
+            "$id: $(page_failure(res))"
+    )
     return embedded_pdf_url(res.body)
 end
 
@@ -252,10 +279,13 @@ if only_numbers !== nothing
             continue
         end
         hit = findfirst(
-            p -> p[1] == num && occursin(r"(?i)mve", p[3]), posts)
+            p -> p[1] == num && occursin(r"(?i)mve", p[3]), posts
+        )
         if hit === nothing
-            println("SKIP   SitRep $num: no MVE post found among " *
-                    "published sitreps")
+            println(
+                "SKIP   SitRep $num: no MVE post found among " *
+                    "published sitreps"
+            )
             continue
         end
         _, id, slug = posts[hit]
@@ -281,8 +311,10 @@ else
     listing = collect_sitrep_urls()
     urls = listing.urls
     isempty(urls) &&
-        error("no MVE SitRep PDFs found at $MEDIA_API (site down or API " *
-              "changed?)")
+        error(
+        "no MVE SitRep PDFs found at $MEDIA_API (site down or API " *
+            "changed?)"
+    )
 
     ## Measles and SGI-GPM SitReps share this media library and their
     ## numbering collides with the MVE series, so these rejections are
@@ -290,8 +322,10 @@ else
     ## published without MVE in the filename it lands here, and a gap in
     ## the series would otherwise be indistinguishable from a rename.
     if !isempty(listing.rejected)
-        println("skipped $(length(listing.rejected)) sitrep-numbered " *
-                "non-MVE file(s):")
+        println(
+            "skipped $(length(listing.rejected)) sitrep-numbered " *
+                "non-MVE file(s):"
+        )
         for name in listing.rejected
             println("  $name")
         end
@@ -316,6 +350,8 @@ else
         end
     end
 
-    println("\n$downloaded new sitrep(s) into $outdir ($(length(urls)) " *
-            "upstream).")
+    println(
+        "\n$downloaded new sitrep(s) into $outdir ($(length(urls)) " *
+            "upstream)."
+    )
 end

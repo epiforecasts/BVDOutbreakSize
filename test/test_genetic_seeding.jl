@@ -27,13 +27,15 @@ end
     using BVDOutbreakSize: genetic_seeding_model
 
     ## When tmrca_days = missing the model adds zero log-probability.
-    lp = logjoint(genetic_seeding_model(100.0, missing; tmrca_days_sd = 15.0),
-        (;))
+    lp = logjoint(
+        genetic_seeding_model(100.0, missing; tmrca_days_sd = 15.0),
+        (;)
+    )
     @test lp == 0.0
 end
 
-@testitem "genetic_seeding composes into bvd_joint via `genetic` kwarg" tags=[
-    :slow
+@testitem "genetic_seeding composes into bvd_joint via `genetic` kwarg" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -41,10 +43,12 @@ end
 
     seed = genetic_seeding_model
     chn = sample(
-        bvd_joint(40, 2, 18;
+        bvd_joint(
+            40, 2, 18;
             tmrca_days = 30.0,
             tmrca_days_sd = 15.0,
-            genetic = seed),
+            genetic = seed
+        ),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )

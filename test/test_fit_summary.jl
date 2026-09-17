@@ -2,8 +2,8 @@
 ## carries the convergence diagnostics and the headline quantities the chain
 ## holds, and `write_fit_summary` appends it to the file GitHub names.
 
-@testitem "fit_summary_markdown reports diagnostics and headlines" tags=[
-    :slow
+@testitem "fit_summary_markdown reports diagnostics and headlines" tags = [
+    :slow,
 ] begin
     using Distributions: Normal
     using Turing: @model
@@ -22,7 +22,8 @@
 
     @test occursin("### Fit `demo`", md)
     @test occursin(
-        "| max R-hat | min ESS bulk | min ESS tail | divergences |", md)
+        "| max R-hat | min ESS bulk | min ESS tail | divergences |", md
+    )
     @test occursin("| `C_T` |", md)
     @test occursin("| `R_T` |", md)
     ## Scannable in the run UI: a heading, the two tables and their rows.

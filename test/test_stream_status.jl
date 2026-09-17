@@ -29,11 +29,11 @@ end
     ## Derived from the registry's forecast_prefix, so the column names are
     ## not repeated per consumer, and resolvable from any vocabulary.
     @test stream_forecast_columns(:confirmed_cases) ==
-          (cum = :confirmed_cum, new = :confirmed_new)
+        (cum = :confirmed_cum, new = :confirmed_new)
     @test stream_forecast_columns(:confirmed_cum) ==
-          (cum = :confirmed_cum, new = :confirmed_new)
+        (cum = :confirmed_cum, new = :confirmed_new)
     @test stream_forecast_columns("suspected deaths") ==
-          (cum = :deaths_cum, new = :deaths_new)
+        (cum = :deaths_cum, new = :deaths_new)
     ## A stream the forecast does not carry has no columns.
     @test isnothing(stream_forecast_columns(:tests_analysed))
 end
@@ -43,9 +43,11 @@ end
     using BVDOutbreakSize: stream_last_date
     n = 40
     cutoff = Date(2026, 7, 15)
-    obs = (; cutoff = cutoff, n = n,
+    obs = (;
+        cutoff = cutoff, n = n,
         reported_history = (; days = [5, 12], counts = [50.0, 90.0]),
-        deaths_history = (; days = Int[], counts = Float64[]))
+        deaths_history = (; days = Int[], counts = Float64[]),
+    )
     @test stream_last_date(obs, :suspected_cases) == cutoff - Day(n - 12)
     ## A history with no vintages, and a stream this observation set does
     ## not carry at all, both have no last reported date.
@@ -61,8 +63,10 @@ end
     ## The exports are a dated list of detections rather than a series of
     ## vintages, and the later of the import and import-death detections
     ## is the last thing that stream reported.
-    obs = (; cutoff = cutoff, n = n,
-        export_case_days = [8, 15, 20], export_death_days = [9, 22])
+    obs = (;
+        cutoff = cutoff, n = n,
+        export_case_days = [8, 15, 20], export_death_days = [9, 22],
+    )
     @test stream_last_date(obs, :exports) == cutoff - Day(n - 22)
 end
 
@@ -72,21 +76,25 @@ end
     n = 40
     cutoff = Date(2026, 7, 15)
     grace = STREAM_REPORTING_GRACE_DAYS
-    mk(day) = (; cutoff = cutoff, n = n,
-        reported_history = (; days = [day], counts = [90.0]))
+    mk(day) = (;
+        cutoff = cutoff, n = n,
+        reported_history = (; days = [day], counts = [90.0]),
+    )
     @test stream_reporting(mk(n), :suspected_cases)
     @test stream_reporting(mk(n - grace), :suspected_cases)
     @test !stream_reporting(mk(n - grace - 1), :suspected_cases)
     ## A stream with no vintages is not reporting.
-    empty_obs = (; cutoff = cutoff, n = n,
-        reported_history = (; days = Int[], counts = Float64[]))
+    empty_obs = (;
+        cutoff = cutoff, n = n,
+        reported_history = (; days = Int[], counts = Float64[]),
+    )
     @test !stream_reporting(empty_obs, :suspected_cases)
 end
 
 @testitem "stream_report_status covers the loaded manifest" begin
     using DataFrames: nrow
     using BVDOutbreakSize: load_observations, stream_report_status,
-                           OBSERVATION_STREAMS
+        OBSERVATION_STREAMS
     obs = load_observations()
     status = stream_report_status(obs)
     ## Every registry entry names a field the loader really returns, so a
@@ -95,20 +103,24 @@ end
     @test all(e -> hasproperty(obs, e.field), OBSERVATION_STREAMS)
     @test nrow(status) == length(OBSERVATION_STREAMS)
     @test names(status) ==
-          ["stream", "label", "last_date", "reporting", "days_since"]
+        ["stream", "label", "last_date", "reporting", "days_since"]
     @test all(d -> d <= obs.cutoff, skipmissing(status.last_date))
     @test maximum(skipmissing(status.last_date)) == obs.cutoff
     ## The split the report's posterior predictive checks partition on.
     reporting = Set(status.stream[status.reporting])
-    for s in (:confirmed_cases, :confirmed_deaths, :recovered,
-        :isolation_beds, :tests_analysed_daily, :onset_reports,
-        :suspected_daily)
+    for s in (
+            :confirmed_cases, :confirmed_deaths, :recovered,
+            :isolation_beds, :tests_analysed_daily, :onset_reports,
+            :suspected_daily,
+        )
         @test s in reporting
     end
-    for s in (:suspected_cases, :suspected_deaths,
-        :suspected_daily_deaths, :tests_analysed, :treatment_admissions,
-        :treatment_deaths, :treatment_ruleouts, :treatment_absconded,
-        :treatment_beds, :suspect_beds)
+    for s in (
+            :suspected_cases, :suspected_deaths,
+            :suspected_daily_deaths, :tests_analysed, :treatment_admissions,
+            :treatment_deaths, :treatment_ruleouts, :treatment_absconded,
+            :treatment_beds, :suspect_beds,
+        )
         @test !(s in reporting)
     end
 end

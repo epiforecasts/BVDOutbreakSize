@@ -1,4 +1,4 @@
-@testitem "Enzyme AD extension (isolated env)" tags=[:quality] begin
+@testitem "Enzyme AD extension (isolated env)" tags = [:quality] begin
     using Pkg
     enzyme_env = joinpath(@__DIR__, "..", "enzyme")
     ## Enzyme reverse-mode is not viable on Windows for this model (the
@@ -7,17 +7,23 @@
     ## only on Linux and macOS off the experimental matrix entry. They are
     ## isolated here so Enzyme never enters the main test environment.
     runnable = !Sys.iswindows() &&
-               get(ENV, "JULIA_CI_EXPERIMENTAL", "false") != "true" &&
-               isdir(enzyme_env) &&
-               isfile(joinpath(enzyme_env, "Project.toml"))
+        get(ENV, "JULIA_CI_EXPERIMENTAL", "false") != "true" &&
+        isdir(enzyme_env) &&
+        isfile(joinpath(enzyme_env, "Project.toml"))
     if runnable
-        run(pipeline(
-            `julia --project=$enzyme_env -e "using Pkg; Pkg.instantiate()"`,
-            stdout = stdout, stderr = stderr))
-        result = run(pipeline(
-            Cmd(`julia --project=$enzyme_env $(joinpath(enzyme_env,
+        run(
+            pipeline(
+                `julia --project=$enzyme_env -e "using Pkg; Pkg.instantiate()"`,
+                stdout = stdout, stderr = stderr
+            )
+        )
+        result = run(
+            pipeline(
+                Cmd(`julia --project=$enzyme_env $(joinpath(enzyme_env,
                 "runtests.jl"))`; ignorestatus = true),
-            stdout = stdout, stderr = stderr))
+                stdout = stdout, stderr = stderr
+            )
+        )
         ## Enzyme's platform/version instability is tolerated: a non-zero
         ## exit (an upstream Enzyme/LLVM failure, not a model issue) is
         ## recorded as broken rather than failing the suite. Mooncake, the
