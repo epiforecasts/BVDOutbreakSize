@@ -15,6 +15,11 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
+- The bed-capacity walk is sampled centred, each innovation drawn at the sampled step size rather than as a standard half-normal multiplied by it (#743).
+The two forms are the same distribution, so the fit is unchanged in what it estimates and only the geometry the sampler explores differs.
+Non-centring suits a walk the prior dominates, and this is not one: on the 16 September joint fit its innovations had lost about 90% of their prior variance and its step size sat past the prior 95th percentile holding about half the prior spread.
+The gain, if any, is in effective samples per unit time rather than in gradient cost.
+Every fit-cache key changes, so the next build refits.
 
 ### Report
 
