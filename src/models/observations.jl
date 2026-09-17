@@ -108,9 +108,8 @@ days[i]]` takes `rate[i]`, and any day beyond the last vintage takes the
 last rate (a flat carry-forward of the final window). When `days` is
 empty the whole grid takes `rate[1]` if present, else zero, so a scalar
 background is recovered. Pure and AD-transparent. The element type
-follows `rate`. Used to turn the per-vintage background random effect
-([`background_re_model`](@ref)) into the additive daily background the
-suspected-case and suspected-death streams consume.
+follows `rate`. Used to put the per-window laboratory positivity on the
+daily grid ([`confirmed_cases_model`](@ref)).
 """
 function expand_vintage_rate(
         rate::AbstractVector,
@@ -494,9 +493,8 @@ CFR submodel ([`background_cfr_model`](@ref)), so the background deaths are
 `cfr_bg` times that case background, lagged by the onset-to-death delay.
 The death background therefore inherits its level and time profile from the
 identified case background rather than carrying a second free,
-outbreak-size-degenerate rate. The `death_background`
-([`death_background_model`](@ref)) scalar, the per-vintage `background_re`
-and the pure-BVD stream are sensitivity fallbacks.
+outbreak-size-degenerate rate. With no `case_bg_daily` the stream is pure
+BVD, which is what the deaths-only composer fits.
 
 An optional `suspected_daily_deaths_history` adds the daily new suspected
 deaths ("cas suspects du jour N (M deces)"), per-day counts scored against
@@ -519,8 +517,6 @@ ascertainment and the background CFR for reuse by
         ascertainment = death_ascertainment_model(),
         case_bg_daily = nothing,
         background_cfr = background_cfr_model(),
-        death_background = nothing,
-        background_re = nothing,
         ## nmax covers 98% of the convolved onset->death sum (the two atomic
         ## Gammas moment-matched to a single Gamma only for the truncation).
         onset_to_death = onset_to_death_model(
@@ -548,18 +544,6 @@ ascertainment and the background CFR for reuse by
         bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
         λ_bg_death = sum(bg_death_daily) / n
         bg_death_sigma = zero(CFR)
-    elseif background_re !== nothing
-        bg_state ~ to_submodel(background_re(n))
-        cfr_bg = zero(CFR)
-        λ_bg_death = bg_state.λ_mu
-        bg_death_sigma = bg_state.σ_bg
-        bg_death_daily = bg_state.λ
-    elseif death_background !== nothing
-        dbg_state ~ to_submodel(death_background)
-        cfr_bg = zero(CFR)
-        λ_bg_death = dbg_state.λ_bg_death
-        bg_death_sigma = zero(λ_bg_death)
-        bg_death_daily = fill(λ_bg_death, n)
     else
         cfr_bg = zero(CFR)
         λ_bg_death = zero(CFR)
@@ -1091,12 +1075,6 @@ quantities.
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
         overdispersion = confirmed_overdispersion_model(),
-        ## When false, the early/late windows (confirmed vintages with no
-        ## observed analysed denominator) are not scored: only the
-        ## observed-denominator Binomial windows contribute, so confirmed
-        ## informs positivity without extrapolating a denominator from
-        ## incidence. Used to probe the no-test-data extrapolation.
-        fit_unanchored::Bool = true,
         ## Opt-in retrospective harmonisation-break days (grid day-indices):
         ## days whose cumulative confirmed step is mostly a provincial base
         ## integration rather than 24h notifications. De-anchored from the
@@ -1275,7 +1253,7 @@ quantities.
         [windows.early_start]
     early_volume = bin_increments(analysed_daily, early_edges)[2:end]
     early_mean = early_p .* early_volume
-    early_obs = (have_data && n_early > 0 && fit_unanchored) ?
+    early_obs = (have_data && n_early > 0) ?
         windows.early_increments : missing
     early_increments ~ to_submodel(
         vintage_increments_model(early_mean, early_obs, k)
@@ -1335,21 +1313,16 @@ quantities.
     )
     late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
-    ## confirmed increment clamped into the Binomial support and are always
-    ## scored. Unanchored days are scored only when `fit_unanchored` (the
-    ## no-extrapolation probe leaves them latent). A per-entry
-    ## `missing`/value vector lets the one submodel observe each accordingly.
+    ## confirmed increment clamped into the Binomial support, unanchored days
+    ## the increment itself. The `Union{Missing, Int}` element type is kept so
+    ## the one submodel still handles the generator-mode `missing` below.
     if have_data && n_late > 0
         late_obs = Vector{Union{Missing, Int}}(undef, n_late)
         for i in 1:n_late
             a = windows.late_analysed[i]
-            if a > 0
-                late_obs[i] = clamp(windows.late_increments[i], 0, a)
-            elseif fit_unanchored
-                late_obs[i] = windows.late_increments[i]
-            else
-                late_obs[i] = missing
-            end
+            late_obs[i] = a > 0 ?
+                clamp(windows.late_increments[i], 0, a) :
+                windows.late_increments[i]
         end
     else
         late_obs = missing
