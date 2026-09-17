@@ -82,9 +82,11 @@ Recovered is still published, so this was a gap rather than a frozen stream.
 - The AD benchmark uses AirspeedVelocity, which benchmarks both revisions itself in one job on one machine (#752).
 Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
 Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
-The bespoke `benchmark/compare.jl` goes with it, and its fixed 5% neutral band with that.
-AirspeedVelocity reports a median ratio with interquartile error bars and no band at all, and its ratio reads the other way round, above 1 meaning the pull request is faster.
-It runs each revision once with no interleaving, so a smaller within-machine drift remains and is not measured.
+AirspeedVelocity runs the suite and `benchmark/comment/comment.jl` reports it, replacing `benchmark/compare.jl`.
+The action has no neutral band and no input to set one, so the band is measured from the run rather than fixed at 5%: the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, with the measured number stated in the comment.
+The comment also reports each benchmark's own spread and warns when every benchmark moves by one factor, which is an environment difference rather than the diff and is the signature that diagnosed the bias.
+The ratio stays `PR / main`, the opposite of the action's own table.
+That band is a lower bound: AirspeedVelocity times each revision once, so the spread is dispersion within a revision's samples rather than drift between the two.
 - The benchmark suite is frozen at the default branch (#752).
 AirspeedVelocity resolves `benchmark/benchmarks.jl`, and the fixtures it includes, once from one revision, then runs that definition against each revision's `src/`.
 A change to the suite or to `test/ad_fixtures.jl` therefore takes effect on the pull request after it rather than its own, and a pull request that renames a model can no longer make the baseline arm unresolvable.

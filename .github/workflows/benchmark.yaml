@@ -1,7 +1,7 @@
 name: Benchmark
 
 # Per-component AD gradient comparison against `main`, posted as a single
-# PR comment by AirspeedVelocity.
+# PR comment.
 #
 # One job, one machine. `benchpkg` checks out and benchmarks both revisions
 # itself, inside this job, which is the whole point of the change. Each
@@ -11,6 +11,13 @@ name: Benchmark
 # that touched no differentiated source all sixteen log-density benchmarks
 # moved together, by 1.37x, 0.61x, 0.78x and 0.98x, and the same component
 # ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+#
+# `job-summary: true` sends AirspeedVelocity's own flat table to the job
+# summary, and `benchmark/comment/comment.jl` builds the comment from the
+# same results JSON. The action's table has no neutral band and no way to
+# set one, and it cannot show whether the benchmarks moved together, which
+# is the signature that diagnosed the bias above. Both are recovered from
+# the raw per-sample times the action writes out.
 #
 # The suite is frozen at the default branch. `benchpkg` resolves
 # `benchmark/benchmarks.jl`, and everything it includes, once from
@@ -64,11 +71,48 @@ jobs:
       # package name, and runs `benchpkg` from this working tree.
       - uses: actions/checkout@v7
 
-      # The action installs Julia, caches the depot, benchmarks both
-      # revisions and posts the comparison comment itself. There is no
-      # `cache-name` input to pass through it, so the depot cache it manages
-      # uses the action's own key rather than a pinned snapshot.
+      # Installs Julia, caches the depot, and benchmarks both revisions into
+      # `results/`. There is no `cache-name` input to pass through it, so the
+      # depot cache it manages uses the action's own key.
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: '1'
           mode: 'time,memory'
+          job-summary: true
+
+      - name: Build comparison comment
+        run: |
+          julia --project=benchmark/comment -e 'using Pkg; Pkg.instantiate()'
+          julia --project=benchmark/comment benchmark/comment/comment.jl \
+            results BVDOutbreakSize \
+            "${{ github.event.repository.default_branch }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            comment.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: results
+
+      - name: Post comparison comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const marker = '<!-- benchmark-comparison -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number });
+            const existing = comments.find(
+              (c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment(
+                { owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment(
+                { owner, repo, issue_number, body });
+            }

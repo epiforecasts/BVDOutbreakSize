@@ -32,18 +32,35 @@ The direction was not even consistent, which is why it read as signal rather tha
 [AirspeedVelocity](https://github.com/MilesCranmer/AirspeedVelocity.jl) removes that at the root.
 Its `benchpkg` obtains both revisions itself and benchmarks them in one job on one machine, so there is no second runner to divide by.
 
-## What the comparison does and does not tell you
+## Why the comment is built here rather than by the action
 
-AirspeedVelocity reports, per benchmark, each revision's median with an interquartile range, and a ratio with the error propagated from those two ranges.
-The ratio is `main / PR`, so **above 1 means the pull request is faster**, which is the opposite of the convention the old comment used.
+AirspeedVelocity runs the suite; `comment/comment.jl` reports it.
+The action's own table goes to the job summary instead, under `job-summary: true`.
 
-It has no neutral band and no noise threshold.
-It runs each revision once, in its own process, one after the other, with no interleaving and no repeated rounds.
-The two arms are therefore separated by the twenty minutes it takes to compile the second one's gradients, and slow drift over that gap lands on the ratio with nothing to flag it.
-The `±` on a ratio is the only uncertainty signal, and it is within-trial dispersion rather than run-to-run drift.
+Two things the comment needs are not in the action.
 
-So the large, systematic, cross-machine error is gone and a smaller within-machine one is not measured.
-Read a ratio whose `±` overlaps 1 as unresolved.
+It has no neutral band and no input to set one: the action takes thirteen inputs and none of them is a comparison threshold.
+A fixed band is what let the old harness call noise a regression, so the band here is measured from the run.
+It is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+
+The action's table also cannot show whether the benchmarks moved together.
+Unrelated components share no cause, so one factor applied to all of them is an environment difference rather than the diff, and that is the signature that diagnosed the two-runner bias in the first place.
+The comment reports the range of the ratios across benchmarks and warns when they all move as one.
+
+Both are recoverable because AirspeedVelocity writes the raw per-sample times into its results JSON, not only a summary.
+
+The ratio stays `PR / main`, so below 1 means the pull request is faster.
+That is the convention the old comment used, and it is the opposite of the action's own table, which reads `main / PR`.
+
+## What it still cannot resolve
+
+The band is a lower bound.
+AirspeedVelocity runs each revision once, in its own process, one after the other, with no interleaving and no repeated rounds.
+So the spread it can measure is dispersion within one revision's own samples, not drift between the two revisions, and those are separated by the twenty minutes it takes to compile the second one's gradients.
+
+The large, systematic, cross-machine error is gone.
+A smaller within-machine one is bounded from below rather than measured.
+Treat a ratio inside the stated band as unresolved.
 
 ## The suite is frozen at `main`
 
@@ -101,7 +118,8 @@ AD gradients/
   <same groups>/<component>/<backend>
 ```
 
-AirspeedVelocity flattens this to one row per leaf, joining the group keys with `/`, so the comment carries 32 rows folded into a `<details>` block per mode.
+AirspeedVelocity flattens this to one row per leaf, joining the group keys with `/`.
+The comment regroups those rows, folds the log-density and gradient tables separately, and keeps AirspeedVelocity's own package-load benchmark out of both and out of the band.
 
 Backends are Mooncake, the package default, and Enzyme, the opt-in backend from the package's Enzyme extension.
 Enzyme is off unless `BVD_BENCH_ENZYME=true` is set.
@@ -144,6 +162,7 @@ They also measure pure helpers below the component level this suite reports.
 | `src/log_density.jl` | One evaluation per component |
 | `src/ad_gradients.jl` | One gradient per component per backend |
 | `run.jl` | Times one revision once, for local profiling |
+| `comment/comment.jl` | Turns AirspeedVelocity's results JSON into the PR comment |
 
 ## CI
 
@@ -151,7 +170,8 @@ They also measure pure helpers below the component level this suite reports.
 It does not run on pushes to `main` and records no history.
 There is no companion `benchmark-history.yaml`: the docs workflow already spends hours fitting and the runner queue has no room for a timeline.
 
-The workflow is one job holding one `MilesCranmer/AirspeedVelocity.jl@action-v1` step, which installs Julia, caches the depot, benchmarks both revisions and posts the comment.
+The workflow is one job. `MilesCranmer/AirspeedVelocity.jl@action-v1` installs Julia, caches the depot and benchmarks both revisions into `results/`, with its own table going to the job summary.
+Two further steps build the comment from that JSON and post it.
 Fork pull requests are skipped: the workflow uses `pull_request` rather than `pull_request_target`, so a fork never runs with a write token, and it could not post the comment anyway.
 
 The action has no input for `julia-actions/cache`, so the depot cache uses the action's own key rather than a pinned snapshot.
