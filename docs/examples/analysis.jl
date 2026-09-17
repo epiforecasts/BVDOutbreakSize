@@ -4362,10 +4362,11 @@ onset_forecast_fig #hide
 
 # ### Health-zone estimates
 #
-# The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the forecast confirmed cases over the coming week and the confirmed cases to date, zone by zone.
+# The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the bounds of the 90% interval on the forecast confirmed cases over the coming week, and the confirmed cases to date, zone by zone.
+# The forecast is mapped as its two bounds rather than a single number, so a zone's colour reads as a range.
 # On the reproduction-number map a zone whose 90% interval straddles one is washed towards white.
 # Zones with no confirmed case, or too few infections for a reproduction number, are grey.
-# The three maps share the zone boundaries, so a zone's forecast can be read against its reproduction number and its cases to date.
+# The four maps share the zone boundaries, so a zone's forecast can be read against its reproduction number and its cases to date.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -4404,14 +4405,18 @@ zone_map_fig = plot_zone_map_panels(
             diverging_at = 1.0, scale = log10,
             title = "Reproduction number at the cut-off",
             colorbar_label = "R"),
-        (; values = [median(v) for v in zone_fc_draws.zones],
+        (; values = [_zq(v, 0.05) for v in zone_fc_draws.zones],
             zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
-            title = "Confirmed cases over the coming week (median)",
+            title = "Confirmed cases over the coming week (lower 90%)",
+            colorbar_label = "cases"),
+        (; values = [_zq(v, 0.95) for v in zone_fc_draws.zones],
+            zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
+            title = "Confirmed cases over the coming week (upper 90%)",
             colorbar_label = "cases"),
         (; values = Float64.(zone_inputs.cumulative), zones = zone_map_keys,
             scale = CairoMakie.Makie.pseudolog10,
             title = "Confirmed cases to date", colorbar_label = "cases")];
-    title = "Health zones at the cut-off");
+    ncols = 2, title = "Health zones at the cut-off");
 
 #md # ```@raw html
 #md # </details>
@@ -4475,6 +4480,7 @@ zone_overview_display = zone_overview[:,
 zone_ranking_fig #hide
 
 # The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether it walks.
+# The share, the reproduction number and the deviation are each a median with a 90% interval.
 # Every zone is listed in the fold below it.
 
 MarkdownTable(first(zone_overview_display, 20)) #hide
@@ -4551,7 +4557,7 @@ zone_calibration_table #hide
 
 # #### Health-zone forecast results
 #
-# The figure and table below split the one-week-ahead confirmed-case forecast across the health zones, for the fifteen zones with the largest forecast medians.
+# The figure and table below split the one-week-ahead confirmed-case forecast across the health zones, for the fifteen zones with the largest forecasts.
 # The patch totals in the table are the province forecast above.
 # The same split made from the one-week-back validation fit is scored against the zone tables observed since in the [zone forecast validation](@ref "Forecast by health zone") of the sensitivity page.
 
@@ -4972,7 +4978,9 @@ zone_estimates = DataFrame(zone = zone_map_keys,
     forecast_median = [median(v) for v in zone_fc_draws.zones],
     forecast_lower = [quantile(v, 0.05) for v in zone_fc_draws.zones],
     forecast_upper = [quantile(v, 0.95) for v in zone_fc_draws.zones],
-    share_median = [median(v) for v in zone_share_T])
+    share_median = [median(v) for v in zone_share_T],
+    share_lower = [quantile(v, 0.05) for v in zone_share_T],
+    share_upper = [quantile(v, 0.95) for v in zone_share_T])
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 
 ## Headline prose: the same bullet summary shown at the top of the Results

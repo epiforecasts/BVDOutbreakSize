@@ -354,7 +354,8 @@ One row per health zone: its patch, the confirmed cases to date, the share
 of its patch's infections at the cut-off with a 90% interval, the implied
 reproduction number at the cut-off with its 90% interval and the posterior
 probability that it exceeds one, the log-transmission deviation at the
-cut-off and whether the zone carries a time-varying deviation. The
+cut-off with a 90% interval and whether the zone carries a time-varying
+deviation. The
 reproduction number is also given numerically as `rt_median`, `rt_lo90`
 and `rt_hi90` (`NaN` below the reporting floor), the probability unrounded
 as `p_rt_above_one`, and the patch as its index `patch_index`. It is
@@ -387,7 +388,7 @@ function zone_overview_table(chn, inputs; parent_chain = nothing,
                 p_R_above_1 = isnan(p_above) ? NaN : round(p_above; digits),
                 p_rt_above_one = p_above,
                 patch_index = inputs.patch_of_zone[z],
-                delta_T = round(median(δ[z]); digits),
+                delta_T = _median_ci(δ[z]; digits),
                 walking = inputs.walking[z]))
     end
     order = sortperm(
