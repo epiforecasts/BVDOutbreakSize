@@ -6,6 +6,58 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v2.1.0
+
+Changes since v2.0.0
+
+### Performance
+
+- The joint gradient costs about 30% less, and the log density is bit-identical (#717).
+`onset_report_G` walked the reporting hazard twice, once for the numerator and once for the denominator, though the numerator is a prefix of the denominator's own survival product.
+One walk now records both, and the delay CDF is built once over the onset-date grid for the anchor series and the moments to share.
+At the production data the hazard fell from about 87,000 evaluations per gradient to about 8,500.
+- The sampler budget moves from draws into adaptation (#716).
+The headline patch fit returned 48 bulk and 39 tail effective samples at a worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population control on the same data through the same pipeline.
+Five times the effective sample from the same draw count places the limit at adaptation rather than at the draw count.
+Adaptation goes from 400 steps to 500 and draws from 900 to 750, so total iterations fall from 1300 to 1250 and the fit job's 350-minute budget is not spent.
+- The onset digitisers reuse the vintages the scanned file already holds (#707).
+Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run, walking the embedded figure pixel by pixel across all 55 vintages, though a data update adds one.
+Each run now opens a PDF only for the vintages the file is missing, and an incremental run and a full one write the same file.
+`--rebuild` still re-reads every vintage.
+
+### Data
+
+- The daily new-suspect series resumes from 7 August and runs to 13 September (#713).
+It had been frozen at 282, on 5 August, on the view that the alert table from SitRep 084 counted something else.
+Re-reading the reports shows the earlier Tableau 3 was the same alert-investigation funnel, so the two tables print the same quantity.
+- The model cut-off advances to SitRep 122, 13 September (#709).
+Confirmed cases reach 7258 and confirmed deaths 3510.
+Every fitted stream's net change matches that report's own printed 24-hour figure, with no harmonisation anywhere in the run.
+
+### Report
+
+- Four comment-level claims that did not match the code are corrected (#710).
+The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
+The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
+`forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
+- The duplicated comments in `score_releases.jl` are trimmed (#714).
+
+### Fixed
+
+- Each single-stream fit is forecast from its own fitted trajectory (#706).
+The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
+That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
+
+### Infrastructure
+
+- The documentation build pins the pkgimage targets and rescores the released-estimate and forecast-scoring overlays once (#712).
+Of the 30 minutes the render step took, 23 went on installing dependencies and refreshing overlays rather than on rendering.
+
+### Dependencies
+
+- Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
+Several of these carry a meaningless `< 0.0.1` bound on a standard library, which is corrected separately.
+
 ## v2.0.0
 
 Changes since v1.18.0
