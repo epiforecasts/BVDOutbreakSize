@@ -8,48 +8,7 @@ each push to `main` also republishes the rendered analysis and the
 
 ## v2.1.0
 
-Changes since v2.0.0
-
-### Performance
-
-- The sampler budget moves from draws into adaptation (#716).
-The headline patch fit returned 48 bulk and 39 tail effective samples at a worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population control on the same data through the same pipeline.
-Five times the effective sample from the same draw count places the limit at adaptation rather than at the draw count.
-Adaptation goes from 400 steps to 500 and draws from 900 to 750, so total iterations fall from 1300 to 1250 and the fit job's 350-minute budget is not spent.
-- The onset digitisers reuse the vintages the scanned file already holds (#707).
-Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run, walking the embedded figure pixel by pixel across all 55 vintages, though a data update adds one.
-Each run now opens a PDF only for the vintages the file is missing, and an incremental run and a full one write the same file.
-`--rebuild` still re-reads every vintage.
-
-### Data
-
-- The model cut-off advances to SitRep 122, 13 September (#709).
-Confirmed cases reach 7258 and confirmed deaths 3510.
-Every fitted stream's net change matches that report's own printed 24-hour figure, with no harmonisation anywhere in the run.
-
-### Report
-
-- Four comment-level claims that did not match the code are corrected (#710).
-The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
-The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
-`forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
-- The duplicated comments in `score_releases.jl` are trimmed (#714).
-
-### Fixed
-
-- Each single-stream fit is forecast from its own fitted trajectory (#706).
-The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
-That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
-
-### Infrastructure
-
-- The documentation build pins the pkgimage targets and rescores the released-estimate and forecast-scoring overlays once (#712).
-Of the 30 minutes the render step took, 23 went on installing dependencies and refreshing overlays rather than on rendering.
-
-### Dependencies
-
-- Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
-Several of these carry a meaningless `< 0.0.1` bound on a standard library, which is corrected separately.
+Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ## v2.0.0
 
@@ -90,7 +49,7 @@ detection on the ramp the reproduction number already uses.
 - Ituri carries the whole cryptic seed and the other provinces are seeded by
 importation from it, so when a province first carries infections follows from
 the kernel rather than from a fitted fraction.
-- The headline and its control run at 900 draws with 400 adaptation steps and a
+- The headline and its control run at 750 draws with 500 adaptation steps and a
 target acceptance of 0.80, measured against the fit job's 350-minute budget.
 - `m` counts transmission generations rather than doublings (#672).
 `m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
@@ -124,6 +83,10 @@ transposed, and its validated-suspect columns reproduce the old table's own
 daily suspect total exactly on all 20 vintages that print both.
 SitRep 084 stays out: its Nord-Kivu row both validates and invalidates more
 alerts than the province received.
+- The model cut-off advances to SitRep 122, 13 September (#709).
+Confirmed cases reach 7258 and confirmed deaths 3510.
+Every fitted stream's net change matches that report's own printed 24-hour
+figure, with no harmonisation anywhere in the run.
 
 ### Report
 
@@ -172,6 +135,22 @@ The log density is unchanged bit for bit, but reverse mode accumulates in a
 different order, so a fixed-seed chain no longer reproduces an earlier
 vintage draw for draw.
 Summaries agree within Monte Carlo error rather than exactly.
+- The sampler budget sits in adaptation rather than in draws (#716).
+The headline patch fit returned 48 bulk and 39 tail effective samples at a
+worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population
+control on the same data through the same pipeline.
+Five times the effective sample from the same draw count places the limit at
+adaptation rather than at the draw count.
+The 500 adaptation steps and 750 draws are 1250 iterations, which the fit
+job's 350-minute budget covers.
+- The onset digitisers reuse the vintages the scanned file already holds
+(#707).
+Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run,
+walking the embedded figure pixel by pixel across all 55 vintages, though a
+data update adds one.
+Each run now opens a PDF only for the vintages the file is missing, and an
+incremental run and a full one write the same file.
+`--rebuild` still re-reads every vintage.
 
 ### Fixed
 
@@ -190,6 +169,10 @@ Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 - The quality items run once in their own job rather than on every matrix cell.
 They do not vary by platform or Julia version, and carrying them on top of the
 whole suite took the Linux cell past its 150-minute ceiling.
+- The documentation build pins the pkgimage targets, and rescores the
+released-estimate and forecast-scoring overlays once (#712).
+Of the 30 minutes the render step took, 23 went on installing dependencies and
+refreshing overlays rather than on rendering.
 - The occupancy-offset forecast test scores both offsets on one set of prior
 draws rather than comparing two independent samples.
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
@@ -233,6 +216,19 @@ Those together are the signature of a zero-mean walk carrying a systematic trend
 - The docs and test environments no longer warn about the SHA compat entry on every resolve.
 `SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
 Both environments now read `SHA = "0.7.0, 1"`.
+- Each single-stream fit is forecast from its own fitted trajectory (#706).
+The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
+That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
+- Four comment-level claims that did not match the code are corrected (#710).
+The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
+The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
+`forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
+- The duplicated comments in `score_releases.jl` are trimmed (#714).
+
+### Dependencies
+
+- Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
+Several of these carry a meaningless `< 0.0.1` bound on a standard library, which is corrected separately.
 
 ### Dependencies
 
