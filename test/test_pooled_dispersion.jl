@@ -21,8 +21,8 @@
         @test s.τ >= 0
         ## `k_pop` is the dispersion at the population mean, and each stream's
         ## `k` is the reciprocal square of its `1/sqrt(k)` deviation.
-        @test isapprox(s.k_pop, 1 / exp(s.μ_log)^2; rtol = 1e-6)
-        @test all(isapprox.(s.k, 1.0 ./ s.inv_sqrt_k .^ 2; rtol = 1e-6))
+        @test isapprox(s.k_pop, 1 / exp(s.μ_log)^2; rtol = 1.0e-6)
+        @test all(isapprox.(s.k, 1.0 ./ s.inv_sqrt_k .^ 2; rtol = 1.0e-6))
     end
 end
 
@@ -35,12 +35,14 @@ end
     ## With the pooling SD pinned at ~0 every stream takes the population
     ## value, recovering the shared-`k` model.
     seed!(5)
-    m = pooled_dispersion_model(6;
-        sd_prior = truncated(Normal(0, 1e-9); lower = 0))
+    m = pooled_dispersion_model(
+        6;
+        sd_prior = truncated(Normal(0, 1.0e-9); lower = 0)
+    )
     rng = default_rng()
     for _ in 1:20
         s = returned(m, rand(rng, m))
-        @test all(isapprox.(s.k, s.k_pop; rtol = 1e-4))
+        @test all(isapprox.(s.k, s.k_pop; rtol = 1.0e-4))
     end
 end
 
@@ -61,13 +63,13 @@ end
             s = returned(m, rand(rng, m))
             @test length(s.k) == n
             @test all(isfinite, s.k) && all(>(0), s.k)
-            @test all(isapprox.(s.k, 1.0 ./ s.inv_sqrt_k .^ 2; rtol = 1e-6))
+            @test all(isapprox.(s.k, 1.0 ./ s.inv_sqrt_k .^ 2; rtol = 1.0e-6))
         end
     end
 end
 
-@testitem "bvd_joint: exposes partially-pooled per-stream dispersions" tags=[
-    :slow
+@testitem "bvd_joint: exposes partially-pooled per-stream dispersions" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -75,7 +77,8 @@ end
 
     obs = load_observations()
     breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -92,15 +95,20 @@ end
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 30;
-        chain_type = FlexiChains.VNChain, progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 30;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
 
     ## Every per-stream dispersion (including the isolation and recovered
     ## streams, pooled rather than independent in the joint), the
     ## population value and the pooling SD are exposed and positive.
-    for key in (:k, :k_cases, :k_deaths, :k_confirmed, :k_confirmed_deaths,
-        :isolation_dispersion, :recovered_dispersion)
+    for key in (
+            :k, :k_cases, :k_deaths, :k_confirmed, :k_confirmed_deaths,
+            :isolation_dispersion, :recovered_dispersion,
+        )
         v = vec(Array(chn[key]))
         @test length(v) == 30
         @test all(isfinite, v)

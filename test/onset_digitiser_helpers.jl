@@ -43,8 +43,10 @@ to onset dates before `cut`. This is the section-4b date-alignment check
 one's.
 """
 function _l1_shift(a, b, s; cut = nothing)
-    ds = [d for d in keys(a)
-          if haskey(b, d - Day(s)) && (cut === nothing || d < cut)]
+    ds = [
+        d for d in keys(a)
+            if haskey(b, d - Day(s)) && (cut === nothing || d < cut)
+    ]
     isempty(ds) && return typemax(Int)
     return sum(abs(a[d] - b[d - Day(s)]) for d in ds)
 end
@@ -60,8 +62,12 @@ function _python_runner()
     end
     py = Sys.which("python3")
     py === nothing && return nothing
-    ok = success(pipeline(`$py -c "import numpy, PIL"`;
-        stdout = devnull, stderr = devnull))
+    ok = success(
+        pipeline(
+            `$py -c "import numpy, PIL"`;
+            stdout = devnull, stderr = devnull
+        )
+    )
     return ok ? `$py` : nothing
 end
 

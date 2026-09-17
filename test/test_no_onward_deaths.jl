@@ -4,8 +4,8 @@
 ## composer re-exposes these; the single-stream composers expose only
 ## `C_T`).
 
-@testitem "predict_no_onward_deaths returns the documented columns" tags=[
-    :slow
+@testitem "predict_no_onward_deaths returns the documented columns" tags = [
+    :slow,
 ] begin
     using DataFrames: DataFrame, nrow
     using Turing: sample, Prior
@@ -30,7 +30,7 @@
     @test all(df.total_projected .>= obs_deaths)
     @test maximum(
         abs.(df.total_projected .- (obs_deaths .+ df.delta_deaths))
-    ) < 1e-8
+    ) < 1.0e-8
 end
 
 ## Both plotted quantities have a hard floor: `delta_deaths` is clamped at
@@ -38,8 +38,8 @@ end
 ## A free kernel density spreads mass past the smallest draw, which put a
 ## visible negative tail on the still-expected-deaths panel.
 
-@testitem "plot_no_onward_deaths keeps each density inside its bound" setup=[
-    HeadlessMakie
+@testitem "plot_no_onward_deaths keeps each density inside its bound" setup = [
+    HeadlessMakie,
 ] begin
     using DataFrames: DataFrame
     using CairoMakie: Axis
@@ -48,8 +48,10 @@ end
     ## Draws piled against the zero clamp, which is what produced the tail.
     delta = max.(collect(range(-40, 160; length = 500)), 0.0)
     obs_deaths = 2325
-    df = DataFrame(delta_deaths = delta,
-        total_projected = obs_deaths .+ delta)
+    df = DataFrame(
+        delta_deaths = delta,
+        total_projected = obs_deaths .+ delta
+    )
 
     fig = plot_no_onward_deaths(df; obs_deaths = obs_deaths)
     axes = [c for c in fig.content if c isa Axis]

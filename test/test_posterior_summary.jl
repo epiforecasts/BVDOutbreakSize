@@ -10,14 +10,14 @@
 
     # Field names and order match the docstring.
     @test propertynames(s) ==
-          (:lo90, :lo60, :lo30, :hi30, :hi60, :hi90)
+        (:lo90, :lo60, :lo30, :hi30, :hi60, :hi90)
 
     # Values match Statistics.quantile on the same vector.
     @test s.lo90 ≈ quantile(xs, 0.05)
-    @test s.lo60 ≈ quantile(xs, 0.20)
+    @test s.lo60 ≈ quantile(xs, 0.2)
     @test s.lo30 ≈ quantile(xs, 0.35)
     @test s.hi30 ≈ quantile(xs, 0.65)
-    @test s.hi60 ≈ quantile(xs, 0.80)
+    @test s.hi60 ≈ quantile(xs, 0.8)
     @test s.hi90 ≈ quantile(xs, 0.95)
 
     # Monotone in the credible level.

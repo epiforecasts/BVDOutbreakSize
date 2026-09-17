@@ -2,18 +2,18 @@
 # object so individual docstrings stay focused on prose.
 
 @template (FUNCTIONS, METHODS, MACROS) = """
-                                             $(TYPEDSIGNATURES)
-                                         $(DOCSTRING)
-                                         """
+    $(TYPEDSIGNATURES)
+$(DOCSTRING)
+"""
 
 @template (TYPES) = """
-                        $(TYPEDEF)
-                    $(DOCSTRING)
+    $(TYPEDEF)
+$(DOCSTRING)
 
-                    ---
-                    ## Fields
-                    $(TYPEDFIELDS)
-                    """
+---
+## Fields
+$(TYPEDFIELDS)
+"""
 
 @template MODULES = """
 $(DOCSTRING)

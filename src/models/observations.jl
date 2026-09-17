@@ -43,7 +43,7 @@ function safe_betabinomial(n::Integer, p, ρ)
     pc = isfinite(p) ? clamp(T(p), lo, one(T) - lo) : one(T) / 2
     ## Floor ρ at 1e-6 (capping `s` at ≈1e6) so a near-zero draw stays a
     ## well-conditioned near-Binomial, and cap below 1 so `s` stays positive.
-    ρc = isfinite(ρ) ? clamp(T(ρ), T(1e-6), one(T) - T(1e-6)) : T(1e-6)
+    ρc = isfinite(ρ) ? clamp(T(ρ), T(1.0e-6), one(T) - T(1.0e-6)) : T(1.0e-6)
     s = (one(T) - ρc) / ρc
     α = max(s * pc, lo)
     β = max(s * (one(T) - pc), lo)
@@ -59,8 +59,10 @@ the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
 bin needs the cumulative. Day indices are clamped to the grid. Pure and
 AD-transparent. The output element type follows `daily`.
 """
-function bin_increments(daily::AbstractVector,
-        days::AbstractVector{<:Integer})
+function bin_increments(
+        daily::AbstractVector,
+        days::AbstractVector{<:Integer}
+    )
     n = length(daily)
     out = Vector{eltype(daily)}(undef, length(days))
     ## Concrete zero for empty bins, dispatched on the runtime element type
@@ -110,8 +112,10 @@ follows `rate`. Used to turn the per-vintage background random effect
 ([`background_re_model`](@ref)) into the additive daily background the
 suspected-case and suspected-death streams consume.
 """
-function expand_vintage_rate(rate::AbstractVector,
-        days::AbstractVector{<:Integer}, n::Integer)
+function expand_vintage_rate(
+        rate::AbstractVector,
+        days::AbstractVector{<:Integer}, n::Integer
+    )
     T = eltype(rate)
     out = Vector{T}(undef, n)
     if isempty(days) || isempty(rate)
@@ -161,8 +165,10 @@ keeps the predict keys (`<prefix>.counts[i]`) replicable. Used by
 [`exports_model`](@ref) and the export-deaths likelihood for the dated
 Uganda export series.
 """
-@model function dated_poisson_model(means::AbstractVector,
-        counts::Union{Missing, AbstractVector{<:Integer}})
+@model function dated_poisson_model(
+        means::AbstractVector,
+        counts::Union{Missing, AbstractVector{<:Integer}}
+    )
     n = length(means)
     if ismissing(counts)
         counts = Vector{Union{Missing, Int}}(missing, n)
@@ -191,8 +197,12 @@ vector or `missing`.
 function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
     if !isempty(history.counts)
         days = history.days
-        obs_increments = diff(vcat(zero(eltype(history.counts)),
-            collect(history.counts)))
+        obs_increments = diff(
+            vcat(
+                zero(eltype(history.counts)),
+                collect(history.counts)
+            )
+        )
         return (; days, obs_increments)
     elseif !isempty(history.days)
         return (; days = collect(history.days), obs_increments = missing)
@@ -215,9 +225,11 @@ sampled (the predictive-generator path). The indexed `increments[i]` keeps
 the predict keys (`<prefix>.increments[i]`) replicable. An empty vector
 (zero vintages) is a no-op.
 """
-@model function vintage_increments_model(modelled::AbstractVector,
+@model function vintage_increments_model(
+        modelled::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Integer}},
-        k::Real)
+        k::Real
+    )
     n = length(modelled)
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
@@ -236,16 +248,20 @@ depends on the demand above the ceiling, so demand stays identified when
 beds are full rather than the occupancy going flat in demand. A `missing`
 `obs` samples (the predictive path). Shares the surveillance dispersion `k`.
 """
-@model function censored_occupancy_model(means::AbstractVector,
+@model function censored_occupancy_model(
+        means::AbstractVector,
         ceilings::AbstractVector,
-        obs::Union{Missing, AbstractVector{<:Integer}}, k::Real)
+        obs::Union{Missing, AbstractVector{<:Integer}}, k::Real
+    )
     n = length(means)
     if ismissing(obs)
         obs = Vector{Union{Missing, Int}}(missing, n)
     end
     for i in 1:n
-        obs[i] ~ censored(safe_nbinomial(k, safe_rate(means[i]));
-            upper = safe_rate(ceilings[i]))
+        obs[i] ~ censored(
+            safe_nbinomial(k, safe_rate(means[i]));
+            upper = safe_rate(ceilings[i])
+        )
     end
     return (; means, ceilings, obs)
 end
@@ -258,8 +274,10 @@ earliest. A data lookup with no sampled input. Written as a scan rather
 than an `argmin` over a broadcast so that it allocates nothing on the
 gradient path.
 """
-function nearest_recorded(days::AbstractVector{<:Integer},
-        counts::AbstractVector, day::Integer)
+function nearest_recorded(
+        days::AbstractVector{<:Integer},
+        counts::AbstractVector, day::Integer
+    )
     best = 1
     best_dist = abs(days[1] - day)
     @inbounds for j in 2:length(days)
@@ -280,8 +298,10 @@ going to the earliest, or `fallback` when there is no such record. A data
 lookup with no sampled input, written as a scan so that it allocates
 nothing on the gradient path.
 """
-function last_recorded_before(days::AbstractVector{<:Integer},
-        counts::AbstractVector, day::Integer, fallback)
+function last_recorded_before(
+        days::AbstractVector{<:Integer},
+        counts::AbstractVector, day::Integer, fallback
+    )
     best = 0
     best_day = 0
     @inbounds for j in eachindex(days)
@@ -503,11 +523,14 @@ ascertainment and the background CFR for reuse by
         background_re = nothing,
         ## nmax covers 98% of the convolved onset->death sum (the two atomic
         ## Gammas moment-matched to a single Gamma only for the truncation).
-        onset_to_death = onset_to_death_model(cdf_nmax(Gamma(3.33, 3.83));
+        onset_to_death = onset_to_death_model(
+            cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)))
+            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+        )
+    )
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
     asc_state ~ to_submodel(ascertainment)
@@ -548,7 +571,8 @@ ascertainment and the background CFR for reuse by
 
     modelled_increments = bin_increments(deaths_daily, vobs.days)
     death_increments ~ to_submodel(
-        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k)
+    )
 
     ## The mean for day `d` is the single-day `deaths_daily[d]`, not a
     ## between-vintage increment: this is a genuine daily count, so it never
@@ -556,17 +580,20 @@ ascertainment and the background CFR for reuse by
     sdd_days = suspected_daily_deaths_history.days
     sdd_modelled = [deaths_daily[clamp(Int(d), 1, n)] for d in sdd_days]
     sdd_obs = isempty(suspected_daily_deaths_history.counts) ? missing :
-              collect(Int.(suspected_daily_deaths_history.counts))
+        collect(Int.(suspected_daily_deaths_history.counts))
     suspected_daily_deaths ~ to_submodel(
-        vintage_increments_model(sdd_modelled, sdd_obs, k))
+        vintage_increments_model(sdd_modelled, sdd_obs, k)
+    )
 
     raw_total = sum(deaths_daily)
     expected_deaths_T := safe_rate(raw_total)
     bg_death_total = sum(bg_death_daily)
 
-    return (; CFR, p_death, cfr_bg, od_pmf = od_state.pmf, deaths_daily,
+    return (;
+        CFR, p_death, cfr_bg, od_pmf = od_state.pmf, deaths_daily,
         bvd_deaths_daily, expected_deaths_T, λ_bg_death, bg_death_sigma,
-        bg_death_daily, bg_death_total)
+        bg_death_daily, bg_death_total,
+    )
 end
 
 """
@@ -614,9 +641,12 @@ sitrep.
         ## delay (~20 d) is not used: it is assumed to reflect a longer
         ## pathway (likely confirmation and administrative processing),
         ## though what it captures is uncertain.
-        onset_to_report = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
+        onset_to_report = gamma_delay_model(
+            cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
-            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
+        )
+    )
     pos_state ~ to_submodel(positivity)
     report_state ~ to_submodel(onset_to_report)
     λ_bg = pos_state.λ_bg
@@ -649,7 +679,8 @@ sitrep.
 
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
-        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k)
+    )
 
     ## The mean for day `d` is the single-day `reports_daily[d]`, not a
     ## between-vintage increment: this is a genuine daily incidence, so it
@@ -657,9 +688,10 @@ sitrep.
     sd_days = suspected_daily_history.days
     sd_modelled = [reports_daily[clamp(Int(d), 1, n)] for d in sd_days]
     sd_obs = isempty(suspected_daily_history.counts) ? missing :
-             collect(Int.(suspected_daily_history.counts))
+        collect(Int.(suspected_daily_history.counts))
     suspected_daily ~ to_submodel(
-        vintage_increments_model(sd_modelled, sd_obs, k))
+        vintage_increments_model(sd_modelled, sd_obs, k)
+    )
 
     raw_total = sum(reports_daily)
     expected_reports := safe_rate(raw_total)
@@ -671,11 +703,13 @@ sitrep.
 
     bg_total = sum(bg_daily)
 
-    return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf,
+    return (;
+        p_drc, λ_bg = λ_bg_base, τ_test, report_pmf,
         report_mean = report_state.mean, report_sd = report_state.sd,
         bvd_reports_daily,
         reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
-        bg_total)
+        bg_total,
+    )
 end
 
 """
@@ -694,7 +728,8 @@ keys are `<prefix>.positives[i]`.
 @model function confirmed_positives_model(
         positives::Union{Missing, AbstractVector{<:Integer}},
         analysed::AbstractVector{<:Integer}, p_pos::AbstractVector,
-        ρ::Real = 0.0)
+        ρ::Real = 0.0
+    )
     nv = length(analysed)
     if ismissing(positives)
         positives = Vector{Union{Missing, Int}}(missing, nv)
@@ -726,7 +761,8 @@ no-extrapolation probe.
 @model function late_confirmed_model(
         increments::Union{Missing, AbstractVector},
         modelled::AbstractVector, analysed::AbstractVector{<:Integer},
-        p_pos::AbstractVector, k::Real, ρ::Real = 0.0)
+        p_pos::AbstractVector, k::Real, ρ::Real = 0.0
+    )
     n = length(modelled)
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
@@ -803,16 +839,20 @@ caller reading the sentinel as a grid day would index on `0`.
 
 Pure integer bookkeeping on the observed data, so it carries no gradient.
 """
-function confirmed_positivity_windows(confirmed_history, lab_history,
+function confirmed_positivity_windows(
+        confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]),
-        confirmed_break_days = Int[])
+        confirmed_break_days = Int[]
+    )
     ## Both starts are the sentinel `0` rather than a grid day. With no
     ## confirmed vintage there is no first one to pin to, and the bin this
     ## edge produces downstream is dropped before it reaches the likelihood.
-    empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
+    empty = (;
+        obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
-        late_start = 0)
+        late_start = 0,
+    )
     isempty(confirmed_history.counts) && return empty
     cdays = confirmed_history.days
     ccounts = confirmed_history.counts
@@ -833,12 +873,16 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     ## binned from `early_start`.
     if isempty(lab_history.counts)
         ed = Int[Int(d) for d in cdays[2:end]]
-        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1])
-                  for i in 2:length(ccounts)]
-        return (; obs_days = Int[], obs_positives = Int[],
+        inc = Int[
+            Int(ccounts[i]) - Int(ccounts[i - 1])
+                for i in 2:length(ccounts)
+        ]
+        return (;
+            obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = ed, early_increments = inc,
             early_start, late_days = Int[], late_increments = Int[],
-            late_analysed = Int[], late_start = 0)
+            late_analysed = Int[], late_start = 0,
+        )
     end
 
     first_lab_day = Int(lab_history.days[1])
@@ -886,8 +930,10 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         push!(obs_positives, clamp(c_acc, 0, a_acc))
         push!(obs_analysed, a_acc)
     elseif c_acc > 0 && !isempty(obs_analysed)
-        obs_positives[end] = clamp(obs_positives[end] + c_acc, 0,
-            obs_analysed[end])
+        obs_positives[end] = clamp(
+            obs_positives[end] + c_acc, 0,
+            obs_analysed[end]
+        )
     end
 
     ## Late windows: confirmed vintages strictly after the last laboratory
@@ -933,9 +979,11 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         pos === nothing || (late_analysed[pos] = 0)
     end
 
-    return (; obs_days, obs_positives, obs_analysed, early_days,
+    return (;
+        obs_days, obs_positives, obs_analysed, early_days,
         early_increments, early_start, late_days, late_increments,
-        late_analysed, late_start = last_lab_day)
+        late_analysed, late_start = last_lab_day,
+    )
 end
 
 ## Per-window tested-positive probability `p_pos` under the `:composition`
@@ -944,8 +992,10 @@ end
 ## scoped capture inside the `@model` is boxed in a `Base.RefValue`, which
 ## Enzyme's reverse mode cannot differentiate through, and a `map(...) do i`
 ## leaves an anonymous-closure shadow Enzyme cannot construct.
-function composition_positivity(window_days, bvd_window, bg_window,
-        c_window, δ0, dscale, s_test, spec, lo, hi)
+function composition_positivity(
+        window_days, bvd_window, bg_window,
+        c_window, δ0, dscale, s_test, spec, lo, hi
+    )
     Tt = eltype(bvd_window)
     s_t = convert(Tt, s_test)
     sp_t = convert(Tt, spec)
@@ -1063,7 +1113,8 @@ quantities.
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
         ## Zero pins the step at the published discrepancy and samples no
         ## parameter.
-        confirmed_break_sd::Real = 25.0)
+        confirmed_break_sd::Real = 25.0
+    )
     n = length(onsets)
     ## `missing` cut-off scalar means generator mode: observed increments are
     ## left missing so `predict` resamples them.
@@ -1081,9 +1132,11 @@ quantities.
     ## early-confirmed bins. The suspected-case pipeline feeding the volume is
     ## not gated, since suspected cases did accumulate over the cryptic phase.
     cap_start = !isempty(confirmed_history.days) ?
-                clamp(Int(confirmed_history.days[1]), 1, n) :
-                (!isempty(lab_history.days) ?
-                 clamp(Int(lab_history.days[1]), 1, n) : 1)
+        clamp(Int(confirmed_history.days[1]), 1, n) :
+        (
+            !isempty(lab_history.days) ?
+            clamp(Int(lab_history.days[1]), 1, n) : 1
+        )
 
     ## Analysed-specimen volume: the suspected pipeline carried through the
     ## report-to-analysed delay and thinned by the tested fraction. `bg_daily`
@@ -1101,7 +1154,7 @@ quantities.
     ## length-`n` vector of ones would be a real broadcast multiply on every
     ## gradient call.
     analysed_daily_raw = κ_test === nothing ? τ_test .* carried :
-                         (κ_test * τ_test) .* carried
+        (κ_test * τ_test) .* carried
     ## In predict mode the daily series can infer as `Vector{Any}`, which
     ## trips `reduce_empty` / `zero(Any)` on the empty derived window vectors
     ## below, so it is concretised to the working scalar type.
@@ -1111,16 +1164,18 @@ quantities.
     ## Mooncake a dictionary lookup per use on every gradient.
     analysed_daily = gate_before(
         eltype(analysed_daily_raw) === Any ?
-        convert(Vector{typeof(τ_test)}, analysed_daily_raw) :
-        analysed_daily_raw,
-        cap_start)
+            convert(Vector{typeof(τ_test)}, analysed_daily_raw) :
+            analysed_daily_raw,
+        cap_start
+    )
     rvobs = vintage_obs(lab_history, tests_analysed, n)
     analysed_inc = bin_increments(analysed_daily, rvobs.days)
     ## Generator mode leaves the volume increments missing so `predict`
     ## resamples them, like the early/late windows below.
     vol_obs = have_data ? rvobs.obs_increments : missing
     analysed_increments ~ to_submodel(
-        vintage_increments_model(analysed_inc, vol_obs, k))
+        vintage_increments_model(analysed_inc, vol_obs, k)
+    )
 
     ## Post-cutoff 24h analysed volume. Once the national cumulative analysed
     ## series stops, INSP publishes a 24h analysed count on some days. Scoring
@@ -1128,15 +1183,18 @@ quantities.
     ## than only using it as a confirmed denominator.
     daily_days = [clamp(Int(d), 1, n) for d in lab_daily_history.days]
     daily_modelled = isempty(daily_days) ? similar(analysed_daily, 0) :
-                     [analysed_daily[d] for d in daily_days]
+        [analysed_daily[d] for d in daily_days]
     daily_obs = have_data ? lab_daily_history.counts : missing
     analysed_daily_increments ~ to_submodel(
-        vintage_increments_model(daily_modelled, daily_obs, k))
+        vintage_increments_model(daily_modelled, daily_obs, k)
+    )
 
     ## Confirmed positives in three groups sharing one partially-pooled
     ## positivity (see `confirmed_positivity_windows`).
-    windows = confirmed_positivity_windows(confirmed_history, lab_history,
-        lab_daily_history, confirmed_break_days)
+    windows = confirmed_positivity_windows(
+        confirmed_history, lab_history,
+        lab_daily_history, confirmed_break_days
+    )
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
     n_late = length(windows.late_days)
@@ -1144,8 +1202,10 @@ quantities.
 
     ## Per-window tested BVD share `p_pos`, under whichever link
     ## `positivity_link` selects (see the docstring).
-    window_days = vcat(windows.early_days, windows.obs_days,
-        windows.late_days)
+    window_days = vcat(
+        windows.early_days, windows.obs_days,
+        windows.late_days
+    )
     if positivity_link === :composition
         enrich_state ~ to_submodel(severity_enrichment, false)
         δ0 = enrich_state.δ0
@@ -1158,14 +1218,20 @@ quantities.
         ## report-to-analysed delay so it reflects the specimens actually
         ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
         ## so it is omitted here.
-        analysed_bvd_daily = convolve_delay(p_drc .* bvd_reports_daily,
-            receipt_state.pmf)
+        analysed_bvd_daily = convolve_delay(
+            p_drc .* bvd_reports_daily,
+            receipt_state.pmf
+        )
         analysed_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
         if eltype(analysed_bvd_daily) === Any
-            analysed_bvd_daily = convert(Vector{typeof(τ_test)},
-                analysed_bvd_daily)
-            analysed_bg_daily = convert(Vector{typeof(τ_test)},
-                analysed_bg_daily)
+            analysed_bvd_daily = convert(
+                Vector{typeof(τ_test)},
+                analysed_bvd_daily
+            )
+            analysed_bg_daily = convert(
+                Vector{typeof(τ_test)},
+                analysed_bg_daily
+            )
         end
         ## Gate the tested composition to the testing window too, so the
         ## composition clock and the per-window BVD share start at the testing
@@ -1178,13 +1244,15 @@ quantities.
         ## Testing clock: cumulative modelled analysed volume at each window.
         vol_window = bin_increments(analysed_daily, window_days)
         c_window = cumsum(vol_window)
-        lo = convert(Tt, 1e-8)
+        lo = convert(Tt, 1.0e-8)
         hi = one(Tt) - lo
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
         ## the clock ratio `0/0` and break the downstream Binomial.
         dscale = max(convert(Tt, decay_scale), one(Tt))
-        p_pos = composition_positivity(window_days, bvd_window, bg_window,
-            c_window, δ0, dscale, s_test, spec, lo, hi)
+        p_pos = composition_positivity(
+            window_days, bvd_window, bg_window,
+            c_window, δ0, dscale, s_test, spec, lo, hi
+        )
     else
         pos_state ~ to_submodel(positivity(nv))
         p_pos = pos_state.p_pos
@@ -1203,23 +1271,27 @@ quantities.
     ## `[start]`, so `bin_increments(...)[2:end]` is empty, the same value a
     ## `similar(analysed_daily, 0)` branch would give.
     early_edges = n_early > 0 ?
-                  vcat(windows.early_start, windows.early_days) :
-                  [windows.early_start]
+        vcat(windows.early_start, windows.early_days) :
+        [windows.early_start]
     early_volume = bin_increments(analysed_daily, early_edges)[2:end]
     early_mean = early_p .* early_volume
     early_obs = (have_data && n_early > 0 && fit_unanchored) ?
-                windows.early_increments : missing
+        windows.early_increments : missing
     early_increments ~ to_submodel(
-        vintage_increments_model(early_mean, early_obs, k))
+        vintage_increments_model(early_mean, early_obs, k)
+    )
 
     ## Observed windows: overdispersed BetaBinomial of the observed analysed
     ## denominator (`ρ_conf` the intra-window overdispersion).
     obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
     obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
-                    missing
+        missing
     confirmed_positives ~ to_submodel(
-        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p,
-        ρ_conf))
+        confirmed_positives_model(
+            obs_positives, windows.obs_analysed, obs_p,
+            ρ_conf
+        )
+    )
 
     ## Late windows: confirmed-only vintages after the last laboratory date,
     ## scored by `late_confirmed_model`. The modelled volume is binned over
@@ -1230,7 +1302,7 @@ quantities.
     late_p = p_pos[(n_early + n_obs + 1):nv]
     ## Unconditional single-allocation binding, as for `early_volume` above.
     late_edges = n_late > 0 ? vcat(windows.late_start, windows.late_days) :
-                 [windows.late_start]
+        [windows.late_start]
     late_volume = bin_increments(analysed_daily, late_edges)[2:end]
     ## Opt-in retrospective harmonisation step. A single level step is fitted
     ## into the break window's modelled mean, so the fit partitions the
@@ -1240,8 +1312,10 @@ quantities.
     ## landing on a late window can move the likelihood, so others are dropped
     ## rather than sampling an inert step. Empty gives Δ = 0.
     late_day_ints = Int.(windows.late_days)
-    conf_brk_days, conf_brk_centre = break_step_centres(late_day_ints,
-        windows.late_increments, confirmed_break_days, confirmed_break_gross)
+    conf_brk_days, conf_brk_centre = break_step_centres(
+        late_day_ints,
+        windows.late_increments, confirmed_break_days, confirmed_break_gross
+    )
     if isempty(conf_brk_days)
         cb = Float64[]
     elseif iszero(confirmed_break_sd)
@@ -1251,11 +1325,14 @@ quantities.
         cb = conf_brk_centre
     else
         confirmed_step ~ product_distribution(
-            fill(Normal(0, 1), length(conf_brk_days)))
+            fill(Normal(0, 1), length(conf_brk_days))
+        )
         cb = conf_brk_centre .+ confirmed_break_sd .* confirmed_step
     end
-    late_break_offset = confirmed_break_offset(windows.late_days,
-        conf_brk_days, cb)
+    late_break_offset = confirmed_break_offset(
+        windows.late_days,
+        conf_brk_days, cb
+    )
     late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support and are always
@@ -1278,8 +1355,11 @@ quantities.
         late_obs = missing
     end
     late_increments ~ to_submodel(
-        late_confirmed_model(late_obs, late_mean, windows.late_analysed,
-        late_p, k, ρ_conf))
+        late_confirmed_model(
+            late_obs, late_mean, windows.late_analysed,
+            late_p, k, ρ_conf
+        )
+    )
 
     ## Plain `=`, not `:=`: these are surfaced through the returned NamedTuple
     ## and re-tracked at the joint level (`joint.jl`), so `:=` here would be
@@ -1303,10 +1383,10 @@ quantities.
     late_den = ifelse.(amask, late_den_a, late_volume)
     late_expected = ifelse.(amask, late_p .* late_den_a, late_mean)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
-            sum(late_den; init = z)
+        sum(late_den; init = z)
     expected_positives = sum(early_mean; init = z) +
-                         sum(late_expected; init = z) +
-                         (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
+        sum(late_expected; init = z) +
+        (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
     expected_confirmed = safe_rate(expected_positives)
     p_positive = safe_rate(expected_positives) / safe_rate(denom)
 
@@ -1322,13 +1402,15 @@ quantities.
     p_pos_grid = expand_vintage_rate(p_pos_daily, window_days, n)
     confirmed_daily = p_pos_grid .* analysed_daily
 
-    return (; τ_test, κ_test,
+    return (;
+        τ_test, κ_test,
         bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
         s_test, spec,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
-        expected_analysed, expected_confirmed, p_positive)
+        expected_analysed, expected_confirmed, p_positive,
+    )
 end
 
 """
@@ -1401,9 +1483,12 @@ rate and the daily at-risk prevalence for reuse by
         ## Export detection abroad uses the same line-list onset→admission
         ## delay (d_oa) as the suspect-case report: a case is detected at a
         ## point of entry when first formally seen, ~4 days after onset.
-        onset_to_detection = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
+        onset_to_detection = gamma_delay_model(
+            cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
-            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
+        )
+    )
     travel_state ~ to_submodel(traveller)
     daily_travellers = travel_state.daily_travellers
     q = daily_travellers / source_population
@@ -1432,13 +1517,15 @@ rate and the daily at-risk prevalence for reuse by
         ## Pre-detection survival weight Λ(d₁−1): the cumulative export
         ## intensity up to the day before the earliest detection.
         pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
-              zero(@inbounds export_prevalence[begin])
+            zero(@inbounds export_prevalence[begin])
         pre_detection_exports ~ Poisson(safe_rate(pre))
         ## The first increment is measured from `pre`, so the pre-detection
         ## term and the increments partition Λ(t_last).
         raw_inc = bin_increments(export_prevalence, days)
-        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
-                 for i in eachindex(raw_inc)]
+        μ_day = [
+            i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                for i in eachindex(raw_inc)
+        ]
         obs = ismissing(exported_cases) ? missing : counts
         export_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
         expected_exports_T := safe_rate(pre + sum(μ_day))
@@ -1450,9 +1537,11 @@ rate and the daily at-risk prevalence for reuse by
     ## model accrues over the travelled person-time `q · prevalence`, not the
     ## ascertained `export_prevalence = p_uganda · q · prevalence`.
     travelled_prevalence = q .* prevalence
-    return (; p_uganda, daily_travellers, q, prevalence,
+    return (;
+        p_uganda, daily_travellers, q, prevalence,
         export_prevalence, travelled_prevalence,
-        expected_exports = expected_exports_T)
+        expected_exports = expected_exports_T,
+    )
 end
 
 """
@@ -1490,7 +1579,8 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         travelled_prevalence::AbstractVector, CFR::Real,
         od_pmf::AbstractVector, incubation_pmf::AbstractVector;
         export_death_days::AbstractVector{<:Integer} = Int[],
-        pre_death_exports::Union{Missing, Integer} = 0)
+        pre_death_exports::Union{Missing, Integer} = 0
+    )
     n = length(travelled_prevalence)
     ## Infection→death PMF by age (age 0 = same day).
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
@@ -1507,11 +1597,13 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         days, counts = dated_event_bins(export_death_days, n)
         δ₁ = days[1]
         pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
-              zero(@inbounds death_daily[begin])
+            zero(@inbounds death_daily[begin])
         pre_death_exports ~ Poisson(safe_rate(pre))
         raw_inc = bin_increments(death_daily, days)
-        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
-                 for i in eachindex(raw_inc)]
+        μ_day = [
+            i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                for i in eachindex(raw_inc)
+        ]
         obs = ismissing(exports_deaths) ? missing : counts
         death_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
         expected_exports_deaths_T := safe_rate(pre + sum(μ_day))
@@ -1584,7 +1676,8 @@ positivity and the expected confirmed-death count.
         scaling = death_testing_scaling_model(),
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
-        specificity = test_specificity_model())
+        specificity = test_specificity_model()
+    )
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
     s_test = sens_state.s_test
@@ -1601,11 +1694,11 @@ positivity and the expected confirmed-death count.
     ## and a reassignment would box them.
     _widened = eltype(susp_death_raw) === Any
     susp_death = _widened ?
-                 convert(Vector{typeof(s_test)}, susp_death_raw) :
-                 susp_death_raw
+        convert(Vector{typeof(s_test)}, susp_death_raw) :
+        susp_death_raw
     bvd_death = _widened ?
-                convert(Vector{typeof(s_test)}, bvd_death_raw) :
-                bvd_death_raw
+        convert(Vector{typeof(s_test)}, bvd_death_raw) :
+        bvd_death_raw
 
     ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
     ## tested-positive probability p = s_test·q + (1 − spec)(1 − q).
@@ -1617,8 +1710,8 @@ positivity and the expected confirmed-death count.
         clamp(isfinite(ratio) ? ratio : one(s_test), lo, hi)
     end
     p_pos_daily = s_test .* q_death_daily .+
-                  (one(s_test) - spec) .*
-                  (one(s_test) .- q_death_daily)
+        (one(s_test) - spec) .*
+        (one(s_test) .- q_death_daily)
 
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
@@ -1635,7 +1728,7 @@ positivity and the expected confirmed-death count.
             min(v, susp_death[t])
         end
         τ_death = susp_death[n] > lo ?
-                  death_volume[n] / susp_death[n] : zero(sc_c)
+            death_volume[n] / susp_death[n] : zero(sc_c)
         sc = sc_c
     else
         test_state ~ to_submodel(testing)
@@ -1651,8 +1744,10 @@ positivity and the expected confirmed-death count.
     ## Sampled whenever a break day lands on a vintage, so a posterior
     ## predictive carries the same dimensions as the fitted chain and
     ## replicates the break rather than leaving the vintage an outlier.
-    cd_brk_days, cd_brk_centre = break_step_centres(vobs.days,
-        vobs.obs_increments, confirmed_break_days, confirmed_break_gross)
+    cd_brk_days, cd_brk_centre = break_step_centres(
+        vobs.days,
+        vobs.obs_increments, confirmed_break_days, confirmed_break_gross
+    )
     if isempty(cd_brk_days)
         cdb = Float64[]
     elseif iszero(confirmed_break_sd)
@@ -1660,18 +1755,20 @@ positivity and the expected confirmed-death count.
         cdb = cd_brk_centre
     else
         cdeath_step ~ product_distribution(
-            fill(Normal(0, 1), length(cd_brk_days)))
+            fill(Normal(0, 1), length(cd_brk_days))
+        )
         cdb = cd_brk_centre .+ confirmed_break_sd .* cdeath_step
     end
     modelled_inc = modelled_inc .+
-                   confirmed_break_offset(vobs.days, cd_brk_days, cdb)
+        confirmed_break_offset(vobs.days, cd_brk_days, cdb)
     ## The cut-off scalar is the generator gate, as in `confirmed_cases_model`.
     ## Nulling it leaves `predict` to resample the increments while the dated
     ## history still supplies the vintage grid and the break-step centres, so
     ## the published discrepancy stays available to a predictive.
     cdeath_obs = ismissing(confirmed_deaths) ? missing : vobs.obs_increments
     cdeath_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, cdeath_obs, k))
+        vintage_increments_model(modelled_inc, cdeath_obs, k)
+    )
 
     expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
     ## Cut-off death-pool composition and confirmation positivity, surfaced as
@@ -1679,8 +1776,10 @@ positivity and the expected confirmed-death count.
     q_death := q_death_daily[n]
     p_death_conf := p_pos_daily[n]
 
-    return (; τ_death, scaling = sc, s_test, spec, q_death, p_death_conf,
-        confirmed_death_daily, expected_confirmed_deaths)
+    return (;
+        τ_death, scaling = sc, s_test, spec, q_death, p_death_conf,
+        confirmed_death_daily, expected_confirmed_deaths,
+    )
 end
 
 """
@@ -1724,8 +1823,10 @@ carries no abscond hazard.
 A `conf_hazard` of zero recovers [`abscond_thinned`](@ref) convolved with `adm`,
 and `κ = 0` recovers the plain [`convolve_delay`](@ref).
 """
-function abscond_thinned_flow(adm::AbstractVector, pmf::AbstractVector,
-        κ::Real, conf_hazard::AbstractVector)
+function abscond_thinned_flow(
+        adm::AbstractVector, pmf::AbstractVector,
+        κ::Real, conf_hazard::AbstractVector
+    )
     return first(abscond_thinned_flows(adm, pmf, adm, pmf, κ, conf_hazard))
 end
 
@@ -1737,12 +1838,16 @@ a confirmation hazard, walked in one pass. The cohort survival `S(t, d)`
 depends on neither the admissions nor the stay schedule, so the two flows
 run off one recurrence. Returns `(out1, out2)`.
 """
-function abscond_thinned_flows(adm1::AbstractVector, pmf1::AbstractVector,
+function abscond_thinned_flows(
+        adm1::AbstractVector, pmf1::AbstractVector,
         adm2::AbstractVector, pmf2::AbstractVector,
-        κ::Real, conf_hazard::AbstractVector)
+        κ::Real, conf_hazard::AbstractVector
+    )
     n = length(adm1)
-    T = promote_type(eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
-        typeof(κ), eltype(conf_hazard))
+    T = promote_type(
+        eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
+        typeof(κ), eltype(conf_hazard)
+    )
     out1 = zeros(T, n)
     out2 = zeros(T, n)
     one_T = one(T)
@@ -1833,12 +1938,16 @@ not-yet-confirmed BVD occupancy plus the non-case rule-out occupancy, so
 is floored with `eps` so a zero suspect pool gives a zero split. Returns
 `(; demand, O_bvd, O_conf, O_susp, abscond)`, each a length-`n` vector.
 """
-function accumulate_occupancy(A_bvd::AbstractVector, A_bg::AbstractVector,
+function accumulate_occupancy(
+        A_bvd::AbstractVector, A_bg::AbstractVector,
         deaths::AbstractVector, recover::AbstractVector,
-        ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector)
+        ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
+    )
     n = length(A_bvd)
-    T = promote_type(eltype(A_bvd), eltype(A_bg), eltype(deaths),
-        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard))
+    T = promote_type(
+        eltype(A_bvd), eltype(A_bg), eltype(deaths),
+        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
+    )
     demand = Vector{T}(undef, n)
     O_bvd = Vector{T}(undef, n)
     O_conf = Vector{T}(undef, n)
@@ -1902,8 +2011,10 @@ discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)` of
 by construction. The two PMFs need not share a length. Each contributes zero
 beyond its support, so the result takes the longer length.
 """
-function clinical_stay_survival(death_pmf::AbstractVector,
-        recover_pmf::AbstractVector, cfr::Real)
+function clinical_stay_survival(
+        death_pmf::AbstractVector,
+        recover_pmf::AbstractVector, cfr::Real
+    )
     L = max(length(death_pmf), length(recover_pmf))
     T = promote_type(eltype(death_pmf), eltype(recover_pmf), typeof(cfr))
     S = Vector{T}(undef, L)
@@ -1912,7 +2023,7 @@ function clinical_stay_survival(death_pmf::AbstractVector,
     @inbounds for d in 1:L
         pd = d <= length(death_pmf) ? death_pmf[d] : zero(eltype(death_pmf))
         pr = d <= length(recover_pmf) ? recover_pmf[d] :
-             zero(eltype(recover_pmf))
+            zero(eltype(recover_pmf))
         cum += cfr * pd + (one_T - cfr) * pr
         S[d] = one_T - cum
     end
@@ -1952,8 +2063,10 @@ before its test returns is never counted as confirmed. Returns the
 length-`n` confirmed-in-care sub-stock. The caller forms the suspect
 sub-stock as the demand remainder `D − O_conf`.
 """
-function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
-        S_clin::AbstractVector)
+function two_clock_confirmed(
+        A_bvd::AbstractVector, conf_hazard::AbstractVector,
+        S_clin::AbstractVector
+    )
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
     O_conf = Vector{T}(undef, n)
@@ -1991,8 +2104,10 @@ no-op bound. The bound is kept strictly above each day's observed admissions
 scored as a plain count rather than on the censoring boundary. Returns a
 length-`length(adm_days)` `Float64` vector.
 """
-function admission_headroom(adm_days, adm_obs, capacity_history,
-        isolation_history)
+function admission_headroom(
+        adm_days, adm_obs, capacity_history,
+        isolation_history
+    )
     cdays = Int.(capacity_history.days)
     ccounts = Float64.(capacity_history.counts)
     idays = Int.(isolation_history.days)
@@ -2008,7 +2123,7 @@ function admission_headroom(adm_days, adm_obs, capacity_history,
         ## Previous day's observed occupancy, the most recent record strictly
         ## before this admission day. No prior record ⇒ a large no-op headroom.
         prev_occ = have_occ ?
-                   last_recorded_before(idays, icounts, di, -nocap) : -nocap
+            last_recorded_before(idays, icounts, di, -nocap) : -nocap
         h = cap - prev_occ
         o = adm_obs === missing ? 0.0 : Float64(adm_obs[i])
         head[i] = max(h, o + 0.5)
@@ -2124,7 +2239,8 @@ series for forecasting and replication.
         admission_delay = censored_delay_model(
             cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
             mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
-            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)),
+            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
+        ),
         ## Outcome-mixture BVD bed stay: admission→death (the admission→death
         ## atomic delay the onset→death convolution also uses, mean ≈ 8.4 d) and
         ## the longer admission→recovery stay (mean ≈ 14 d). Built to a common
@@ -2132,23 +2248,27 @@ series for forecasting and replication.
         death_los = gamma_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
             alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+        ),
         recovery_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+        ),
         ## Non-BVD rule-out stay (report→receipt turnaround plus sign-off).
         ruleout_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
             mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)),
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
+        ),
         ## Opt-in occupancy reclassification-break days (grid indices). A level
         ## step is fitted into the modelled total at each, absorbing a
         ## measurement-basis discontinuity in the isolation series. See
         ## `cumulative_occupancy_offset`.
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         ## Prior sd of each occupancy break step (beds), centred on zero.
-        occupancy_break_sd::Real = 25.0)
+        occupancy_break_sd::Real = 25.0
+    )
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
     sev_state ~ to_submodel(severity)
@@ -2171,8 +2291,10 @@ series for forecasting and replication.
     CFR_iso = logistic(logit(CFR) + β_iso)
     ## Time-varying bed capacity `C(t)` (a random walk), started at the first
     ## day with occupancy or capacity data.
-    cap_obs_days = vcat(Int.(isolation_history.days),
-        Int.(capacity_history.days))
+    cap_obs_days = vcat(
+        Int.(isolation_history.days),
+        Int.(capacity_history.days)
+    )
     cap_start = isempty(cap_obs_days) ? 1 : minimum(cap_obs_days)
     cap_state ~ to_submodel(capacity(n; start = cap_start))
     C = cap_state.C
@@ -2193,13 +2315,14 @@ series for forecasting and replication.
     ## observed occupancy day can move the likelihood, so later ones are
     ## dropped rather than sampling an inert step.
     iso_last = isempty(isolation_history.days) ? 0 :
-               maximum(Int.(isolation_history.days))
+        maximum(Int.(isolation_history.days))
     brk_days = [Int(d) for d in occupancy_break_days if Int(d) <= iso_last]
     if isempty(brk_days)
         b = Float64[]
     else
         occupancy_step ~ product_distribution(
-            fill(Normal(0, 1), length(brk_days)))
+            fill(Normal(0, 1), length(brk_days))
+        )
         b = occupancy_break_sd .* occupancy_step
     end
     break_grid_days = brk_days
@@ -2208,8 +2331,10 @@ series for forecasting and replication.
     ## Admission inflow through the suspected→admission delay, split into BVD
     ## true-case (`p_iso_bvd`) and non-BVD (`p_iso`) inflows. Uncapped latent
     ## demand. Capacity enters only as a censoring bound below.
-    A_bvd = convolve_delay(p_iso_bvd .* p_drc .* bvd_reports_daily,
-        adm_delay_state.pmf)
+    A_bvd = convolve_delay(
+        p_iso_bvd .* p_drc .* bvd_reports_daily,
+        adm_delay_state.pmf
+    )
     A_bg = convolve_delay(p_iso .* bg_daily, adm_delay_state.pmf)
     if eltype(A_bvd) === Any
         A_bvd = convert(Vector{eltype(C)}, A_bvd)
@@ -2256,9 +2381,12 @@ series for forecasting and replication.
     deaths_daily, recover_daily = abscond_thinned_flows(
         CFR_iso .* A_bvd, death_los_state.pmf,
         (one(CFR_iso) - CFR_iso) .* A_bvd, recovery_los_state.pmf,
-        κ, conf_hazard)
-    ruleout_daily = convolve_delay(A_bg,
-        abscond_thinned(ruleout_los_state.pmf, κ))
+        κ, conf_hazard
+    )
+    ruleout_daily = convolve_delay(
+        A_bg,
+        abscond_thinned(ruleout_los_state.pmf, κ)
+    )
     ## Still-in-a-bed survival for the two-clock confirmed sub-stock below.
     ## `two_clock_confirmed` takes one schedule for every cohort, so it cannot
     ## carry the admission-day-dependent abscond survival the flows above use.
@@ -2271,8 +2399,10 @@ series for forecasting and replication.
     ## Forward running-balance occupancy: total demand and the BVD/non-case
     ## stocks. The scored abscond flow is recomputed below off the two-clock
     ## suspect stock.
-    acc = accumulate_occupancy(A_bvd, A_bg, deaths_daily, recover_daily,
-        ruleout_daily, κ, conf_hazard)
+    acc = accumulate_occupancy(
+        A_bvd, A_bg, deaths_daily, recover_daily,
+        ruleout_daily, κ, conf_hazard
+    )
     demand_raw = acc.demand
     O_bvd = acc.O_bvd
 
@@ -2285,15 +2415,21 @@ series for forecasting and replication.
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     ## `O_conf ≤ O_bvd` holds by construction; the clamp guards any prior
     ## draw.
-    O_conf_c = map((c, b) -> clamp(c, zero(eltype(demand_raw)), b),
-        O_conf_raw, O_bvd)
-    O_susp_raw = map((d, c) -> max(d - c, zero(eltype(demand_raw))),
-        demand_raw, O_conf_c)
+    O_conf_c = map(
+        (c, b) -> clamp(c, zero(eltype(demand_raw)), b),
+        O_conf_raw, O_bvd
+    )
+    O_susp_raw = map(
+        (d, c) -> max(d - c, zero(eltype(demand_raw))),
+        demand_raw, O_conf_c
+    )
     ## Abscond outflow off the two-clock suspect stock. Day 1 has no prior
     ## stock.
-    abscond_daily_raw = [t == 1 ? zero(eltype(demand_raw)) :
-                         κ * O_susp_raw[t - 1]
-                         for t in 1:n]
+    abscond_daily_raw = [
+        t == 1 ? zero(eltype(demand_raw)) :
+            κ * O_susp_raw[t - 1]
+            for t in 1:n
+    ]
     ## Assigned once each: the `map`s and the comprehension above capture
     ## them, so reassigning them in a branch would box them.
     _widened = eltype(demand_raw) === Any
@@ -2301,13 +2437,13 @@ series for forecasting and replication.
     O_conf = _widened ? convert(Vector{eltype(C)}, O_conf_c) : O_conf_c
     O_susp = _widened ? convert(Vector{eltype(C)}, O_susp_raw) : O_susp_raw
     abscond_daily = _widened ?
-                    convert(Vector{eltype(C)}, abscond_daily_raw) :
-                    abscond_daily_raw
+        convert(Vector{eltype(C)}, abscond_daily_raw) :
+        abscond_daily_raw
 
     ## Add the reclassification offset Δ(t) to the modelled total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
     occ_offset = eltype(occ_break_offset) === Any ?
-                 convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
+        convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
     ## Broadcasts, not `map(1:n) do t`: the `do`-block builds an anonymous
     ## closure whose reverse-mode shadow Enzyme cannot construct.
     occ_obs_total = demand .+ occ_offset
@@ -2321,72 +2457,96 @@ series for forecasting and replication.
     ## split are scored as the two sub-stocks below instead, so the total and
     ## its parts are never both scored on one day.
     split_days = split_active ? Set(Int.(confirmed_incare_history.days)) :
-                 Set{Int}()
+        Set{Int}()
     iso_all_days = isolation_history.days
     iso_keep = [!(Int(d) in split_days) for d in iso_all_days]
     iso_days = iso_all_days[iso_keep]
     iso_obs = isempty(isolation_history.counts) ? missing :
-              collect(Int.(isolation_history.counts))[iso_keep]
+        collect(Int.(isolation_history.counts))[iso_keep]
     iso_means = [occ_obs_total[clamp(Int(d), 1, n)] for d in iso_days]
     iso_ceil = censoring_cap(iso_days, iso_obs, capacity_history)
     isolation ~ to_submodel(
-        censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
+        censored_occupancy_model(iso_means, iso_ceil, iso_obs, k)
+    )
 
     ## Capacity likelihood: the implied bed count is a noisy observation of
     ## C(t).
     cap_days = capacity_history.days
     cap_modelled = [C[clamp(Int(d), 1, n)] for d in cap_days]
     cap_obs = isempty(capacity_history.counts) ? missing :
-              collect(Int.(capacity_history.counts))
+        collect(Int.(capacity_history.counts))
     bed_capacity ~ to_submodel(
-        vintage_increments_model(cap_modelled, cap_obs, k))
+        vintage_increments_model(cap_modelled, cap_obs, k)
+    )
 
     ## Split likelihoods, guarded by `split_active` so they no-op when the
     ## hazard is structurally zero.
     ci_days = split_active ? confirmed_incare_history.days : Int[]
     ci_obs = (!split_active || isempty(confirmed_incare_history.counts)) ?
-             missing : collect(Int.(confirmed_incare_history.counts))
-    confirmed_incare_obs ~ to_submodel(vintage_increments_model(
-        [conf_split[clamp(Int(d), 1, n)] for d in ci_days], ci_obs, k))
+        missing : collect(Int.(confirmed_incare_history.counts))
+    confirmed_incare_obs ~ to_submodel(
+        vintage_increments_model(
+            [conf_split[clamp(Int(d), 1, n)] for d in ci_days], ci_obs, k
+        )
+    )
     si_days = split_active ? suspect_incare_history.days : Int[]
     si_obs = (!split_active || isempty(suspect_incare_history.counts)) ?
-             missing : collect(Int.(suspect_incare_history.counts))
-    suspect_incare_obs ~ to_submodel(vintage_increments_model(
-        [max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
-         for d in si_days], si_obs, k))
+        missing : collect(Int.(suspect_incare_history.counts))
+    suspect_incare_obs ~ to_submodel(
+        vintage_increments_model(
+            [
+                max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
+                    for d in si_days
+            ], si_obs, k
+        )
+    )
     ## Confirmed-in-care deaths, attributed as the death flow times the
     ## confirmed share of the BVD stock. Exposed for the report, not
     ## separately scored.
     bvd_stock = acc.O_bvd
-    conf_share = [bvd_stock[t] > zero(eltype(demand)) ?
-                  O_conf[t] / bvd_stock[t] : zero(eltype(demand)) for t in 1:n]
+    conf_share = [
+        bvd_stock[t] > zero(eltype(demand)) ?
+            O_conf[t] / bvd_stock[t] : zero(eltype(demand)) for t in 1:n
+    ]
     confirmed_incare_deaths_daily = deaths_daily .* conf_share
 
     ## Optional daily Tableau 6 flow likelihoods, each a no-op on empty history.
     ## Admissions are right-censored at the recorded free-bed headroom.
     dth_days = deaths_history.days
     dth_obs = isempty(deaths_history.counts) ? missing :
-              collect(Int.(deaths_history.counts))
-    incare_deaths ~ to_submodel(vintage_increments_model(
-        [deaths_daily[clamp(Int(d), 1, n)] for d in dth_days], dth_obs, k))
+        collect(Int.(deaths_history.counts))
+    incare_deaths ~ to_submodel(
+        vintage_increments_model(
+            [deaths_daily[clamp(Int(d), 1, n)] for d in dth_days], dth_obs, k
+        )
+    )
     ro_days = ruleout_history.days
     ro_obs = isempty(ruleout_history.counts) ? missing :
-             collect(Int.(ruleout_history.counts))
-    ruleouts ~ to_submodel(vintage_increments_model(
-        [ruleout_daily[clamp(Int(d), 1, n)] for d in ro_days], ro_obs, k))
+        collect(Int.(ruleout_history.counts))
+    ruleouts ~ to_submodel(
+        vintage_increments_model(
+            [ruleout_daily[clamp(Int(d), 1, n)] for d in ro_days], ro_obs, k
+        )
+    )
     adm_h_days = admissions_history.days
     adm_h_obs = isempty(admissions_history.counts) ? missing :
-                collect(Int.(admissions_history.counts))
+        collect(Int.(admissions_history.counts))
     adm_means = [admit_daily[clamp(Int(d), 1, n)] for d in adm_h_days]
-    adm_ceil = admission_headroom(adm_h_days, adm_h_obs, capacity_history,
-        isolation_history)
+    adm_ceil = admission_headroom(
+        adm_h_days, adm_h_obs, capacity_history,
+        isolation_history
+    )
     admissions ~ to_submodel(
-        censored_occupancy_model(adm_means, adm_ceil, adm_h_obs, k))
+        censored_occupancy_model(adm_means, adm_ceil, adm_h_obs, k)
+    )
     ab_days = absconded_history.days
     ab_obs = isempty(absconded_history.counts) ? missing :
-             collect(Int.(absconded_history.counts))
-    absconded ~ to_submodel(vintage_increments_model(
-        [abscond_daily[clamp(Int(d), 1, n)] for d in ab_days], ab_obs, k))
+        collect(Int.(absconded_history.counts))
+    absconded ~ to_submodel(
+        vintage_increments_model(
+            [abscond_daily[clamp(Int(d), 1, n)] for d in ab_days], ab_obs, k
+        )
+    )
 
     ## Cut-off reported quantities. Occupancy is the censored stock, the
     ## demand capped at the bed count. Bed demand is the uncapped latent
@@ -2395,7 +2555,7 @@ series for forecasting and replication.
     dem_T = isempty(demand) ? z0 : demand[end]
     occ_T = min(dem_T, C_T)
     overall_los = CFR_iso * death_los_state.mean +
-                  (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
+        (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
     ## returned, so it is bound once and used twice. Computing it twice puts
     ## the work on the gradient path twice, and lets an edit to one copy
@@ -2408,8 +2568,10 @@ series for forecasting and replication.
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
     admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
-    incare_deaths_T = safe_rate(isempty(deaths_daily) ? z0 :
-                                deaths_daily[end])
+    incare_deaths_T = safe_rate(
+        isempty(deaths_daily) ? z0 :
+            deaths_daily[end]
+    )
     ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[end])
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
@@ -2439,7 +2601,8 @@ series for forecasting and replication.
     break_T = isempty(occ_break_offset) ? z0 : last(occ_break_offset)
     occupancy_break := break_T
 
-    return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
+    return (;
+        p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
         death_los_mean = death_los_state.mean,
         recovery_los_mean = recovery_los_state.mean,
@@ -2460,7 +2623,8 @@ series for forecasting and replication.
         expected_bed_demand = bed_demand_T,
         expected_admissions = admissions_T,
         expected_incare_deaths = incare_deaths_T,
-        expected_ruleouts = ruleouts_T)
+        expected_ruleouts = ruleouts_T,
+    )
 end
 
 """
@@ -2511,10 +2675,12 @@ the daily recovered series and the cut-off total.
         confirmation_to_recovery = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+        ),
         ## Dispersion can be injected from the joint composer's pooled set
         ## (`k_external`). Standalone it samples its own from `dispersion`.
-        k_external::Union{Nothing, Real} = nothing)
+        k_external::Union{Nothing, Real} = nothing
+    )
     rec_state ~ to_submodel(recovery(CFR))
     p_recover = rec_state.p_recover
     if k_external === nothing
@@ -2527,19 +2693,24 @@ the daily recovered series and the cut-off total.
 
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
     ## delay.
-    recovered_daily = p_recover .* convolve_delay(confirmed_daily,
-        delay_state.pmf)
+    recovered_daily = p_recover .* convolve_delay(
+        confirmed_daily,
+        delay_state.pmf
+    )
 
     n = length(confirmed_daily)
     vobs = vintage_obs(recovered_history, recovered_total, n)
     modelled_inc = bin_increments(recovered_daily, vobs.days)
     recovered_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k)
+    )
 
     expected_recovered := safe_rate(sum(recovered_daily))
 
-    return (; p_recover, recovery_delay_mean = delay_state.mean,
-        k_recovered = k, recovered_daily, expected_recovered)
+    return (;
+        p_recover, recovery_delay_mean = delay_state.mean,
+        k_recovered = k, recovered_daily, expected_recovered,
+    )
 end
 
 # Symptom-onset reporting-triangle observation model. The digitised
@@ -2592,9 +2763,11 @@ the left of `~` is treated as latent, silently dropping the likelihood.
 Same argument shape as [`vintage_increments_model`](@ref). A `missing`
 argument samples instead (the predictive-generator path).
 """
-@model function onset_increments_model(means::AbstractVector,
+@model function onset_increments_model(
+        means::AbstractVector,
         sds::AbstractVector,
-        increments::Union{Missing, AbstractVector{<:Real}}, ν::Real)
+        increments::Union{Missing, AbstractVector{<:Real}}, ν::Real
+    )
     n = length(means)
     if ismissing(increments)
         increments = Vector{Union{Missing, Float64}}(missing, n)
@@ -2632,8 +2805,10 @@ closures), so it composes AD-transparently into the vectorised moment and
 total functions below, avoiding the Enzyme boxing a `map(...) do` or a
 closure over `logit_h0`/`γ` inside an `@model` body hits.
 """
-function onset_report_cdf(δ::Integer, logit_h0::AbstractVector,
-        γ::AbstractVector, u::Integer, grid_start::Integer)
+function onset_report_cdf(
+        δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer
+    )
     T = promote_type(eltype(logit_h0), eltype(γ))
     δ < 0 && return zero(T)
     D = length(logit_h0)
@@ -2671,8 +2846,10 @@ degrades quietly rather than producing `NaN`.
 that would spread, an anchor of exactly zero. Pure, top-level,
 allocation-free.
 """
-function onset_report_G(δ::Integer, logit_h0::AbstractVector,
-        γ::AbstractVector, u::Integer, grid_start::Integer)
+function onset_report_G(
+        δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer
+    )
     T = promote_type(eltype(logit_h0), eltype(γ))
     D = length(logit_h0)
     ng = length(γ)
@@ -2700,8 +2877,10 @@ and `G` the normalised delay CDF ([`onset_report_G`](@ref)). `F(u, D-1) = α`
 exactly, so the hazard's delay shape and its ascertainment level are two
 separate factors rather than one asymptote. Pure, top-level, allocation-free.
 """
-function onset_report_F(δ::Integer, logit_h0::AbstractVector,
-        γ::AbstractVector, u::Integer, grid_start::Integer, α::Real)
+function onset_report_F(
+        δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer, α::Real
+    )
     return α * onset_report_G(δ, logit_h0, γ, u, grid_start)
 end
 
@@ -2727,13 +2906,15 @@ count it targets is latent, so put it through the stream's own bar
 measurement error before comparing it with a digitised reading. Pure,
 top-level, allocation-free.
 """
-function onset_nowcast(observed::Real, onsets_u::Real, δ::Integer,
+function onset_nowcast(
+        observed::Real, onsets_u::Real, δ::Integer,
         logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
         grid_start::Integer, α::Real;
-        until::Union{Nothing, Integer} = nothing)
+        until::Union{Nothing, Integer} = nothing
+    )
     reached = onset_report_F(δ, logit_h0, γ, u, grid_start, α)
     target = isnothing(until) ? α :
-             onset_report_F(until, logit_h0, γ, u, grid_start, α)
+        onset_report_F(until, logit_h0, γ, u, grid_start, α)
     return observed + onsets_u * max(target - reached, zero(reached))
 end
 
@@ -2754,9 +2935,11 @@ evaluated once per `(delay, onset date)` cell for the whole stream rather
 than once per use. Pure, top-level, single indexed loop (see
 [`onset_report_cdf`](@ref) for the AD-safety rationale).
 """
-function onset_report_cdf_table(logit_h0::AbstractVector,
+function onset_report_cdf_table(
+        logit_h0::AbstractVector,
         γ::AbstractVector, grid_start::Integer, u_lo::Integer,
-        u_hi::Integer)
+        u_hi::Integer
+    )
     D = length(logit_h0)
     ng = length(γ)
     T = promote_type(eltype(logit_h0), eltype(γ))
@@ -2791,9 +2974,11 @@ report-indexed series such as the confirmed pipeline's daily ascertainment
 (see [`onset_reporting_model`](@ref)). Pure and top-level, over a
 one-column [`onset_report_cdf_table`](@ref).
 """
-function onset_report_anchor(logit_h0::AbstractVector,
+function onset_report_anchor(
+        logit_h0::AbstractVector,
         γ::AbstractVector, u::Integer, grid_start::Integer,
-        a::AbstractVector)
+        a::AbstractVector
+    )
     table = onset_report_cdf_table(logit_h0, γ, grid_start, u, u)
     return onset_report_anchor_series(table, u, a)[1]
 end
@@ -2807,11 +2992,15 @@ grid_start:grid_end`, the onset-date grid the ascertainment walk spans (see
 ([`onset_report_cdf_table`](@ref)) built here. Returns an empty vector when
 `grid_end < grid_start`.
 """
-function onset_report_anchor_series(logit_h0::AbstractVector,
+function onset_report_anchor_series(
+        logit_h0::AbstractVector,
         γ::AbstractVector, grid_start::Integer, grid_end::Integer,
-        a::AbstractVector)
-    table = onset_report_cdf_table(logit_h0, γ, grid_start,
-        grid_start, grid_end)
+        a::AbstractVector
+    )
+    table = onset_report_cdf_table(
+        logit_h0, γ, grid_start,
+        grid_start, grid_end
+    )
     return onset_report_anchor_series(table, grid_start, a)
 end
 
@@ -2824,8 +3013,10 @@ end
 the table it shares with [`onset_report_moments`](@ref). Pure, top-level,
 one indexed loop over the table and no further hazard evaluation.
 """
-function onset_report_anchor_series(cdf_table::AbstractMatrix,
-        u_lo::Integer, a::AbstractVector)
+function onset_report_anchor_series(
+        cdf_table::AbstractMatrix,
+        u_lo::Integer, a::AbstractVector
+    )
     D = size(cdf_table, 1)
     nu = size(cdf_table, 2)
     T = promote_type(eltype(cdf_table), eltype(a))
@@ -2880,21 +3071,29 @@ enters through a delay-CDF table ([`onset_report_cdf_table`](@ref)) built
 here over `extrema(onset_idx)`. Pure and top-level (see
 [`onset_report_cdf`](@ref) for the AD-safety rationale).
 """
-function onset_report_moments(onsets::AbstractVector,
+function onset_report_moments(
+        onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
         grid_start::Integer, alpha::AbstractVector,
         onset_idx::AbstractVector{<:Integer},
         cur_report_idx::AbstractVector{<:Integer},
-        prev_report_idx::AbstractVector{<:Integer})
-    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
-        eltype(alpha))
+        prev_report_idx::AbstractVector{<:Integer}
+    )
+    T = promote_type(
+        eltype(onsets), eltype(logit_h0), eltype(γ),
+        eltype(alpha)
+    )
     isempty(onset_idx) &&
         return (; means = T[], level_cur = T[], level_prev = T[])
     u_lo, u_hi = extrema(onset_idx)
-    table = onset_report_cdf_table(logit_h0, γ, grid_start, u_lo,
-        u_hi)
-    return onset_report_moments(table, u_lo, onsets, grid_start, alpha,
-        onset_idx, cur_report_idx, prev_report_idx)
+    table = onset_report_cdf_table(
+        logit_h0, γ, grid_start, u_lo,
+        u_hi
+    )
+    return onset_report_moments(
+        table, u_lo, onsets, grid_start, alpha,
+        onset_idx, cur_report_idx, prev_report_idx
+    )
 end
 
 """
@@ -2911,12 +3110,14 @@ must span every `onset_idx`; the method above builds one over
 top-level, one indexed loop over the table and no further hazard
 evaluation.
 """
-function onset_report_moments(cdf_table::AbstractMatrix, u_lo::Integer,
+function onset_report_moments(
+        cdf_table::AbstractMatrix, u_lo::Integer,
         onsets::AbstractVector, grid_start::Integer,
         alpha::AbstractVector,
         onset_idx::AbstractVector{<:Integer},
         cur_report_idx::AbstractVector{<:Integer},
-        prev_report_idx::AbstractVector{<:Integer})
+        prev_report_idx::AbstractVector{<:Integer}
+    )
     m = length(onset_idx)
     D = size(cdf_table, 1)
     T = promote_type(eltype(onsets), eltype(cdf_table), eltype(alpha))
@@ -2936,9 +3137,9 @@ function onset_report_moments(cdf_table::AbstractMatrix, u_lo::Integer,
         ## off this onset date's column. A negative delay is the
         ## right-truncation case and contributes exactly zero.
         num_cur = (δ_cur < 0 || D == 0) ? zero(T) :
-                  cdf_table[min(Int(δ_cur), D - 1) + 1, k]
+            cdf_table[min(Int(δ_cur), D - 1) + 1, k]
         num_prev = (δ_prev < 0 || D == 0) ? zero(T) :
-                   cdf_table[min(Int(δ_prev), D - 1) + 1, k]
+            cdf_table[min(Int(δ_prev), D - 1) + 1, k]
         sden = safe_rate(D > 0 ? cdf_table[D, k] : zero(T))
         level_cur[i] = onset_rate * (α * (num_cur / sden))
         level_prev[i] = onset_rate * (α * (num_prev / sden))
@@ -2964,8 +3165,10 @@ Derived here rather than carried on the history, so any
 Integer work on the observation grid with no sampled quantity in it, so it
 costs one pass per model evaluation and contributes nothing to the gradient.
 """
-function onset_vintage_indices(report_idx::AbstractVector{<:Integer},
-        prev_report_idx::AbstractVector{<:Integer})
+function onset_vintage_indices(
+        report_idx::AbstractVector{<:Integer},
+        prev_report_idx::AbstractVector{<:Integer}
+    )
     days = sort(unique(report_idx))
     m = length(report_idx)
     vintage_idx = Vector{Int}(undef, m)
@@ -2975,7 +3178,7 @@ function onset_vintage_indices(report_idx::AbstractVector{<:Integer},
         p = prev_report_idx[i]
         j = p > 0 ? searchsortedfirst(days, p) : 0
         prev_vintage_idx[i] = (j >= 1 && j <= length(days) && days[j] == p) ?
-                              j : 0
+            j : 0
     end
     return (; vintage_idx, prev_vintage_idx, n_vintages = length(days))
 end
@@ -3006,13 +3209,17 @@ error. Returns the same `(; means, level_cur, level_prev)` shape
 [`onset_report_moments`](@ref) does, ready for
 [`onset_report_scales`](@ref). Pure, top-level, single indexed loop.
 """
-function onset_scan_adjust(level_cur::AbstractVector,
+function onset_scan_adjust(
+        level_cur::AbstractVector,
         level_prev::AbstractVector, scan_level::AbstractVector,
         vintage_idx::AbstractVector{<:Integer},
-        prev_vintage_idx::AbstractVector{<:Integer})
+        prev_vintage_idx::AbstractVector{<:Integer}
+    )
     m = length(level_cur)
-    T = promote_type(eltype(level_cur), eltype(level_prev),
-        eltype(scan_level))
+    T = promote_type(
+        eltype(level_cur), eltype(level_prev),
+        eltype(scan_level)
+    )
     means = Vector{T}(undef, m)
     lc = Vector{T}(undef, m)
     lp = Vector{T}(undef, m)
@@ -3092,19 +3299,25 @@ Student-t implies. It is in the report's symptom-onset reporting-delay
 section, along with the per-snapshot coverage test for the shared scan
 error, which shows up only once a snapshot's cells are summed.
 """
-function onset_report_scales(means::AbstractVector,
+function onset_report_scales(
+        means::AbstractVector,
         level_cur::AbstractVector,
         level_prev::AbstractVector,
         prev_report_idx::AbstractVector{<:Integer};
-        pixel_sd::Real = 2.1, scan_sd::Real = 0.0)
+        pixel_sd::Real = 2.1, scan_sd::Real = 0.0
+    )
     m = length(level_cur)
-    T = promote_type(eltype(means), eltype(level_cur), eltype(level_prev),
-        typeof(float(pixel_sd)), typeof(float(scan_sd)))
+    T = promote_type(
+        eltype(means), eltype(level_cur), eltype(level_prev),
+        typeof(float(pixel_sd)), typeof(float(scan_sd))
+    )
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
         r = prev_report_idx[i] > 0 ? 2 : 1
-        out[i] = onset_report_scale(means[i], level_cur[i], level_prev[i], r;
-            pixel_sd, scan_sd)
+        out[i] = onset_report_scale(
+            means[i], level_cur[i], level_prev[i], r;
+            pixel_sd, scan_sd
+        )
     end
     return out
 end
@@ -3122,13 +3335,19 @@ method calls this, so the two cannot drift apart. The forecast
 reporting increment the same observation scale the likelihood gives a
 scored cell. See [`onset_report_scales`](@ref) for what each term means.
 """
-function onset_report_scale(μ::Real, level_cur::Real, level_prev::Real,
-        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0)
-    T = promote_type(typeof(float(μ)), typeof(float(level_cur)),
+function onset_report_scale(
+        μ::Real, level_cur::Real, level_prev::Real,
+        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0
+    )
+    T = promote_type(
+        typeof(float(μ)), typeof(float(level_cur)),
         typeof(float(level_prev)), typeof(float(pixel_sd)),
-        typeof(float(scan_sd)))
-    return sqrt(max(μ, zero(T)) + pixel_sd^2 * reads +
-                scan_sd^2 * (level_cur^2 + level_prev^2))
+        typeof(float(scan_sd))
+    )
+    return sqrt(
+        max(μ, zero(T)) + pixel_sd^2 * reads +
+            scan_sd^2 * (level_cur^2 + level_prev^2)
+    )
 end
 
 """
@@ -3150,8 +3369,10 @@ to onset dates the digitised triangle never covers (days
 date is inside `[grid_start, grid_end]` by construction
 (`grid_start = minimum(onset_days)`). Pure, top-level, allocation-free.
 """
-function onset_report_cdf_extrapolated(δ::Integer, logit_h0::AbstractVector,
-        γ::AbstractVector, u::Integer, grid_start::Integer)
+function onset_report_cdf_extrapolated(
+        δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer
+    )
     T = promote_type(eltype(logit_h0), eltype(γ))
     δ < 0 && return zero(T)
     D = length(logit_h0)
@@ -3190,11 +3411,15 @@ Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
 in range. Pure, top-level, single indexed loop.
 """
-function onset_report_expected_total(onsets::AbstractVector,
+function onset_report_expected_total(
+        onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
-        grid_start::Integer, alpha::AbstractVector, as_of::Integer)
-    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
-        eltype(alpha))
+        grid_start::Integer, alpha::AbstractVector, as_of::Integer
+    )
+    T = promote_type(
+        eltype(onsets), eltype(logit_h0), eltype(γ),
+        eltype(alpha)
+    )
     total = zero(T)
     n = length(onsets)
     na = length(alpha)
@@ -3228,13 +3453,17 @@ and while the forward value stays finite the gradient is `NaN`, which would
 poison the whole log-density rather than this stream's part of it. Pure,
 top-level, elementwise broadcast.
 """
-function onset_report_ascertainment(anchor_series::AbstractVector,
-        β::Real, ω::AbstractVector)
+function onset_report_ascertainment(
+        anchor_series::AbstractVector,
+        β::Real, ω::AbstractVector
+    )
     T = promote_type(eltype(anchor_series), typeof(β), eltype(ω))
-    lo = convert(T, 1e-8)
+    lo = convert(T, 1.0e-8)
     hi = one(T) - lo
-    safe = clamp.(ifelse.(isfinite.(anchor_series), anchor_series, lo),
-        lo, hi)
+    safe = clamp.(
+        ifelse.(isfinite.(anchor_series), anchor_series, lo),
+        lo, hi
+    )
     return logistic.(logit.(safe) .+ β .+ ω)
 end
 
@@ -3294,13 +3523,15 @@ should report `R_t` over the final fortnight and `C_T` either side.
 Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
 `max(grid_end - grid_start + 1, 1)`, indexed from `grid_start`.
 """
-@model function onset_report_hazard_model(grid_start::Integer,
+@model function onset_report_hazard_model(
+        grid_start::Integer,
         grid_end::Integer;
         D::Integer = ONSET_REPORT_MAX_DELAY,
         baseline_prior = Normal(logit(0.13), 0.7),
         pooling_prior = truncated(Normal(0.0, 1.0); lower = 0),
         walk_sigma_prior = truncated(Normal(0.0, 0.3); lower = 0),
-        week::Integer = 7)
+        week::Integer = 7
+    )
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
     z_h0 ~ product_distribution(fill(Normal(0, 1), D))
@@ -3347,11 +3578,13 @@ calendar walk exactly.
 Returns `(; alpha, β, σ_a, z_a, ω)`, `alpha` and `ω` length `nt =
 max(grid_end - grid_start + 1, 1)`.
 """
-@model function onset_ascertainment_model(anchor_series::AbstractVector,
+@model function onset_ascertainment_model(
+        anchor_series::AbstractVector,
         grid_start::Integer, grid_end::Integer;
         beta_prior = Normal(0.0, 0.75),
         pooling_prior = truncated(Normal(0.0, 0.1); lower = 0),
-        week::Integer = 7)
+        week::Integer = 7
+    )
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
     days = knot_days(nt; week, start = 1)
     nb = length(days)
@@ -3500,10 +3733,13 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
         pixel_sd::Real = 2.1,
-        scan_sd_prior = truncated(Normal(0.0, 0.03);
-            lower = 0.0, upper = 0.08),
+        scan_sd_prior = truncated(
+            Normal(0.0, 0.03);
+            lower = 0.0, upper = 0.08
+        ),
         slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
-        ν::Real = 4.0)
+        ν::Real = 4.0
+    )
     onset_days = onset_curve_history.onset_days
     report_days = onset_curve_history.report_days
     prev_report_days = onset_curve_history.prev_report_days
@@ -3528,13 +3764,18 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## One delay-CDF table over the onset-date grid, read by both the
     ## anchor series and the per-cell moments, so the reporting hazard is
     ## evaluated once per (delay, onset date) cell for the whole stream.
-    cdf_table = onset_report_cdf_table(hazard_state.logit_h0,
+    cdf_table = onset_report_cdf_table(
+        hazard_state.logit_h0,
         hazard_state.γ, hazard_state.grid_start, grid_start,
-        grid_end)
-    anchor_series = onset_report_anchor_series(cdf_table, grid_start,
-        anchor)
+        grid_end
+    )
+    anchor_series = onset_report_anchor_series(
+        cdf_table, grid_start,
+        anchor
+    )
     asc_state ~ to_submodel(
-        ascertainment(anchor_series, grid_start, grid_end), false)
+        ascertainment(anchor_series, grid_start, grid_end), false
+    )
     alpha = asc_state.alpha
     σ_mult ~ slack_prior
 
@@ -3544,17 +3785,27 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## counting and pixel noise alone.
     vintages = onset_vintage_indices(report_days, prev_report_days)
     σ_scan ~ scan_sd_prior
-    z_scan ~ product_distribution(fill(Normal(0, 1),
-        max(vintages.n_vintages, 1)))
+    z_scan ~ product_distribution(
+        fill(
+            Normal(0, 1),
+            max(vintages.n_vintages, 1)
+        )
+    )
     scan_level = one(σ_scan) .+ σ_scan .* z_scan
 
-    moments = onset_report_moments(cdf_table, grid_start, onsets,
+    moments = onset_report_moments(
+        cdf_table, grid_start, onsets,
         hazard_state.grid_start, alpha, onset_days, report_days,
-        prev_report_days)
-    scanned = onset_scan_adjust(moments.level_cur, moments.level_prev,
-        scan_level, vintages.vintage_idx, vintages.prev_vintage_idx)
-    scales = onset_report_scales(scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd)
+        prev_report_days
+    )
+    scanned = onset_scan_adjust(
+        moments.level_cur, moments.level_prev,
+        scan_level, vintages.vintage_idx, vintages.prev_vintage_idx
+    )
+    scales = onset_report_scales(
+        scanned.means, scanned.level_cur,
+        scanned.level_prev, prev_report_days; pixel_sd
+    )
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
@@ -3562,16 +3813,21 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## silently (see `onset_increments_model`). Attached unprefixed so the
     ## cells keep the flat `increments[i]` names the predictive path indexes.
     increments_state ~ to_submodel(
-        onset_increments_model(scanned.means, σ_mult .* scales,
-            onset_curve_history.increments, ν), false)
+        onset_increments_model(
+            scanned.means, σ_mult .* scales,
+            onset_curve_history.increments, ν
+        ), false
+    )
     increments = increments_state.increments
 
-    return (; increments, modelled = scanned.means,
+    return (;
+        increments, modelled = scanned.means,
         unscanned = moments.means, scan_level,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
         grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
         σ_scan, η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
-        σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a)
+        σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
+    )
 end
 
 """
@@ -3581,10 +3837,14 @@ on the predictive path, where there is no observed total to condition on.
 """
 function _composition_totals(obs_increments, modelled_confirmed)
     nv = size(modelled_confirmed, 2)
-    ismissing(obs_increments) || return [sum(@view obs_increments[:, i])
-                                         for i in 1:nv]
-    return [round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
-            for i in 1:nv]
+    ismissing(obs_increments) || return [
+        sum(@view obs_increments[:, i])
+            for i in 1:nv
+    ]
+    return [
+        round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
+            for i in 1:nv
+    ]
 end
 
 """
@@ -3665,8 +3925,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         severity_sd_prior = nothing,
         ascertainment_offset_prior = Normal(0, 1),
         testing_covariate::AbstractVector{<:Real} = zeros(
-            size(modelled_confirmed, 1)),
-        testing_coefficient_prior = Normal(0, 0.5))
+            size(modelled_confirmed, 1)
+        ),
+        testing_coefficient_prior = Normal(0, 0.5)
+    )
     np, nv = size(modelled_confirmed)
     ρ ~ rho_prior
     ## Read through a local. The tilde assigns `ρ` on more than one path, so
@@ -3707,7 +3969,8 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     z_asc ~ product_distribution(fill(ascertainment_offset_prior, np))
     length(testing_covariate) == np || error(
         "province_composition_model: $(length(testing_covariate)) testing " *
-        "covariate entries for $(np) patches.")
+            "covariate entries for $(np) patches."
+    )
     β_asc = 0.0
     if any(!iszero, testing_covariate)
         β_asc ~ testing_coefficient_prior
@@ -3796,12 +4059,13 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             trials[i] = max(remaining[i], 0)
         end
         obs_increments[p, :] ~ product_distribution(
-            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv])
+            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv]
+        )
         ## Guard the running tail against round-off driving it to zero or
         ## negative on the last step.
         for i in 1:nv
             remaining[i] -= obs_increments[p, i]
-            tail[i] = max(tail[i] - shares[p, i], 1e-10)
+            tail[i] = max(tail[i] - shares[p, i], 1.0e-10)
         end
     end
     ## The last patch is the remainder, not a free draw. Filled in only on the
@@ -3812,8 +4076,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             obs_increments[np, i] = max(remaining[i], 0)
         end
     end
-    return (; shares, rho = ρ, obs_increments,
+    return (;
+        shares, rho = ρ, obs_increments,
         province_ascertainment = asc, ascertainment_sd = τ_asc,
         testing_coefficient = β_asc,
-        province_severity = sev, severity_sd = τ_sev)
+        province_severity = sev, severity_sd = τ_sev,
+    )
 end

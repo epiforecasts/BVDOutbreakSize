@@ -1,6 +1,6 @@
 @testitem "confirmed_cases_model exposes lab-pipeline positivity" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
-                           infection_model, onset_incidence_model
+        infection_model, onset_incidence_model
     using Turing: @model, to_submodel, returned
     using Turing.DynamicPPL: VarInfo
     using Random: MersenneTwister
@@ -19,8 +19,10 @@
     @model function _rep(onsets)
         st ~ to_submodel(
             reported_cases_model(
-                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
-            false)
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3
+            ),
+            false
+        )
         return st
     end
     rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
@@ -30,8 +32,10 @@
             confirmed_cases_model(
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
-                lab_history = (; days = [20, 40], counts = [5, 9])),
-            false)
+                lab_history = (; days = [20, 40], counts = [5, 9])
+            ),
+            false
+        )
         return st
     end
     m = _conf(onsets, rep_state)
@@ -44,8 +48,8 @@ end
 
 @testitem "confirmed_cases_model composition ties positivity to λ_bg" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
-                           infection_model, onset_incidence_model,
-                           severity_enrichment_model
+        infection_model, onset_incidence_model,
+        severity_enrichment_model
     using Turing: @model, to_submodel, returned
     using Random: MersenneTwister
 
@@ -60,8 +64,10 @@ end
     @model function _rep(onsets)
         st ~ to_submodel(
             reported_cases_model(
-                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
-            false)
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3
+            ),
+            false
+        )
         return st
     end
     rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
@@ -74,8 +80,10 @@ end
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
-                positivity_link = :composition),
-            false)
+                positivity_link = :composition
+            ),
+            false
+        )
         return st
     end
     m = _conf_comp(onsets, rep_state)
@@ -86,8 +94,10 @@ end
     @test all(0 .<= st.p_pos .<= 1)
 
     ## The severity-enrichment submodel constructs and stays positive.
-    sv = returned(severity_enrichment_model(),
-        rand(MersenneTwister(5), severity_enrichment_model()))
+    sv = returned(
+        severity_enrichment_model(),
+        rand(MersenneTwister(5), severity_enrichment_model())
+    )
     @test sv.δ0 >= 0
     @test sv.decay_scale >= 0
 end
@@ -98,21 +108,27 @@ end
     using Random: MersenneTwister
     using Statistics: mean
 
-    spec = returned(test_specificity_model(),
-        rand(MersenneTwister(7), test_specificity_model())).spec
+    spec = returned(
+        test_specificity_model(),
+        rand(MersenneTwister(7), test_specificity_model())
+    ).spec
     @test 0 < spec < 1
     ## Beta(60, 2) mean ≈ 0.97: a small false-positive rate, never zero.
-    draws = [returned(test_specificity_model(),
-                 rand(MersenneTwister(i), test_specificity_model())).spec
-             for i in 1:500]
+    draws = [
+        returned(
+            test_specificity_model(),
+            rand(MersenneTwister(i), test_specificity_model())
+        ).spec
+            for i in 1:500
+    ]
     @test 0.9 < mean(draws) < 1.0
     @test all(d -> 0 < d < 1, draws)
 end
 
 @testitem "composition positivity carries a false-positive floor" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
-                           infection_model, onset_incidence_model,
-                           test_specificity_model
+        infection_model, onset_incidence_model,
+        test_specificity_model
     using Turing: @model, to_submodel, returned
     using Distributions: Beta
     using Random: MersenneTwister
@@ -128,8 +144,10 @@ end
     @model function _rep(onsets)
         st ~ to_submodel(
             reported_cases_model(
-                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
-            false)
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3
+            ),
+            false
+        )
         return st
     end
     rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
@@ -145,8 +163,11 @@ end
                 lab_history = (; days = [20, 40], counts = [5, 9]),
                 positivity_link = :composition,
                 specificity = test_specificity_model(;
-                    specificity_prior = Beta(700.0, 300.0))),
-            false)
+                    specificity_prior = Beta(700.0, 300.0)
+                )
+            ),
+            false
+        )
         return st
     end
     m = _conf_fp(onsets, rep_state)

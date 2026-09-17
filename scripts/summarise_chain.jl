@@ -20,18 +20,22 @@ println("  divergences    : ", d.n_divergent)
 draws(sym) = vec(collect(chn[Symbol(sym)]))
 
 println("\n=== Headline posteriors (median [5%, 95%]) ===")
-for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda, :lambda_bg,
-    :bg_sigma, :death_ascertainment, :background_cfr, :lambda_bg_death,
-    :tau_death, :death_composition, :death_confirmation,
-    :background_total, :background_death_total,
-    :expected_reports_T, :expected_deaths_T, :expected_exports_T,
-    :expected_confirmed_T, :expected_confirmed_deaths_T)
+for sym in (
+        :C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda, :lambda_bg,
+        :bg_sigma, :death_ascertainment, :background_cfr, :lambda_bg_death,
+        :tau_death, :death_composition, :death_confirmation,
+        :background_total, :background_death_total,
+        :expected_reports_T, :expected_deaths_T, :expected_exports_T,
+        :expected_confirmed_T, :expected_confirmed_deaths_T,
+    )
     try
         v = draws(sym)
-        println("  ", rpad(string(sym), 22),
+        println(
+            "  ", rpad(string(sym), 22),
             rpad(round(median(v); digits = 3), 12),
             "[", round(quantile(v, 0.05); digits = 3), ", ",
-            round(quantile(v, 0.95); digits = 3), "]")
+            round(quantile(v, 0.95); digits = 3), "]"
+        )
     catch e
         println("  ", rpad(string(sym), 22), "(absent: ", e, ")")
     end

@@ -7,8 +7,8 @@
     for (m, s) in ((5.0, 2.0), (10.0, 3.0), (1.0, 0.5))
         d = lognormal_meansd(m, s)
         @test d isa LogNormal
-        @test isapprox(mean(d), m; rtol = 1e-8)
-        @test isapprox(std(d), s; rtol = 1e-8)
+        @test isapprox(mean(d), m; rtol = 1.0e-8)
+        @test isapprox(std(d), s; rtol = 1.0e-8)
     end
 end
 
@@ -20,7 +20,7 @@ end
     pmf = discretise_censored(d, 30)
     @test length(pmf) == 31
     @test all(pmf .>= 0)
-    @test isapprox(sum(pmf), 1.0; atol = 1e-10)
+    @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
 end
 
 @testitem "discretise_censored: cdf-difference matches the pdf-loop PMF" begin
@@ -35,18 +35,24 @@ end
     ## tolerance for the delays the model actually uses, so the optimisation
     ## cannot silently shift the discretisation.
     function pmf_pdf_loop(dist, nmax)
-        dic = double_interval_censored(dist; interval = 1.0,
-            upper = float(nmax))
+        dic = double_interval_censored(
+            dist; interval = 1.0,
+            upper = float(nmax)
+        )
         raw = [pdf(dic, float(d)) for d in 0:nmax]
         return raw ./ sum(raw)
     end
-    cases = ((lognormal_meansd(6.3, 3.5), 30),
+    cases = (
+        (lognormal_meansd(6.3, 3.5), 30),
         (lognormal_meansd(4.5, 4.0), 30),
         (Gamma(1.178, 3.694), 30),
-        (Gamma(3.33, 3.83), 60))
+        (Gamma(3.33, 3.83), 60),
+    )
     for (dist, nmax) in cases
-        @test isapprox(discretise_censored(dist, nmax),
-            pmf_pdf_loop(dist, nmax); rtol = 1e-10, atol = 1e-12)
+        @test isapprox(
+            discretise_censored(dist, nmax),
+            pmf_pdf_loop(dist, nmax); rtol = 1.0e-10, atol = 1.0e-12
+        )
     end
 end
 
@@ -60,7 +66,7 @@ end
     pmf = discretise_censored(d, 60)
     @test length(pmf) == 61
     @test all(pmf .>= 0)
-    @test isapprox(sum(pmf), 1.0; atol = 1e-10)
+    @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
 end
 
 @testitem "euler_lotka_r: round-trips R → r → R" begin
@@ -76,7 +82,7 @@ end
         r = euler_lotka_r(R, g; steps = 5)
         ## Verify Euler-Lotka identity: R · Σ g_s e^{-r s} = 1
         S = sum(g[s] * exp(-r * s) for s in eachindex(g))
-        @test isapprox(R * S, 1.0; rtol = 1e-5)
+        @test isapprox(R * S, 1.0; rtol = 1.0e-5)
     end
 end
 
@@ -90,12 +96,12 @@ end
     ## r_to_R0 is the forward Euler–Lotka map; it should invert euler_lotka_r.
     for R in (0.8, 1.0, 1.5, 2.0, 3.0)
         r = euler_lotka_r(R, g; steps = 8)
-        @test isapprox(r_to_R0(r, g), R; rtol = 1e-4)
+        @test isapprox(r_to_R0(r, g), R; rtol = 1.0e-4)
     end
     ## r > 0 implies R0 > 1, r < 0 implies R0 < 1, r = 0 implies R0 = 1.
     @test r_to_R0(0.05, g) > 1
     @test r_to_R0(-0.05, g) < 1
-    @test isapprox(r_to_R0(0.0, g), 1.0; rtol = 1e-10)
+    @test isapprox(r_to_R0(0.0, g), 1.0; rtol = 1.0e-10)
 end
 
 @testitem "euler_lotka_r: r > 0 when R > 1, r < 0 when R < 1" begin
@@ -108,16 +114,16 @@ end
     @test euler_lotka_r(0.8, g) < 0
     ## R = 1 → r ≈ 0
     r_one = euler_lotka_r(1.0, g; steps = 10)
-    @test abs(r_one) < 1e-4
+    @test abs(r_one) < 1.0e-4
 end
 
 @testitem "doubling_time: log(2)/r" begin
     using BVDOutbreakSize: doubling_time
 
     r = log(2) / 14.0
-    @test isapprox(doubling_time(r), 14.0; rtol = 1e-10)
+    @test isapprox(doubling_time(r), 14.0; rtol = 1.0e-10)
     r2 = log(2) / 7.0
-    @test isapprox(doubling_time(r2), 7.0; rtol = 1e-10)
+    @test isapprox(doubling_time(r2), 7.0; rtol = 1.0e-10)
 end
 
 @testitem "seed_infections: ends at I0, grows exponentially" begin
@@ -129,10 +135,10 @@ end
     s = seed_infections(I0, r, len)
 
     @test length(s) == len
-    @test isapprox(s[end], I0; rtol = 1e-10)
+    @test isapprox(s[end], I0; rtol = 1.0e-10)
     ## Check the exponential shape: s[j] = I0 * exp(r*(j - len))
     for j in 1:len
-        @test isapprox(s[j], I0 * exp(r * (j - len)); rtol = 1e-10)
+        @test isapprox(s[j], I0 * exp(r * (j - len)); rtol = 1.0e-10)
     end
 end
 
@@ -161,8 +167,8 @@ end
     ## The renewal-start magnitude is exactly 2^m, independent of r.
     @test seed0 == C_T_prior
     ## The cryptic curve ends at the renewal-start seed and grows at rate r.
-    @test isapprox(seed_vec[end], seed0; rtol = 1e-10)
-    @test isapprox(seed_vec[end - 1], seed0 * exp(-r); rtol = 1e-10)
+    @test isapprox(seed_vec[end], seed0; rtol = 1.0e-10)
+    @test isapprox(seed_vec[end - 1], seed0 * exp(-r); rtol = 1.0e-10)
 end
 
 @testitem "renewal_infections: hand-calculation on a tiny example" begin
@@ -185,7 +191,7 @@ end
 
 @testitem "renewal_infections: grows under R > 1" begin
     using BVDOutbreakSize: renewal_infections, lognormal_meansd,
-                           discretise_censored
+        discretise_censored
 
     gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
     g = gi_raw[2:end] ./ sum(gi_raw[2:end])
@@ -200,7 +206,7 @@ end
 
 @testitem "renewal_infections: declines under R < 1" begin
     using BVDOutbreakSize: renewal_infections, lognormal_meansd,
-                           discretise_censored
+        discretise_censored
 
     gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
     g = gi_raw[2:end] ./ sum(gi_raw[2:end])
@@ -240,10 +246,16 @@ end
     ## Independent reference: the causal convolution written as the plain
     ## double sum the vectorised lag-loop must reproduce, exercised across
     ## sizes including a delay kernel longer than the series.
-    ref(x,
-        delay) = [sum(x[t - d] * delay[d + 1]
-                  for d in 0:min(t - 1, length(delay) - 1))
-                  for t in 1:length(x)]
+    ref(
+        x,
+        delay
+    ) = [
+        sum(
+            x[t - d] * delay[d + 1]
+                for d in 0:min(t - 1, length(delay) - 1)
+        )
+            for t in 1:length(x)
+    ]
 
     rng = MersenneTwister(20260604)
     for (n, L) in ((1, 1), (5, 1), (10, 3), (7, 12), (40, 30), (93, 40))
@@ -321,7 +333,7 @@ end
     r = sigmoid_ramp(n, day; ramp = ramp_val)
     @test length(r) == n
     ## Logistic at the breakpoint should be ≈ 0.5
-    @test isapprox(r[day], logistic(0.0); atol = 1e-8)
+    @test isapprox(r[day], logistic(0.0); atol = 1.0e-8)
     ## Well before breakpoint should be close to 0
     @test r[1] < 0.1
     ## Well after breakpoint should be close to 1

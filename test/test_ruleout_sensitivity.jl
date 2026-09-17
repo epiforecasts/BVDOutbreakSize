@@ -2,8 +2,8 @@
 ## confirmation process (Beta(38, 2), mean 0.95) rather than one analytical
 ## assay draw (Beta(10, 1.76), mean 0.85).
 
-@testitem "headline prior is higher and tighter than single-assay" tags=[
-    :slow
+@testitem "headline prior is higher and tighter than single-assay" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
@@ -11,11 +11,15 @@
     using Distributions: Beta
     using BVDOutbreakSize: test_sensitivity_model
 
-    headline = sample(MersenneTwister(1), test_sensitivity_model(),
-        Prior(), 4_000; progress = false)
-    single = sample(MersenneTwister(1),
+    headline = sample(
+        MersenneTwister(1), test_sensitivity_model(),
+        Prior(), 4_000; progress = false
+    )
+    single = sample(
+        MersenneTwister(1),
         test_sensitivity_model(sensitivity_prior = Beta(10.0, 1.76)),
-        Prior(), 4_000; progress = false)
+        Prior(), 4_000; progress = false
+    )
     s_headline = vec(Array(headline[:s_test]))
     s_single = vec(Array(single[:s_test]))
     @test mean(s_headline) > mean(s_single)

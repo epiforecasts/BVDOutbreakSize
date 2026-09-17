@@ -59,18 +59,28 @@ function run_case(label, build, a, b, nmaxes)
         v_new = f_new(a, b)
         t_old = time_gradient(f_old, a, b)
         t_new = time_gradient(f_new, a, b)
-        @printf("  nmax=%-3d  pdf-loop %8.2f µs  cdf-diff %8.2f µs  (%.2fx)  Δval=%.1e\n",
-            nmax, t_old * 1e6, t_new * 1e6, t_old / t_new, abs(v_old - v_new))
+        @printf(
+            "  nmax=%-3d  pdf-loop %8.2f µs  cdf-diff %8.2f µs  (%.2fx)  Δval=%.1e\n",
+            nmax, t_old * 1.0e6, t_new * 1.0e6, t_old / t_new, abs(v_old - v_new)
+        )
     end
     println()
     return nothing
 end
 
-run_case("LogNormal(mean=6.3, sd=3.5) [incubation]:",
-    lognormal_meansd, 6.3, 3.5, (20, 30))
-run_case("LogNormal(mean=4.5, sd=4.0) [lab receipt / ruleout]:",
-    lognormal_meansd, 4.5, 4.0, (20, 30))
-run_case("Gamma(1.178, 3.694) [onset->report / detection]:",
-    Gamma, 1.178, 3.694, (20, 30))
-run_case("Gamma(3.33, 3.83) [onset->death atomic]:",
-    Gamma, 3.33, 3.83, (40, 60))
+run_case(
+    "LogNormal(mean=6.3, sd=3.5) [incubation]:",
+    lognormal_meansd, 6.3, 3.5, (20, 30)
+)
+run_case(
+    "LogNormal(mean=4.5, sd=4.0) [lab receipt / ruleout]:",
+    lognormal_meansd, 4.5, 4.0, (20, 30)
+)
+run_case(
+    "Gamma(1.178, 3.694) [onset->report / detection]:",
+    Gamma, 1.178, 3.694, (20, 30)
+)
+run_case(
+    "Gamma(3.33, 3.83) [onset->death atomic]:",
+    Gamma, 3.33, 3.83, (40, 60)
+)

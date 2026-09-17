@@ -37,10 +37,10 @@
                     for arg in relevant_args
                         arg_str = string(arg)
                         if arg ≠ Symbol("#unused#") &&
-                           !startswith(arg_str, "#") &&
-                           !startswith(arg_str, "var\"") &&
-                           arg ≠ Symbol("") &&
-                           !occursin("##", arg_str)
+                                !startswith(arg_str, "#") &&
+                                !startswith(arg_str, "var\"") &&
+                                arg ≠ Symbol("") &&
+                                !occursin("##", arg_str)
                             all_args = union(all_args, [arg])
                         end
                     end
@@ -113,37 +113,51 @@
 
         # Split into types and functions (only include actual functions,
         # not constants like ITURI_POPULATION)
-        all_types = [name
-                     for name in all_symbols if is_type_export(name, BVDOutbreakSize)]
-        all_functions = [name
-                         for name in all_symbols
-                         if is_function_export(name, BVDOutbreakSize)]
+        all_types = [
+            name
+                for name in all_symbols if is_type_export(name, BVDOutbreakSize)
+        ]
+        all_functions = [
+            name
+                for name in all_symbols
+                if is_function_export(name, BVDOutbreakSize)
+        ]
 
         # Also track which are exported vs public
-        exported_types = [name
-                          for name in exported_symbols
-                          if is_type_export(name, BVDOutbreakSize)]
-        exported_functions = [name
-                              for name in exported_symbols
-                              if is_function_export(name, BVDOutbreakSize)]
+        exported_types = [
+            name
+                for name in exported_symbols
+                if is_type_export(name, BVDOutbreakSize)
+        ]
+        exported_functions = [
+            name
+                for name in exported_symbols
+                if is_function_export(name, BVDOutbreakSize)
+        ]
 
-        public_types = [name
-                        for name in public_symbols
-                        if is_type_export(name, BVDOutbreakSize)]
-        public_functions = [name
-                            for name in public_symbols
-                            if is_function_export(name, BVDOutbreakSize)]
+        public_types = [
+            name
+                for name in public_symbols
+                if is_type_export(name, BVDOutbreakSize)
+        ]
+        public_functions = [
+            name
+                for name in public_symbols
+                if is_function_export(name, BVDOutbreakSize)
+        ]
 
-        return (all_types, all_functions, exported_types,
-            exported_functions, public_types, public_functions)
+        return (
+            all_types, all_functions, exported_types,
+            exported_functions, public_types, public_functions,
+        )
     end
 
     # Assign discovered symbols as variables for use in test items
     all_types, all_functions, exported_types, exported_functions,
-    public_types, public_functions = discover_all_symbols()
+        public_types, public_functions = discover_all_symbols()
 end
 
-@testitem "Type Documentation Format" setup=[DocstringHelpers] tags=[:quality] begin
+@testitem "Type Documentation Format" setup = [DocstringHelpers] tags = [:quality] begin
     @testset "Type Documentation" begin
         for type_name in all_types
             @testset "$type_name" begin
@@ -153,7 +167,7 @@ end
                     # Only test if docstring exists (let Aqua handle existence)
                     doc_str = get_docstring_content(type_obj)
                     if !occursin("No documentation found", doc_str) &&
-                       length(strip(doc_str)) > 10
+                            length(strip(doc_str)) > 10
 
                         # Skip test if no meaningful docstring
                         if length(strip(doc_str)) > length(string(type_name)) + 10
@@ -199,10 +213,10 @@ end
     end
 
     # Report discovered structure for debugging
-    @info "Discovered symbols" all_types=all_types exported_types=exported_types public_types=public_types
+    @info "Discovered symbols" all_types = all_types exported_types = exported_types public_types = public_types
 end
 
-@testitem "Function Documentation Format" setup=[DocstringHelpers] tags=[:quality] begin
+@testitem "Function Documentation Format" setup = [DocstringHelpers] tags = [:quality] begin
     @testset "Function Documentation" begin
         for func_name in all_functions
             @testset "$func_name" begin
@@ -212,11 +226,11 @@ end
                     # Only test if docstring exists (let Aqua handle existence)
                     doc_str = get_docstring_content(func_obj)
                     if !occursin("No documentation found", doc_str) &&
-                       length(strip(doc_str)) > 10
+                            length(strip(doc_str)) > 10
 
                         # Skip if docstring is just the object name or no documentation found
                         if !occursin("No documentation found", doc_str) &&
-                           length(strip(doc_str)) > length(string(func_name)) + 10
+                                length(strip(doc_str)) > length(string(func_name)) + 10
 
                             # Check each method's documentation individually
                             try
@@ -235,11 +249,11 @@ end
                                             for arg in relevant_args
                                                 arg_str = string(arg)
                                                 if arg ≠ Symbol("#unused#") &&
-                                                   !startswith(arg_str, "#") &&
-                                                   !startswith(arg_str, "var\"") &&
-                                                   arg ≠ Symbol("") &&
-                                                   !occursin("##", arg_str) &&
-                                                   length(arg_str) > 1
+                                                        !startswith(arg_str, "#") &&
+                                                        !startswith(arg_str, "var\"") &&
+                                                        arg ≠ Symbol("") &&
+                                                        !occursin("##", arg_str) &&
+                                                        length(arg_str) > 1
                                                     push!(method_args, arg)
                                                 end
                                             end
@@ -249,7 +263,8 @@ end
 
                                                 # Check that documented arguments are reasonable for this function
                                                 args_section_match = match(
-                                                    r"# Arguments(.*?)(?=# [A-Z]|@|\z)"s, doc_str)
+                                                    r"# Arguments(.*?)(?=# [A-Z]|@|\z)"s, doc_str
+                                                )
                                                 if args_section_match !== nothing
                                                     args_section = args_section_match.captures[1]
                                                     # At least some of this method's args should be documented
@@ -303,14 +318,14 @@ end
                             # BVDOutbreakSize uses a Literate walkthrough in place of
                             # per-function @example blocks; mark as a known gap.
                             if func_name in exported_functions ||
-                               func_name in public_functions
+                                    func_name in public_functions
                                 @test_broken occursin("@example", doc_str) ||
-                                             occursin("```@example", doc_str)
+                                    occursin("```@example", doc_str)
                             end
 
                             # Check for TYPEDSIGNATURES macro usage (from DocStringExtensions) or function signature
                             @test occursin("TYPEDSIGNATURES", doc_str) ||
-                                  occursin(string(func_name), doc_str)
+                                occursin(string(func_name), doc_str)
                         else
                             # Skip test if no meaningful docstring
                             @test true
@@ -328,17 +343,19 @@ end
     end
 
     # Report discovered structure for debugging
-    @info "Discovered functions" all_functions=all_functions exported_functions=exported_functions public_functions=public_functions
+    @info "Discovered functions" all_functions = all_functions exported_functions = exported_functions public_functions = public_functions
 end
 
-@testitem "Cross-Reference Validation" setup=[DocstringHelpers] tags=[:quality] begin
+@testitem "Cross-Reference Validation" setup = [DocstringHelpers] tags = [:quality] begin
     @testset "Cross-Reference Validation" begin
         # Check that See also sections reference valid functions/types.
         # Include all module names (exported and internal) so cross-refs
         # to constants and internal helpers aren't reported as missing.
-        all_names = union(all_types, all_functions,
+        all_names = union(
+            all_types, all_functions,
             names(BVDOutbreakSize),
-            names(BVDOutbreakSize; all = true))
+            names(BVDOutbreakSize; all = true)
+        )
 
         for name in all_names
             try
@@ -346,18 +363,18 @@ end
                 doc_str = get_docstring_content(obj)
 
                 if !occursin("No documentation found", doc_str) &&
-                   length(strip(doc_str)) > 10
+                        length(strip(doc_str)) > 10
 
                     # Skip if no meaningful docstring
                     if !occursin("No documentation found", doc_str) &&
-                       length(strip(doc_str)) > length(string(name)) + 10
+                            length(strip(doc_str)) > length(string(name)) + 10
                         # Extract references from See also sections
                         see_also_matches = eachmatch(r"`([^`]+)`\]\(@ref\)", doc_str)
                         for match in see_also_matches
                             referenced_name = Symbol(match.captures[1])
                             if referenced_name ∉ all_names &&
-                               referenced_name ∉
-                               [:pdf, :cdf, :logpdf, :logcdf, :rand, :quantile]
+                                    referenced_name ∉
+                                    [:pdf, :cdf, :logpdf, :logcdf, :rand, :quantile]
                                 @warn "Function/type $name references non-existent $referenced_name in See also section"
                             end
                         end

@@ -42,11 +42,14 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 ## the frozen fit was actually fitted to.
 _val_onset_days = frozen_lastweek.o.onset_curve_history.onset_days
 _val_grid_start = isempty(_val_onset_days) ? nothing :
-                  minimum(_val_onset_days)
+    minimum(_val_onset_days)
 _val_grid_end = isnothing(_val_grid_start) ? nothing :
-                max(maximum(frozen_lastweek.o.onset_curve_history.report_days),
-    _val_grid_start)
-validation_forecast = forecast_reported(frozen_lastweek.chn;
+    max(
+        maximum(frozen_lastweek.o.onset_curve_history.report_days),
+        _val_grid_start
+    )
+validation_forecast = forecast_reported(
+    frozen_lastweek.chn;
     horizon = 7,
     obs_cases = frozen_lastweek.o.reported_cases,
     obs_deaths = frozen_lastweek.o.total_deaths,
@@ -54,7 +57,8 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
     obs_recovered = frozen_lastweek.o.recovered_cases,
     grid_n = frozen_lastweek.o.n,
-    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end);
+    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end
+);
 
 ## Each frozen individual (single-stream) fit's own one-week-ahead new-count
 ## forecast at the same cut-off as `frozen_lastweek`, from
@@ -69,22 +73,34 @@ function _validation_individual_new(sid, stream::Symbol, obs_field)
     haskey(frozen_lastweek_streams, sid) || return nothing
     f = frozen_lastweek_streams[sid]
     bp = f.o.n - f.o.who_first_sitrep_days
-    return Float64.(forecast_stream(f.chn, stream; horizon = 7,
-        obs_value = getproperty(f.o, obs_field), n = f.o.n, breakpoint = bp,
-        rt_start = 1, rt_walk_start = 1))
+    return Float64.(
+        forecast_stream(
+            f.chn, stream; horizon = 7,
+            obs_value = getproperty(f.o, obs_field), n = f.o.n, breakpoint = bp,
+            rt_start = 1, rt_walk_start = 1
+        )
+    )
 end
 validation_individual = NamedTuple(
     k => v
-for (k, v) in pairs((;
-        cases_new = _validation_individual_new(
-            "cases", :reported_cases, :reported_cases),
-        deaths_new = _validation_individual_new(
-            "deaths", :suspected_deaths, :total_deaths),
-        confirmed_new = _validation_individual_new(
-            "confirmed", :confirmed_cases, :confirmed_cases),
-        confirmed_deaths_new = _validation_individual_new(
-            "confirmed_deaths", :confirmed_deaths, :confirmed_deaths)))
-if !isnothing(v))
+        for (k, v) in pairs(
+            (;
+                cases_new = _validation_individual_new(
+                    "cases", :reported_cases, :reported_cases
+                ),
+                deaths_new = _validation_individual_new(
+                    "deaths", :suspected_deaths, :total_deaths
+                ),
+                confirmed_new = _validation_individual_new(
+                    "confirmed", :confirmed_cases, :confirmed_cases
+                ),
+                confirmed_deaths_new = _validation_individual_new(
+                    "confirmed_deaths", :confirmed_deaths, :confirmed_deaths
+                ),
+            )
+        )
+        if !isnothing(v)
+)
 ## The frozen individual (treatment-only) fit's own bed-occupancy forecast,
 ## anchored on the beds occupied at ITS OWN cut-off (the frozen fit's own
 ## `o`, not the current `obs`), matching how the joint frozen forecast is
@@ -97,11 +113,15 @@ validation_individual_isolation = let
     if haskey(frozen_lastweek_streams, "treatment")
         tf = frozen_lastweek_streams["treatment"]
         beds = isempty(tf.o.isolation_history.counts) ? 0.0 :
-               Float64(tf.o.isolation_history.counts[end])
-        Float64.(forecast_stream(tf.chn, :isolation_beds; horizon = 7,
-            obs_value = beds, n = tf.o.n,
-            breakpoint = tf.o.n - tf.o.who_first_sitrep_days,
-            rt_start = 1, rt_walk_start = 1))
+            Float64(tf.o.isolation_history.counts[end])
+        Float64.(
+            forecast_stream(
+                tf.chn, :isolation_beds; horizon = 7,
+                obs_value = beds, n = tf.o.n,
+                breakpoint = tf.o.n - tf.o.who_first_sitrep_days,
+                rt_start = 1, rt_walk_start = 1
+            )
+        )
     else
         nothing
     end
@@ -112,7 +132,7 @@ end
 ## Held back once the beds stop being reported, since the last count would
 ## then be carried forward rather than observed at the target date.
 _obs_beds = stream_reporting(obs, :isolation_beds) ?
-            obs.isolation_history.counts[end] : missing
+    obs.isolation_history.counts[end] : missing
 ## Same observed/baseline keying as the plot below, so the table covers every
 ## fitted count stream (cumulative and new-count rows) plus the bed level.
 ## A harmonisation-break day between the frozen cut-off and the current one
@@ -123,9 +143,12 @@ _obs_beds = stream_reporting(obs, :isolation_beds) ?
 ## frozen fit's own `n` and the current `obs.n` index the same grid.
 validation_breaks = (
     confirmed_cum = confirmed_break_correction(
-        obs, frozen_lastweek.o.n, obs.n),
+        obs, frozen_lastweek.o.n, obs.n
+    ),
     confirmed_deaths_cum = confirmed_break_correction(
-        obs, frozen_lastweek.o.n, obs.n; deaths = true))
+        obs, frozen_lastweek.o.n, obs.n; deaths = true
+    ),
+)
 
 ## Observed cumulative at the target date per stream, keyed by the forecast's
 ## cumulative column; `baseline` is each stream's origin cumulative (the
@@ -136,22 +159,28 @@ validation_breaks = (
 ## reports have stopped updating has an origin and a target reading the same
 ## repeated total, so its cumulative truth is stale and its new-count truth is
 ## a guaranteed zero.
-validation_observed = (cases_cum = obs.reported_cases,
+validation_observed = (
+    cases_cum = obs.reported_cases,
     deaths_cum = obs.total_deaths,
     confirmed_cum = obs.confirmed_cases,
     confirmed_deaths_cum = obs.confirmed_deaths,
-    recovered_cum = obs.recovered_cases)
-validation_baseline = (cases_cum = frozen_lastweek.o.reported_cases,
+    recovered_cum = obs.recovered_cases,
+)
+validation_baseline = (
+    cases_cum = frozen_lastweek.o.reported_cases,
     deaths_cum = frozen_lastweek.o.total_deaths,
     confirmed_cum = frozen_lastweek.o.confirmed_cases,
     confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
-    recovered_cum = frozen_lastweek.o.recovered_cases)
+    recovered_cum = frozen_lastweek.o.recovered_cases,
+)
 
-validation_table = forecast_vs_truth(validation_forecast;
+validation_table = forecast_vs_truth(
+    validation_forecast;
     observed = keep_streams(validation_observed, reporting_cum_cols),
     baseline = keep_streams(validation_baseline, reporting_cum_cols),
     breaks = validation_breaks,
-    isolation = _obs_beds);
+    isolation = _obs_beds
+);
 
 #md # ```@raw html
 #md # </details>
@@ -183,11 +212,13 @@ MarkdownTable(validation_table) #hide
 #md # <details><summary>Forecast-versus-observed plot</summary>
 #md # ```
 
-validation_fig = plot_forecast_vs_truth(validation_forecast;
+validation_fig = plot_forecast_vs_truth(
+    validation_forecast;
     observed = keep_streams(validation_observed, reporting_cum_cols),
     baseline = keep_streams(validation_baseline, reporting_cum_cols),
     breaks = validation_breaks,
-    individual = keep_streams(validation_individual, reporting_cum_cols));
+    individual = keep_streams(validation_individual, reporting_cum_cols)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -201,8 +232,10 @@ validation_fig #hide
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
 #md # ```
 
-validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
-    isolation = _obs_beds, individual = validation_individual_isolation);
+validation_beds_fig = plot_forecast_beds_vs_truth(
+    validation_forecast;
+    isolation = _obs_beds, individual = validation_individual_isolation
+);
 
 #md # ```@raw html
 #md # </details>
@@ -226,10 +259,12 @@ end
 now_latent = (;
     infections_new = _now_new(chn_joint, :cumulative_infections),
     onsets_new = _now_new(chn_joint, :cumulative_onsets),
-    deaths_latent_new = _now_new(chn_joint, :cumulative_expected_deaths))
+    deaths_latent_new = _now_new(chn_joint, :cumulative_expected_deaths),
+)
 
 validation_latent_fig = plot_forecast_vs_truth_latent(
-    validation_forecast; now = now_latent);
+    validation_forecast; now = now_latent
+);
 
 #md # ```@raw html
 #md # </details>
@@ -253,19 +288,27 @@ validation_latent_fig #hide
 ## Read off the same increment matrices the compositions are scored on, so
 ## the clamped revision is treated identically on both sides.
 province_truth = let
-    cur_c = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES)
-    cur_d = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, N_PATCHES)
+    cur_c = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES
+    )
+    cur_d = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, N_PATCHES
+    )
     froz_c = province_increment_matrix(
         frozen_lastweek.o.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES)
+        PROVINCE_NAMES, N_PATCHES
+    )
     froz_d = province_increment_matrix(
-        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES)
-    (; observed = vec(sum(cur_c.increments; dims = 2)),
+        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES
+    )
+    (;
+        observed = vec(sum(cur_c.increments; dims = 2)),
         baseline = vec(sum(froz_c.increments; dims = 2)),
         death_observed = vec(sum(cur_d.increments; dims = 2)),
-        death_baseline = vec(sum(froz_d.increments; dims = 2)))
+        death_baseline = vec(sum(froz_d.increments; dims = 2)),
+    )
 end
 
 province_validation_table = province_forecast_vs_truth(
@@ -274,7 +317,8 @@ province_validation_table = province_forecast_vs_truth(
     baseline = province_truth.baseline,
     death_observed = province_truth.death_observed,
     death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES);
+    n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
@@ -297,17 +341,22 @@ MarkdownTable(province_validation_table) #hide
 ## projection without the fabricated truth rule the validation figure would
 ## otherwise draw against a repeated total.
 validation_stopped_streams = let s = stream_report_status(obs),
-    ids = [stream_id(c) for c in stopped_cum_cols]
+        ids = [stream_id(c) for c in stopped_cum_cols]
 
     keep = [r.stream in ids for r in eachrow(s)]
-    DataFrame("Stream" => s[keep, :label],
-        "Last reported" => s[keep, :last_date])
+    DataFrame(
+        "Stream" => s[keep, :label],
+        "Last reported" => s[keep, :last_date]
+    )
 end
-_stopped_new_cols = [c
-                     for c in new_cols(stopped_cum_cols)
-                     if c in propertynames(validation_forecast)]
+_stopped_new_cols = [
+    c
+        for c in new_cols(stopped_cum_cols)
+        if c in propertynames(validation_forecast)
+]
 validation_stopped_fig = plot_forecast(
-    validation_forecast[!, _stopped_new_cols]);
+    validation_forecast[!, _stopped_new_cols]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -354,19 +403,27 @@ function _release_data(name, schema::NamedTuple)
     return DataFrame([k => T[] for (k, T) in pairs(schema)])
 end
 
-forecast_scores_df = _release_data("forecast_scores.csv",
-    (; release = String, made_date = Date, stream = String, horizon = Int,
+forecast_scores_df = _release_data(
+    "forecast_scores.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, dispersion = Float64, overprediction = Float64,
         underprediction = Float64, coverage_50 = Float64,
         coverage_90 = Float64,
         bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64))
-forecast_overlay_df = _release_data("forecast_overlay.csv",
-    (; release = String, made_date = Date, stream = String, horizon = Int,
+        log_rel_to_baseline = Float64,
+    )
+)
+forecast_overlay_df = _release_data(
+    "forecast_overlay.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-        hi60 = Float64, lo90 = Float64, hi90 = Float64))
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
 ## One row per (stream, fit) pooled over every horizon and release. The
 ## by-horizon and by-release detail tables carry the same columns at a finer
 ## grain (see src/scoring.jl). Every fit is kept here, since the
@@ -378,9 +435,11 @@ forecast_score_by_horizon_table = forecast_score_by_horizon(forecast_scores_df)
 forecast_score_by_release_table = forecast_score_by_release(forecast_scores_df)
 
 joint_score_overview_table = select_fit_role(
-    forecast_score_overview_table, "joint")
+    forecast_score_overview_table, "joint"
+)
 joint_score_by_horizon_table = select_fit_role(
-    forecast_score_by_horizon_table, "joint")
+    forecast_score_by_horizon_table, "joint"
+)
 ## The trailing `;` on this last assignment matters: without it, this whole
 ## setup chunk's last statement (the DataFrame it assigns) is Literate's
 ## implicitly displayed "result" for the chunk, on top of the deliberate
@@ -388,7 +447,8 @@ joint_score_by_horizon_table = select_fit_role(
 ## goes out as a second, undisplayed-in-source `@raw html` block that (for
 ## a table this size) can itself hit the PCRE limit described above.
 joint_score_by_release_table = select_fit_role(
-    forecast_score_by_release_table, "joint");
+    forecast_score_by_release_table, "joint"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -402,7 +462,8 @@ MarkdownTable(joint_score_overview_table) #hide
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
 
 forecast_relative_skill_fig = plot_forecast_relative_skill(
-    forecast_score_by_horizon_table);
+    forecast_score_by_horizon_table
+);
 
 forecast_relative_skill_fig #hide
 
@@ -437,7 +498,8 @@ MarkdownTable(joint_score_by_release_table) #hide
 #md # ```
 
 forecast_overlay_fig = plot_forecast_overlay(
-    scored_overlay(forecast_overlay_df));
+    scored_overlay(forecast_overlay_df)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -453,14 +515,18 @@ forecast_overlay_fig #hide
 #md # <details><summary>Load and summarise the province forecast scores</summary>
 #md # ```
 
-province_scores_df = _release_data("province_forecast_scores.csv",
-    (; release = String, made_date = Date, stream = String, horizon = Int,
+province_scores_df = _release_data(
+    "province_forecast_scores.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, dispersion = Float64, overprediction = Float64,
         underprediction = Float64, coverage_50 = Float64,
         coverage_90 = Float64,
         bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64))
+        log_rel_to_baseline = Float64,
+    )
+)
 ## The joint patch model is the only model that forecasts the provinces, so
 ## there is no individual single-stream fit to compare against and `fit` is
 ## single-valued by construction. Both are dropped rather than rendered as
@@ -469,10 +535,13 @@ province_scores_df = _release_data("province_forecast_scores.csv",
 ## See the comment above `joint_score_by_release_table`'s assignment for why
 ## this setup chunk's last statement needs a trailing `;`.
 province_score_overview_display = drop_degenerate_fit_column(
-    drop_individual_fit_columns(forecast_score_overview(province_scores_df)))
+    drop_individual_fit_columns(forecast_score_overview(province_scores_df))
+)
 province_score_by_horizon_display = drop_degenerate_fit_column(
     drop_individual_fit_columns(
-    forecast_score_by_horizon(province_scores_df)));
+        forecast_score_by_horizon(province_scores_df)
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -501,28 +570,39 @@ MarkdownTable(province_score_by_horizon_display) #hide
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
 #md # ```
 
-frozen_scores_df = _release_data("forecast_scores_frozen.csv",
-    (; release = String, made_date = Date, stream = String, horizon = Int,
+frozen_scores_df = _release_data(
+    "forecast_scores_frozen.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, dispersion = Float64, overprediction = Float64,
         underprediction = Float64, coverage_50 = Float64,
         coverage_90 = Float64,
         bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64))
-frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
-    (; release = String, made_date = Date, stream = String, horizon = Int,
+        log_rel_to_baseline = Float64,
+    )
+)
+frozen_overlay_df = _release_data(
+    "forecast_overlay_frozen.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-        hi60 = Float64, lo90 = Float64, hi90 = Float64))
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
 ## The frozen evaluation never carries an individual single-stream fit
 ## (it scores only the joint model at past cut-offs), so the individual-fit
 ## comparison columns are dropped rather than shown as a column of missing.
 frozen_score_overview_table = drop_individual_fit_columns(
-    forecast_score_overview(frozen_scores_df))
+    forecast_score_overview(frozen_scores_df)
+)
 frozen_score_by_horizon_table = drop_individual_fit_columns(
-    forecast_score_by_horizon(frozen_scores_df))
+    forecast_score_by_horizon(frozen_scores_df)
+)
 frozen_score_by_release_table = drop_individual_fit_columns(
-    forecast_score_by_release(frozen_scores_df))
+    forecast_score_by_release(frozen_scores_df)
+)
 
 ## `fit` is single-valued (`FROZEN_FIT`) by construction in every one of
 ## these tables, not just for the releases scored so far, so it is dropped
@@ -530,13 +610,16 @@ frozen_score_by_release_table = drop_individual_fit_columns(
 ## frames above keep it and still feed the relative-skill plots, which read
 ## it to colour each series in the joint role.
 frozen_score_overview_display = drop_degenerate_fit_column(
-    frozen_score_overview_table)
+    frozen_score_overview_table
+)
 frozen_score_by_horizon_display = drop_degenerate_fit_column(
-    frozen_score_by_horizon_table)
+    frozen_score_by_horizon_table
+)
 ## See the comment above `joint_score_by_release_table`'s assignment for why
 ## this setup chunk's last statement needs a trailing `;`.
 frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table);
+    frozen_score_by_release_table
+);
 
 #md # ```@raw html
 #md # </details>
@@ -547,7 +630,8 @@ MarkdownTable(frozen_score_overview_display) #hide
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
 
 frozen_relative_skill_fig = plot_forecast_relative_skill(
-    frozen_score_by_horizon_table);
+    frozen_score_by_horizon_table
+);
 
 frozen_relative_skill_fig #hide
 
@@ -579,7 +663,8 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # ```
 
 frozen_overlay_fig = plot_forecast_overlay(
-    scored_overlay(frozen_overlay_df));
+    scored_overlay(frozen_overlay_df)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -612,13 +697,16 @@ frozen_overlay_fig #hide
 ## computed on the joint model's row, so on these rows it is missing by
 ## construction and the column is dropped rather than shown empty.
 individual_score_overview_table = drop_individual_fit_columns(
-    select_fit_role(forecast_score_overview_table, "individual"))
+    select_fit_role(forecast_score_overview_table, "individual")
+)
 individual_score_by_horizon_table = drop_individual_fit_columns(
-    select_fit_role(forecast_score_by_horizon_table, "individual"))
+    select_fit_role(forecast_score_by_horizon_table, "individual")
+)
 ## See the comment above `joint_score_by_release_table`'s assignment for why
 ## this setup chunk's last statement needs a trailing `;`.
 individual_score_by_release_table = drop_individual_fit_columns(
-    select_fit_role(forecast_score_by_release_table, "individual"));
+    select_fit_role(forecast_score_by_release_table, "individual")
+);
 
 #md # ```@raw html
 #md # </details>
@@ -631,8 +719,9 @@ MarkdownTable(individual_score_overview_table) #hide
 individual_relative_skill_fig = plot_forecast_relative_skill(
     individual_score_by_horizon_table;
     empty_message = "Empty: no release old enough for its targets to " *
-                    "have been observed carries an individual-stream " *
-                    "forecast. Not a missing forecast.");
+        "have been observed carries an individual-stream " *
+        "forecast. Not a missing forecast."
+);
 
 individual_relative_skill_fig #hide
 
@@ -671,7 +760,8 @@ streams_C_table = streams_table(
     "confirmed (DRC)" => posterior_C_confirmed,
     "isolation (DRC)" => posterior_C_treatment,
     "onsets (DRC)" => posterior_C_onsets,
-    "joint" => posterior_C_joint);
+    "joint" => posterior_C_joint
+);
 
 #md # ```@raw html
 #md # </details>
@@ -699,25 +789,43 @@ _last_day(days) = isempty(days) ? nothing : maximum(days)
 
 stream_traj_fig = plot_stream_trajectories(
     [
-        (; label = "exports", trajs = _cuminf(chn_exports),
-            last_day = _last_day(vcat(obs.export_case_days,
-                obs.export_death_days)), colour = :seagreen),
-        (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
+        (;
+            label = "exports", trajs = _cuminf(chn_exports),
+            last_day = _last_day(
+                vcat(
+                    obs.export_case_days,
+                    obs.export_death_days
+                )
+            ), colour = :seagreen,
+        ),
+        (;
+            label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
             last_day = _last_day(obs.deaths_history.days),
-            colour = :firebrick),
-        (; label = "cases (DRC)", trajs = _cuminf(chn_cases),
+            colour = :firebrick,
+        ),
+        (;
+            label = "cases (DRC)", trajs = _cuminf(chn_cases),
             last_day = _last_day(obs.reported_history.days),
-            colour = :steelblue),
-        (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
+            colour = :steelblue,
+        ),
+        (;
+            label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
             last_day = _last_day(obs.confirmed_history.days),
-            colour = :goldenrod),
-        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
+            colour = :goldenrod,
+        ),
+        (;
+            label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
             last_day = _last_day(obs.isolation_history.days),
-            colour = :darkorange),
-        (; label = "onsets (DRC)", trajs = _cuminf(chn_onsets),
+            colour = :darkorange,
+        ),
+        (;
+            label = "onsets (DRC)", trajs = _cuminf(chn_onsets),
             last_day = _last_day(obs.onset_curve_history.report_days),
-            colour = :mediumpurple)];
-    n = obs.n, seeding = obs.seeding);
+            colour = :mediumpurple,
+        ),
+    ];
+    n = obs.n, seeding = obs.seeding
+);
 
 #md # ```@raw html
 #md # </details>
@@ -745,7 +853,8 @@ cumulative_density_fig = plot_cumulative_cases(
     "isolation (DRC)" => posterior_C_treatment,
     "onsets (DRC)" => posterior_C_onsets,
     "joint" => posterior_C_joint;
-    scenarios = [], xmax = density_xmax);
+    scenarios = [], xmax = density_xmax
+);
 
 #md # ```@raw html
 #md # </details>
@@ -769,8 +878,12 @@ cumulative_density_fig #hide
 ## Released median and 30/60/90% intervals per release, from
 ## `data/released_estimates.csv`. Each tuple is
 ## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
-release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                         r.lo90, r.hi90) for r in eachrow(released_df)]
+release_evolution = [
+    (
+        string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+        r.lo90, r.hi90,
+    ) for r in eachrow(released_df)
+]
 
 ## The current model frozen at earlier cut-offs, each its own discrete
 ## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
@@ -786,13 +899,17 @@ release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 ## quantity such as R0.
 function _ci369(xs; round_fn = x -> round(Int, x))
     q(p) = round_fn(quantile(xs, p))
-    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
+    return (q(0.5), q(0.35), q(0.65), q(0.2), q(0.8), q(0.05), q(0.95))
 end
 frozen_by_cutoff[validation_cutoff] = frozen_lastweek
 ## The cut-offs every frozen fit above was made at, shared by the
 ## outbreak-size and R0 by-release overlays below.
-_frozen_matched_cutoffs = sort(union(frozen_cutoffs,
-    [validation_cutoff, default_chamla_cutoff()]))
+_frozen_matched_cutoffs = sort(
+    union(
+        frozen_cutoffs,
+        [validation_cutoff, default_chamla_cutoff()]
+    )
+)
 frozen_matched = [(c, _ci369(frozen_C(c))...) for c in _frozen_matched_cutoffs]
 
 ## The current-data, current-model estimate as the cumulative-infection
@@ -811,17 +928,21 @@ infection_trajectory = let
     days = max(start_day, 1):obs.n
     dates = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(Float64[t[d] for t in trajs], p)
-    (dates,
+    (
+        dates,
         [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+        [q(d, 0.2) for d in days], [q(d, 0.8) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days],
+    )
 end
 
-evolution_fig = plot_estimate_evolution(release_evolution;
+evolution_fig = plot_estimate_evolution(
+    release_evolution;
     renewal = frozen_matched,
     renewal_label = "Current model frozen at earlier cut-offs",
     trajectory = infection_trajectory,
-    title = "Outbreak-size estimate as data accrued");
+    title = "Outbreak-size estimate as data accrued"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -844,23 +965,39 @@ evolution_fig #hide
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
 stream_rt_fig = plot_rt_streams(
     [
-        (; label = "exports", chn = chn_exports, rt_start = 1,
-            rt_walk_start = 1, colour = :seagreen),
-        (; label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
-            rt_walk_start = 1, colour = :firebrick),
-        (; label = "cases (DRC)", chn = chn_cases, rt_start = 1,
-            rt_walk_start = 1, colour = :steelblue),
-        (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
-            rt_walk_start = 1, colour = :goldenrod),
-        (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
-            rt_walk_start = 1, colour = :darkorange),
-        (; label = "onsets (DRC)", chn = chn_onsets, rt_start = 1,
-            rt_walk_start = 1, colour = :mediumpurple)];
-    joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = _rt_walk_start_joint),
+        (;
+            label = "exports", chn = chn_exports, rt_start = 1,
+            rt_walk_start = 1, colour = :seagreen,
+        ),
+        (;
+            label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick,
+        ),
+        (;
+            label = "cases (DRC)", chn = chn_cases, rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue,
+        ),
+        (;
+            label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
+            rt_walk_start = 1, colour = :goldenrod,
+        ),
+        (;
+            label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
+            rt_walk_start = 1, colour = :darkorange,
+        ),
+        (;
+            label = "onsets (DRC)", chn = chn_onsets, rt_start = 1,
+            rt_walk_start = 1, colour = :mediumpurple,
+        ),
+    ];
+    joint = (;
+        label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint,
+    ),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP);
+    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP
+);
 
 #md # ```@raw html
 #md # </details>
@@ -879,9 +1016,14 @@ stream_rt_fig #hide
 #md # ```
 
 rt_release_df = CSV.read(
-    joinpath(pkgdir(BVDOutbreakSize), "data", "rt_by_release.csv"), DataFrame)
-rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                  r.lo90, r.hi90) for r in eachrow(rt_release_df)]
+    joinpath(pkgdir(BVDOutbreakSize), "data", "rt_by_release.csv"), DataFrame
+)
+rt_release = [
+    (
+        string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+        r.lo90, r.hi90,
+    ) for r in eachrow(rt_release_df)
+]
 
 ## The current fit's daily Rt over its established window, summarised per day
 ## into a 30/60/90% band, reusing the same walk reconstruction the Rt figure
@@ -894,28 +1036,35 @@ rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 ## clamped into the reconstructed range so the quantiles never hit masked days.
 rt_release_trajectory = let
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
-    mat = reconstruct_rt(chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
+    mat = reconstruct_rt(
+        chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
         rt_start = _rt_start_plot, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP)
+        ramp = RT_INTERVENTION_RAMP
+    )
     first_release_day = clamp(
         value(minimum(rt_release_df.date) - obs.seeding) + 1,
-        _rt_start_plot, obs.n)
+        _rt_start_plot, obs.n
+    )
     days = first_release_day:obs.n
     dates = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
-    (dates,
+    (
+        dates,
         [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+        [q(d, 0.2) for d in days], [q(d, 0.8) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days],
+    )
 end
 
-rt_evolution_fig = plot_estimate_evolution(rt_release;
+rt_evolution_fig = plot_estimate_evolution(
+    rt_release;
     trajectory = rt_release_trajectory,
     ylabel = "Reproduction number",
     title = "Reproduction number as data accrued",
     released_label = "Released estimate (per project release)",
     trajectory_label = "Current model, current data",
-    refline = 1.0);
+    refline = 1.0
+);
 
 #md # ```@raw html
 #md # </details>
@@ -938,47 +1087,63 @@ rt_evolution_fig #hide
 
 ## Schema of the per-release, per-fit estimate tables written by
 ## scripts/score_releases.jl from each release's stream_estimates.csv.
-_by_stream_schema = (; release = String, date = Date, fit = String,
+_by_stream_schema = (;
+    release = String, date = Date, fit = String,
     median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-    hi60 = Float64, lo90 = Float64, hi90 = Float64)
+    hi60 = Float64, lo90 = Float64, hi90 = Float64,
+)
 
 ## Fits in a fixed order, the joint first, so the panels do not reshuffle
 ## between builds. Labels match the per-stream table above (in "Outbreak
 ## size estimated by each data stream"). Recovered is absent because it
 ## has no individual fit.
-_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
-    "treatment", "onsets", "exports"]
-_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
+_fit_order = [
+    "joint", "cases", "deaths", "confirmed", "confirmed_deaths",
+    "treatment", "onsets", "exports",
+]
+_fit_labels = Dict(
+    "joint" => "joint", "cases" => "cases (DRC)",
     "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
     "confirmed_deaths" => "confirmed deaths (DRC)",
     "treatment" => "isolation (DRC)", "onsets" => "onsets (DRC)",
-    "exports" => "exports")
+    "exports" => "exports"
+)
 
 ## Group a per-fit estimate table into the label => tuples pairs the faceted
 ## plot takes, keyed on the date so the mixed release tag shapes
 ## (`results-v1.9.0` and `results-1243`) never reach the axis.
 function _fit_groups(df)
-    return [get(_fit_labels, f, f) =>
-                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
-            for f in _fit_order]
+    return [
+        get(_fit_labels, f, f) =>
+            [
+            (
+                string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                r.lo90, r.hi90,
+            ) for r in eachrow(df) if r.fit == f
+        ]
+            for f in _fit_order
+    ]
 end
 
 ## Per-fit reproduction-number trajectory, reconstructing the walk exactly as
 ## `plot_rt_streams` does per stream.
 function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
-    mat = reconstruct_rt(chn; n = obs.n, breakpoint = _BREAKPOINT,
+    mat = reconstruct_rt(
+        chn; n = obs.n, breakpoint = _BREAKPOINT,
         rt_start = rt_start, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP)
+        ramp = RT_INTERVENTION_RAMP
+    )
     first_date = isempty(dates) ? obs.seeding : minimum(dates)
     first_day = clamp(value(first_date - obs.seeding) + 1, rt_start, obs.n)
     days = first_day:obs.n
     ds = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
-    (ds,
+    return (
+        ds,
         [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+        [q(d, 0.2) for d in days], [q(d, 0.8) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days],
+    )
 end
 
 ## The single-stream chains and their renewal-walk starts, keyed on the fit
@@ -987,16 +1152,21 @@ end
 ## uses, so the bands here match it. Confirmed deaths has no trajectory
 ## here: its panel still draws its release points alone.
 _stream_chains = (
-    "joint" => (; chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = _rt_walk_start_joint),
+    "joint" => (;
+        chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint,
+    ),
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
-    "confirmed_deaths" => (; chn = chn_confirmed_deaths, rt_start = 1,
-        rt_walk_start = 1),
+    "confirmed_deaths" => (;
+        chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1,
+    ),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
     "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
-    "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
+    "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1),
+)
 
 ## Build a fit label => trajectory dictionary from a per-release table,
 ## restricted to the fits `_stream_chains` names. A fit with no row in `df`
@@ -1008,20 +1178,25 @@ function _rt_trajectories(df)
         isempty(fdates) && continue
         trajs[get(_fit_labels, fid, fid)] = _stream_rt_trajectory(
             cfg.chn, fdates; rt_start = cfg.rt_start,
-            rt_walk_start = cfg.rt_walk_start)
+            rt_walk_start = cfg.rt_walk_start
+        )
     end
     return trajs
 end
 
-rt_stream_df = _release_data("rt_by_release_by_stream.csv",
-    _by_stream_schema)
-rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
+rt_stream_df = _release_data(
+    "rt_by_release_by_stream.csv",
+    _by_stream_schema
+)
+rt_stream_fig = plot_evolution_by_group(
+    _fit_groups(rt_stream_df);
     trajectories = _rt_trajectories(rt_stream_df),
     ylabel = "Reproduction number",
     title = "Reproduction number as data accrued, by dataset",
     released_label = "Released estimate (per release)",
     refline = 1.0,
-    empty_note = "No per-dataset reproduction numbers saved yet.");
+    empty_note = "No per-dataset reproduction numbers saved yet."
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1044,20 +1219,28 @@ rt_stream_fig #hide
 ## fallback so a missing or header-only file (until a release carries
 ## `rt_state.log_R0` in its posterior draws) does not break the build. The
 ## schema mirrors rt_by_release.csv.
-_r0_schema = (; release = String, date = Date, median = Float64,
+_r0_schema = (;
+    release = String, date = Date, median = Float64,
     lo30 = Float64, hi30 = Float64, lo60 = Float64, hi60 = Float64,
-    lo90 = Float64, hi90 = Float64)
+    lo90 = Float64, hi90 = Float64,
+)
 r0_release_df = _release_data("r0_by_release.csv", _r0_schema)
-r0_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                  r.lo90, r.hi90) for r in eachrow(r0_release_df)]
+r0_release = [
+    (
+        string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+        r.lo90, r.hi90,
+    ) for r in eachrow(r0_release_df)
+]
 
 ## The current model frozen at earlier cut-offs, one discrete estimate per
 ## cut-off, reusing the same frozen fits `frozen_matched` above already
 ## computed. No extra fits are run. Each tuple carries the median and
 ## 30/60/90% credible bounds of that frozen fit's own R0 draws, unrounded
 ## since R0 is continuous.
-frozen_r0_matched = [(c, _ci369(frozen_R0(c); round_fn = identity)...)
-                     for c in _frozen_matched_cutoffs]
+frozen_r0_matched = [
+    (c, _ci369(frozen_R0(c); round_fn = identity)...)
+        for c in _frozen_matched_cutoffs
+]
 
 ## The current fit's R0 posterior is a single distribution rather than a
 ## daily series, so it summarises into a flat 30/60/90% reference band. The
@@ -1067,15 +1250,20 @@ frozen_r0_matched = [(c, _ci369(frozen_R0(c); round_fn = identity)...)
 r0_reference = let
     draws = r0_walk_draws(chn_joint)
     q(p) = quantile(draws, p)
-    first_date = min(minimum(Date.(_frozen_matched_cutoffs)),
+    first_date = min(
+        minimum(Date.(_frozen_matched_cutoffs)),
         isempty(r0_release_df.date) ? obs.cutoff :
-        minimum(r0_release_df.date))
+            minimum(r0_release_df.date)
+    )
     dates = [first_date, obs.cutoff]
-    (dates, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.20), 2),
-        fill(q(0.80), 2), fill(q(0.05), 2), fill(q(0.95), 2))
+    (
+        dates, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.2), 2),
+        fill(q(0.8), 2), fill(q(0.05), 2), fill(q(0.95), 2),
+    )
 end
 
-r0_evolution_fig = plot_estimate_evolution(r0_release;
+r0_evolution_fig = plot_estimate_evolution(
+    r0_release;
     renewal = frozen_r0_matched,
     renewal_label = "Current model frozen at earlier cut-offs",
     trajectory = r0_reference,
@@ -1083,7 +1271,8 @@ r0_evolution_fig = plot_estimate_evolution(r0_release;
     title = "Basic reproduction number as data accrued",
     released_label = "Released estimate (per project release)",
     trajectory_label = "Current model, current data",
-    refline = 1.0);
+    refline = 1.0
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1113,8 +1302,10 @@ function _r0_stream_trajectory(chn, dates)
     q(p) = quantile(draws, p)
     first_date = isempty(dates) ? obs.seeding : minimum(dates)
     ds = [first_date, obs.cutoff]
-    (ds, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.20), 2),
-        fill(q(0.80), 2), fill(q(0.05), 2), fill(q(0.95), 2))
+    return (
+        ds, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.2), 2),
+        fill(q(0.8), 2), fill(q(0.05), 2), fill(q(0.95), 2),
+    )
 end
 
 ## Build a fit label => trajectory dictionary from a per-release R0 table,
@@ -1133,15 +1324,19 @@ function _r0_trajectories(df)
     return trajs
 end
 
-r0_stream_df = _release_data("r0_by_release_by_stream.csv",
-    _by_stream_schema)
-r0_stream_fig = plot_evolution_by_group(_fit_groups(r0_stream_df);
+r0_stream_df = _release_data(
+    "r0_by_release_by_stream.csv",
+    _by_stream_schema
+)
+r0_stream_fig = plot_evolution_by_group(
+    _fit_groups(r0_stream_df);
     trajectories = _r0_trajectories(r0_stream_df),
     ylabel = "Basic reproduction number",
     title = "Basic reproduction number as data accrued, by dataset",
     released_label = "Released estimate (per release)",
     refline = 1.0,
-    empty_note = "No per-dataset basic reproduction numbers saved yet.");
+    empty_note = "No per-dataset basic reproduction numbers saved yet."
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1166,9 +1361,11 @@ r0_stream_fig #hide
 #md # ```
 
 function _ci90row(xs)
-    (round(Int, quantile(xs, 0.5)),
+    return (
+        round(Int, quantile(xs, 0.5)),
         round(Int, quantile(xs, 0.05)),
-        round(Int, quantile(xs, 0.95)))
+        round(Int, quantile(xs, 0.95)),
+    )
 end
 
 ## Our modelled cumulative symptom onsets on a McCabe report date, read off
@@ -1185,7 +1382,7 @@ end
 _grid_day(date) = obs.n - value(obs.cutoff - Date(date))
 function _ours_on(date)
     d = _grid_day(date)
-    _ci90row(Float64[t[d] for t in _onset_trajs])
+    return _ci90row(Float64[t[d] for t in _onset_trajs])
 end
 
 ## Our matched cumulative-onset estimate for each report date, keyed by date so
@@ -1193,17 +1390,22 @@ end
 mccabe_ours = Dict(
     "2026-05-18" => _ours_on("2026-05-18"),
     "2026-05-20" => _ours_on("2026-05-20"),
-    "2026-05-27" => _ours_on("2026-05-27"))
+    "2026-05-27" => _ours_on("2026-05-27")
+)
 
 ## One panel per report date; within a panel each method-and-family is one row,
 ## with the case-fatality / window / doubling-time sweep dodged onto that single
 ## line, so the ~40 scenarios keep their intervals without becoming ~40 rows.
-matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
+matched_comparison_fig = plot_scenario_comparison(
+    REPORT_SCENARIOS_CI;
     ours = mccabe_ours,
-    date_titles = ["2026-05-18" => "18 May report",
+    date_titles = [
+        "2026-05-18" => "18 May report",
         "2026-05-20" => "20 May update",
-        "2026-05-27" => "27 May (Lancet)"],
-    xlabel = "Cumulative cases");
+        "2026-05-27" => "27 May (Lancet)",
+    ],
+    xlabel = "Cumulative cases"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1226,7 +1428,8 @@ frozen_streams_table = streams_table(
     "frozen 23 May" => frozen_C("2026-05-23"),
     "frozen 27 May" => frozen_C("2026-05-27"),
     "frozen 8 June" => frozen_C(default_chamla_cutoff()),
-    "current data" => posterior_C_joint);
+    "current data" => posterior_C_joint
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1260,12 +1463,14 @@ chamla_anchor = frozen_by_cutoff["2026-06-08"]
 ## 8 June cut-off: a forward `forecast_reported` run (its reproduction number
 ## left to keep evolving), summarised as (median, 5%, 95%).
 function _our_confirmed_h(h)
-    fc = forecast_reported(chamla_anchor.chn;
+    fc = forecast_reported(
+        chamla_anchor.chn;
         horizon = h,
         obs_cases = chamla_anchor.o.reported_cases,
         obs_deaths = chamla_anchor.o.total_deaths,
         obs_confirmed = chamla_anchor.o.confirmed_cases,
-        obs_confirmed_deaths = chamla_anchor.o.confirmed_deaths)
+        obs_confirmed_deaths = chamla_anchor.o.confirmed_deaths
+    )
     return _ci90row(float.(fc.confirmed_cum))
 end
 
@@ -1275,14 +1480,16 @@ end
 chamla_fan = map(["2026-06-08", "2026-06-10", "2026-06-24"]) do d
     h = value(Date(d) - chamla_anchor.cutoff)
     row = h == 0 ?
-          (chamla_anchor.o.confirmed_cases, chamla_anchor.o.confirmed_cases,
-        chamla_anchor.o.confirmed_cases) : _our_confirmed_h(h)
+        (
+            chamla_anchor.o.confirmed_cases, chamla_anchor.o.confirmed_cases,
+            chamla_anchor.o.confirmed_cases,
+        ) : _our_confirmed_h(h)
     (d, row...)
 end
 _fan_at(date) =
-    let r = first(x for x in chamla_fan if x[1] == date)
-        (r[2], r[3], r[4])
-    end
+let r = first(x for x in chamla_fan if x[1] == date)
+    (r[2], r[3], r[4])
+end
 ours_10jun = _fan_at("2026-06-10")
 ours_24jun = _fan_at("2026-06-24")
 
@@ -1307,7 +1514,8 @@ chamla_projection_fig = plot_projection_comparison(;
     external_label = "Chamla et al. central (R₀=1.71)",
     ours_label = "Our projection (from 8 June)",
     observed_label = "Observed confirmed",
-    title = "Confirmed-case projections versus observed, from mid-May");
+    title = "Confirmed-case projections versus observed, from mid-May"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1324,17 +1532,28 @@ chamla_projection_fig #hide
 chamla_w12_rows = vcat(
     [(label, m, lo, hi) for (label, m, lo, hi) in CHAMLA_CONFIRMED_W12],
     [("Our projection (from 8 June)", ours_24jun...)],
-    [("Observed by 23 June cut-off", obs.confirmed_cases,
-        obs.confirmed_cases, obs.confirmed_cases)])
-chamla_w12_groups = vcat(fill("Chamla et al. scenarios", 3),
-    ["Our projection"], ["Observed"])
+    [
+        (
+            "Observed by 23 June cut-off", obs.confirmed_cases,
+            obs.confirmed_cases, obs.confirmed_cases,
+        ),
+    ]
+)
+chamla_w12_groups = vcat(
+    fill("Chamla et al. scenarios", 3),
+    ["Our projection"], ["Observed"]
+)
 
-chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
+chamla_w12_fig = plot_estimate_comparison(
+    chamla_w12_rows;
     xlabel = "Cumulative confirmed cases by 24 June",
     groups = chamla_w12_groups,
-    group_colours = ["Chamla et al. scenarios" => :steelblue,
+    group_colours = [
+        "Chamla et al. scenarios" => :steelblue,
         "Our projection" => :firebrick,
-        "Observed" => :black]);
+        "Observed" => :black,
+    ]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1349,18 +1568,24 @@ chamla_w12_fig #hide
 chamla_comparison_table = let
     fmt(t) = string(t[1], " (", t[2], "–", t[3], ")")
     central(date) =
-        let r = first(x for x in CHAMLA_CONFIRMED_CENTRAL
-            if x[1] == date)
-            fmt((r[2], r[3], r[4]))
-        end
+    let r = first(
+            x for x in CHAMLA_CONFIRMED_CENTRAL
+                if x[1] == date
+        )
+        fmt((r[2], r[3], r[4]))
+    end
     DataFrame(
         "Date" => ["10 June", "24 June"],
-        "Chamla central (90% PI)" => [central("2026-06-10"),
-            central("2026-06-24")],
+        "Chamla central (90% PI)" => [
+            central("2026-06-10"),
+            central("2026-06-24"),
+        ],
         "Our projection (90% CrI)" => [fmt(ours_10jun), fmt(ours_24jun)],
         "Observed confirmed" => [
             string(freeze_observations("2026-06-10").confirmed_cases),
-            string(obs.confirmed_cases) * " (23 June)"])
+            string(obs.confirmed_cases) * " (23 June)",
+        ]
+    )
 end;
 
 MarkdownTable(chamla_comparison_table) #hide
@@ -1387,14 +1612,19 @@ chamla_rt_obs = chamla_anchor.o
 chamla_rt_breakpoint = chamla_rt_obs.n - chamla_rt_obs.who_first_sitrep_days
 chamla_rt_start = clamp(
     chamla_rt_obs.n - round(Int, chamla_rt_obs.tmrca_days) + RENEWAL_START_LEAD,
-    1, chamla_rt_obs.n)
-chamla_rt_fig = plot_rt(chamla_anchor.chn;
+    1, chamla_rt_obs.n
+)
+chamla_rt_fig = plot_rt(
+    chamla_anchor.chn;
     n = chamla_rt_obs.n, breakpoint = chamla_rt_breakpoint,
     rt_start = chamla_rt_start,
-    rt_walk_start = clamp(chamla_rt_breakpoint - RT_WALK_LEAD,
-        chamla_rt_start, chamla_rt_obs.n),
+    rt_walk_start = clamp(
+        chamla_rt_breakpoint - RT_WALK_LEAD,
+        chamla_rt_start, chamla_rt_obs.n
+    ),
     as_of_date = string(chamla_rt_obs.cutoff),
-    seeding = chamla_rt_obs.seeding, ramp = RT_INTERVENTION_RAMP);
+    seeding = chamla_rt_obs.seeding, ramp = RT_INTERVENTION_RAMP
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1421,7 +1651,8 @@ chamla_rt_fig #hide
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
-    "Single population (n_patches = 1)" => posterior_C_no_patches);
+    "Single population (n_patches = 1)" => posterior_C_no_patches
+);
 spatial_sensitivity_table
 
 #md # ```@raw html
@@ -1431,7 +1662,8 @@ spatial_sensitivity_table
 spatial_sensitivity_fig = plot_density_overlay(
     "Meta-population (headline)" => posterior_C_joint,
     "Single population" => posterior_C_no_patches;
-    xlabel = "Cumulative infections");
+    xlabel = "Cumulative infections"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1450,29 +1682,42 @@ spatial_sensitivity_fig #hide
 #md # ```
 
 spatial_rt_fig = plot_rt_streams(
-    [(; label = "Single population (n_patches = 1)",
-        chn = chn_no_patches, rt_start = _rt_start_plot,
-        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
-            obs.n), colour = :steelblue)];
-    joint = (; chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
-            obs.n)),
+    [
+        (;
+            label = "Single population (n_patches = 1)",
+            chn = chn_no_patches, rt_start = _rt_start_plot,
+            rt_walk_start = clamp(
+                _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+                obs.n
+            ), colour = :steelblue,
+        ),
+    ];
+    joint = (;
+        chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(
+            _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n
+        ),
+    ),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
     display_start = _rt_start_plot, ncols = 1,
     title = "National reproduction number under both structures",
     reference_label = "the meta-population headline",
-    panel_label = "the single-population fit");
+    panel_label = "the single-population fit"
+);
 
 spatial_cfr_fig = plot_density_overlay(
     "Meta-population (headline)" => vec(Array(chn_joint[:CFR])),
     "Single population" => vec(Array(chn_no_patches[:CFR]));
-    xlabel = "Case-fatality ratio");
+    xlabel = "Case-fatality ratio"
+);
 
 spatial_rt_density_fig = plot_density_overlay(
     "Meta-population (headline)" => vec(Array(chn_joint[:R_T])),
     "Single population" => vec(Array(chn_no_patches[:R_T]));
-    xlabel = "Reproduction number at the cut-off");
+    xlabel = "Reproduction number at the cut-off"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1498,19 +1743,30 @@ spatial_quantities_table = let
     ## A count rounded to zero decimals still prints a trailing ".0", so
     ## whole-number quantities go through `Int`.
     fmt(x, d) = d <= 0 ? string(round(Int, x)) : string(round(x; digits = d))
-    cell(v, d) = string(fmt(quantile(v, 0.5), d), " (",
-        fmt(quantile(v, 0.05), d), "–", fmt(quantile(v, 0.95), d), ")")
-    rows = [("Cumulative infections", :C_T, 0),
+    cell(v, d) = string(
+        fmt(quantile(v, 0.5), d), " (",
+        fmt(quantile(v, 0.05), d), "–", fmt(quantile(v, 0.95), d), ")"
+    )
+    rows = [
+        ("Cumulative infections", :C_T, 0),
         ("Reproduction number at the cut-off", :R_T, 2),
         ("Case-fatality ratio", :CFR, 2),
         ("Outbreak age (days)", :T, 0),
-        ("Latest growth rate (per day)", :r, 3)]
-    DataFrame("Quantity" => [r[1] for r in rows],
-        "Meta-population (headline)" => [cell(
-             vec(Array(chn_joint[r[2]])), r[3])
-         for r in rows],
-        "Single population" => [cell(vec(Array(chn_no_patches[r[2]])), r[3])
-                                for r in rows])
+        ("Latest growth rate (per day)", :r, 3),
+    ]
+    DataFrame(
+        "Quantity" => [r[1] for r in rows],
+        "Meta-population (headline)" => [
+            cell(
+                vec(Array(chn_joint[r[2]])), r[3]
+            )
+                for r in rows
+        ],
+        "Single population" => [
+            cell(vec(Array(chn_no_patches[r[2]])), r[3])
+                for r in rows
+        ]
+    )
 end;
 
 #md # ```@raw html
@@ -1538,7 +1794,7 @@ spatial_quantities_table #hide
 ## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
-                              vec(Array(chn_joint_community_delay[:C_T])) : nothing;
+    vec(Array(chn_joint_community_delay[:C_T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1549,9 +1805,11 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 #md # ```
 
 delay_sensitivity_table = RUN_SENSITIVITY ?
-                          streams_table("baseline (hospital pathway)" => posterior_C_joint,
-    "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity analysis not shown in this build._";
+    streams_table(
+        "baseline (hospital pathway)" => posterior_C_joint,
+        "community pathway" => posterior_C_community_delay
+    ) :
+    Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1564,10 +1822,11 @@ MarkdownTable(delay_sensitivity_table) #hide
 #md # ```
 
 delay_sensitivity_fig = RUN_SENSITIVITY ?
-                        plot_cumulative_cases(
-    "baseline (hospital pathway)" => posterior_C_joint,
-    "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity analysis not shown in this build._";
+    plot_cumulative_cases(
+        "baseline (hospital pathway)" => posterior_C_joint,
+        "community pathway" => posterior_C_community_delay; scenarios = []
+    ) :
+    Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1591,7 +1850,7 @@ delay_sensitivity_fig #hide
 ## registry (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
 ## setup block above.
 posterior_C_exp_growth = RUN_SENSITIVITY ?
-                         vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
+    vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
 T_skygrid = vec(Array(chn_joint[:T]))
 T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing;
 
@@ -1607,9 +1866,11 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 #md # ```
 
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
-                            streams_table("Skygrid (baseline)" => posterior_C_joint,
-    "Exponential growth" => posterior_C_exp_growth) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+    streams_table(
+        "Skygrid (baseline)" => posterior_C_joint,
+        "Exponential growth" => posterior_C_exp_growth
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1622,9 +1883,11 @@ MarkdownTable(clock_sensitivity_C_table) #hide
 #md # ```
 
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
-                          plot_cumulative_cases("Skygrid (baseline)" => posterior_C_joint,
-    "Exponential growth" => posterior_C_exp_growth; scenarios = []) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+    plot_cumulative_cases(
+        "Skygrid (baseline)" => posterior_C_joint,
+        "Exponential growth" => posterior_C_exp_growth; scenarios = []
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1639,9 +1902,11 @@ clock_sensitivity_C_fig #hide
 #md # ```
 
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
-                            streams_table("Skygrid (baseline)" => T_skygrid,
-    "Exponential growth" => T_exp_growth; digits = 0) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+    streams_table(
+        "Skygrid (baseline)" => T_skygrid,
+        "Exponential growth" => T_exp_growth; digits = 0
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1654,11 +1919,13 @@ MarkdownTable(clock_sensitivity_T_table) #hide
 #md # ```
 
 clock_sensitivity_T_fig = RUN_SENSITIVITY ?
-                          plot_density_overlay("Skygrid (baseline)" => T_skygrid,
-    "Exponential growth" => T_exp_growth;
-    xlabel = "Outbreak age (days before cut-off)",
-    title = "Posterior outbreak age by tree prior", lower = 0) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+    plot_density_overlay(
+        "Skygrid (baseline)" => T_skygrid,
+        "Exponential growth" => T_exp_growth;
+        xlabel = "Outbreak age (days before cut-off)",
+        title = "Posterior outbreak age by tree prior", lower = 0
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1689,16 +1956,24 @@ diagnostic_fits = [
     "isolation (DRC)" => chn_treatment,
     "onsets (DRC)" => chn_onsets,
     "frozen (1wk back)" => frozen_lastweek.chn,
-    (RUN_SENSITIVITY ?
-     ["delay sensitivity" => chn_joint_community_delay,
-        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] :
-     [])...]
-diagnostic_frames = [label => parameter_diagnostics(chn)
-                     for (label, chn) in diagnostic_fits]
+    (
+        RUN_SENSITIVITY ?
+            [
+                "delay sensitivity" => chn_joint_community_delay,
+                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+            ] :
+            []
+    )...,
+]
+diagnostic_frames = [
+    label => parameter_diagnostics(chn)
+        for (label, chn) in diagnostic_fits
+]
 diagnostic_frame = Dict(diagnostic_frames)
 joint_diagnostics = diagnostic_frame["joint"]
 diagnostic_spread = MarkdownTable(
-    diagnostic_spread_table(diagnostic_frames...; labels = display_names));
+    diagnostic_spread_table(diagnostic_frames...; labels = display_names)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1716,7 +1991,8 @@ rhat_spread_fig = plot_rhat_spread(
     "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
     "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
     "exports" => diagnostic_frame["exports"],
-    "frozen (1wk back)" => diagnostic_frame["frozen (1wk back)"]);
+    "frozen (1wk back)" => diagnostic_frame["frozen (1wk back)"]
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1731,8 +2007,11 @@ rhat_spread_fig #hide
 #md # ```
 
 joint_worst_parameters = MarkdownTable(
-    worst_parameters_table(joint_diagnostics; n = 15,
-    labels = display_names));
+    worst_parameters_table(
+        joint_diagnostics; n = 15,
+        labels = display_names
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1747,8 +2026,11 @@ joint_worst_parameters #hide
 #md # ```
 
 joint_worst_groups = MarkdownTable(
-    family_diagnostics_table(joint_diagnostics; n = 12,
-    labels = display_names));
+    family_diagnostics_table(
+        joint_diagnostics; n = 12,
+        labels = display_names
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1760,8 +2042,10 @@ joint_worst_groups #hide
 #md # <details><summary>Mixing over time varying paramters</summary>
 #md # ```
 
-joint_index_fig = plot_parameter_index_diagnostics(joint_diagnostics;
-    n_groups = 3, labels = display_names);
+joint_index_fig = plot_parameter_index_diagnostics(
+    joint_diagnostics;
+    n_groups = 3, labels = display_names
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1788,7 +2072,8 @@ joint_chain_table #hide
 #md # ```
 
 joint_divergence_table = MarkdownTable(
-    divergence_location_table(chn_joint; n = 12, labels = display_names));
+    divergence_location_table(chn_joint; n = 12, labels = display_names)
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1800,13 +2085,17 @@ joint_divergence_table #hide
 #md # <details><summary>Divergent draws against the posterior</summary>
 #md # ```
 
-joint_divergence_fig = plot_divergence_locations(chn_joint,
+joint_divergence_fig = plot_divergence_locations(
+    chn_joint,
     [:C_T, :R_T, :r, :T, :CFR, :k];
-    labels = Dict(:C_T => "cumulative infections",
+    labels = Dict(
+        :C_T => "cumulative infections",
         :R_T => "reproduction number at the cut-off",
         :r => "latest growth rate", :T => "outbreak age",
         :CFR => "case-fatality ratio",
-        :k => "surveillance dispersion"));
+        :k => "surveillance dispersion"
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1828,10 +2117,14 @@ stream_contrast = diagnostic_contrast(
     "cases (DRC)" => diagnostic_frame["cases (DRC)"],
     "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
     "isolation (DRC)" => diagnostic_frame["isolation (DRC)"],
-    "onsets (DRC)" => diagnostic_frame["onsets (DRC)"])
+    "onsets (DRC)" => diagnostic_frame["onsets (DRC)"]
+)
 stream_contrast_table = MarkdownTable(
-    diagnostic_contrast_table(stream_contrast; n = 15,
-    labels = display_names));
+    diagnostic_contrast_table(
+        stream_contrast; n = 15,
+        labels = display_names
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1843,10 +2136,12 @@ stream_contrast_table #hide
 #md # <details><summary>Joint against single-stream figure</summary>
 #md # ```
 
-stream_contrast_fig = plot_diagnostic_contrast(stream_contrast;
+stream_contrast_fig = plot_diagnostic_contrast(
+    stream_contrast;
     xlabel = "Bulk effective sample size, single-stream fit",
     ylabel = "Bulk effective sample size, joint fit",
-    title = "Mixing in the joint against each stream fitted alone");
+    title = "Mixing in the joint against each stream fitted alone"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1863,10 +2158,14 @@ stream_contrast_fig #hide
 
 frozen_contrast = diagnostic_contrast(
     "joint" => joint_diagnostics,
-    "one week earlier" => diagnostic_frame["frozen (1wk back)"])
+    "one week earlier" => diagnostic_frame["frozen (1wk back)"]
+)
 frozen_contrast_table = MarkdownTable(
-    diagnostic_contrast_table(frozen_contrast; n = 15,
-    labels = display_names));
+    diagnostic_contrast_table(
+        frozen_contrast; n = 15,
+        labels = display_names
+    )
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1878,10 +2177,12 @@ frozen_contrast_table #hide
 #md # <details><summary>Live against frozen figure</summary>
 #md # ```
 
-frozen_contrast_fig = plot_diagnostic_contrast(frozen_contrast;
+frozen_contrast_fig = plot_diagnostic_contrast(
+    frozen_contrast;
     xlabel = "Bulk effective sample size, fit a week earlier",
     ylabel = "Bulk effective sample size, live fit",
-    title = "Mixing in the live fit against the same fit a week earlier");
+    title = "Mixing in the live fit against the same fit a week earlier"
+);
 
 #md # ```@raw html
 #md # </details>
@@ -1898,25 +2199,36 @@ frozen_contrast_fig #hide
 #md # <details><summary>Write sensitivity outputs</summary>
 #md # ```
 
-output_dir = get(ENV, "BVD_OUTPUT_DIR",
-    joinpath(pkgdir(BVDOutbreakSize), "output"))
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
 mkpath(output_dir)
-CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
-    streams_C_table)
-CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
-    frozen_streams_table)
+CSV.write(
+    joinpath(output_dir, "cumulative_cases_by_stream.csv"),
+    streams_C_table
+)
+CSV.write(
+    joinpath(output_dir, "frozen_matched_cutoffs.csv"),
+    frozen_streams_table
+)
 
 ## The one-week-back validation forecast, in the same archive format as the
 ## release forecast, so the frozen "last week versus now" forecast is recorded
 ## as a release asset alongside the forecast it is scored against.
-CSV.write(joinpath(output_dir, "forecast_validation.csv"),
-    forecast_archive([(7, validation_forecast)];
-        made_date = frozen_lastweek.o.cutoff, thin = 5))
+CSV.write(
+    joinpath(output_dir, "forecast_validation.csv"),
+    forecast_archive(
+        [(7, validation_forecast)];
+        made_date = frozen_lastweek.o.cutoff, thin = 5
+    )
+)
 
 ## The per-stream reproduction-number figure for the summary dashboard; the
 ## main analysis writes the other three dashboard figures.
 dashboard_dir = joinpath(
-    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
+)
 mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_streams.png"), stream_rt_fig)
 

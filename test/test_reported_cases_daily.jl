@@ -1,8 +1,8 @@
 ## Smoke tests for the per-vintage reported-cases likelihood exercised
 ## through `cases_only_model` with a history `(; days, counts)`.
 
-@testitem "reported_cases: prior draws are finite and non-negative" tags=[
-    :slow
+@testitem "reported_cases: prior draws are finite and non-negative" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -26,8 +26,8 @@
     @test all(0 .< p_drc .< 1)
 end
 
-@testitem "reported_cases: a tiny fit with a total stays positive" tags=[
-    :slow
+@testitem "reported_cases: a tiny fit with a total stays positive" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains

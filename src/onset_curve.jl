@@ -31,8 +31,10 @@ no quoting or embedded commas. Returns a `Vector` of
 per distinct `sitrep` id in first-seen order.
 """
 function _read_onset_curve_blocks(path::AbstractString)
-    blocks = NamedTuple{(:sitrep, :report_date, :onsets),
-        Tuple{String, Date, Dict{Date, Int}}}[]
+    blocks = NamedTuple{
+        (:sitrep, :report_date, :onsets),
+        Tuple{String, Date, Dict{Date, Int}},
+    }[]
     order = Dict{String, Int}()
     open(path) do io
         first_line = true
@@ -51,8 +53,12 @@ function _read_onset_curve_blocks(path::AbstractString)
             if haskey(order, sitrep)
                 blocks[order[sitrep]].onsets[onset_date] = total
             else
-                push!(blocks, (; sitrep, report_date,
-                    onsets = Dict(onset_date => total)))
+                push!(
+                    blocks, (;
+                        sitrep, report_date,
+                        onsets = Dict(onset_date => total),
+                    )
+                )
                 order[sitrep] = length(blocks)
             end
         end
@@ -78,19 +84,27 @@ automatically. Returns the surviving blocks sorted by ascending
 """
 function _dedup_onset_blocks(blocks)
     kept = Dict{Vector{Pair{Date, Int}}, Int}()
-    out = @NamedTuple{sitrep::String, report_date::Date,
-        onsets::Dict{Date, Int}}[]
+    out = @NamedTuple{
+        sitrep::String, report_date::Date,
+        onsets::Dict{Date, Int},
+    }[]
     for b in blocks
         key = sort(collect(pairs(b.onsets)); by = first)
         if haskey(kept, key)
             j = kept[key]
             if b.report_date < out[j].report_date
-                out[j] = (; sitrep = out[j].sitrep,
-                    report_date = b.report_date, onsets = out[j].onsets)
+                out[j] = (;
+                    sitrep = out[j].sitrep,
+                    report_date = b.report_date, onsets = out[j].onsets,
+                )
             end
         else
-            push!(out, (; sitrep = b.sitrep, report_date = b.report_date,
-                onsets = b.onsets))
+            push!(
+                out, (;
+                    sitrep = b.sitrep, report_date = b.report_date,
+                    onsets = b.onsets,
+                )
+            )
             kept[key] = length(out)
         end
     end
@@ -185,17 +199,23 @@ A missing `path`, or a manifest with no in-cutoff vintage, returns the
 same empty, `missing`-total shape, so the stream degrades to a no-op
 rather than throwing.
 """
-function load_onset_curve(path::AbstractString;
+function load_onset_curve(
+        path::AbstractString;
         cutoff::Date, seeding::Date,
         max_delay::Integer = ONSET_REPORT_MAX_DELAY,
-        horizon::Integer = max_delay)
-    noop = (; onset_days = Int[], report_days = Int[],
+        horizon::Integer = max_delay
+    )
+    noop = (;
+        onset_days = Int[], report_days = Int[],
         prev_report_days = Int[], increments = Int[],
-        total_days = Int[], total_counts = Int[], last_total = missing)
+        total_days = Int[], total_counts = Int[], last_total = missing,
+    )
     isfile(path) || return noop
 
-    snaps = filter(b -> b.report_date <= cutoff,
-        _dedup_onset_blocks(_read_onset_curve_blocks(path)))
+    snaps = filter(
+        b -> b.report_date <= cutoff,
+        _dedup_onset_blocks(_read_onset_curve_blocks(path))
+    )
     isempty(snaps) && return noop
 
     ## Grid day-index of a calendar date: seeding day is day 1, matching
@@ -207,8 +227,12 @@ function load_onset_curve(path::AbstractString;
     ## date), as grid day-indices. A date inside the extent that has no row
     ## is a zero-height bar; a date outside it is not covered by that
     ## figure at all and carries no observation. See the docstring above.
-    extents = [(_idx(minimum(keys(snap.onsets))),
-                   _idx(maximum(keys(snap.onsets)))) for snap in snaps]
+    extents = [
+        (
+            _idx(minimum(keys(snap.onsets))),
+            _idx(maximum(keys(snap.onsets))),
+        ) for snap in snaps
+    ]
 
     onset_days = Int[]
     report_days = Int[]
@@ -250,6 +274,8 @@ function load_onset_curve(path::AbstractString;
     ## instead of the total the figure reports.
     total_days = [_idx(snap.report_date) for snap in snaps]
     total_counts = [sum(values(snap.onsets)) for snap in snaps]
-    return (; onset_days, report_days, prev_report_days, increments,
-        total_days, total_counts, last_total = total_counts[end])
+    return (;
+        onset_days, report_days, prev_report_days, increments,
+        total_days, total_counts, last_total = total_counts[end],
+    )
 end

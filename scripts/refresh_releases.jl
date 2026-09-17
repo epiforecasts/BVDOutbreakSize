@@ -48,8 +48,10 @@ repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 function results_release_tags(repo)
     out = read(`gh release list -R $repo -L 200 --json tagName
         --jq ".[].tagName"`, String)
-    tags = filter(t -> occursin(r"^results-v[0-9]", t),
-        split(strip(out), '\n'))
+    tags = filter(
+        t -> occursin(r"^results-v[0-9]", t),
+        split(strip(out), '\n')
+    )
     return tags
 end
 
@@ -60,9 +62,12 @@ function fetch_asset(repo, tag, file, dir; attempts = 3)
     dest = joinpath(dir, file)
     for _ in 1:attempts
         try
-            run(pipeline(
-                `gh release download $tag -R $repo -p $file
-       -O $dest --clobber`; stdout = devnull, stderr = devnull))
+            run(
+                pipeline(
+                    `gh release download $tag -R $repo -p $file
+       -O $dest --clobber`; stdout = devnull, stderr = devnull
+                )
+            )
         catch
             continue
         end
@@ -116,12 +121,16 @@ mktempdir() do dir
             @warn "skipping $tag (no parseable outbreak-size summary)"
             continue
         end
-        push!(rows,
-            (; tag = r[1], date = r[2], model = r[3],
+        push!(
+            rows,
+            (;
+                tag = r[1], date = r[2], model = r[3],
                 median = round(Int, r[4]),
                 lo30 = round(Int, r[5]), hi30 = round(Int, r[6]),
                 lo60 = round(Int, r[7]), hi60 = round(Int, r[8]),
-                lo90 = round(Int, r[9]), hi90 = round(Int, r[10])))
+                lo90 = round(Int, r[9]), hi90 = round(Int, r[10]),
+            )
+        )
     end
 end
 

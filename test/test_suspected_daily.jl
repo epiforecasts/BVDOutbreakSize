@@ -2,8 +2,8 @@
 ## suspects du jour"), scored against the modelled daily suspected series at
 ## each report day, exercised through `cases_only_model` and `bvd_joint`.
 
-@testitem "suspected daily inflow: conditioned fit stays positive" tags=[
-    :slow
+@testitem "suspected daily inflow: conditioned fit stays positive" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -12,11 +12,15 @@
     ## Cumulative suspected history (frozen) plus the disjoint daily inflow
     ## on later days, supplied as observed counts.
     reported_history = (; days = [13, 18, 23], counts = [340, 516, 905])
-    suspected_daily_history = (; days = [30, 31, 32, 33],
-        counts = [153, 119, 117, 94])
+    suspected_daily_history = (;
+        days = [30, 31, 32, 33],
+        counts = [153, 119, 117, 94],
+    )
     chn = sample(
-        cases_only_model(33, missing; reported_history,
-            suspected_daily_history),
+        cases_only_model(
+            33, missing; reported_history,
+            suspected_daily_history
+        ),
         Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -26,8 +30,8 @@
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily inflow: predictive path samples the counts" tags=[
-    :slow
+@testitem "suspected daily inflow: predictive path samples the counts" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -39,8 +43,10 @@ end
     reported_history = (; days = [13, 18, 23], counts = [340, 516, 905])
     suspected_daily_history = (; days = [30, 31, 32, 33], counts = Int[])
     chn = sample(
-        cases_only_model(33, missing; reported_history,
-            suspected_daily_history),
+        cases_only_model(
+            33, missing; reported_history,
+            suspected_daily_history
+        ),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -48,7 +54,7 @@ end
     @test any(k -> occursin("suspected_daily", k), ks)
 end
 
-@testitem "suspected daily inflow: empty history is a no-op" tags=[:slow] begin
+@testitem "suspected daily inflow: empty history is a no-op" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model
@@ -68,8 +74,8 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily inflow: joint prior runs with the live data" tags=[
-    :slow
+@testitem "suspected daily inflow: joint prior runs with the live data" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -78,7 +84,8 @@ end
     obs = load_observations()
     @test !isempty(obs.suspected_daily_history.counts)
     breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+    m = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -93,9 +100,12 @@ end
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)
-    chn = sample(m, Prior(), 30;
-        chain_type = FlexiChains.VNChain, progress = false)
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 30;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     C_T = vec(Array(chn[:C_T]))
     @test length(C_T) == 30
     @test all(isfinite, C_T)

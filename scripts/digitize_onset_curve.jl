@@ -156,7 +156,7 @@ const CONFIG = [
     ("121", Date(2026, 9, 12), Date(2026, 9, 7)),
     ("122", Date(2026, 9, 13), Date(2026, 9, 14)),
     ("123", Date(2026, 9, 14), Date(2026, 9, 14)),
-    ("124", Date(2026, 9, 15), Date(2026, 9, 14))
+    ("124", Date(2026, 9, 15), Date(2026, 9, 14)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -249,10 +249,10 @@ function read_ppm(path)
 end
 
 function masks(R, G, B)
-    (
+    return (
         blue = (B .> 150) .& (G .> 150) .& (R .< 210) .& (B .>= R .+ 15),
         red = (R .> 120) .& (R .>= G .+ 50) .& (R .>= B .+ 50),
-        dark = (R .< 120) .& (G .< 120) .& (B .< 120)
+        dark = (R .< 120) .& (G .< 120) .& (B .< 120),
     )
 end
 
@@ -282,7 +282,7 @@ function is_onset_curve(R, G, B)
     orange = (R .> 200) .& (G .> 110) .& (G .< 195) .& (B .< 90)
     npx = length(R)
     return sum(m.blue) / npx > 0.055 && sum(orange) / npx < 0.01 &&
-           sum(m.red) / npx > 0.01
+        sum(m.red) / npx > 0.01
 end
 
 function longest_run(col)
@@ -340,8 +340,12 @@ end
 function y_axis_ticks(dark, base, H, W)
     best = nothing
     for x in 30:floor(Int, W * 0.13)
-        seg = vec(sum(dark[1:min(base + 3, H), max(1, x - 10):(x - 1)];
-            dims = 2))
+        seg = vec(
+            sum(
+                dark[1:min(base + 3, H), max(1, x - 10):(x - 1)];
+                dims = 2
+            )
+        )
         yt = cluster([y for y in 1:length(seg) if seg[y] >= 3])
         length(yt) < 3 && continue
         abs(yt[end] - base) > 3 && continue
@@ -476,12 +480,16 @@ end
 function _onset_page(pdf)
     # The onset figure usually sits on the page whose text carries its
     # caption.
-    npages = parse(Int, match(r"Pages:\s*(\d+)",
-        read(`pdfinfo $pdf`, String)).captures[1])
+    npages = parse(
+        Int, match(
+            r"Pages:\s*(\d+)",
+            read(`pdfinfo $pdf`, String)
+        ).captures[1]
+    )
     for p in 1:npages
         txt = lowercase(read(`pdftotext -layout -f $p -l $p $pdf -`, String))
         if occursin("date de debut des symptom", txt) ||
-           occursin("date de début des symptôm", txt)
+                occursin("date de début des symptôm", txt)
             return p, npages
         end
     end
@@ -496,7 +504,7 @@ function _best_onset_image(pdf, page, wd)
         endswith(name, ".ppm") || continue
         R, G, B = read_ppm(joinpath(wd, name))
         if is_onset_curve(R, G, B) &&
-           (best === nothing || length(R) > length(best[1]))
+                (best === nothing || length(R) > length(best[1]))
             best = (R, G, B)
         end
         rm(joinpath(wd, name))
@@ -528,7 +536,7 @@ function onset_image(pdf)
 end
 
 const OUT_HEADER = "sitrep,report_date,onset_date,confirmed_alive," *
-                   "confirmed_dead,confirmed_total"
+    "confirmed_dead,confirmed_total"
 
 ## Rows `out_csv` already holds, keyed by the SitRep number in its first
 ## field, so a run can reuse a vintage it has already read rather than open
@@ -547,9 +555,11 @@ function digitised_rows(out_csv)
     return rows
 end
 
-function main(pdf_dir = "data/sitrep_pdfs",
+function main(
+        pdf_dir = "data/sitrep_pdfs",
         out_csv = "data/onset_curve_scanned.csv";
-        rebuild::Bool = false)
+        rebuild::Bool = false
+    )
     ## Read before the file is opened for writing, which truncates it.
     cached = rebuild ? Dict{String, Vector{String}}() : digitised_rows(out_csv)
     reused = 0
@@ -586,24 +596,38 @@ function main(pdf_dir = "data/sitrep_pdfs",
             ## loosen the invariant test/test_onset_digitiser.jl checks.
             filter!(r -> r[1] <= report_date + Day(1), rows)
             total = sum(a + d for (_, a, d) in rows)
-            @printf("SitRep %s (%s): %d onset days, total %d confirmed\n",
-                sr, report_date, length(rows), total)
+            @printf(
+                "SitRep %s (%s): %d onset days, total %d confirmed\n",
+                sr, report_date, length(rows), total
+            )
             for (onset, alive, dead) in rows
-                println(io, join((sr, report_date, onset, alive, dead,
-                        alive + dead), ","))
+                println(
+                    io, join(
+                        (
+                            sr, report_date, onset, alive, dead,
+                            alive + dead,
+                        ), ","
+                    )
+                )
             end
             read_now += 1
         end
     end
-    @printf("wrote %s: %d vintages read, %d reused from the existing file\n",
-        out_csv, read_now, reused)
-    reused > 0 && println("re-run with --rebuild to re-read every vintage " *
-            "after changing the digitiser")
+    @printf(
+        "wrote %s: %d vintages read, %d reused from the existing file\n",
+        out_csv, read_now, reused
+    )
+    return reused > 0 && println(
+        "re-run with --rebuild to re-read every vintage " *
+            "after changing the digitiser"
+    )
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     args = filter(a -> a != "--rebuild", ARGS)
-    main(get(args, 1, "data/sitrep_pdfs"),
+    main(
+        get(args, 1, "data/sitrep_pdfs"),
         get(args, 2, "data/onset_curve_scanned.csv");
-        rebuild = "--rebuild" in ARGS)
+        rebuild = "--rebuild" in ARGS
+    )
 end

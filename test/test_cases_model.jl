@@ -1,8 +1,8 @@
 ## Smoke tests for the reported-cases stream composer.
 ## Exercises the real `cases_only_model` from `src/models/joint.jl`.
 
-@testitem "cases_only_model prior draws are finite and non-negative" tags=[
-    :slow
+@testitem "cases_only_model prior draws are finite and non-negative" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -25,8 +25,8 @@
     @test all(0 .< p_drc .< 1)
 end
 
-@testitem "cases_only_model conditioned on an observation stays positive" tags=[
-    :slow
+@testitem "cases_only_model conditioned on an observation stays positive" tags = [
+    :slow,
 ] begin
     using Turing: sample, Prior
     import FlexiChains

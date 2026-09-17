@@ -19,8 +19,10 @@ include(joinpath(@__DIR__, "registry.jl"))
 include(joinpath(@__DIR__, "summary.jl"))
 
 const ID = strip(get(ENV, "BVD_FIT_ID", ""))
-const CACHE = get(ENV, "BVD_FIT_CACHE",
-    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache"))
+const CACHE = get(
+    ENV, "BVD_FIT_CACHE",
+    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache")
+)
 const REFIT = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
 const DRYRUN = lowercase(strip(get(ENV, "BVD_FIT_DRYRUN", ""))) in ("1", "true", "yes")
 
@@ -29,19 +31,23 @@ obs = load_observations()
 # resolve any id the `list` matrix enumerates — the matrix decides which fits
 # run; here we only fit the single requested `id`, so listing all is cheap.
 specs = build_fit_specs(obs; run_sensitivity = true)
-isempty(ID) && error("set BVD_FIT_ID to one of: " *
-                     join((s.id for s in specs), ", "))
+isempty(ID) && error(
+    "set BVD_FIT_ID to one of: " *
+        join((s.id for s in specs), ", ")
+)
 i = findfirst(s -> s.id == ID, specs)
-i === nothing && error("unknown BVD_FIT_ID=$ID; known: " *
-      join((s.id for s in specs), ", "))
+i === nothing && error(
+    "unknown BVD_FIT_ID=$ID; known: " *
+        join((s.id for s in specs), ", ")
+)
 
 key = fit_key(ID)
-@info "fit_one" id=ID key=key cache=CACHE dryrun=DRYRUN refit=REFIT
+@info "fit_one" id = ID key = key cache = CACHE dryrun = DRYRUN refit = REFIT
 if DRYRUN
     println(key)
 else
     result = fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
-    @info "cached" id=ID key=key
+    @info "cached" id = ID key = key
     ## Keys are rebuilt before the diagnostics read them: a chain that came
     ## back from the cache was serialised by another FlexiChains version.
     write_fit_summary(ID, repair_chain_keys(result))
