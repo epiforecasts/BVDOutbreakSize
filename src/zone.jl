@@ -1,31 +1,49 @@
 # Post-processing of a health-zone chain (`bvd_zone`): daily trajectories
-# rebuilt from the stored knots, zone infections paired with parent draws,
-# the one-week zone forecast and its archive, the overview and forecast
-# tables, scoring against the observed split, and the fit diagnostics.
-# Everything here reads the chain and the `zone_fit_inputs` it was fitted
-# with; nothing re-evaluates the Turing model.
+# rebuilt from the stored knots, the one-week zone forecast and its
+# archive, the overview and forecast tables, scoring against the observed
+# split, and the fit diagnostics. Every draw carries its own draw of the
+# shared quantity, so the province model's uncertainty is already inside
+# each zone draw and nothing here pairs the two stages after the fact.
+# Everything reads the chain and the `zone_fit_inputs` it was fitted with;
+# nothing re-evaluates the Turing model.
 
 ## One draw's state from the chain: the deviation knots `(n_zones ×
-## n_knots)`, the initial shares, the AR retention and, with mixing, the
-## per-patch fractions.
+## n_knots)`, the initial shares, the AR retention, the draw of the shared
+## quantity and the patch trajectory it implies, and, with mixing, the
+## per-patch mixing fractions. A chain fitted with `meld = false` carries
+## an empty `η` and every draw reads the province model's mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
+    zd = inputs.model_data
     nz = length(inputs.zone_keys)
+    np = length(inputs.patch_names)
     K = length(inputs.knots)
     knots = _draw_vectors(chn, :delta_knots_zone)
     starts = _draw_vectors(chn, :share_start_zone)
     halflife = _draws(chn, :region_halflife_zone)
     eps_ = _has_key(chn, :mixing_epsilon_zone) ?
            _draw_vectors(chn, :mixing_epsilon_zone) : nothing
+    eta = _has_key(chn, :parent_eta_zone) ?
+          _draw_vectors(chn, :parent_eta_zone) : nothing
     ndraws = length(knots)
     isempty(knots) || length(knots[1]) == nz * K ||
         error(
             "_zone_states: `delta_knots_zone` holds $(length(knots[1])) " *
             "entries but $nz zones by $K knots is $(nz * K); the chain was " *
             "fitted to different inputs.")
+    eta === nothing || ndraws == 0 || length(eta[1]) in (0, zd.meld_d) ||
+        error(
+            "_zone_states: `parent_eta_zone` holds $(length(eta[1])) " *
+            "entries but the shared quantity has $(zd.meld_d); the chain " *
+            "was fitted to different inputs.")
+    scale(i) = (eta === nothing || isempty(eta[i])) ? nothing :
+               zone_parent_scale(zd.meld_weights, zd.meld_L,
+        Float64.(eta[i]), np, zd.n)
     return [(; δ_knots = reshape(Float64.(knots[i]), nz, K),
                 w0 = Float64.(starts[i]),
                 φ = exp2(-week / halflife[i]),
-                ε = eps_ === nothing ? nothing : Float64.(eps_[i]))
+                ε = eps_ === nothing ? nothing : Float64.(eps_[i]),
+                η = eta === nothing ? Float64[] : Float64.(eta[i]),
+                def = zone_deformation(zd, scale(i)))
             for i in 1:ndraws]
 end
 
@@ -66,7 +84,7 @@ function reconstruct_zone_shares(chn, inputs)
     zd = inputs.model_data
     states = _zone_states(chn, inputs)
     return _zone_per_zone_matrices(states, inputs,
-        st -> zone_forward(zd, st.δ_knots, st.w0, st.ε).shares,
+        st -> zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def).shares,
         (st, z) -> st.w0[z])
 end
 
@@ -76,6 +94,45 @@ function _zone_parent_infections(parent_chain, inputs)
     n = inputs.n
     vs = _draw_vectors(parent_chain, _ZONE_PARENT_KEYS.infections)
     return [reshape(Float64.(v), np, n) for v in vs]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+How the fitted draw of the shared quantity compares with the province
+model's own posterior on it. The zone stage places no prior of its own on
+that quantity beyond the province model's, so if the zone data say nothing
+about it the whitened draw should read back as its prior, a standard
+normal in every component. A component whose posterior mean is far from
+zero or whose spread is well under one says the zone structure is pulling
+the province model's trajectory in that week.
+
+Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
+kept patch-week cell: the patch, the window's midpoint day and date, the
+posterior mean and standard deviation of that component of the whitened
+draw, and the province model's own posterior standard deviation of the log
+weekly infections there. `mean_norm_sq` is the mean of `‖η‖²`, which is
+`dimension` when the fit reproduces the prior.
+"""
+function zone_meld_check(chn, inputs)
+    meld = inputs.meld
+    out = DataFrame(patch = String[], midpoint = Int[], date = Date[],
+        eta_mean = Float64[], eta_sd = Float64[], parent_sd = Float64[])
+    empty_result = (; table = out, mean_norm_sq = NaN, dimension = meld.d)
+    _has_key(chn, :parent_eta_zone) || return empty_result
+    draws = _draw_vectors(chn, :parent_eta_zone)
+    (isempty(draws) || isempty(draws[1])) && return empty_result
+    E = reduce(hcat, [Float64.(v) for v in draws])
+    parent_sd = sqrt.(vec(sum(abs2, meld.L; dims = 2)))
+    for c in 1:meld.d
+        mid = meld.midpoints[meld.cells_week[c]]
+        push!(out,
+            (inputs.patch_labels[meld.cells_patch[c]], mid,
+                inputs.seeding + Day(mid - 1),
+                mean(view(E, c, :)), std(view(E, c, :)), parent_sd[c]))
+    end
+    return (; table = out, mean_norm_sq = mean(vec(sum(abs2, E; dims = 1))),
+        dimension = meld.d)
 end
 
 ## `I_z / Λ_z` on the grid days from one draw's daily shares `(n_days ×
@@ -114,14 +171,15 @@ end
 $(TYPEDSIGNATURES)
 
 Each zone's implied daily reproduction number `I_z(t) / Λ_z(t)`, rebuilt
-per draw from the shares. With `parent_chain`, draw `j` is paired with a
-random parent draw `σ(j)` (the picks of [`zone_infections`](@ref) at the
-same `rng`) and the patch infections are that draw's rather than the
-cut's posterior mean, so the interval carries the patch uncertainty. A
-zone is reported from the day its cumulative infections reach `rt_floor`
-(the fit's `inputs.rt_floor` by default) in the median draw, and holds
-`NaN` in every draw before that day, so the reported draws are never a
-selected subset. Returns one `(ndraws × n)` matrix per zone.
+per draw from the shares and that draw's own patch trajectory, so the
+interval carries the province model's uncertainty as the fit saw it. A
+chain fitted without the meld reads the province model's mean curve, and
+`parent_chain` then pairs each draw with a random province draw instead,
+which is the old behaviour and the only way that variant carries the patch
+uncertainty. A zone is reported from the day its cumulative infections
+reach `rt_floor` (the fit's `inputs.rt_floor` by default) in the median
+draw, and holds `NaN` in every draw before that day, so the reported draws
+are never a selected subset. Returns one `(ndraws × n)` matrix per zone.
 """
 function reconstruct_zone_rt(chn, inputs; parent_chain = nothing,
         rt_floor::Real = inputs.rt_floor,
@@ -129,7 +187,8 @@ function reconstruct_zone_rt(chn, inputs; parent_chain = nothing,
     zd = inputs.model_data
     states = _zone_states(chn, inputs)
     ndraws = length(states)
-    parents = parent_chain === nothing ? nothing :
+    melded = !isempty(states) && !isempty(states[1].η)
+    parents = (melded || parent_chain === nothing) ? nothing :
               _zone_parent_infections(parent_chain, inputs)
     pick = parents === nothing ? nothing :
            rand(rng, 1:length(parents), ndraws)
@@ -138,8 +197,8 @@ function reconstruct_zone_rt(chn, inputs; parent_chain = nothing,
     out = [fill(NaN, ndraws, inputs.n) for _ in 1:nz]
     first_day = zeros(Int, ndraws, nz)
     for (i, st) in enumerate(states)
-        I_p = parents === nothing ? zd.I_bar : parents[pick[i]]
-        shares = zone_forward(zd, st.δ_knots, st.w0, st.ε).shares
+        I_p = parents === nothing ? st.def.I_bar : parents[pick[i]]
+        shares = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def).shares
         r, first_day[i, :] = _zone_rt_daily(shares, st.w0, I_p, zd.g,
             inputs.patch_of_zone, zd.t0, rt_floor)
         for z in 1:nz, j in 1:nd
@@ -157,23 +216,32 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Daily zone infections with the patch uncertainty carried: stage-2 draw `j`
-is paired with a stage-1 draw `σ(j)` drawn at random from `parent_chain`,
-and the zone's infections are that parent draw's patch infections times
-this draw's share, `I_z = Ī_p^{(σ(j))}(t) w_z^{(j)}(t)`. Returns one
-`(ndraws × n)` matrix per zone.
+Daily zone infections with the patch uncertainty carried: each draw's
+share of its own draw of the patch trajectory,
+`I_z = I_p^{(j)}(t) w_z^{(j)}(t)`, so the two stages are one object rather
+than paired after the fact. A chain fitted without the meld holds the
+province model's mean curve, and `parent_chain` then supplies a random
+province draw `σ(j)` per zone draw instead. Returns one `(ndraws × n)`
+matrix per zone.
 """
 function zone_infections(chn, parent_chain, inputs;
         rng::AbstractRNG = MersenneTwister(20260518))
-    shares = reconstruct_zone_shares(chn, inputs)
-    parents = _zone_parent_infections(parent_chain, inputs)
-    ndraws = size(shares[1], 1)
-    pick = rand(rng, 1:length(parents), ndraws)
+    zd = inputs.model_data
+    states = _zone_states(chn, inputs)
+    shares = _zone_per_zone_matrices(states, inputs,
+        st -> zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def).shares,
+        (st, z) -> st.w0[z])
+    melded = !isempty(states) && !isempty(states[1].η)
+    ndraws = length(states)
+    parents = melded ? nothing :
+              _zone_parent_infections(parent_chain, inputs)
+    pick = parents === nothing ? nothing :
+           rand(rng, 1:length(parents), ndraws)
     out = [similar(s) for s in shares]
     for z in eachindex(shares)
         p = inputs.patch_of_zone[z]
         for i in 1:ndraws
-            I = parents[pick[i]]
+            I = parents === nothing ? states[i].def.I_bar : parents[pick[i]]
             for t in 1:inputs.n
                 out[z][i, t] = I[p, t] * shares[z][i, t]
             end
@@ -182,21 +250,25 @@ function zone_infections(chn, parent_chain, inputs;
     return out
 end
 
-## The model data extended `horizon` days past the cut-off: the patch
-## infections continue at their cut-off weekly growth, `Ī_p(n + d) = Ī_p(n)
-## (Ī_p(n) / Ī_p(n − 7))^{d/7}`, the pre-`t0` terms are recomputed on the
-## longer grid and the vintage days become the cut-off and each horizon
-## day, so the increments read `(n, n + d]` by cumulative sum.
-function _zone_extended_data(inputs; horizon::Integer = 7, week::Integer = 7,
-        growth_bounds = (0.25, 4.0))
+## The model data extended `horizon` days past the cut-off for one draw:
+## its patch infections `I_base` continue at their own cut-off weekly
+## growth, `I_p(n + d) = I_p(n) (I_p(n) / I_p(n − 7))^{d/7}`, the pre-`t0`
+## terms are rebuilt on the longer grid and the vintage days become the
+## cut-off and each horizon day, so the increments read `(n, n + d]` by
+## cumulative sum. `report_matrix` is the same for every draw and is built
+## once by the caller. Because `I_base` already carries the draw's shared
+## quantity, the returned data need no further deformation.
+function _zone_extended_data(inputs, I_base::AbstractMatrix,
+        report_matrix::AbstractMatrix; horizon::Integer = 7,
+        week::Integer = 7, growth_bounds = (0.25, 4.0))
     zd = inputs.model_data
     n = zd.n
-    np = size(zd.I_bar, 1)
+    np = size(I_base, 1)
     I_ext = zeros(Float64, np, n + horizon)
-    I_ext[:, 1:n] .= zd.I_bar
+    I_ext[:, 1:n] .= I_base
     for p in 1:np
-        last = zd.I_bar[p, n]
-        back = n > week ? zd.I_bar[p, n - week] : last
+        last = I_base[p, n]
+        back = n > week ? I_base[p, n - week] : last
         ratio = back > 0 ? clamp(last / back, growth_bounds...) : 1.0
         for d in 1:horizon
             I_ext[p, n + d] = last * ratio^(d / week)
@@ -204,11 +276,10 @@ function _zone_extended_data(inputs; horizon::Integer = 7, week::Integer = 7,
     end
     fixed = zone_fixed_terms(I_ext, zd.g, zd.f, zd.t0)
     days = vcat(n, n .+ (1:horizon))
-    nd = n + horizon - zd.t0 + 1
     return merge(zd,
         (; I_bar = I_ext, n = n + horizon, days,
             fixed.force_pre, fixed.report_pre_cum, fixed.infections_pre,
-            report_matrix = zone_delay_operator(zd.f, nd),
+            report_matrix,
             report_pre_rows = zone_report_pre_rows(fixed.report_pre,
                 inputs.patch_of_zone, zd.t0, n + horizon)))
 end
@@ -234,19 +305,24 @@ $(TYPEDSIGNATURES)
 
 Projected share of each patch's confirmed reports falling in each zone over
 the horizon: the share renewal continued past the cut-off with the
-deviations on their AR mean path, the patch infections on their cut-off
-weekly growth and no fresh innovations, then
+deviations on their AR mean path, each draw's own patch infections on
+their cut-off weekly growth and no fresh innovations, then
 `π_z(d) = C_z(n, n + d] / Σ_{z' ∈ p} C_{z'}(n, n + d]`. Returns an
 `(ndraws × n_zones × horizon)` array.
 """
 function zone_forecast_shares(chn, inputs; horizon::Integer = 7)
+    zd = inputs.model_data
     states = _zone_states(chn, inputs)
-    zd_ext = _zone_extended_data(inputs; horizon, week = inputs.week)
+    nd_ext = zd.n + horizon - zd.t0 + 1
+    report_matrix = zone_delay_operator(zd.f, nd_ext)
     nz = length(inputs.zone_keys)
     out = zeros(Float64, length(states), nz, horizon)
     for (i, st) in enumerate(states)
+        zd_ext = _zone_extended_data(inputs, st.def.I_bar, report_matrix;
+            horizon, week = inputs.week)
         δ = _zone_extended_deviations(st, inputs; horizon, week = inputs.week)
-        inc = zone_forward_daily(zd_ext, δ, st.w0, st.ε).increments
+        inc = zone_forward_daily(zd_ext, δ, st.w0, st.ε,
+            zone_deformation(zd_ext, nothing)).increments
         for zs in inputs.patch_ranges
             isempty(zs) && continue
             run = zeros(Float64, length(zs))
@@ -616,7 +692,7 @@ function _zone_modelled_shares(chn, inputs)
     nv = length(inputs.days)
     out = zeros(Float64, length(states), nz, nv)
     for (i, st) in enumerate(states)
-        inc = zone_forward(zd, st.δ_knots, st.w0, st.ε).increments
+        inc = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def).increments
         for zs in inputs.patch_ranges, v in 1:nv
 
             isempty(zs) && continue

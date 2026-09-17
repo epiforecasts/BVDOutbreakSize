@@ -1,6 +1,8 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor, median
+using Statistics: quantile, mean, cor, median, cov, std
+using LinearAlgebra: cholesky, Symmetric, tr, I, Diagonal, diag,
+                     issuccess
 using TOML: TOML
 using DataFrames: DataFrame, rename, select, Not
 using Chain: @chain
@@ -161,7 +163,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        province_composition_model,
 # health-zone model
        bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
-       zone_share_renewal,
+       zone_share_renewal, zone_meld_block, zone_week_midpoints,
+       zone_parent_scale, zone_deformation, zone_meld_check,
        reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
        zone_forecast_shares, zone_forecast_draws, zone_forecast_archive,
        zone_overview_table,

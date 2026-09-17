@@ -482,6 +482,7 @@ end
     ZoneSynthetic
 ] begin
     using BVDOutbreakSize: bvd_zone, _zone_states, _zone_extended_data,
+                           zone_deformation, zone_delay_operator,
                            _zone_extended_deviations, zone_forward_daily
     using Turing: sample, Prior
     import FlexiChains
@@ -500,10 +501,15 @@ end
     ## The extended recursion reproduces the fitted days exactly and the
     ## deviations continue on the AR mean path.
     st = first(_zone_states(chn, inputs))
-    fitted = zone_forward(zd, st.δ_knots, st.w0, st.ε)
-    zd_ext = _zone_extended_data(inputs; horizon = H)
+    fitted = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
+    ## The forecast extends the draw's own deformed patch trajectory, so
+    ## the extension is built from `st.def.I_bar` rather than the mean.
+    nd_ext = zd.n + H - zd.t0 + 1
+    zd_ext = _zone_extended_data(inputs, st.def.I_bar,
+        zone_delay_operator(zd.f, nd_ext); horizon = H)
     δ_ext = _zone_extended_deviations(st, inputs; horizon = H)
-    ext = zone_forward_daily(zd_ext, δ_ext, st.w0, st.ε)
+    ext = zone_forward_daily(zd_ext, δ_ext, st.w0, st.ε,
+        zone_deformation(zd_ext, nothing))
     nd = inputs.n - inputs.t0 + 1
     @test ext.shares[1:nd, :] ≈ fitted.shares rtol = 1e-10
     @test ext.infections[1:nd, :] ≈ fitted.infections rtol = 1e-10
@@ -511,10 +517,11 @@ end
 
         @test δ_ext[nd + d, z] ≈ st.φ^(d / 7) * δ_ext[nd, z] rtol = 1e-12
     end
-    ## Patch infections continue at the cut-off weekly growth.
+    ## Patch infections continue at the draw's own cut-off weekly growth.
     for p in 1:2
-        ratio = syn.I_bar[p, inputs.n] / syn.I_bar[p, inputs.n - 7]
-        @test zd_ext.I_bar[p, inputs.n + 7] ≈ syn.I_bar[p, inputs.n] * ratio
+        base = st.def.I_bar
+        ratio = base[p, inputs.n] / base[p, inputs.n - 7]
+        @test zd_ext.I_bar[p, inputs.n + 7] ≈ base[p, inputs.n] * ratio
     end
 end
 
@@ -888,7 +895,8 @@ end
     zd = inputs.model_data
     K = length(zd.knots)
     model = bvd_zone(zd)
-    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 5
+    ## The melded parent draw adds one whitened dimension per kept cell.
+    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 5 + zd.meld_d
     st = zone_initial_params(model, inputs; chains = 3, jitter = 0.1)
     @test length(st.x0) == dim
     @test all(isfinite, st.x0)
@@ -912,7 +920,7 @@ end
     @test zd0.n_walking == 0
     model0 = bvd_zone(zd0)
     st_level = zone_initial_params(model0, inputs0)
-    @test length(st_level.x0) == 2 * syn.nz + 5
+    @test length(st_level.x0) == 2 * syn.nz + 5 + zd0.meld_d
     chn0 = sample(model0, Prior(), 3; chain_type = FlexiChains.VNChain,
         progress = false)
     @test !any(p -> string(p) == "z_drift", FlexiChains.parameters(chn0))
