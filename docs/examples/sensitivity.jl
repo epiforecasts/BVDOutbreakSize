@@ -430,8 +430,6 @@ MarkdownTable(joint_score_by_release_table) #hide
 # The x-axis is the date each forecast was made, so an incident stream's observed window pairs unambiguously with the forecast that made it.
 # Each panel's axis is cropped to a small multiple of what that stream actually reached, so one very wide interval cannot squash every other series flat.
 # An interval or median too wide for the panel is clamped at the top and marked with an open triangle rather than silently cut off.
-# A stream with no persistence baseline is left out, the same rule the score tables apply, so a stream the situation reports have stopped publishing leaves the figure and the tables together rather than holding a row of near-empty panels open.
-# Its scored history stays in the released data either way.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
