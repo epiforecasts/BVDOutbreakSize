@@ -534,7 +534,38 @@ function province_increment_matrix(province_history,
 end
 
 """
-    zone_reattribution_days(zone_history)
+    zone_cumulative_falls(zone_history; min_fall = 1)
+
+Every place a named zone's cumulative count falls between consecutive
+vintages by more than `min_fall`, as a vector of named tuples
+`(; province, zone, day, from, to)`. A cumulative series cannot fall on
+its own, so each entry is a revision: the report has moved counts
+between zones, provinces or the unallocated row. `min_fall` guards
+against a single-unit correction being read as a revision.
+
+[`zone_increment_matrix`](@ref) clamps a negative increment to zero, so
+without this the revision is absorbed silently. Report these rather than
+let the clamp hide them.
+"""
+function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
+    out = @NamedTuple{province::String, zone::String, day::Int,
+        from::Int, to::Int}[]
+    for (prov, zones) in zone_history, (zone, h) in zones
+
+        zone == "unallocated" && continue
+        for i in 2:length(h.days)
+            h.counts[i - 1] - h.counts[i] > min_fall || continue
+            push!(out,
+                (; province = String(prov), zone = String(zone),
+                    day = h.days[i], from = h.counts[i - 1], to = h.counts[i]))
+        end
+    end
+    return sort!(out; by = x -> (x.day, x.province, x.zone))
+end
+
+"""
+    zone_reattribution_days(zone_history; include_zone_falls = false,
+        min_fall = 1)
 
 The vintage days on which a province's `unallocated` cumulative count
 falls, keyed by province, from the per-health-zone histories loaded by
@@ -544,8 +575,18 @@ that day the zones' cumulative counts rise by more than the province's.
 A province whose unallocated row never falls, or that has none, is
 absent. [`zone_increment_matrix`](@ref) leaves those vintages out of the
 composition.
+
+A revision can also move counts the other way, out of named zones,
+leaving the unallocated row flat or rising. That vintage is a revision
+just as much, but the unallocated rule does not see it. With
+`include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
+added, so any vintage on which a named zone loses more than `min_fall`
+is left out too. It is off by default: the confirmed-case composition
+was fitted under the unallocated rule alone, and widening it there
+changes that stream rather than this one.
 """
-function zone_reattribution_days(zone_history)
+function zone_reattribution_days(zone_history;
+        include_zone_falls::Bool = false, min_fall::Integer = 1)
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
         haskey(zones, "unallocated") || continue
@@ -553,6 +594,14 @@ function zone_reattribution_days(zone_history)
         falls = [h.days[i] for i in 2:length(h.days)
                  if h.counts[i] < h.counts[i - 1]]
         isempty(falls) || (out[String(prov)] = falls)
+    end
+    if include_zone_falls
+        for f in zone_cumulative_falls(zone_history; min_fall)
+            push!(get!(out, f.province, Int[]), f.day)
+        end
+        for (prov, days) in out
+            out[prov] = sort!(unique!(days))
+        end
     end
     return out
 end
