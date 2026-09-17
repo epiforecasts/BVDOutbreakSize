@@ -21,12 +21,12 @@ Zones with fewer than 30 confirmed cases carry a decaying level rather than a wa
 ### Data
 
 - Added per-health-zone confirmed cases and deaths from Tableau 2 as
-`[zone_confirmed_history]` and `[zone_death_history]`, 85 vintages from 1 June
-to 12 September over 62 zones, each province's unallocated row kept so the
+`[zone_confirmed_history]` and `[zone_death_history]`, 86 vintages from 1 June
+to 13 September over 62 zones, each province's unallocated row kept so the
 zones partition the province exactly on every date (#711).
 `scripts/scan_zone_tableau2.jl` scans them, `scripts/confirm_zone_data.jl`
-cross-checks them against the INRB-UMIE mirror (3043 of 3057 case cells and
-3049 of 3059 death cells agree, every disagreement the mirror's), and
+cross-checks them against the INRB-UMIE mirror (3105 of 3119 case cells and
+3111 of 3121 death cells agree, every disagreement the mirror's), and
 `data/health_zones.csv` and `data/health_zones.geojson` carry the zones'
 population, centroid, DHIS2 code and boundaries.
 `load_observations` exposes the blocks as `zone_confirmed_history` and
@@ -41,14 +41,20 @@ the implied zone reproduction number and the assumptions the zone stage makes,
 with its prior sample, sampler settings, forecast projection and scoring under
 model fitting and evaluation (#711).
 - Added a health-zone results section: choropleths of the reproduction
-number, the one-week forecast and the cases to date, zone reproduction-number
+number, the two bounds of the one-week forecast interval and the cases to
+date, zone reproduction-number
 trajectories against their patch, a ranking by the probability of growth, the
 composition check with the prior predictive, the posterior predictive per
 vintage and cumulative and a calibration table, the one-week zone forecast and
 the zone fit diagnostics.
-- The release adds `zone_summary.csv` and `zone_forecast.csv`, and the
-summary page gains the zone maps, the zone forecast, and an interactive
-health-zone map reading the per-zone estimates.
+- The release adds `zone_summary.csv` and `zone_forecast.csv`, and a new
+Spatial page carries the zone maps, the zone forecast and an interactive
+health-zone map reading the per-zone estimates. The summary page keeps a
+pointer to it.
+- Every reported zone quantity carries a 90% interval. The cut-off
+deviation is an interval in the overview table, the coming-week map shows the
+forecast bounds rather than a median, and the dashboard CSV bounds the zone
+share.
 - The sensitivity page validates the one-week zone forecast beside the
 province one, scoring each province's observed zone split against the
 share-persistence and naive-persistence rules, and gains a health-zone
