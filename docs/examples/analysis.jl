@@ -117,8 +117,8 @@
 #   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
 # - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
 #   Transmission within a patch is well mixed, so spread inside a province is not represented.
-# - *Provincial testing enters the prior, not the likelihood.* Each patch's samples analysed per head shifts the prior on its relative case ascertainment, so the coefficient on it largely tracks that prior.
-#   The per-province positives are the differencing of the per-province confirmed counts the composition already scores, so fitting them would put the same observations into the joint density twice.
+# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
+#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -1908,7 +1908,20 @@ cfr_prior_fig #hide
 # ```
 #
 # with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
-# $x_p$ is the laboratory samples analysed per head of population in patch $p$ over the window, logged and centred across patches, read off the situation reports' per-province laboratory section.
+#
+# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
+#
+# ```math
+# x_p = \log \frac{A_p}{N_p}
+#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
+# ```
+#
+# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
+# A pooled patch sums its members before the ratio is taken.
+# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
+# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
+# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
 # The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
