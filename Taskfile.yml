@@ -116,7 +116,8 @@ tasks:
       - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
 
   format:
-    desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.
+    desc: >
+      Run Runic over src/, test/, docs/, scripts/, benchmark/ and ext/.
     cmds:
       - ./scripts/run_formatter.sh
 

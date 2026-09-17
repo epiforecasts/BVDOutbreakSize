@@ -1347,6 +1347,114 @@ function plot_forecast_relative_skill(
 end
 
 """
+By-vintage relative-skill figure: one panel per stream, plotting relative
+skill against the persistence baseline against the release that made the
+forecast, with one series per fit role. `scores` is a
+[`forecast_score_by_vintage`](@ref)-shaped table, carrying `stream`,
+`release`, `release_date`, `fit` and the column named by `value_col`.
+
+Releases sit at evenly spaced slots in `release_date` order, not to
+calendar scale, and are labelled with the date each was cut. The skill
+axis is log-scaled about a reference line at one, as in
+[`plot_forecast_relative_skill`](@ref).
+
+A cell whose skill is missing or non-finite is absent from its series.
+`empty_message` replaces the panels when `scores` has no rows.
+"""
+function plot_forecast_skill_by_vintage(
+        scores::DataFrame;
+        value_col::Symbol = :rel_to_baseline,
+        ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
+        title::AbstractString =
+            "Relative skill against the baseline, by release",
+        ncols::Integer = 3,
+        empty_message::AbstractString =
+            "No cut-off has been forecast by more than one release yet."
+    )
+    streams = sort(unique(scores.stream))
+    if isempty(streams)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(
+            fig[1, 1], empty_message;
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    role_order = ["individual", "joint"]
+    role_colour = Dict("individual" => :steelblue, "joint" => :firebrick)
+
+    ## One shared slot per release across every panel, so a stream missing a
+    ## release leaves a gap rather than shifting against the others.
+    rel_dates = Dict(
+        scores.release[i] => scores.release_date[i]
+            for i in 1:size(scores, 1)
+    )
+    rels = sort(collect(keys(rel_dates)); by = r -> (rel_dates[r], r))
+    slot = Dict(r => Float64(i) for (i, r) in enumerate(rels))
+    ## Thinned to about eight labels once the history is long enough.
+    step = length(rels) <= 8 ? 1 : cld(length(rels), 8)
+    ticks = 1:step:length(rels)
+    ticklabels = [string(rel_dates[rels[i]]) for i in ticks]
+
+    usedcols = min(ncols, length(streams))
+    nrows = cld(length(streams), usedcols)
+    fig = Figure(; size = (340 * usedcols, 260 * nrows + 90))
+
+    role_handles = Dict{String, Any}()
+    for (i, s) in enumerate(streams)
+        r, c = fldmod1(i, usedcols)
+        cell = scores[scores.stream .== s, :]
+        ax = Axis(
+            fig[r, c]; title = string(s),
+            xlabel = r == nrows ? "Release cut from" : "",
+            ylabel = c == 1 ? ylabel : "",
+            xticks = (Float64.(collect(ticks)), ticklabels),
+            xticklabelrotation = pi / 4,
+            yscale = log10,
+            yticks = (_SKILL_TICKS, _skill_tick_labels),
+            limits = ((0.5, length(rels) + 0.5), nothing)
+        )
+        hlines!(
+            ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
+            linewidth = 2
+        )
+        for role in role_order
+            rs = select_fit_role(cell, role)
+            isempty(rs) && continue
+            keep = [!ismissing(v) && isfinite(v) for v in rs[!, value_col]]
+            any(keep) || continue
+            xs = [slot[r] for r in rs.release[keep]]
+            ys = Float64.(rs[keep, value_col])
+            ord = sortperm(xs)
+            h = scatterlines!(
+                ax, xs[ord], ys[ord];
+                color = role_colour[role], markersize = 8, linewidth = 2
+            )
+            get!(role_handles, role, h)
+        end
+    end
+
+    handles = Any[]
+    labels = String[]
+    for role in role_order
+        haskey(role_handles, role) || continue
+        push!(handles, role_handles[role])
+        push!(labels, role)
+    end
+    isempty(title) || CairoMakie.Label(
+        fig[0, 1:usedcols], title;
+        font = :bold, tellwidth = false
+    )
+    isempty(handles) ||
+        CairoMakie.Legend(
+        fig[nrows + 1, 1:usedcols], handles, labels;
+        orientation = :horizontal, framevisible = true,
+        tellheight = true, tellwidth = false
+    )
+    return fig
+end
+
+"""
 Horizontal point-and-interval comparison of cumulative-case estimates from
 several sources. `rows` is a vector of `(label, central, lower, upper)`
 tuples, drawn top to bottom with the central estimate as a point and

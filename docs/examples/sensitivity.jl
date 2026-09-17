@@ -562,7 +562,8 @@ MarkdownTable(province_score_by_horizon_display) #hide
 # ## Frozen-fit forecast evaluation
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
-# Only the joint model is scored here, so no individual single-stream fit appears in the tables and figures below.
+# Each stream's own frozen fit is scored alongside the joint where one exists, at the one-week-back cut-off and for still-reported streams only.
+# Every other cut-off carries the joint alone.
 # The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
 # The baseline carries a weaker data-vintage guarantee than the cross-release one, since its snapshot was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
@@ -591,35 +592,32 @@ frozen_overlay_df = _release_data(
         hi60 = Float64, lo90 = Float64, hi90 = Float64,
     )
 )
-## The frozen evaluation never carries an individual single-stream fit
-## (it scores only the joint model at past cut-offs), so the individual-fit
-## comparison columns are dropped rather than shown as a column of missing.
-frozen_score_overview_table = drop_individual_fit_columns(
-    forecast_score_overview(frozen_scores_df)
+## The frozen joint carries `FROZEN_FIT`, so it is named as the joint role
+## here and compared against each stream's own frozen fit. A release
+## published before the archive had a `fit` column carries joint rows only.
+frozen_score_overview_table = forecast_score_overview(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
-frozen_score_by_horizon_table = drop_individual_fit_columns(
-    forecast_score_by_horizon(frozen_scores_df)
+frozen_score_by_horizon_table = forecast_score_by_horizon(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
-frozen_score_by_release_table = drop_individual_fit_columns(
-    forecast_score_by_release(frozen_scores_df)
+frozen_score_by_release_table = forecast_score_by_release(
+    frozen_scores_df; joint_fit = FROZEN_FIT
 )
 
-## `fit` is single-valued (`FROZEN_FIT`) by construction in every one of
-## these tables, not just for the releases scored so far, so it is dropped
-## from the display tables below as a degenerate column. The `..._table`
-## frames above keep it and still feed the relative-skill plots, which read
-## it to colour each series in the joint role.
-frozen_score_overview_display = drop_degenerate_fit_column(
-    frozen_score_overview_table
-)
-frozen_score_by_horizon_display = drop_degenerate_fit_column(
-    frozen_score_by_horizon_table
-)
+## `fit` is kept in the display tables. It was single-valued and dropped as
+## degenerate until the archive gained the single-stream fits.
+frozen_score_overview_display = frozen_score_overview_table
+frozen_score_by_horizon_display = frozen_score_by_horizon_table
+frozen_score_by_release_display = frozen_score_by_release_table
+
+## One row per release for the cut-offs more than one release forecast.
 ## See the comment above `joint_score_by_release_table`'s assignment for why
 ## this setup chunk's last statement needs a trailing `;`.
-frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table
-);
+frozen_score_by_vintage_table = forecast_score_by_vintage(
+    frozen_scores_df; joint_fit = FROZEN_FIT
+)
+frozen_score_by_vintage_display = frozen_score_by_vintage_table;
 
 #md # ```@raw html
 #md # </details>
@@ -650,6 +648,35 @@ MarkdownTable(frozen_score_by_horizon_display) #hide
 #md # ```
 
 MarkdownTable(frozen_score_by_release_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Frozen skill by release
+#
+# Skill at each cut-off more than one release forecast, one point per release rather than pooled across releases.
+# Releases run in the order they were cut, evenly spaced rather than to calendar scale.
+
+#md # ```@raw html
+#md # <details><summary>Frozen skill per release</summary>
+#md # ```
+
+frozen_skill_by_vintage_fig = plot_forecast_skill_by_vintage(
+    frozen_score_by_vintage_table
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_skill_by_vintage_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Frozen scores by release</summary>
+#md # ```
+
+MarkdownTable(frozen_score_by_vintage_display) #hide
 
 #md # ```@raw html
 #md # </details>

@@ -905,12 +905,11 @@ last walk innovation was among the worst-mixing parameters. Pass
 `centred = false` for the non-centred form, the better choice when the
 walk is weakly informed and prior-dominated. Both forms carry the same
 prior, a cumulative sum of `Normal(0, σ_rw)` steps, so only the sampled
-coordinates differ.
-[`pooled_dispersion_model`](@ref) carries the same switch for the same
-reason.
+coordinates differ. [`pooled_dispersion_model`](@ref) carries the same
+switch for the same reason.
 
-Knots run only over the surveillance window `[onset, n]`, so the number of
-innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
+Knots run only over the surveillance window `[onset, n]`, so the number
+of innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
 `week` to change the knot spacing.
 
 `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk

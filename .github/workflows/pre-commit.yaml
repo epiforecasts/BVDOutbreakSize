@@ -14,5 +14,11 @@ jobs:
     - uses: actions/setup-python@v7
     - uses: julia-actions/setup-julia@v3
     - uses: julia-actions/cache@v3
-    - run: julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+    # Runic is deliberately not installed here. The hook uses pre-commit's
+    # native `language: julia`, which builds its own environment from the
+    # `additional_dependencies` pin in `.pre-commit-config.yaml` and never
+    # consults the runner's package environment. A `Pkg.add` step here would
+    # put the formatter where pre-commit does not look, so it would read as a
+    # pin and do nothing. The quality test `test/package/CodeFormatting.jl`
+    # checks that pin against the one in `test/formatter/Project.toml`.
     - uses: ./.github/actions/pre-commit

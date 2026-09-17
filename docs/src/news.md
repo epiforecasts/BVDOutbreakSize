@@ -52,6 +52,13 @@ It counts survivors among laboratory-confirmed cases recorded as discharged, not
 - The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
 Reported cases and suspected deaths froze on 26 May and hold one scored point each with no baseline, so they were two rows of near-empty panels; the score tables already dropped them under the same rule.
 Their scored history stays in the released data.
+- The frozen-fit evaluation reports skill by release as well as pooled (#742).
+Each release re-forecasts the same four fixed cut-offs, so each carries one attempt per release by one version of the model.
+A step at the 17 August release moves confirmed cases from about 3.0 to about 3.7 times the baseline, and confirmed deaths from about 0.79 to about 0.36 on the log scale.
+Pooling hid it.
+- The frozen evaluation scores each stream's own frozen fit alongside the joint (#742).
+`forecast_frozen.csv` carries a `fit` column, which the scorer already read where present.
+Those fits exist only at the one-week-back cut-off and only for still-reported streams.
 
 ### Fixed
 
@@ -61,6 +68,10 @@ Filtering its explanation comment left a blank line, which Literate counts as vi
 - The province forecast test again catches the share column it guards (#736).
 An overlap check replaced the dropped median assertion, and the wrong column's interval overlaps the band too.
 The whole interval must now sit inside it.
+- Matched scoring keys on the made date as well as the release and horizon (#742).
+A frozen table carries several made dates per release, and every baseline row was paired against whichever forecast for that horizon was read last.
+Frozen confirmed-death skill against the baseline moves from 3.18 to 1.76 and confirmed cases from 1.76 to 1.91.
+The cross-release tables carry one made date per release and do not move.
 - The fit cache key covers `data/observations.toml`, the manifest every observation is read from (#738).
 The digest hashed `*.csv` only, so a data update that touched the manifest alone left every key unchanged and served each fit from cache against the previous data.
 Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
@@ -74,9 +85,22 @@ Recovered is still published, so this was a gap rather than a frozen stream.
 
 ### Infrastructure
 
+- A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows (#749).
+The concurrency group falls back to the run id when there is no pull request head branch, so only pull request runs are superseded.
+Fifteen pushes landed on `main` on 17 September and every documentation build was cancelled by the next one, which is why the published site and the results release both went stale.
+- Closing or merging a pull request cancels the runs still queued or in flight on its head branch (#751).
+Around fifteen pull requests merged on 17 September and the queue reached twenty-two runs against three finished, several of them four-hour fit jobs whose results nobody would read.
+Only runs carrying that head branch are cancelled, so runs on `main`, on other pull requests and on merge queue refs are left alone.
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
+- Julia code is formatted with Runic rather than JuliaFormatter (#744).
+The isolated formatter environment existed to hold one exact version, and its compat string `"=2.12.0, 2.12"` did not do that.
+Julia reads a comma-separated compat string as a union, so the exact version unioned with a caret range covering everything below 3.0 and narrowed nothing.
+The environment accepted any 2.x at or above 2.12.0 and resolved 2.14.0 in practice.
+Runic takes no configuration, so the style cannot drift with settings either.
+The pin is now a single `=` string, and a quality test fails when the environment and the pre-commit hook declare different versions.
+The switch reformatted 121 files and added `ext/` to the checked directories.
 
 ### Dependencies
 
