@@ -58,7 +58,7 @@ const _PRETTY_COLS = Dict(
     "province" => "Province",
     "stream" => "Stream",
     "scenario" => "Scenario",
-    "central_estimate" => "Central estimate",
+    "estimate" => "Estimate",
     "reported_cases" => "Reported cases",
     "narrowest_interval" => "Narrowest interval",
     "observed" => "Observed",
@@ -745,9 +745,9 @@ multiplied draw by draw, so the interval carries their correlation. The share
 itself is held over the horizon, which the width does not express. A province
 whose share is moving is scored as though it were not.
 
-Reports the median and 90% predictive interval, the observed count, and
-whether the observation fell inside the interval, one row per province and
-stream.
+Reports the 90% predictive interval, the observed count, and whether the
+observation fell inside the interval, one row per province and stream. No
+central estimate is reported.
 """
 function province_forecast_vs_truth(chn, fc;
         observed::AbstractVector, baseline::AbstractVector,
@@ -770,7 +770,6 @@ function province_forecast_vs_truth(chn, fc;
         s = posterior_summary(draws)
         push!(rows,
             (province = patch_labels[p], stream = stream,
-                central_estimate = round(quantile(draws, 0.5); digits),
                 lower_90 = round(s.lo90; digits),
                 upper_90 = round(s.hi90; digits),
                 observed = truth,
