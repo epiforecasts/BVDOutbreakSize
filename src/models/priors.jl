@@ -775,8 +775,8 @@ in over the first `onset_ramp` days of the window. With knot values
 `\\log\\lambda` and knot days `d`,
 
 ```math
-\\log \\lambda_d = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < d} z_s,
-\\qquad z_s \\sim \\mathcal N(0, 1),
+\\log \\lambda_d = \\log \\lambda_0 + \\sum_{s < d} \\epsilon_s,
+\\qquad \\epsilon_s \\sim \\mathcal N(0, \\sigma_{rw}),
 \\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
 ```
 
@@ -785,9 +785,32 @@ across the suspected-case and suspected-death streams via
 [`background_pooling_model`](@ref). Its regularising prior keeps the
 background a slow drift, which holds down the background/outbreak-size
 degeneracy and keeps the series smooth, so a death background scaled from
-it carries no steps. Knots run only over the surveillance window
-`[onset, n]`, so the number of innovations is small. `onset ≤ 1` runs it
-over the whole grid. Pass `week` to change the knot spacing.
+it carries no steps.
+
+The default is the centred form, each knot step drawn directly at
+`Normal(0, σ_rw)`. The daily new-suspect series runs to the cut-off, so
+the walk is strongly informed, and the non-centred form
+`steps = σ_rw .* z` funnels, with `z` diverging as `σ_rw → 0` and
+stretching NUTS trajectories. That funnel is what broke the joint fit
+when the series resumed. The worst R-hat went to 1.6 with 5 bulk
+effective samples, against 1.05 and 65 on the vintage before.
+
+The funnel shows in the draws. Divergences concentrate at the small end
+of `σ_rw`, at a median of 0.147 against 0.185 over all draws, and the
+correlation between `σ_rw` and its own innovations doubles, mean absolute
+0.159 to 0.323. The walk fails along its whole length rather than at its
+newly informed tail. R-hat runs 1.11 to 1.60 across the knots, against
+1.00 to 1.01 before, and the weakest mixing sits in the middle knots as
+much as the last. Pass `centred = false` for the non-centred form, the
+better choice when the walk is weakly informed and prior-dominated. Both
+forms carry the same prior, a cumulative sum of `Normal(0, σ_rw)` steps,
+so only the sampled coordinates differ.
+[`pooled_dispersion_model`](@ref) carries the same switch for the same
+reason.
+
+Knots run only over the surveillance window `[onset, n]`, so the number
+of innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
+`week` to change the knot spacing.
 
 `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk
 multiplies, not the level over the window. The log-deviation is pinned to
@@ -803,7 +826,8 @@ before `onset`).
 @model function background_walk_model(
         n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
-        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0)
+        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0),
+        centred::Bool = true
     )
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
@@ -814,12 +838,22 @@ before `onset`).
     ## Half-normal rather than lognormal. A log-scale level has a heavy right
     ## tail the background/outbreak-size degeneracy exploits to run away.
     λ_mu ~ baseline_prior
-    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
-    ## Smooth multiplicative deviation, a non-centred cumulative log-deviation
-    ## from the baseline, anchored there on the first knot. Interpolated to
-    ## daily so a death background scaled from it is smooth.
-    steps = σ_rw .* z[1:max(nb - 1, 0)]
-    log_knots = vcat(zero(σ_rw), cumsum(steps))
+    m = max(nb - 1, 1)
+    if centred
+        ## Draw each knot step on its own scale. `eps` floors the SD so a
+        ## `σ_rw ≈ 0` draw stays a proper distribution.
+        steps ~ product_distribution(
+            fill(Normal(0, σ_rw + eps(typeof(float(σ_rw)))), m)
+        )
+        walk_steps = steps[1:max(nb - 1, 0)]
+    else
+        z ~ product_distribution(fill(Normal(0, 1), m))
+        walk_steps = σ_rw .* z[1:max(nb - 1, 0)]
+    end
+    ## Smooth multiplicative deviation, a cumulative log-deviation from the
+    ## baseline, anchored there on the first knot. Interpolated to daily so a
+    ## death background scaled from it is smooth.
+    log_knots = vcat(zero(σ_rw), cumsum(walk_steps))
     walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
     ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the
