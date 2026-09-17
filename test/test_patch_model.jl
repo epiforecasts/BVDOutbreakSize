@@ -1495,9 +1495,12 @@ end
     deaths = df[df[!, "Stream"] .== "Confirmed deaths", :]
     @test deaths[!, "Observed"] == [20, 10]
     ## The shares used are the last vintage's, so province A takes the
-    ## complement of the second column rather than the first.
-    @test cases[1, "Lower 90%"] / 100 < 0.6
-    @test cases[1, "Upper 90%"] / 100 > 0.05
+    ## complement of the second column rather than the first. The whole
+    ## interval must sit inside the band, not merely overlap it. Taking the
+    ## first column instead puts province A above 0.6 and would pass an
+    ## overlap check.
+    @test cases[1, "Lower 90%"] / 100 > 0.05
+    @test cases[1, "Upper 90%"] / 100 < 0.6
     ## Coverage is reported, and the interval is ordered.
     @test all(df[!, "Lower 90%"] .<= df[!, "Upper 90%"])
     ## No central estimate is reported anywhere in the table.
