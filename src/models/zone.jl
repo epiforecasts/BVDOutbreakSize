@@ -1,24 +1,23 @@
-# Health-zone composition model, the second stage of a two-stage Markov
-# melding. Stage one is the four-patch joint fit; stage two takes its
-# posterior as fixed inputs (a cut, nothing feeds back) and fits only the
-# per-zone confirmed-case tables, as a within-patch composition. The
-# functions here build the fixed inputs from a parent chain
-# (`zone_fit_inputs`), run the share renewal and its observation model as
-# plain functions the model and the render both call, define the Turing
-# model (`bvd_zone`) and fit it (`fit_zone`).
+# Health-zone model, the second stage of a two-stage Markov melding. Stage
+# one is the four-patch joint fit. Stage two runs the patch renewal over the
+# 62 health zones on the parent's grid, with the parent's reproduction
+# numbers, seed and growth rate melded through a Gaussian summary of its
+# posterior, the parent's weekly patch infections as a melding term on the
+# zone sums, and the per-zone confirmed-case tables as a within-patch
+# composition. `zone_fit_inputs` builds everything from a parent chain,
+# `zone_forward` is the pure forward pass the model and the render share,
+# `bvd_zone` is the Turing model and `fit_zone` fits it.
 
-## Truncation lags of the stage-1 delay PMFs, the defaults of
+## Truncation lags of the parent's delay PMFs, the defaults of
 ## `patch_infection_model` (generation interval, incubation) and
-## `lab_delay_model` (receipt), so the PMFs built here are discretised as
-## the parent fit discretised them.
+## `lab_delay_model` (receipt).
 const ZONE_GI_NMAX = cdf_nmax(Gamma(2.71, 5.65))
 const ZONE_INCUBATION_NMAX = cdf_nmax(lognormal_meansd(6.3, 3.5))
 const ZONE_RECEIPT_NMAX = cdf_nmax(lognormal_meansd(4.5, 4.0))
 
-## Chain keys of the parent quantities the cut reads. The joint attaches its
-## latent submodel unprefixed, so the generation interval and incubation
-## sit under their submodel names, and the receipt delay under the
-## confirmed stream's.
+## Chain keys of the parent quantities the zone stage reads. The joint
+## attaches its latent submodel unprefixed, so the growth, generation
+## interval and incubation blocks sit under their submodel names.
 const _ZONE_PARENT_KEYS = (
     gi_alpha = Symbol("gi_state.α"),
     gi_theta = Symbol("gi_state.θ"),
@@ -28,55 +27,22 @@ const _ZONE_PARENT_KEYS = (
     receipt_sd = Symbol("confirmed_state.receipt_state.d.delay_sd"),
     infections = :infections_patch,
     death_confirmation = :onset_to_death_confirmation_pmf,
-    C_T = :C_T)
+    seed = Symbol("growth_state.C_T"),
+    r = Symbol("growth_state.r"))
 
 ## --- Pure building blocks ------------------------------------------------
 
 """
 $(TYPEDSIGNATURES)
 
-Initial zone shares at the grid start: a within-patch softmax of the
-centred standard-normal draws `z_w` at a fixed `scale`,
-`w_z = exp(scale (z_z − mean_p z)) / Σ_p`. The centring removes the flat
-direction of the softmax. Returns a vector over the zones, summing to one
-within every patch range.
-"""
-function zone_initial_shares(z_w::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange}, scale::Real)
-    Tp = promote_type(eltype(z_w), typeof(float(scale)))
-    w = zeros(Tp, length(z_w))
-    @inbounds for zs in patch_ranges
-        isempty(zs) && continue
-        m = zero(Tp)
-        for z in zs
-            m += z_w[z]
-        end
-        m /= length(zs)
-        tot = zero(Tp)
-        for z in zs
-            w[z] = exp(scale * (z_w[z] - m))
-            tot += w[z]
-        end
-        for z in zs
-            w[z] /= tot
-        end
-    end
-    return w
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Weekly deviation knots `(n_zones × n_knots)` of the zone log-transmission
-deviations. The first knot is the level `σ_level (z_level − mean_p z_level)`,
-centred within each patch. Later knots follow an AR(1) toward zero with
-retention `φ`: a walking zone adds an innovation
-`σ_δ (z − mean_{W_p} z)` centred over the walking zones of its patch, and a
-level-only zone decays along the AR mean path `φ^{k−1} δ(1)`. The patch
-sum is therefore zero at every knot. `walk_index[z]` is the zone's position
-among the `n_walking` walking zones (zero for a level-only zone) and
-`z_drift` holds the innovations knot by knot, `(k − 2) n_walking +
-walk_index[z]`.
+Weekly deviation knots `(n_zones × n_knots)`. The first knot is the level
+`σ_level (z_level − mean_p z_level)`, centred within each patch. Later knots
+follow an AR(1) toward zero with retention `φ`: a walking zone adds
+`σ_δ (z − mean_{W_p} z)` centred over the walking zones of its patch, a
+level-only zone decays along `φ^{k−1} δ(1)`. `walk_index[z]` is the zone's
+position among the `n_walking` walking zones (zero otherwise) and
+`z_drift` holds the innovations knot by knot at
+`(k − 2) n_walking + walk_index[z]`.
 """
 function zone_deviation_knots(z_level::AbstractVector, z_drift::AbstractVector,
         σ_level::Real, σ_δ::Real, φ::Real,
@@ -124,10 +90,8 @@ end
 $(TYPEDSIGNATURES)
 
 The linear map from knot values to the days `t0 … n`, as an `(n_days ×
-n_knots)` weight matrix `W` with `δ_daily = W δ_knotsᵀ`, so the
-interpolation of every zone is one matrix product. Each column is
-[`interpolate_knots`](@ref) applied to a unit vector. The reverse pass
-over a per-day interpolation loop costs far more than the product.
+n_knots)` weight matrix `W` with `δ_daily = W δ_knotsᵀ`. Each column is
+[`interpolate_knots`](@ref) applied to a unit vector.
 """
 function zone_interpolation_weights(knots::AbstractVector{<:Integer},
         t0::Integer, n::Integer)
@@ -149,11 +113,9 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The delay convolution over the days `t0 … n` as an `(n_days × n_days)`
-lower-triangular Toeplitz matrix `F` with `F[j, j − s] = f_s` (lag 0 on
-the diagonal), so the convolution of every zone's infections is one
-matrix product `F I`. The days before `t0` enter separately through
-[`zone_report_pre_rows`](@ref).
+The delay convolution over `nd` days as an `(nd × nd)` lower-triangular
+Toeplitz matrix `F` with `F[j, j − s] = f_s` (lag 0 on the diagonal), so
+the convolution of every zone's infections is one product `F Iᵀ`.
 """
 function zone_delay_operator(f::AbstractVector, nd::Integer)
     F = zeros(Float64, nd, nd)
@@ -167,210 +129,35 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The pre-`t0` reporting term of each zone's patch on the days `t0 … n`, as
-an `(n_days × n_zones)` matrix so that a zone's daily reports are
-`F I[:, z] + w_z(t_0) pre[:, z]`. `report_pre` is the `(n_patches × n)`
-term of [`zone_fixed_terms`](@ref).
+Window indicator `(n × n_windows)` for the windows `(d_{v−1}, d_v]` of the
+grid days `days`, the first opening on day one, so a daily series binned
+into the windows is one product with this matrix.
 """
-function zone_report_pre_rows(report_pre::AbstractMatrix,
-        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, n::Integer)
-    nd = n - t0 + 1
-    out = zeros(Float64, nd, length(patch_of_zone))
-    for (z, p) in enumerate(patch_of_zone), j in 1:nd
-
-        out[j, z] = report_pre[p, t0 + j - 1]
-    end
-    return out
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The parts of the zone renewal and its delays that involve only patch
-infections before the grid start `t0`, which are constant under the cut.
-Every zone holds its initial share over those days, so each term enters a
-zone's series multiplied by `w_z(t0)` only.
-
-Returns, with `I_bar` `(n_patches × n)` and PMFs `g` (lag 1) and `f`
-(lag 0):
-
-- `force_pre[p, t] = Σ_{s ≥ 1, t − s < t0} g_s Ī_p(t − s)`, the pre-`t0`
-  force of infection on every day;
-- `report_pre[p, t] = Σ_{s ≥ 0, t − s < t0} f_s Ī_p(t − s)`, the
-  pre-`t0` contribution to the daily expected reports;
-- `report_pre_cum[p, t] = Σ_{t' ≤ min(t, t0 − 1)} report_pre[p, t']`, the
-  expected reports accrued over the days before `t0`, so a vintage window
-  opening before the grid start bins them by difference;
-- `infections_pre[p] = Σ_{t < t0} Ī_p(t)`, the patch infections before
-  the grid start.
-"""
-function zone_fixed_terms(I_bar::AbstractMatrix, g::AbstractVector,
-        f::AbstractVector, t0::Integer)
-    np, n = size(I_bar)
-    Tp = promote_type(eltype(I_bar), eltype(g), eltype(f))
-    force_pre = zeros(Tp, np, n)
-    report_pre = zeros(Tp, np, n)
-    report_pre_cum = zeros(Tp, np, n)
-    infections_pre = zeros(Tp, np)
-    @inbounds for p in 1:np
-        for t in 1:n
-            acc = zero(Tp)
-            for s in 1:min(length(g), t - 1)
-                t - s < t0 || continue
-                acc += g[s] * I_bar[p, t - s]
-            end
-            force_pre[p, t] = acc
-            acc = zero(Tp)
-            for s in 0:min(length(f) - 1, t - 1)
-                t - s < t0 || continue
-                acc += f[s + 1] * I_bar[p, t - s]
-            end
-            report_pre[p, t] = acc
-        end
-        run = zero(Tp)
-        for t in 1:n
-            t < t0 && (run += report_pre[p, t])
-            report_pre_cum[p, t] = run
-        end
-        for t in 1:min(t0 - 1, n)
-            infections_pre[p] += I_bar[p, t]
-        end
-    end
-    return (; force_pre, report_pre, report_pre_cum, infections_pre)
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The share renewal over the days `t0 … n`. Each zone's force of infection is
-its own past infections through the generation interval `g` (lag 1), with
-the days before `t0` entering as the initial share times the patch's
-pre-`t0` force (`force_pre`, from [`zone_fixed_terms`](@ref)):
-
-```math
-Λ_z(t) = w_z(t_0)\\, Λ^{pre}_p(t)
-    + \\sum_{s ≥ 1,\\; t − s ≥ t_0} g_s I_z(t − s),
-\\qquad u_z(t) = e^{δ_z(t)} Λ_z(t),
-\\qquad w_z(t) = u_z(t) / \\sum_{z' ∈ p} u_{z'}(t),
-\\qquad I_z(t) = Ī_p(t)\\, w_z(t).
-```
-
-`δ_daily` is `(n_days × n_zones)`, the interpolation weights
-([`zone_interpolation_weights`](@ref)) times the knots, `w0` the initial
-shares and `I_bar` the fixed patch infections. Only the share denominator
-is floored.
-
-With `kernel` (an `(n_zones × n_zones)` matrix, column-stochastic within
-each patch and zero across patches) and per-patch `ε`, a fraction of each
-zone's force is redistributed within its patch before normalising,
-`v = (1 − ε_p) u + ε_p K u`. Pass `kernel = nothing` to skip it.
-
-Returns `(; shares, forces, infections)`, each `(n_days × n_zones)`.
-"""
-function zone_share_renewal(I_bar::AbstractMatrix, g::AbstractVector,
-        δ_daily::AbstractMatrix, w0::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer,
-        force_pre::AbstractMatrix;
-        kernel::Union{Nothing, AbstractMatrix} = nothing,
-        ε::Union{Nothing, AbstractVector} = nothing)
-    nd, nz = size(δ_daily)
-    Tp = promote_type(eltype(I_bar), eltype(g), eltype(δ_daily),
-        eltype(w0), eltype(force_pre),
-        ε === nothing ? Float64 : eltype(ε),
-        kernel === nothing ? Float64 : eltype(kernel))
-    I = zeros(Tp, nd, nz)
-    Λ = zeros(Tp, nd, nz)
-    W = zeros(Tp, nd, nz)
-    u = zeros(Tp, nz)
-    v = zeros(Tp, nz)
-    L = length(g)
-    floor_ = floatmin(Tp)
-    @inbounds for j in 1:nd
-        t = t0 + j - 1
-        smax = min(L, j - 1)
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            isempty(zs) && continue
-            fp = force_pre[p, t]
-            for z in zs
-                acc = w0[z] * fp
-                for s in 1:smax
-                    acc += g[s] * I[j - s, z]
-                end
-                Λ[j, z] = acc
-                u[z] = exp(δ_daily[j, z]) * acc
-            end
-            if kernel === nothing || ε === nothing
-                for z in zs
-                    v[z] = u[z]
-                end
-            else
-                e = ε[p]
-                for z in zs
-                    mixed = zero(Tp)
-                    for q in zs
-                        mixed += kernel[z, q] * u[q]
-                    end
-                    v[z] = (one(Tp) - e) * u[z] + e * mixed
-                end
-            end
-            tot = zero(Tp)
-            for z in zs
-                tot += v[z]
-            end
-            tot = max(tot, floor_)
-            Ip = I_bar[p, t]
-            for z in zs
-                W[j, z] = v[z] / tot
-                I[j, z] = Ip * W[j, z]
-            end
-        end
-    end
-    return (; shares = W, forces = Λ, infections = I)
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Bin the daily expected reports `(n_days × n_zones)` of
-[`zone_forward_daily`](@ref) into the vintage windows `(d_{v−1}, d_v]`
-given by the grid days `days`, the first window opening on day one. Days
-before the grid start `t0` contribute the initial share times the patch's
-pre-`t0` accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)).
-Returns the `(n_zones × n_vintages)` expected increments.
-"""
-function zone_report_increments(reports::AbstractMatrix, w0::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange},
-        days::AbstractVector{<:Integer}, t0::Integer,
-        report_pre_cum::AbstractMatrix)
-    nd, nz = size(reports)
+function zone_window_operator(days::AbstractVector{<:Integer}, n::Integer)
     nv = length(days)
-    Tp = promote_type(eltype(reports), eltype(w0), eltype(report_pre_cum))
-    C = zeros(Tp, nz, nv)
-    @inbounds for v in 1:nv
+    B = zeros(Float64, n, nv)
+    for v in 1:nv
         lo = v == 1 ? 1 : Int(days[v - 1]) + 1
-        hi = Int(days[v])
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            ## Accrued before the grid start, by difference of the cumulative.
-            pre = zero(Tp)
-            if lo < t0
-                top = min(hi, t0 - 1)
-                pre = report_pre_cum[p, top] -
-                      (lo > 1 ? report_pre_cum[p, lo - 1] : zero(Tp))
-            end
-            jlo = max(lo, t0) - t0 + 1
-            jhi = hi - t0 + 1
-            for z in zs
-                acc = w0[z] * pre
-                for j in jlo:min(jhi, nd)
-                    acc += reports[j, z]
-                end
-                C[z, v] = acc
-            end
+        for t in lo:min(Int(days[v]), n)
+            B[t, v] = 1.0
         end
     end
-    return C
+    return B
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Patch membership indicator `(n_patches × n_zones)`.
+"""
+function zone_membership(patch_ranges::AbstractVector{<:UnitRange},
+        nz::Integer)
+    P = zeros(Float64, length(patch_ranges), nz)
+    for (p, zs) in enumerate(patch_ranges), z in zs
+
+        P[p, z] = 1.0
+    end
+    return P
 end
 
 """
@@ -384,8 +171,6 @@ concentration vector `α`, `Σ y` trials:
 + \\sum_i \\log \\frac{Γ(y_i + α_i)}{Γ(α_i)\\, y_i!},
 \\qquad A = \\sum_i α_i.
 ```
-
-Plain arithmetic and `loggamma`, so it differentiates under Mooncake.
 """
 function dirichlet_multinomial_logpdf(y::AbstractVector{<:Integer},
         α::AbstractVector)
@@ -458,171 +243,324 @@ end
 """
 $(TYPEDSIGNATURES)
 
-One forward pass of the zone model from its fixed data `zd` (the
-`model_data` of [`zone_fit_inputs`](@ref)) and a draw's deviation knots
-`(n_zones × n_knots)`, initial shares `w0` and per-patch mixing fractions
-`ε` (`nothing` when mixing is off): the daily deviations (the
-interpolation weights times the knots), the share renewal and the binned
-expected reports (the delay operator times the infections plus the
-pre-`t0` rows). Called by the model and, per draw, by the render. Returns
-`(; shares, forces, infections, reports, increments)`.
+The melding term: `log S ~ Normal(m, s)` summed over the kept cells, with
+`S = weekly[cell_patch[c], cell_week[c]]` the zone stage's weekly patch
+sum of infections and `m`, `s` the parent's posterior mean and sd of the
+same log sum. The sum is floored at machine epsilon before the log.
 """
-function zone_forward(zd, δ_knots::AbstractMatrix, w0::AbstractVector,
-        ε::Union{Nothing, AbstractVector})
-    δ_daily = zd.interp * transpose(δ_knots)
-    return zone_forward_daily(zd, δ_daily, w0, ε)
+function zone_melding_logpdf(weekly::AbstractMatrix,
+        cell_patch::AbstractVector{<:Integer},
+        cell_week::AbstractVector{<:Integer},
+        m::AbstractVector{<:Real}, s::AbstractVector{<:Real})
+    Tp = float(eltype(weekly))
+    lp = zero(Tp)
+    @inbounds for c in eachindex(cell_patch)
+        x = log(safe_rate(weekly[cell_patch[c], cell_week[c]]))
+        z = (x - m[c]) / s[c]
+        lp -= z * z / 2 + log(s[c]) + log(2π) / 2
+    end
+    return lp
 end
 
 """
 $(TYPEDSIGNATURES)
 
-[`zone_forward`](@ref) from daily deviations `(n_days × n_zones)` rather
-than knots, for the forecast projection, which continues the deviations
-on their AR mean path day by day.
+Daily log reproduction number of every patch `(n_patches × n)` from the
+melded parent vector `φ`, whose first `n_patches × n_knots` entries are
+the patch log reproduction numbers at the `knots`, flattened
+column-major, interpolated linearly and held flat outside the knot span
+([`interpolate_knots`](@ref)).
 """
-function zone_forward_daily(zd, δ_daily::AbstractMatrix, w0::AbstractVector,
-        ε::Union{Nothing, AbstractVector})
-    kernel = ε === nothing ? nothing : zd.mixing_kernel
-    st = zone_share_renewal(zd.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
-        zd.t0, zd.force_pre; kernel, ε)
-    reports = zd.report_matrix * st.infections .+
-              zd.report_pre_rows .* transpose(w0)
-    increments = zone_report_increments(reports, w0, zd.patch_ranges,
-        zd.days, zd.t0, zd.report_pre_cum)
-    return (; st.shares, st.forces, st.infections, reports, increments)
-end
-
-## Cumulative zone infections to the last grid day: the pre-`t0` patch
-## infections at the initial share plus the renewal's own days.
-function _zone_cumulative_infections(infections::AbstractMatrix,
-        w0::AbstractVector, patch_ranges::AbstractVector{<:UnitRange},
-        infections_pre::AbstractVector)
-    nd, nz = size(infections)
-    Tp = promote_type(eltype(infections), eltype(w0), eltype(infections_pre))
-    cum = zeros(Tp, nz)
-    @inbounds for p in eachindex(patch_ranges)
-        zs = patch_ranges[p]
-        for z in zs
-            acc = w0[z] * infections_pre[p]
-            for j in 1:nd
-                acc += infections[j, z]
-            end
-            cum[z] = acc
+function zone_parent_log_rt(φ::AbstractVector, knots::AbstractVector{<:Integer},
+        np::Integer, n::Integer)
+    K = length(knots)
+    Tp = eltype(φ)
+    out = zeros(Tp, np, n)
+    @inbounds for p in 1:np
+        daily = interpolate_knots(view(φ, p:np:(np * K)), knots, n)
+        for t in 1:n
+            out[p, t] = daily[t]
         end
     end
-    return cum
+    return out
 end
 
-## Implied zone reproduction number on grid row `j`, `I_z / Λ_z`, `NaN` where
-## the zone's cumulative infections are below `rt_floor`.
-function _zone_rt_at(infections::AbstractMatrix, forces::AbstractMatrix,
-        cum::AbstractVector, j::Integer, rt_floor::Real)
-    Tp = promote_type(eltype(infections), eltype(forces))
-    nz = size(infections, 2)
-    out = zeros(Tp, nz)
-    nan = convert(Tp, NaN)
+"""
+$(TYPEDSIGNATURES)
+
+Zone reproduction numbers `(n_zones × n)`, `R_z(t) = R_{p(z)}(t)
+exp(δ_z(t))`, from the patch log reproduction numbers `(n_patches × n)`
+and the daily deviations `(n × n_zones)`.
+"""
+function zone_rt_matrix(log_Rp::AbstractMatrix, δ_daily::AbstractMatrix,
+        patch_of_zone::AbstractVector{<:Integer})
+    n, nz = size(δ_daily)
+    Tp = promote_type(eltype(log_Rp), eltype(δ_daily))
+    R = zeros(Tp, nz, n)
     @inbounds for z in 1:nz
-        r = infections[j, z] / max(forces[j, z], floatmin(Tp))
-        out[z] = cum[z] >= rt_floor ? r : nan
+        p = patch_of_zone[z]
+        for t in 1:n
+            R[z, t] = exp(log_Rp[p, t] + δ_daily[t, z])
+        end
+    end
+    return R
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Seed share of every zone: a within-patch softmax of `2 (z − mean)` over the
+zones of each seeded patch (`seed_zones` lists them and `seed_ranges`
+their positions in `z_seed`, patch by patch), times that patch's share
+`patch_share[p]` of the parent's seed. Zones outside the seeded patches
+are zero.
+"""
+function zone_seed_shares(z_seed::AbstractVector, patch_share::AbstractVector,
+        seed_zones::AbstractVector{<:Integer},
+        seed_ranges::AbstractVector{<:UnitRange},
+        seed_patches::AbstractVector{<:Integer}, nz::Integer;
+        scale::Real = 2.0)
+    Tp = promote_type(eltype(z_seed), eltype(patch_share), typeof(float(scale)))
+    out = zeros(Tp, nz)
+    @inbounds for (i, rs) in enumerate(seed_ranges)
+        isempty(rs) && continue
+        m = zero(Tp)
+        for j in rs
+            m += z_seed[j]
+        end
+        m /= length(rs)
+        tot = zero(Tp)
+        for j in rs
+            e = exp(scale * (z_seed[j] - m))
+            out[seed_zones[j]] = e
+            tot += e
+        end
+        share = patch_share[seed_patches[i]]
+        for j in rs
+            out[seed_zones[j]] = share * out[seed_zones[j]] / tot
+        end
     end
     return out
 end
 
-## Dirichlet-multinomial concentration `(1 − ρ) / ρ` from the composition
-## dispersion `ρ`, with `ρ` and `1 − ρ` floored at machine epsilon so a
-## proposal at either end of `[0, 1]` gives a finite, positive `κ`.
+"""
+$(TYPEDSIGNATURES)
+
+Seed matrix `(n_zones × L)`: each zone's share of the parent's cryptic
+curve [`seed_infections`](@ref)`(seed, r, L)`.
+"""
+function zone_seed_matrix(seed_shares::AbstractVector, seed::Real, r::Real,
+        L::Integer)
+    curve = seed_infections(seed, r, L)
+    nz = length(seed_shares)
+    Tp = promote_type(eltype(seed_shares), eltype(curve))
+    S = zeros(Tp, nz, L)
+    @inbounds for z in 1:nz
+        s = seed_shares[z]
+        for j in 1:L
+            S[z, j] = s * curve[j]
+        end
+    end
+    return S
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Importation intensity per origin zone and day `(n_zones × n)`,
+`min(level_z exp(effect ramp_t), 1)`, the parent's construction.
+"""
+function zone_mixing_intensity(level::AbstractVector, effect::Real,
+        ramp::AbstractVector)
+    nz = length(level)
+    n = length(ramp)
+    Tp = promote_type(eltype(level), typeof(float(effect)), eltype(ramp))
+    ε = zeros(Tp, nz, n)
+    @inbounds for t in 1:n
+        e = exp(effect * ramp[t])
+        for z in 1:nz
+            ε[z, t] = min(level[z] * e, one(Tp))
+        end
+    end
+    return ε
+end
+
+## Per-origin intensity levels `ε_bar exp(σ_ε (z_ε − mean z_ε))`.
+function _zone_mixing_levels(ε_bar::Real, σ_ε::Real, z_ε::AbstractVector)
+    Tp = promote_type(typeof(float(ε_bar)), typeof(float(σ_ε)), eltype(z_ε))
+    nz = length(z_ε)
+    m = zero(Tp)
+    @inbounds for z in 1:nz
+        m += z_ε[z]
+    end
+    m /= nz
+    out = zeros(Tp, nz)
+    @inbounds for z in 1:nz
+        out[z] = ε_bar * exp(σ_ε * (z_ε[z] - m))
+    end
+    return out
+end
+
+## Patch seed shares under the parent's uncoupled rule: the primary takes
+## `1 / (1 + Σ f)` and secondary patch `p` takes `f_{p−1} / (1 + Σ f)`.
+function _zone_patch_seed_shares(seed_fraction::AbstractVector, np::Integer)
+    Tp = float(eltype(seed_fraction))
+    out = zeros(Tp, np)
+    if isempty(seed_fraction)
+        out[1] = one(Tp)
+        return out
+    end
+    denom = one(Tp) + sum(seed_fraction)
+    out[1] = one(Tp) / denom
+    @inbounds for p in 2:np
+        out[p] = seed_fraction[p - 1] / denom
+    end
+    return out
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Share of each zone in its patch's infections on day `t`, the patch sum
+floored at `floatmin`.
+"""
+function zone_patch_shares(infections::AbstractMatrix,
+        patch_ranges::AbstractVector{<:UnitRange}, t::Integer)
+    Tp = eltype(infections)
+    nz = size(infections, 1)
+    out = zeros(Tp, nz)
+    @inbounds for zs in patch_ranges
+        tot = zero(Tp)
+        for z in zs
+            tot += infections[z, t]
+        end
+        tot = max(tot, floatmin(Tp))
+        for z in zs
+            out[z] = infections[z, t] / tot
+        end
+    end
+    return out
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One forward pass of the zone model from its fixed data `zd` (the
+`model_data` of [`zone_fit_inputs`](@ref)): the melded parent vector `φ`,
+the deviation knots `(n_zones × n_knots)`, the seed shares, and the
+importation levels per origin zone with the ramp effect (`nothing` and
+zero when mixing is off). Builds the zone reproduction numbers, runs
+[`patch_infections`](@ref) over the zones, convolves the reporting delay
+and bins the vintage windows, and sums the patches by week. Called by the
+model and, per draw, by the render. Returns `(; Rt, infections,
+importation, reports, increments, patch_sums, weekly)`.
+"""
+function zone_forward(zd, φ::AbstractVector, δ_knots::AbstractMatrix,
+        seed_shares::AbstractVector,
+        ε_level::Union{Nothing, AbstractVector}, ε_effect::Real)
+    np = length(zd.patch_ranges)
+    K = length(zd.knots)
+    log_Rp = zone_parent_log_rt(φ, zd.knots, np, zd.n)
+    δ_daily = zd.interp * transpose(δ_knots)
+    Rt = zone_rt_matrix(log_Rp, δ_daily, zd.patch_of_zone)
+    seeds = zone_seed_matrix(seed_shares, exp(φ[np * K + 1]), φ[np * K + 2],
+        zd.L)
+    st = if ε_level === nothing
+        patch_infections(Rt, zd.g, seeds, zd.kernel, 0.0)
+    else
+        patch_infections(Rt, zd.g, seeds, zd.kernel,
+            zone_mixing_intensity(ε_level, ε_effect, zd.ramp))
+    end
+    I = st.infections
+    reports = zd.report_matrix * transpose(I)
+    increments = transpose(reports) * zd.bin_matrix
+    patch_sums = zd.membership * I
+    weekly = patch_sums * zd.week_matrix
+    return (; Rt, infections = I, importation = st.importation, reports,
+        increments, patch_sums, weekly)
+end
+
+## Dirichlet-multinomial concentration `(1 − ρ) / ρ`, with `ρ` and `1 − ρ`
+## floored at machine epsilon so a proposal at either end of `[0, 1]` gives
+## a finite, positive `κ`.
 _zone_kappa(ρ::Real) = safe_rate(one(ρ) - ρ) / safe_rate(ρ)
-
-## Shares at the knot days as an `(n_zones × n_knots)` matrix.
-function _zone_shares_at_knots(shares::AbstractMatrix,
-        knots::AbstractVector{<:Integer}, t0::Integer)
-    nz = size(shares, 2)
-    out = zeros(eltype(shares), nz, length(knots))
-    @inbounds for (k, d) in enumerate(knots), z in 1:nz
-
-        out[z, k] = shares[d - t0 + 1, z]
-    end
-    return out
-end
 
 ## --- The model -----------------------------------------------------------
 
 """
-Health-zone composition model, stage two of the melding. `zd` is the
-`model_data` of [`zone_fit_inputs`](@ref): the fixed stage-1 inputs (patch
-infections `Ī_p`, the generation-interval and infection-to-report PMFs),
-the zone count matrix and the scored cells, the knot days and the walking
-mask, all plain arrays, plus the softmax scale `share_scale`, the knot
-spacing `week` and the reporting floor `rt_floor`. Nothing in it is
-sampled here.
+Health-zone model, stage two of the melding. `zd` is the `model_data` of
+[`zone_fit_inputs`](@ref): the Gaussian summary of the parent's melded
+vector, the parent's weekly patch sums, the delay PMFs, the zone kernel,
+the count matrix and its scored cells, the grid and the walking mask, all
+plain arrays.
 
 ### Parameters
 
 ```math
 \\begin{aligned}
-z^w_z &\\sim N(0, 1), &
-w_z(t_0) &= \\mathrm{softmax}_p\\bigl(s\\,(z^w_z − \\bar z^w_p)\\bigr) \\\\
+η &\\sim N(0, I), & φ &= \\hat μ + \\hat L η \\\\
 σ_L &\\sim N^+(0, 0.3),\\; z^L_z \\sim N(0, 1), &
 δ_z(1) &= σ_L (z^L_z − \\bar z^L_p) \\\\
-h &\\sim \\mathrm{LogNormal}(\\log 42, 0.6), & φ &= 2^{−w/h} \\\\
+h &\\sim \\mathrm{LogNormal}(\\log 42, 0.6), & φ_δ &= 2^{−w/h} \\\\
 σ_δ &\\sim N^+(0, 0.1),\\; z^δ_{z,k} \\sim N(0, 1), &
-δ_z(k) &= φ\\, δ_z(k−1) + σ_δ (z^δ_{z,k} − \\bar z^δ_{W_p,k}) \\\\
+δ_z(k) &= φ_δ\\, δ_z(k−1) + σ_δ (z^δ_{z,k} − \\bar z^δ_{W_p,k}) \\\\
+z^s_z &\\sim N(0, 1), & s_z &= \\mathrm{softmax}_p(2 (z^s_z − \\bar z^s_p)) \\\\
+ε̄ &\\sim \\mathrm{Beta}(1, 100),\\; σ_ε \\sim N^+(0, 0.5),\\;
+z^ε_z \\sim N(0, 1),\\; β_ε \\sim N(0, 0.5) \\\\
 ρ &\\sim N^+(0, 0.1) \\text{ on } [0, 1], & κ &= (1 − ρ)/ρ
 \\end{aligned}
 ```
 
-`s` is `zd.share_scale` and `w` is `zd.week`, the days between knots. The
-innovations exist for the walking zones `W_p` only (cumulative confirmed
-cases at the cut-off at or above the threshold, and at least two such
-zones in the patch); a level-only zone decays along the AR mean path.
-Each block is one `~` over a `product_distribution`, and the innovation
-block is absent when no zone walks. `κ` floors both `ρ` and `1 − ρ` at
-machine epsilon (`safe_rate`), so a proposal at either end of the prior's
-support keeps the composition mass finite.
+`φ` holds the patch log reproduction numbers at the parent's knots, the
+log seed and the growth rate; `melding = :cut` fixes it at `\\hat μ`. The
+innovations exist for the walking zones `W_p` only. With `mixing` the
+seed is split over the primary patch's zones and every other zone starts
+empty; without it each secondary patch takes a sampled fraction of the
+seed, as the parent does against an all-zero kernel, and `ε ≡ 0`.
 
 ### Likelihood
 
-The share renewal [`zone_share_renewal`](@ref) gives each zone's
-infections as its share of the fixed patch infections, the delay
-operator ([`zone_delay_operator`](@ref)) and binning
-([`zone_report_increments`](@ref)) give
-the expected confirmed reports per vintage window, and the observed zone
+[`zone_forward`](@ref) gives the zone infections. The observed zone
 increments of each patch and vintage follow a Dirichlet-multinomial on the
-allocated total with concentration `κ π`
-([`zone_composition_logpdf`](@ref)), as one `@addlogprob!` over every
-cell.
-
-`mixing = true` adds one shared within-patch mixing fraction per patch,
-`ε_p ~ Beta(1, 100)`, redistributing force through the gravity kernel
-`zd.mixing_kernel`. `deaths = true` adds one Dirichlet-multinomial on the
-cumulative allocated zone deaths at the last vintage, through the
-infection-to-death-confirmation PMF, with no extra multiplier. Both are off
-by default.
+allocated total with concentration `κ π` ([`zone_composition_logpdf`](@ref))
+and the weekly patch sums of zone infections follow the parent's posterior
+of the same sums ([`zone_melding_logpdf`](@ref)), one `@addlogprob!` each.
+`deaths = true` adds one Dirichlet-multinomial on the cumulative allocated
+zone deaths at the last vintage through the death-confirmation PMF.
 
 ### Deterministics
 
-Flattened column-major where a matrix: `delta_knots_zone` `(n_zones ×
-n_knots)`, `share_knots_zone` `(n_zones × n_knots)`, `delta_T_zone`,
-`share_T_zone`, `share_start_zone` (the initial shares `w_z(t_0)`),
-`R_T_zone` (the implied `I_z / Λ_z` at the cut-off, `NaN` below
-`zd.rt_floor` cumulative zone infections), `region_sd_zone` (`σ_L`),
-`region_drift_sd_zone` (`σ_δ`), `region_halflife_zone` (`h`),
-`composition_rho_zone` (`ρ`) and, with mixing, `mixing_epsilon_zone`. Daily
-trajectories are rebuilt from these by [`zone_forward`](@ref).
+`delta_knots_zone` (flattened `(n_zones × n_knots)`), `delta_T_zone`,
+`R_T_zone`, `share_T_zone`, `seed_share_zone`, `mixing_epsilon_zone`
+(at the cut-off), `mixing_level_zone`, `mixing_effect_zone`,
+`parent_logR_knots` (flattened `(n_patches × n_knots)`), `parent_C_T`,
+`parent_r`, `patch_sum_T`, `region_sd_zone`, `region_drift_sd_zone`,
+`region_halflife_zone` and `composition_rho_zone`. Daily trajectories are
+rebuilt from these by [`zone_forward`](@ref).
 """
 @model function bvd_zone(zd;
-        mixing::Bool = false,
+        mixing::Bool = true,
         deaths::Bool = false,
+        melding::Symbol = :sampled,
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
-        mixing_prior = Beta(1, 100),
+        importation_epsilon_prior = Beta(1, 100),
+        importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_effect_prior = Normal(0, 0.5),
+        seed_fraction_prior = LogNormal(log(0.05), 1.0),
         offset_prior = Normal(0, 1))
     nz = size(zd.counts, 1)
     np = length(zd.patch_ranges)
     K = length(zd.knots)
-    z_w ~ product_distribution(fill(offset_prior, nz))
+    nφ = np * K
+    φ = if melding === :sampled
+        η ~ product_distribution(fill(offset_prior, length(zd.phi_mean)))
+        zd.phi_mean .+ zd.phi_chol * η
+    else
+        zd.phi_mean
+    end
     σ_level ~ region_sd_prior
     z_level ~ product_distribution(fill(offset_prior, nz))
     δ_halflife ~ region_halflife_prior
@@ -630,58 +568,83 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     ρ ~ rho_prior
     ## Sampled only when used, or they would be prior-only dimensions.
     n_drift = zd.n_walking * (K - 1)
-    if n_drift > 0
-        z_drift ~ product_distribution(fill(offset_prior, n_drift))
+    z_drift = if n_drift > 0
+        z_drift_ ~ product_distribution(fill(offset_prior, n_drift))
+        z_drift_
     else
-        z_drift = Float64[]
+        Float64[]
     end
-    if mixing
-        ε_mix ~ product_distribution(fill(mixing_prior, np))
+    ## Seed layout. Coupled zones are seeded in the primary patch only;
+    ## uncoupled ones take the parent's per-patch fractions.
+    seed_zones = mixing ? zd.seed_zones_coupled : zd.seed_zones_uncoupled
+    seed_ranges = mixing ? zd.seed_ranges_coupled : zd.seed_ranges_uncoupled
+    seed_patches = mixing ? zd.seed_patches_coupled :
+                   zd.seed_patches_uncoupled
+    z_seed ~ product_distribution(fill(offset_prior, length(seed_zones)))
+    patch_share = if mixing || np == 1
+        _zone_patch_seed_shares(Float64[], np)
     else
-        ε_mix = nothing
+        seed_fraction ~ product_distribution(
+            fill(seed_fraction_prior, np - 1))
+        _zone_patch_seed_shares(seed_fraction, np)
     end
-    w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
-    φ = exp2(-zd.week / δ_halflife)
-    δ_knots = zone_deviation_knots(z_level, z_drift, σ_level, σ_δ, φ,
+    seed_shares = zone_seed_shares(z_seed, patch_share, seed_zones,
+        seed_ranges, seed_patches, nz)
+    ε_level = if mixing
+        ε_bar ~ importation_epsilon_prior
+        σ_ε ~ importation_sd_prior
+        z_ε ~ product_distribution(fill(offset_prior, nz))
+        _zone_mixing_levels(ε_bar, σ_ε, z_ε)
+    else
+        nothing
+    end
+    ε_effect = if mixing
+        β_ε ~ importation_effect_prior
+        β_ε
+    else
+        0.0
+    end
+    φ_δ = exp2(-zd.week / δ_halflife)
+    δ_knots = zone_deviation_knots(z_level, z_drift, σ_level, σ_δ, φ_δ,
         zd.patch_ranges, zd.walking, zd.walk_index, zd.n_walking, K)
-    fw = zone_forward(zd, δ_knots, w0, ε_mix)
+    fw = zone_forward(zd, φ, δ_knots, seed_shares, ε_level, ε_effect)
     κ = _zone_kappa(ρ)
     @addlogprob! zone_composition_logpdf(zd.counts, fw.increments,
         zd.cell_patch, zd.cell_vintage, zd.cell_total, zd.cell_const,
         zd.patch_ranges, κ)
+    @addlogprob! zone_melding_logpdf(fw.weekly, zd.meld_patch, zd.meld_week,
+        zd.meld_mean, zd.meld_sd)
     if deaths
-        ## One composition of the cumulative allocated deaths at the last
-        ## vintage, through the death-confirmation delay.
-        death_daily = zd.death_matrix * fw.infections .+
-                      zd.death_pre_rows .* transpose(w0)
-        D = zone_report_increments(death_daily, w0, zd.patch_ranges,
-            zd.death_days, zd.t0, zd.death_pre_cum)
-        @addlogprob! zone_composition_logpdf(zd.death_counts, D,
-            zd.death_cell_patch, zd.death_cell_vintage,
+        D = fw.infections * zd.death_weights
+        @addlogprob! zone_composition_logpdf(zd.death_counts,
+            reshape(D, nz, 1), zd.death_cell_patch, zd.death_cell_vintage,
             zd.death_cell_total, zd.death_cell_const, zd.patch_ranges, κ)
     end
-    nd = zd.n - zd.t0 + 1
-    cum = _zone_cumulative_infections(fw.infections, w0, zd.patch_ranges,
-        zd.infections_pre)
-    R_T_zone := _zone_rt_at(fw.infections, fw.forces, cum, nd, zd.rt_floor)
+    n = zd.n
+    R_T_zone := fw.Rt[:, n]
+    share_T_zone := zone_patch_shares(fw.infections, zd.patch_ranges, n)
+    patch_sum_T := fw.patch_sums[:, n]
     delta_knots_zone := vec(δ_knots)
     delta_T_zone := δ_knots[:, K]
-    share_T_zone := fw.shares[nd, :]
-    share_start_zone := w0
-    share_knots_zone := vec(_zone_shares_at_knots(fw.shares, zd.knots, zd.t0))
+    seed_share_zone := seed_shares
+    parent_logR_knots := φ[1:nφ]
+    parent_C_T := exp(φ[nφ + 1])
+    parent_r := φ[nφ + 2]
     region_sd_zone := σ_level
     region_drift_sd_zone := σ_δ
     region_halflife_zone := δ_halflife
     composition_rho_zone := ρ
     if mixing
-        mixing_epsilon_zone := ε_mix
+        mixing_level_zone := ε_level
+        mixing_effect_zone := ε_effect
+        mixing_epsilon_zone := zone_mixing_intensity(ε_level, ε_effect,
+            zd.ramp)[:, n]
     end
-    return (; shares = fw.shares, forces = fw.forces,
-        infections = fw.infections, increments = fw.increments,
-        δ_knots, w0, cum)
+    return (; fw.Rt, fw.infections, fw.increments, fw.weekly, δ_knots,
+        seed_shares, φ)
 end
 
-## --- Fixed inputs from the parent chain ---------------------------------
+## --- Parent summaries -----------------------------------------------------
 
 ## Draws of `key` from the parent chain (per-draw vectors with
 ## `vectors = true`), with a clear error naming the key when the chain does
@@ -693,19 +656,6 @@ function _zone_parent_draws(chn, key::Symbol; vectors::Bool = false)
     return vectors ? _draw_vectors(chn, key) : _draws(chn, key)
 end
 
-## Index of the parent draw whose `C_T` sits at quantile `q`, or `nothing`
-## for the posterior mean.
-function _zone_parent_index(chn, parent_summary::Symbol)
-    parent_summary === :mean && return nothing
-    q = parent_summary === :draw_low ? 0.05 :
-        parent_summary === :draw_high ? 0.95 :
-        error("zone_fit_inputs: `parent_summary` must be :mean, :draw_low " *
-              "or :draw_high, got $(repr(parent_summary)).")
-    C_T = _zone_parent_draws(chn, _ZONE_PARENT_KEYS.C_T)
-    target = quantile(C_T, q)
-    return argmin(abs.(C_T .- target))
-end
-
 ## Generation-interval PMF (lag 1) of one parent draw, discretised as the
 ## parent did.
 function _zone_gi_pmf(α::Real, θ::Real)
@@ -713,9 +663,8 @@ function _zone_gi_pmf(α::Real, θ::Real)
     return pmf[2:end] ./ sum(pmf[2:end])
 end
 
-## Mean over draws of a per-draw PMF, or that of a single draw.
-function _zone_mean_pmf(build, ndraws::Integer, idx)
-    idx === nothing || return build(idx)
+## Mean over draws of a per-draw PMF.
+function _zone_mean_pmf(build, ndraws::Integer)
     acc = build(1)
     for i in 2:ndraws
         acc = acc .+ build(i)
@@ -726,57 +675,131 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The stage-1 quantities the zone model conditions on, read from a
-`bvd_joint` parent chain: the patch infections `Ī_p(t)` `(n_patches × n)`,
-the generation-interval PMF `g` (lag 1), the infection-to-confirmed-report
-PMF `f = incubation ⊛ receipt` (lag 0, the delay the parent's per-province
-composition applies to infections) and the infection-to-confirmed-death PMF
-`death_pmf = incubation ⊛ onset-to-death ⊛ receipt`.
-
-With `parent_summary = :mean` each is a posterior mean: `log_infections`
-is the mean over draws of the log infections per day, flattened as the
-parent stores `infections_patch`, so `Ī_p` is its exponential reshaped to
-`(n_patches × n)`; the PMFs are the mean of the per-draw PMFs. With
-`:draw_low` or `:draw_high` every quantity comes from the single draw
-whose national `C_T` sits nearest its 5th or 95th percentile, for the
-feedback sensitivity, and `draw` is that draw's index (`nothing` for the
-mean). Returns `(; log_infections, g, f, death_pmf, draw)`.
+The parent's posterior-mean delay PMFs: the generation interval `g` (lag
+1), the infection-to-confirmed-report PMF `f = incubation ⊛ receipt` (lag
+0) and the infection-to-confirmed-death PMF `death_pmf` (empty when the
+chain carries no death-confirmation delay). Returns `(; g, f, death_pmf)`.
 """
-function zone_parent_inputs(chn; parent_summary::Symbol = :mean)
+function zone_parent_inputs(chn)
     keys_ = _ZONE_PARENT_KEYS
-    idx = _zone_parent_index(chn, parent_summary)
-    infs = _zone_parent_draws(chn, keys_.infections; vectors = true)
-    ndraws = length(infs)
-    logI = if idx === nothing
-        acc = log.(safe_rate.(Float64.(infs[1])))
-        for i in 2:ndraws
-            acc .+= log.(safe_rate.(Float64.(infs[i])))
-        end
-        acc ./ ndraws
-    else
-        log.(safe_rate.(Float64.(infs[idx])))
-    end
     α = _zone_parent_draws(chn, keys_.gi_alpha)
     θ = _zone_parent_draws(chn, keys_.gi_theta)
     inc_m = _zone_parent_draws(chn, keys_.inc_mean)
     inc_s = _zone_parent_draws(chn, keys_.inc_sd)
     rec_m = _zone_parent_draws(chn, keys_.receipt_mean)
     rec_s = _zone_parent_draws(chn, keys_.receipt_sd)
-    g = _zone_mean_pmf(i -> _zone_gi_pmf(α[i], θ[i]), ndraws, idx)
+    ndraws = length(α)
+    g = _zone_mean_pmf(i -> _zone_gi_pmf(α[i], θ[i]), ndraws)
     inc_pmf(i) = discretise_censored(lognormal_meansd(inc_m[i], inc_s[i]),
         ZONE_INCUBATION_NMAX)
     rec_pmf(i) = discretise_censored(lognormal_meansd(rec_m[i], rec_s[i]),
         ZONE_RECEIPT_NMAX)
-    f = _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), rec_pmf(i)), ndraws, idx)
+    f = _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), rec_pmf(i)), ndraws)
     death_pmf = if _has_key(chn, keys_.death_confirmation)
         dc = _draw_vectors(chn, keys_.death_confirmation)
-        _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), Float64.(dc[i])),
-            ndraws, idx)
+        _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), Float64.(dc[i])), ndraws)
     else
         Float64[]
     end
-    return (; log_infections = logI, g, f, death_pmf, draw = idx)
+    return (; g, f, death_pmf)
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Ledoit–Wolf shrinkage of the sample covariance of `X` (one draw per row)
+toward the scaled identity `μ I`, `μ = tr(S) / p`. Returns the shrunk
+covariance and the shrinkage intensity.
+"""
+function ledoit_wolf(X::AbstractMatrix)
+    ndraw, p = size(X)
+    Xc = X .- (sum(X; dims = 1) ./ ndraw)
+    S = transpose(Xc) * Xc ./ ndraw
+    μ = tr(S) / p
+    d2 = sum(abs2, S - μ * I) / p
+    b2 = 0.0
+    for i in 1:ndraw
+        x = view(Xc, i, :)
+        b2 += sum(abs2, x * transpose(x) - S)
+    end
+    b2 /= ndraw^2 * p
+    shrink = d2 > 0 ? clamp(b2 / d2, 0.0, 1.0) : 1.0
+    Σ = shrink * μ * Matrix{Float64}(I, p, p) + (1 - shrink) * S
+    return Σ, shrink
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Gaussian summary of the parent's melded vector `φ = (log R_p at the
+knots, log seed, r)` and its weekly patch sums. The patch log reproduction
+numbers come from [`reconstruct_patch_rt`](@ref) read at the knot days,
+the seed and growth rate from the growth submodel's `C_T` and `r`. The
+covariance is shrunk by [`ledoit_wolf`](@ref) and factored. The weekly
+windows are `[1, knots[1]]` then `(knots[k−1], knots[k]]`; a window whose
+mean patch sum is below `floor` infections is left out of the melding
+cells. Returns `(; phi_mean, phi_cov, phi_chol, phi_sd, phi_labels,
+meld_patch, meld_week, meld_mean, meld_sd, shrinkage)`.
+"""
+function zone_parent_summary(chn; n::Integer, np::Integer,
+        knots::AbstractVector{<:Integer}, breakpoint, rt_start::Integer,
+        rt_walk_start::Integer, week::Integer, ramp::Real,
+        patch_names::AbstractVector, floor::Real = 1.0)
+    keys_ = _ZONE_PARENT_KEYS
+    rt = reconstruct_patch_rt(chn; n, breakpoint, n_patches = np, rt_start,
+        rt_walk_start, week, ramp)
+    seed = _zone_parent_draws(chn, keys_.seed)
+    r = _zone_parent_draws(chn, keys_.r)
+    ndraw = length(seed)
+    K = length(knots)
+    X = zeros(Float64, ndraw, np * K + 2)
+    for i in 1:ndraw, p in 1:np, k in 1:K
+        v = rt[p][i, knots[k]]
+        ismissing(v) && error(
+            "zone_parent_summary: the parent's reproduction number is " *
+            "undefined on knot day $(knots[k]); the knots must sit inside " *
+            "its established window.")
+        X[i, p + np * (k - 1)] = log(safe_rate(v))
+    end
+    X[:, np * K + 1] .= log.(safe_rate.(seed))
+    X[:, np * K + 2] .= r
+    phi_mean = vec(sum(X; dims = 1)) ./ ndraw
+    phi_cov, shrinkage = ledoit_wolf(X)
+    phi_chol = Matrix(cholesky(Symmetric(phi_cov)).L)
+    phi_sd = sqrt.(diag(phi_cov))
+    phi_labels = vcat(
+        ["$(patch_names[p]) knot $k" for k in 1:K for p in 1:np],
+        ["log C_T", "r"])
+    ## Weekly patch sums.
+    infs = _zone_parent_draws(chn, keys_.infections; vectors = true)
+    length(infs[1]) == np * n || error(
+        "zone_fit_inputs: the parent's `infections_patch` holds " *
+        "$(length(infs[1])) entries but $np patches by $n days is " *
+        "$(np * n); the parent must be fitted to the same data cut-off.")
+    W = zone_window_operator(knots, n)
+    sums = zeros(Float64, ndraw, np, K)
+    for i in 1:ndraw
+        sums[i, :, :] = reshape(Float64.(infs[i]), np, n) * W
+    end
+    meld_patch = Int[]
+    meld_week = Int[]
+    meld_mean = Float64[]
+    meld_sd = Float64[]
+    for k in 1:K, p in 1:np
+
+        s = view(sums, :, p, k)
+        mean(s) >= floor || continue
+        ls = log.(safe_rate.(s))
+        push!(meld_patch, p)
+        push!(meld_week, k)
+        push!(meld_mean, mean(ls))
+        push!(meld_sd, max(std(ls), 1e-3))
+    end
+    return (; phi_mean, phi_cov, phi_chol, phi_sd, phi_labels, meld_patch,
+        meld_week, meld_mean, meld_sd, shrinkage)
+end
+
+## --- Fixed inputs from the parent chain ---------------------------------
 
 ## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
 ## zero when the zone is absent from the block.
@@ -788,69 +811,102 @@ function _zone_last_cumulative(history, prov::AbstractString,
     return isempty(c) ? 0 : Int(c[end])
 end
 
-## Within-patch gravity kernel over the zones, column-stochastic within each
-## patch and zero across patches, from the zone populations and centroids.
-function _zone_mixing_kernel(pops::AbstractVector, coords::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange})
-    nz = length(pops)
-    K = zeros(Float64, nz, nz)
-    for zs in patch_ranges
-        length(zs) >= 2 || continue
-        sub = province_importation_kernel(pops[zs];
-            distances = province_distance_matrix(coords[zs]))
-        for (j, q) in enumerate(zs)
-            s = sum(@view sub[:, j])
-            s > 0 || continue
-            for (i, z) in enumerate(zs)
-                K[z, q] = sub[i, j] / s
-            end
-        end
+"""
+$(TYPEDSIGNATURES)
+
+Gravity kernel over the zones, [`province_importation_kernel`](@ref) on
+the zone populations and haversine centroid distances, so every column's
+off-diagonal sum is `1 − N_z / N` over all zones across patches.
+"""
+function zone_kernel(pops::AbstractVector, coords::AbstractVector)
+    return province_importation_kernel(pops;
+        distances = province_distance_matrix(coords))
+end
+
+## The package's health-zone metadata, or `nothing` when the file is absent.
+function _default_health_zones()
+    path = joinpath(@__DIR__, "..", "..", "data", "health_zones.csv")
+    isfile(path) || return nothing
+    return load_health_zones(path)
+end
+
+## Metadata row per zone; an error names the first zone without one.
+function _zone_metadata_rows(zones, zone_province, zone_names)
+    zones === nothing && error(
+        "zone_fit_inputs: the health-zone metadata (data/health_zones.csv) " *
+        "is needed for the zone kernel; pass `zones`.")
+    lookup = Dict((r.province, r.zone) => r for r in zones)
+    rows = [get(lookup, (zone_province[z], zone_names[z]), nothing)
+            for z in eachindex(zone_names)]
+    z = findfirst(isnothing, rows)
+    z === nothing || error(
+        "zone_fit_inputs: no population and centroid for zone " *
+        "`$(zone_province[z]).$(zone_names[z])` in the health-zone metadata.")
+    return rows
+end
+
+## The zone indices, ranges into the seed vector and patch ids of the
+## seeded patches: the primary patch alone, or every non-empty patch.
+function _zone_seed_layout(patch_ranges, patches)
+    zones = Int[]
+    ranges = UnitRange{Int}[]
+    ids = Int[]
+    for p in patches
+        zs = patch_ranges[p]
+        isempty(zs) && continue
+        start = length(zones) + 1
+        append!(zones, zs)
+        push!(ranges, start:length(zones))
+        push!(ids, p)
     end
-    return K
+    return (; zones, ranges, patches = ids)
 end
 
 """
 $(TYPEDSIGNATURES)
 
 Everything the zone model and its render need, built once from the
-parent chain and the observations: the fixed stage-1 inputs
-([`zone_parent_inputs`](@ref)), the zone units and their data, the grid
-and the sampler's starting point.
+parent chain and the observations.
 
 Zones are the health-zone rows of `obs.zone_confirmed_history`
-([`zone_increment_matrix`](@ref)), nested in the stage-1 patches of
-[`PROVINCE_NAMES`](@ref) and ordered patch by patch; `unallocated`
-pseudo-rows are never units. Per vintage the zone increments are the
-consecutive-vintage differences clamped at zero, the first vintage's
-increment its cumulative, and the allocated patch total their sum. A
+([`zone_increment_matrix`](@ref)), nested in the parent's patches of
+`patch_names` and ordered patch by patch; `unallocated` pseudo-rows are
+never units. Per vintage the zone increments are the consecutive-vintage
+differences clamped at zero and the allocated patch total their sum; a
 vintage on which a patch's unallocated count falls in either zone block
-is a reattribution into the zones and is zeroed for that patch
-([`zone_increment_matrix`](@ref)); `excluded` lists those `(patch, date)`
-pairs. Cells with a zero allocated total are dropped here, so the model
-scores only positive totals. The walking set is the zones whose
+is zeroed for that patch and listed in `excluded`. Cells with a zero
+allocated total are not scored. The walking set is the zones whose
 cumulative confirmed count at the cut-off is at least `walk_threshold`,
-in patches with at least two such zones. The grid starts `lead_days`
-before the first vintage and
-carries knots every `week` days ([`knot_days`](@ref)) to the cut-off.
-`share_scale` is the softmax scale of the initial shares and `rt_floor`
-the cumulative zone infections below which `R_T_zone` is undefined; both
-are stored in `model_data` for the model and in the returned inputs for
-the render, so the two read one value.
+in patches with at least two such zones.
 
-`zones` is the metadata table of [`load_health_zones`](@ref), read from the
-package data by default, for labels and, with mixing, populations and
-centroids. Returns a named tuple whose `model_data` field is the plain-array
-input of [`bvd_zone`](@ref), alongside the zone keys and labels, the patch
-index and labels, the vintage days and dates, the cumulative counts, the
-walking mask, the knots, the grid start and the initial-share start values.
+The grid is the parent's: `n` days, the renewal start `rt_start` (the
+seed length), the walk start `rt_walk_start` and the weekly knots from it
+([`knot_days`](@ref)), the intervention `breakpoint` and its ramp. The
+defaults derive them from `obs` as the joint does. The parent summary
+([`zone_parent_summary`](@ref)) and delay PMFs
+([`zone_parent_inputs`](@ref)) are read from `parent_chain`, and the zone
+kernel ([`zone_kernel`](@ref)) from the `zones` metadata.
+
+Returns a named tuple whose `model_data` field is the plain-array input
+of [`bvd_zone`](@ref), alongside the zone keys and labels, the patch index
+and labels, the vintage days and dates, the counts, the walking mask, the
+grid, the parent summary and the kernel. `t0` is the walk start, the
+first day the zone reproduction numbers are plotted from.
 """
 function zone_fit_inputs(parent_chain, obs;
-        parent_summary::Symbol = :mean,
         walk_threshold::Integer = 30,
-        lead_days::Integer = 42,
         week::Integer = 7,
-        share_scale::Real = 2.0,
-        rt_floor::Real = 10.0,
+        breakpoint = hasproperty(obs, :who_first_sitrep_days) ?
+                     obs.n - obs.who_first_sitrep_days : missing,
+        rt_start::Integer = hasproperty(obs, :tmrca_days) ?
+                            clamp(
+            obs.n - round(Int, obs.tmrca_days) +
+            RENEWAL_START_LEAD, 1, obs.n) : 1,
+        rt_walk_start::Integer = ismissing(breakpoint) ? rt_start :
+                                 clamp(round(Int, breakpoint) - RT_WALK_LEAD,
+            rt_start, obs.n),
+        ramp::Real = RT_INTERVENTION_RAMP,
+        melding_floor::Real = 1.0,
         zones = _default_health_zones(),
         patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS)
@@ -858,17 +914,8 @@ function zone_fit_inputs(parent_chain, obs;
         "zone_fit_inputs: `obs` carries no `zone_confirmed_history`; load " *
         "the observations with a manifest that has the zone tables.")
     n = obs.n
-    parent = zone_parent_inputs(parent_chain; parent_summary)
     np = length(patch_names)
-    length(parent.log_infections) == np * n || error(
-        "zone_fit_inputs: the parent's `infections_patch` holds " *
-        "$(length(parent.log_infections)) entries but $np patches by $n " *
-        "days is $(np * n); the parent must be fitted to the same data " *
-        "cut-off.")
-    I_bar = exp.(reshape(parent.log_infections, np, n))
-    ## Zone units and counts, patch by patch. A vintage on which a patch's
-    ## unallocated count falls in either block is a reattribution into the
-    ## zones and is left out of that patch's composition.
+    ## Zone units and counts, patch by patch.
     death_history = hasproperty(obs, :zone_death_history) ?
                     obs.zone_death_history : Dict{String, Any}()
     reattribution = mergewith(vcat,
@@ -913,7 +960,10 @@ function zone_fit_inputs(parent_chain, obs;
         "zone_fit_inputs: the zone count blocks do not stack to " *
         "$(nz) zones by $(nv) vintages.")
     zone_keys = [zone_province[z] * "." * zone_names[z] for z in 1:nz]
-    labels = _zone_labels(zones, zone_province, zone_names)
+    rows = _zone_metadata_rows(zones, zone_province, zone_names)
+    labels = [r.label for r in rows]
+    kernel = zone_kernel(Float64[r.population for r in rows],
+        [(r.lat, r.lon) for r in rows])
     ## Scored cells: every (patch, vintage) with a positive allocated total.
     cell_patch = Int[]
     cell_vintage = Int[]
@@ -946,15 +996,14 @@ function zone_fit_inputs(parent_chain, obs;
         n_walking += 1
         walk_index[z] = n_walking
     end
-    ## Grid and knots.
-    t0 = clamp(days[1] - lead_days, 1, n)
-    knots = knot_days(n; week, start = t0)
-    fixed = zone_fixed_terms(I_bar, parent.g, parent.f, t0)
-    nd = n - t0 + 1
-    interp = zone_interpolation_weights(knots, t0, n)
-    report_matrix = zone_delay_operator(parent.f, nd)
-    report_pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone,
-        t0, n)
+    ## The parent's grid and summaries.
+    knots = knot_days(n; week, start = rt_walk_start)
+    parent = zone_parent_inputs(parent_chain)
+    summary = zone_parent_summary(parent_chain; n, np, knots, breakpoint,
+        rt_start, rt_walk_start, week, ramp, patch_names,
+        floor = melding_floor)
+    coupled = _zone_seed_layout(patch_ranges, 1:1)
+    uncoupled = _zone_seed_layout(patch_ranges, 1:np)
     ## Optional death composition: cumulative allocated deaths at the last
     ## vintage, zones absent from the death table counting zero.
     death_counts = reshape(
@@ -972,117 +1021,44 @@ function zone_fit_inputs(parent_chain, obs;
         push!(death_cell_const, _zone_cell_const(death_counts, zs, 1))
     end
     death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
-    death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
-    death_matrix = zone_delay_operator(death_pmf, nd)
-    death_pre_rows = zone_report_pre_rows(death_fixed.report_pre,
-        patch_of_zone, t0, n)
-    ## Within-patch mixing kernel, when the metadata covers every zone.
-    mixing_kernel = _zone_mixing_kernel_or_zeros(zones, zone_province,
-        zone_names, patch_ranges)
-    ## Data-informed starting point for the initial shares: the log observed
-    ## cumulative share at the first vintage with a pseudo-count, centred
-    ## within patch and divided by the softmax scale.
-    z_w_start = zeros(Float64, nz)
-    for zs in patch_ranges
-        isempty(zs) && continue
-        lg = [log(counts[z, 1] + 0.5) for z in zs]
-        z_w_start[zs] .= (lg .- (sum(lg) / length(lg))) ./ share_scale
-    end
     model_data = (; counts, cell_patch, cell_vintage, cell_total, cell_const,
-        days, I_bar, g = parent.g, f = parent.f, patch_ranges, knots, t0, n,
-        week, share_scale, rt_floor,
+        days, n, L = rt_start, knots, week, g = parent.g, f = parent.f,
+        patch_ranges, patch_of_zone,
         walking = collect(walking), walk_index, n_walking,
-        fixed.force_pre, fixed.report_pre_cum,
-        fixed.infections_pre, mixing_kernel, interp, report_matrix,
-        report_pre_rows,
+        phi_mean = summary.phi_mean, phi_chol = summary.phi_chol,
+        summary.meld_patch, summary.meld_week, summary.meld_mean,
+        summary.meld_sd,
+        ramp = sigmoid_ramp(n, breakpoint; ramp), kernel,
+        interp = zone_interpolation_weights(knots, 1, n),
+        report_matrix = zone_delay_operator(parent.f, n),
+        bin_matrix = zone_window_operator(days, n),
+        membership = zone_membership(patch_ranges, nz),
+        week_matrix = zone_window_operator(knots, n),
+        seed_zones_coupled = coupled.zones,
+        seed_ranges_coupled = coupled.ranges,
+        seed_patches_coupled = coupled.patches,
+        seed_zones_uncoupled = uncoupled.zones,
+        seed_ranges_uncoupled = uncoupled.ranges,
+        seed_patches_uncoupled = uncoupled.patches,
         death_counts, death_cell_patch,
         death_cell_vintage = ones(Int, length(death_cell_patch)),
-        death_cell_total, death_cell_const, death_days = [n],
-        death_pre_cum = death_fixed.report_pre_cum, death_matrix,
-        death_pre_rows)
+        death_cell_total, death_cell_const,
+        death_weights = vec(sum(zone_delay_operator(death_pmf, n); dims = 1)))
     dates = [obs.seeding + Day(d - 1) for d in days]
     return (; model_data, zone_keys, zone_labels = labels, zone_province,
         zone_names, patch_of_zone, patch_ranges,
         patch_names = collect(String, patch_names),
         patch_labels = collect(String, patch_labels),
         days, dates, counts, cumulative, excluded, walking = collect(walking),
-        walk_threshold, knots, t0, n, week, share_scale, rt_floor,
-        seeding = obs.seeding, cutoff = obs.cutoff, z_w_start,
-        I_bar, g = parent.g, f = parent.f, death_pmf,
-        parent_summary, parent_draw = parent.draw)
-end
-
-## The package's health-zone metadata, or `nothing` when the file is absent.
-function _default_health_zones()
-    path = joinpath(@__DIR__, "..", "..", "data", "health_zones.csv")
-    isfile(path) || return nothing
-    return load_health_zones(path)
-end
-
-## Display label per zone from the metadata, falling back to the key.
-function _zone_labels(zones, zone_province::AbstractVector,
-        zone_names::AbstractVector)
-    fallback(z) = titlecase(replace(zone_names[z], "_" => " "))
-    zones === nothing && return [fallback(z) for z in eachindex(zone_names)]
-    lookup = Dict((r.province, r.zone) => r.label for r in zones)
-    return [get(lookup, (zone_province[z], zone_names[z]), fallback(z))
-            for z in eachindex(zone_names)]
-end
-
-## The mixing kernel when every zone has metadata, else an all-zero matrix
-## (mixing is then refused by `fit_zone`).
-function _zone_mixing_kernel_or_zeros(zones, zone_province, zone_names,
-        patch_ranges)
-    nz = length(zone_names)
-    zones === nothing && return zeros(Float64, nz, nz)
-    lookup = Dict((r.province, r.zone) => r for r in zones)
-    rows = [get(lookup, (zone_province[z], zone_names[z]), nothing)
-            for z in 1:nz]
-    any(isnothing, rows) && return zeros(Float64, nz, nz)
-    pops = Float64[r.population for r in rows]
-    coords = [(r.lat, r.lon) for r in rows]
-    return _zone_mixing_kernel(pops, coords, patch_ranges)
+        walk_threshold, knots, t0 = rt_walk_start, n, week, breakpoint,
+        rt_start, rt_walk_start, ramp, seeding = obs.seeding,
+        cutoff = obs.cutoff, g = parent.g, f = parent.f, death_pmf, kernel,
+        summary.phi_mean, summary.phi_sd, summary.phi_cov, summary.phi_labels,
+        summary.shrinkage, summary.meld_patch, summary.meld_week,
+        summary.meld_mean, summary.meld_sd)
 end
 
 ## --- Fitting -------------------------------------------------------------
-
-"""
-$(TYPEDSIGNATURES)
-
-Per-chain starting points for [`bvd_zone`](@ref), in unconstrained space.
-The constrained start is the data-informed point of the specification
-(`δ = 0`, the initial shares from the observed first-vintage cumulative,
-`σ_L = 0.2`, `σ_δ = 0.05`, `h = 42`, `ρ = 0.05`, and `ε = 0.01` with
-mixing), built through a `VarInfo`, linked, then jittered per chain with
-`N(0, jitter²)` noise. Returns
-`(; inits, x0, logp)`, the `InitFromVector` strategies, the unjittered
-unconstrained vector and each chain's initial log joint density.
-"""
-function zone_initial_params(model, inputs; chains::Integer = 2,
-        seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false)
-    zd = inputs.model_data
-    nz = length(inputs.z_w_start)
-    K = length(zd.knots)
-    n_drift = zd.n_walking * (K - 1)
-    params = (; z_w = inputs.z_w_start, σ_level = 0.2, z_level = zeros(nz),
-        δ_halflife = 42.0, σ_δ = 0.05, ρ = 0.05)
-    if n_drift > 0
-        params = merge(params, (; z_drift = zeros(n_drift)))
-    end
-    if mixing
-        params = merge(params,
-            (; ε_mix = fill(0.01, length(zd.patch_ranges))))
-    end
-    rng = MersenneTwister(seed)
-    vi = VarInfo(rng, model, InitFromParams(params))
-    vi_linked = link(vi, model)
-    x0 = collect(vi_linked[:])
-    ldf = LogDensityFunction(model, getlogjoint, vi_linked)
-    xs = [x0 .+ jitter .* randn(rng, length(x0)) for _ in 1:chains]
-    logp = [LogDensityProblems.logdensity(ldf, x) for x in xs]
-    inits = [InitFromVector(x, ldf) for x in xs]
-    return (; inits, x0, logp)
-end
 
 ## Iterations-by-chains matrix of a sampler statistic, or `nothing`.
 function _zone_stat(chn, name::Symbol)
@@ -1098,62 +1074,52 @@ $(TYPEDSIGNATURES)
 
 Fit the health-zone model [`bvd_zone`](@ref) melded from `parent_chain`, a
 `bvd_joint` chain with the patch structure on, to the zone tables in
-`obs`. Builds the fixed inputs with [`zone_fit_inputs`](@ref), starts every
-chain at the data-informed point of [`zone_initial_params`](@ref) and runs
-[`nuts_sample`](@ref) with a diagonal metric at the given settings. Logs
-each chain's initial log density before sampling and its adapted step size,
-divergences and the fraction of iterations at the tree-depth cap after.
-`mixing`, `deaths` and `parent_summary` select the sensitivity variants;
-`walk_threshold`, `lead_days`, `week`, `share_scale`, `rt_floor`, `zones`,
-`patch_names` and `patch_labels` pass through to [`zone_fit_inputs`](@ref)
-and any other keyword to [`nuts_sample`](@ref). Returns the chain.
+`obs`. Builds the inputs with [`zone_fit_inputs`](@ref) and runs
+[`nuts_sample`](@ref) with its default initialisation at the given
+settings. Logs the adapted step size, the fraction of iterations at the
+tree-depth cap and the divergences per chain after. `mixing`, `deaths`
+and `melding` select the variants; `walk_threshold`, `week`, `zones`,
+`patch_names` and `patch_labels` pass through to
+[`zone_fit_inputs`](@ref) and any other keyword to [`nuts_sample`](@ref).
+Returns the chain.
 """
 function fit_zone(parent_chain, obs;
-        samples::Integer = 600,
+        samples::Integer = 500,
         chains::Integer = 2,
-        n_adapts::Integer = 400,
-        target_accept::Real = 0.8,
-        max_depth::Integer = 8,
+        n_adapts::Integer = min(200, samples ÷ 2),
+        target_accept::Real = 0.85,
+        max_depth::Integer = 10,
         seed::Integer = 20260518,
         callback = nothing,
-        mixing::Bool = false,
+        mixing::Bool = true,
         deaths::Bool = false,
-        parent_summary::Symbol = :mean,
+        melding::Symbol = :sampled,
         walk_threshold::Integer = 30,
-        lead_days::Integer = 42,
         week::Integer = 7,
-        share_scale::Real = 2.0,
-        rt_floor::Real = 10.0,
-        jitter::Real = 0.1,
         zones = _default_health_zones(),
         patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS,
         kwargs...)
-    inputs = zone_fit_inputs(parent_chain, obs; parent_summary,
-        walk_threshold, lead_days, week, share_scale, rt_floor, zones,
+    melding in (:sampled, :cut) || error(
+        "fit_zone: `melding` must be :sampled or :cut, got $(repr(melding)).")
+    inputs = zone_fit_inputs(parent_chain, obs; walk_threshold, week, zones,
         patch_names, patch_labels)
     zd = inputs.model_data
-    mixing && !any(!iszero, zd.mixing_kernel) &&
-        error(
-            "fit_zone: mixing needs a population and centroid for every zone " *
-            "in the health-zone metadata.")
     deaths && isempty(zd.death_cell_patch) &&
         error(
             "fit_zone: deaths = true but the observations carry no allocated " *
             "zone deaths.")
-    model = bvd_zone(zd; mixing, deaths)
-    start = zone_initial_params(model, inputs; chains, seed, jitter, mixing)
+    model = bvd_zone(zd; mixing, deaths, melding)
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)
     n_knots = length(inputs.knots)
     n_cells = length(zd.cell_patch)
-    dimension = length(start.x0)
-    initial_logp = start.logp
+    n_melding = length(zd.meld_patch)
     @info("fit_zone: starting", n_zones, n_walking, n_knots, n_cells,
-        dimension, initial_logp)
+        n_melding, mixing, deaths, melding)
     t = time()
     chn = nuts_sample(model; samples, chains, n_adapts, target_accept,
-        max_depth, seed, callback, init = start.inits, kwargs...)
+        max_depth, seed, callback, kwargs...)
     elapsed = time() - t
     steps = _zone_stat(chn, :step_size)
     depth = _zone_stat(chn, :tree_depth)
