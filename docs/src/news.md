@@ -18,6 +18,11 @@ The inclusion rules in `data/README.md` record which streams each vintage carrie
 ### Fixed
 
 - The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
+- The stopped-streams chunk in the sensitivity page no longer renders an empty code block (#736).
+Filtering its explanation comment left a blank line, which Literate counts as visible, so the fence stayed behind once the text went.
+- The province forecast test again catches the share column it guards (#736).
+An overlap check replaced the dropped median assertion, and the wrong column's interval overlaps the band too.
+The whole interval must now sit inside it.
 
 ### Infrastructure
 
