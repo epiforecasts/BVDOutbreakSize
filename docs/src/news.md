@@ -12,7 +12,7 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
-- The suspected-case background walk is sampled in centred form, each knot step drawn at `Normal(0, σ_bg)` rather than as a standardised innovation rescaled by `σ_bg` (#TBD2).
+- The suspected-case background walk is sampled in centred form, each knot step drawn at `Normal(0, σ_bg)` rather than as a standardised innovation rescaled by `σ_bg` (#745).
 The daily new-suspect series now runs to the cut-off, so the walk is strongly informed and the non-centred form funnels.
 That funnel is what stopped the joint fit mixing when the series resumed in #713.
 `background_walk_model` takes `centred = false` for the old form, which stays the better choice when the walk is weakly informed.
