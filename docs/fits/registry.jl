@@ -16,7 +16,9 @@ const _PKG = pkgdir(BVDOutbreakSize)
 ## Source files whose contents define the fits: the model and its submodels,
 ## the renewal maths, the sampler, the data pipeline and this registry. A
 ## change to any of them invalidates every cached fit; plotting and reporting
-## code (plots.jl, summaries.jl, ...) deliberately does not.
+## code (plots.jl, summaries.jl, ...) deliberately does not. `cache.jl` is
+## here because it defines what the key covers: a change to the hashing rule
+## that left the key alone would give two different rules the same key.
 const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "priors.jl"),
     joinpath(_PKG, "src", "models", "observations.jl"),
@@ -26,6 +28,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "constants.jl"),
     joinpath(_PKG, "src", "data.jl"),
     joinpath(_PKG, "src", "onset_curve.jl"),
+    joinpath(@__DIR__, "cache.jl"),
     @__FILE__
 ]
 
@@ -46,12 +49,20 @@ const FIT_CACHE_SCHEMA = "v1"
 ## overlay, rewritten the same way.
 ## Every file score_releases.jl writes into data/ must be listed here, or the
 ## render's data hash diverges from the fit matrix's and every fit misses.
+##
+## The digest covers every file under `data/` whatever its format, so this
+## list is the only thing that keeps a file out of the key. `README.md`
+## documents the directory and `sitrep_pdfs` holds the situation report PDFs
+## the scans are taken from. Neither is read by the model, and hashing 230 MB
+## of PDFs would refit the whole report each time one is downloaded. An entry
+## naming a directory drops everything under it.
 const FIT_DATA_EXCLUDE = ("released_estimates.csv",
     "rt_by_release.csv", "r0_by_release.csv",
     "forecast_scores.csv", "forecast_scores_frozen.csv",
     "forecast_overlay.csv", "forecast_overlay_frozen.csv",
     "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv",
-    "r0_by_release_by_stream.csv", "province_forecast_scores.csv")
+    "r0_by_release_by_stream.csv", "province_forecast_scores.csv",
+    "README.md", "sitrep_pdfs")
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 500, chains::Integer = 2)
@@ -180,7 +191,9 @@ function build_fit_specs(obs;
             province_increments = pp.increments,
             province_days = pp.days,
             province_death_increments = pd.increments,
-            province_death_days = pd.days) : (;)
+            province_death_days = pd.days,
+            province_testing_covariate = province_testing_covariate(
+                o.province_lab_daily_history)) : (;)
         chn = nuts_sample(
             bvd_joint(
                 o.n, o.exported_cases, o.total_deaths,
@@ -357,6 +370,7 @@ function build_fit_specs(obs;
     patch_prov_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES))
+    patch_testing = province_testing_covariate(obs.province_lab_daily_history)
 
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
@@ -405,7 +419,8 @@ function build_fit_specs(obs;
         province_increments = patch_prov.increments,
         province_days = patch_prov.days,
         province_death_increments = patch_prov_deaths.increments,
-        province_death_days = patch_prov_deaths.days)
+        province_death_days = patch_prov_deaths.days,
+        province_testing_covariate = patch_testing)
 
     specs = Any[
         ## Headline fit. The patch (meta-population) model is the joint. With

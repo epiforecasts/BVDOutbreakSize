@@ -232,6 +232,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
     province_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES))
+    province_testing = province_testing_covariate(
+        obs.province_lab_daily_history)
     posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))

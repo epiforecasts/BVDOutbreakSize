@@ -117,6 +117,8 @@
 #   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
 # - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
 #   Transmission within a patch is well mixed, so spread inside a province is not represented.
+# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
+#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -1901,11 +1903,26 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (z_p - \bar z), \qquad
+# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
 # \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
 # ```
 #
 # with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+#
+# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
+#
+# ```math
+# x_p = \log \frac{A_p}{N_p}
+#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
+# ```
+#
+# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
+# A pooled patch sums its members before the ratio is taken.
+# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
+# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
+# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
+# The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
 # ```math
@@ -1921,6 +1938,7 @@ cfr_prior_fig #hide
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \beta \sim \mathrm{Normal}(0,\ 0.5), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
 # \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
 # ```
@@ -2759,12 +2777,13 @@ province_detail_table #hide
 
 spatial_hyper_table = summary_table(chn_joint,
     [:region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd];
+        :province_ascertainment_sd, :province_testing_coefficient];
     digits = 3,
     labels = Dict(:region_sd => "Rt deviation spread",
         :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread"));
+        :province_ascertainment_sd => "Ascertainment spread",
+        :province_testing_coefficient => "Testing effect on ascertainment"));
 
 #md # ```@raw html
 #md # </details>
@@ -3014,6 +3033,7 @@ pp_joint = predict(
         n_patches = N_PATCHES,
         province_increments = missing,
         province_days = province_cases.days,
+        province_testing_covariate = province_testing,
         province_death_increments = missing,
         province_death_days = province_deaths.days),
     chn_joint);
@@ -4341,7 +4361,7 @@ CSV.write(joinpath(output_dir, "forecast_frozen.csv"),
 ## `RT_WALK_LEAD` days before the first situation report, so each fit carries
 ## the starts its own fit used. Each single-stream fit forecasts only the
 ## dataset it observes; the joint forecasts every shared stream. Recovered has
-## no single-stream fit, so it stays a joint-only stream in `forecast.csv`.
+## no single-stream fit, so the joint is the only fit that carries it.
 stream_thin = 5
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 ## Observed bed occupancy at the cut-off, the level the isolation forecast
@@ -4353,6 +4373,10 @@ _iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
 ## INCREMENT this total should add over the horizon, not the level (see the
 ## methods section on the nowcast and forecast).
 _onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
+## Cumulative recovered at the cut-off. The loader leaves it missing when the
+## manifest carries no recovered vintages, and the forecast returns the
+## increment rather than this base, so a zero stands in for that case.
+_recovered_at_cutoff = coalesce(obs.recovered_cases, 0)
 stream_fits = [
     (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
@@ -4360,6 +4384,7 @@ stream_fits = [
             (:suspected_deaths, "suspected deaths", obs.total_deaths),
             (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
             (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
+            (:recovered, "recovered", _recovered_at_cutoff),
             (:isolation_beds, "isolation beds", _iso_at_cutoff),
             (:exports, "exports", obs.exported_cases),
             (:onset_reports, "onset reports", _onset_at_cutoff)]),
