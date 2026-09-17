@@ -117,6 +117,8 @@
 #   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
 # - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
 #   Transmission within a patch is well mixed, so spread inside a province is not represented.
+# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
+#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -1901,11 +1903,26 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (z_p - \bar z), \qquad
+# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
 # \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
 # ```
 #
 # with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+#
+# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
+#
+# ```math
+# x_p = \log \frac{A_p}{N_p}
+#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
+# ```
+#
+# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
+# A pooled patch sums its members before the ratio is taken.
+# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
+# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
+# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
+# The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
 # ```math
@@ -1921,6 +1938,7 @@ cfr_prior_fig #hide
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \beta \sim \mathrm{Normal}(0,\ 0.5), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
 # \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
 # ```
@@ -2734,12 +2752,13 @@ province_detail_table #hide
 
 spatial_hyper_table = summary_table(chn_joint,
     [:region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd];
+        :province_ascertainment_sd, :province_testing_coefficient];
     digits = 3,
     labels = Dict(:region_sd => "Rt deviation spread",
         :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread"));
+        :province_ascertainment_sd => "Ascertainment spread",
+        :province_testing_coefficient => "Testing effect on ascertainment"));
 
 #md # ```@raw html
 #md # </details>
@@ -2989,6 +3008,7 @@ pp_joint = predict(
         n_patches = N_PATCHES,
         province_increments = missing,
         province_days = province_cases.days,
+        province_testing_covariate = province_testing,
         province_death_increments = missing,
         province_death_days = province_deaths.days),
     chn_joint);

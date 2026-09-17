@@ -12,6 +12,15 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
+- The prior on a province's relative case ascertainment carries its laboratory
+throughput per head of population, logged and centred across patches, with a
+sampled coefficient (#410).
+Ituri analyses about 372 samples per 100k over the laboratory window against
+Nord-Kivu's 104, and nothing else in the model represented that contrast, so it
+was free to land in the provincial reproduction number.
+The per-province positives are not fitted.
+They are the differencing of the per-province confirmed counts the case
+composition already scores.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
