@@ -10,6 +10,28 @@ each push to `main` also republishes the rendered analysis and the
 
 Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
+### Report
+
+- The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
+The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+
+### Fixed
+
+- The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
+
+### Infrastructure
+
+- One-off harnesses written at the repository root are ignored (#726).
+Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
+The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
+
+### Dependencies
+
+- The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).
+Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no version, one of which merged in #699.
+Standard libraries ship with Julia, so these environments have nothing to pin.
+The root `Project.toml` keeps its entries, which Aqua requires and which were never malformed.
+
 ## v2.0.0
 
 Changes since v1.18.0
@@ -115,8 +137,6 @@ A per-fit matrix job said nothing about the chain it produced, so whether a fit 
 It goes to the job summary and to the job log.
 A cache hit records that the fit was reused rather than refitted.
 `fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
-- The reduced-data-streams banner is gone from the README and the summary dashboard.
-The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 
 ### Performance
 
@@ -173,8 +193,6 @@ whole suite took the Linux cell past its 150-minute ceiling.
 released-estimate and forecast-scoring overlays once (#712).
 Of the 30 minutes the render step took, 23 went on installing dependencies and
 refreshing overlays rather than on rendering.
-- The occupancy-offset forecast test scores both offsets on one set of prior
-draws rather than comparing two independent samples.
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
 The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
 It now states the thinned discharge flow and the confirmation-dependent abscond survival.
@@ -228,15 +246,8 @@ The confirmed-deaths assay sensitivity is named `s_test`, as the case model alre
 ### Dependencies
 
 - Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
-Several of these carry a meaningless `< 0.0.1` bound on a standard library, which is corrected separately.
+Several carried a meaningless `< 0.0.1` bound on a standard library.
 
-### Dependencies
-
-- The docs, test and scripts environments no longer carry compat entries for
-Julia standard libraries, and Dependabot no longer opens pull requests for them.
-Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no
-version, one of which merged in #699.
-Standard libraries ship with Julia, so these environments have nothing to pin.
 
 ## v1.18.0
 
