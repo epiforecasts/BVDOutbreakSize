@@ -4331,10 +4331,10 @@ CSV.write(joinpath(output_dir, "province_forecast.csv"),
 ## guard in `forecast_archive` skips a stream a fit does not carry.
 frozen_forecast_fits = unique(f -> f.o.cutoff,
     [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek])
-## The archive carries a `fit` column, so the frozen joint and each frozen
-## single-stream fit are told apart when scored. `score_release` reads that
-## column where it exists and falls back to one default otherwise, so an
-## older release whose archive has no column still scores as the joint.
+## The `fit` column tells the frozen joint and each frozen single-stream fit
+## apart when scored. `score_release` falls back to one default where an
+## archive carries no such column, so an older release still scores as the
+## joint.
 frozen_forecast_archive = DataFrame(made_date = Date[], horizon = Int[],
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
     fit = String[])
@@ -4363,13 +4363,9 @@ for f in frozen_forecast_fits
     append!(frozen_forecast_archive, _rows)
 end
 
-## The frozen single-stream fits, forecast from their own chains the way
-## `stream_forecasts.csv` forecasts the live ones, so the frozen evaluation
-## scores each stream's own model alongside the joint rather than the joint
-## alone. Two limits follow from how these fits are registered. They exist
-## only at the validation cut-off, so they add one made date per release,
-## and only for streams the situation reports are still updating, so the two
-## suspected streams are absent.
+## The frozen single-stream fits, forecast from their own chains as
+## `stream_forecasts.csv` forecasts the live ones. They are registered only
+## at the validation cut-off and only for still-reported streams.
 _frozen_stream_of = Dict("cases" => (:reported_cases, "reported cases"),
     "deaths" => (:suspected_deaths, "suspected deaths"),
     "confirmed" => (:confirmed_cases, "confirmed cases"),
@@ -4379,8 +4375,7 @@ for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
     _stream, _label = _frozen_stream_of[_sid]
     _o = _sf.o
     _bp = _o.n - _o.who_first_sitrep_days
-    ## Each stream is anchored on its own cut-off count, the beds on the
-    ## occupancy standing at that cut-off.
+    ## Each stream on its own cut-off count, the beds on their occupancy.
     _base = if _stream === :isolation_beds
         isempty(_o.isolation_history.counts) ? 0 :
         _o.isolation_history.counts[end]

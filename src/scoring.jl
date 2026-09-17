@@ -205,11 +205,9 @@ end
 ## row per key in each frame, true of any single-fit subset of a scored
 ## table.
 ##
-## The made date belongs in the key. A cross-release table carries one made
-## date per release, so it changes nothing there. A frozen table carries
-## several, since every release re-forecasts the same fixed cut-offs, and a
-## key without it collapses those onto one entry per horizon and keeps
-## whichever row was read last.
+## A cross-release table carries one made date per release, so the made date
+## adds nothing there. A frozen table carries several, and a key without it
+## keeps only whichever row was read last.
 function _matched_scores(dfa::DataFrame, dfb::DataFrame)
     ia = Dict{Tuple{String, Any, Int}, Int}()
     for i in 1:size(dfa, 1)
@@ -253,11 +251,8 @@ end
 ## `nothing` when `fit` has no forecast in `mask` matched against its
 ## stream's baseline, so the caller can drop the row entirely.
 ##
-## Every relative skill is the ratio of the two aggregate mean scores over
-## the matched set of forecasts both the fit and its comparator scored, so
-## a mean over one set of forecasts is never divided by a mean over
-## another. The individual-fit columns use their own matched set and are
-## only populated on the joint fit's row of a stream that has one.
+## The individual-fit columns use their own matched set and are only
+## populated on the joint fit's row of a stream that has one.
 function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
         joint_fit, baseline_fit)
     fit_grp = scores[mask .& (scores.fit .== fit), :]
@@ -333,11 +328,17 @@ the relative skill against the stream's persistence baseline on both
 scales, and, on the joint row of a stream with an individual single-stream
 fit, the relative skill against that fit.
 
-Every relative skill is the ratio of the two aggregate mean scores over the
-matched set of forecasts both sides scored, not a mean of per-forecast
-ratios, so one forecast whose comparator scored zero cannot make the ratio
-infinite. A ratio is `missing`, never `Inf` or `NaN`, when the comparator's
-mean is zero or the ratio itself is not finite.
+Every relative skill is a ratio of aggregate means over the matched set
+``M`` of forecasts both sides scored, for fit scores ``s`` and comparator
+scores ``b``:
+
+```math
+\\frac{\\sum_{i \\in M} s_i}{\\sum_{i \\in M} b_i}.
+```
+
+It is not a mean of per-forecast ratios, so one forecast whose comparator
+scored zero cannot make it infinite. A ratio is `missing`, never `Inf` or
+`NaN`, when the denominator is zero or the ratio is not finite.
 
 Returns a typed zero-row frame when `scores` is empty, so the report
 renders before any release carries a forecast.
@@ -418,11 +419,8 @@ function forecast_score_by_release(scores::DataFrame;
     return DataFrame(rows)
 end
 
-## Made dates that at least `min_releases` distinct releases forecast. These
-## are the fixed cut-offs every release re-forecasts, the only ones on which
-## one release's model can be compared against another's on the same
-## forecasting problem. A made date only one release carries has no second
-## attempt to compare against.
+## Made dates that at least `min_releases` distinct releases forecast. A
+## made date one release carries has no second attempt to compare against.
 function _repeated_made_dates(scores::DataFrame; min_releases::Integer = 2)
     seen = Dict{Any, Set{String}}()
     for i in 1:size(scores, 1)
@@ -432,14 +430,11 @@ function _repeated_made_dates(scores::DataFrame; min_releases::Integer = 2)
     return Set(d for (d, rels) in seen if length(rels) >= min_releases)
 end
 
-## Each release's own latest made date, used to order releases in time.
-##
-## Release tags mix `results-<build number>` and `results-<version>`, so
-## sorting them as strings interleaves the two and does not order them by
-## when they were cut. The latest made date does: a release archives a
-## frozen forecast at its own validation cut-off alongside the fixed ones,
-## and that cut-off moves forward with the release. Releases that tie fall
-## back to the tag, so the order is total either way.
+## Each release's latest made date, which orders releases in time. Tags mix
+## `results-<build number>` and `results-<version>` and sort into the wrong
+## order as strings. A release archives a frozen forecast at its own
+## validation cut-off, which moves forward with the release. Ties fall back
+## to the tag.
 function _release_order_date(scores::DataFrame)
     latest = Dict{String, Any}()
     for i in 1:size(scores, 1)
@@ -452,25 +447,15 @@ end
 
 """
 The same columns as [`forecast_score_overview`](@ref), one row per
-`(stream, release, fit)` over the made dates that `min_releases` or more
-releases forecast, plus the `release_date` each release is ordered by.
+`(stream, release, fit)`, plus the `release_date` rows are ordered by.
 
-This is the view [`forecast_score_overview`](@ref) averages away. Every
-release re-fits the model at the same fixed cut-offs and archives its own
-forecast, so those cut-offs carry one attempt per release by one version of
-the model. Pooling them reports the mean of those attempts and hides
-whether the model is getting better or worse at a problem it has now tried
-many times. Here each attempt keeps its own row.
-
-Made dates carried by fewer than `min_releases` releases are dropped rather
-than shown as single points, since a lone attempt has nothing to be
-compared against. On the frozen table that keeps the fixed cut-offs and
-drops each release's own validation cut-off, which only that release
-carries.
+Restricted to made dates that `min_releases` or more releases forecast,
+the cut-offs every release re-forecasts. A made date one release carries
+has nothing to compare against and is dropped, which on the frozen table
+drops each release's own validation cut-off.
 
 `release_date` is the release's latest made date, which orders releases in
-time where the tag names do not (see [`forecast_score_by_vintage`](@ref)'s
-ordering note). Rows are returned in that order.
+time where the tag names do not.
 
 Returns a typed zero-row frame when `scores` is empty or carries no
 repeated made date.

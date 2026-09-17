@@ -1178,22 +1178,13 @@ forecast, with one series per fit role. `scores` is a
 [`forecast_score_by_vintage`](@ref)-shaped table, carrying `stream`,
 `release`, `release_date`, `fit` and the column named by `value_col`.
 
-Every release re-fits the model at the same fixed cut-offs, so each point
-is one version of the model attempting a forecasting problem every other
-version also attempted. A run of points sloping down is the model getting
-better at that problem; a step is a change that moved it.
-
-Releases are placed at evenly spaced slots in `release_date` order rather
-than to calendar scale, since they cluster within days of each other and
-would otherwise overprint. The axis is labelled with the date each release
-was cut, which reads as a trend where the tag names do not. The skill axis
-is log-scaled about a dashed reference line at one, as in
+Releases sit at evenly spaced slots in `release_date` order, not to
+calendar scale, and are labelled with the date each was cut. The skill
+axis is log-scaled about a reference line at one, as in
 [`plot_forecast_relative_skill`](@ref).
 
-A cell whose skill is missing or non-finite is absent from its series
-rather than drawn as a break. `empty_message` is shown in place of the
-panels when `scores` has no rows, which is the state before any made date
-carries more than one release.
+A cell whose skill is missing or non-finite is absent from its series.
+`empty_message` replaces the panels when `scores` has no rows.
 """
 function plot_forecast_skill_by_vintage(scores::DataFrame;
         value_col::Symbol = :rel_to_baseline,
@@ -1213,15 +1204,13 @@ function plot_forecast_skill_by_vintage(scores::DataFrame;
     role_order = ["individual", "joint"]
     role_colour = Dict("individual" => :steelblue, "joint" => :firebrick)
 
-    ## One shared slot per release across every panel, ordered by the date
-    ## the release was cut, so a stream missing a release leaves a gap in
-    ## the same place rather than shifting its series against the others.
+    ## One shared slot per release across every panel, so a stream missing a
+    ## release leaves a gap rather than shifting against the others.
     rel_dates = Dict(scores.release[i] => scores.release_date[i]
     for i in 1:size(scores, 1))
     rels = sort(collect(keys(rel_dates)); by = r -> (rel_dates[r], r))
     slot = Dict(r => Float64(i) for (i, r) in enumerate(rels))
-    ## Thinned to about eight labels once the release history is long
-    ## enough to crush them.
+    ## Thinned to about eight labels once the history is long enough.
     step = length(rels) <= 8 ? 1 : cld(length(rels), 8)
     ticks = 1:step:length(rels)
     ticklabels = [string(rel_dates[rels[i]]) for i in ticks]

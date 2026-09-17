@@ -916,10 +916,8 @@ end
     using Dates: Date
     using BVDOutbreakSize: forecast_score_overview
 
-    ## A frozen-shaped table: one release forecasting two fixed cut-offs at
-    ## one horizon. Keyed on (release, horizon) alone the two cut-offs
-    ## collapse onto one entry and only the last survives, so the mean is
-    ## taken over one forecast rather than two.
+    ## Frozen-shaped: one release, two fixed cut-offs, one horizon. Without
+    ## the made date in the key the two collapse onto one entry.
     scores = DataFrame(
         release = fill("r1", 4),
         made_date = [Date(2026, 5, 20), Date(2026, 5, 20),
@@ -944,10 +942,8 @@ end
     using Dates: Date
     using BVDOutbreakSize: forecast_score_by_vintage
 
-    ## Two releases forecasting one shared fixed cut-off, each also
-    ## forecasting a validation cut-off only it carries. The shared cut-off
-    ## is kept and the two private ones dropped, so each release gets one
-    ## row scored on the same problem.
+    ## Two releases sharing one fixed cut-off, each also carrying a
+    ## validation cut-off of its own. Only the shared one is kept.
     rel = ["r1", "r1", "r1", "r1", "r2", "r2", "r2", "r2"]
     made = [Date(2026, 5, 20), Date(2026, 5, 20),
         Date(2026, 7, 1), Date(2026, 7, 1),
@@ -967,11 +963,9 @@ end
     out = forecast_score_by_vintage(scores)
     @test nrow(out) == 2
     @test all(out.n .== 1)
-    ## Ordered by the date each release was cut, which is its own latest
-    ## made date, not by tag string.
+    ## Ordered by each release's latest made date, not by tag string.
     @test out.release == ["r1", "r2"]
     @test out.release_date == [Date(2026, 7, 1), Date(2026, 7, 8)]
-    ## The second release halves its score against the same baseline.
     @test out.crps == [10.0, 5.0]
     @test out.rel_to_baseline == [0.5, 0.25]
 end
@@ -981,8 +975,7 @@ end
     using Dates: Date
     using BVDOutbreakSize: forecast_score_by_vintage
 
-    ## Every made date carried by one release only, so there is no pair of
-    ## attempts at the same problem and the table is empty but typed.
+    ## Every made date carried by one release only, so nothing is kept.
     scores = DataFrame(
         release = ["r1", "r1", "r2", "r2"],
         made_date = [Date(2026, 7, 1), Date(2026, 7, 1),

@@ -23,10 +23,9 @@ const BASELINE_FIT = "baseline"
 
 Value of a `fit` column identifying a row as a frozen-fit forecast, the
 joint model re-fit and evaluated at a past cut-off
-(`forecast_frozen.csv`). That asset labels its own joint rows with this
-value and its frozen single-stream rows with each fit's own id. A release
-published before the column existed carries none, and `score_release`
-labels every row of such an archive with this value instead.
+(`forecast_frozen.csv`). That asset labels its joint rows with this value
+and its single-stream rows with each fit's own id. `score_release` applies
+it to every row of an archive published before the column existed.
 """
 const FROZEN_FIT = "frozen"
 
