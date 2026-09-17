@@ -1667,19 +1667,8 @@ clock_sensitivity_T_fig #hide
 
 # ## Fit diagnostics by parameter
 #
-# The analysis page carries one row per fit, with the worst R-hat across that fit's parameters, the smallest bulk effective sample size and the number of divergent transitions.
-# Three numbers say a fit went wrong without saying where.
-# This section takes the same fits apart parameter by parameter, so a fit that misbehaves can be diagnosed from the report rather than from a fresh sampling run.
-# Parameters are named as the model names them, and a vector-valued parameter shows its element index in brackets.
-#
 # ### One parameter or the whole model
 #
-# A worst R-hat of 1.6 means one thing when a single parameter out of several thousand carries it and another when most of the model sits above 1.1.
-# In the first case one weakly identified quantity cannot be read and the rest of the fit can.
-# In the second the fit has not converged and nothing should be read from it.
-# The table counts, for each fit, the parameter elements above an R-hat of 1.01 and above 1.1, and those whose bulk effective sample size falls below 100.
-# A vector-valued parameter contributes one element per entry, so a daily walk counts once per day.
-# The last column names the parameter whose elements reach the lowest bulk effective sample size.
 
 #md # ```@raw html
 #md # <details><summary>Per-parameter diagnostics for every fit</summary>
@@ -1716,11 +1705,6 @@ diagnostic_spread = MarkdownTable(
 
 diagnostic_spread #hide
 
-# The same spread as a curve, for the joint fit and the fits closest to it.
-# Each line gives the share of that fit's parameters at or below the R-hat on the axis.
-# A line that reaches the top just right of one is a fit where a few parameters are bad and the rest are fine.
-# A line that climbs slowly across the axis is a fit where most of the model has not converged.
-
 #md # ```@raw html
 #md # <details><summary>R-hat spread figure</summary>
 #md # ```
@@ -1741,10 +1725,6 @@ rhat_spread_fig #hide
 
 # ### Which parameters mix worst
 #
-# The elements of the joint fit with the lowest bulk effective sample size, worst first.
-# The bulk effective sample size is the number of independent draws the chains are worth for the centre of that parameter, and the tail one is the same count for its extremes.
-# Where the model carries the same quantity under a second name, only the first name is listed, since both would carry identical numbers.
-
 #md # ```@raw html
 #md # <details><summary>Worst-mixing parameters of the joint fit</summary>
 #md # ```
@@ -1760,8 +1740,6 @@ joint_worst_parameters = MarkdownTable(
 joint_worst_parameters #hide
 
 # The same diagnostics grouped by parameter rather than by element.
-# A walk whose entries all mix badly is one row here rather than hundreds of rows above, which is how a problem confined to one part of the model becomes visible.
-# The last column counts that parameter's elements above an R-hat of 1.1.
 
 #md # ```@raw html
 #md # <details><summary>Worst-mixing parameters, grouped</summary>
@@ -1777,13 +1755,8 @@ joint_worst_groups = MarkdownTable(
 
 joint_worst_groups #hide
 
-# Where a parameter is a walk or a daily series, its element index is time, so the position of bad mixing along it says when the trouble starts.
-# Mixing that collapses at the right of a panel is confined to the end of the window, which is where the newest data lands.
-# Mixing that is poor across a panel is a problem with the whole walk.
-# Points are red where the element's R-hat exceeds 1.1.
-
 #md # ```@raw html
-#md # <details><summary>Mixing along the worst walks</summary>
+#md # <details><summary>Mixing over time varying paramters</summary>
 #md # ```
 
 joint_index_fig = plot_parameter_index_diagnostics(joint_diagnostics;
@@ -1797,11 +1770,6 @@ joint_index_fig #hide
 
 # ### Where the divergent transitions sit
 #
-# A divergent transition is a step the sampler could not take accurately, so the region it happened in went unexplored.
-# Divergences spread evenly across the chains are a property of the posterior.
-# Divergences concentrated in one chain are usually that chain sitting somewhere the others never reach, and the step size and the tree depth separate the two.
-# A chain that adapted to a much smaller step size than its neighbours, and built much deeper trees, is stuck rather than sampling.
-
 #md # ```@raw html
 #md # <details><summary>Sampler behaviour by chain</summary>
 #md # ```
@@ -1813,12 +1781,6 @@ joint_chain_table = MarkdownTable(sampler_by_chain_table(chn_joint));
 #md # ```
 
 joint_chain_table #hide
-
-# Where in parameter space those divergences sit.
-# The two interval columns give the middle 90% of all draws and of the divergent draws alone.
-# The separation is how far the divergent draws sit from the rest, in standard deviations of the full posterior, signed by direction.
-# A separation near zero is divergences scattered through the posterior.
-# A large one is divergences confined to one region of that parameter, which points at the geometry there.
 
 #md # ```@raw html
 #md # <details><summary>Divergence location table</summary>
@@ -1832,9 +1794,6 @@ joint_divergence_table = MarkdownTable(
 #md # ```
 
 joint_divergence_table #hide
-
-# The same contrast drawn for the headline quantities.
-# Each panel is the full posterior, with the divergent draws as ticks along the axis and the middle 90% of those ticks shaded.
 
 #md # ```@raw html
 #md # <details><summary>Divergent draws against the posterior</summary>
@@ -1856,11 +1815,6 @@ joint_divergence_fig #hide
 
 # ### The joint fit against the single-stream fits
 #
-# Each data stream is also fitted on its own, and those fits share most of their parameters with the joint.
-# A parameter that mixes in its own fit and stops mixing in the joint is not a hard parameter.
-# It is a parameter the joint holds in tension with something else, so the cause is an interaction between streams rather than the parameter itself.
-# The ratio below is the joint's bulk effective sample size over the single-stream fit's, ranked from the smallest up.
-# A ratio of a tenth means the joint buys a tenth of the independent draws that fitting the stream alone buys for that parameter.
 
 #md # ```@raw html
 #md # <details><summary>Joint against single-stream contrast</summary>
@@ -1884,12 +1838,6 @@ stream_contrast_table = MarkdownTable(
 
 stream_contrast_table #hide
 
-# The same comparison for every shared parameter.
-# A point on the dashed line mixes as well in the joint as it does on its own.
-# A point far below the line is where the joint loses the mixing, and its colour says which stream's own fit it came from.
-# A cloud sitting below the line across the whole range says the joint is harder to sample than any one stream, which is expected.
-# A single stream whose points sit far lower than the others is the stream to look at first.
-
 #md # ```@raw html
 #md # <details><summary>Joint against single-stream figure</summary>
 #md # ```
@@ -1907,9 +1855,6 @@ stream_contrast_fig #hide
 
 # ### The joint fit against the same fit a week earlier
 #
-# The frozen fit runs the same model against the data as it stood a week earlier.
-# A parameter that mixes in the frozen fit and not in the live one implicates the week of data between them rather than the model.
-# The table and figure read the same way as the pair above, with the frozen fit in place of the single-stream ones.
 
 #md # ```@raw html
 #md # <details><summary>Live against frozen contrast</summary>
