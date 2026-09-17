@@ -14,6 +14,8 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- The per-province headline is a table per quantity, with a row per province and a column per interval level (#724).
+Infections to date, the reproduction number and the case-fatality ratio were nested bullet lists that repeated the interval level in every cell.
 
 ### Fixed
 
