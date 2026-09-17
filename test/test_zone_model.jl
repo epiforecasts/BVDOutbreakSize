@@ -919,7 +919,8 @@ end
 @testitem "bvd_zone: mixing redistributes force within the patch" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, _zone_mixing_kernel, _zone_states
+    using BVDOutbreakSize: bvd_zone, _zone_mixing_kernel, _zone_states,
+        zone_deformation
     using Turing: sample, Prior
     import FlexiChains
 
@@ -942,14 +943,15 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
     eps = [collect(v) for v in vec(collect(chn[:mixing_epsilon_zone]))]
-    @test all(v -> length(v) == 2 && all(0 .< v .< 1), eps)
+    @test all(v -> length(v) == size(zd.counts, 1) && all(0 .< v .< 1), eps)
     ## The states read the fractions, and the mixed shares still sum to one
     ## within each patch but differ from the unmixed ones.
     states = _zone_states(chn, inputs)
     for (i, st) in enumerate(states)
         @test st.ε == eps[i]
-        mixed = zone_forward(zd, st.δ_knots, st.w0, st.ε).shares
-        plain = zone_forward(zd, st.δ_knots, st.w0, nothing).shares
+        def = zone_deformation(zd, nothing)
+        mixed = zone_forward(zd, st.δ_knots, st.w0, st.ε, def).shares
+        plain = zone_forward(zd, st.δ_knots, st.w0, nothing, def).shares
         for zs in inputs.patch_ranges
             @test all(sum(mixed[:, zs]; dims = 2) .≈ 1)
         end
