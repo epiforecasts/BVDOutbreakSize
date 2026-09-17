@@ -1,6 +1,6 @@
 # Benchmark suite for BVDOutbreakSize. Defines a BenchmarkTools
-# `BenchmarkGroup` named `SUITE`, which `run.jl` executes and `compare.jl`
-# turns into a PR comment.
+# `BenchmarkGroup` named `SUITE`. AirspeedVelocity discovers this file and
+# runs it against each revision; `run.jl` runs it once, locally.
 #
 # Groups:
 #   "Log density"  — one unconstrained log-density evaluation per component,
@@ -22,6 +22,18 @@
 
 using BenchmarkTools
 
+## AirspeedVelocity calls `run(SUITE)` with no arguments, so a benchmark's
+## own parameters are the only place to set a budget. The defaults are five
+## seconds each and a garbage collection before every trial. This suite
+## reports a minimum, which a collection pause cannot lower, and thirty-two
+## components at the default budget is most of an hour per revision. Set
+## before the suite is built: `@benchmarkable` reads these at construction.
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
+BenchmarkTools.DEFAULT_PARAMETERS.gctrial = false
+BenchmarkTools.DEFAULT_PARAMETERS.gcsample = false
+
+## Resolved from the revision `--bench-on` names, not from the revision
+## being timed, so both arms are measured with one definition of the suite.
 include(joinpath(@__DIR__, "..", "test", "ad_fixtures.jl"))
 
 const BENCH_ENZYME = lowercase(get(ENV, "BVD_BENCH_ENZYME", "false")) == "true"

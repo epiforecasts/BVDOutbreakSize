@@ -67,13 +67,6 @@ tasks:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
 
-  benchmark-compare:
-    desc: >
-      Turn two saved result files into the Markdown comparison CI posts on a
-      PR. Usage: task benchmark-compare -- pr.json main.json comment.md.
-    cmds:
-      - julia --project=benchmark benchmark/compare.jl {{.CLI_ARGS}}
-
   docs:
     desc: >
       Build the full docs site locally: render both literate pages (analysis
