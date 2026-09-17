@@ -33,6 +33,11 @@ Every fit-cache key changes, so the next build refits.
 - The model bodies lost four configuration switches that no fit selected (#754).
 The confirmed-case stream carried a probe that left the unanchored laboratory windows unscored, the suspected-death stream carried two unused background fallbacks, and the specimen-intensity factor was turned on in the joint model and off in the confirmed-only model by a keyword neither ever set.
 Every published fit took the same branch each time, so the alternatives are gone and the results are unchanged.
+- Four submodels that no fit can reach are removed (#754).
+The seeding prior is a leftover of the two-phase renewal, which now fills the cryptic window from the outbreak size and the growth rate.
+The scalar bed capacity, the per-vintage background random effect and the scalar suspected-death background were each displaced by a time-varying form or by a keyword this change removes.
+An unused submodel carries its own methods and types into every build, so this is the larger part of the saving.
+The methods page dropped the seeding dropdown, which showed a prior the fit does not sample.
 
 ### Report
 
