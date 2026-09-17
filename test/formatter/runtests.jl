@@ -1,8 +1,8 @@
 using JuliaFormatter
 
 project_root = dirname(dirname(@__DIR__))
-dirs_to_check = filter(isdir,
-    [joinpath(project_root, d) for d in ("src", "test", "docs", "scripts")])
+dirs = ("src", "test", "docs", "scripts", "benchmark")
+dirs_to_check = filter(isdir, [joinpath(project_root, d) for d in dirs])
 
 # Every directory is checked. The previous `all(d -> format(d), dirs)`
 # short-circuited on the first unformatted one, so a violation in `src` hid

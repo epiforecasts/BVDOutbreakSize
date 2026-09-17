@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/
-# using the project's isolated test/formatter/ sub-environment. Invoked
-# by the local pre-commit hook and re-usable from the command line.
+# Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/ and
+# benchmark/ using the project's isolated test/formatter/ sub-environment.
+# Invoked by the local pre-commit hook and re-usable from the command line.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -16,7 +16,7 @@ using Pkg
 Pkg.Registry.update()
 Pkg.instantiate()
 using JuliaFormatter
-dirs = ["src", "test", "docs", "scripts"]
+dirs = ["src", "test", "docs", "scripts", "benchmark"]
 # `map`, not `all`: `all` short-circuits, so an unformatted file in an early
 # directory left every later one unformatted AND unreported, one round trip per
 # directory. Every directory is rewritten in a single pass.
