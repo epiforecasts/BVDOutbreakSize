@@ -9,5 +9,10 @@ JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 # point resolves afresh, and `Pkg.add` refreshes the registry while
 # `Pkg.instantiate` does not) — so the hook could pass a tree the test then
 # rejected. Bump this deliberately, reformatting the tree in the same commit.
+#
+# ONE range, with no comma. Julia reads a comma-separated compat string as a
+# union, so the `=2.12.0, 2.12` this said between #500 and now was an exact
+# pin unioned with everything below 3.0.0, which is just everything below
+# 3.0.0. Adding a range here does not narrow the pin, it dissolves it.
 [compat]
-JuliaFormatter = "=2.12.0, 2.12"
+JuliaFormatter = "=2.12.0"

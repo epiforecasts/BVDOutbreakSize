@@ -62,6 +62,12 @@ updates:
       - dependency-name: "TOML"
       - dependency-name: "Test"
       - dependency-name: "UUIDs"
+      # JuliaFormatter is pinned to one exact version on purpose: a newer
+      # formatter reformats untouched files, so a bump has to land with the
+      # reformatted tree in the same commit. Dependabot cannot do that, and
+      # in #500 it appended a range to the pin, which under union semantics
+      # dissolved it and let any 2.x resolve. Bump it by hand.
+      - dependency-name: "JuliaFormatter"
       # DocumenterCitations 1.5 renders citations as a raw `CitationSiteNode`
       # struct under DocumenterVitepress, which has no writer method for it.
       # Skip 1.5 and later until Vitepress handles the node.
