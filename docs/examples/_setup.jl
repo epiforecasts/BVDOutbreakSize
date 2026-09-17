@@ -219,6 +219,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
+        chn_joint_no_contact = _fits["sens_no_contact"]
+        chn_joint_no_effort = _fits["sens_no_effort"]
     end
 
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
