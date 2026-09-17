@@ -1661,6 +1661,284 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
+# ## Fit diagnostics by parameter
+#
+# The analysis page carries one row per fit, with the worst R-hat across that fit's parameters, the smallest bulk effective sample size and the number of divergent transitions.
+# Three numbers say a fit went wrong without saying where.
+# This section takes the same fits apart parameter by parameter, so a fit that misbehaves can be diagnosed from the report rather than from a fresh sampling run.
+# Parameters are named as the model names them, and a vector-valued parameter shows its element index in brackets.
+#
+# ### One parameter or the whole model
+#
+# A worst R-hat of 1.6 means one thing when a single parameter out of several thousand carries it and another when most of the model sits above 1.1.
+# In the first case one weakly identified quantity cannot be read and the rest of the fit can.
+# In the second the fit has not converged and nothing should be read from it.
+# The table counts, for each fit, the parameter elements above an R-hat of 1.01 and above 1.1, and those whose bulk effective sample size falls below 100.
+# A vector-valued parameter contributes one element per entry, so a daily walk counts once per day.
+# The last column names the parameter whose elements reach the lowest bulk effective sample size.
+
+#md # ```@raw html
+#md # <details><summary>Per-parameter diagnostics for every fit</summary>
+#md # ```
+
+## R-hat and both effective sample sizes over several thousand parameters
+## are not free to compute, so each fit's per-parameter frame is built once
+## here and handed to every table and figure in this section.
+diagnostic_fits = [
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    (RUN_SENSITIVITY ?
+     ["delay sensitivity" => chn_joint_community_delay,
+        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] :
+     [])...]
+diagnostic_frames = [label => parameter_diagnostics(chn)
+                     for (label, chn) in diagnostic_fits]
+diagnostic_frame = Dict(diagnostic_frames)
+joint_diagnostics = diagnostic_frame["joint"]
+diagnostic_spread = MarkdownTable(
+    diagnostic_spread_table(diagnostic_frames...; labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+diagnostic_spread #hide
+
+# The same spread as a curve, for the joint fit and the fits closest to it.
+# Each line gives the share of that fit's parameters at or below the R-hat on the axis.
+# A line that reaches the top just right of one is a fit where a few parameters are bad and the rest are fine.
+# A line that climbs slowly across the axis is a fit where most of the model has not converged.
+
+#md # ```@raw html
+#md # <details><summary>R-hat spread figure</summary>
+#md # ```
+
+rhat_spread_fig = plot_rhat_spread(
+    "joint" => joint_diagnostics,
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "exports" => diagnostic_frame["exports"],
+    "frozen (1wk back)" => diagnostic_frame["frozen (1wk back)"]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rhat_spread_fig #hide
+
+# ### Which parameters mix worst
+#
+# The elements of the joint fit with the lowest bulk effective sample size, worst first.
+# The bulk effective sample size is the number of independent draws the chains are worth for the centre of that parameter, and the tail one is the same count for its extremes.
+# Where the model carries the same quantity under a second name, only the first name is listed, since both would carry identical numbers.
+
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters of the joint fit</summary>
+#md # ```
+
+joint_worst_parameters = MarkdownTable(
+    worst_parameters_table(joint_diagnostics; n = 15,
+    labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_parameters #hide
+
+# The same diagnostics grouped by parameter rather than by element.
+# A walk whose entries all mix badly is one row here rather than hundreds of rows above, which is how a problem confined to one part of the model becomes visible.
+# The last column counts that parameter's elements above an R-hat of 1.1.
+
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters, grouped</summary>
+#md # ```
+
+joint_worst_groups = MarkdownTable(
+    family_diagnostics_table(joint_diagnostics; n = 12,
+    labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_groups #hide
+
+# Where a parameter is a walk or a daily series, its element index is time, so the position of bad mixing along it says when the trouble starts.
+# Mixing that collapses at the right of a panel is confined to the end of the window, which is where the newest data lands.
+# Mixing that is poor across a panel is a problem with the whole walk.
+# Points are red where the element's R-hat exceeds 1.1.
+
+#md # ```@raw html
+#md # <details><summary>Mixing along the worst walks</summary>
+#md # ```
+
+joint_index_fig = plot_parameter_index_diagnostics(joint_diagnostics;
+    n_groups = 3, labels = display_names);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_index_fig #hide
+
+# ### Where the divergent transitions sit
+#
+# A divergent transition is a step the sampler could not take accurately, so the region it happened in went unexplored.
+# Divergences spread evenly across the chains are a property of the posterior.
+# Divergences concentrated in one chain are usually that chain sitting somewhere the others never reach, and the step size and the tree depth separate the two.
+# A chain that adapted to a much smaller step size than its neighbours, and built much deeper trees, is stuck rather than sampling.
+
+#md # ```@raw html
+#md # <details><summary>Sampler behaviour by chain</summary>
+#md # ```
+
+joint_chain_table = MarkdownTable(sampler_by_chain_table(chn_joint));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_chain_table #hide
+
+# Where in parameter space those divergences sit.
+# The two interval columns give the middle 90% of all draws and of the divergent draws alone.
+# The separation is how far the divergent draws sit from the rest, in standard deviations of the full posterior, signed by direction.
+# A separation near zero is divergences scattered through the posterior.
+# A large one is divergences confined to one region of that parameter, which points at the geometry there.
+
+#md # ```@raw html
+#md # <details><summary>Divergence location table</summary>
+#md # ```
+
+joint_divergence_table = MarkdownTable(
+    divergence_location_table(chn_joint; n = 12, labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_table #hide
+
+# The same contrast drawn for the headline quantities.
+# Each panel is the full posterior, with the divergent draws as ticks along the axis and the middle 90% of those ticks shaded.
+
+#md # ```@raw html
+#md # <details><summary>Divergent draws against the posterior</summary>
+#md # ```
+
+joint_divergence_fig = plot_divergence_locations(chn_joint,
+    [:C_T, :R_T, :r, :T, :CFR, :k];
+    labels = Dict(:C_T => "cumulative infections",
+        :R_T => "reproduction number at the cut-off",
+        :r => "latest growth rate", :T => "outbreak age",
+        :CFR => "case-fatality ratio",
+        :k => "surveillance dispersion"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_fig #hide
+
+# ### The joint fit against the single-stream fits
+#
+# Each data stream is also fitted on its own, and those fits share most of their parameters with the joint.
+# A parameter that mixes in its own fit and stops mixing in the joint is not a hard parameter.
+# It is a parameter the joint holds in tension with something else, so the cause is an interaction between streams rather than the parameter itself.
+# The ratio below is the joint's bulk effective sample size over the single-stream fit's, ranked from the smallest up.
+# A ratio of a tenth means the joint buys a tenth of the independent draws that fitting the stream alone buys for that parameter.
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream contrast</summary>
+#md # ```
+
+stream_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "exports" => diagnostic_frame["exports"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "isolation (DRC)" => diagnostic_frame["isolation (DRC)"],
+    "onsets (DRC)" => diagnostic_frame["onsets (DRC)"])
+stream_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(stream_contrast; n = 15,
+    labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_table #hide
+
+# The same comparison for every shared parameter.
+# A point on the dashed line mixes as well in the joint as it does on its own.
+# A point far below the line is where the joint loses the mixing, and its colour says which stream's own fit it came from.
+# A cloud sitting below the line across the whole range says the joint is harder to sample than any one stream, which is expected.
+# A single stream whose points sit far lower than the others is the stream to look at first.
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream figure</summary>
+#md # ```
+
+stream_contrast_fig = plot_diagnostic_contrast(stream_contrast;
+    xlabel = "Bulk effective sample size, single-stream fit",
+    ylabel = "Bulk effective sample size, joint fit",
+    title = "Mixing in the joint against each stream fitted alone");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_fig #hide
+
+# ### The joint fit against the same fit a week earlier
+#
+# The frozen fit runs the same model against the data as it stood a week earlier.
+# A parameter that mixes in the frozen fit and not in the live one implicates the week of data between them rather than the model.
+# The table and figure read the same way as the pair above, with the frozen fit in place of the single-stream ones.
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen contrast</summary>
+#md # ```
+
+frozen_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "one week earlier" => diagnostic_frame["frozen (1wk back)"])
+frozen_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(frozen_contrast; n = 15,
+    labels = display_names));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen figure</summary>
+#md # ```
+
+frozen_contrast_fig = plot_diagnostic_contrast(frozen_contrast;
+    xlabel = "Bulk effective sample size, fit a week earlier",
+    ylabel = "Bulk effective sample size, live fit",
+    title = "Mixing in the live fit against the same fit a week earlier");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_fig #hide
+
 # ## Saving sensitivity results
 #
 # The stream-comparison and frozen-fit tables and the per-stream reproduction number figure are written to the shared output directory.
