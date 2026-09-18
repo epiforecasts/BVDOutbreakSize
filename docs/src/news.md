@@ -12,6 +12,14 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
+- The per-province confirmed composition now pays the same onset-to-confirmation
+  delay as the national confirmed stream, the onset-to-report pmf convolved with
+  the report-to-receipt pmf (#756). It previously stopped at the receipt leg
+  alone, so the provincial split was attributed to earlier days than the
+  national total it conditions on, which biased the split wherever a province's
+  trajectory diverges at a different rate from the national one — the exact
+  case the composition exists to detect. The death composition already paid
+  both legs (onset-to-death ⊕ receipt) and is unchanged.
 - The prior on a province's relative case ascertainment carries its laboratory
 throughput per head of population, logged and centred across patches, with a
 sampled coefficient (#410).
