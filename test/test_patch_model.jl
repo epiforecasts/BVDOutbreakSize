@@ -1554,20 +1554,26 @@ end
 @testitem "province_testing_covariate: the patch contrast in the manifest" begin
     using BVDOutbreakSize
 
-    ## The covariate the headline fit carries. Ituri analyses about 372
-    ## samples per 100k over the laboratory window against Nord-Kivu's 104, a
-    ## contrast nothing else in the model represents.
+    ## The covariate the headline fit carries. Ituri analyses far more
+    ## samples per head over the laboratory window than Nord-Kivu, a contrast
+    ## nothing else in the model represents.
+    ##
+    ## These are properties of the covariate, not of one vintage. The values
+    ## themselves move whenever the laboratory history advances, so pinning
+    ## them here would fail on every data update. `province_testing_covariate`
+    ## is checked against fixed inputs in the item above.
     obs = load_observations()
     cov = province_testing_covariate(obs.province_lab_daily_history)
     @test length(cov) == length(PROVINCE_NAMES)
-    @test cov ≈ [2.244, 0.974, -0.372, -2.846] atol = 1.0e-3
     @test sum(cov) ≈ 0 atol = 1.0e-12
+    @test all(isfinite, cov)
 
-    ## Per-capita, not per-patch: the pooled `other` patch is the largest
-    ## population and the smallest covariate.
-    rate = exp.(cov)
-    @test rate[1] / rate[2] ≈ 3.56 atol = 0.01
+    ## Ordered by testing effort per head, and per-capita rather than
+    ## per-patch: the pooled `other` patch is the largest population and the
+    ## smallest covariate.
+    @test cov[1] > cov[2] > cov[3] > cov[4]
     @test argmin(cov) == findfirst(==("other"), PROVINCE_NAMES)
+    @test exp(cov[1] - cov[2]) > 2
 end
 
 @testitem "province composition: a zero covariate changes nothing" begin
