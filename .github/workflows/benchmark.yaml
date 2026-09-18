@@ -1,24 +1,40 @@
 name: Benchmark
 
-# Per-component AD gradient comparison against `main`, posted as a single PR
-# comment. The components are the observation submodels, the latent process
-# and the single-stream composers, not the full `bvd_joint`: the joint's
-# gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, which
-# no CI run can afford (see benchmark/README.md).
+# Per-component AD gradient comparison against `main`, posted as a single
+# PR comment.
+#
+# One job, one machine. `benchpkg` checks out and benchmarks both revisions
+# itself, inside this job, which is the whole point of the change. Each
+# revision used to get its own job, so every ratio divided one hosted
+# runner's speed by another's. That pool is heterogeneous by about a factor
+# of two and the difference landed whole on the ratio: on four pull requests
+# that touched no differentiated source all sixteen log-density benchmarks
+# moved together, by 1.37x, 0.61x, 0.78x and 0.98x, and the same component
+# ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+#
+# `job-summary: true` sends AirspeedVelocity's own flat table to the job
+# summary, and `benchmark/comment/comment.jl` builds the comment from the
+# same results JSON. The action's table has no neutral band and no way to
+# set one, and it cannot show whether the benchmarks moved together, which
+# is the signature that diagnosed the bias above. Both are recovered from
+# the raw per-sample times the action writes out.
+#
+# The suite is frozen at the default branch. `benchpkg` resolves
+# `benchmark/benchmarks.jl`, and everything it includes, once from
+# `--bench-on`, then runs that one suite against each revision's `src/`. So
+# a change to the suite or to `test/ad_fixtures.jl` takes effect on the pull
+# request after it, not its own. That is the pattern's design: it is what
+# lets a revision that predates a component still be measured, and it means
+# a pull request that renames a model cannot break the baseline arm.
 #
 # Paths-filtered, so it runs only when the differentiated surface or the
 # suite itself changes. It does not run on pushes to `main`, and there is no
-# benchmark-history job: the docs workflow already spends hours fitting, and
-# a timeline of these numbers would not pay for the runner time.
+# benchmark-history job: the docs workflow already spends hours fitting and
+# the runner queue has no room for a timeline.
 #
-# Each revision is benchmarked in its own job, a fresh runner checked out at
-# that revision, so `main` runs `main`'s model source and fixtures while the
-# PR runs its own. That is what lets a component that changed shape still be
-# compared, and it keeps one runner from compiling two AD stacks at once.
-#
-# Uses `pull_request` (not `pull_request_target`): the comparison runs the
-# PR's own code, so the comment-posting token stays scoped to same-repo PRs.
-# Fork PRs get a read-only token and will not post a comment.
+# Uses `pull_request`, not `pull_request_target`, so a fork's code never
+# runs with a write token. Fork pull requests are skipped outright, since
+# they could not post the comment anyway.
 
 on:
   pull_request:
@@ -34,88 +50,52 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # One revision per job. `ref` selects the checkout; `name` labels the
-  # uploaded results artifact.
   benchmark:
-    name: Benchmark (${{ matrix.name }})
+    name: Benchmark
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: pr
-            ref: ${{ github.event.pull_request.head.sha }}
-          - name: main
-            ref: ${{ github.event.pull_request.base.sha }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # Two revisions, each compiling its own gradients before anything is
+    # timed, at roughly 20 minutes a side, plus the package-load samples
+    # AirspeedVelocity takes per revision.
+    timeout-minutes: 120
     steps:
+      # Full checkout: the action reads the repo-root `Project.toml` for the
+      # package name, and runs `benchpkg` from this working tree.
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ matrix.ref }}
-      - uses: julia-actions/setup-julia@v3
-        with:
-          version: '1'
-      - uses: julia-actions/cache@v3
-        with:
-          # Matches the test workflow: only a job that finished may write the
-          # depot cache, so a run cancelled mid-`Pkg` never becomes the
-          # newest snapshot for the restore key.
-          save-always: false
-          key-prefix: '2026-09-15'
-      # A revision that predates the suite (the `main` baseline until this
-      # lands) has no `benchmark/run.jl`. Write an empty result there rather
-      # than failing: the comparison then reports every benchmark as new.
-      - name: Run benchmark suite
-        run: |
-          if [ ! -f benchmark/run.jl ]; then
-            echo "no benchmark suite at this revision: empty result"
-            julia -e '
-              import Pkg
-              Pkg.activate(; temp = true)
-              Pkg.add("BenchmarkTools")
-              using BenchmarkTools
-              BenchmarkTools.save(ARGS[1], BenchmarkGroup())' \
-              results-${{ matrix.name }}.json
-            exit 0
-          fi
-          julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
-          julia --project=benchmark benchmark/run.jl \
-            results-${{ matrix.name }}.json
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bench-${{ matrix.name }}
-          path: results-${{ matrix.name }}.json
 
-  compare:
-    needs: benchmark
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      # PR checkout for `benchmark/compare.jl`.
-      - uses: actions/checkout@v7
-      - uses: julia-actions/setup-julia@v3
+      # Installs Julia, caches the depot, and benchmarks both revisions into
+      # `results/`. There is no `cache-name` input to pass through it, so the
+      # depot cache it manages uses the action's own key.
+      - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
-          version: '1'
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
+          julia-version: '1'
+          mode: 'time,memory'
+          job-summary: true
+
       - name: Build comparison comment
         run: |
-          julia -e '
-            import Pkg
-            Pkg.activate(; temp = true)
-            Pkg.add("BenchmarkTools")
-            include("benchmark/compare.jl")' \
-            artifacts/bench-pr/results-pr.json \
-            artifacts/bench-main/results-main.json comment.md
+          julia --project=benchmark/comment -e 'using Pkg; Pkg.instantiate()'
+          julia --project=benchmark/comment benchmark/comment/comment.jl \
+            results BVDOutbreakSize \
+            "${{ github.event.repository.default_branch }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            comment.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: results
+
       - name: Post comparison comment
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           script: |

@@ -102,6 +102,21 @@ Recovered is still published, so this was a gap rather than a frozen stream.
 
 ### Infrastructure
 
+- The AD benchmark uses AirspeedVelocity, which benchmarks both revisions itself in one job on one machine (#752).
+Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
+Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+AirspeedVelocity runs the suite and `benchmark/comment/comment.jl` reports it, replacing `benchmark/compare.jl`.
+The action has no neutral band and no input to set one, so the band is measured from the run rather than fixed at 5%: the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, with the measured number stated in the comment.
+The comment also reports each benchmark's own spread and warns when every benchmark moves by one factor, which is an environment difference rather than the diff and is the signature that diagnosed the bias.
+The ratio stays `PR / main`, the opposite of the action's own table.
+That band is a lower bound: AirspeedVelocity times each revision once, so the spread is dispersion within a revision's samples rather than drift between the two.
+- The benchmark suite is frozen at the default branch (#752).
+AirspeedVelocity resolves `benchmark/benchmarks.jl`, and the fixtures it includes, once from one revision, then runs that definition against each revision's `src/`.
+A change to the suite or to `test/ad_fixtures.jl` therefore takes effect on the pull request after it rather than its own, and a pull request that renames a model can no longer make the baseline arm unresolvable.
+- The benchmark workflow no longer passes `key-prefix` to `julia-actions/cache` (#752).
+That input does not exist on that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
+AirspeedVelocity manages the depot cache itself and exposes no input for it, so the step is gone rather than corrected.
+This was the third input of that shape found on 17 September, after Dependabot compat bounds that matched no version and a formatter pin with the same problem.
 - A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows (#749).
 The concurrency group falls back to the run id when there is no pull request head branch, so only pull request runs are superseded.
 Fifteen pushes landed on `main` on 17 September and every documentation build was cancelled by the next one, which is why the published site and the results release both went stale.
