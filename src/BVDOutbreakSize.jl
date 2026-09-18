@@ -1,5 +1,8 @@
 module BVDOutbreakSize
 
+using Statistics: quantile, mean, cor, median, cov, std, var
+using LinearAlgebra: cholesky, Symmetric, tr, I, Diagonal, diag,
+    issuccess
 using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
 using DataFrames: DataFrame, rename, select, Not, nrow
@@ -10,8 +13,9 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
-using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-    VarInfo, getlogjoint
+using Turing.DynamicPPL: InitFromPrior, InitFromVector, InitFromParams,
+    LogDensityFunction, VarInfo, getlogjoint, link
+using LogDensityProblems: LogDensityProblems
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -19,12 +23,15 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 using Distributions: Distribution, pdf, cdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
     LogNormal, Beta, LKJCholesky,
-    Gamma, TDist, truncated, censored, product_distribution
+    Gamma, TDist, truncated, censored, product_distribution,
+    DirichletMultinomial
 using CensoredDistributions: double_interval_censored
+using SpecialFunctions: loggamma
 using StatsFuns: logit, logistic
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
+import JSON
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
     lines!, scatter!, band!, linesegments!, scatterlines!
 
@@ -77,6 +84,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_infections_patches, plot_imports_patches,
     plot_patch_summary,
     plot_province_composition_ppc,
+    ZONE_MAP_PROVINCES, zone_key, zone_geojson_path,
+    load_health_zones_geojson,
+    plot_zone_map, plot_zone_map_panels, plot_rt_zones,
+    plot_zone_shares, plot_zone_forecast, plot_zone_ranking,
+    plot_zone_comparison, zone_summary_table,
     plot_rhat_spread, plot_parameter_index_diagnostics,
     plot_divergence_locations, plot_diagnostic_contrast,
     reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
@@ -151,11 +163,24 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     PROVINCE_DISTANCE_DECAY, haversine_km,
     province_distance_matrix, province_importation_kernel,
     province_increment_matrix, province_testing_covariate,
+    zone_increment_matrix, zone_reattribution_days,
+    zone_cumulative_falls, load_health_zones,
     patch_infections, importation_from_kernel,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
     province_export_pressure_model,
-    province_composition_model
+    province_composition_model,
+    # health-zone model
+    bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
+    zone_share_renewal, zone_meld_block, zone_week_midpoints,
+    zone_parent_scale, zone_deformation, zone_meld_check,
+    reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
+    zone_forecast_shares, zone_forecast_draws, zone_forecast_archive,
+    zone_overview_table,
+    zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,
+    zone_forecast_scores, zone_composition_ppc, zone_composition_draws,
+    zone_composition_calibration, plot_zone_composition_ppc,
+    zone_diagnostics_table, zone_sampler_diagnostics
 
 include("docstrings.jl")
 include("constants.jl")
@@ -173,6 +198,8 @@ include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
+include("models/zone.jl")
+include("zone.jl")
 include("precompile.jl")
 
 end # module

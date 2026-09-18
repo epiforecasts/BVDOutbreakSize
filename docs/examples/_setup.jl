@@ -150,21 +150,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## `fit_parallel`, so on a cold cache the joint overlaps the per-stream,
     ## frozen and (gated) sensitivity re-fits and keeps all cores busy; on a
     ## warm cache they deserialise in parallel.
-    ## Resolve the cache dir against the package root, never the working
-    ## directory: Literate executes the page with the cwd changed to docs/src,
-    ## so a relative `BVD_FIT_CACHE` (as CI passes) would point at
-    ## docs/src/logs/fit_cache, miss every cached chain and refit the whole
-    ## report. Relative overrides are resolved against `pkgdir`; absolute ones
-    ## are used as-is.
-    _fit_cache_dir = let c = strip(get(ENV, "BVD_FIT_CACHE", ""))
-        if isempty(c)
-            joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache")
-        elseif isabspath(c)
-            String(c)
-        else
-            joinpath(pkgdir(BVDOutbreakSize), c)
-        end
-    end
+    ## Resolved against the package root, not the working directory, because
+    ## Literate runs the page from docs/src.
+    _fit_cache_dir = fit_cache_dir()
     _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in
         ("all", "true", "1")
     ## In CI the per-fit matrix produces every fit before the render, so a
@@ -179,20 +167,28 @@ if !@isdefined(_BVD_SETUP_LOADED)
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
         validation_cutoff = validation_cutoff,
-        run_sensitivity = RUN_SENSITIVITY
+        run_sensitivity = RUN_SENSITIVITY,
+        cache_dir = _fit_cache_dir
     )
-    _fit_results = fit_parallel(
-        [
-            () -> fit_or_load(
-                fit_key(s.id), s.thunk;
-                cache_dir = _fit_cache_dir,
-                refit = _refit_all,
-                strict = _strict
-            )
-                for s in _fit_specs
-        ]
-    )
-    _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
+    ## Two passes: the base fits, then the dependent fits that meld from a
+    ## cached parent, so the second pass finds what the first wrote.
+    _fits = Dict{String, Any}()
+    for _stage in (base_fit_specs(_fit_specs), dependent_fit_specs(_fit_specs))
+        _results = fit_parallel(
+            [
+                () -> fit_or_load(
+                    fit_key(s.id), s.thunk;
+                    cache_dir = _fit_cache_dir,
+                    refit = _refit_all,
+                    strict = _strict
+                )
+                    for s in _stage
+            ]
+        )
+        for (s, r) in zip(_stage, _results)
+            _fits[s.id] = r
+        end
+    end
 
     ## The headline joint is the patch (meta-population) model, run over the
     ## three affected provinces. With `n_patches = 1` the same model collapses
@@ -208,7 +204,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     chn_confirmed_deaths = _fits["confirmed_deaths"]
     chn_treatment = _fits["treatment"]
     chn_onsets = _fits["onsets"]
+    ## The health-zone fit, melded from the headline joint.
+    chn_local = _fits["local"]
     frozen_lastweek = _fits["frozen_validation"]
+    ## The health-zone fit melded from `frozen_lastweek`, in the same
+    ## `(; cutoff, o, chn)` shape.
+    frozen_local = _fits["local_frozen_validation"]
     ## One frozen individual fit per stream at the same cut-off as
     ## `frozen_lastweek`, so the forecast validation section can show each
     ## stream's own model alongside the frozen joint. Keyed by the same
@@ -244,6 +245,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
+        ## The zone-model sensitivity re-fits, each one switch away from
+        ## `chn_local`.
+        chn_local_mixing = _fits["local_mixing"]
+        chn_local_parent_low = _fits["local_parent_low"]
+        chn_local_parent_high = _fits["local_parent_high"]
     end
 
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup

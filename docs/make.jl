@@ -90,6 +90,30 @@ function write_references()
     end
 end
 
+## Stage the health-zone map's runtime inputs. Vitepress copies only
+## `src/public/` through unchanged (everything else is either a page or a
+## hashed asset), so the map page at `src/public/zone_map/index.html` fetches
+## its CSV and geojson from that directory by relative URL. The render step
+## writes the CSV into `summary_assets/`; the geojson is versioned under
+## `data/`. A missing input is a warning, not an error, so a build without
+## the zone model still deploys and the page shows its no-data message.
+function stage_zone_map()
+    dest = joinpath(LITERATE_OUT, "public", "zone_map")
+    mkpath(dest)
+    inputs = (
+        joinpath(REPO_ROOT, "data", "health_zones.geojson"),
+        joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"),
+    )
+    for src in inputs
+        if isfile(src)
+            cp(src, joinpath(dest, basename(src)); force = true)
+        else
+            @warn "Zone map input missing; the map will show no estimates" src
+        end
+    end
+    return
+end
+
 ## Assemble and deploy the Vitepress site from the pre-rendered markdown. The
 ## two report pages are already executed (Literate `execute = true`), so
 ## makedocs does not re-run them; it resolves `@ref`/`@cite`/`@bibliography`
@@ -100,6 +124,7 @@ function combine()
     )
     write_index()
     write_references()
+    stage_zone_map()
     makedocs(;
         sitename = "BVDOutbreakSize",
         authors = "Sam Abbott and contributors",
@@ -111,6 +136,7 @@ function combine()
         pages = [
             "Home" => "index.md",
             "Summary" => "summary.md",
+            "Spatial" => "spatial.md",
             "Analysis" => "analysis.md",
             "Sensitivity" => "sensitivity.md",
             "API" => "api.md",

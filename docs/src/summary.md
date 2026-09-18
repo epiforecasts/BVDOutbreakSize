@@ -2,7 +2,7 @@
 
 A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model fit as the full [Analysis](analysis.md) and refreshes whenever the data updates.
-See the [Analysis](analysis.md) page for the methods, assumptions and supporting detail behind each result, and the [Sensitivity](sensitivity.md) page for the forecast validation, the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
+See the [Analysis](analysis.md) page for the methods, assumptions and supporting detail behind each result, the [Spatial](spatial.md) page for the health-zone maps, and the [Sensitivity](sensitivity.md) page for the forecast validation, the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
 Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
 
 ```@eval
@@ -103,6 +103,10 @@ The reproduction number each data stream implies on its own, fitted to that stre
 Agreement between the streams supports the joint estimate; disagreement shows where they pull in different directions.
 
 ![Reproduction number implied by each data stream](summary_assets/rt_streams.png)
+
+## Health zones
+
+Each patch's infections split across its health zones, the zone maps and the interactive zone map are on the [Spatial](spatial.md) page.
 
 ---
 

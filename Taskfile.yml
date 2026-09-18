@@ -42,6 +42,36 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_province_tableau1.jl {{.CLI_ARGS}}
 
+  zone-tableau2:
+    desc: >
+      Regenerate the [zone_confirmed_history] and [zone_death_history]
+      blocks for data/observations.toml by scanning Tableau 2 of the INSP
+      situation reports (per-health-zone confirmed cases and deaths within
+      each province). Fails unless the zone rows plus the unallocated row
+      sum exactly to the committed province_confirmed_history and
+      province_death_history on every date; a vintage whose zone rows do
+      not sum to its own printed province row is reported and left out.
+      Needs the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_zone_tableau2.jl {{.CLI_ARGS}}
+
+  confirm-zone-data:
+    desc: >
+      Cross-check the [zone_confirmed_history] and [zone_death_history]
+      blocks against the INRB-UMIE per-zone cumulative CSVs and list every
+      disagreement. The mirror is a second transcription, not a gate, so
+      this always exits zero; see data/README.md for the known artefacts.
+    cmds:
+      - julia --project=scripts scripts/confirm_zone_data.jl {{.CLI_ARGS}}
+
+  health-zones:
+    desc: >
+      Rebuild data/health_zones.csv and data/health_zones.geojson from the
+      INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
+      only.
+    cmds:
+      - python3 scripts/build_health_zones.py {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for
@@ -102,18 +132,30 @@ tasks:
   fit:
     desc: >
       Run and cache a single model fit by id (BVD_FIT_ID), matching one CI
-      matrix job. List ids with `julia --project=docs docs/fits/list.jl`.
-      Example: BVD_FIT_ID=deaths task fit.
+      matrix job. List ids with `julia --project=docs docs/fits/list.jl`
+      (BVD_FIT_STAGE=dependent lists the fits melded from a cached parent,
+      which must be fitted first). Example: BVD_FIT_ID=deaths task fit.
     cmds:
       - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
   fit-all:
     desc: >
-      Fit and cache every model in one parallel pass, then `task docs` renders
-      from the cache without refitting. Canonical local full build:
-      `task fit-all && task docs`.
+      Fit and cache every model, then `task docs` renders from the cache
+      without refitting. Two parallel passes: the base fits, then the
+      dependent fits melded from a cached parent (the health-zone fits from
+      the joints). Canonical local full build: `task fit-all && task docs`.
     cmds:
       - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
+
+  fit-dependent:
+    desc: >
+      Fit and cache only the dependent fits, those melded from a cached
+      parent (the health-zone `local` from `joint`, `local_frozen_validation`
+      from `frozen_validation`). The parents must already be cached; a
+      missing one is an error, not a refit.
+    cmds:
+      - BVD_FIT_STAGE=dependent julia --project=docs docs/fits/all.jl
+        {{.CLI_ARGS}}
 
   format:
     desc: >

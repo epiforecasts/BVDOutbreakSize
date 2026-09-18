@@ -30,6 +30,44 @@ Both forms carry the same prior, so only the sampled coordinates change.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
+- The health-zone stage is steered by the province model's full posterior rather than its posterior mean (#711).
+The shared quantity is the log weekly patch infections, as one multivariate normal over every kept patch-week cell fitted to the parent draws, sampled whitened.
+It is the only parent term: the weekly sums are not scored again, which would count the parent posterior twice.
+Infections rather than reproduction numbers, because the zone forward pass consumes infections while deriving them from shared reproduction numbers is the absolute renewal; a reproduction number built on a sampled trajectory carries the parent's uncertainty either way.
+Zones in different provinces inherit the parent's learned cross-patch correlation through their shared draw, with nothing new estimated.
+Cost: 72 dimensions and 7% of the gradient.
+- Zone level deviations are correlated within a patch by distance between centroids, `C_zq = exp(-d_zq / ℓ)`, on one sampled length scale (#711).
+The meld correlates zones across patches but not within one, where every zone multiplies the same parent trajectory, so a cluster of neighbouring zones rising together had to be read as coincidence.
+One parameter, no measurable gradient cost.
+- Zone importation is per origin and inherits the province model's posterior export intensity as the centre of its prior, with a sampled departure scale (#711).
+Sixty-two zones cannot each identify an export intensity from the zone tables; they do not have to when the parent sets the centre.
+- The health-zone model conditions on the confirmed cases and the confirmed deaths together (#711).
+The allocated zone deaths of every vintage are a second Dirichlet-multinomial within the patch, on the infection-to-confirmed-death delay rather than the case delay, with its own overdispersion.
+Deaths were previously off by default and, when on, contributed one composition of the cumulative allocated deaths at the final vintage, which saw the end-state allocation and no timing.
+The deaths are what separate a zone's incidence from its ascertainment: both compositions are normalised within a patch, so with zone case fatality assumed constant within a patch the death shares weight zones by incidence alone, leaving the case shares to identify relative ascertainment.
+There is no per-zone lethality multiplier, which would cancel from the case shares and be absorbed by the death shares, reabsorbing the signal.
+- A revision that moves deaths out of named zones leaves the unallocated row flat, so the reattribution rule that reads only that row does not see it and the increment clamp absorbs the fall (#711).
+`zone_cumulative_falls` reports every such fall, and the death composition excludes any vintage on which a named zone loses more than one death, five vintages beyond the unallocated rule.
+The confirmed-case composition keeps the unallocated rule, so that stream is unchanged; three of its vintages carry a fall the rule does not see.
+- A health-zone model disaggregates each patch of the headline joint model over the health zones that have reported a confirmed case (#711).
+It is a two-stage Markov melding in which the zone stage receives the patch posterior and feeds nothing back: patch infections, the generation interval and the infection-to-report delay are fixed at the joint posterior means, each zone's infections are a share of its patch's, the shares follow a renewal on the zone's own force of infection scaled by a weekly-knot deviation walk, and the per-vintage zone increments are scored with a Dirichlet-multinomial composition conditional on the allocated patch total.
+Zone reproduction numbers invert the zone renewal and are paired with joint draws for every reported quantity.
+Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk; between-zone mixing is off by default and fitted as a sensitivity variant.
+`fit_zone` fits it from a parent chain with a data-informed start, two chains, 600 draws after 400 adaptation steps and a tree-depth cap of 8.
+
+### Data
+- Added per-health-zone confirmed cases and deaths from Tableau 2 as
+`[zone_confirmed_history]` and `[zone_death_history]`, 86 vintages from 1 June
+to 13 September over 62 zones, each province's unallocated row kept so the
+zones partition the province exactly on every date (#711).
+`scripts/scan_zone_tableau2.jl` scans them, `scripts/confirm_zone_data.jl`
+cross-checks them against the INRB-UMIE mirror (3105 of 3119 case cells and
+3111 of 3121 death cells agree, every disagreement the mirror's), and
+`data/health_zones.csv` and `data/health_zones.geojson` carry the zones'
+population, centroid, DHIS2 code and boundaries.
+`load_observations` exposes the blocks as `zone_confirmed_history` and
+`zone_death_history`, `zone_increment_matrix` reshapes them per patch and
+`load_health_zones` reads the metadata.
 - The bed-capacity walk is sampled centred, each innovation drawn at the sampled step size rather than as a standard half-normal multiplied by it (#743).
 The two forms are the same distribution, so the fit is unchanged in what it estimates and only the geometry the sampler explores differs.
 Non-centring suits a walk the prior dominates, and this is not one: on the 16 September joint fit its innovations had lost about 90% of their prior variance and its step size sat past the prior 95th percentile holding about half the prior spread.
@@ -54,6 +92,36 @@ It counts how many of each fit's parameters exceed an R-hat threshold rather tha
 A parameter that mixes on its own and not in the joint points at an interaction between streams, and one that mixes a week earlier and not now points at the newest data.
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
+- The methods carry the health-zone model: the cut two-stage melding, the
+share renewal and its deviation walk, the Dirichlet-multinomial composition,
+the implied zone reproduction number and the assumptions the zone stage makes,
+with its prior sample, sampler settings, forecast projection and scoring under
+model fitting and evaluation (#711).
+- Added a health-zone results section: choropleths of the reproduction
+number, the two bounds of the one-week forecast interval and the cases to
+date, zone reproduction-number
+trajectories against their patch, a ranking by the probability of growth, the
+composition check with the prior predictive, the posterior predictive per
+vintage and cumulative and a calibration table, the one-week zone forecast and
+the zone fit diagnostics.
+- The release adds `zone_summary.csv` and `zone_forecast.csv`, and a new
+Spatial page carries the zone maps, the zone forecast and an interactive
+health-zone map reading the per-zone estimates. The summary page keeps a
+pointer to it.
+- Every reported zone quantity carries a 90% interval. The cut-off
+deviation is an interval in the overview table, the coming-week map shows the
+forecast bounds rather than a median, and the dashboard CSV bounds the zone
+share.
+- The sensitivity page validates the one-week zone forecast beside the
+province one, scoring each province's observed zone split against the
+share-persistence and naive-persistence rules, and gains a health-zone
+sensitivity section: the zone posteriors under a low and a high parent draw,
+with and without between-zone mixing, with and without the zone deaths, and
+the frozen and live zone fits' reproduction numbers over the past week.
+The release adds `zone_forecast_validation.csv` and `zone_forecast_scores.csv`.
+- `scripts/zone_fit_report.jl` writes a standalone fit report for the zone
+model: prior predictive check, simulation-based recovery, sampler diagnostics,
+posterior predictive checks and the ranking and map.
 - The per-province headline is a table per quantity, with a row per province and a column per interval level (#724).
 Infections to date, the reproduction number and the case-fatality ratio were nested bullet lists that repeated the interval level in every cell.
 - Recovered is labelled recovered among confirmed wherever the stream is named (#737).
@@ -70,7 +138,6 @@ Pooling hid it.
 Those fits exist only at the one-week-back cut-off and only for still-reported streams.
 
 ### Fixed
-
 - The occupancy-offset forecast test scores both offsets on one set of prior draws rather than comparing two independent samples (#725).
 - The stopped-streams chunk in the sensitivity page no longer renders an empty code block (#736).
 Filtering its explanation comment left a blank line, which Literate counts as visible, so the fence stayed behind once the text went.
@@ -103,6 +170,10 @@ Only runs carrying that head branch are cancelled, so runs on `main`, on other p
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
+- The fit registry and the docs workflow gain a dependent stage (#711).
+The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
+The zone sensitivity variants `local_mixing`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
+`BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
 - Julia code is formatted with Runic rather than JuliaFormatter (#744).
 The isolated formatter environment existed to hold one exact version, and its compat string `"=2.12.0, 2.12"` did not do that.
 Julia reads a comma-separated compat string as a union, so the exact version unioned with a caret range covering everything below 3.0 and narrowed nothing.
@@ -112,7 +183,6 @@ The pin is now a single `=` string, and a quality test fails when the environmen
 The switch reformatted 121 files and added `ext/` to the checked directories.
 
 ### Dependencies
-
 - The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).
 Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no version, one of which merged in #699.
 Standard libraries ship with Julia, so these environments have nothing to pin.

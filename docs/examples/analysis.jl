@@ -2070,6 +2070,156 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# #### Health-zone model
+#
+# The situation reports also give cumulative confirmed cases per health zone within each province.
+# A second-stage model splits each patch's infections across its zones, conditional on the fitted joint model above.
+# This is a two-stage Markov melding [goudie2019](@cite) in which the zone stage receives the patch posterior and feeds nothing back, a cut [plummer2015](@cite).
+# Write $\xi$ for the patch quantities the zone stage reads, $\psi$ for its own parameters, $Y_1$ for the national and provincial data and $Y_2$ for the zone tables.
+# The zone stage samples
+#
+# ```math
+# p(\psi \mid Y_1, Y_2) \approx p(\psi \mid \bar\xi, Y_2)
+#   \propto p(Y_2 \mid \bar\xi, \psi)\, p(\psi), \tag{55}
+# ```
+#
+# with $\bar\xi$ the posterior mean of $\xi$ under the joint model.
+# The zone likelihood is a composition within each patch, so it is scale-free in the patch infections.
+# The patch uncertainty re-enters every reported zone infection count, reproduction number and forecast by pairing each zone draw with a joint-model draw chosen at random.
+#
+# The fixed inputs are $\bar I_{p,t}$, the exponential of the posterior mean of $\log I_{p,t}$ on every grid day, $\bar g$, the posterior-mean generation-interval distribution, and $\bar f$, the posterior-mean delay from infection to a confirmed report.
+# $\bar f$ is the incubation period convolved with the report-to-receipt delay.
+#
+# The units are the health zones that have reported a confirmed case, nested in the four patches, so the pooled patch's zones span Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi.
+# The zone tables are read at the vintages $d_1 < \dots < d_V$ they were printed on.
+# A zone's increment $y_{z,v}$ at vintage $v$ is the difference of its cumulative count from the previous vintage, clamped at zero, and the first vintage's increment is its cumulative count.
+# The allocated patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ excludes the report's unallocated row.
+# A patch and vintage with no allocated cases is not scored.
+# A vintage on which a province's unallocated count falls is a reattribution of counts into named zones rather than new cases, so that province's zone split is not scored on that date.
+# The composition check pushes each posterior draw's expected shares through the allocation at that vintage's observed total, and the prior draws through the same allocation for a prior predictive band.
+# The zone grid starts on day $t_0$, 42 days before the first zone vintage, and carries weekly knots $k = 1, \dots, K$ from there to the cut-off.
+#
+# Each zone's infections are its share $w_{z,t}$ of its patch's fixed infections.
+# The shares start from a within-patch softmax of standard-normal draws at a fixed scale of two, centred within the patch:
+#
+# ```math
+# w_{z,t_0} = \frac{\exp\bigl(2\,(z^w_z - \bar z^w_p)\bigr)}
+#   {\sum_{z' \in p} \exp\bigl(2\,(z^w_{z'} - \bar z^w_p)\bigr)}, \qquad
+# z^w_z \sim \mathrm{Normal}(0, 1), \tag{56}
+# ```
+#
+# where $\bar z^w_p$ is the mean over the zones of patch $p$.
+# From the grid start the shares evolve by a renewal on the zone's own force of infection, scaled by a log-transmission deviation $\delta_{z,t}$:
+#
+# ```math
+# \Lambda_{z,t} = \sum_{s \ge 1} \bar g_s\, I_{z,t-s}, \qquad
+# w_{z,t} = \frac{e^{\delta_{z,t}}\, \Lambda_{z,t}}
+#   {\sum_{z' \in p} e^{\delta_{z',t}}\, \Lambda_{z',t}}, \qquad
+# I_{z,t} = \bar I_{p,t}\, w_{z,t}, \tag{57}
+# ```
+#
+# with $I_{z,t} = \bar I_{p,t}\, w_{z,t_0}$ on the days before the grid start.
+# The shares of a patch sum to one on every day.
+# The deviation is a weekly-knot process by analogy with the patch deviations of Equation (6), interpolated linearly between knots.
+# Its first knot is a centred level and later knots revert toward zero with a retention $\phi_{\text{z}}$ set by a shared half-life $h_{\text{z}}$ in days:
+#
+# ```math
+# \delta_{z,1} = \sigma_L\,(z^L_z - \bar z^L_p), \qquad
+# \delta_{z,k} = \phi_{\text{z}}\, \delta_{z,k-1}
+#   + \sigma_\delta\,(z^\delta_{z,k} - \bar z^\delta_{W_p,k})\ \bigl[z \in W_p\bigr], \qquad
+# \phi_{\text{z}} = 2^{-7/h_{\text{z}}}, \tag{58}
+# ```
+#
+# ```math
+# \sigma_L \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \sigma_\delta \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
+# h_{\text{z}} \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
+# z^L_z,\ z^\delta_{z,k} \sim \mathrm{Normal}(0, 1). \tag{59}
+# ```
+#
+# $W_p$ is the set of walking zones of patch $p$, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones, and $\bar z^\delta_{W_p,k}$ is the mean of the innovations over that set.
+# Only walking zones carry innovations.
+# Every other zone decays along the mean path $\phi_{\text{z}}^{k-1}\,\delta_{z,1}$ from its level.
+#
+# The expected confirmed reports of a zone in the window of vintage $v$ carry its infections through $\bar f$, and the observed increments of each patch and vintage follow a Dirichlet-multinomial on the allocated total:
+#
+# ```math
+# C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} \bar f_s\, I_{z,t-s}, \qquad
+# \pi_{z,v} = \frac{C_{z,v}}{\sum_{z' \in p} C_{z',v}}, \qquad
+# y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa\, \pi_{p,v}\bigr), \tag{60}
+# ```
+#
+# ```math
+# \kappa = \frac{1 - \rho}{\rho}, \qquad
+# \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1]. \tag{61}
+# ```
+#
+# $\rho$ is the intra-class correlation of the allocation, one value shared across patches and vintages.
+#
+# The allocated confirmed deaths of every vintage follow a second Dirichlet-multinomial of the same form within each patch, on the infection-to-confirmed-death delay rather than the infection-to-report delay, with its own intra-class correlation $\rho_{\text{death}}$.
+# A case table and a death table do not disperse alike, so the two compositions do not share one concentration.
+#
+# Cases observe incidence times case-finding, deaths incidence times lethality, and each composition is normalised within its patch:
+#
+# ```math
+# \pi^{C}_{z} = \frac{a_z I_z}{\sum_{z' \in p} a_{z'} I_{z'}},
+# \qquad
+# \pi^{D}_{z} = \frac{\theta_z I_z}{\sum_{z' \in p} \theta_{z'} I_{z'}}. \tag{62}
+# ```
+#
+# Relative ascertainment $a_z$ and relative fatality $\theta_z$ are log contrasts summing to zero within the patch,
+#
+# ```math
+# a_z = \exp\bigl(\sigma_a (z^a_z - \bar z^a_p)\bigr),
+# \qquad
+# \theta_z = \exp\bigl(\sigma_\theta (z^\theta_z - \bar z^\theta_p)\bigr), \tag{63}
+# ```
+#
+# with $\sigma_a$ and $\sigma_\theta$ taking their priors from the province model's posterior for the same scales between provinces.
+# The pooling is what separates $I_z$ from $a_z$ and $\theta_z$: as $\sigma$ shrinks the shares weight zones by incidence alone, and a zone departs from its province only as far as its own counts require.
+#
+# The implied zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
+#
+# ```math
+# R_{z,t} = \frac{I_{z,t}}{\Lambda_{z,t}}. \tag{62}
+# ```
+#
+# Its force-weighted mean over the zones of a patch is the patch's implied reproduction number, $\bar I_{p,t} / \sum_{s \ge 1} \bar g_s\, \bar I_{p,t-s}$, which includes importation.
+# $\delta_{z,t}$ is the log deviation of the zone's transmission from its patch.
+# It is reported only from the day the zone's cumulative infections reach ten in the median draw.
+# For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
+# The results rank zones by the posterior probability that the reproduction number exceeds one.
+#
+# We assume the generation interval and the infection-to-report delay are the patch posterior means.
+# Importation into a patch is allocated to its zones in proportion to their current shares.
+# There is no mixing between the zones of a patch.
+# The increments are consecutive-vintage differences clamped at zero.
+# The walking set depends on the data and can differ between fits at different cut-offs.
+# A revision can move counts out of named zones, which leaves the unallocated row flat and the clamp absorbing the fall.
+# The death composition therefore leaves out any vintage on which a named zone loses more than one death, which is five vintages beyond those the unallocated row identifies; the case composition keeps the unallocated rule.
+# The mixing and the choice of a low or high patch draw in place of the mean, and a cases-only fit without the death composition, are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
+#
+# #### Departures from the province model
+#
+# The zone model follows the province model's deviation structure, gravity function, composition form, inherited priors and reporting conventions. Two departures remain.
+#
+# - Zone infections are a share of the patch total rather than a renewal in their own right, so no infection crosses a patch boundary.
+# - One drift scale is shared across zones, where the province model gives each patch its own.
+
+#md # ```@raw html
+#md # <details><summary>Model: bvd_zone</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.bvd_zone(nothing)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ### Model fitting and evaluation
 #
 # #### Prior predictive check
@@ -2135,6 +2285,41 @@ prior_pair_fig = plot_pair(
 
 prior_pair_fig #hide
 
+# The zone prior predictive is drawn from the [health-zone model](@ref "Health-zone model") at the headline joint's posterior means.
+# The prior predictive zone shares are shown against the posterior in the [health-zone composition check](@ref "Health-zone composition check").
+
+#md # ```@raw html
+#md # <details><summary>Sample the zone prior</summary>
+#md # ```
+
+zone_inputs = zone_fit_inputs(chn_joint, obs);
+zone_patch = zone_inputs.patch_of_zone;
+prior_chn_zone = sample(
+    bvd_zone(zone_inputs.model_data), Prior(), 500;
+    progress = false
+);
+prior_zone_table = summary_table(
+    prior_chn_zone,
+    [
+        :region_sd_zone, :region_drift_sd_zone, :region_halflife_zone,
+        :composition_rho_zone,
+    ]
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Show zone prior summary table</summary>
+#md # ```
+
+prior_zone_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # #### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
@@ -2143,6 +2328,10 @@ prior_pair_fig #hide
 # The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
 # The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
+#
+# The zone stage samples with the same NUTS and Mooncake on a diagonal metric: two chains, 600 draws each after 400 adaptation steps, a target acceptance probability of 0.8 and a maximum tree depth of 8.
+# Each chain starts from a data-informed point rather than the prior: deviations at zero, initial shares from the observed cumulative zone shares at the first vintage with a pseudo-count of half a case, and the scales at $\sigma_L = 0.2$, $\sigma_\delta = 0.05$, $h_{\text{z}} = 42$ and $\rho = 0.05$.
+# Each chain's start is jittered with normal noise of standard deviation 0.1 in the unconstrained space.
 
 # #### No-onward-transmission counterfactual
 #
@@ -2167,7 +2356,7 @@ prior_pair_fig #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{55}
+#         \Pr(X_d - X_c \le T - t)}, \tag{63}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
@@ -2242,6 +2431,20 @@ prior_pair_fig #hide
 # v1.0.0 to v1.2.0 reconstruct the reported case, suspected death and export streams, from each tag's own inline model code.
 # Reconstructed forecasts are published as a separate backfill release and scored alongside the stored ones by the [forecast scoring across releases](@ref "Forecast scoring across releases") section.
 #
+# ##### Health-zone forecast
+#
+# The one-week zone forecast continues the share renewal of Equation (57) past the cut-off with no fresh innovations:
+#
+# ```math
+# \delta_{z,n+d} = \phi_{\text{z}}^{d/7}\, \delta_{z,n}, \qquad
+# \bar I_{p,n+d} = \bar I_{p,n}\Bigl(\frac{\bar I_{p,n}}{\bar I_{p,n-7}}\Bigr)^{d/7}, \qquad
+# \pi^{\text{fc}}_{z} = \frac{C_{z,(n,\,n+7]}}{\sum_{z' \in p} C_{z',(n,\,n+7]}}, \tag{64}
+# ```
+#
+# for horizon days $d = 1, \dots, 7$.
+# A zone's forecast count is the national confirmed-case forecast draw times its patch's share at the last spatial vintage, times $\pi^{\text{fc}}_z$ from a zone draw chosen at random.
+# The national draw and the patch share come from the same joint-model draw, as the [province forecast](@ref "One-week-ahead forecast results") pairs them.
+#
 # #### Forecast-versus-frozen evaluation
 #
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and projecting one week ahead with the same forecast machinery.
@@ -2249,6 +2452,7 @@ prior_pair_fig #hide
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
 # Each frozen re-fit uses the full headline settings (1000 draws across two chains).
 # The same frozen re-fit is reused to compare against McCabe et al. at the cut-offs they used.
+# The zone forecast is validated the same way: a zone fit melded from the frozen joint projects each patch's zone split a week ahead and is scored against the zone tables observed since, in the [zone forecast validation](@ref "Forecast by health zone") of the sensitivity page.
 # The helper below performs one frozen joint re-fit and is reused by the forecast validation and matched-in-time results.
 
 #md # ```@raw html
@@ -2273,7 +2477,7 @@ prior_pair_fig #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{56}
+#     \tag{65}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
@@ -2294,14 +2498,14 @@ prior_pair_fig #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{57}
+# \end{cases} \tag{66}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{58}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{67}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2312,7 +2516,7 @@ prior_pair_fig #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{59}
+#     \tag{68}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$,.
@@ -2330,6 +2534,12 @@ prior_pair_fig #hide
 # A window opening before the stream's first recorded vintage would read that absence as a zero and centre the baseline on the whole cumulative total instead, identically at every horizon.
 # The earliest releases archived their cut-off totals without the dated vintage record at all, which is the same case with no history to centre on and no step to draw from.
 # Neither is scored, so those forecasts keep their own scores and carry no relative skill.
+#
+# The zone forecast is scored per patch.
+# The observed zone split of the patch's weekly total is scored by its multinomial log probability under the draw-averaged projected shares.
+# It is compared with two nulls: share persistence, the cumulative zone shares at the cut-off, which is the province forecast's rule applied one level down, and naive persistence, the zone split of the week before the cut-off.
+# Both nulls carry a pseudo-count of half a case per zone.
+# The patch totals are scored by the CRPS and 90% coverage against a naive persistence total, the previous week's count with negative-binomial noise at a dispersion of five.
 
 # ## Results
 #
@@ -2523,6 +2733,8 @@ fit_diagnostics_table = diagnostics_table(
     "isolation (DRC)" => chn_treatment,
     "onsets (DRC)" => chn_onsets,
     "frozen (1wk back)" => frozen_lastweek.chn,
+    "health zones" => chn_local,
+    "health zones (frozen)" => frozen_local.chn,
     (
         RUN_SENSITIVITY ?
             [
@@ -3590,7 +3802,7 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# #### Province compositions
+# #### [Province compositions](@id province-compositions-results)
 #
 # The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
 # The panels below show that modelled share at every spatial vintage against the observed one.
@@ -4507,6 +4719,320 @@ end;
 
 onset_forecast_fig #hide
 
+# ### Health-zone estimates
+#
+# The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the bounds of the 90% interval on the forecast confirmed cases over the coming week, and the confirmed cases to date, zone by zone.
+# The forecast is mapped as its two bounds rather than a single number, so a zone's colour reads as a range.
+# On the reproduction-number map a zone whose 90% interval straddles one is washed towards white.
+# Zones with no confirmed case, or too few infections for a reproduction number, are grey.
+# The four maps share the zone boundaries, so a zone's forecast can be read against its reproduction number and its cases to date.
+
+#md # ```@raw html
+#md # <details><summary>Health-zone post-processing</summary>
+#md # ```
+
+## The geojson keys a zone without the province prefix the manifest carries.
+zone_map_keys = [
+    String(last(split(k, "."; limit = 2)))
+        for k in zone_inputs.zone_keys
+];
+## Daily zone reproduction numbers over the zone grid, each zone draw
+## paired with a joint draw so the patch uncertainty is carried, and the
+## cut-off values the map and ranking read. A zone's reproduction number
+## is reported only in the draws where its cumulative infections reach
+## the floor; the rest are undefined.
+zone_rt_traj = reconstruct_zone_rt(
+    chn_local, zone_inputs;
+    parent_chain = chn_joint
+);
+zone_RT_finite = [filter(isfinite, m[:, obs.n]) for m in zone_rt_traj];
+zone_RT_reported = findall(!isempty, zone_RT_finite);
+zone_share_T = let vs = vec(collect(chn_local[:share_T_zone]))
+    [Float64[v[z] for v in vs] for z in eachindex(zone_map_keys)]
+end;
+_zq(v, p) = quantile(v, p)
+## The one-week zone forecast, split from the headline forecast above.
+zone_fc_draws = zone_forecast_draws(
+    chn_local, chn_joint, forecast,
+    zone_inputs
+);
+zone_forecast_summary = zone_forecast_table(
+    chn_local, chn_joint, forecast,
+    zone_inputs
+);
+zone_overview = zone_overview_table(
+    chn_local, zone_inputs;
+    parent_chain = chn_joint
+);
+
+zone_map_fig = plot_zone_map_panels(
+    [
+        (;
+            values = [median(zone_RT_finite[z]) for z in zone_RT_reported],
+            zones = zone_map_keys[zone_RT_reported],
+            lower = [_zq(zone_RT_finite[z], 0.05) for z in zone_RT_reported],
+            upper = [_zq(zone_RT_finite[z], 0.95) for z in zone_RT_reported],
+            diverging_at = 1.0, scale = log10,
+            title = "Reproduction number at the cut-off",
+            colorbar_label = "R",
+        ),
+        (;
+            values = [_zq(v, 0.05) for v in zone_fc_draws.zones],
+            zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
+            title = "Confirmed cases over the coming week (lower 90%)",
+            colorbar_label = "cases",
+        ),
+        (;
+            values = [_zq(v, 0.95) for v in zone_fc_draws.zones],
+            zones = zone_map_keys, scale = CairoMakie.Makie.pseudolog10,
+            title = "Confirmed cases over the coming week (upper 90%)",
+            colorbar_label = "cases",
+        ),
+        (;
+            values = Float64.(zone_inputs.cumulative), zones = zone_map_keys,
+            scale = CairoMakie.Makie.pseudolog10,
+            title = "Confirmed cases to date", colorbar_label = "cases",
+        ),
+    ];
+    ncols = 2, title = "Health zones at the cut-off"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_map_fig #hide
+
+# The panels below trace the reproduction number of the twelve zones with most confirmed cases, each against its patch's own implied reproduction number in grey.
+# Where a zone's line departs from the grey patch line, the gap is the zone's fitted deviation from its patch.
+
+#md # ```@raw html
+#md # <details><summary>Zone reproduction-number trajectories</summary>
+#md # ```
+
+## Each patch's implied reproduction number from the joint draws with the
+## same generation interval the zone stage fixes, so the grey reference is
+## the quantity the zone values average to.
+zone_grid = zone_inputs.t0:obs.n
+_patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
+patch_implied_rt = [
+    let m = Matrix{Float64}(
+            undef,
+            length(_patch_infection_draws), obs.n
+        )
+        for (i, v) in enumerate(_patch_infection_draws)
+            I = reshape(Float64.(v), N_PATCHES, obs.n)
+            m[i, :] .= implied_national_Rt(I[p, :], zone_inputs.g)
+        end
+        m
+    end
+        for p in 1:N_PATCHES
+];
+zone_rt_fig = plot_rt_zones(
+    [replace(m[:, zone_grid], NaN => missing) for m in zone_rt_traj],
+    zone_inputs.zone_labels, zone_patch;
+    patch_labels = zone_inputs.patch_labels,
+    dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
+    cumulative = zone_inputs.cumulative, top = 12,
+    patch_rt = [m[:, zone_grid] for m in patch_implied_rt]
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_rt_fig #hide
+
+# The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
+# A zone below the walking threshold is drawn hollow, since its estimate comes from its patch rather than its own data.
+
+#md # ```@raw html
+#md # <details><summary>Zone ranking</summary>
+#md # ```
+
+zone_ranking_fig = plot_zone_ranking(
+    zone_overview;
+    patch_labels = zone_inputs.patch_labels
+);
+## The overview as displayed: the interval strings, without the numeric
+## columns the figure reads.
+zone_overview_display = zone_overview[
+    :,
+    [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T, :walking],
+];
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_ranking_fig #hide
+
+# The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether it walks.
+# The share, the reproduction number and the deviation are each a median with a 90% interval.
+# Every zone is listed in the fold below it.
+
+MarkdownTable(first(zone_overview_display, 20)) #hide
+
+#md # ```@raw html
+#md # <details><summary>All health zones</summary>
+#md # ```
+
+MarkdownTable(zone_overview_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# #### Health-zone composition check
+#
+# The composition check draws replicated zone allocations from the fitted zone model and compares them to the observed ones, as the [province compositions](@ref province-compositions-results) check does one level up.
+# The panels show, for the zones with the largest observed shares, the modelled share of the patch's confirmed cases at each vintage against the observed one.
+# Each panel carries three bands: the tan prior predictive share, the grey posterior predictive interval on the observed share, and the coloured ribbon of the expected share inside it.
+# The observed points should fall inside the grey band.
+# A zone with a handful of cases per vintage has an observed share that jumps between zero and one, and its band spans the same range.
+# The second figure is the same check on the cumulative allocation, each zone's share of its patch's cumulative allocated cases at every vintage.
+
+#md # ```@raw html
+#md # <details><summary>Zone composition predictive checks</summary>
+#md # ```
+
+## Per-draw expected, predictive and observed zone shares at every vintage,
+## from the posterior and from the zone prior, per vintage and cumulative.
+zone_ppc = zone_composition_draws(chn_local, zone_inputs);
+zone_ppc_prior = zone_composition_draws(prior_chn_zone, zone_inputs);
+zone_ppc_cum = zone_composition_draws(
+    chn_local, zone_inputs;
+    cumulative = true
+);
+zone_ppc_prior_cum = zone_composition_draws(
+    prior_chn_zone, zone_inputs;
+    cumulative = true
+);
+zone_ppc_fig = plot_zone_shares(
+    zone_ppc.expected, zone_ppc.observed,
+    zone_inputs.dates, zone_inputs.zone_labels;
+    zone_patch, patch_labels = zone_inputs.patch_labels,
+    pred_draws = zone_ppc.predictive_share,
+    prior_draws = zone_ppc_prior.predictive_share, top = 15, ncols = 5
+);
+zone_ppc_cum_fig = plot_zone_shares(
+    zone_ppc_cum.expected,
+    zone_ppc_cum.observed, zone_inputs.dates, zone_inputs.zone_labels;
+    zone_patch, patch_labels = zone_inputs.patch_labels,
+    pred_draws = zone_ppc_cum.predictive_share,
+    prior_draws = zone_ppc_prior_cum.predictive_share, top = 15, ncols = 5,
+    title = "Zone share of the patch's cumulative confirmed cases, " *
+        "modelled against observed"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_ppc_fig #hide
+
+zone_ppc_cum_fig #hide
+
+# The calibration table scores the per-vintage composition the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch: the mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
+# A cell with no case is covered by any interval that includes zero, so the coverage is read with the share of empty cells in mind.
+
+#md # ```@raw html
+#md # <details><summary>Zone composition calibration</summary>
+#md # ```
+
+zone_calibration_table = zone_composition_calibration(chn_local, zone_inputs);
+zone_calibration_fig = plot_stream_calibration(zone_calibration_table);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_calibration_fig #hide
+
+zone_calibration_table #hide
+
+# #### Health-zone forecast results
+#
+# The figure and table below split the one-week-ahead confirmed-case forecast across the health zones, for the fifteen zones with the largest forecasts.
+# The patch totals in the table are the province forecast above.
+# The same split made from the one-week-back validation fit is scored against the zone tables observed since in the [zone forecast validation](@ref "Forecast by health zone") of the sensitivity page.
+
+#md # ```@raw html
+#md # <details><summary>One-week-ahead zone forecast</summary>
+#md # ```
+
+zone_forecast_fig = plot_zone_forecast(
+    zone_fc_draws.zones,
+    zone_inputs.zone_labels, zone_patch;
+    patch_labels = zone_inputs.patch_labels, top = 15
+);
+## The fifteen largest zone forecasts, then every patch total.
+zone_forecast_display = let t = zone_forecast_summary
+    zones = sort(t[t.zone .!= "Patch total", :], :median; rev = true)
+    vcat(first(zones, 15), t[t.zone .== "Patch total", :])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_forecast_fig #hide
+
+MarkdownTable(zone_forecast_display) #hide
+
+# #### Health-zone fit diagnostics
+#
+# The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity and the divergences.
+# Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
+# The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
+# The walking rows are the ones to read.
+
+#md # ```@raw html
+#md # <details><summary>Zone fit diagnostics</summary>
+#md # ```
+
+_zone_per_chain(v) = join(string.(round.(v; sigdigits = 3)), " / ")
+function _zone_sampler_row(label, chn)
+    d = zone_sampler_diagnostics(chn)
+    return (
+        fit = label, max_rhat = round(d.max_rhat; digits = 3),
+        min_ess_bulk = round(d.min_ess_bulk; digits = 0),
+        min_ess_tail = round(d.min_ess_tail; digits = 0),
+        divergences = d.n_divergent,
+        depth_cap = _zone_per_chain(d.depth_cap_fraction),
+        ebfmi = _zone_per_chain(d.ebfmi),
+        step_size = _zone_per_chain(d.step_size),
+    )
+end
+zone_sampler_table = DataFrame(
+    [
+        _zone_sampler_row("health zones", chn_local),
+        _zone_sampler_row("health zones (frozen)", frozen_local.chn),
+    ]
+);
+zone_diagnostics = let d = zone_diagnostics_table(chn_local, zone_inputs)
+    for c in names(d)[3:end]
+        d[!, c] = round.(d[!, c]; digits = startswith(c, "rhat") ? 3 : 0)
+    end
+    d
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(zone_sampler_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-zone R-hat and effective sample sizes</summary>
+#md # ```
+
+MarkdownTable(zone_diagnostics) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Saving results
 #
 # The tables above are written to an output directory at the repo root so they can be archived and shared.
@@ -4934,6 +5460,19 @@ CSV.write(
     onsets_over_time_table
 );
 
+## The health-zone overview and the per-zone split of the same one- to
+## four-week-ahead forecasts, in the province archive's schema plus the
+## zone, so a release records the zone forecast it made.
+CSV.write(joinpath(output_dir, "zone_summary.csv"), zone_overview)
+CSV.write(
+    joinpath(output_dir, "zone_forecast.csv"),
+    zone_forecast_archive(
+        chn_local, chn_joint, forecast_runs, zone_inputs;
+        made_date = obs.cutoff, horizon = maximum(forecast_horizons),
+        thin = 5
+    )
+);
+
 #md # ```@raw html
 #md # </details>
 #md # ```
@@ -4941,7 +5480,7 @@ CSV.write(
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, modelled versus observed reported cases, and the health-zone maps and forecast) into `docs/src/summary_assets/`, with the per-zone estimates its interactive map reads.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -4979,6 +5518,44 @@ CairoMakie.save(
     joinpath(dashboard_dir, "reported_cases.png"),
     plot_vintage_conditional_ppc(vintage_panels)
 )
+## The health-zone maps and the one-week zone forecast, and the per-zone
+## estimates the interactive map reads: one row per zone keyed as the
+## geojson keys it, with the cases and deaths to date, the reproduction
+## number, the one-week forecast and the share of the patch's infections.
+## A zone below the reporting floor carries no reproduction number.
+CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
+CairoMakie.save(
+    joinpath(dashboard_dir, "zone_forecast.png"),
+    zone_forecast_fig
+)
+_zone_deaths = [
+    let h = obs.zone_death_history
+        haskey(h, prov) && haskey(h[prov], z) &&
+            !isempty(h[prov][z].counts) ? Int(h[prov][z].counts[end]) :
+            0
+    end
+        for (prov, z) in zip(
+            zone_inputs.zone_province,
+            zone_inputs.zone_names
+        )
+]
+_zone_rt_stat(f) = [isempty(r) ? missing : f(r) for r in zone_RT_finite]
+zone_estimates = DataFrame(
+    zone = zone_map_keys,
+    label = zone_inputs.zone_labels, province = zone_inputs.zone_province,
+    patch = zone_inputs.patch_labels[zone_patch],
+    cases = zone_inputs.cumulative, deaths = _zone_deaths,
+    R_T_median = _zone_rt_stat(median),
+    R_T_lower = _zone_rt_stat(r -> quantile(r, 0.05)),
+    R_T_upper = _zone_rt_stat(r -> quantile(r, 0.95)),
+    forecast_median = [median(v) for v in zone_fc_draws.zones],
+    forecast_lower = [quantile(v, 0.05) for v in zone_fc_draws.zones],
+    forecast_upper = [quantile(v, 0.95) for v in zone_fc_draws.zones],
+    share_median = [median(v) for v in zone_share_T],
+    share_lower = [quantile(v, 0.05) for v in zone_share_T],
+    share_upper = [quantile(v, 0.95) for v in zone_share_T]
+)
+CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 
 ## Headline prose: the same bullet summary shown at the top of the Results
 ## section, serialised to markdown so the dashboard renders it verbatim.

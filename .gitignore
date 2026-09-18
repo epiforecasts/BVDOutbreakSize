@@ -8,6 +8,11 @@
 Manifest.toml
 /docs/build/
 /docs/src/analysis.md
+# Figures the literate pages write beside their generated markdown.
+# Build output: `git add -A` after a local docs build would otherwise
+# commit tens of megabytes of them.
+/docs/src/analysis-*.png
+/docs/src/sensitivity-*.png
 /docs/src/index.md
 /docs/src/sensitivity.md
 /docs/src/references.md
@@ -50,6 +55,12 @@ logs/
 /results.json
 
 *.html
+
+# Runtime inputs the docs build stages next to the health-zone map page;
+# the page itself is source, so exempt it from the *.html rule above.
+/docs/src/public/zone_map/zone_estimates.csv
+/docs/src/public/zone_map/health_zones.geojson
+!/docs/src/public/zone_map/index.html
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log

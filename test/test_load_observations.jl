@@ -467,6 +467,30 @@ end
     @test occursin("matches no", err.msg)
 end
 
+@testitem "load_observations refuses a zone series of the wrong length" begin
+    using BVDOutbreakSize
+    using TOML
+
+    ## A zone series one entry short of the block's dates names its key.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["zone_confirmed_history"]
+    prov = first(sort([k for k in keys(blk) if blk[k] isa AbstractDict]))
+    zone = first(sort(collect(keys(blk[prov]))))
+    blk[prov][zone] = blk[prov][zone][1:(end - 1)]
+    tmp = joinpath(mktempdir(), "observations.toml")
+    open(io -> TOML.print(io, raw), tmp, "w")
+    err = try
+        load_observations(tmp)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ErrorException
+    @test occursin("zone_confirmed_history: $prov.$zone", err.msg)
+    @test occursin("$(length(blk["dates"])) dates", err.msg)
+end
+
 @testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()

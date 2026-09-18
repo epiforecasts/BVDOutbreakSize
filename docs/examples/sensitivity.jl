@@ -326,6 +326,119 @@ province_validation_table = province_forecast_vs_truth(
 
 MarkdownTable(province_validation_table) #hide
 
+# ### Forecast by health zone
+#
+# The one-week-ahead forecast split by health zone, scored against what each zone went on to report.
+# Each zone's forecast is the province forecast above times the zone's projected share of the province's confirmed reports over the week, from the [health-zone model](@ref "Health-zone model") melded from the frozen fit.
+# The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the current data, clamped at zero.
+# When the zone tables end before the current cut-off, the week scored is shortened to the days they cover.
+# The scores and the two persistence rules they are set against are those of the [zone forecast scoring](@ref "Forecast scoring against a persistence baseline") in the analysis methods.
+# The figure shows the fifteen zones with the largest forecast medians and the fold below the scores holds every zone.
+
+#md # ```@raw html
+#md # <details><summary>Zone forecast against observed</summary>
+#md # ```
+
+## The live and frozen zone fits' inputs, rebuilt from their parents and
+## the observations each was fitted to. The live inputs also serve the
+## health-zone sensitivity section further down.
+zone_inputs_live = zone_fit_inputs(chn_joint, obs)
+frozen_zone_inputs = zone_fit_inputs(frozen_lastweek.chn, frozen_local.o)
+## The horizon is the days from the frozen cut-off to the last zone
+## vintage, at most the week. A shorter week needs its own national
+## forecast at that horizon, since the zone split scales its total; at the
+## full week it is the province forecast above. Zone tables that end at
+## or before the frozen cut-off leave no day to score, and the section
+## shows a note in place of its outputs.
+zone_validation_horizon = min(
+    7,
+    value(zone_inputs_live.dates[end] - frozen_local.o.cutoff)
+)
+_zone_validation_missing = Markdown.parse(
+    "_The zone tables end at or before the frozen cut-off, so the zone " *
+        "forecast is not scored in this build._"
+)
+if zone_validation_horizon >= 1
+    zone_validation_forecast = zone_validation_horizon == 7 ?
+        validation_forecast :
+        forecast_reported(
+            frozen_lastweek.chn;
+            horizon = zone_validation_horizon,
+            obs_cases = frozen_lastweek.o.reported_cases,
+            obs_deaths = frozen_lastweek.o.total_deaths,
+            obs_confirmed = frozen_lastweek.o.confirmed_cases,
+            obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
+            obs_recovered = frozen_lastweek.o.recovered_cases,
+            grid_n = frozen_lastweek.o.n,
+            onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end
+        )
+    zone_truth = zone_forecast_truth(
+        obs, frozen_zone_inputs;
+        made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon
+    )
+    zone_validation_table = zone_forecast_vs_truth(
+        frozen_local.chn,
+        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
+        truth = zone_truth, horizon = zone_validation_horizon
+    )
+    zone_validation_scores = zone_forecast_scores(
+        frozen_local.chn,
+        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
+        truth = zone_truth, horizon = zone_validation_horizon
+    )
+    zone_validation_fig = plot_zone_forecast(
+        zone_validation_table;
+        patch_labels = frozen_zone_inputs.patch_labels,
+        xlabel = "New confirmed cases over $(zone_validation_horizon) days",
+        title = "Zone forecast from $(frozen_local.o.cutoff) against observed"
+    )
+else
+    ## The frames stay frames, since the release assets below write them.
+    zone_validation_table = DataFrame()
+    zone_validation_scores = DataFrame()
+    zone_validation_fig = _zone_validation_missing
+end;
+## The scores rounded for display. Share persistence carries no total
+## forecast, so its total columns are blank. No patch is scored when every
+## observed total is zero or incomplete, which leaves an empty frame
+## without the columns.
+zone_validation_scores_table = isempty(zone_validation_scores) ?
+    _zone_validation_missing :
+    let s = zone_validation_scores
+        fmt(x, d) = isnan(x) ? "" : string(round(x; digits = d))
+        DataFrame(
+            "Province" => s.patch, "Rule" => s.method,
+            "Observed total" => s.observed,
+            "Log score of the split" => [fmt(x, 2) for x in s.log_score],
+            "CRPS of the total" => [fmt(x, 1) for x in s.crps],
+            "Total within 90%" => [
+                ismissing(x) ? "" : string(x)
+                for x in s.within_90
+            ]
+        )
+end;
+zone_validation_table_display = isempty(zone_validation_table) ?
+    _zone_validation_missing :
+    zone_validation_table;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_validation_fig #hide
+
+MarkdownTable(zone_validation_scores_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Zone forecast against observed, every zone</summary>
+#md # ```
+
+MarkdownTable(zone_validation_table_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
@@ -1802,6 +1915,290 @@ end;
 
 spatial_quantities_table #hide
 
+# ## Health-zone model sensitivity
+#
+# The [health-zone model](@ref "Health-zone model") takes the headline fit's provincial infections as fixed and feeds nothing back.
+# Each comparison reads every zone's reproduction number and share of its province at the cut-off from a re-fit that differs from the headline zone fit in one setting.
+# The figures show the fifteen zones the headline zone fit ranks highest on each quantity, and the tables the ten with most confirmed cases.
+
+#md # ```@raw html
+#md # <details><summary>Zone cut-off summaries shared by the comparisons</summary>
+#md # ```
+
+## Per-zone draw vectors of a cut-off quantity stored on a zone chain, one
+## vector per zone in input order.
+function _zone_cutoff_draws(chn, key, nz)
+    return [[Float64(v[z]) for v in vec(collect(chn[key]))] for z in 1:nz]
+end
+
+## One row per zone in `zs` with the median and the 50% and 90% intervals
+## of its draws (one vector per zone), in the schema the zone dot plots
+## read, plus the zone's key to match variants by and its confirmed cases
+## to rank by. A zone with no finite draw is left out.
+function _zone_cutoff_summary(draws, inputs, zs = eachindex(draws))
+    keep = [i for (i, v) in enumerate(draws) if any(isfinite, v)]
+    z = zs[keep]
+    tbl = zone_summary_table(
+        [filter(isfinite, draws[i]) for i in keep],
+        inputs.zone_labels[z], inputs.patch_of_zone[z]
+    )
+    tbl.key = inputs.zone_keys[z]
+    tbl.cases = inputs.cumulative[z]
+    return tbl
+end
+
+## The reproduction-number and share summaries of a zone fit at its cut-off.
+function _zone_cutoff_summaries(chn, inputs)
+    nz = length(inputs.zone_keys)
+    return (;
+        R = _zone_cutoff_summary(
+            _zone_cutoff_draws(chn, :R_T_zone, nz),
+            inputs
+        ),
+        share = _zone_cutoff_summary(
+            _zone_cutoff_draws(chn, :share_T_zone, nz), inputs
+        ),
+    )
+end
+
+## The `top` zones by confirmed cases in the first variant, one column per
+## variant for each quantity the variants carry: the reproduction number
+## and, where present, the share of the province in percent. Each cell is
+## a median with its 90% interval. Variants are matched by zone key.
+function _zone_comparison_table(variants; top::Integer = 10)
+    function cell(t, key, d, scale)
+        i = findfirst(==(key), t.key)
+        i === nothing && return ""
+        f(x) = string(round(scale * x; digits = d))
+        return string(f(t.median[i]), " (", f(t.lo90[i]), "–", f(t.hi90[i]), ")")
+    end
+    base = first(last(first(variants)))
+    order = sortperm(base.cases; rev = true)[1:min(top, size(base, 1))]
+    df = DataFrame(
+        "Zone" => base.label[order],
+        "Province" => [PROVINCE_LABELS[p] for p in base.patch[order]],
+        "Cases" => base.cases[order]
+    )
+    for (q, name, d, scale) in ((:R, "R", 2, 1), (:share, "Share %", 1, 100)),
+            (label, s) in variants
+
+        haskey(s, q) || continue
+        df[!, "$name ($label)"] = [
+            cell(s[q], k, d, scale)
+                for k in base.key[order]
+        ]
+    end
+    return df
+end
+
+## The comparison table and the reproduction-number and share dot plots of
+## a set of variants, or the placeholder when this build ran no re-fits.
+_zone_sens_missing = Markdown.parse(
+    "_Health-zone sensitivity re-fits not shown in this build._"
+)
+function _zone_variant_outputs(variants, what)
+    RUN_SENSITIVITY || return (;
+        table = _zone_sens_missing,
+        rt = _zone_sens_missing, share = _zone_sens_missing,
+    )
+    return (;
+        table = _zone_comparison_table(variants),
+        rt = plot_zone_comparison(
+            [l => s.R for (l, s) in variants];
+            xlabel = "Reproduction number at the cut-off",
+            reference_line = 1.0,
+            title = "Zone reproduction number $what"
+        ),
+        share = plot_zone_comparison(
+            [l => s.share for (l, s) in variants];
+            xlabel = "Share of the province's infections at the cut-off",
+            title = "Zone share $what"
+        ),
+    )
+end
+
+zone_live_summary = _zone_cutoff_summaries(chn_local, zone_inputs_live);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Sensitivity to the parent fit
+#
+# The cut assumes the zone posteriors barely depend on which draw of the provincial infections they condition on.
+# The check re-fits the zone model on the two draws of the headline fit nearest its 5th and 95th percentiles of cumulative infections, in place of the posterior mean.
+
+#md # ```@raw html
+#md # <details><summary>Zone posteriors by parent draw</summary>
+#md # ```
+
+## The parent-draw re-fits read their inputs from the same draw.
+zone_parent = _zone_variant_outputs(
+    RUN_SENSITIVITY ?
+        [
+            "mean" => zone_live_summary,
+            "low draw" => _zone_cutoff_summaries(
+                chn_local_parent_low,
+                zone_fit_inputs(chn_joint, obs; parent_summary = :draw_low)
+            ),
+            "high draw" => _zone_cutoff_summaries(
+                chn_local_parent_high,
+                zone_fit_inputs(chn_joint, obs; parent_summary = :draw_high)
+            ),
+        ] :
+        nothing, "by parent summary"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(zone_parent.table) #hide
+
+zone_parent.rt #hide
+
+zone_parent.share #hide
+
+# ### Between-zone mixing
+#
+# The headline zone fit moves no infections between zones.
+# The variant redistributes a fraction of each zone's force of infection within its province, one fraction per province.
+# The table after the figures gives the fitted fraction per province.
+
+#md # ```@raw html
+#md # <details><summary>Zone posteriors with and without mixing</summary>
+#md # ```
+
+zone_mixing = _zone_variant_outputs(
+    RUN_SENSITIVITY ?
+        [
+            "no mixing" => zone_live_summary,
+            "mixing" => _zone_cutoff_summaries(
+                chn_local_mixing,
+                zone_inputs_live
+            ),
+        ] : nothing,
+    "with and without mixing"
+);
+
+## The mixing fraction per province, as a median with its 90% interval.
+zone_mixing_epsilon_table = RUN_SENSITIVITY ?
+    let np = length(zone_inputs_live.patch_names),
+        eps = vec(collect(chn_local_mixing[:mixing_epsilon_zone]))
+
+        fmt(x) = string(round(x; digits = 3))
+        cell(v) = string(
+            fmt(median(v)), " (", fmt(quantile(v, 0.05)), "–",
+            fmt(quantile(v, 0.95)), ")"
+        )
+        DataFrame(
+            "Province" => zone_inputs_live.patch_labels[1:np],
+            "Mixing fraction" => [
+                cell([Float64(v[p]) for v in eps])
+                for p in 1:np
+            ]
+        )
+end : _zone_sens_missing;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(zone_mixing.table) #hide
+
+zone_mixing.rt #hide
+
+zone_mixing.share #hide
+
+MarkdownTable(zone_mixing_epsilon_table) #hide
+
+# ### Change over the past week
+#
+# The frozen zone fit and the live one condition on different weeks of data and on different parent fits.
+# The comparison reads each zone's reproduction number on the frozen cut-off day from both fits, alongside the live estimate at the current cut-off.
+# A zone carries its own walk only once it has reported 30 confirmed cases, and the comparison is restricted to zones walking in both fits.
+# The trajectory panels draw the frozen fit behind the live one for the twelve such zones with most confirmed cases.
+
+#md # ```@raw html
+#md # <details><summary>Zone reproduction numbers from the frozen and live fits</summary>
+#md # ```
+
+## Daily reproduction numbers rebuilt from both fits, and the zones walking
+## in both as live index => frozen index, matched by key. The summaries
+## take their labels and cases from the live inputs.
+zone_rt_live = reconstruct_zone_rt(chn_local, zone_inputs_live)
+zone_rt_frozen = reconstruct_zone_rt(frozen_local.chn, frozen_zone_inputs)
+zone_week_pairs = [
+    z => j
+        for (z, k) in enumerate(zone_inputs_live.zone_keys)
+        for j in (findfirst(==(k), frozen_zone_inputs.zone_keys),)
+        if j !== nothing && zone_inputs_live.walking[z] &&
+        frozen_zone_inputs.walking[j]
+]
+zone_week_variants = let zs = first.(zone_week_pairs), js = last.(zone_week_pairs),
+        n_f = frozen_zone_inputs.n
+
+    [
+        "frozen fit at its cut-off" => (;
+            R = _zone_cutoff_summary(
+                [zone_rt_frozen[j][:, n_f] for j in js],
+                zone_inputs_live, zs
+            ),
+        ),
+        "live fit on the same day" => (;
+            R = _zone_cutoff_summary(
+                [zone_rt_live[z][:, n_f] for z in zs],
+                zone_inputs_live, zs
+            ),
+        ),
+        "live fit at its cut-off" => (;
+            R = _zone_cutoff_summary(
+                [zone_rt_live[z][:, end] for z in zs],
+                zone_inputs_live, zs
+            ),
+        ),
+    ]
+end
+zone_week_table = _zone_comparison_table(zone_week_variants);
+zone_week_fig = plot_zone_comparison(
+    [l => s.R for (l, s) in zone_week_variants];
+    xlabel = "Reproduction number", reference_line = 1.0,
+    title = "Zone reproduction number from the frozen and live fits"
+);
+
+## The frozen trajectories padded onto the live grid, undefined past the
+## frozen cut-off, behind the live ones over the zone grid. The plot reads
+## an undefined day as `missing`, where the reconstruction writes `NaN`.
+zone_week_rt_fig = let grid = zone_inputs_live.t0:obs.n, n_f = frozen_zone_inputs.n
+    asmissing(m) = replace(m, NaN => missing)
+    frozen = map(zone_week_pairs) do (z, j)
+        m = fill(NaN, size(zone_rt_frozen[j], 1), obs.n)
+        m[:, 1:n_f] .= zone_rt_frozen[j]
+        asmissing(m[:, grid])
+    end
+    zs = first.(zone_week_pairs)
+    plot_rt_zones(
+        [asmissing(zone_rt_live[z][:, grid]) for z in zs],
+        zone_inputs_live.zone_labels[zs], zone_inputs_live.patch_of_zone[zs];
+        patch_labels = zone_inputs_live.patch_labels,
+        dates = grid_date.(grid), as_of_date = obs.cutoff,
+        cumulative = zone_inputs_live.cumulative[zs], top = 12,
+        reference_rt = frozen, reference_label = "Frozen fit",
+        title = "Zone reproduction number from the live fit, " *
+            "with the frozen fit behind"
+    )
+end
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(zone_week_table) #hide
+
+zone_week_fig #hide
+
+zone_week_rt_fig #hide
+
 # ## Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
@@ -2249,6 +2646,17 @@ CSV.write(
         [(7, validation_forecast)];
         made_date = frozen_lastweek.o.cutoff, thin = 5
     )
+)
+
+## The frozen zone fit's one-week-ahead forecast against the observed zone
+## increments, and its scores against the two persistence rules.
+CSV.write(
+    joinpath(output_dir, "zone_forecast_validation.csv"),
+    zone_validation_table
+)
+CSV.write(
+    joinpath(output_dir, "zone_forecast_scores.csv"),
+    zone_validation_scores
 )
 
 ## The per-stream reproduction-number figure for the summary dashboard; the

@@ -52,6 +52,10 @@ task docs
 # `julia --project=docs docs/fits/list.jl`)
 BVD_FIT_ID=deaths task fit
 
+# Fit only the dependent models, those melded from a cached parent
+# (`BVD_FIT_STAGE` is `base`, `dependent` or `all` for list.jl and all.jl)
+task fit-dependent
+
 # Render just the main analysis page from the cache, for fast iteration
 task docs-main
 task docs-sensitivity
@@ -78,6 +82,9 @@ Tail a log for quick liveness, or run `task tensorboard` to view all fits in the
 The logs live under the git-ignored `logs/`, so each worktree keeps its own.
 A cached fit lives under `logs/fit_cache` and is keyed by a content hash of the fit-relevant code and data, so a Turing or dependency version bump invalidates it.
 Refit rather than debugging a `KeyError` on a stale chain.
+The fits run in two stages.
+The base fits start from the prior, and the dependent fits (the health-zone `local` and `local_frozen_validation`) are initialised from a cached parent joint, which they load strictly rather than refit.
+`BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` (default `base`) and `docs/fits/all.jl` (default `all`, both stages in order).
 
 `test/runtests.jl` includes each `test/test_*.jl`.
 To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or temporarily comment out the others in `runtests.jl`.
