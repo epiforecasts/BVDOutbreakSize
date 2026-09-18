@@ -897,7 +897,7 @@ reproduction number implied by the summed patch infections.
             case_suspected_daily = cases_state.reports_daily
         )
     )
-    
+
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(
@@ -1065,7 +1065,7 @@ reproduction number implied by the summed patch infections.
 
     infections_patch := vec(patch_state.infections_matrix)
     importation_patch := vec(patch_state.importation_matrix)
- 
+
     delta_patch := [@inbounds(patch_state.δ_patch[p, n]) for p in 1:n_patches]
     delta_patch_start := [
         @inbounds(patch_state.δ_patch[p, rt_walk_start])
