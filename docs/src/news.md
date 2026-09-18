@@ -21,6 +21,12 @@ was free to land in the provincial reproduction number.
 The per-province positives are not fitted.
 They are the differencing of the per-province confirmed counts the case
 composition already scores.
+- The suspected-case background walk is sampled in centred form, each knot step drawn at `Normal(0, σ_bg)` rather than as a standardised innovation rescaled by `σ_bg` (#745).
+The daily new-suspect series now runs to the cut-off, so the walk is strongly informed and the non-centred form funnels.
+That funnel is what stopped the joint fit mixing when the series resumed in #713.
+`background_walk_model` takes `centred = false` for the old form, which stays the better choice when the walk is weakly informed.
+Both forms carry the same prior, so only the sampled coordinates change.
+`pooled_dispersion_model` already carried the same switch for the same reason.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
@@ -67,6 +73,15 @@ The two forms are the same distribution, so the fit is unchanged in what it esti
 Non-centring suits a walk the prior dominates, and this is not one: on the 16 September joint fit its innovations had lost about 90% of their prior variance and its step size sat past the prior 95th percentile holding about half the prior spread.
 The gain, if any, is in effective samples per unit time rather than in gradient cost.
 Every fit-cache key changes, so the next build refits.
+
+- The model bodies lost four configuration switches that no fit selected (#754).
+The confirmed-case stream carried a probe that left the unanchored laboratory windows unscored, the suspected-death stream carried two unused background fallbacks, and the specimen-intensity factor was turned on in the joint model and off in the confirmed-only model by a keyword neither ever set.
+Every published fit took the same branch each time, so the alternatives are gone and the results are unchanged.
+- Four submodels that no fit can reach are removed (#754).
+The seeding prior is a leftover of the two-phase renewal, which now fills the cryptic window from the outbreak size and the growth rate.
+The scalar bed capacity, the per-vintage background random effect and the scalar suspected-death background were each displaced by a time-varying form or by a keyword this change removes.
+An unused submodel carries its own methods and types into every build, so this is the larger part of the saving.
+The methods page dropped the seeding dropdown, which showed a prior the fit does not sample.
 
 ### Report
 

@@ -552,7 +552,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...
                 );
-                samples = joint_samples(750), chains = chains,
+                samples = joint_samples(800), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint")
@@ -580,7 +580,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...
                 );
-                samples = joint_samples(750), chains = chains,
+                samples = joint_samples(800), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches")

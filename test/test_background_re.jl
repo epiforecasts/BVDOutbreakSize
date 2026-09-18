@@ -1,10 +1,9 @@
-## Tests for the per-vintage background random-effect submodel
-## (`background_re_model`) and its daily expansion (`expand_vintage_rate`)
-## from `src/models`. The random effect is the time-varying
-## generalisation of the scalar `λ_bg` / `λ_bg_death` background: it is
+## Tests for the non-BVD background walk (`background_walk_model`), its
+## shared pooling SD (`background_pooling_model`) and the daily window
+## expansion (`expand_vintage_rate`) from `src/models`. The walk is the
+## time-varying generalisation of the scalar `λ_bg` background: it is
 ## tightly pooled toward an informative scalar baseline so it cannot
-## out-explain the real suspected-case signal, and `σ_bg → 0` recovers
-## the scalar exactly.
+## out-explain the real suspected-case signal.
 
 @testitem "expand_vintage_rate maps windows and carries the tail" begin
     using BVDOutbreakSize: expand_vintage_rate
@@ -18,28 +17,6 @@
     ## A grid shorter than the last vintage edge clamps the windows.
     @test expand_vintage_rate([1.0, 2.0], [2, 8], 5) ==
         [1.0, 1.0, 2.0, 2.0, 2.0]
-end
-
-@testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    using Random: MersenneTwister
-    using Statistics: std
-    using BVDOutbreakSize: background_re_model
-
-    ## With the shared pooling SD passed as zero every per-vintage rate
-    ## equals the sampled baseline, so the across-window spread is zero.
-    nv = 5
-    chn = sample(
-        MersenneTwister(20260604),
-        background_re_model(nv, 0.0), Prior(), 2_000; progress = false
-    )
-    ## `chn[:λ]` is a matrix (iter × chain) of length-`nv` vectors; each
-    ## per-draw vector should be flat (zero across-window spread).
-    draws = vec(Array(chn[:λ]))
-    spreads = [std(d) for d in draws]
-    @test maximum(spreads) < 1.0e-8
 end
 
 @testitem "background_pooling_model default σ_bg regularises the walk" tags = [
@@ -98,6 +75,58 @@ end
     λ_mu = vec(Array(chn[:λ_mu]))
     @test isapprox(mean(λ_mu) * sqrt(pi / 2), 20.0; atol = 1.0)
     @test all(>=(0), λ_mu)
+end
+
+@testitem "background_walk_model samples knot steps, not standard z" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## The centred default draws `steps` at `Normal(0, σ_rw)`. The
+    ## non-centred form draws a standard `z` and rescales it. The sampled
+    ## coordinates are what differ, so the variable names are the check.
+    c = rand(MersenneTwister(3), background_walk_model(40, 0.2; onset = 5))
+    @test haskey(c, :steps)
+    @test !haskey(c, :z)
+    nc = rand(
+        MersenneTwister(3),
+        background_walk_model(40, 0.2; onset = 5, centred = false)
+    )
+    @test haskey(nc, :z)
+    @test !haskey(nc, :steps)
+end
+
+@testitem "background_walk_model centred and non-centred share a prior" tags = [
+    :slow,
+] begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    using Statistics: mean, std
+
+    n, σ_rw, onset = 60, 0.2, 10
+    ## Accumulated log deviation from the window anchor on the last day. Both
+    ## forms carry the same prior over it, a cumulative sum of
+    ## `Normal(0, σ_rw)` steps, so its mean and spread must agree.
+    function drift(centred)
+        mdl = background_walk_model(
+            n, σ_rw; onset = onset,
+            centred = centred
+        )
+        rng = MersenneTwister(20260917)
+        return [
+            let s = returned(mdl, rand(rng, mdl))
+                log(s.λ[end] / s.λ_mu)
+            end
+                for _ in 1:8_000
+        ]
+    end
+    c = drift(true)
+    nc = drift(false)
+    @test isapprox(mean(c), mean(nc); atol = 0.05)
+    @test isapprox(std(c), std(nc); rtol = 0.1)
+    ## A walk, not noise: the drift accumulates well beyond one step.
+    @test std(c) > σ_rw
 end
 
 @testitem "background_walk_model edge cases (ungated, single day)" begin
@@ -184,65 +213,6 @@ end
         rand(MersenneTwister(11), background_walk_model(n, 0.0; onset = onset))
     )
     @test all(flat.λ[(onset + 7):end] .≈ flat.λ_mu)
-end
-
-@testitem "background_re_model is a positive perturbation of baseline" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    using Random: MersenneTwister
-    using BVDOutbreakSize: background_re_model
-
-    ## At a fixed shared σ_bg the per-vintage rates are a multiplicative
-    ## log-normal deviation from the baseline: strictly positive.
-    nv = 8
-    chn = sample(
-        MersenneTwister(20260604), background_re_model(nv, 0.3),
-        Prior(), 4_000; progress = false
-    )
-    λ = reduce(vcat, vec(Array(chn[:λ])))
-    @test all(>(0), λ)
-end
-
-@testitem "background_re_model baseline prior is overridable" tags = [:slow] begin
-    using Turing: sample, Prior
-    using Random: MersenneTwister
-    using Statistics: mean
-    using Distributions: truncated, Normal
-    using BVDOutbreakSize: background_re_model
-
-    ## A tight low baseline pulls every per-vintage rate down, confirming
-    ## the baseline keyword is a real override point (used for the deaths
-    ## background, which is far smaller than the cases background).
-    chn = sample(
-        MersenneTwister(20260604),
-        background_re_model(
-            4, 0.1;
-            baseline_prior = truncated(Normal(0.0, 0.05); lower = 0)
-        ),
-        Prior(), 4_000; progress = false
-    )
-    λ = reduce(vcat, vec(Array(chn[:λ])))
-    @test mean(λ) < 0.15
-end
-
-@testitem "death_background_model default is a tight half-normal" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    using Random: MersenneTwister
-    using Statistics: mean, std
-    using BVDOutbreakSize: death_background_model
-
-    ## Default `truncated(Normal(0, 0.25); lower = 0)`: fold the half-normal
-    ## back to its untruncated SD via E|X| = σ√(2/π).
-    chn = sample(
-        MersenneTwister(20260604), death_background_model(),
-        Prior(), 40_000; progress = false
-    )
-    λ = vec(Array(chn[:λ_bg_death]))
-    @test isapprox(mean(λ) * sqrt(pi / 2), 0.25; atol = 0.02)
-    @test all(>=(0), λ)
 end
 
 @testitem "bvd_joint runs the pooled background branch" tags = [:slow] begin

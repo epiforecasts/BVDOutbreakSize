@@ -567,20 +567,6 @@ MarkdownTable(vintage_table) #hide
 # When a secondary patch first carries infections then follows from the kernel and the coupling intensity of the mixing subsection below.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: seed_model</summary>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, CodeTracking, Markdown
-#md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.seed_model()), "\n```"))
-#md # ```
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
 #md # <details><summary>Submodel: exponential_growth_model</summary>
 #md # ```
 
@@ -5206,7 +5192,7 @@ for f in frozen_forecast_fits
             for h in forecast_horizons
     ]
     _rows = forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
-    _rows[!, :fit] = fill(FROZEN_FIT, nrow(_rows))
+    _rows[!, :fit] = fill(FROZEN_FIT, size(_rows, 1))
     append!(frozen_forecast_archive, _rows)
 end
 
