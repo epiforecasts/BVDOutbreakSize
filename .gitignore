@@ -8,6 +8,11 @@
 Manifest.toml
 /docs/build/
 /docs/src/analysis.md
+# Figures the literate pages write beside their generated markdown.
+# Build output: `git add -A` after a local docs build would otherwise
+# commit tens of megabytes of them.
+/docs/src/analysis-*.png
+/docs/src/sensitivity-*.png
 /docs/src/index.md
 /docs/src/sensitivity.md
 /docs/src/references.md
