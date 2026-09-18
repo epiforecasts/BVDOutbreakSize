@@ -957,26 +957,7 @@ reproduction number implied by the summed patch infections.
         )
     end
 
-    ## Per-province composition of the confirmed cases, conditional on the
-    ## national total (already scored above), so no observation is counted
-    ## twice. Skipped when no spatial-table data is supplied.
-    ##
-    ## `province_increments` and `province_days` are the already-reshaped
-    ## spatial-table data (see [`province_increment_matrix`](@ref)), not the
-    ## raw per-province history dict. The reshaping looks provinces up by
-    ## name in a `Dict{String}`, which would put a string comparison
-    ## (`memcmp`) on the AD tape and abort the gradient, so it must stay
-    ## hoisted out of the model body.
     if !isempty(province_days)
-        ## The provincial confirmed increments pay the SAME delay structure as
-        ## the national confirmed stream: onset-to-report (`report_pmf`) then
-        ## report-to-receipt (`receipt_pmf`). An earlier version convolved
-        ## with the receipt leg alone, so the provincial split was attributed
-        ## to earlier days than the national total it is conditioned on,
-        ## biasing the split wherever provincial trajectories diverge at
-        ## different rates (#756). The death composition below pays the same
-        ## two legs with the onset-to-death delay in place of the
-        ## onset-to-report one.
         confirmed_kernel = convolve_pmf(
             cases_state.report_pmf, confirmed_state.receipt_pmf
         )
