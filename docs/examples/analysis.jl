@@ -1881,7 +1881,7 @@ cfr_prior_fig #hide
 # \qquad N = \sum_p y_p.
 # ```
 #
-# The modelled per-patch confirmed increments carry each patch's onsets through the report-to-receipt delay $f_{\text{rec}}$ and the assay sensitivity $s$ of the national confirmed stream, binned to the vintage days.
+# The modelled per-patch confirmed increments carry each patch's onsets through the same onset-to-confirmation delay as the national confirmed stream — the onset-to-report delay $f_{\text{rep}}$ convolved with the report-to-receipt delay $f_{\text{rec}}$ — and the assay sensitivity $s$, binned to the vintage days.
 # The death increments use the onset-to-death delay convolved with the same receipt delay.
 # Write those modelled increments $\lambda_{p,i}$ for patch $p$ at vintage $i$.
 # Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$:

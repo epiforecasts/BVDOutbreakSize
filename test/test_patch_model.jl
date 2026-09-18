@@ -1674,6 +1674,130 @@ end
     @test !any(k -> occursin("death_composition_state.β_asc", k), ks)
 end
 
+@testitem "_patch_confirmed_increments: kernels pay both delay legs" begin
+    using BVDOutbreakSize: _patch_confirmed_increments, convolve_pmf,
+        convolve_delay, bin_increments
+
+    ## The provincial confirmed composition must carry each patch's onsets
+    ## through the SAME onset-to-confirmation kernel as the national confirmed
+    ## stream: onset-to-report convolved with report-to-receipt. An earlier
+    ## version stopped at the receipt leg alone (#756), which attributed the
+    ## provincial split to earlier days than the national total it conditions
+    ## on. The helper is kernel-parametric, so pin what a caller must pass:
+    ## the convolved two-leg pmf, applied per patch and binned to the vintages.
+    n = 12
+    onsets = zeros(2, n)
+    onsets[1, 3] = 10.0
+    onsets[2, 8] = 5.0
+    report_pmf = [0.0, 0.0, 1.0]        ## onset -> report: exactly 2 days
+    receipt_pmf = [0.0, 1.0]            ## report -> receipt: exactly 1 day
+    kernel = convolve_pmf(report_pmf, receipt_pmf)  ## onset -> confirmation
+    days = [5, 10, 12]
+    s_test = 0.9
+    got = _patch_confirmed_increments(onsets, kernel, s_test, days)
+    for p in 1:2
+        want = s_test .* bin_increments(
+            convolve_delay(onsets[p, :], kernel), days
+        )
+        @test got[p, :] == want
+    end
+    ## The full kernel (3-day total lag) lands the day-3 spike in the second
+    ## vintage bin; the receipt leg alone (1-day lag) keeps it in the first.
+    ## A caller passing the receipt pmf gets an earlier, wrong split.
+    @test got[1, :] == [0.0, 9.0, 0.0]
+    rec_only = _patch_confirmed_increments(onsets, receipt_pmf, s_test, days)
+    @test rec_only[1, :] == [9.0, 0.0, 0.0]
+    @test got != rec_only
+end
+
+@testitem "bvd_joint: the provincial confirmed composition pays the report leg" begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior, @model, to_submodel
+    using Distributions: Dirac, Gamma
+    using BVDOutbreakSize: gamma_delay_model, cdf_nmax
+    import FlexiChains
+
+    ## The composition kernel must be the full onset-to-confirmation delay of
+    ## the national confirmed stream (onset-to-report ⊕ report-to-receipt),
+    ## not the receipt leg alone (#756). A delay pinned to lag 0 vs lag 5 on
+    ## the report leg must measurably move the modelled provincial increments
+    ## the composition scores; passing only `receipt_pmf` would make them
+    ## identical. The composition is captured through a recording wrapper
+    ## around [`province_composition_model`](@ref), the one place the joint
+    ## touches it, and the report delay is pinned through a wrapper on
+    ## [`reported_cases_model`](@ref) so nothing else moves.
+    obs = load_observations()
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    captured = Ref{Any}(nothing)
+    @model function _recording_composition(o, modelled; kwargs...)
+        captured[] = modelled
+        inner ~ to_submodel(
+            province_composition_model(o, modelled; kwargs...)
+        )
+        return inner
+    end
+
+    ## Pin the onset-to-report delay to a point mass at a chosen lag. A wrapper
+    ## is needed because `bvd_joint` takes the whole cases submodel as a
+    ## keyword, and the delay prior lives inside it.
+    function _cases_with_report_delay(onset_to_report)
+        @model function wrapped(history, total, onsets, k, p_drc; kwargs...)
+            inner ~ to_submodel(
+                reported_cases_model(
+                    history, total, onsets, k, p_drc;
+                    onset_to_report, kwargs...
+                )
+            )
+            return inner
+        end
+        return wrapped
+    end
+    point_lag(L) = gamma_delay_model(
+        cdf_nmax(Gamma(1, 1));
+        alpha_prior = Dirac(Float64(max(L, 1.0e-3))),
+        theta_prior = Dirac(1.0)
+    )
+
+    function modelled_prov(report_lag)
+        m = bvd_joint(
+            obs.n, obs.exported_cases, obs.total_deaths,
+            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+            obs.tests_analysed;
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            deaths_history = obs.deaths_history,
+            breakpoint = obs.who_first_sitrep_days,
+            n_patches = length(PROVINCE_NAMES),
+            province_increments = prov.increments, province_days = prov.days,
+            tmrca_days = obs.tmrca_days,
+            composition = _recording_composition,
+            cases = _cases_with_report_delay(point_lag(report_lag))
+        )
+        sample(
+            m, Prior(), 1; chain_type = FlexiChains.VNChain,
+            progress = false
+        )
+        return captured[]
+    end
+
+    ## Same seed, same everything except the report lag. Under a receipt-only
+    ## kernel the two matrices would be identical; under the fixed two-leg
+    ## kernel the 5-day report delay moves the whole provincial firings later
+    ## by five days, a visible shift in the models' binned vintages.
+    lag0 = modelled_prov(0.0)
+    lag5 = modelled_prov(5.0)
+    @test size(lag0) == (length(PROVINCE_NAMES), length(prov.days))
+    @test size(lag5) == size(lag0)
+    @test !isapprox(lag0, lag5; rtol = 1.0e-8)
+    ## The shift is the report delay, not noise: the lag-0 model is the
+    ## national-cases kernel with the receipt leg alone, and a five-day
+    ## report delay is far larger than any between-draw jitter in one chain.
+    @test maximum(abs, lag0 - lag5) > 100.0
+end
+
 @testitem "patch Rt deviations should mean-revert to the national trend" begin
     using BVDOutbreakSize: patch_rt_model
     using Turing: sample, Prior

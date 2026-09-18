@@ -571,9 +571,11 @@ end
 """
 Modelled per-province confirmed increments, binned to the vintages of the
 per-province spatial tables. Each patch's onsets are pushed through the
-same report-to-receipt delay and test sensitivity as the national
-confirmed stream (the laboratory pipeline is national, only the incidence
-feeding it is provincial) and then binned onto the shared vintage days.
+same onset-to-confirmation kernel and test sensitivity as the national
+confirmed stream (`kernel` is the onset-to-report pmf convolved with the
+report-to-receipt pmf; the laboratory pipeline is national, only the
+incidence feeding it is provincial) and then binned onto the shared
+vintage days.
 
 `province_days` are the (shared) grid-day indices of the spatial-table
 vintages. Returns an `(n_patches × n_vintages)` matrix.
@@ -600,19 +602,19 @@ vintages. Returns an `(n_patches × n_vintages)` matrix.
 """
 function _patch_confirmed_increments(
         onsets_matrix::AbstractMatrix,
-        receipt_pmf::AbstractVector, s_test::Real,
+        kernel::AbstractVector, s_test::Real,
         province_days::AbstractVector{<:Integer}
     )
     np = size(onsets_matrix, 1)
     nv = length(province_days)
     first_daily = s_test .* convolve_delay(
-        vec(@view onsets_matrix[1, :]), receipt_pmf
+        vec(@view onsets_matrix[1, :]), kernel
     )
     out = Matrix{eltype(first_daily)}(undef, np, nv)
     @inbounds out[1, :] = bin_increments(first_daily, province_days)
     @inbounds for p in 2:np
         daily = s_test .* convolve_delay(
-            vec(@view onsets_matrix[p, :]), receipt_pmf
+            vec(@view onsets_matrix[p, :]), kernel
         )
         out[p, :] = bin_increments(daily, province_days)
     end
@@ -1059,8 +1061,20 @@ reproduction number implied by the summed patch infections.
     ## (`memcmp`) on the AD tape and abort the gradient, so it must stay
     ## hoisted out of the model body.
     if !isempty(province_days)
+        ## The provincial confirmed increments pay the SAME delay structure as
+        ## the national confirmed stream: onset-to-report (`report_pmf`) then
+        ## report-to-receipt (`receipt_pmf`). An earlier version convolved
+        ## with the receipt leg alone, so the provincial split was attributed
+        ## to earlier days than the national total it is conditioned on,
+        ## biasing the split wherever provincial trajectories diverge at
+        ## different rates (#756). The death composition below pays the same
+        ## two legs with the onset-to-death delay in place of the
+        ## onset-to-report one.
+        confirmed_kernel = convolve_pmf(
+            cases_state.report_pmf, confirmed_state.receipt_pmf
+        )
         modelled_prov = _patch_confirmed_increments(
-            patch_state.onsets_matrix, confirmed_state.receipt_pmf,
+            patch_state.onsets_matrix, confirmed_kernel,
             confirmed_state.s_test, province_days
         )
         composition_state ~ to_submodel(
