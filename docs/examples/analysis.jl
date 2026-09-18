@@ -4666,7 +4666,7 @@ for f in frozen_forecast_fits
             for h in forecast_horizons
     ]
     _rows = forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
-    _rows[!, :fit] = fill(FROZEN_FIT, nrow(_rows))
+    _rows[!, :fit] = fill(FROZEN_FIT, size(_rows, 1))
     append!(frozen_forecast_archive, _rows)
 end
 
