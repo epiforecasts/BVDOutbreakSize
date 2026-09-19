@@ -1369,34 +1369,15 @@ scales and the correlation matrix.
         eltype(σ_δ), eltype(L), eltype(z_level), eltype(z_drift)
     )
     ## Correlated deviations, centred at every knot so the patches sum to
-    ## zero and no province is privileged.
-    δ_knots = zeros(Tp, n_patches, nb)
-    lvl = zeros(Tp, n_patches)
-    @inbounds for i in 1:n_patches
-        acc = zero(Tp)
-        for j in 1:i
-            acc += L[i, j] * z_level[j]
-        end
-        lvl[i] = σ_level * acc
-    end
-    lvl_bar = sum(lvl) / n_patches
-    @inbounds for i in 1:n_patches
-        δ_knots[i, 1] = lvl[i] - lvl_bar
-    end
-    innov = zeros(Tp, n_patches)
-    @inbounds for k in 2:nb
-        for i in 1:n_patches
-            acc = zero(Tp)
-            for j in 1:i
-                acc += L[i, j] * z_drift[(k - 2) * n_patches + j]
-            end
-            innov[i] = σ_δ[i] * acc
-        end
-        innov_bar = sum(innov) / n_patches
-        for i in 1:n_patches
-            δ_knots[i, k] = φ * δ_knots[i, k - 1] + (innov[i] - innov_bar)
-        end
-    end
+    ## zero and no province is privileged. The patches are one group here
+    ## and every patch carries an innovation; [`bvd_zone`](@ref) calls the
+    ## same process with one group per patch and only its walking zones
+    ## carrying innovations.
+    δ_knots = deviation_knots(
+        z_level, z_drift, σ_level, σ_δ, φ,
+        [1:n_patches], [L], [L],
+        trues(n_patches), 1:n_patches, n_patches, nb
+    )
     ## Interpolate each patch's deviation to the daily grid and build Rt.
     δ_patch = zeros(Tp, n_patches, n)
     Rt_matrix = zeros(Tp, n_patches, n)

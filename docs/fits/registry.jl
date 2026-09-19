@@ -165,8 +165,8 @@ before running: empty for a base fit, the parent id for the health-zone fits
 parent is an error, not a refit. `zone_fitter` fits a zone model from a
 parent chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the
 thunk runs. The sensitivity re-fits, including the zone variants
-`local_mixing`, `local_parent_low` and
-`local_parent_high`, are appended only when `run_sensitivity` is true.
+`local_no_mixing` and `local_cut`, are appended only when
+`run_sensitivity` is true.
 """
 ## Sampler settings for the headline and its spatial control.
 ##
@@ -209,21 +209,6 @@ joint_warmup(default::Integer) = parse(
     Int,
     get(ENV, "BVD_JOINT_WARMUP", string(default))
 )
-
-## Sampler settings for the health-zone fits. `BVD_ZONE_SAMPLES` and
-## `BVD_ZONE_WARMUP` override the draw and adaptation counts. Like
-## `BVD_JOINT_*` they sit outside the content hash, so a short local run
-## writes its chain under the production key.
-zone_samples(default::Integer) = parse(
-    Int,
-    get(ENV, "BVD_ZONE_SAMPLES", string(default))
-)
-zone_warmup(default::Integer) = parse(
-    Int,
-    get(ENV, "BVD_ZONE_WARMUP", string(default))
-)
-zone_target_accept() = 0.8
-zone_max_depth() = 8
 
 ## Looked up when a dependent thunk runs, so the registry builds without
 ## `fit_zone` and tests can inject a double through `zone_fitter`.
@@ -769,16 +754,17 @@ function build_fit_specs(
             cache_dir = cache_dir, strict = true
         )
     end
-    ## `variant` carries the zone model's own switches (`mixing`, `deaths`,
-    ## `parent_summary`) for the sensitivity re-fits below.
+    ## The zone stage samples at the headline joint's settings, so a
+    ## difference between the two levels is the model rather than the
+    ## sampler. `variant` carries the zone model's own switches (`mixing`,
+    ## `meld`) for the sensitivity re-fits below.
     function fit_zone_from(parent_chn, o, name; variant...)
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
         return fitter(
             parent_chn, o;
-            samples = zone_samples(600), chains = chains,
-            n_adapts = zone_warmup(400),
-            target_accept = zone_target_accept(),
-            max_depth = zone_max_depth(),
+            samples = joint_samples(800), chains = chains,
+            n_adapts = joint_warmup(500),
+            target_accept = joint_target_accept(),
             callback = fit_callback(name), variant...
         )
     end
@@ -810,13 +796,13 @@ function build_fit_specs(
         )
     )
     ## Zone-model sensitivity re-fits, each one switch away from `local`:
-    ## between-zone mixing on, the zone deaths stream on, and the parent
-    ## summary taken from a low or high draw rather than the mean.
+    ## the zones held inside their own boundaries, and the cut, which reads
+    ## the province model's posterior mean and carries none of its
+    ## uncertainty.
     if run_sensitivity
         for (id, variant) in (
-                ("local_mixing", (; mixing = true)),
-                ("local_parent_low", (; parent_summary = :draw_low)),
-                ("local_parent_high", (; parent_summary = :draw_high)),
+                ("local_no_mixing", (; mixing = false)),
+                ("local_cut", (; meld = false)),
             )
             push!(
                 specs,

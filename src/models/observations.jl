@@ -3952,9 +3952,14 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## one path and the literal on another, so the fused broadcast below
     ## would box it if it captured `β_asc` itself.
     beta = β_asc
-    log_asc_raw = beta .* testing_covariate .+ τ_asc .* z_asc
-    log_asc = log_asc_raw .- (sum(log_asc_raw) / np)
-    asc = exp.(log_asc)
+    ## The pooled sum-to-zero multiplier, the one definition
+    ## [`bvd_zone`](@ref) also builds its relative ascertainment and fatality
+    ## from, here over all the provinces as one group.
+    groups = [1:np]
+    asc = relative_multiplier(
+        z_asc, τ_asc, groups;
+        offset = beta .* testing_covariate
+    )
     ## Optional second multiplier, per-province severity. The death
     ## composition uses it for the per-province case-fatality ratio, partially
     ## pooled toward the national value on the log scale and constrained to
@@ -3974,8 +3979,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     if severity_sd_prior !== nothing
         τ_sev ~ severity_sd_prior
         z_sev ~ product_distribution(fill(ascertainment_offset_prior, np))
-        log_sev_raw = τ_sev .* z_sev
-        sev = exp.(log_sev_raw .- (sum(log_sev_raw) / np))
+        sev = relative_multiplier(z_sev, τ_sev, groups)
     end
     ## Expected share of each patch at each vintage. `safe_rate` floors the
     ## modelled increments away from zero so an early vintage with no

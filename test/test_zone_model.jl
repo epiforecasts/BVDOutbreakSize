@@ -9,7 +9,7 @@
 ## joint fit. The truth is kept alongside so the recovery items can compare.
 @testsnippet ZoneSynthetic begin
     using BVDOutbreakSize
-    using BVDOutbreakSize: zone_initial_shares, zone_deviation_knots,
+    using BVDOutbreakSize: zone_initial_shares, deviation_knots,
         zone_fixed_terms, zone_report_increments,
         zone_forward, discretise_censored,
         lognormal_meansd, convolve_pmf, knot_days,
@@ -60,7 +60,8 @@
         walk_index = collect(1:nz)
         n_walking = nz
         σ_level = 0.25
-        σ_δ = 0.08
+        ## One drift scale per patch, as the model samples it.
+        σ_δ = fill(0.08, np)
         φ = exp2(-7 / 42)
         z_level = [0.6, -0.4, 0.2, -0.3, -0.1, 0.5, -0.2, -0.3]
         z_drift = zeros(n_walking * (K - 1))
@@ -68,16 +69,17 @@
             z_drift[(k - 2) * n_walking + 1] = 0.8
             z_drift[(k - 2) * n_walking + 2] = -0.8
         end
-        δ_knots = zone_deviation_knots(
-            z_level, z_drift, σ_level, σ_δ, φ,
-            patch_ranges, walking, walk_index, n_walking, K
+        patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
+        δ_knots = deviation_knots(
+            z_level, z_drift, σ_level, σ_δ[patch_of_zone], φ,
+            patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
+            walking, walk_index, n_walking, K
         )
         fixed = zone_fixed_terms(I_bar, g, f, t0)
-        patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
         zd = (;
             I_bar, g, f, patch_ranges, knots, t0, n, days,
             fixed.force_pre, fixed.report_pre_cum,
-            fixed.infections_pre, mixing_kernel = zeros(nz, nz),
+            fixed.infections_pre, mixing = nothing,
             interp = zone_interpolation_weights(knots, t0, n),
             report_matrix = zone_delay_operator(f, n - t0 + 1),
             report_pre_rows = zone_report_pre_rows(
@@ -110,10 +112,22 @@
                 )
             end
         end
+        ## Allocated zone deaths, a tenth of the confirmed, so the death
+        ## composition the model always fits has something to score.
+        death_hist = Dict{String, Dict{String, NamedTuple}}()
+        for (prov, zones) in hist
+            death_hist[prov] = Dict{String, NamedTuple}()
+            for (nm, h) in zones
+                death_hist[prov][nm] = (;
+                    days = copy(h.days), counts = cld.(h.counts, 10),
+                )
+            end
+        end
         seeding = Date("2026-02-13")
         obs = (;
             n, seeding, cutoff = seeding + Day(n - 1),
             zone_confirmed_history = hist,
+            zone_death_history = death_hist,
         )
         ## Stand-in parent chain: four identical draws of the truth.
         ndraw = 4
@@ -130,7 +144,25 @@
                 fill(4.5, ndraw, 1),
             Symbol("confirmed_state.receipt_state.d.delay_sd") =>
                 fill(4.0, ndraw, 1),
-            :C_T => fill(sum(I_bar), ndraw, 1)
+            :C_T => fill(sum(I_bar), ndraw, 1),
+            ## The province model's own between-patch movement: a per-origin
+            ## intensity and the arrivals into each patch, a twentieth of
+            ## the second patch's infections and none into the first.
+            :importation_epsilon_patch => reshape(
+                [[0.02, 0.01] for _ in 1:ndraw], ndraw, 1
+            ),
+            :importation_patch => reshape(
+                [
+                    vec(
+                        [
+                            p == 2 ? 0.05 * I_bar[p, t] : 0.0
+                                for p in 1:np, t in 1:n
+                        ]
+                    )
+                        for _ in 1:ndraw
+                ],
+                ndraw, 1
+            )
         )
         truth = (;
             z_w, w0, δ_knots, z_level, z_drift, σ_level, σ_δ, φ,
@@ -354,7 +386,7 @@ end
 @testitem "zone deviations: centred, and level-only zones decay" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: zone_deviation_knots, zone_initial_shares
+    using BVDOutbreakSize: deviation_knots, zone_initial_shares
 
     syn = zone_synthetic()
     K = size(syn.truth.δ_knots, 2)
@@ -363,9 +395,10 @@ end
     walking = [true, true, true, false, false, false, false, false]
     walk_index = [1, 2, 3, 0, 0, 0, 0, 0]
     z_drift = randn(Xoshiro(3), 3 * (K - 1))
-    δ = zone_deviation_knots(
-        syn.truth.z_level, z_drift, 0.25, 0.08, φ,
-        syn.patch_ranges, walking, walk_index, 3, K
+    δ = deviation_knots(
+        syn.truth.z_level, z_drift, 0.25, fill(0.08, syn.nz), φ,
+        syn.patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
+        walking, walk_index, 3, K
     )
     for (p, zs) in enumerate(syn.patch_ranges), k in 1:K
 
@@ -393,7 +426,7 @@ end
     @test w ≈ w_shift rtol = 1.0e-12
 end
 
-@testitem "zone_fit_inputs: units, cells, walking set and start values" setup = [
+@testitem "zone_fit_inputs: units, cells and the walking set" setup = [
     ZoneSynthetic,
 ] begin
     syn = zone_synthetic()
@@ -428,12 +461,6 @@ end
     )
     @test zd.n_walking == count(inputs.walking)
     @test all(z -> (zd.walk_index[z] > 0) == inputs.walking[z], 1:syn.nz)
-    ## The initial-share start is the centred log observed first-vintage
-    ## cumulative, halved.
-    for zs in inputs.patch_ranges
-        lg = log.(syn.counts[zs, 1] .+ 0.5)
-        @test inputs.z_w_start[zs] ≈ (lg .- sum(lg) / length(lg)) ./ 2
-    end
     ## Cumulative counts come from the manifest's last vintage.
     @test inputs.cumulative == vec(sum(syn.counts; dims = 2))
 end
@@ -513,12 +540,13 @@ end
             (:delta_knots_zone, nz * K), (:share_knots_zone, nz * K),
             (:delta_T_zone, nz), (:share_T_zone, nz), (:share_start_zone, nz),
             (:R_T_zone, nz),
+            (:region_drift_sd_zone, length(inputs.patch_ranges)),
         )
         @test all(v -> length(v) == len, vec(collect(chn[q])))
     end
     for q in (
-            :region_sd_zone, :region_drift_sd_zone, :region_halflife_zone,
-            :composition_rho_zone,
+            :region_sd_zone, :region_halflife_zone,
+            :composition_rho_zone, :composition_rho_death_zone,
         )
         @test all(isfinite, vec(Array(chn[q])))
     end
@@ -793,13 +821,13 @@ end
     end
 end
 
-@testitem "zone_parent_inputs: a draw at the C_T tails" setup = [
+@testitem "zone_parent_inputs: the mean over the parent draws" setup = [
     ZoneSynthetic,
 ] begin
     using Statistics: mean
 
     syn = zone_synthetic()
-    ## Four draws at different scales of the truth, so `C_T` orders them.
+    ## Four draws at different scales of the truth.
     scales = [0.5, 1.0, 2.0, 1.5]
     chain = copy(syn.chain)
     chain[:infections_patch] = reshape(
@@ -807,31 +835,18 @@ end
         4, 1
     )
     chain[:C_T] = reshape(scales .* sum(syn.I_bar), 4, 1)
-    low = zone_parent_inputs(chain; parent_summary = :draw_low)
-    high = zone_parent_inputs(chain; parent_summary = :draw_high)
-    @test low.draw == 1
-    @test high.draw == 3
-    @test exp.(low.log_infections) ≈ 0.5 .* vec(syn.I_bar) rtol = 1.0e-10
-    @test exp.(high.log_infections) ≈ 2.0 .* vec(syn.I_bar) rtol = 1.0e-10
-    ## The mean is the geometric mean over draws, and carries no draw.
+    ## The patch trajectory the zone stage conditions on is the geometric
+    ## mean over the parent draws; their spread reaches the fit through the
+    ## shared quantity instead.
     avg = zone_parent_inputs(chain)
-    @test avg.draw === nothing
     @test exp.(avg.log_infections) ≈
         exp(mean(log.(scales))) .* vec(syn.I_bar) rtol = 1.0e-10
-    ## The PMFs are identical across draws here, so they agree.
-    @test low.g ≈ avg.g && high.f ≈ avg.f
-    ## The inputs carry the draw and its infections.
     inputs = zone_fit_inputs(
-        chain, syn.obs; parent_summary = :draw_low,
+        chain, syn.obs;
         zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"]
     )
-    @test inputs.parent_draw == 1
-    @test inputs.parent_summary == :draw_low
-    @test inputs.model_data.I_bar ≈ 0.5 .* syn.I_bar rtol = 1.0e-10
-    @test_throws ErrorException zone_parent_inputs(
-        chain;
-        parent_summary = :median
-    )
+    @test inputs.model_data.I_bar ≈
+        exp(mean(log.(scales))) .* syn.I_bar rtol = 1.0e-10
 end
 
 @testitem "zone_fit_inputs: refuses inconsistent inputs" setup = [
@@ -916,10 +931,10 @@ end
     @test isempty(zone_inputs(syn).excluded)
 end
 
-@testitem "bvd_zone: mixing redistributes force within the patch" setup = [
+@testitem "zone mixing: the blocks, and what they conserve" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, _zone_mixing_kernel, _zone_states,
+    using BVDOutbreakSize: bvd_zone, zone_importation_blocks, _zone_states,
         zone_deformation
     using Turing: sample, Prior
     import FlexiChains
@@ -927,46 +942,70 @@ end
     syn = zone_synthetic()
     inputs = zone_inputs(syn; zones = zone_metadata(syn))
     zd = inputs.model_data
-    K = zd.mixing_kernel
-    ## Column-stochastic within each patch and zero across patches.
-    for (p, zs) in enumerate(inputs.patch_ranges), q in zs
-
-        @test sum(K[zs, q]) ≈ 1 rtol = 1.0e-12
-        @test all(iszero, K[setdiff(1:syn.nz, zs), q])
+    mix = zd.mixing
+    @test mix !== nothing
+    poz = inputs.patch_of_zone
+    ## The within block is column-stochastic inside the origin's patch and
+    ## empty across patches; the between block is the other way round.
+    for q in 1:syn.nz
+        zs = findall(==(poz[q]), poz)
+        @test sum(mix.within[zs, q]) ≈ 1 rtol = 1.0e-12
+        @test mix.within[q, q] == 0
+        @test all(iszero, mix.within[setdiff(1:syn.nz, zs), q])
+        @test all(iszero, mix.between[zs, q])
     end
-    @test K == _zone_mixing_kernel(
-        [10_000.0 * i for i in 1:syn.nz],
-        [(0.1 * i, 0.2 * i) for i in 1:syn.nz], inputs.patch_ranges
+    ## Summed over a destination patch's zones the between block is the
+    ## province model's own patch-to-patch flow, so the same movement is
+    ## not counted at both levels.
+    parent_kernel = province_importation_kernel(
+        PROVINCE_POPULATIONS[1:2]
     )
+    for q in 1:syn.nz, p in 1:2
+
+        p == poz[q] && continue
+        zs = findall(==(p), poz)
+        @test sum(mix.between[zs, q]) ≈ parent_kernel[p, poz[q]] rtol = 1.0e-12
+    end
+    ## Arrivals stay a proper fraction of a patch's own infections.
+    @test all(0 .<= mix.import_fraction .< 1)
     chn = sample(
         bvd_zone(zd; mixing = true), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false
     )
     eps = [collect(v) for v in vec(collect(chn[:mixing_epsilon_zone]))]
-    @test all(v -> length(v) == size(zd.counts, 1) && all(0 .< v .< 1), eps)
+    @test all(v -> length(v) == syn.nz && all(0 .< v .< 1), eps)
     ## The states read the fractions, and the mixed shares still sum to one
     ## within each patch but differ from the unmixed ones.
     states = _zone_states(chn, inputs)
     for (i, st) in enumerate(states)
         @test st.ε == eps[i]
         def = zone_deformation(zd, nothing)
-        mixed = zone_forward(zd, st.δ_knots, st.w0, st.ε, def).shares
+        fw = zone_forward(zd, st.δ_knots, st.w0, st.ε, def)
         plain = zone_forward(zd, st.δ_knots, st.w0, nothing, def).shares
         for zs in inputs.patch_ranges
-            @test all(sum(mixed[:, zs]; dims = 2) .≈ 1)
+            @test all(sum(fw.shares[:, zs]; dims = 2) .≈ 1)
         end
-        @test !(mixed ≈ plain)
+        @test !(fw.shares ≈ plain)
+        ## Every zone's infections still sum to the patch total the shared
+        ## quantity gave, so mixing adds no infection and loses none.
+        for (p, zs) in enumerate(inputs.patch_ranges), j in 1:size(fw.infections, 1)
+
+            @test sum(fw.infections[j, zs]) ≈
+                def.I_bar[p, inputs.t0 + j - 1] rtol = 1.0e-10
+        end
+        ## Some infection crosses a patch boundary.
+        @test sum(fw.imports) > 0
     end
-    ## Without metadata for every zone the kernel is zero and the fit
-    ## refuses to mix.
-    @test all(iszero, zone_inputs(syn).model_data.mixing_kernel)
+    ## Without metadata for every zone there is no mixing structure and the
+    ## fit refuses to mix.
+    @test zone_inputs(syn).model_data.mixing === nothing
     @test_throws ErrorException fit_zone(
         syn.chain, syn.obs; mixing = true,
         zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"]
     )
 end
 
-@testitem "bvd_zone: deaths add a per-vintage composition term" setup = [
+@testitem "bvd_zone: the two compositions sum to the likelihood" setup = [
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_composition_logpdf, _zone_kappa
@@ -999,20 +1038,26 @@ end
     @test length(zd.death_cell_patch) > 2
     @test all(>(0), zd.death_cell_total)
     truth = syn.truth
+    ## Zero contrasts leave both relative multipliers at one, so the
+    ## likelihood is the two compositions at the modelled increments alone.
     params = (;
         z_w = truth.z_w, σ_level = truth.σ_level,
         z_level = truth.z_level, δ_halflife = 42.0, σ_δ = truth.σ_δ,
         z_drift = truth.z_drift, ρ = 0.05, ρ_death = 0.05,
+        z_ascertainment = zeros(syn.nz), z_severity = zeros(syn.nz),
     )
-    loglik(m) = DynamicPPL.loglikelihood(
+    m = bvd_zone(zd)
+    total = DynamicPPL.loglikelihood(
         m,
         DynamicPPL.VarInfo(Xoshiro(1), m, DynamicPPL.InitFromParams(params))
     )
-    base = loglik(bvd_zone(zd; deaths = false))
-    with = loglik(bvd_zone(zd))
-    @test isfinite(with)
-    ## The difference is the death composition at the same forward pass.
+    @test isfinite(total)
     fw = zone_forward(zd, truth.δ_knots, truth.w0, nothing)
+    cases = zone_composition_logpdf(
+        zd.counts, fw.increments, zd.cell_patch,
+        zd.cell_vintage, zd.cell_total, zd.cell_const,
+        zd.patch_ranges, _zone_kappa(0.05)
+    )
     daily = zd.death_matrix * fw.infections .+
         zd.death_pre_rows .* transpose(truth.w0)
     D = zone_report_increments(
@@ -1024,20 +1069,19 @@ end
         zd.death_cell_vintage, zd.death_cell_total, zd.death_cell_const,
         zd.patch_ranges, _zone_kappa(0.05)
     )
-    @test with - base ≈ extra rtol = 1.0e-8
-    ## Without allocated zone deaths the fit refuses the stream.
+    @test total ≈ cases + extra rtol = 1.0e-8
+    ## Without allocated zone deaths the fit refuses to run.
     @test_throws ErrorException fit_zone(
-        syn.chain, syn.obs; deaths = true,
+        syn.chain, syn.obs;
         zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"]
     )
 end
 
-@testitem "zone_initial_params: shape, jitter and a finite start" setup = [
+@testitem "bvd_zone: the sampled dimension and the optional blocks" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, zone_initial_params, nuts_sample
+    using BVDOutbreakSize: bvd_zone
     using Turing: DynamicPPL
-    using LogDensityProblems: logdensity
     import FlexiChains
     using Turing: sample, Prior
 
@@ -1045,46 +1089,29 @@ end
     inputs = zone_inputs(syn)
     zd = inputs.model_data
     K = length(zd.knots)
-    model = bvd_zone(zd)
-    ## The melded parent draw adds one whitened dimension per kept cell.
-    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 5 + zd.meld_d
-    st = zone_initial_params(model, inputs; chains = 3, jitter = 0.1)
-    @test length(st.x0) == dim
-    @test all(isfinite, st.x0)
-    @test length(st.inits) == 3 && length(st.logp) == 3
-    @test all(isfinite, st.logp)
-    @test length(unique(st.logp)) == 3
-    ## Without jitter every chain starts at the specification's point.
-    st0 = zone_initial_params(model, inputs; chains = 2, jitter = 0.0)
-    @test st0.logp[1] == st0.logp[2]
-    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
-    ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
-    @test logdensity(ldf, st.x0) ≈ st0.logp[1]
-    ## Mixing adds one fraction per patch.
-    stm = zone_initial_params(
-        bvd_zone(zd; mixing = true), inputs;
-        mixing = true
-    )
-    @test length(stm.x0) == dim + 2
-    ## With no walking zone the innovation block is absent from the model
-    ## and the start.
+    np = length(inputs.patch_ranges)
+    dimension(m) = length(DynamicPPL.link(DynamicPPL.VarInfo(m), m)[:])
+    ## Four unit-scale blocks over the zones, the innovations, the six
+    ## scalar scales, one drift scale per patch and the shared draw.
+    dim = 4 * syn.nz + zd.n_walking * (K - 1) + 6 + np + zd.meld_d
+    @test dimension(bvd_zone(zd)) == dim
+    ## Mixing adds the within-patch intensity, a departure scale and one
+    ## offset per zone.
+    @test dimension(bvd_zone(zd; mixing = true)) == dim + 2 + syn.nz
+    ## The cut fixes the shared draw rather than sampling it.
+    @test dimension(bvd_zone(zd; meld = false)) == dim - zd.meld_d
+    ## With no walking zone the innovation block is absent from the model.
     inputs0 = zone_inputs(syn; walk_threshold = 10^6)
     zd0 = inputs0.model_data
     @test zd0.n_walking == 0
     model0 = bvd_zone(zd0)
-    st_level = zone_initial_params(model0, inputs0)
-    @test length(st_level.x0) == 2 * syn.nz + 5 + zd0.meld_d
+    @test dimension(model0) == 4 * syn.nz + 6 + np + zd0.meld_d
     chn0 = sample(
         model0, Prior(), 3; chain_type = FlexiChains.VNChain,
         progress = false
     )
     @test !any(p -> string(p) == "z_drift", FlexiChains.parameters(chn0))
     @test all(v -> length(v) == syn.nz, vec(collect(chn0[:delta_T_zone])))
-    ## The sampler wants one strategy per chain.
-    @test_throws ArgumentError nuts_sample(
-        model; chains = 2,
-        init = st.inits[1:1]
-    )
 end
 
 @testitem "zone diagnostics: tables from a short chain" setup = [

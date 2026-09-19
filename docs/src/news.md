@@ -36,11 +36,19 @@ It is the only parent term: the weekly sums are not scored again, which would co
 Infections rather than reproduction numbers, because the zone forward pass consumes infections while deriving them from shared reproduction numbers is the absolute renewal; a reproduction number built on a sampled trajectory carries the parent's uncertainty either way.
 Zones in different provinces inherit the parent's learned cross-patch correlation through their shared draw, with nothing new estimated.
 Cost: 72 dimensions and 7% of the gradient.
-- Zone level deviations are correlated within a patch by distance between centroids, `C_zq = exp(-d_zq / ℓ)`, on one sampled length scale (#711).
+- The zone deviations are the province model's own deviation process, `deviation_knots`, called with one group per patch and the zones of a patch as its units (#711).
+The province model calls it with the patches as one group.
+Both get a correlated, group-centred AR(1) on weekly knots from one definition, and the zone stage gains the province model's per-group drift scale and its correlated innovations, which is what lets a cluster of neighbouring zones share a local excursion.
+- Zone deviations are correlated within a patch by distance between centroids, `C_zq = exp(-d_zq / ℓ)` with `ℓ = -d̄ / log ρ_corr` (#711).
+`ρ_corr` is the correlation of two zones a province-capital distance apart and its prior is a beta fitted to the province model's own posterior correlation between patches, so the zone correlation is inherited rather than set here.
+A negative provincial correlation enters as no correlation.
 The meld correlates zones across patches but not within one, where every zone multiplies the same parent trajectory, so a cluster of neighbouring zones rising together had to be read as coincidence.
-One parameter, no measurable gradient cost.
-- Zone importation is per origin and inherits the province model's posterior export intensity as the centre of its prior, with a sampled departure scale (#711).
-Sixty-two zones cannot each identify an export intensity from the zone tables; they do not have to when the parent sets the centre.
+- Each patch has its own zone drift scale, with a log-normal prior fitted to the province model's posterior per-patch drift scale, in place of one scale shared across all 62 zones (#711).
+- Infections cross zone boundaries, through a kernel decomposed into a within-patch and a between-patch block, both normalisations of one gravity pull over all 62 zones (#711).
+The between block's column over a destination patch's zones sums to exactly the province model's own patch-to-patch entry, and the arrivals into a patch are the province model's own, so summed over zones the between-patch flow is the province model's and the same movement is not counted at both levels.
+The within-patch spill is the zone stage's own mechanism and carries its own intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation; the province model's export intensity is a between-province quantity its data pulled four orders of magnitude below one, which is not what a boundary between two neighbouring zones measures.
+Zone infections still sum to the sampled patch total exactly, so no second parent term is added.
+- The gravity form is one definition, `gravity_pull`, that `province_importation_kernel` normalises over provinces and the zone kernel normalises within and between patches (#711).
 - The health-zone model conditions on the confirmed cases and the confirmed deaths together (#711).
 The allocated zone deaths of every vintage are a second Dirichlet-multinomial within the patch, on the infection-to-confirmed-death delay rather than the case delay, with its own overdispersion.
 Deaths were previously off by default and, when on, contributed one composition of the cumulative allocated deaths at the final vintage, which saw the end-state allocation and no timing.
@@ -52,8 +60,9 @@ The confirmed-case composition keeps the unallocated rule, so that stream is unc
 - A health-zone model disaggregates each patch of the headline joint model over the health zones that have reported a confirmed case (#711).
 It is a two-stage Markov melding in which the zone stage receives the patch posterior and feeds nothing back: patch infections, the generation interval and the infection-to-report delay are fixed at the joint posterior means, each zone's infections are a share of its patch's, the shares follow a renewal on the zone's own force of infection scaled by a weekly-knot deviation walk, and the per-vintage zone increments are scored with a Dirichlet-multinomial composition conditional on the allocated patch total.
 Zone reproduction numbers invert the zone renewal and are paired with joint draws for every reported quantity.
-Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk; between-zone mixing is off by default and fitted as a sensitivity variant.
-`fit_zone` fits it from a parent chain with a data-informed start, two chains, 600 draws after 400 adaptation steps and a tree-depth cap of 8.
+Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk.
+`fit_zone` fits it from a parent chain at the headline joint's sampler settings, initialising from the prior as every other fit does, so a difference between the two levels is the model and not the sampler.
+The sensitivity variants are the zones held inside their own boundaries and the cut that conditions on the province model's posterior mean alone; the variants that substituted a low or high parent draw are gone, since the fit now carries the parent's uncertainty itself.
 
 ### Data
 - Added per-health-zone confirmed cases and deaths from Tableau 2 as
