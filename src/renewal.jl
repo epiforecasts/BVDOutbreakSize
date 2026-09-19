@@ -576,6 +576,175 @@ function interpolate_knots(
 end
 
 """
+Partially pooled relative multiplier, `exp(\\sigma z_u + o_u)` centred within
+each group so the log contrasts sum to zero there,
+
+```math
+m_u = \\exp\\bigl(\\sigma z_u + o_u
+    - \\overline{\\sigma z + o}_{g}\\bigr).
+```
+
+The level stays with the group and only the contrasts are identified, so a
+composition over the group's units weights them by the modelled quantity
+alone as `\\sigma` shrinks. `groups` are the index ranges to centre within:
+all the provinces as one group in
+[`province_composition_model`](@ref), one group per patch over its health
+zones in [`bvd_zone`](@ref). `offset` adds a covariate term to the log scale
+before centring, and `nothing` leaves the pooled deviation on its own.
+
+"""
+function relative_multiplier(
+        z::AbstractVector, σ::Real,
+        groups::AbstractVector{<:UnitRange};
+        offset::Union{Nothing, AbstractVector} = nothing
+    )
+    Tp = promote_type(
+        eltype(z), typeof(float(σ)),
+        offset === nothing ? Float64 : eltype(offset)
+    )
+    out = ones(Tp, length(z))
+    @inbounds for us in groups
+        isempty(us) && continue
+        m = zero(Tp)
+        for i in us
+            out[i] = σ * z[i] + (offset === nothing ? zero(Tp) : offset[i])
+            m += out[i]
+        end
+        m /= length(us)
+        for i in us
+            out[i] = exp(out[i] - m)
+        end
+    end
+    return out
+end
+
+"""
+Group-centred AR(1) deviation knots, the log-transmission deviation process
+of both spatial levels. The units are the patches of
+[`patch_rt_model`](@ref) or the health zones of [`bvd_zone`](@ref), and
+`groups` are the index ranges the deviations are centred within: one range
+over every patch at province level, one range per patch at zone level.
+
+The first knot is a level and the later knots revert toward zero at
+retention `φ`,
+
+```math
+δ_u(1) = σ_L (F_g z^L)_u - \\overline{σ_L (F_g z^L)}_g,
+\\qquad
+δ_u(k) = φ\\, δ_u(k-1) + σ_{δ,u} (F^W_g z^δ_k)_u
+    - \\overline{σ_δ (F^W_g z^δ_k)}_{W_g},
+```
+
+so every group sums to zero at every knot and no unit is privileged.
+`factors[i]` is a lower-triangular correlation factor over the units of
+group `i`, and `drift_factors[i]` the same over its walking units;
+`nothing` in either place leaves those draws independent. Scaling comes
+before centring, so a per-unit `σ_δ` still leaves the group sum at zero.
+
+Only a walking unit carries an innovation and a level-only unit decays
+along the mean path `φ^{k-1} δ_u(1)`. `walk_index[u]` is the unit's
+position among the `n_walking` walking units, zero for a level-only unit,
+and `z_drift` holds the innovations knot by knot at
+`(k - 2) n_walking + walk_index[u]`.
+
+Returns an `(n_units × n_knots)` matrix.
+"""
+function deviation_knots(
+        z_level::AbstractVector, z_drift::AbstractVector,
+        σ_level::Real, σ_δ::AbstractVector, φ::Real,
+        groups::AbstractVector{<:UnitRange},
+        factors::AbstractVector, drift_factors::AbstractVector,
+        walking::AbstractVector{Bool},
+        walk_index::AbstractVector{<:Integer},
+        n_walking::Integer, n_knots::Integer
+    )
+    Tp = promote_type(
+        eltype(z_level), eltype(z_drift), typeof(float(σ_level)),
+        eltype(σ_δ), typeof(float(φ)),
+        _factor_eltype(factors), _factor_eltype(drift_factors)
+    )
+    nu = length(z_level)
+    δ = zeros(Tp, nu, n_knots)
+    scaled = zeros(Tp, nu)
+    @inbounds for (i, us) in enumerate(groups)
+        isempty(us) && continue
+        _correlate!(scaled, z_level, us, i <= length(factors) ? factors[i] : nothing)
+        m = zero(Tp)
+        for u in us
+            scaled[u] *= σ_level
+            m += scaled[u]
+        end
+        m /= length(us)
+        for u in us
+            δ[u, 1] = scaled[u] - m
+        end
+    end
+    n_knots > 1 || return δ
+    ## The walking units of each group, in order, so a group's innovations
+    ## are one contiguous slice of its drift factor.
+    walkers = [[u for u in us if walking[u]] for us in groups]
+    innov = zeros(Tp, nu)
+    @inbounds for k in 2:n_knots
+        off = (k - 2) * n_walking
+        for (i, us) in enumerate(groups)
+            isempty(us) && continue
+            ws = walkers[i]
+            F = i <= length(drift_factors) ? drift_factors[i] : nothing
+            m = zero(Tp)
+            for (a, u) in enumerate(ws)
+                acc = zero(Tp)
+                if F === nothing
+                    acc = z_drift[off + walk_index[u]]
+                else
+                    for b in 1:a
+                        acc += F[a, b] * z_drift[off + walk_index[ws[b]]]
+                    end
+                end
+                innov[u] = σ_δ[u] * acc
+                m += innov[u]
+            end
+            m = isempty(ws) ? zero(Tp) : m / length(ws)
+            for u in us
+                δ[u, k] = φ * δ[u, k - 1] +
+                    (walking[u] ? innov[u] - m : zero(Tp))
+            end
+        end
+    end
+    return δ
+end
+
+## Element type of a list of correlation factors, ignoring the `nothing`
+## entries that stand for independent draws.
+function _factor_eltype(factors::AbstractVector)
+    T = Float64
+    for F in factors
+        F === nothing && continue
+        T = promote_type(T, eltype(F))
+    end
+    return T
+end
+
+## `out[us] = F * z[us]` for a lower-triangular `F` over the group's units,
+## or a copy when `F` is `nothing`.
+function _correlate!(out, z, us, ::Nothing)
+    @inbounds for u in us
+        out[u] = z[u]
+    end
+    return out
+end
+
+function _correlate!(out, z, us, F::AbstractMatrix)
+    @inbounds for (a, u) in enumerate(us)
+        acc = zero(eltype(out))
+        for b in 1:a
+            acc += F[a, b] * z[first(us) + b - 1]
+        end
+        out[u] = acc
+    end
+    return out
+end
+
+"""
 Derive the implied national reproduction number from a summed infection
 trajectory by inverting the renewal equation:
 

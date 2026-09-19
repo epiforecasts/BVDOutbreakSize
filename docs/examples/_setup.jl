@@ -247,9 +247,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
         ## The zone-model sensitivity re-fits, each one switch away from
         ## `chn_local`.
-        chn_local_mixing = _fits["local_mixing"]
-        chn_local_parent_low = _fits["local_parent_low"]
-        chn_local_parent_high = _fits["local_parent_high"]
+        chn_local_no_mixing = _fits["local_no_mixing"]
+        chn_local_cut = _fits["local_cut"]
     end
 
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup

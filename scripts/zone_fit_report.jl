@@ -22,8 +22,8 @@
 
 using BVDOutbreakSize
 using BVDOutbreakSize: bvd_zone, zone_forward, zone_initial_shares,
-    zone_deviation_knots, zone_initial_params,
-    _zone_draws, _zone_stat, _draws, _has_key
+    deviation_knots, _zone_draws, _zone_stat, _draws, _draw_vectors,
+    _has_key
 using Serialization: serialize, deserialize
 using Statistics: mean, median, quantile
 using Random: Xoshiro
@@ -289,18 +289,19 @@ function stage_b()
     rng = Xoshiro(20260915)
     ## One draw from a moderate part of the prior, rather than its tails, so
     ## the simulated dataset resembles the real one in dispersion.
-    z_w = INPUTS.z_w_start .+ 0.2 .* randn(rng, NZ)
+    z_w = 0.2 .* randn(rng, NZ)
     σ_level = 0.25
-    σ_δ = 0.06
+    σ_δ = fill(0.06, length(ZD.patch_ranges))
     h = 42.0
     ρ = 0.03
     z_level = randn(rng, NZ)
     z_drift = randn(rng, max(ZD.n_walking * (K - 1), 1))
     φ = exp2(-7 / h)
     w0 = zone_initial_shares(z_w, ZD.patch_ranges, 2.0)
-    δ_knots = zone_deviation_knots(
-        z_level, z_drift, σ_level, σ_δ, φ,
-        ZD.patch_ranges, ZD.walking, ZD.walk_index, ZD.n_walking, K
+    δ_knots = deviation_knots(
+        z_level, z_drift, σ_level, σ_δ[ZD.patch_of_zone], φ,
+        ZD.patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
+        ZD.walking, ZD.walk_index, ZD.n_walking, K
     )
     fw = zone_forward(ZD, δ_knots, w0, nothing)
     κ = (1 - ρ) / ρ
@@ -395,7 +396,6 @@ function stage_b()
         push!(shown, length(xs))
     end
     scalars = (
-        (:region_drift_sd_zone, :σ_δ, "σ_δ"),
         (:composition_rho_zone, :ρ, "ρ"), (:region_halflife_zone, :h, "h"),
     )
     rows = NamedTuple[]
@@ -463,12 +463,10 @@ end
 
 function stage_c(chn)
     log_line("stage c: diagnostics")
-    sd = zone_sampler_diagnostics(chn, INPUTS; max_depth = 8)
+    sd = zone_sampler_diagnostics(chn, INPUTS; max_depth = MAX_DEPTH)
     nchains = length(sd.step_size)
-    init = zone_initial_params(bvd_zone(ZD), INPUTS; chains = nchains)
     per_chain = DataFrame(
         chain = 1:nchains,
-        initial_logp = init.logp,
         step_size = sd.step_size,
         depth_cap_fraction = sd.depth_cap_fraction,
         ebfmi = sd.ebfmi,
@@ -490,7 +488,6 @@ function stage_c(chn)
     ranges, zdiag = range_table(chn, INPUTS)
     big = sort(1:NZ; by = z -> -INPUTS.cumulative[z])[1:5]
     traces = [
-        (chain_matrix(chn, :region_drift_sd_zone), "σ_δ"),
         (chain_matrix(chn, :composition_rho_zone), "ρ"),
         (chain_matrix(chn, :region_halflife_zone), "h (days)"),
     ]

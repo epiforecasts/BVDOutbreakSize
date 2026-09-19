@@ -2023,30 +2023,23 @@ zone_live_summary = _zone_cutoff_summaries(chn_local, zone_inputs_live);
 #md # </details>
 #md # ```
 
-# ### Sensitivity to the parent fit
+# ### Carrying the parent posterior
 #
-# The cut assumes the zone posteriors barely depend on which draw of the provincial infections they condition on.
-# The check re-fits the zone model on the two draws of the headline fit nearest its 5th and 95th percentiles of cumulative infections, in place of the posterior mean.
+# The zone stage samples the province model's weekly patch infections from a multivariate normal fitted to its draws, so the province model's uncertainty reaches every zone quantity through the fit.
+# The cut instead conditions on the province model's posterior mean alone.
+# The comparison is what carrying that uncertainty costs and buys.
 
 #md # ```@raw html
-#md # <details><summary>Zone posteriors by parent draw</summary>
+#md # <details><summary>Zone posteriors with and without the shared draw</summary>
 #md # ```
 
-## The parent-draw re-fits read their inputs from the same draw.
 zone_parent = _zone_variant_outputs(
     RUN_SENSITIVITY ?
         [
-            "mean" => zone_live_summary,
-            "low draw" => _zone_cutoff_summaries(
-                chn_local_parent_low,
-                zone_fit_inputs(chn_joint, obs; parent_summary = :draw_low)
-            ),
-            "high draw" => _zone_cutoff_summaries(
-                chn_local_parent_high,
-                zone_fit_inputs(chn_joint, obs; parent_summary = :draw_high)
-            ),
+            "melded" => zone_live_summary,
+            "cut" => _zone_cutoff_summaries(chn_local_cut, zone_inputs_live),
         ] :
-        nothing, "by parent summary"
+        nothing, "with and without the shared draw"
 );
 
 #md # ```@raw html
@@ -2061,9 +2054,9 @@ zone_parent.share #hide
 
 # ### Between-zone mixing
 #
-# The headline zone fit moves no infections between zones.
-# The variant redistributes a fraction of each zone's force of infection within its province, one fraction per province.
-# The table after the figures gives the fitted fraction per province.
+# The headline zone fit lets infections cross zone boundaries, within a province through its own spill and between provinces on the province model's own flows.
+# The variant holds every zone inside its own boundary.
+# The table after the figures gives the fitted within-province spill per zone.
 
 #md # ```@raw html
 #md # <details><summary>Zone posteriors with and without mixing</summary>
@@ -2072,30 +2065,34 @@ zone_parent.share #hide
 zone_mixing = _zone_variant_outputs(
     RUN_SENSITIVITY ?
         [
-            "no mixing" => zone_live_summary,
-            "mixing" => _zone_cutoff_summaries(
-                chn_local_mixing,
+            "mixing" => zone_live_summary,
+            "no mixing" => _zone_cutoff_summaries(
+                chn_local_no_mixing,
                 zone_inputs_live
             ),
         ] : nothing,
     "with and without mixing"
 );
 
-## The mixing fraction per province, as a median with its 90% interval.
+## The within-province spill per zone, as a median with its 90% interval,
+## for the zones with most confirmed cases.
 zone_mixing_epsilon_table = RUN_SENSITIVITY ?
-    let np = length(zone_inputs_live.patch_names),
-        eps = vec(collect(chn_local_mixing[:mixing_epsilon_zone]))
+    let eps = vec(collect(chn_local[:mixing_epsilon_zone])),
+        top = partialsortperm(
+            zone_inputs_live.cumulative, 1:min(10, length(eps[1]));
+            rev = true
+        )
 
-        fmt(x) = string(round(x; digits = 3))
+        fmt(x) = string(round(x; digits = 4))
         cell(v) = string(
             fmt(median(v)), " (", fmt(quantile(v, 0.05)), "–",
             fmt(quantile(v, 0.95)), ")"
         )
         DataFrame(
-            "Province" => zone_inputs_live.patch_labels[1:np],
-            "Mixing fraction" => [
-                cell([Float64(v[p]) for v in eps])
-                for p in 1:np
+            "Health zone" => zone_inputs_live.zone_labels[top],
+            "Spill fraction" => [
+                cell([Float64(v[z]) for v in eps])
+                for z in top
             ]
         )
 end : _zone_sens_missing;
