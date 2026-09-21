@@ -1,0 +1,159 @@
+@testitem "background_split_model: one patch is the whole background" begin
+    using BVDOutbreakSize: background_split_model
+
+    res = background_split_model(1)()
+    @test res.w == [1.0]
+    @test res.pooling_sd == 0.0
+end
+
+@testitem "background_split_model: a simplex centred on population share" begin
+    using BVDOutbreakSize: background_split_model
+    using Turing: DynamicPPL
+
+    pops = [4.0, 2.0, 1.0, 1.0]
+    m = background_split_model(4; populations = pops)
+    res = m()
+    @test length(res.w) == 4
+    @test sum(res.w) ≈ 1.0
+    @test all(>(0), res.w)
+    @test res.pooling_sd >= 0
+
+    ## With the pooling scale at zero every patch sits on its population
+    ## share, so the prior centre is the population split and the sampled
+    ## deviations carry the rest.
+    flat = DynamicPPL.fix(m; τ_bg = 0.0)()
+    @test flat.w ≈ pops ./ sum(pops)
+end
+
+@testitem "province_lab_increment_matrix: pools members, matches the national" begin
+    using BVDOutbreakSize
+
+    obs = load_observations()
+    np = length(PROVINCE_NAMES)
+    lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES, np
+    )
+    @test size(lab.increments) == (np, length(lab.days))
+    @test issorted(lab.days)
+
+    ## The per-province analysed counts partition the national daily
+    ## analysed series, so each column sums to the national count that day.
+    nat = Dict(zip(obs.lab_daily_history.days, obs.lab_daily_history.counts))
+    shared = 0
+    for (i, d) in enumerate(lab.days)
+        haskey(nat, d) || continue
+        shared += 1
+        @test sum(@view lab.increments[:, i]) == nat[d]
+    end
+    @test shared > 50
+
+    ## A pooled patch is the sum of its members.
+    members = PROVINCE_MEMBERS[PROVINCE_NAMES[end]]
+    pooled = sum(
+        obs.province_lab_daily_history["$(m)_analysed"].counts
+            for m in members
+    )
+    @test lab.increments[end, :] == pooled
+
+    ## No data, no term.
+    none = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
+    @test isempty(province_lab_increment_matrix(none, PROVINCE_NAMES, np).days)
+end
+
+@testitem "province_composition_model: the ascertainment contrast can be off" begin
+    using BVDOutbreakSize: province_composition_model
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    obs = [80 40; 15 8; 5 2]
+    modelled = [8.0 4.0; 1.5 0.8; 0.5 0.2]
+    m = province_composition_model(
+        obs, modelled; ascertainment_sd_prior = nothing
+    )
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    names = string.(keys(vi))
+    @test !any(contains("τ_asc"), names)
+    @test !any(contains("z_asc"), names)
+    @test isfinite(DynamicPPL.loglikelihood(m, vi))
+
+    res = m()
+    @test res.province_ascertainment == ones(3)
+    @test res.ascertainment_sd == 0.0
+
+    ## Off, the shares are the modelled split and nothing else.
+    expected = modelled ./ sum(modelled; dims = 1)
+    @test res.shares ≈ expected
+end
+
+@testitem "bvd_joint: the province analysed volume is scored as a composition" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    obs = load_observations()
+    np = length(PROVINCE_NAMES)
+
+    function build(labh; n_patches = np)
+        lab = province_lab_increment_matrix(labh, PROVINCE_NAMES, n_patches)
+        return bvd_joint(
+            obs.n,
+            obs.exported_cases, obs.total_deaths, obs.reported_cases,
+            obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+            confirmed_deaths = obs.confirmed_deaths,
+            recovered_cases = obs.recovered_cases,
+            deaths_history = obs.deaths_history,
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
+            suspected_daily_history = obs.suspected_daily_history,
+            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            recovered_history = obs.recovered_history,
+            occupancy_break_days = obs.occupancy_break_days,
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = obs.who_first_sitrep_days,
+            n_patches,
+            province_lab_increments = lab.increments,
+            province_lab_days = lab.days,
+            tmrca_days = obs.tmrca_days
+        )
+    end
+
+    labh = obs.province_lab_daily_history
+    m = build(labh)
+    vi = DynamicPPL.VarInfo(Xoshiro(7), m)
+    base = DynamicPPL.logjoint(m, vi)
+    @test isfinite(base)
+
+    ## The background split is sampled once the country has patches.
+    names = string.(keys(vi))
+    @test any(contains("τ_bg"), names)
+    @test any(contains("lab_composition_state"), names)
+
+    ## Moving analysed specimens between provinces at a fixed daily total
+    ## must move the density: the split is what this term adds.
+    shifted = Dict(k => v for (k, v) in labh)
+    it = labh["ituri_analysed"]
+    nk = labh["nord_kivu_analysed"]
+    mv = min.(it.counts, 20)
+    shifted["ituri_analysed"] = (; days = it.days, counts = it.counts .- mv)
+    shifted["nord_kivu_analysed"] = (; days = nk.days, counts = nk.counts .+ mv)
+    @test !isapprox(DynamicPPL.logjoint(build(shifted), vi), base; rtol = 1.0e-8)
+
+    ## Without the province series the term is absent and nothing else moves.
+    none = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
+    m_none = build(none)
+    @test isfinite(DynamicPPL.logjoint(m_none, vi))
+    @test !any(contains("lab_composition_state"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), m_none))))
+
+    ## One patch has no split to sample.
+    single = build(none; n_patches = 1)
+    @test !any(contains("τ_bg"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
+
+    ## Province laboratory data with one patch would be dropped silently.
+    @test_throws ErrorException build(labh; n_patches = 1)
+end
