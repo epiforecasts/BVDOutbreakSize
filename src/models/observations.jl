@@ -2630,16 +2630,20 @@ series for forecasting and replication.
     ## Province splits of the occupancy and of the beds, conditional on the
     ## printed sum of the provinces present each day. The national tile and
     ## the national implied capacity above keep their likelihoods, so these
-    ## add only the spatial split. Occupancy is split on the censored
-    ## per-patch stock, so a full province takes no more than its beds.
+    ## add only the spatial split. Occupancy is split on the uncapped
+    ## per-patch demand: the printed bed counts do not cover every structure
+    ## patients are held in, so a province can print more patients than
+    ## beds (Nord-Kivu from SitRep 124, 376 in-patients against 228 normed
+    ## beds), and a cap at the walk would read that as a smaller share.
+    ## Saturation is reported through the per-patch utilisation and
+    ## shortfall instead.
     occupancy_split_rho = 0.0
     if np > 1 && province_isolation !== nothing &&
             !isempty(province_isolation.days)
         occupancy_split_rho ~ province_split_rho_prior
         @addlogprob! province_split_logpdf(
             province_isolation.days, province_isolation.patches,
-            province_isolation.counts, min.(demand_patch, C_patch),
-            occupancy_split_rho
+            province_isolation.counts, demand_patch, occupancy_split_rho
         )
     end
     capacity_split_rho = 0.0

@@ -216,3 +216,54 @@ end
     ## Province care data with one patch would be dropped silently.
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
 end
+
+@testitem "province_bed_table: beds, demand and shortfall by province" tags = [
+    :slow,
+] begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+    using DataFrames: nrow, names
+
+    obs = load_observations()
+    np = length(PROVINCE_NAMES)
+    m = bvd_joint(
+        obs.n,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        n_patches = np,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days
+    )
+    chn = sample(
+        m, Prior(), 50; chain_type = FlexiChains.VNChain, progress = false
+    )
+    df = province_bed_table(chn, np)
+    @test nrow(df) == np
+    @test names(df) == [
+        "Province", "Beds", "Bed demand", "Occupied beds",
+        "Utilisation (%)", "Shortfall",
+    ]
+    @test df.Province == collect(PROVINCE_LABELS[1:np])
+    ## Every cell is a median with an interval.
+    @test all(contains("("), df[!, "Beds"])
+
+    ## A single-population chain carries no per-province beds.
+    single = sample(
+        bvd_joint(
+            obs.n,
+            obs.exported_cases, obs.total_deaths, obs.reported_cases,
+            obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+            reported_history = obs.reported_history,
+            isolation_history = obs.isolation_history,
+            breakpoint = obs.who_first_sitrep_days,
+            tmrca_days = obs.tmrca_days
+        ),
+        Prior(), 5; chain_type = FlexiChains.VNChain, progress = false
+    )
+    @test_throws ErrorException province_bed_table(single, np)
+end

@@ -858,6 +858,59 @@ function patch_headline(
 end
 
 """
+Per-province isolation beds at the cut-off, from the province occupancy and
+bed splits in [`treatment_flow_model`](@ref): one row per province with
+the modelled bed count, the latent bed demand, the occupied beds (demand
+capped at the beds), the utilisation and the shortfall, each a median with
+a 90% credible interval. Expects a chain from [`bvd_joint`](@ref) with
+more than one patch, which stores these as the vector deterministics
+`province_bed_capacity`, `province_bed_demand`,
+`province_expected_isolation`, `province_bed_utilisation` and
+`province_bed_shortfall`.
+"""
+function province_bed_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 0,
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    required = [
+        :province_bed_capacity, :province_bed_demand,
+        :province_expected_isolation, :province_bed_utilisation,
+        :province_bed_shortfall,
+    ]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-province bed deterministics $(absent); " *
+            "it was not sampled from `bvd_joint` with more than one patch."
+    )
+    np = min(n_patches, length(patch_labels))
+    beds = _per_patch(chn, :province_bed_capacity, np)
+    demand = _per_patch(chn, :province_bed_demand, np)
+    occupied = _per_patch(chn, :province_expected_isolation, np)
+    util = _per_patch(chn, :province_bed_utilisation, np)
+    short = _per_patch(chn, :province_bed_shortfall, np)
+    df = DataFrame(
+        "Province" => String[],
+        "Beds" => String[],
+        "Bed demand" => String[],
+        "Occupied beds" => String[],
+        "Utilisation (%)" => String[],
+        "Shortfall" => String[]
+    )
+    for p in 1:np
+        push!(
+            df, Any[
+                patch_labels[p], _median_ci(beds[p]; digits),
+                _median_ci(demand[p]; digits), _median_ci(occupied[p]; digits),
+                _median_ci(100 .* util[p]; digits = 1),
+                _median_ci(short[p]; digits),
+            ]
+        )
+    end
+    return df
+end
+
+"""
 Per-patch outbreak summary for the patch model: one row per province, with
 the cut-off cumulative infections `C_T`, the cut-off reproduction number
 `R_T`, the daily infections at the cut-off, and the log-Rt deviation `δ`

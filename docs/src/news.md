@@ -161,9 +161,10 @@ Changes since v2.1.0.
   as splits of the printed sum of the provinces present each day, over
   per-patch bed demand and per-patch capacity walks with one shared innovation
   scale. The national tile and the national implied capacity keep their
-  likelihoods on every day. Occupancy is split on the censored per-patch
-  stock, so a full province takes no more than its beds, and the fit reports
-  beds, demand, utilisation and shortfall by province at the cut-off.
+  likelihoods on every day. Occupancy is split on the uncapped per-patch
+  demand, since a province can print more patients than beds where patients
+  are held outside the counted structures, and the fit reports beds, demand,
+  utilisation and shortfall by province at the cut-off.
 - A pooled patch's occupancy or bed count is used on a day only when every
   member that has printed before prints that day, so a silent member is never
   read as an empty ward.
