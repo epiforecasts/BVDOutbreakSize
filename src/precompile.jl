@@ -1,24 +1,20 @@
 # Precompile the expensive first-call work so a fresh process does not pay
-# it on its first fit. The dominant cost is not the gradient itself but
-# building the Mooncake reverse rule, which happens when the
-# `LogDensityFunction` is constructed: measured per component on a 40-day
-# grid, rule construction is roughly 87% of a cold build, against a ~38 s
-# floor any model pays. Compiling one log-density gradient here bakes those
-# rules into the package precompile cache, which CI persists, so the report
-# build's fits skip it. A component measured at 126 s of rule construction
-# cold builds in 14 s once it is in the cache.
+# it on its first fit. The cost is not the gradient but building the
+# Mooncake reverse rule, which happens when the `LogDensityFunction` is
+# constructed: per component on a 40-day grid it is about 87% of a cold
+# build, against a ~38 s floor any model pays. Compiling one log-density
+# gradient here bakes those rules into the package precompile cache, which
+# CI persists, so the report build's fits skip it.
 #
 # The workload compiles the headline fit itself, through
-# [`production_joint`](@ref), rather than a synthetic model shaped like it.
-# Mooncake caches a rule against a method signature, and a
-# `DynamicPPL.Model`'s type carries the types of its arguments, so a
-# workload that differs from the fit in the type of any argument compiles a
-# rule the fit never reaches. Building both from `joint_fit_args` removes
-# the chance to drift: an earlier hand-written workload passed
-# `province_increments = missing` where the fit passes `Matrix{Int}`, and
-# left the isolation and treatment histories empty, so those likelihood
-# loops never ran and Mooncake, which derives a rule only for code that
-# executes, cached nothing for the most expensive stream in the model.
+# [`production_joint`](@ref). Mooncake caches a rule against a method
+# signature, and a `DynamicPPL.Model`'s type carries the types of its
+# arguments, so a workload differing from the fit in the type of any
+# argument compiles a rule the fit never reaches. Mooncake also derives a
+# rule only for code that executes, so a stream whose history is empty
+# scores a zero-iteration loop and caches nothing. Building both the
+# workload and the fit from `joint_fit_args` is what keeps them the same
+# method instance.
 #
 # Off by default, since the workload makes package precompilation slow. A
 # package preference switches it on, which the report build sets through

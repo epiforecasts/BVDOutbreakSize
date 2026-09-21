@@ -26,13 +26,12 @@ $(TYPEDSIGNATURES)
 Keyword arguments shared by every production [`bvd_joint`](@ref) fit, built
 from a `load_observations()` result.
 
-`breakpoint` is the intervention day index. Anything in `overrides` is merged
-last, for the sensitivity fits that vary one keyword against the headline.
+`breakpoint` is the intervention day index.
 
 See also [`patch_fit_args`](@ref), which adds the spatial structure.
 """
-function joint_fit_args(obs; breakpoint, overrides...)
-    base = (;
+function joint_fit_args(obs; breakpoint)
+    return (;
         confirmed_deaths = obs.confirmed_deaths,
         recovered_cases = obs.recovered_cases,
         deaths_history = obs.deaths_history,
@@ -66,7 +65,6 @@ function joint_fit_args(obs; breakpoint, overrides...)
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days,
     )
-    return merge(base, NamedTuple(overrides))
 end
 
 """
@@ -109,12 +107,12 @@ The headline [`bvd_joint`](@ref) model, for a `load_observations()` result.
 This is the call the precompile workload compiles and the headline fit
 samples, so both reach Mooncake as the same method instance.
 """
-function production_joint(obs; breakpoint, overrides...)
+function production_joint(obs; breakpoint)
     return bvd_joint(
         obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths,
         obs.confirmed_cases, obs.tests_analysed;
-        joint_fit_args(obs; breakpoint, overrides...)...,
+        joint_fit_args(obs; breakpoint)...,
         patch_fit_args(obs)...
     )
 end

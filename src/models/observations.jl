@@ -1093,7 +1093,7 @@ quantities.
     have_data = !ismissing(confirmed_cases)
 
     ## Intra-window overdispersion for the confirmed positives, sampled once
-    ## and shared across all confirmed windows regardless of the link.
+    ## and shared across all confirmed windows.
     od_state ~ to_submodel(overdispersion, false)
     ρ_conf = od_state.ρ
 

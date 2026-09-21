@@ -22,11 +22,10 @@ end
     obs = load_observations()
     args = joint_fit_args(obs; breakpoint = default_breakpoint(obs))
 
-    ## The workload used to leave the isolation and treatment histories
-    ## empty. Mooncake derives a rule only for code that executes, so a
-    ## zero-iteration likelihood loop caches nothing, and `treatment_flow`
-    ## is the most expensive component in the model. Non-empty here is what
-    ## makes the precompile workload reach it.
+    ## Mooncake derives a rule only for code that executes, so a
+    ## zero-iteration likelihood loop caches nothing. Non-empty histories
+    ## are what let the workload reach `treatment_flow_model`, the most
+    ## expensive component in the model.
     for stream in (
             :isolation_history, :bed_capacity_history,
             :treatment_admissions_history, :treatment_deaths_history,
@@ -38,9 +37,8 @@ end
     @test !isempty(args.isolation_history.counts)
     @test !isempty(args.confirmed_history.counts)
 
-    ## The province tables reach the model as integer matrices. Passing
-    ## `missing` here, as an earlier workload did, is a different method
-    ## instance from the one the headline fit builds.
+    ## The province tables must reach the model as integer matrices to
+    ## build the same method instance as the headline fit.
     patch = patch_fit_args(obs)
     @test patch.province_increments isa AbstractMatrix{<:Integer}
     @test patch.province_death_increments isa AbstractMatrix{<:Integer}
