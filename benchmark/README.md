@@ -25,7 +25,7 @@ GitHub's pool is heterogeneous by about a factor of two and the difference lande
 
 That is not a theoretical worry.
 Across nine comparisons, `province_composition_model` ranged from 971 ns to 1.90 μs on code that barely changed.
-Four of those pull requests touched no differentiated source at all: a formatter swap, a scoring change, a dependency pin and a forecast fix.
+Four of those pull requests touched no differentiated source at all: a formatter swap, a scoring change, a `catch` branch never reached when a pair is timed, and a forecast fix.
 They reported every one of the sixteen log-density benchmarks moving together, by 1.37×, 0.61×, 0.78× and 0.98× respectively.
 The direction was not even consistent, which is why it read as signal rather than as noise.
 
@@ -93,7 +93,6 @@ task benchmark                        # results.json in the working directory
 task benchmark -- out.json            # somewhere else
 BVD_BENCH_JOINT=true task benchmark   # plus the full joint
 BVD_BENCH_ENZYME=true task benchmark  # plus the Enzyme backend
-
 
 # Reproduce the CI comparison: two revisions, one process, plus the comment
 task benchmark-pair                   # main vs HEAD

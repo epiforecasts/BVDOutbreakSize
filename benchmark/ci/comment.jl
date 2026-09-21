@@ -108,7 +108,9 @@ function find_results(dir, pkg, rev)
         t = tag.captures[1]
         (startswith(rev, t) || startswith(t, rev)) && return f
     end
-    length(candidates) == 1 && return only(candidates)
+    ## No fallback to the only candidate. One arm's file standing in for
+    ## both would report every ratio as exactly 1.00, which reads as "no
+    ## change" rather than as the half-finished run it is.
     return error("could not match rev $rev among $(basename.(candidates))")
 end
 
