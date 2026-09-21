@@ -79,3 +79,6 @@ logs/
 /paper/*.tex
 /paper/main_files/
 /paper/si_files/
+
+# Task checksum cache
+/.task/
