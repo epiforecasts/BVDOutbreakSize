@@ -19,8 +19,31 @@ permissions:
   contents: read
 
 jobs:
+  # Coverage measures the test suite, so it is gated on the same paths.
+  changes:
+    name: Decide whether coverage needs to run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      needed: ${{ steps.filter.outputs.matched }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge commit's first parent is the base, which the action
+          # diffs against, so the full history is needed rather than a
+          # single-commit checkout.
+          fetch-depth: 0
+      - id: filter
+        uses: ./.github/actions/changed-paths
+        with:
+          label: 'coverage'
+          patterns: >-
+            ^(src/|ext/|test/|data/|docs/fits/|scripts/|Project\.toml|\.github/(workflows/(test\.yml|codecoverage\.yaml)|actions/changed-paths/))
+
   coverage:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
