@@ -257,17 +257,27 @@ jobs:
   convergence:
     name: Check joint convergence
     needs: fit
-    # `always()` rather than the default, which is `success()`. The verdict is
-    # one comment edited in place, so a build where this job never ran leaves
-    # the previous build's verdict on the thread reading as current: "no new
-    # comment" and "still converged" look the same. The fit matrix is
-    # `fail-fast: false`, so one failed leg would otherwise skip this job
-    # silently. Running anyway reaches the steps below, which find no fit and
-    # say the check could not be made. `cancelled()` is excluded because a
-    # superseded run has nothing to report.
+    # Not the default `success()`. The verdict is one comment edited in
+    # place, so a build where this job never ran leaves the previous build's
+    # verdict on the thread reading as current: "no new comment" and "still
+    # converged" look the same. The fit matrix is `fail-fast: false`, so one
+    # failed leg would otherwise skip this job silently. Running anyway
+    # reaches the steps below, which find no fit and say the check could not
+    # be made.
+    #
+    # A cancelled run has nothing to report, and a `fit` that was skipped
+    # means `list` failed, so no fit was ever attempted and the docs build is
+    # already red for a reason that has nothing to do with convergence.
+    #
+    # Dependabot runs with a read-only token that cannot comment, so it is
+    # skipped outright as `combine` skips it. A dependency bump does not
+    # change a fit cache key, so the gate would only restate `main`'s verdict.
+    #
+    # The `${{ }}` is required, not decoration: an `if` whose expression
+    # starts with `!` has to be wrapped or quoted.
     if: >-
-      !cancelled() &&
-      github.actor != 'dependabot[bot]'
+      ${{ !cancelled() && needs.fit.result != 'skipped' &&
+      github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
