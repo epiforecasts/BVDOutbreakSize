@@ -9,15 +9,12 @@
 # ratio, no neutral band, no threshold and no way to set one. Two things
 # this repository needs are therefore not in it.
 #
-# The first is a band that is measured rather than chosen. A fixed 5% band
-# against a resolution floor near 40% is what let the old harness report
-# noise as regression on four pull requests that changed nothing it
-# measures.
+# The first is a band measured from the run rather than chosen. A band
+# fixed below the harness's own resolution reports noise as regression.
 #
 # The second is the spread. Unrelated components share no cause, so all of
-# them moving by one factor is the signature of an environment difference
-# rather than of the diff, and it is the signature that diagnosed the
-# original two-runner bias. A flat table cannot show it.
+# them moving by one factor points at an environment difference rather than
+# at the diff. A flat table cannot show it.
 #
 # Both are recoverable here because AirspeedVelocity writes the raw
 # per-sample times into its JSON, not just a summary.
@@ -28,11 +25,10 @@ const COMMENT_MARKER = "<!-- benchmark-comparison -->"
 ## The load-time benchmark AirspeedVelocity injects. It is dropped rather
 ## than reported. BenchmarkTools runs a warmup evaluation before it samples,
 ## and that warmup performs the `using`, so the in-process sample times a
-## warm re-import rather than a load. The extra samples relaunch Julia and
-## do measure a load, but this comment reports a minimum, so the warm one
-## always wins: a run of this suite reported 358 μs against a spread of
-## 103%, which is the two kinds of sample being mixed. `run_pair.jl` asks
-## for one sample so the relaunches are not paid for either.
+## warm re-import rather than a load. Further samples relaunch Julia and do
+## measure a load, but this comment reports a minimum, so the warm sample
+## always wins. `run_pair.jl` asks for one sample so the relaunches are not
+## paid for either.
 const LOAD_KEY = "time_to_load"
 
 ## Band floor and ceiling. The floor keeps a quiet run from claiming a
@@ -100,23 +96,13 @@ function flatten!(out, node, prefix)
     return out
 end
 
-## `results_<pkg>@<rev>.json`, matching the revision as a prefix because the
-## workflow passes a full SHA while benchpkg may have truncated the name.
+## `run_pair.jl` names each arm's file after the label its caller passes,
+## so the path is exact.
 function find_results(dir, pkg, rev)
-    candidates = filter(readdir(dir; join = true)) do f
-        endswith(f, ".json") && occursin(string("results_", pkg, "@"), basename(f))
-    end
-    isempty(candidates) && error("no results json for $pkg in $dir")
-    for f in candidates
-        tag = match(r"@(.+)\.json$", basename(f))
-        tag === nothing && continue
-        t = tag.captures[1]
-        (startswith(rev, t) || startswith(t, rev)) && return f
-    end
-    ## No fallback to the only candidate. One arm's file standing in for
-    ## both would report every ratio as exactly 1.00, which reads as "no
-    ## change" rather than as the half-finished run it is.
-    return error("could not match rev $rev among $(basename.(candidates))")
+    path = joinpath(dir, "results_$(pkg)@$(rev).json")
+    isfile(path) && return path
+    available = filter(f -> endswith(f, ".json"), readdir(dir))
+    return error("no results for $pkg@$rev in $dir; found $available")
 end
 
 function load_arm(dir, pkg, rev)
@@ -316,9 +302,7 @@ function main(args)
     main_arm = load_arm(dir, pkg, base_rev)
     pr_arm = load_arm(dir, pkg, head_rev)
     rows = filter(r -> !is_load(r.name), build_rows(pr_arm, main_arm))
-
-    suite_rows = rows
-    noise = percentile(filter(!isnan, [r.noise for r in suite_rows]), BAND_QUANTILE)
+    noise = percentile(filter(!isnan, [r.noise for r in rows]), BAND_QUANTILE)
     band = isnan(noise) ? BAND_UNMEASURED : clamp(noise, BAND_FLOOR, BAND_CEILING)
 
     all_sorted = sort(rows; by = sort_key, rev = true)

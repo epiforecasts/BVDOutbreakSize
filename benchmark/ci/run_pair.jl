@@ -1,31 +1,19 @@
 # Benchmark two revisions of this repository, one after the other, in one
-# process on one machine.
+# process.
 #
 # Usage, from the repository root:
 #   julia --project=benchmark/ci benchmark/ci/run_pair.jl \
 #       <main-worktree> <pr-worktree> <results-dir>
 #
-# Both arguments are working trees, not revisions, and that is the reason
-# this file exists rather than a plain call to `benchpkg`. AirspeedVelocity's
-# other entry points obtain a revision by handing it to `Pkg.add` as a git
-# tree, and Pkg cannot check out a tree that declares a submodule:
+# Both arguments are working trees, not revisions. AirspeedVelocity's other
+# entry points obtain a revision through `Pkg.add` on a git tree, which
+# cannot check out a tree that declares a submodule, and this repository
+# declares one. `rev = "dirty"` is its local mode and calls `Pkg.develop` on
+# a path, so nothing is cloned. `benchmark/README.md` carries the reasoning.
 #
-#   GitError(Code:ERROR, Class:Submodule,
-#            cannot get submodules without a working tree)
-#
-# This repository declares `external/bdbv-linelist-analysis`, so every route
-# through `Pkg.add` fails, the `action-v1` action included, whether the
-# package is named by url or by path. `rev = "dirty"` is AirspeedVelocity's
-# supported local mode: it calls `Pkg.develop` on a path, which never clones
-# and so never reaches the submodule. The workflow materialises the two
-# revisions with `git worktree add`, where the submodule is left
-# uninitialised because nothing under `src/` reads it, and this script
-# benchmarks each tree in turn.
-#
-# One process on one machine is the point of the change. Each revision used
-# to be timed in its own CI job, so every reported ratio divided one hosted
-# runner's speed by another's. That pool is heterogeneous by about a factor
-# of two and the difference landed whole on the ratio.
+# One process times both arms on one machine, so a ratio compares two
+# revisions rather than two hosted runners, which differ by about a factor
+# of two.
 using AirspeedVelocity: benchmark
 using Pkg: PackageSpec
 
@@ -88,10 +76,10 @@ function main(args)
         error("usage: run_pair.jl <main-worktree> <pr-worktree> <results-dir>")
     main_worktree, pr_worktree, results_dir = args
     mkpath(results_dir)
-    ## Fixed order, `main` then the pull request. Compilation is outside
-    ## the timed region either way, since AirspeedVelocity precompiles the
-    ## environment and BenchmarkTools warms up before it samples, but the
-    ## order is pinned so two runs of the same pair are comparable.
+    ## Fixed order, `main` then the pull request, so two runs of the same
+    ## pair are comparable. Compilation is outside the timed region either
+    ## way: AirspeedVelocity precompiles the environment and BenchmarkTools
+    ## warms up before it samples.
     for (label, worktree) in (("main", main_worktree), ("pr", pr_worktree))
         @info "benchmarking $label from $worktree"
         println(run_arm(label, worktree, results_dir))

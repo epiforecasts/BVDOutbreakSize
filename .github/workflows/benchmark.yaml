@@ -6,19 +6,13 @@ name: Benchmark
 # gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, which
 # no CI run can afford (see benchmark/README.md).
 #
-# One job, one machine. Each revision used to be timed in its own job, so
-# every reported ratio divided one hosted runner's speed by another's. That
-# pool is heterogeneous by about a factor of two and the difference landed
-# whole on the ratio: on four pull requests that touched no differentiated
-# source all sixteen log-density benchmarks moved together, by 1.37x, 0.61x,
-# 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to
-# 1.90 us across nine runs of equivalent code.
-#
-# The two revisions are materialised as git worktrees of this checkout and
-# handed to `benchmark/ci/run_pair.jl`, which drives AirspeedVelocity over
-# each in turn. Worktrees rather than AirspeedVelocity's own checkout
-# because this repository declares a submodule and Pkg cannot check out a
-# tree that does; `run_pair.jl` documents that in full.
+# One job, one machine. Both revisions are materialised as git worktrees of
+# this checkout and handed to `benchmark/ci/run_pair.jl`, which times them in
+# one process. The hosted runner pool is heterogeneous by about a factor of
+# two, so a ratio taken across two jobs measures the runners rather than the
+# revisions. Worktrees because this repository declares a submodule, which
+# AirspeedVelocity cannot check out itself; `benchmark/README.md` carries
+# the reasoning.
 #
 # Each worktree runs its own `benchmark/benchmarks.jl`, its own
 # `test/ad_fixtures.jl` and its own `benchmark/Project.toml`, so a pull
@@ -61,8 +55,7 @@ jobs:
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     # Two revisions, each compiling its own gradients before anything is
-    # timed, at roughly 20 minutes a side, plus the package-load samples
-    # taken per revision.
+    # timed, at roughly 20 minutes a side.
     timeout-minutes: 120
     steps:
       # Full history: both revisions become worktrees of this clone, so the

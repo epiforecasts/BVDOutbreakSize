@@ -20,17 +20,11 @@ The joint is available as a component but off by default.
 ## Why both revisions on one machine
 
 A comparison is only as good as the machine underneath it.
-Each revision used to be timed in its own CI job, which made every reported ratio a division of one hosted runner's speed by another's.
-GitHub's pool is heterogeneous by about a factor of two and the difference landed whole on the ratio.
+GitHub's hosted runner pool is heterogeneous by about a factor of two, so a ratio taken across two jobs divides one runner's speed by another's and that difference lands whole on the ratio.
+At this suite's resolution it swamps what is being measured.
 
-That is not a theoretical worry.
-Across nine comparisons, `province_composition_model` ranged from 971 ns to 1.90 μs on code that barely changed.
-Four of those pull requests touched no differentiated source at all: a formatter swap, a scoring change, a `catch` branch never reached when a pair is timed, and a forecast fix.
-They reported every one of the sixteen log-density benchmarks moving together, by 1.37×, 0.61×, 0.78× and 0.98× respectively.
-The direction was not even consistent, which is why it read as signal rather than as noise.
-
-[AirspeedVelocity](https://github.com/MilesCranmer/AirspeedVelocity.jl) removes that at the root.
-It benchmarks both revisions in one process, so there is no second runner to divide by.
+[AirspeedVelocity](https://github.com/MilesCranmer/AirspeedVelocity.jl) times both revisions in one process, so there is no second runner to divide by.
+`docs/src/news.md` records the measurements behind this.
 
 ## Why a driver rather than `benchpkg`
 
@@ -58,11 +52,11 @@ AirspeedVelocity runs the suite; `ci/comment.jl` reports it.
 Two things the comment needs are not in AirspeedVelocity's own table.
 
 It has no neutral band and no way to set one.
-A fixed band is what let the old harness call noise a regression, so the band here is measured from the run.
+A band fixed below the harness's own resolution reports noise as regression, so the band here is measured from the run.
 It is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
 
 That table also cannot show whether the benchmarks moved together.
-Unrelated components share no cause, so one factor applied to all of them is an environment difference rather than the diff, and that is the signature that diagnosed the two-runner bias in the first place.
+Unrelated components share no cause, so one factor applied to all of them points at an environment difference rather than at the diff.
 The comment reports the range of the ratios across benchmarks and warns when they all move as one.
 
 Both are recoverable because AirspeedVelocity writes the raw per-sample times into its results JSON, not only a summary.
@@ -71,7 +65,7 @@ The ratio stays `PR / main`, so below 1 means the pull request is faster.
 
 AirspeedVelocity's own package-load benchmark is dropped rather than reported.
 BenchmarkTools runs a warmup evaluation before it samples, and that warmup performs the `using`, so the in-process sample times a warm re-import rather than a load.
-Further samples relaunch Julia and do measure a load, but the comment reports a minimum, so the warm sample always wins: a run of this suite reported 358 μs at a spread of 103%, which is the two kinds of sample being mixed.
+Further samples relaunch Julia and do measure a load, but the comment reports a minimum, so the warm sample always wins.
 
 ## What it still cannot resolve
 
@@ -79,8 +73,8 @@ The band is a lower bound.
 Each revision is run once, one after the other, with no interleaving and no repeated rounds.
 So the spread it can measure is dispersion within one revision's own samples, not drift between the two revisions, and those are separated by the twenty minutes it takes to compile the second one's gradients.
 
-The large, systematic, cross-machine error is gone.
-A smaller within-machine one is bounded from below rather than measured.
+The cross-machine error the one-process design removes is the large one.
+The within-machine one that remains is bounded from below rather than measured.
 Treat a ratio inside the stated band as unresolved.
 
 ## Benchmark parameters

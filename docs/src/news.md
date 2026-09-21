@@ -91,6 +91,9 @@ Each arm runs its own suite, fixtures and benchmark environment, so a pull reque
 The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
 It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
 That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
+- The benchmark comment drops AirspeedVelocity's package-load row (#763).
+BenchmarkTools runs a warmup evaluation before it samples and that warmup performs the load, so the in-process sample times a warm re-import.
+Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
 - The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
 `key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
 - A push to `main` no longer cancels the run before it in the documentation,
