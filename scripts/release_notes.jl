@@ -16,10 +16,12 @@
 # The functions are pure and take the file contents, so `test/test_release_notes.jl`
 # exercises them without touching the repository.
 
+using Dates: today
 using TOML: TOML
 
 const NEWS_PATH = joinpath(dirname(@__DIR__), "docs", "src", "news.md")
 const PROJECT_PATH = joinpath(dirname(@__DIR__), "Project.toml")
+const CITATION_PATH = joinpath(dirname(@__DIR__), "CITATION.cff")
 
 ## A version heading and nothing else on the line, so a `###` subsection
 ## heading inside a release cannot be mistaken for the start of the next one.
@@ -116,6 +118,29 @@ function bump_project(
 end
 
 """
+    bump_citation(cff, released, date) -> String
+
+`CITATION.cff` text with the version and release date moved to the release
+just cut. It cites the released software, so it follows the release rather
+than the version `Project.toml` moves on to.
+"""
+function bump_citation(
+        cff::AbstractString, released::AbstractString,
+        date::AbstractString
+    )
+    version = Regex("^version:[ \\t]*.*\$", "m")
+    released_on = Regex("^date-released:[ \\t]*.*\$", "m")
+    occursin(version, cff) ||
+        error("CITATION.cff carries no version field")
+    occursin(released_on, cff) ||
+        error("CITATION.cff carries no date-released field")
+    cff = replace(cff, version => "version: $released"; count = 1)
+    return replace(
+        cff, released_on => "date-released: \"$date\""; count = 1
+    )
+end
+
+"""
     open_section(news, released, opening) -> String
 
 `news.md` with an empty section for `opening` inserted above the section for
@@ -160,6 +185,16 @@ function main(args)
             release_notes(news, version)
             write(NEWS_PATH, open_section(news, version, upcoming))
             write(PROJECT_PATH, bump_project(project, version, upcoming))
+            ## CITATION.cff cites the release just cut, not the version the
+            ## repository moves on to, so it takes `version` rather than
+            ## `upcoming`. Nothing else was updating it, so it would have
+            ## drifted a version further behind with every release.
+            write(
+                CITATION_PATH,
+                bump_citation(
+                    read(CITATION_PATH, String), version, string(today())
+                )
+            )
             print(upcoming)
         end
     else

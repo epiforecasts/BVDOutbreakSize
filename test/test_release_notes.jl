@@ -88,7 +88,29 @@ end
     @test_throws ErrorException open_section(news, "2.0.0", "2.0.1")
 end
 
-@testitem "the shipped news.md and Project.toml agree" begin
+@testitem "CITATION.cff follows the release, not the next version" begin
+    include(joinpath(@__DIR__, "..", "scripts", "release_notes.jl"))
+
+    cff = """
+    cff-version: 1.2.0
+    title: BVDOutbreakSize
+    version: 2.1.0
+    date-released: "2026-09-17"
+    """
+    ## It cites the released software, so after cutting v2.1.1 it says
+    ## 2.1.1, not the 2.1.2 that Project.toml moves on to.
+    bumped = bump_citation(cff, "2.1.1", "2026-09-21")
+    @test occursin("version: 2.1.1", bumped)
+    @test occursin("date-released: \"2026-09-21\"", bumped)
+    @test !occursin("2026-09-17", bumped)
+    @test occursin("cff-version: 1.2.0", bumped)
+
+    @test_throws ErrorException bump_citation(
+        "title: BVDOutbreakSize\n", "2.1.1", "2026-09-21"
+    )
+end
+
+@testitem "the shipped news.md, Project.toml and CITATION.cff agree" begin
     include(joinpath(@__DIR__, "..", "scripts", "release_notes.jl"))
 
     ## The repository's own files, so a release section that drifts from the
@@ -96,4 +118,11 @@ end
     version = project_version(read(PROJECT_PATH, String))
     news = read(NEWS_PATH, String)
     @test !isempty(release_notes(news, version))
+
+    ## CITATION.cff cites the last release, so it sits at or below the
+    ## version the repository is working towards, never above it.
+    cff = read(CITATION_PATH, String)
+    cited = match(r"^version:[ \t]*(\S+)"m, cff)
+    @test cited !== nothing
+    @test VersionNumber(cited.captures[1]) <= VersionNumber(version)
 end
