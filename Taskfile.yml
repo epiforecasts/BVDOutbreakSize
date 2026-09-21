@@ -67,12 +67,15 @@ tasks:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
 
-  benchmark-compare:
+  benchmark-pair:
     desc: >
-      Turn two saved result files into the Markdown comparison CI posts on a
-      PR. Usage: task benchmark-compare -- pr.json main.json comment.md.
+      Reproduce the CI comparison locally: benchmark two revisions of this
+      repository in one process and write the PR comment. Usage:
+      task benchmark-pair -- <base-rev> <head-rev>. Worktrees go under
+      .benchmark-worktrees/ and results under benchmark-results/. Costs
+      roughly twice a single `task benchmark`.
     cmds:
-      - julia --project=benchmark benchmark/compare.jl {{.CLI_ARGS}}
+      - ./scripts/run_benchmark_pair.sh {{.CLI_ARGS}}
 
   docs:
     desc: >
