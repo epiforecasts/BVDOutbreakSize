@@ -953,43 +953,9 @@ from it. Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
-Per-vintage laboratory positivity for the confirmed-case stream, in
-partially-pooled non-centred form. The confirmed positives in each
-laboratory window are scored as a `Binomial` of the observed
-specimens-analysed denominator (see [`confirmed_cases_model`](@ref)), so
-the positivity is the probability a tested specimen is confirmed. The
-per-window logit positivity shares a baseline `q_mu` and is perturbed by
-non-centred deviations `z_q` scaled by the pooling SD `σ_q`, so a window
-with little data is shrunk toward the baseline while a window with a
-strong signal can depart from it. `σ_q → 0` recovers a single shared
-positivity. The baseline prior is centred on the cut-off cumulative
-positivity (≈ 0.28, that is 210 / 755 on the 28 May data) on the logit
-scale. Conditioning on the observed denominator and giving the positivity
-its own random effect decouples the confirmed counts from the
-multiplicative ascertainment ridge `p_drc · s_test · τ_test`, so the
-outbreak size is pinned by the deaths and exports streams rather than
-forced through the laboratory positivity. Returns `(; p_pos, q_mu, σ_q)`
-with `p_pos` a length-`nv` vector.
-"""
-@model function confirmed_positivity_model(
-        nv::Integer;
-        baseline_prior = Normal(logit(0.28), 0.7),
-        pooling_prior = truncated(Normal(0.0, 1.0); lower = 0)
-    )
-    m = max(nv, 1)
-    q_mu ~ baseline_prior
-    σ_q ~ pooling_prior
-    z_q ~ product_distribution(fill(Normal(0, 1), m))
-    logit_p = q_mu .+ σ_q .* z_q[1:nv]
-    p_pos := logistic.(logit_p)
-    return (; p_pos, q_mu, σ_q)
-end
-
-"""
-Severity-enrichment prior for the composition-linked confirmed positivity
-(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
-that mode the per-window tested BVD share is not a free random effect. It
-is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
+Severity-enrichment prior for the confirmed positivity in
+[`confirmed_cases_model`](@ref). The per-window tested BVD share is the
+suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
 λ_bg_v)` over each laboratory window, upsampled by a severity enrichment
 that decays as testing widens:
 
