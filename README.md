@@ -14,16 +14,25 @@ The rendered report fills in the build date and the exact data cut-off automatic
 
 **Start here:**
 [summary dashboard](https://epiforecasts.io/BVDOutbreakSize/stable/summary) ·
-[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
+[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/forecast) ·
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/limitations).
 
+**Full results:**
+[national](https://epiforecasts.io/BVDOutbreakSize/stable/analysis) ·
+[by province](https://epiforecasts.io/BVDOutbreakSize/stable/province) ·
+[forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecast) ·
+[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation).
+
 **Go deeper:**
-[full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results) ·
 [methods](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Methods) ·
+[how this differs from McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-published-estimates) ·
+[reproduction number over time](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Reproduction-number-over-time) ·
+[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Posterior-predictive-checks) ·
+[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation#Forecast-scoring-across-releases) ·
+[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation#Frozen-fit-forecast-evaluation) ·
 [how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
-[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Forecast-scoring-across-releases) ·
 [estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
-[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
+[estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
 [aim and origins](https://epiforecasts.io/BVDOutbreakSize/stable/aim).
 
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.

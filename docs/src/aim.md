@@ -9,5 +9,5 @@ What the estimate can and cannot support is set out in the [limitations](limitat
 This work began as a replication of the [mccabe2026](@citet) report.
 It has since evolved into a real-time joint Bayesian estimate of the current outbreak size.
 The model is a discrete-time renewal process with a time-varying reproduction number, fitted to more of the available data streams than the original.
-What is shared with that report and what has changed is set out component by component in the [differences from McCabe et al.](@ref "Differences from McCabe et al.").
+What is shared with that report and what has changed is set out component by component in the [comparison with published estimates](@ref "Comparison with published estimates").
 The [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") sets the current estimates against theirs.
