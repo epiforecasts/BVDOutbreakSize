@@ -6,6 +6,29 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v2.1.1
+
+Changes since v2.1.0.
+
+### Infrastructure
+
+- A release is cut by commenting `@release` on any issue or pull request
+  (#767). The notes are the newest `docs/src/news.md` section, which is what
+  they have always been, copied across by hand. The comment tags `main`,
+  publishes the release and opens a pull request bumping the version and
+  starting the next section, so the following change has a heading to write
+  under. `@release minor` and `@release major` choose the size of that bump.
+- `scripts/release_notes.jl` holds the text handling behind it and runs
+  locally through `task release-notes`, so the notes can be read before
+  anything is published.
+- Pushing a version tag starts a second documentation build of the commit
+  that was just pushed to `main`. The two builds used to run at the same
+  time and each refit every model; for v2.1.0 the tag build's joint fit ran
+  past the job's time limit, so no `results-v2.1.0` release was published.
+  The tag build now waits for the `main` build to finish and reuses its
+  cached fits (#765). Each fit job's summary also names the runner's CPU,
+  because the same fit runs up to half again as long on some runners.
+
 ## v2.1.0
 
 Changes since v2.0.0.
@@ -90,6 +113,30 @@ quality measured on them, with that convergence failure in mind.
 
 ### Infrastructure
 
+- The AD benchmark times both revisions in one job on one machine (#763).
+Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
+Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+AirspeedVelocity runs the two arms and `benchmark/ci/comment.jl` reports them, replacing `benchmark/compare.jl`.
+The workflow materialises both revisions as git worktrees and benchmarks them from those paths, because this repository declares a submodule and Pkg cannot check out a tree that does.
+Each arm runs its own suite, fixtures and benchmark environment, so a pull request's changes to the suite are exercised by that pull request.
+`task benchmark-pair` runs the same comparison locally.
+- The benchmark comment measures its neutral band from the run rather than fixing it at 5% (#763).
+The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
+That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
+- The benchmark comment drops AirspeedVelocity's package-load row (#763).
+BenchmarkTools runs a warmup evaluation before it samples and that warmup performs the load, so the in-process sample times a warm re-import.
+Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
+- The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
+`key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
+- The documentation build fails when the headline joint fit has not converged,
+  and says so in a comment on the pull request that is edited in place on each
+  build (#764). The verdict carries the headline diagnostics, which thresholds
+  were breached and the worst-mixing parameters and divergence locations the
+  sensitivity report breaks down in full. It is a leaf job, so the preview
+  still builds and still comments: the pages are how the failure is diagnosed.
+  v2.0.0 was published with a joint fit that had not converged and nothing in
+  the build said so.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17

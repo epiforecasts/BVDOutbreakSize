@@ -52,6 +52,11 @@ logs/
 # between two runs, never stored.
 /results.json
 
+# `task benchmark-pair` writes both arms' results here and checks the two
+# revisions out under .benchmark-worktrees/.
+/benchmark-results/
+/.benchmark-worktrees/
+
 *.html
 
 # Transient docs build logs captured at the repo root
