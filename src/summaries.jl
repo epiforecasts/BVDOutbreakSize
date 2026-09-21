@@ -239,10 +239,14 @@ end
 # divergence flag. A divergence count means little without it: six
 # divergences in 3200 draws and six in twelve are not the same fit. Zero
 # when the chain carries no sampler extras.
+#
+# Draws whose flag is missing are left out, as they are from the divergence
+# count above, so the two are over the same set and their ratio is the
+# divergence rate among the draws whose outcome is known.
 function _num_draws(chn)
     for e in FlexiChains.extras(chn)
         e.name === :numerical_error || continue
-        return length(vec(chn[e]))
+        return count(!ismissing, vec(chn[e]))
     end
     return 0
 end

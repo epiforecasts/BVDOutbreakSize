@@ -139,3 +139,57 @@ end
     @test occursin("Worst-mixing parameters of `demo`", md)
     @test occursin("ess_bulk", md)
 end
+
+@testitem "the report uses the thresholds it was handed throughout" begin
+    using DataFrames: DataFrame
+    include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
+
+    ## The grouped table counts elements past an R-hat threshold, and that
+    ## threshold has to be the one the rest of the report is quoting. A
+    ## report whose footer and whose tables disagree about what counts as a
+    ## bad R-hat says two things at once.
+    per_parameter = DataFrame(
+        parameter = ["a", "b"], index = [0, 0],
+        rhat = [1.3, 1.01], ess_bulk = [12.0, 900.0],
+        ess_tail = [15.0, 800.0]
+    )
+    d = (
+        max_rhat = 1.3, min_ess_bulk = 12.0, min_ess_tail = 15.0,
+        n_divergent = 0, n_draws = 3200,
+    )
+    thresholds = (
+        fail = (
+            rhat = 1.25, ess_bulk = 25.0, ess_tail = 25.0,
+            divergent_fraction = 0.05,
+        ),
+        warn = (
+            rhat = 1.2, ess_bulk = 100.0, ess_tail = 100.0,
+            divergent_fraction = 0.01,
+        ),
+    )
+    check = (;
+        id = "joint", diagnostics = d, per_parameter, chain = nothing,
+        convergence_verdict(d; thresholds = thresholds)...,
+    )
+    md = convergence_markdown([check]; thresholds = thresholds)
+    @test occursin("above_1.2", md)
+    @test !occursin("above_1.05", md)
+    @test occursin("past the failure threshold 1.25", md)
+end
+
+@testitem "a malformed threshold variable names itself" begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
+
+    ## The gate dies before writing its report, so the parse failure is all
+    ## anyone sees. It has to say which variable was wrong.
+    withenv("BVD_CONVERGENCE_FAIL_RHAT" => "1,1") do
+        e = try
+            convergence_thresholds()
+            nothing
+        catch err
+            err
+        end
+        @test e isa ErrorException
+        @test occursin("BVD_CONVERGENCE_FAIL_RHAT", e.msg)
+    end
+end

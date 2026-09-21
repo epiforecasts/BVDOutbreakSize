@@ -257,6 +257,17 @@ jobs:
   convergence:
     name: Check joint convergence
     needs: fit
+    # `always()` rather than the default, which is `success()`. The verdict is
+    # one comment edited in place, so a build where this job never ran leaves
+    # the previous build's verdict on the thread reading as current: "no new
+    # comment" and "still converged" look the same. The fit matrix is
+    # `fail-fast: false`, so one failed leg would otherwise skip this job
+    # silently. Running anyway reaches the steps below, which find no fit and
+    # say the check could not be made. `cancelled()` is excluded because a
+    # superseded run has nothing to report.
+    if: >-
+      !cancelled() &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -305,14 +316,10 @@ jobs:
         run: julia --project=docs docs/fits/check_convergence.jl
       # One comment per pull request, edited in place on every build, so the
       # thread carries the current verdict rather than one comment per push.
-      # Dependabot-triggered workflows run with a read-only GITHUB_TOKEN, so
-      # they get the gate but not the comment; see `combine`. A comment that
-      # cannot be posted must not decide the verdict either, hence
+      # A comment that cannot be posted must not decide the verdict, hence
       # `continue-on-error` — the last step is what fails the build.
       - name: Comment the convergence verdict
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.actor != 'dependabot[bot]'
+        if: github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v9
         with:

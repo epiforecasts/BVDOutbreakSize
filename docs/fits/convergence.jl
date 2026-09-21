@@ -35,10 +35,16 @@ const CONVERGENCE_WARN = (
 ## be worse.
 const CONVERGENCE_IDS = ["joint"]
 
-_env_number(name, default) = (
-    v = strip(get(ENV, name, ""));
-    isempty(v) ? default : parse(Float64, v)
-)
+## A threshold read from the environment. A malformed value names the
+## variable it came from: the parse failure alone says only that some number
+## could not be read, and the report is never written to say which.
+function _env_number(name, default)
+    v = strip(get(ENV, name, ""))
+    isempty(v) && return default
+    n = tryparse(Float64, v)
+    n === nothing && error("$name is \"$v\", which is not a number")
+    return n
+end
 
 """
     convergence_thresholds() -> (; fail, warn)
@@ -178,7 +184,7 @@ end
 ## a comment. Ranked by bulk effective sample size from the lowest up, then
 ## grouped so a whole badly mixing vector reads as one line, then where the
 ## divergent transitions concentrate.
-function _culprit_tables(io, c; n::Integer = 10)
+function _culprit_tables(io, c, thresholds; n::Integer = 10)
     c.per_parameter === nothing && return nothing
     isempty(c.per_parameter) && return nothing
     println(
@@ -191,7 +197,7 @@ function _culprit_tables(io, c; n::Integer = 10)
         io, markdown_table(
             family_diagnostics_table(
                 c.per_parameter; n = n,
-                rhat_threshold = convergence_thresholds().warn.rhat
+                rhat_threshold = thresholds.warn.rhat
             )
         )
     )
@@ -259,7 +265,7 @@ function convergence_markdown(
             println(io, "- warn — ", m)
         end
         println(io)
-        _culprit_tables(io, c)
+        _culprit_tables(io, c, thresholds)
     end
     println(
         io,
