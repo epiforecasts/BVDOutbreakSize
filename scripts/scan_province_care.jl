@@ -131,12 +131,23 @@ The lines of the care section, from its heading to (not including) the
 "Défis" subsection, found by title rather than number since it has been
 numbered 1.5, 1.6 and 1.7 across vintages.
 """
+## A section number's own components never reach double digits in these
+## reports (the deepest seen is "1.5.2"), unlike a wrapped sentence that
+## happens to start with a number followed by an upper-case acronym
+## ("34 PPL ont bénéficié de trois repas chauds ..."), which otherwise
+## satisfies the heading regex just as well as a real heading does and
+## ends the section early (SitRep 126's Bas-Uélé/Tshopo/Sud-Kivu bullets,
+## cut off right after this exact phrasing).
+plausible_heading_number(s::AbstractString) =
+    all(p -> (v = tryparse(Int, p); v !== nothing && v <= 20), split(s, '.'))
+
 function care_lines(lines::Vector{String})
     head = r"^[^0-9\p{L}]*(\d+(?:\.\d+)*)\.?\s*[-—–]?\s*(\p{Lu}.*)$"
     start, num = nothing, ""
     for (i, l) in enumerate(lines)
         m = match(head, l)
         m === nothing && continue
+        plausible_heading_number(m[1]) || continue
         t = fold(m[2])
         (
             startswith(t, "continuite des soins") ||
@@ -150,7 +161,7 @@ function care_lines(lines::Vector{String})
     for l in lines[(start + 1):min(start + 60, length(lines))]
         f = fold(l)
         m = match(head, l)
-        if m !== nothing
+        if m !== nothing && plausible_heading_number(m[1])
             (startswith(m[1], num) && !occursin("defis", fold(m[2]))) ||
                 break
         end
