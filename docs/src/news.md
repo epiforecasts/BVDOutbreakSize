@@ -82,6 +82,13 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
+- The report is five pages rather than two, grouped in the navigation as
+  Estimates (summary, national, provinces) and Forecasts (forecasts,
+  evaluation), with the sensitivity and comparison analyses under Details
+  (#782). Each renders as its own CI job from the same cached fits.
+- The McCabe comparison is a table in the methods, one row per component
+  linking to the section that specifies it, rather than bullets in the
+  framing (#782).
 - The summary dashboard is shorter (#782). The fit diagnostics are behind a
   dropdown, and the per-province infections and parameter panels and the
   per-stream reproduction number are linked rather than repeated. The
