@@ -1,6 +1,6 @@
 @testitem "precompile workload is the method instance the fit builds" begin
     using BVDOutbreakSize: precompile_workload_joint, production_joint,
-        joint_fit_args, patch_fit_args, default_breakpoint, load_observations
+        default_breakpoint, load_observations
 
     obs = load_observations()
     bp = default_breakpoint(obs)
