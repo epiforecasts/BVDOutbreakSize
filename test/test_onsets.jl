@@ -72,6 +72,8 @@ end
     @test h.report_days == Int[]
     @test h.prev_report_days == Int[]
     @test h.increments == Int[]
+    @test h.noise_sd == Float64[]
+    @test h.vintage_noise_sd == Float64[]
     @test ismissing(h.last_total)
 end
 
@@ -222,6 +224,86 @@ end
     ## into the scored increments rather than being clamped.
     @test any(<(0), h.increments)
     @test h.last_total == 34   # V3's cumulative total
+end
+
+@testitem "load_onset_curve: noise_sd and vintage_noise_sd shapes" begin
+    ## Two vintages with extents wide enough, and running close enough to
+    ## their own report date, to carry both a settled region (for
+    ## calibration) and a non-empty scored window: report days Mar 1
+    ## (day 60) extent onset days 1-58, and Mar 6 (day 65) extent 1-63.
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date, Day
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    seeding = Date("2026-01-01")
+    lines = [
+        "sitrep,report_date,onset_date,confirmed_alive,confirmed_dead," *
+            "confirmed_total",
+    ]
+    for u in 1:58
+        d = seeding + Day(u - 1)
+        push!(lines, "001,2026-03-01,$d,0,0,1")
+    end
+    for u in 1:63
+        d = seeding + Day(u - 1)
+        push!(lines, "002,2026-03-06,$d,0,0,1")
+    end
+    write(path, join(lines, "\n"))
+
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-06"), seeding, max_delay = 10
+    )
+    @test !isempty(h.increments)
+    @test length(h.noise_sd) == length(h.increments)
+    @test length(h.vintage_noise_sd) == 2
+    ## The first vintage has no predecessor to settle against.
+    @test isnan(h.vintage_noise_sd[1])
+    ## The second has >10 settled cells (its predecessor prints the same
+    ## count on every day), so it calibrates to an exact zero.
+    @test h.vintage_noise_sd[2] == 0.0
+    @test all(==(0.0), h.noise_sd[h.report_days .== 65])
+end
+
+@testitem "load_onset_curve: settled noise SD recovers the injected spread" begin
+    ## Three vintages: the first two print identical counts (so V2's
+    ## calibrated SD is ~0), the third adds iid noise of SD 10 to every
+    ## bar in its settled region (so V3's calibrated SD recovers ~10).
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date, Day
+    using Random: MersenneTwister, randn
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    seeding = Date("2026-01-01")
+    base = 200   # high enough that a SD-10 perturbation rarely goes negative
+    rng = MersenneTwister(20260921)
+    lines = [
+        "sitrep,report_date,onset_date,confirmed_alive,confirmed_dead," *
+            "confirmed_total",
+    ]
+    for u in 1:58
+        d = seeding + Day(u - 1)
+        push!(lines, "001,2026-03-01,$d,0,0,$base")
+    end
+    for u in 1:63
+        d = seeding + Day(u - 1)
+        push!(lines, "002,2026-03-06,$d,0,0,$base")
+    end
+    for u in 1:68
+        d = seeding + Day(u - 1)
+        noisy = round(Int, base + 10 * randn(rng))
+        push!(lines, "003,2026-03-11,$d,0,0,$noisy")
+    end
+    write(path, join(lines, "\n"))
+
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-11"), seeding, max_delay = 10
+    )
+    @test length(h.vintage_noise_sd) == 3
+    @test isnan(h.vintage_noise_sd[1])
+    @test h.vintage_noise_sd[2] == 0.0
+    @test 5.0 <= h.vintage_noise_sd[3] <= 20.0
 end
 
 @testitem "load_onset_curve: horizon window excludes settled onset dates" begin
@@ -730,6 +812,32 @@ end
     @test s[2] > s[1]
 end
 
+@testitem "onset_report_scales threads cell_sd per cell" begin
+    using BVDOutbreakSize: onset_report_scales, onset_report_scale
+
+    level_cur = [0.0, 100.0]
+    level_prev = [0.0, 80.0]
+    means = level_cur .- level_prev
+    prev_idx = [0, 5]
+    cell_sd = [15.0, NaN]   # cell 1 above its floor, cell 2 uncalibrated
+    s = onset_report_scales(
+        means, level_cur, level_prev, prev_idx; cell_sd
+    )
+    @test s[1] ≈ onset_report_scale(
+        means[1], level_cur[1], level_prev[1], 1; cell_sd = 15.0
+    )
+    ## The uncalibrated NaN falls back to the plain (no-`cell_sd`) scale.
+    @test s[2] ≈ onset_report_scale(means[2], level_cur[2], level_prev[2], 2)
+
+    ## A scalar `cell_sd` broadcasts to every cell.
+    s_scalar = onset_report_scales(
+        means, level_cur, level_prev, prev_idx; cell_sd = 15.0
+    )
+    @test s_scalar[2] ≈ onset_report_scale(
+        means[2], level_cur[2], level_prev[2], 2; cell_sd = 15.0
+    )
+end
+
 @testitem "onset_report_scales floors a negative counting term" begin
     ## `means` is non-negative by construction (F is monotone in δ), but a
     ## degenerate call must not take the square root of a negative variance.
@@ -738,6 +846,44 @@ end
     s = onset_report_scales([-5.0], [1.0], [6.0], [3])
     @test isfinite(s[1])
     @test s[1] > 0
+end
+
+@testitem "onset_report_scale: cell_sd overrides above the pixel floor" begin
+    using BVDOutbreakSize: onset_report_scale
+
+    μ, level_cur, level_prev, reads = 20.0, 100.0, 80.0, 2
+    baseline = onset_report_scale(μ, level_cur, level_prev, reads)
+
+    ## Below the fixed pixel floor (`sqrt(2.1^2 * 2) ≈ 2.97`): the floor
+    ## still wins, so the scale matches the old (no-`cell_sd`) value
+    ## exactly.
+    below = onset_report_scale(
+        μ, level_cur, level_prev, reads; cell_sd = 1.0
+    )
+    @test below == baseline
+
+    ## Above the floor: `cell_sd` replaces the pixel term outright.
+    above = onset_report_scale(
+        μ, level_cur, level_prev, reads; cell_sd = 15.0
+    )
+    @test above ≈ sqrt(max(μ, 0.0) + 15.0^2)
+
+    ## Also above the floor, with a non-zero `scan_sd`, so both terms of
+    ## the general formula are exercised together.
+    above_scan = onset_report_scale(
+        μ, level_cur, level_prev, reads;
+        cell_sd = 15.0, scan_sd = 0.04
+    )
+    @test above_scan ≈ sqrt(
+        max(μ, 0.0) + 15.0^2 + 0.04^2 * (level_cur^2 + level_prev^2)
+    )
+
+    ## An uncalibrated pair reports `NaN`, which must fall back to the
+    ## fixed floor rather than propagate.
+    nan_cell = onset_report_scale(
+        μ, level_cur, level_prev, reads; cell_sd = NaN
+    )
+    @test nan_cell == baseline
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin

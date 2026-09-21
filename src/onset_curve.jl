@@ -113,6 +113,38 @@ function _dedup_onset_blocks(blocks)
 end
 
 """
+    _settled_noise_sd(snap, snap_prev, cov_lo, cov_hi, settle_from, _date)
+
+Robust noise SD for one consecutive vintage pair, from the cells the
+reporting signal has already settled in: onset dates `u` in `cov_lo:cov_hi`
+(both vintages' printed extent) with `u < settle_from`, well beyond the
+scored window. There the true increment is ~0, so the spread of
+`cur[u] - prev[u]` across these cells is digitisation noise alone, read with
+a median absolute deviation (scaled `1.4826 * mad` estimates a Normal SD and
+is not pulled around by the rare cell still mid-settling) rather than the
+plain SD a handful of outliers would inflate. Returns `NaN` when fewer than
+10 settled cells are available, meaning "no calibration"; the caller falls
+back to the fixed pixel-noise term. Pure, top-level.
+"""
+function _settled_noise_sd(
+        snap, snap_prev, cov_lo::Integer, cov_hi::Integer,
+        settle_from::Integer, _date::Function
+    )
+    hi = min(cov_hi, settle_from - 1)
+    hi < cov_lo && return NaN
+    vals = Float64[]
+    for u in cov_lo:hi
+        d = _date(u)
+        prev = get(snap_prev.onsets, d, 0)
+        cur = get(snap.onsets, d, 0)
+        push!(vals, cur - prev)
+    end
+    length(vals) < 10 && return NaN
+    med = median(vals)
+    return 1.4826 * median(abs.(vals .- med))
+end
+
+"""
     load_onset_curve(path; cutoff, seeding,
         max_delay = ONSET_REPORT_MAX_DELAY, horizon = max_delay)
 
@@ -176,11 +208,26 @@ while dropping settled dates that carry only digitisation noise. The
 settled dates' levels are given up along with their noise, so the stream
 informs the onset curve over the trailing four weeks only.
 
+Each pair's own noise floor is read off its settled cells: onset dates both
+vintages print, at a delay more than a week past `horizon`
+(`R - u > horizon + 7`), so well outside the scored window where the true
+increment has levelled off to ~0. The spread of `cur[u] - prev[u]` there is
+read with a robust median-absolute-deviation SD
+([`_settled_noise_sd`](@ref)), needing at least 10 such cells or the pair
+gets `NaN`, meaning "not calibrated"; the likelihood then falls back to its
+fixed pixel-noise term. The first vintage has no predecessor to settle
+against, so it is always `NaN`.
+
 Returns `(; onset_days, report_days, prev_report_days, increments,
-total_days, total_counts, last_total)`. The first four are length-matched
-`Vector{Int}`s (1-based grid day-indices for the first three, the observed
-increment for the fourth) ready for [`onset_reporting_model`](@ref).
-`total_days` and `total_counts` are the cumulative confirmed total printed
+noise_sd, vintage_noise_sd, total_days, total_counts, last_total)`. The
+first four are length-matched `Vector{Int}`s (1-based grid day-indices for
+the first three, the observed increment for the fourth) ready for
+[`onset_reporting_model`](@ref). `noise_sd` is a `Vector{Float64}` the same
+length, the calibrated noise SD of the cell's own vintage pair (`NaN`
+where uncalibrated). `vintage_noise_sd` is a `Vector{Float64}`, one entry
+per surviving vintage in vintage order (`NaN` for the first), for
+reporting. `total_days` and `total_counts` are the cumulative confirmed
+total printed
 by each surviving vintage, keyed on its report day, in the same
 `(days, counts)` shape every other stream's history carries. They are
 built from every printed bar of a vintage, not from the scored cells,
@@ -208,6 +255,7 @@ function load_onset_curve(
     noop = (;
         onset_days = Int[], report_days = Int[],
         prev_report_days = Int[], increments = Int[],
+        noise_sd = Float64[], vintage_noise_sd = Float64[],
         total_days = Int[], total_counts = Int[], last_total = missing,
     )
     isfile(path) || return noop
@@ -238,6 +286,8 @@ function load_onset_curve(
     report_days = Int[]
     prev_report_days = Int[]
     increments = Int[]
+    noise_sd = Float64[]
+    vintage_noise_sd = fill(NaN, length(snaps))
     H = max(Int(horizon), 1)
     for s in eachindex(snaps)
         R = _idx(snaps[s].report_date)
@@ -250,6 +300,17 @@ function load_onset_curve(
             cov_lo = max(cov_lo, extents[s - 1][1])
             cov_hi = min(cov_hi, extents[s - 1][2])
         end
+        ## This pair's own noise floor, from cells well past the scored
+        ## window (delay > horizon + 7) where the true increment has
+        ## settled to ~0. The first vintage has no predecessor to settle
+        ## against and stays `NaN`. See [`_settled_noise_sd`](@ref).
+        if s > 1
+            vintage_noise_sd[s] = _settled_noise_sd(
+                snaps[s], snaps[s - 1], cov_lo, cov_hi,
+                R - Int(horizon) - 7, _date
+            )
+        end
+        pair_sd = vintage_noise_sd[s]
         lo = max(R - H + 1, 1, cov_lo)
         ## A cell differences this vintage against its predecessor, so the
         ## predecessor must have been able to report that onset date. An
@@ -266,6 +327,7 @@ function load_onset_curve(
             push!(report_days, R)
             push!(prev_report_days, Rprev)
             push!(increments, cur - prev)
+            push!(noise_sd, pair_sd)
         end
     end
     ## Per-vintage cumulative confirmed total, over every printed bar rather
@@ -276,6 +338,7 @@ function load_onset_curve(
     total_counts = [sum(values(snap.onsets)) for snap in snaps]
     return (;
         onset_days, report_days, prev_report_days, increments,
+        noise_sd, vintage_noise_sd,
         total_days, total_counts, last_total = total_counts[end],
     )
 end

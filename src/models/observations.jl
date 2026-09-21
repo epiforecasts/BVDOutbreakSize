@@ -3200,7 +3200,7 @@ end
 
 """
     onset_report_scales(means, level_cur, level_prev, prev_report_idx;
-        pixel_sd = 2.1, scan_sd = 0.0)
+        pixel_sd = 2.1, scan_sd = 0.0, cell_sd = 0.0)
 
 Per-cell observation scale for the reporting-triangle increment likelihood,
 the square root of a variance built from three sources.
@@ -3214,10 +3214,17 @@ the square root of a variance built from three sources.
     has counting variation of about `sqrt(40) ≈ 6`, far larger than the
     reading error below, and scoring it on reading error alone would let 28
     level cells dominate the joint likelihood.
-  - Pixel-reading noise, roughly constant per bar read (`pixel_sd`, ≈2.1
-    cases). An increment differences two independent reads, so its variance
-    doubles. The first snapshot's level cells read only one bar, so theirs
-    does not.
+  - Reading noise, the larger of a fixed per-bar floor (`pixel_sd`, ≈2.1
+    cases; an increment differences two independent reads, so its variance
+    doubles) and a per-cell calibrated noise SD (`cell_sd`,
+    [`load_onset_curve`](@ref)'s `noise_sd`, the settled-cell spread
+    measured directly off that vintage pair). The floor exists for pairs
+    `cell_sd` was not calibrated for (`NaN`, or a non-finite value, reads as
+    `0` and defers to the floor); where it was, the settled-cell spread
+    dominates once digitisation noise outgrows the fixed floor, as it does
+    in the later, blurrier scans, instead of leaving those cells
+    over-weighted. The first snapshot's level cells read only one bar, so
+    the fixed floor there does not double.
   - An optional multiplicative level error `scan_sd` on each read's own
     cumulative level, off by default. A bar's height is read in pixels and
     converted with the figure's own axis scale, so the multiplicative part
@@ -3229,7 +3236,8 @@ the square root of a variance built from three sources.
     fitted per-scan level SD here.
 
 ```math
-\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + \\text{pixel\\_sd}^2 \\cdot r_i +
+\\sigma_i = \\sqrt{\\max(\\mu_i, 0) +
+    \\max(\\text{pixel\\_sd}^2 \\cdot r_i, \\text{cell\\_sd}_i^2) +
     \\text{scan\\_sd}^2 \\cdot
     (\\ell_{\\text{cur},i}^2 + \\ell_{\\text{prev},i}^2)},
 \\qquad r_i = \\begin{cases} 1 & \\text{prev\\_report\\_idx}_i = 0
@@ -3245,10 +3253,12 @@ formula covers both cell kinds without a branch.
 Every magnitude entering the scale is modelled (`means`, `level_cur`,
 `level_prev` from [`onset_report_moments`](@ref)), never the raw observed
 count: feeding the likelihood's own noisy observation back into its variance
-would bias towards overconfidence on cells that happen to undershoot. The
-caller ([`onset_reporting_model`](@ref)) applies a sampled multiplicative
-slack on top, so this fixed, measurement-derived formula is correctable by
-the data. Pure, top-level, single indexed loop.
+would bias towards overconfidence on cells that happen to undershoot.
+`cell_sd` is the one exception, since it is measured off the settled cells
+rather than the scored ones, so it carries no such feedback. The caller
+([`onset_reporting_model`](@ref)) applies a sampled multiplicative slack on
+top, so this fixed, measurement-derived formula is correctable by the data.
+Pure, top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
 parameter. `σ_mult` is the diagnostic for that shortfall, but read it in
@@ -3266,7 +3276,8 @@ function onset_report_scales(
         level_cur::AbstractVector,
         level_prev::AbstractVector,
         prev_report_idx::AbstractVector{<:Integer};
-        pixel_sd::Real = 2.1, scan_sd::Real = 0.0
+        pixel_sd::Real = 2.1, scan_sd::Real = 0.0,
+        cell_sd::Union{AbstractVector, Real} = 0.0
     )
     m = length(level_cur)
     T = promote_type(
@@ -3276,9 +3287,10 @@ function onset_report_scales(
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
         r = prev_report_idx[i] > 0 ? 2 : 1
+        c = cell_sd isa AbstractVector ? cell_sd[i] : cell_sd
         out[i] = onset_report_scale(
             means[i], level_cur[i], level_prev[i], r;
-            pixel_sd, scan_sd
+            pixel_sd, scan_sd, cell_sd = c
         )
     end
     return out
@@ -3286,28 +3298,33 @@ end
 
 """
     onset_report_scale(μ, level_cur, level_prev, reads;
-        pixel_sd = 2.1, scan_sd = 0.0)
+        pixel_sd = 2.1, scan_sd = 0.0, cell_sd = 0.0)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
 increment mean `μ` between two modelled cumulative levels `level_cur`
 and `level_prev` read off `reads` bars (`1` for a level differenced
 against an empty predecessor, `2` for a genuine correction). The vector
-method calls this, so the two cannot drift apart. The forecast
+method calls this, so the two cannot drift apart. `cell_sd` is that cell's
+calibrated noise SD; a non-finite value (the uncalibrated `NaN`
+[`load_onset_curve`](@ref) reports, or any other non-finite input) reads as
+`0` and so never overrides the fixed `pixel_sd` floor. The forecast
 ([`forecast_onsets`](@ref)) calls it directly to give a projected
 reporting increment the same observation scale the likelihood gives a
 scored cell. See [`onset_report_scales`](@ref) for what each term means.
 """
 function onset_report_scale(
         μ::Real, level_cur::Real, level_prev::Real,
-        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0
+        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0,
+        cell_sd::Real = 0.0
     )
     T = promote_type(
         typeof(float(μ)), typeof(float(level_cur)),
         typeof(float(level_prev)), typeof(float(pixel_sd)),
-        typeof(float(scan_sd))
+        typeof(float(scan_sd)), typeof(float(cell_sd))
     )
+    c = isfinite(cell_sd) ? cell_sd : zero(T)
     return sqrt(
-        max(μ, zero(T)) + pixel_sd^2 * reads +
+        max(μ, zero(T)) + max(pixel_sd^2 * reads, c^2) +
             scan_sd^2 * (level_cur^2 + level_prev^2)
     )
 end
@@ -3622,15 +3639,20 @@ only `confirmed_total` is fitted, since the confirmed-death stream already
 carries that split from other data.
 
 `onset_curve_history` is the [`load_onset_curve`](@ref) return shape
-`(; onset_days, report_days, prev_report_days, increments)`. The default
-empty history makes every loop here a no-op, the degrade-gracefully path
-for a missing input file. `increments` may be `missing` to sample instead
-of condition (the predictive-generator path).
+`(; onset_days, report_days, prev_report_days, increments)`, plus an
+optional `noise_sd` (per-cell calibrated noise SD, one per scored cell); a
+history without it, an old caller's or a synthetic one built by hand, reads
+as all-zero and every cell falls back to the fixed pixel-noise floor. The
+default empty history makes every loop here a no-op, the degrade-gracefully
+path for a missing input file. `increments` may be `missing` to sample
+instead of condition (the predictive-generator path).
 
 The observation scale ([`onset_report_scales`](@ref)) is built from
-counting variation, the measured per-bar pixel noise (`pixel_sd` ≈2.1
-cases/bar), and a sampled multiplicative slack `σ_mult ~ slack_prior`
-bounded below at 1. Each scale term is a lower bound on the truth, so a
+counting variation, reading noise (the larger of the measured per-bar pixel
+noise, `pixel_sd` ≈2.1 cases/bar, and each cell's own calibrated noise SD
+where [`load_onset_curve`](@ref) calibrated one), and a sampled
+multiplicative slack `σ_mult ~ slack_prior` bounded below at 1. Each scale
+term is a lower bound on the truth, so a
 fitted scale below them would let a couple of hundred cells outvote every
 other stream. A short onsets-only run pulls the slack to that bound; in the
 joint fit a `σ_mult` posterior well above 1 says the scale is missing a
@@ -3705,6 +3727,13 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     report_days = onset_curve_history.report_days
     prev_report_days = onset_curve_history.prev_report_days
     m = length(onset_days)
+    ## Per-cell calibrated noise SD ([`load_onset_curve`](@ref)'s
+    ## `noise_sd`), or an all-zero fallback for a caller whose history has
+    ## no such field (an old caller, or the synthetic histories the
+    ## predictive path builds), which defers every cell to the fixed
+    ## `pixel_sd` floor in `onset_report_scales` below.
+    cell_sd = hasproperty(onset_curve_history, :noise_sd) ?
+        onset_curve_history.noise_sd : zeros(m)
     ## Report-date grid the calendar walk spans: the union of every onset
     ## and report day a scored cell can touch. Falls back to a degenerate
     ## length-1 grid `[1, 1]` when the history is empty (the no-op path),
@@ -3765,7 +3794,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     )
     scales = onset_report_scales(
         scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd
+        scanned.level_prev, prev_report_days; pixel_sd, cell_sd
     )
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
