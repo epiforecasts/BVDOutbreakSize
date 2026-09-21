@@ -20,13 +20,20 @@ on:
 
 # Superseding a run is right on a pull request and destructive on `main`.
 # `github.head_ref` is set only on a pull request, so a push to `main`, a tag
-# or a manual run falls back to `github.run_id`.
-# That gives each of those a group of its own that nothing supersedes.
-# A cancelled run here also loses the hours of fitting it had done and the
-# results release it would have published.
+# or a manual run falls back to the commit SHA, and only a pull request
+# cancels the run before it. A cancelled run here also loses the hours of
+# fitting it had done and the results release it would have published.
+#
+# Keying the non-PR runs on the SHA rather than the run id queues a release
+# tag behind the `main` push of the same commit instead of racing it. The two
+# runs otherwise fit the same content-addressed keys side by side, neither
+# sees the other's cache until its own fit job has finished, and the tag's
+# joint fit, on a slower runner, was the one that hit the job's time limit
+# (v2.1.0). Queued, the tag run starts after the `main` run has written every
+# fit cache and restores all of them.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Compile pkgimages for a fixed set of x86-64 targets rather than for the
 # machine that happens to run the job. GitHub's ubuntu-latest fleet is mixed,
@@ -157,6 +164,15 @@ jobs:
         with:
           name: manifest
           path: .
+      # The fleet is mixed and the joint fit's wall clock varies by half
+      # again between runs of the same commit, so the summary names the CPU
+      # a refit ran on. Read it next to the fit's timing when a job runs long.
+      - name: Record the runner's CPU
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "\`fit ${{ matrix.id }}\` on $(julia -e 'print(Sys.CPU_NAME)')," \
+            "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)" \
+            >> "$GITHUB_STEP_SUMMARY"
       - name: Fit ${{ matrix.id }}
         if: steps.cache.outputs.cache-hit != 'true'
         env:

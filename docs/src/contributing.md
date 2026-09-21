@@ -84,10 +84,15 @@ To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or t
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
 
-The docs workflow also gates the build on the headline joint fit having converged.
-The `convergence` job reads the cached joint chain, applies the thresholds in `docs/fits/convergence.jl` and fails when they are breached, leaving the verdict as a comment on the pull request that later builds edit in place.
-It is a leaf job, so the report still renders and the preview still deploys and comments: the pages are how the failure is diagnosed.
-Run the same gate locally with `task check-convergence`, and change the thresholds with the `BVD_CONVERGENCE_FAIL_*` and `BVD_CONVERGENCE_WARN_*` environment variables.
+## Releases
+
+A release is cut by commenting `@release` on any issue or pull request.
+`.github/workflows/release.yml` tags `main`, publishes a GitHub release whose notes are the newest section of `docs/src/news.md`, and opens a pull request bumping the version and starting the next section.
+`@release minor` and `@release major` choose the size of that bump; plain `@release` is a patch.
+
+The version being released is the one already in `Project.toml`, and the newest news section must match it.
+Write the entry for a change under the open section at the top of `news.md` as part of the change itself.
+`task release-notes` prints what would be published, so the notes can be read before anything is cut.
 
 ## Model architecture
 
