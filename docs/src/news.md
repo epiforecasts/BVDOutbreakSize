@@ -13,7 +13,7 @@ Changes since v2.1.0.
 ### Infrastructure
 
 - A release tag's documentation run queues behind the `main` push of the same
-  commit rather than racing it (#PRNUM). The two runs used to refit every
+  commit rather than racing it (#765). The two runs used to refit every
   model side by side, and the tag's joint fit was the one to hit the job's
   time limit, which is why v2.1.0 published no tagged results release. Each
   refit job's summary now names the runner's CPU, so a slow fit can be told
