@@ -84,6 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.ids.outputs.ids }}
+      fit_hash: ${{ steps.fit_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -122,6 +123,34 @@ jobs:
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
+      # The fit cache key, computed by the same `fit_content_hash` the fits
+      # themselves are keyed on, so the Actions cache and the Julia cache
+      # cannot disagree about what invalidates a fit.
+      #
+      # They did. `hashFiles` was given `data/**`, which covers the generated
+      # scoring tables (`forecast_scores.csv`, `rt_by_release*.csv`,
+      # `released_estimates.csv` and the rest) and `data/README.md`, every one
+      # of which `FIT_DATA_EXCLUDE` drops from the Julia key. A rescore commit
+      # or a README edit therefore missed the Actions cache and refit
+      # everything, for inputs no fit reads. It also left out
+      # `docs/fits/cache.jl`, which is in `FIT_SOURCE_FILES` because it
+      # defines what the key covers, so a change to the hashing rule itself
+      # would not have busted the Actions key.
+      #
+      # Deriving the key rather than restating it is what stops the two
+      # drifting again: there is now one list, in `registry.jl`.
+      - id: fit_hash
+        run: |
+          set -euo pipefail
+          HASH=$(julia --project=docs -e '
+            include("docs/fits/registry.jl"); print(fit_content_hash())')
+          if [ -z "$HASH" ]; then
+            echo "::error::fit_content_hash produced nothing; refusing to" \
+              "key the fit cache on an empty string"
+            exit 1
+          fi
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Fit content hash: \`$HASH\`" >> "$GITHUB_STEP_SUMMARY"
       # Pin the resolved manifest for every downstream job so none re-resolves
       # (which would invalidate the shared compiled cache and could resolve a
       # different chains-library version than the fits were written with).
@@ -172,17 +201,16 @@ jobs:
           # 10 GB repo cache budget and evict the content-addressed fit chains.
           include-matrix: false
       # Content-addressed cache of the fit: reused whenever the fit-relevant
-      # source and data are unchanged, so a re-run refits nothing.
+      # source and data are unchanged, so a re-run refits nothing. The hash is
+      # the one `list` took from `fit_content_hash`, so this key and the
+      # `.jls` file name inside the cache are derived from the same list of
+      # inputs rather than from two lists that can drift.
       - name: Restore fit cache
         id: cache
         uses: actions/cache@v6
         with:
           path: logs/fit_cache
-          key: >-
-            fit-${{ matrix.id }}-${{ hashFiles(
-              'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
-              'src/constants.jl', 'src/data.jl', 'src/onset_curve.jl',
-              'docs/fits/registry.jl', 'data/**') }}
+          key: fit-${{ matrix.id }}-${{ needs.list.outputs.fit_hash }}
       # Restore the resolved manifest from `list` (after the depot cache step,
       # so this job's cache key still matches) so instantiate installs those
       # exact versions instead of re-resolving and recompiling.

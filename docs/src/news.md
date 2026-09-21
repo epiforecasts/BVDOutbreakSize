@@ -12,6 +12,14 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The fit cache key CI restores is the one the fits are keyed on (#739). The
+  Actions key hashed all of `data/`, including the generated scoring tables
+  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
+  rescore commit or a README edit missed the cache and refit every model for
+  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
+  the hashing rule itself would not have invalidated anything. The key is now
+  taken from `fit_content_hash` rather than restated, so there is one list.
+
 - The automatic version increment is gone (#607). It opened a patch-bump pull
   request on every push to `main` where the version had not changed, which is
   now both redundant and harmful: `@release` bumps the version as part of
