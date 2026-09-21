@@ -25,9 +25,14 @@ using JSON3
 
 const COMMENT_MARKER = "<!-- benchmark-comparison -->"
 
-## The load-time benchmark AirspeedVelocity injects. It is a different kind
-## of measurement from the suite's own, so it gets its own row and is kept
-## out of the band.
+## The load-time benchmark AirspeedVelocity injects. It is dropped rather
+## than reported. BenchmarkTools runs a warmup evaluation before it samples,
+## and that warmup performs the `using`, so the in-process sample times a
+## warm re-import rather than a load. The extra samples relaunch Julia and
+## do measure a load, but this comment reports a minimum, so the warm one
+## always wins: a run of this suite reported 358 μs against a spread of
+## 103%, which is the two kinds of sample being mixed. `run_pair.jl` asks
+## for one sample so the relaunches are not paid for either.
 const LOAD_KEY = "time_to_load"
 
 ## Band floor and ceiling. The floor keeps a quiet run from claiming a
@@ -41,7 +46,7 @@ const BAND_UNMEASURED = 0.05
 const BAND_QUANTILE = 0.9
 
 ## Summary row order: the AD-free evaluation first, then the backends.
-const GROUP_ORDER = ["Log density", "Mooncake", "Enzyme", "Package load"]
+const GROUP_ORDER = ["Log density", "Mooncake", "Enzyme"]
 
 # ---- loading ---------------------------------------------------------------
 
@@ -208,7 +213,6 @@ function render_table(rows, band)
 end
 
 function group_of(name)
-    is_load(name) && return "Package load"
     is_ad(name) && return String(split(name, " / ")[end])
     return "Log density"
 end
@@ -261,7 +265,7 @@ end
 ## The signal a flat table cannot show. Unrelated components share no cause,
 ## so one factor applied to all of them is the environment, not the diff.
 function spread_note(rows, band)
-    ratios = [r.time_ratio for r in rows if !isnan(r.time_ratio) && !is_load(r.name)]
+    ratios = [r.time_ratio for r in rows if !isnan(r.time_ratio)]
     length(ratios) < 4 && return ""
     lo, hi = minimum(ratios), maximum(ratios)
     med = percentile(ratios, 0.5)
@@ -311,16 +315,15 @@ function main(args)
     dir, pkg, base_rev, head_rev, out_file = args
     main_arm = load_arm(dir, pkg, base_rev)
     pr_arm = load_arm(dir, pkg, head_rev)
-    rows = build_rows(pr_arm, main_arm)
+    rows = filter(r -> !is_load(r.name), build_rows(pr_arm, main_arm))
 
-    suite_rows = filter(r -> !is_load(r.name), rows)
+    suite_rows = rows
     noise = percentile(filter(!isnan, [r.noise for r in suite_rows]), BAND_QUANTILE)
     band = isnan(noise) ? BAND_UNMEASURED : clamp(noise, BAND_FLOOR, BAND_CEILING)
 
     all_sorted = sort(rows; by = sort_key, rev = true)
-    eval_rows = filter(r -> !is_ad(r.name) && !is_load(r.name), all_sorted)
+    eval_rows = filter(r -> !is_ad(r.name), all_sorted)
     ad_rows = filter(r -> is_ad(r.name), all_sorted)
-    load_rows = filter(r -> is_load(r.name), all_sorted)
 
     io = IOBuffer()
     println(io, COMMENT_MARKER)
@@ -386,15 +389,6 @@ function main(args)
     )
     print(io, render_table(ad_rows, band))
     println(io, "\n</details>")
-
-    ## Package load is AirspeedVelocity's own benchmark, measured by
-    ## relaunching Julia rather than by sampling in process. It is kept out
-    ## of the band and out of the tables above.
-    if !isempty(load_rows)
-        println(io, "\n<details><summary><b>Package load</b></summary>\n")
-        print(io, render_table(load_rows, band))
-        println(io, "\n</details>")
-    end
 
     println(
         io,

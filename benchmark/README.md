@@ -69,6 +69,10 @@ Both are recoverable because AirspeedVelocity writes the raw per-sample times in
 
 The ratio stays `PR / main`, so below 1 means the pull request is faster.
 
+AirspeedVelocity's own package-load benchmark is dropped rather than reported.
+BenchmarkTools runs a warmup evaluation before it samples, and that warmup performs the `using`, so the in-process sample times a warm re-import rather than a load.
+Further samples relaunch Julia and do measure a load, but the comment reports a minimum, so the warm sample always wins: a run of this suite reported 358 μs at a spread of 103%, which is the two kinds of sample being mixed.
+
 ## What it still cannot resolve
 
 The band is a lower bound.

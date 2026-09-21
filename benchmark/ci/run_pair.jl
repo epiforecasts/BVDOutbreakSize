@@ -35,10 +35,13 @@ const PACKAGE = "BVDOutbreakSize"
 ## are `dirty`, so each one is renamed as soon as it is written.
 const DIRTY_RESULTS = "results_$(PACKAGE)@dirty.json"
 
-## Package-load samples per arm. Each one relaunches Julia and loads the
-## package, so the default of five is minutes of wall clock for a number
-## this comment reads as context rather than as a result.
-const LOAD_SAMPLES = 3
+## Package-load samples per arm. AirspeedVelocity always injects one
+## in-process load benchmark; anything beyond the first relaunches Julia to
+## take another. `comment.jl` drops the row either way, because the warmup
+## BenchmarkTools runs before it samples performs the `using` and leaves the
+## in-process sample timing a warm re-import. So ask for one and do not pay
+## for the relaunches.
+const LOAD_SAMPLES = 1
 
 """
     run_arm(label, worktree, results_dir) -> String
