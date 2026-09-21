@@ -2129,7 +2129,7 @@ alerts_validated_dead_community,118,2026-09-09,Ensemble,112,alerts,"Tableau 3, A
 alerts_investigated,118,2026-09-09,Ensemble,205,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
 alert_investigation_rate,116,2026-09-07,Ensemble,100.0,percent,"section 1.1.2 prose ('... suspects ont ete investigues (100 %) et 154 d'entre eux ont ete transferes vers les CT/CTE'); backfilled in the SitRep 118 update, omitted from the 116/117 update"
 alert_investigation_rate,117,2026-09-08,Ensemble,100.0,percent,"section 1.1.2 prose ('... investigues (100 %) et 229 d'entre eux ont ete transferes vers les CT/CTE'); backfilled in the SitRep 118 update, omitted from the 116/117 update"
-alert_investigation_rate,118,2026-09-09,Ensemble,100.0,percent,"section 1.1.2 prose ('Toutes les 386 alertes validees comme cas suspects ont ete investigues (100 %) et 205 d'entre eux ont ete transferes vers les CT/CTE')"
+alert_investigation_rate,118,2026-09-09,Ensemble,100.0,percent,section 1.1.2 prose ('Toutes les 386 alertes validees comme cas suspects ont ete investigues (100 %) et 205 d'entre eux ont ete transferes vers les CT/CTE')
 eds_death_alerts,118,2026-09-09,Ituri,96,alerts,"section 1.4.1 prose: '96 alertes ont ete enregistrees (dont 7 reports de la veille), 77 EDS realises (80,2 %) et 65 corps swabes'"
 eds_investigations_performed,118,2026-09-09,Ituri,77,investigations,see eds_death_alerts row note
 eds_corpses_swabbed,118,2026-09-09,Ituri,65,corpses,see eds_death_alerts row note
@@ -2139,19 +2139,19 @@ eds_corpses_swabbed,118,2026-09-09,Nord-Kivu,40,corpses,see eds_death_alerts row
 eds_death_alerts,118,2026-09-09,Tshopo,3,alerts,"section 1.4.1 prose: 'Le pilier EDS a recu 3 alertes (dont 2 reports), aucun EDS n'a ete realise et 2 corps n'ont pu etre swabes' - printed zero EDS, no corpse swabbed; Haut-Uele gives narrative only (no EDS figures this vintage)"
 eds_investigations_performed,118,2026-09-09,Tshopo,0,investigations,see eds_death_alerts row note
 eds_corpses_swabbed,118,2026-09-09,Tshopo,0,corpses,see eds_death_alerts row note
-poe_travellers_screened,118,2026-09-09,Ituri,142526,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_travellers_screened,118,2026-09-09,Ituri,142526,persons,Tableau 4 'Nombre de personnes passees aux PoE/PoC'
 poe_alertes_notifiees,118,2026-09-09,Ituri,1,alerts,Tableau 4 'Nombre d'alertes notifiees'
 poe_corpses_swabbed,118,2026-09-09,Ituri,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
-poe_travellers_screened,118,2026-09-09,Nord-Kivu,88843,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_travellers_screened,118,2026-09-09,Nord-Kivu,88843,persons,Tableau 4 'Nombre de personnes passees aux PoE/PoC'
 poe_alertes_notifiees,118,2026-09-09,Nord-Kivu,3,alerts,Tableau 4 'Nombre d'alertes notifiees'
 poe_corpses_swabbed,118,2026-09-09,Nord-Kivu,2,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
-poe_travellers_screened,118,2026-09-09,Sud-Kivu,7361,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_travellers_screened,118,2026-09-09,Sud-Kivu,7361,persons,Tableau 4 'Nombre de personnes passees aux PoE/PoC'
 poe_alertes_notifiees,118,2026-09-09,Sud-Kivu,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
 poe_corpses_swabbed,118,2026-09-09,Sud-Kivu,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
-poe_travellers_screened,118,2026-09-09,Tshopo,18072,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_travellers_screened,118,2026-09-09,Tshopo,18072,persons,Tableau 4 'Nombre de personnes passees aux PoE/PoC'
 poe_alertes_notifiees,118,2026-09-09,Tshopo,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
 poe_corpses_swabbed,118,2026-09-09,Tshopo,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
-poe_travellers_screened,118,2026-09-09,Haut-Uele,13336,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_travellers_screened,118,2026-09-09,Haut-Uele,13336,persons,Tableau 4 'Nombre de personnes passees aux PoE/PoC'
 poe_alertes_notifiees,118,2026-09-09,Haut-Uele,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
 poe_corpses_swabbed,118,2026-09-09,Haut-Uele,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
 poe_travellers_screened,118,2026-09-09,Ensemble,270138,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'; Bas-Uele column absent this vintage (section 1.2.2: 'absence de rapport PoE/PoC du Bas-Uele'), so no Bas-Uele row - silent, not zero"
@@ -2447,26 +2447,26 @@ alerts_investigated,122,2026-09-13,Tshopo,4,alerts,"Tableau 3 'Situation des ale
 alerts_investigated,122,2026-09-13,Ensemble,189,alerts,"Tableau 3 'Situation des alertes notifiees par province', 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
 alert_investigation_rate,122,2026-09-13,Ensemble,100.0,percent,"section 1.1.2 prose ('Ces derniers ont tous ete investigues (100 %), dont 189 ont ete referes vers les CT/CTE')"
 contact_tracing_coverage,122,2026-09-13,Ensemble,78.6,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Ensemble,21935,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Ensemble,27905,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Ensemble,21935,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Ensemble,27905,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Ituri,87.6,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Ituri,12561,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Ituri,14346,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Ituri,12561,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Ituri,14346,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Nord-Kivu,69.2,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Nord-Kivu,8146,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Nord-Kivu,11774,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Nord-Kivu,8146,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Nord-Kivu,11774,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Bas-Uele,83.2,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Bas-Uele,149,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Bas-Uele,179,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Bas-Uele,149,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Bas-Uele,179,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Tshopo,77.9,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Tshopo,218,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Tshopo,280,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Tshopo,218,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Tshopo,280,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Haut-Uele,65.7,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Haut-Uele,845,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Haut-Uele,1287,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Haut-Uele,845,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Haut-Uele,1287,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,122,2026-09-13,Sud Ubangi,41.0,percent,"section 1.1.2 prose: national 78,6 % (21 935/27 905, printed; the prose attributes the drop to weak data completeness in several Nord-Kivu and Haut-Uele zones); per-province: 87,6% Ituri (12561/14346), 83,2% Bas-Uele (149/179), 77,9% Tshopo (218/280), 69,2% Nord-Kivu (8146/11774), 65,7% Haut-Uele (845/1287), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed (last recorded vintage 121)."
-contacts_seen,122,2026-09-13,Sud Ubangi,16,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,122,2026-09-13,Sud Ubangi,39,persons,"see contact_tracing_coverage row note"
+contacts_seen,122,2026-09-13,Sud Ubangi,16,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,122,2026-09-13,Sud Ubangi,39,persons,see contact_tracing_coverage row note
 poe_alertes_notifiees,122,2026-09-13,Ituri,1,alerts,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre d'alertes notifiees row"
 poe_alertes_notifiees,122,2026-09-13,Nord-Kivu,0,alerts,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre d'alertes notifiees row"
 poe_alertes_notifiees,122,2026-09-13,Sud-Kivu,0,alerts,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre d'alertes notifiees row"
@@ -2537,32 +2537,32 @@ alerts_investigated,123,2026-09-14,Tshopo,0,alerts,"Tableau 3 'Situation des ale
 alerts_investigated,123,2026-09-14,Ensemble,207,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
 alert_investigation_rate,123,2026-09-14,Ensemble,98.8,percent,"section 1.1.2 prose as printed (413 validees comme cas suspects, desquels 408 ont ete investigues); 408/413 = 98,8 percent, corroborated by Tableau 3 (validees 294 vivants + 119 decedes = 413, Nombre de suspects investigues 408). This vintage prints no percentage of its own, the same construction as SitReps 097, 098, 100 and 101. It is also the first vintage since 102 whose investigated count falls short of its validated total, so the rate leaves 100 percent for the first time in 21 vintages."
 contact_tracing_coverage,123,2026-09-14,Ensemble,89.3,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Ensemble,31389,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Ensemble,35158,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Ensemble,31389,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Ensemble,35158,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Ituri,91.4,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Ituri,19126,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Ituri,20930,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Ituri,19126,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Ituri,20930,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Nord-Kivu,86.9,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Nord-Kivu,10854,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Nord-Kivu,12490,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Nord-Kivu,10854,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Nord-Kivu,12490,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Bas-Uele,78.5,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Bas-Uele,146,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Bas-Uele,186,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Bas-Uele,146,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Bas-Uele,186,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Tshopo,79.3,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Tshopo,222,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Tshopo,280,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Tshopo,222,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Tshopo,280,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Haut-Uele,83.1,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Haut-Uele,1025,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Haut-Uele,1233,persons,"see contact_tracing_coverage row note"
+contacts_seen,123,2026-09-14,Haut-Uele,1025,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Haut-Uele,1233,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,123,2026-09-14,Sud Ubangi,41.0,percent,"section 1.1.2 prose: national 89,3 % (31 389/35 158, printed); per-province: 91,4% Ituri (19126/20930), 86,9% Nord-Kivu (10854/12490), 83,1% Haut-Uele (1025/1233), 79,3% Tshopo (222/280), 78,5% Bas-Uele (146/186), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,123,2026-09-14,Sud Ubangi,16,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,123,2026-09-14,Sud Ubangi,39,persons,"see contact_tracing_coverage row note"
-eds_death_alerts,123,2026-09-14,Ituri,79,alerts,"section 1.4 PCI/EDS prose: EDS alertes."
+contacts_seen,123,2026-09-14,Sud Ubangi,16,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,123,2026-09-14,Sud Ubangi,39,persons,see contact_tracing_coverage row note
+eds_death_alerts,123,2026-09-14,Ituri,79,alerts,section 1.4 PCI/EDS prose: EDS alertes.
 eds_death_alerts,123,2026-09-14,Nord-Kivu,56,alerts,"section 1.4 PCI/EDS prose: EDS alertes. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
 eds_death_alerts,123,2026-09-14,Tshopo,3,alerts,"section 1.4 PCI/EDS prose: EDS alertes. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
 eds_death_alerts,123,2026-09-14,Haut-Uele,2,alerts,"section 1.4 PCI/EDS prose: EDS alertes. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
 eds_death_alerts,123,2026-09-14,Bas-Uele,1,alerts,"section 1.4 PCI/EDS prose: EDS alertes. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
-eds_investigations_performed,123,2026-09-14,Ituri,61,investigations,"section 1.4 PCI/EDS prose: EDS realises."
+eds_investigations_performed,123,2026-09-14,Ituri,61,investigations,section 1.4 PCI/EDS prose: EDS realises.
 eds_investigations_performed,123,2026-09-14,Nord-Kivu,53,investigations,"section 1.4 PCI/EDS prose: EDS realises. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
 eds_investigations_performed,123,2026-09-14,Tshopo,3,investigations,"section 1.4 PCI/EDS prose: EDS realises. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
 eds_investigations_performed,123,2026-09-14,Haut-Uele,1,investigations,"section 1.4 PCI/EDS prose: EDS realises. This figure is verbatim identical to SitRep 122's for the same province: the whole EDS clause of this bullet is reprinted from 122, so do not read a zero change here as a fresh observation."
@@ -2631,36 +2631,36 @@ alerts_investigated,124,2026-09-15,Tshopo,1,alerts,"Tableau 3 'Situation des ale
 alerts_investigated,124,2026-09-15,Ensemble,185,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
 alert_investigation_rate,124,2026-09-15,Ensemble,100.0,percent,"section 1.1.2 prose as printed (Toutes les 423 alertes validees comme cas suspects et ces derniers ont tous ete investigues); corroborated by Tableau 3, whose Nombre de suspects investigues column reads 423 against a validated sum of 299 vivants + 124 decedes = 423. Recorded from the words rather than a printed figure, the same construction as SitReps 099 and 102."
 contact_tracing_coverage,124,2026-09-15,Ensemble,87.4,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Ensemble,28065,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Ensemble,32094,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Ensemble,28065,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Ensemble,32094,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Ituri,91.4,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Ituri,16066,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Ituri,17576,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Ituri,16066,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Ituri,17576,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Nord-Kivu,83.3,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Nord-Kivu,11146,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Nord-Kivu,13386,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Nord-Kivu,11146,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Nord-Kivu,13386,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Bas-Uele,67.9,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Bas-Uele,169,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Bas-Uele,249,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Bas-Uele,169,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Bas-Uele,249,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Tshopo,75.5,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Tshopo,222,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Tshopo,294,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Tshopo,222,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Tshopo,294,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Haut-Uele,81.1,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Haut-Uele,446,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Haut-Uele,550,persons,"see contact_tracing_coverage row note"
+contacts_seen,124,2026-09-15,Haut-Uele,446,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Haut-Uele,550,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,124,2026-09-15,Sud Ubangi,41.0,percent,"section 1.1.2 prose: national 87,4 % (28 065/32 094, printed); per-province: 91,4% Ituri (16066/17576), 83,3% Nord-Kivu (11146/13386), 81,1% Haut-Uele (446/550), 75,5% Tshopo (222/294), 67,9% Bas-Uele (169/249), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly. Backfilled this run: the 122-124 updates let this series lapse with the data still printed."
-contacts_seen,124,2026-09-15,Sud Ubangi,16,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,124,2026-09-15,Sud Ubangi,39,persons,"see contact_tracing_coverage row note"
-eds_death_alerts,124,2026-09-15,Ituri,83,alerts,"section 1.4 PCI/EDS prose: EDS alertes."
-eds_death_alerts,124,2026-09-15,Nord-Kivu,58,alerts,"section 1.4 PCI/EDS prose: EDS alertes."
-eds_death_alerts,124,2026-09-15,Tshopo,1,alerts,"section 1.4 PCI/EDS prose: EDS alertes."
-eds_death_alerts,124,2026-09-15,Haut-Uele,6,alerts,"section 1.4 PCI/EDS prose: EDS alertes."
+contacts_seen,124,2026-09-15,Sud Ubangi,16,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,124,2026-09-15,Sud Ubangi,39,persons,see contact_tracing_coverage row note
+eds_death_alerts,124,2026-09-15,Ituri,83,alerts,section 1.4 PCI/EDS prose: EDS alertes.
+eds_death_alerts,124,2026-09-15,Nord-Kivu,58,alerts,section 1.4 PCI/EDS prose: EDS alertes.
+eds_death_alerts,124,2026-09-15,Tshopo,1,alerts,section 1.4 PCI/EDS prose: EDS alertes.
+eds_death_alerts,124,2026-09-15,Haut-Uele,6,alerts,section 1.4 PCI/EDS prose: EDS alertes.
 eds_investigations_performed,124,2026-09-15,Ituri,66,investigations,"section 1.4 PCI/EDS prose: EDS realises. Tshopo records one alert but no EDS realises figure this vintage, so it is silent here (not zero)."
 eds_investigations_performed,124,2026-09-15,Nord-Kivu,61,investigations,"section 1.4 PCI/EDS prose: EDS realises. Tshopo records one alert but no EDS realises figure this vintage, so it is silent here (not zero)."
 eds_investigations_performed,124,2026-09-15,Haut-Uele,5,investigations,"section 1.4 PCI/EDS prose: EDS realises. Tshopo records one alert but no EDS realises figure this vintage, so it is silent here (not zero)."
-eds_corpses_swabbed,124,2026-09-15,Ituri,61,corpses,"section 1.4 PCI/EDS prose: corps swabes."
-eds_corpses_swabbed,124,2026-09-15,Nord-Kivu,58,corpses,"section 1.4 PCI/EDS prose: corps swabes."
-eds_corpses_swabbed,124,2026-09-15,Haut-Uele,5,corpses,"section 1.4 PCI/EDS prose: corps swabes."
+eds_corpses_swabbed,124,2026-09-15,Ituri,61,corpses,section 1.4 PCI/EDS prose: corps swabes.
+eds_corpses_swabbed,124,2026-09-15,Nord-Kivu,58,corpses,section 1.4 PCI/EDS prose: corps swabes.
+eds_corpses_swabbed,124,2026-09-15,Haut-Uele,5,corpses,section 1.4 PCI/EDS prose: corps swabes.
 eds_corpses_swabbed,124,2026-09-15,Tshopo,0,corpses,"section 1.4 PCI/EDS prose: the single Tshopo alert, a body at the CM Horizon (Makiso-Kisangani), is stated as non swabe faute de mobilisation de l'equipe de prelevement, so this is a printed zero rather than a silence."
 poe_travellers_screened,124,2026-09-15,Ituri,146808,travellers,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de personnes passees aux PoE/PoC row"
 poe_travellers_screened,124,2026-09-15,Nord-Kivu,92480,travellers,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de personnes passees aux PoE/PoC row"
@@ -2719,35 +2719,35 @@ alerts_investigated,125,2026-09-16,Tshopo,7,alerts,"Tableau 3 'Situation des ale
 alerts_investigated,125,2026-09-16,Ensemble,417,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transférés au CT/CTE (du jour) column"
 alert_investigation_rate,125,2026-09-16,Ensemble,100.0,percent,"section 1.1.2 prose as printed ('Ces derniers ont tous ete investigues (100 %)'); corroborated by Tableau 3, whose Nombre de suspects investigues column reads 417 against a validated sum of 284 vivants + 133 decedes = 417, back in exact agreement after 123's five-unit gap."
 contact_tracing_coverage,125,2026-09-16,Ensemble,87.6,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Ensemble,26181,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Ensemble,29873,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Ensemble,26181,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Ensemble,29873,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Bas-Uele,95.6,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Bas-Uele,172,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Bas-Uele,180,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Bas-Uele,172,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Bas-Uele,180,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Ituri,90.7,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Ituri,13535,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Ituri,14926,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Ituri,13535,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Ituri,14926,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Nord-Kivu,85.6,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Nord-Kivu,11604,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Nord-Kivu,13556,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Nord-Kivu,11604,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Nord-Kivu,13556,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Tshopo,82.2,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Tshopo,267,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Tshopo,325,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Tshopo,267,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Tshopo,325,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Haut-Uele,69.3,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Haut-Uele,587,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Haut-Uele,847,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Haut-Uele,587,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Haut-Uele,847,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,125,2026-09-16,Sud Ubangi,41.0,percent,"section 1.1.2 prose: national 87,6 % (26 181/29 873, printed, 'plus ou moins similaire a la veille (87,6 %)' - the same rate as 124); per-province: 95,6% Bas-Uele (172/180), 90,7% Ituri (13535/14926), 85,6% Nord-Kivu (11604/13556), 82,2% Tshopo (267/325), 69,3% Haut-Uele (587/847), 41,0% Sud Ubangi (16/39); Sud-Kivu not mentioned. Each printed ratio reproduces its printed percentage exactly and the six numerators and denominators each sum to the printed national exactly."
-contacts_seen,125,2026-09-16,Sud Ubangi,16,persons,"see contact_tracing_coverage row note"
-contacts_under_follow_up,125,2026-09-16,Sud Ubangi,39,persons,"see contact_tracing_coverage row note"
+contacts_seen,125,2026-09-16,Sud Ubangi,16,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,125,2026-09-16,Sud Ubangi,39,persons,see contact_tracing_coverage row note
 eds_death_alerts,125,2026-09-16,Nord-Kivu,56,alerts,"section 1.4 PCI/EDS prose: '56 alertes ont ete enregistrees, 51 EDS realises et 56 corps swabes (100 %)' - five more corps swabes than EDS realises, recorded as printed."
 eds_investigations_performed,125,2026-09-16,Nord-Kivu,51,investigations,"section 1.4 PCI/EDS prose: 51 EDS realises sur 56 alertes. Ituri is absent from section 1.4 entirely this vintage (checked directly: no Ituri bullet in 1.4.1 or 1.4.2 - an intermittent-coverage gap on the SitRep 107 precedent, not a zero) and Tshopo's bullet carries no EDS counts, so both are silent here."
-eds_corpses_swabbed,125,2026-09-16,Nord-Kivu,56,corpses,"section 1.4 PCI/EDS prose: 56 corps swabes (100 %)."
+eds_corpses_swabbed,125,2026-09-16,Nord-Kivu,56,corpses,section 1.4 PCI/EDS prose: 56 corps swabes (100 %).
 eds_death_alerts,125,2026-09-16,Haut-Uele,7,alerts,"section 1.4 PCI/EDS prose: '7 alertes ont ete enregistrees, 6 EDS realises et 6 corps swabes'."
-eds_investigations_performed,125,2026-09-16,Haut-Uele,6,investigations,"section 1.4 PCI/EDS prose: 6 EDS realises."
-eds_corpses_swabbed,125,2026-09-16,Haut-Uele,6,corpses,"section 1.4 PCI/EDS prose: 6 corps swabes."
+eds_investigations_performed,125,2026-09-16,Haut-Uele,6,investigations,section 1.4 PCI/EDS prose: 6 EDS realises.
+eds_corpses_swabbed,125,2026-09-16,Haut-Uele,6,corpses,section 1.4 PCI/EDS prose: 6 corps swabes.
 eds_death_alerts,125,2026-09-16,Bas-Uele,1,alerts,"section 1.4 PCI/EDS prose: '1 alerte a ete enregistree et 1 corps swabe a Ganga, sans EDS realise'."
 eds_investigations_performed,125,2026-09-16,Bas-Uele,0,investigations,"section 1.4 PCI/EDS prose: sans EDS realise - a printed zero, not a silence."
-eds_corpses_swabbed,125,2026-09-16,Bas-Uele,1,corpses,"section 1.4 PCI/EDS prose: 1 corps swabe a Ganga."
+eds_corpses_swabbed,125,2026-09-16,Bas-Uele,1,corpses,section 1.4 PCI/EDS prose: 1 corps swabe a Ganga.
 poe_travellers_screened,125,2026-09-16,Ituri,140196,travellers,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de personnes passees aux PoE/PoC row; the Bas-Uele column is absent this vintage"
 poe_travellers_screened,125,2026-09-16,Nord-Kivu,85252,travellers,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de personnes passees aux PoE/PoC row; the Bas-Uele column is absent this vintage"
 poe_travellers_screened,125,2026-09-16,Sud-Kivu,8945,travellers,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de personnes passees aux PoE/PoC row; the Bas-Uele column is absent this vintage"
@@ -2774,38 +2774,38 @@ poe_corpses_swabbed,125,2026-09-16,Haut-Uele,0,corpses,"Tableau 4 'Situation ind
 poe_corpses_swabbed,125,2026-09-16,Ensemble,1,corpses,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de corps sans vie interceptes ce jour row"
 vaccination_persons_cumulative,125,2026-09-16,Tshopo,2810,persons,"section 1.6.1: 2 810 personnes ont ete vaccinees a ce jour sur 11 703 TPL/PPL cibles (24,0 %), dont 1 633 a Makiso-Kisangani, 381 a Kabondo, 352 a Mangobo, 280 a Tshopo, 126 a Lubunga et 38 a Bafwasende (1633+381+352+280+126+38=2810 exact); solde disponible 500 doses congelees. Bafwasende enters the printed per-zone split for the first time."
 vaccination_persons_cumulative,125,2026-09-16,Bas-Uele,600,persons,"section 1.6.1: 600 PPL ont ete vaccinees a ce jour, dont 550 a Buta et 50 a Ganga (550+50=600 exact) - the first Bas-Uele persons-vaccinated figure since SitRep 114 (500), alongside the compassionate-use launch at Ganga on the 450 doses deployed there at SitRep 124."
-alerts_total_day,126,2026-09-17,Ituri,1234,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Ituri,951,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Ituri,107,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Ituri,1058,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Nord-Kivu,1228,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Nord-Kivu,159,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Nord-Kivu,59,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Nord-Kivu,218,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Haut-Uele,78,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Haut-Uele,20,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Haut-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Haut-Uele,23,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Bas-Uele,100,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Bas-Uele,12,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Bas-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Bas-Uele,15,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Sud-Kivu,9,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Sud-Kivu,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Sud-Kivu,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Sud-Kivu,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Sud Ubangi,15,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Sud Ubangi,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Tshopo,155,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Tshopo,8,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Tshopo,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Tshopo,10,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_total_day,126,2026-09-17,Ensemble,2819,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_alive,126,2026-09-17,Ensemble,1155,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_validated_dead_community,126,2026-09-17,Ensemble,174,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
-alerts_investigated,126,2026-09-17,Ensemble,1329,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Ituri,1234,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Ituri,951,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Ituri,107,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Ituri,90,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Nord-Kivu,1228,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Nord-Kivu,159,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Nord-Kivu,59,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Nord-Kivu,94,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Haut-Uele,78,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Haut-Uele,20,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Haut-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Haut-Uele,13,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Bas-Uele,100,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Bas-Uele,12,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Bas-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Sud-Kivu,9,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Sud-Kivu,2,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Sud-Kivu,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Sud-Kivu,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Sud Ubangi,15,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Sud Ubangi,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Sud Ubangi,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Sud Ubangi,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Tshopo,155,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,126,2026-09-17,Tshopo,8,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Tshopo,2,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Tshopo,4,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,126,2026-09-17,Ensemble,2819,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Total alertes column"
+alerts_validated_alive,126,2026-09-17,Ensemble,1155,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,126,2026-09-17,Ensemble,174,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,126,2026-09-17,Ensemble,201,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
 alert_investigation_rate,126,2026-09-17,Ensemble,100.0,percent,'L'ensemble de ces cas suspects (100%) ont fait l'objet d'une investigation' - Tableau 3 prose.
 contact_tracing_coverage,126,2026-09-17,Ituri,91.7,percent,"Section 1.1.2 prose, per-province breakdown."
 contacts_seen,126,2026-09-17,Ituri,14377,persons,Section 1.1.2 prose.
@@ -2863,34 +2863,34 @@ poe_corpses_swabbed,126,2026-09-17,Ensemble,4,corpses,"Tableau 4, 'Nombre de cor
 vaccination_persons_cumulative,126,2026-09-17,Tshopo,3063,persons,"'3 063 personnes ont ete vaccinees a ce jour sur 11 703 TPL/PPL cibles (26,2%)' - section 1.6."
 vaccination_persons_cumulative,126,2026-09-17,Bas-Uele,708,persons,"'708 PPL ont ete vaccinees a ce jour, dont 550 a Buta et 158 a Ganga' - section 1.6."
 smsps_confirmed_coverage,126,2026-09-17,Ituri,64.5,percent,"'89 des 138 cas confirmes en cours de suivi (64,5%)' - section 1.9 SMSPS."
-alerts_total_day,127,2026-09-18,Ituri,1200,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Ituri,143,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Ituri,89,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Ituri,232,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Nord-Kivu,397,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Nord-Kivu,62,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Nord-Kivu,24,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Nord-Kivu,86,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Haut-Uele,49,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Haut-Uele,19,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Haut-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Haut-Uele,22,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Bas-Uele,76,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Bas-Uele,7,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Bas-Uele,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Bas-Uele,9,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Sud Ubangi,50,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Sud Ubangi,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Tshopo,80,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Tshopo,5,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Tshopo,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Tshopo,8,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_total_day,127,2026-09-18,Ensemble,1852,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_alive,127,2026-09-18,Ensemble,239,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_validated_dead_community,127,2026-09-18,Ensemble,121,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
-alerts_investigated,127,2026-09-18,Ensemble,360,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Ituri,1200,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Ituri,143,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Ituri,89,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Ituri,118,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Nord-Kivu,397,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Nord-Kivu,62,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Nord-Kivu,24,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Nord-Kivu,52,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Haut-Uele,49,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Haut-Uele,19,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Haut-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Haut-Uele,9,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Bas-Uele,76,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Bas-Uele,7,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Bas-Uele,2,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Sud Ubangi,50,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Sud Ubangi,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Sud Ubangi,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Sud Ubangi,1,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Tshopo,80,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column"
+alerts_validated_alive,127,2026-09-18,Tshopo,5,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Tshopo,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Tshopo,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
+alerts_total_day,127,2026-09-18,Ensemble,1852,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Total alertes column"
+alerts_validated_alive,127,2026-09-18,Ensemble,239,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Alertes verifiees et validees (cas suspect) - Vivants column"
+alerts_validated_dead_community,127,2026-09-18,Ensemble,121,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Alertes verifiees et validees (cas suspect) - Decedes column"
+alerts_investigated,127,2026-09-18,Ensemble,183,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total General row, Nombre de suspects investigues et transferes au CT/CTE (du jour) column"
 alert_investigation_rate,127,2026-09-18,Ensemble,100.0,percent,'L'ensemble de ces cas suspects (100%) ont fait l'objet d'une investigation' - Tableau 3 prose.
 contact_tracing_coverage,127,2026-09-18,Sud Ubangi,100.0,percent,"Section 1.1.2 prose, per-province breakdown."
 contacts_seen,127,2026-09-18,Sud Ubangi,42,persons,Section 1.1.2 prose.
