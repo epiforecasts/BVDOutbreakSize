@@ -21,6 +21,34 @@ Every fit used the composition link.
 The option and the gradients are unchanged.
 A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
 
+### Report
+
+- The report is six pages rather than two, grouped in the navigation as
+  Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
+  forecast) and Details (#782). Each renders as its own CI job from the same
+  cached fits.
+- The forecasts, the forecast evaluation and the sensitivity analyses each
+  open on a national section and carry a by-province one, so a health-zone
+  stratum has one place to go on each (#782). The forward forecast split by
+  province previously had no heading and sat inside the national results.
+- The in-sample checks are a page of their own: the posterior predictive
+  checks, the stream calibration, the exports, the posterior correlations and
+  the province composition checks (#782). The estimates pages keep the
+  estimates and the prior-versus-posterior plots that qualify them.
+- The McCabe comparison is a table in the methods, one row per component
+  linking to the section that specifies it, rather than bullets in the
+  framing (#782).
+- The summary dashboard is shorter (#782). The fit diagnostics are behind a
+  dropdown, and the per-province infections and parameter panels and the
+  per-stream reproduction number are linked rather than repeated. The
+  by-province headline table stays.
+- The API reference is grouped into eleven pages following the order a fit
+  runs in, and says which names are public and which are internal (#782).
+  It was one undifferentiated `@autodocs` dump.
+- The aim and origins and the limitations are pages of their own rather than
+  dropdowns inside the analysis, and a new page carries the authors, the
+  funding and the citation (#782).
+
 ### Infrastructure
 
 - A release is cut by commenting `@release` on any issue or pull request (#767).
@@ -55,6 +83,13 @@ The headline joint's cold build drops from 1095 s to 292 s.
 The existing suite times steady-state gradients only, which is why an 18 minute cold compile went untracked.
 - The release helper reads a Windows checkout.
 Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
+- The Literate report pages move from `docs/examples/` to `docs/pages/`, and
+  `scripts/run.jl` runs all of them rather than the two it named (#782).
+- A local documentation build loads its fits the way CI does (#782).
+  `task fetch-fits` downloads them from the latest successful documentation
+  run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
+  and `task fit-all` takes every available thread instead of fitting the
+  registry one model at a time.
 
 ## v2.1.0
 
@@ -109,31 +144,6 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
-- The report is six pages rather than two, grouped in the navigation as
-  Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
-  forecast) and Details (#782). Each renders as its own CI job from the same
-  cached fits.
-- The forecasts, the forecast evaluation and the sensitivity analyses each
-  open on a national section and carry a by-province one, so a health-zone
-  stratum has one place to go on each (#782). The forward forecast split by
-  province previously had no heading and sat inside the national results.
-- The in-sample checks are a page of their own: the posterior predictive
-  checks, the stream calibration, the exports, the posterior correlations and
-  the province composition checks (#782). The estimates pages keep the
-  estimates and the prior-versus-posterior plots that qualify them.
-- The McCabe comparison is a table in the methods, one row per component
-  linking to the section that specifies it, rather than bullets in the
-  framing (#782).
-- The summary dashboard is shorter (#782). The fit diagnostics are behind a
-  dropdown, and the per-province infections and parameter panels and the
-  per-stream reproduction number are linked rather than repeated. The
-  by-province headline table stays.
-- The API reference is grouped into eleven pages following the order a fit
-  runs in, and says which names are public and which are internal (#782).
-  It was one undifferentiated `@autodocs` dump.
-- The aim and origins and the limitations are pages of their own rather than
-  dropdowns inside the analysis, and a new page carries the authors, the
-  funding and the citation (#782).
 - The frozen-fit score tables carry the frozen joint alone, as the
   cross-release tables carry the joint alone, so a row is one model at one
   cut-off. The single-stream frozen fits stay in the figures, which compare
@@ -217,13 +227,6 @@ Further samples relaunch Julia and do measure a load, and the comment reports a 
 - Julia code is formatted with Runic rather than JuliaFormatter (#744). The old
   compat string `"=2.12.0, 2.12"` was a union that pinned nothing; a quality
   test now checks the pin, and 121 files were reformatted.
-- The Literate report pages move from `docs/examples/` to `docs/pages/`, and
-  `scripts/run.jl` runs all of them rather than the two it named (#782).
-- A local documentation build loads its fits the way CI does (#782).
-  `task fetch-fits` downloads them from the latest successful documentation
-  run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
-  and `task fit-all` takes every available thread instead of fitting the
-  registry one model at a time.
 
 ### Dependencies
 
