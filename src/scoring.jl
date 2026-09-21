@@ -639,29 +639,33 @@ function select_fit_role(table::DataFrame, role::AbstractString)
     return table[_fit_role.(table.fit) .== role, :]
 end
 
-## The frozen archive's confirmed-death rows that a superseded forecaster
-## produced, named as a stream and the window of frozen cut-offs the defect
-## shows in.
-##
-## Those reconstructions were built before the forecaster projected each
-## stream from its own cumulative trajectory. Without one it inferred the
-## cut-off daily rate by inverting the cumulative total under exponential
-## growth, which collapses towards zero as the fitted growth rate reaches
-## zero. Confirmed deaths was the stream carrying no
-## trajectory, and from mid-July the reproduction number sits at one, so
-## the two together floor the projection: every one of the fourteen
-## reconstructions cut between these dates carries a confirmed-death median
-## of exactly zero at the one-week horizon against an observed 250 to 370,
-## and every reconstruction cut after the window projects the stream
-## normally (318 against 295 at the first of them).
-##
-## The same releases' May and June cut-offs are kept. The outbreak was
-## growing then, so the same code returned a rate rather than a floor, and
-## those rows carry no signature of the defect.
-##
-## This lapses when those reconstructions are rebuilt with the current
-## forecaster, which is what the frozen evaluation claims to be: the
-## current model frozen at earlier cut-offs.
+"""
+    SUPERSEDED_FROZEN_FORECASTS
+
+The frozen archive's confirmed-death rows that a superseded forecaster
+produced, named as a stream and the window of frozen cut-offs the defect
+shows in.
+
+Those reconstructions were built before the forecaster projected each
+stream from its own cumulative trajectory. Without one it inferred the
+cut-off daily rate by inverting the cumulative total under exponential
+growth, which collapses towards zero as the fitted growth rate reaches
+zero. Confirmed deaths was the stream carrying no
+trajectory, and from mid-July the reproduction number sits at one, so
+the two together floor the projection: every one of the fourteen
+reconstructions cut between these dates carries a confirmed-death median
+of exactly zero at the one-week horizon against an observed 250 to 370,
+and every reconstruction cut after the window projects the stream
+normally (318 against 295 at the first of them).
+
+The same releases' May and June cut-offs are kept. The outbreak was
+growing then, so the same code returned a rate rather than a floor, and
+those rows carry no signature of the defect.
+
+This lapses when those reconstructions are rebuilt with the current
+forecaster, which is what the frozen evaluation claims to be: the
+current model frozen at earlier cut-offs.
+"""
 const SUPERSEDED_FROZEN_FORECASTS = (;
     stream = "confirmed deaths",
     from = Date(2026, 7, 16),
