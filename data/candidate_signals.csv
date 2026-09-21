@@ -2774,3 +2774,180 @@ poe_corpses_swabbed,125,2026-09-16,Haut-Uele,0,corpses,"Tableau 4 'Situation ind
 poe_corpses_swabbed,125,2026-09-16,Ensemble,1,corpses,"Tableau 4 'Situation indicateurs cles des PoE/PoC par province', Nombre de corps sans vie interceptes ce jour row"
 vaccination_persons_cumulative,125,2026-09-16,Tshopo,2810,persons,"section 1.6.1: 2 810 personnes ont ete vaccinees a ce jour sur 11 703 TPL/PPL cibles (24,0 %), dont 1 633 a Makiso-Kisangani, 381 a Kabondo, 352 a Mangobo, 280 a Tshopo, 126 a Lubunga et 38 a Bafwasende (1633+381+352+280+126+38=2810 exact); solde disponible 500 doses congelees. Bafwasende enters the printed per-zone split for the first time."
 vaccination_persons_cumulative,125,2026-09-16,Bas-Uele,600,persons,"section 1.6.1: 600 PPL ont ete vaccinees a ce jour, dont 550 a Buta et 50 a Ganga (550+50=600 exact) - the first Bas-Uele persons-vaccinated figure since SitRep 114 (500), alongside the compassionate-use launch at Ganga on the 450 doses deployed there at SitRep 124."
+alerts_total_day,126,2026-09-17,Ituri,1234,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Ituri,951,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Ituri,107,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Ituri,1058,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Nord-Kivu,1228,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Nord-Kivu,159,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Nord-Kivu,59,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Nord-Kivu,218,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Haut-Uele,78,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Haut-Uele,20,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Haut-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Haut-Uele,23,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Bas-Uele,100,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Bas-Uele,12,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Bas-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Bas-Uele,15,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Sud-Kivu,9,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Sud-Kivu,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Sud-Kivu,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Sud-Kivu,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Sud Ubangi,15,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Sud Ubangi,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Tshopo,155,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Tshopo,8,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Tshopo,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Tshopo,10,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_total_day,126,2026-09-17,Ensemble,2819,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_alive,126,2026-09-17,Ensemble,1155,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_validated_dead_community,126,2026-09-17,Ensemble,174,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alerts_investigated,126,2026-09-17,Ensemble,1329,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 2597+Decedes 222=2819; validated 1155+174=1329)."
+alert_investigation_rate,126,2026-09-17,Ensemble,100.0,percent,'L'ensemble de ces cas suspects (100%) ont fait l'objet d'une investigation' - Tableau 3 prose.
+contact_tracing_coverage,126,2026-09-17,Ituri,91.7,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Ituri,14377,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Ituri,15682,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Bas-Uele,88.2,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Bas-Uele,186,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Bas-Uele,211,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Nord-Kivu,83.3,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Nord-Kivu,11431,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Nord-Kivu,13717,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Haut-Uele,80.8,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Haut-Uele,1534,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Haut-Uele,1899,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Tshopo,75.3,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Tshopo,278,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Tshopo,369,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Sud Ubangi,73.5,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Sud Ubangi,36,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Sud Ubangi,49,persons,Section 1.1.2 prose.
+contact_tracing_coverage,126,2026-09-17,Ensemble,87.2,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,126,2026-09-17,Ensemble,27842,persons,Section 1.1.2 prose.
+contacts_under_follow_up,126,2026-09-17,Ensemble,31902,persons,Section 1.1.2 prose.
+eds_death_alerts,126,2026-09-17,Nord-Kivu,61,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,126,2026-09-17,Nord-Kivu,58,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,126,2026-09-17,Nord-Kivu,60,corpses,Section 1.4 PCI/EDS prose.
+eds_death_alerts,126,2026-09-17,Haut-Uele,14,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,126,2026-09-17,Haut-Uele,4,investigations,Section 1.4 PCI/EDS prose.
+eds_death_alerts,126,2026-09-17,Tshopo,1,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,126,2026-09-17,Tshopo,0,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,126,2026-09-17,Tshopo,1,corpses,Section 1.4 PCI/EDS prose.
+poe_travellers_screened,126,2026-09-17,Ituri,154818,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Ituri,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Ituri,1,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Ituri,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+poe_travellers_screened,126,2026-09-17,Nord-Kivu,99988,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Nord-Kivu,3,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Nord-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Nord-Kivu,3,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+poe_travellers_screened,126,2026-09-17,Sud-Kivu,6882,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Sud-Kivu,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Sud-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Sud-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+poe_travellers_screened,126,2026-09-17,Tshopo,18068,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Tshopo,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Tshopo,0,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Tshopo,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+poe_travellers_screened,126,2026-09-17,Haut-Uele,11801,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Haut-Uele,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Haut-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Haut-Uele,1,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+poe_travellers_screened,126,2026-09-17,Ensemble,291557,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,126,2026-09-17,Ensemble,5,alerts,Tableau 4.
+poe_alertes_vivantes_validees,126,2026-09-17,Ensemble,1,alerts,Tableau 4.
+poe_corpses_swabbed,126,2026-09-17,Ensemble,4,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour'."
+vaccination_persons_cumulative,126,2026-09-17,Tshopo,3063,persons,"'3 063 personnes ont ete vaccinees a ce jour sur 11 703 TPL/PPL cibles (26,2%)' - section 1.6."
+vaccination_persons_cumulative,126,2026-09-17,Bas-Uele,708,persons,"'708 PPL ont ete vaccinees a ce jour, dont 550 a Buta et 158 a Ganga' - section 1.6."
+smsps_confirmed_coverage,126,2026-09-17,Ituri,64.5,percent,"'89 des 138 cas confirmes en cours de suivi (64,5%)' - section 1.9 SMSPS."
+alerts_total_day,127,2026-09-18,Ituri,1200,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Ituri,143,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Ituri,89,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Ituri,232,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Nord-Kivu,397,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Nord-Kivu,62,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Nord-Kivu,24,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Nord-Kivu,86,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Haut-Uele,49,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Haut-Uele,19,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Haut-Uele,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Haut-Uele,22,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Bas-Uele,76,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Bas-Uele,7,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Bas-Uele,2,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Bas-Uele,9,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Sud Ubangi,50,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Sud Ubangi,0,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Sud Ubangi,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Tshopo,80,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Tshopo,5,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Tshopo,3,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Tshopo,8,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_total_day,127,2026-09-18,Ensemble,1852,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_alive,127,2026-09-18,Ensemble,239,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_validated_dead_community,127,2026-09-18,Ensemble,121,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alerts_investigated,127,2026-09-18,Ensemble,360,alerts,"Tableau 3 Total General row, verified directly against the PDF; row sums reconcile exactly (Vivants 1720+Decedes 132=1852; validated 239+121=360)."
+alert_investigation_rate,127,2026-09-18,Ensemble,100.0,percent,'L'ensemble de ces cas suspects (100%) ont fait l'objet d'une investigation' - Tableau 3 prose.
+contact_tracing_coverage,127,2026-09-18,Sud Ubangi,100.0,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Sud Ubangi,42,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Sud Ubangi,42,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Ituri,94.0,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Ituri,13964,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Ituri,14861,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Bas-Uele,91.5,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Bas-Uele,193,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Bas-Uele,211,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Nord-Kivu,82.2,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Nord-Kivu,11345,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Nord-Kivu,13801,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Haut-Uele,78.0,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Haut-Uele,981,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Haut-Uele,1257,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Tshopo,75.3,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Tshopo,278,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Tshopo,369,persons,Section 1.1.2 prose.
+contact_tracing_coverage,127,2026-09-18,Ensemble,87.8,percent,"Section 1.1.2 prose, per-province breakdown."
+contacts_seen,127,2026-09-18,Ensemble,26803,persons,Section 1.1.2 prose.
+contacts_under_follow_up,127,2026-09-18,Ensemble,30541,persons,Section 1.1.2 prose.
+eds_death_alerts,127,2026-09-18,Ituri,104,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,127,2026-09-18,Ituri,80,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,127,2026-09-18,Ituri,69,corpses,Section 1.4 PCI/EDS prose.
+eds_investigations_performed,127,2026-09-18,Nord-Kivu,53,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,127,2026-09-18,Nord-Kivu,42,corpses,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,127,2026-09-18,Tshopo,1,corpses,Section 1.4 PCI/EDS prose.
+eds_death_alerts,127,2026-09-18,Haut-Uele,4,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,127,2026-09-18,Haut-Uele,4,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,127,2026-09-18,Haut-Uele,4,corpses,Section 1.4 PCI/EDS prose.
+eds_death_alerts,127,2026-09-18,Sud Ubangi,2,alerts,"Section 1.4 PCI/EDS prose, 'Quant aux EDS'."
+eds_investigations_performed,127,2026-09-18,Sud Ubangi,1,investigations,Section 1.4 PCI/EDS prose.
+eds_corpses_swabbed,127,2026-09-18,Sud Ubangi,1,corpses,Section 1.4 PCI/EDS prose.
+poe_travellers_screened,127,2026-09-18,Ituri,146383,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Ituri,4,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Ituri,3,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Ituri,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+poe_travellers_screened,127,2026-09-18,Nord-Kivu,93658,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Nord-Kivu,2,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Nord-Kivu,2,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Nord-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+poe_travellers_screened,127,2026-09-18,Sud-Kivu,8152,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Sud-Kivu,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Sud-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Sud-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+poe_travellers_screened,127,2026-09-18,Tshopo,19745,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Tshopo,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Tshopo,0,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Tshopo,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+poe_travellers_screened,127,2026-09-18,Haut-Uele,13207,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Haut-Uele,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Haut-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Haut-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+poe_travellers_screened,127,2026-09-18,Ensemble,281145,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,127,2026-09-18,Ensemble,6,alerts,Tableau 4.
+poe_alertes_vivantes_validees,127,2026-09-18,Ensemble,5,alerts,Tableau 4.
+poe_corpses_swabbed,127,2026-09-18,Ensemble,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptés ce jour' - explicitly printed as 0 for every province this vintage."
+vaccination_persons_cumulative,127,2026-09-18,Tshopo,3369,persons,"'3 369 personnes ont ete vaccinees a ce jour sur 11 703 TPL/PPL cibles (28,8%)' - section 1.6."
+smsps_confirmed_coverage,127,2026-09-18,Ituri,63.8,percent,"'90 des 141 cas confirmes en cours de suivi (63,8%)' - section 1.9 SMSPS."
