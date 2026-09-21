@@ -9,7 +9,7 @@ using BVDOutbreakSize
 import Dates
 
 const REPO_ROOT = dirname(@__DIR__)
-const EXAMPLES = joinpath(@__DIR__, "examples")
+const PAGES_DIR = joinpath(@__DIR__, "pages")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 
 ## The report is split across three literate pages so the expensive fits and
@@ -17,14 +17,16 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## the national results, `province` the per-province estimates, `forecast`
 ## the one-week-ahead projections, `evaluation` their scoring against what
 ## arrived, and `sensitivity` the comparison and sensitivity analyses. All
-## load the same cached fits through the shared `docs/examples/_setup.jl`.
+## load the same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
-    "analysis", "province", "forecast", "evaluation", "sensitivity",
+    "analysis", "province", "insample", "forecast", "evaluation",
+    "sensitivity",
 ]
 
 ## Build stage, so fitting and rendering can be split across jobs:
 ##   render-main         → Literate-execute analysis.jl → src/analysis.md
 ##   render-province     → Literate-execute province.jl → src/province.md
+##   render-insample     → Literate-execute insample.jl → src/insample.md
 ##   render-forecast     → Literate-execute forecast.jl → src/forecast.md
 ##   render-evaluation   → Literate-execute evaluation.jl → src/evaluation.md
 ##   render-sensitivity  → Literate-execute sensitivity.jl → sensitivity.md
@@ -40,7 +42,7 @@ isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 function render_page(page)
     @info "Literate render" page
     return Literate.markdown(
-        joinpath(EXAMPLES, "$page.jl"), LITERATE_OUT;
+        joinpath(PAGES_DIR, "$page.jl"), LITERATE_OUT;
         name = page,
         flavor = Literate.DocumenterFlavor(),
         execute = true,
@@ -125,9 +127,10 @@ function combine()
                 "National" => "analysis.md",
                 "Provinces" => "province.md",
             ],
-            "Forecasts" => [
-                "Forecasts" => "forecast.md",
-                "Evaluation" => "evaluation.md",
+            "Forecasts" => "forecast.md",
+            "Evaluation" => [
+                "In-sample" => "insample.md",
+                "Forecast" => "evaluation.md",
             ],
             "Details" => [
                 "Aim and origins" => "aim.md",
@@ -183,6 +186,8 @@ if STAGE == "render-main"
     render_page("analysis")
 elseif STAGE == "render-province"
     render_page("province")
+elseif STAGE == "render-insample"
+    render_page("insample")
 elseif STAGE == "render-forecast"
     render_page("forecast")
 elseif STAGE == "render-evaluation"
@@ -199,7 +204,8 @@ elseif STAGE == "all"
 else
     error(
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-main, " *
-            "render-province, render-forecast, render-evaluation, " *
+            "render-province, render-insample, render-forecast, " *
+            "render-evaluation, " *
             "render-sensitivity, combine, all"
     )
 end

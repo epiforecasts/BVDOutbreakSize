@@ -92,7 +92,7 @@ julia --project=. scripts/run.jl
 ```
 
 `scripts/run.jl` fits the models and writes the output CSVs (the analysis literate is also run as part of the docs build).
-Running `docs/examples/analysis.jl` directly instead steps through the full narrative.
+Running `docs/pages/analysis.jl` directly instead steps through the full narrative.
 
 ### Re-fit without cloning
 

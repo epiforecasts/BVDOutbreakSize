@@ -17,9 +17,9 @@
 #md # ```
 
 ## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/examples/_setup.jl`.
+## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
 using BVDOutbreakSize
-include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 #md # ```@raw html
 #md # </details>
@@ -171,46 +171,9 @@ spatial_hyper_table = summary_table(
 
 spatial_hyper_table #hide
 
-# ## [Province compositions](@id province-compositions)
+# ## Composition checks
 #
-# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
-# The panels below show that modelled share at every spatial vintage against the observed one.
-# Each panel carries two bands.
-# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
-# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# The observed points should fall inside it.
-# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
-# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
-# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
-# The vintages stop before the cut-off, so the panels end earlier than the [national posterior predictive checks](@ref "Posterior predictive checks").
-
-#md # ```@raw html
-#md # <details><summary>Province composition posterior predictive checks</summary>
-#md # ```
-
-province_case_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_shares,
-    obs_increments = province_cases.increments,
-    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed case share by province"
-);
-
-province_death_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_death_shares,
-    obs_increments = province_deaths.increments,
-    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed death share by province"
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_case_ppc_fig #hide
-
-province_death_ppc_fig #hide
+# Whether the model reproduces each province's observed share of the national total is on the [in-sample checks](@ref "Province compositions") page.
 
 # ## Saving province assets
 #

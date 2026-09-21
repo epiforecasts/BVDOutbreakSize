@@ -17,13 +17,16 @@ using Literate
 using BVDOutbreakSize
 
 const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
-PAGE in ("analysis", "province", "forecast", "evaluation", "sensitivity") ||
+PAGE in (
+    "analysis", "province", "insample", "forecast", "evaluation",
+    "sensitivity",
+) ||
     error(
-    "BVD_DOC_PAGE must be one of analysis, province, forecast, " *
-        "evaluation, sensitivity; got \"$PAGE\""
+    "BVD_DOC_PAGE must be one of analysis, province, insample, " *
+        "forecast, evaluation, sensitivity; got \"$PAGE\""
 )
 
-const LITERATE_SRC = joinpath(@__DIR__, "examples", "$PAGE.jl")
+const LITERATE_SRC = joinpath(@__DIR__, "pages", "$PAGE.jl")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 

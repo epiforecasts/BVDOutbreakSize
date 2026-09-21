@@ -448,7 +448,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        page: [analysis, province, forecast, evaluation, sensitivity]
+        page: [analysis, province, insample, forecast, evaluation, sensitivity]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3

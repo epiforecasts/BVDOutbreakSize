@@ -12,15 +12,17 @@
 #md # ```
 
 ## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/examples/_setup.jl`.
+## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
 using BVDOutbreakSize
-include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# ## Forecast validation
+# ## National
+#
+# ### Forecast validation
 #
 # How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports are still updating are validated here.
@@ -277,61 +279,7 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
-# ### Forecast by province
-#
-# The one-week-ahead forecast split by province, scored against what each province went on to report.
-# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
-# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
-# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
-
-#md # ```@raw html
-#md # <details><summary>Province forecast against observed</summary>
-#md # ```
-
-## Per-province cumulative confirmed cases and deaths at the frozen cut-off
-## and at the current one, so the truth for the week is their difference.
-## Read off the same increment matrices the compositions are scored on, so
-## the clamped revision is treated identically on both sides.
-province_truth = let
-    cur_c = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    cur_d = province_increment_matrix(
-        obs.province_death_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_c = province_increment_matrix(
-        frozen_lastweek.o.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_d = province_increment_matrix(
-        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES
-    )
-    (;
-        observed = vec(sum(cur_c.increments; dims = 2)),
-        baseline = vec(sum(froz_c.increments; dims = 2)),
-        death_observed = vec(sum(cur_d.increments; dims = 2)),
-        death_baseline = vec(sum(froz_d.increments; dims = 2)),
-    )
-end
-
-province_validation_table = province_forecast_vs_truth(
-    frozen_lastweek.chn, validation_forecast;
-    observed = province_truth.observed,
-    baseline = province_truth.baseline,
-    death_observed = province_truth.death_observed,
-    death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_validation_table) #hide
-
-# ### Streams no longer reported
+# #### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
 # The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
@@ -374,7 +322,7 @@ validation_stopped_fig = plot_forecast(
 MarkdownTable(validation_stopped_streams) #hide
 validation_stopped_fig #hide
 
-# ## Forecast scoring across releases
+# ### Forecast scoring across releases
 #
 # Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
 # The tables in this section are the joint model's, one row per stream.
@@ -545,59 +493,7 @@ forecast_overlay_fig = plot_forecast_overlay(
 
 forecast_overlay_fig #hide
 
-# ### Forecast by province across releases
-#
-# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-
-#md # ```@raw html
-#md # <details><summary>Load and summarise the province forecast scores</summary>
-#md # ```
-
-province_scores_df = _release_data(
-    "province_forecast_scores.csv",
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, crps = Float64,
-        log_crps = Float64, dispersion = Float64, overprediction = Float64,
-        underprediction = Float64, coverage_50 = Float64,
-        coverage_90 = Float64,
-        bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64,
-    )
-)
-## The joint patch model is the only model that forecasts the provinces, so
-## there is no individual single-stream fit to compare against and `fit` is
-## single-valued by construction. Both are dropped rather than rendered as
-## columns that cannot vary.
-##
-## See the comment above `joint_score_by_release_table`'s assignment for why
-## this setup chunk's last statement needs a trailing `;`.
-province_score_overview_display = drop_degenerate_fit_column(
-    drop_individual_fit_columns(forecast_score_overview(province_scores_df))
-)
-province_score_by_horizon_display = drop_degenerate_fit_column(
-    drop_individual_fit_columns(
-        forecast_score_by_horizon(province_scores_df)
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_score_overview_display) #hide
-
-#md # ```@raw html
-#md # <details><summary>Province scores by horizon</summary>
-#md # ```
-
-MarkdownTable(province_score_by_horizon_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# ## Frozen-fit forecast evaluation
+# ### Frozen-fit forecast evaluation
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
@@ -737,7 +633,7 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # </details>
 #md # ```
 
-# ### Frozen skill by release
+# #### Frozen skill by release
 #
 # Skill at each cut-off more than one release forecast, one point per release rather than pooled across releases.
 # Releases run in the order they were cut, evenly spaced rather than to calendar scale.
@@ -807,7 +703,7 @@ frozen_overlay_fig #hide
 #md # </details>
 #md # ```
 
-# ## Individual fits against the baseline
+# ### Individual fits against the baseline
 #
 # This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
 
@@ -862,6 +758,114 @@ MarkdownTable(individual_score_by_horizon_table) #hide
 #md # ```
 
 MarkdownTable(individual_score_by_release_table) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## By province
+
+# ### Forecast by province
+#
+# The one-week-ahead forecast split by province, scored against what each province went on to report.
+# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
+# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
+# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
+
+#md # ```@raw html
+#md # <details><summary>Province forecast against observed</summary>
+#md # ```
+
+## Per-province cumulative confirmed cases and deaths at the frozen cut-off
+## and at the current one, so the truth for the week is their difference.
+## Read off the same increment matrices the compositions are scored on, so
+## the clamped revision is treated identically on both sides.
+province_truth = let
+    cur_c = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES
+    )
+    cur_d = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, N_PATCHES
+    )
+    froz_c = province_increment_matrix(
+        frozen_lastweek.o.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES
+    )
+    froz_d = province_increment_matrix(
+        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES
+    )
+    (;
+        observed = vec(sum(cur_c.increments; dims = 2)),
+        baseline = vec(sum(froz_c.increments; dims = 2)),
+        death_observed = vec(sum(cur_d.increments; dims = 2)),
+        death_baseline = vec(sum(froz_d.increments; dims = 2)),
+    )
+end
+
+province_validation_table = province_forecast_vs_truth(
+    frozen_lastweek.chn, validation_forecast;
+    observed = province_truth.observed,
+    baseline = province_truth.baseline,
+    death_observed = province_truth.death_observed,
+    death_baseline = province_truth.death_baseline,
+    n_patches = N_PATCHES
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_validation_table) #hide
+
+# ### Forecast by province across releases
+#
+# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the province forecast scores</summary>
+#md # ```
+
+province_scores_df = _release_data(
+    "province_forecast_scores.csv",
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, crps = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
+        bias = Float64, n_samples = Int,
+        log_rel_to_baseline = Float64,
+    )
+)
+## The joint patch model is the only model that forecasts the provinces, so
+## there is no individual single-stream fit to compare against and `fit` is
+## single-valued by construction. Both are dropped rather than rendered as
+## columns that cannot vary.
+##
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
+province_score_overview_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(forecast_score_overview(province_scores_df))
+)
+province_score_by_horizon_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(
+        forecast_score_by_horizon(province_scores_df)
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_score_overview_display) #hide
+
+#md # ```@raw html
+#md # <details><summary>Province scores by horizon</summary>
+#md # ```
+
+MarkdownTable(province_score_by_horizon_display) #hide
 
 #md # ```@raw html
 #md # </details>

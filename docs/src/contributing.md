@@ -18,10 +18,9 @@ This page covers how the project is laid out, how to run it, and the conventions
 - `src/forecast.jl` — forecast helpers (`forecast_reported`).
 - `src/confirmed_cfr.jl` — delay-corrected confirmed-case-fatality-ratio helpers.
 - `src/plots.jl` — plotting.
-- `docs/examples/analysis.jl` and `docs/examples/sensitivity.jl` — the Literate walkthroughs, split so the expensive fits and the render can fan out across CI runners.
-  `analysis.jl` carries the methods, results and one-week-ahead forecast.
-  `sensitivity.jl` carries the forecast validation and the comparison/sensitivity analyses.
-  Both load their fits through the shared `docs/examples/_setup.jl`.
+- `docs/pages/` — the Literate report pages, one file per rendered page, split so the render fans out across CI runners.
+  `analysis.jl` carries the methods and the national results, `province.jl` the per-province estimates, `forecast.jl` the one-week-ahead projections, `evaluation.jl` their scoring against what arrived, and `sensitivity.jl` the comparison and sensitivity analyses.
+  All load their fits through the shared `_setup.jl`, and anything two pages both need lives there rather than on whichever page defined it first.
   `analysis.jl` is the main artifact.
 - `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), `list.jl` (print fit ids for the CI matrix), and `convergence.jl` with `check_convergence.jl` (the convergence gate, `task check-convergence`).
 - `scripts/fetch_fits.sh` — download a CI run's fits into `logs/fit_cache` (`task fetch-fits`), so a local render loads the same chains CI rendered from.
@@ -78,7 +77,7 @@ A fit the render cannot find in the cache fails the build naming the key, rather
 Set `JULIA_NUM_THREADS` to cap it on a shared host.
 
 `BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
-Running `julia --project=. docs/examples/analysis.jl` that way steps through the full narrative and fits every model as it goes.
+Running `julia --project=. docs/pages/analysis.jl` that way steps through the full narrative and fits every model as it goes.
 This is the slow path.
 
 A build streams per-fit progress by default: every NUTS fit writes `logs/<fit>.log` (iteration, log-density, divergences) and a TensorBoard run under `logs/tensorboard/<fit>/`, controlled by `BVD_FIT_LOG` (`all` when unset, or `progress`, `tensorboard`, `none`).
@@ -133,7 +132,7 @@ Pass a stream as `missing` to drop its likelihood.
   This rule is for prose only.
 - The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
   Edit it in `README.md` only.
-  `docs/examples/analysis.jl` loads it at build time via a Documenter `@eval` block that reads `README.md` and extracts everything before that marker, so do not duplicate it into the analysis page.
+  `docs/pages/analysis.jl` loads it at build time via a Documenter `@eval` block that reads `README.md` and extracts everything before that marker, so do not duplicate it into the analysis page.
 - Table-construction and other setup code in `analysis.jl` is hidden inside `<details>` dropdowns via `#md # @raw html` blocks.
   The bare result object follows (with `#hide`) so only the output renders.
 - The surveillance dispersion prior is a half-normal `truncated(Normal(0.6, 0.2); lower = 0)` on `inv_sqrt_k`, following the Stan prior-choice recommendations.
@@ -185,7 +184,7 @@ println(any(x -> occursin("Core.Box", string(x)),
 
 ### Analysis report prose
 
-These apply to the narrative prose in `docs/examples/analysis.jl`, and to write-up prose generally.
+These apply to the narrative prose in `docs/pages/analysis.jl`, and to write-up prose generally.
 Use the existing report text as the template for tone.
 The measured sentence- and paragraph-level rules below were reverse-engineered from a manuscript the maintainers are happy with.
 The repo-specific rules that follow take precedence where the two disagree.

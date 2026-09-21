@@ -9,6 +9,7 @@ Manifest.toml
 /docs/build/
 /docs/src/analysis.md
 /docs/src/province.md
+/docs/src/insample.md
 /docs/src/forecast.md
 /docs/src/evaluation.md
 /docs/src/index.md
@@ -18,6 +19,7 @@ Manifest.toml
 # Figures a local Literate render writes beside the page markdown
 /docs/src/analysis-*.png
 /docs/src/province-*.png
+/docs/src/insample-*.png
 /docs/src/forecast-*.png
 /docs/src/evaluation-*.png
 /docs/src/sensitivity-*.png

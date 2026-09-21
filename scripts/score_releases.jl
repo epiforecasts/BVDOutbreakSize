@@ -397,7 +397,7 @@ end
 ## between vintages): `0` when no vintage predates `date`, i.e. the
 ## series had not started yet. `grid_date` converts a history's grid
 ## day-index back to a calendar `Date` (mirrors the local `grid_date`
-## helper in `docs/examples/_setup.jl`).
+## helper in `docs/pages/_setup.jl`).
 function cum_at(hist, date::Date, grid_date)
     isempty(hist.days) && return 0
     idx = findlast(d -> grid_date(d) <= date, hist.days)
