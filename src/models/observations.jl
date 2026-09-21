@@ -1024,9 +1024,9 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
 - Confirmed positives. The confirmed counts are scored as an overdispersed
   `BetaBinomial` of the observed specimens-*analysed* denominator in each
   laboratory window ([`confirmed_positivity_windows`](@ref),
-  [`safe_betabinomial`](@ref)), with a partially-pooled per-window
-  positivity ([`confirmed_positivity_model`](@ref)) and a shared
-  intra-window overdispersion ([`confirmed_overdispersion_model`](@ref)).
+  [`safe_betabinomial`](@ref)), with the composition-linked per-window
+  positivity below and a shared intra-window overdispersion
+  ([`confirmed_overdispersion_model`](@ref)).
   Conditioning the positives on the observed denominator, rather than on a
   modelled count scaled by `p_drc · s_test · τ_test`, removes the
   multiplicative ascertainment ridge, so the outbreak size is pinned by the
@@ -1036,18 +1036,14 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   against the modelled laboratory volume with the same pooled positivity,
   so all the confirmed data is used.
 
-The per-window positivity has two links, set by `positivity_link`. The
-default `:composition` ties the tested BVD share to the suspect-pool
+The per-window positivity ties the tested BVD share to the suspect-pool
 composition `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)`,
 severity-upsampled by a decaying enrichment δ0, then mapped to the
 tested-positive probability through the assay sensitivity and specificity,
 `p = s · q + (1 − spec)(1 − q)`. The false-positive term `(1 − spec)(1 − q)`
 makes the confirmed counts respond to the non-BVD share `1 − q`, so the
 laboratory positivity identifies the background `λ_bg` rather than
-absorbing it into a free curve. The alternative `:free` link uses a free
-partially-pooled per-window random effect
-([`confirmed_positivity_model`](@ref)) decoupled from `λ_bg`. It leaves
-`λ_bg` weakly identified and is kept for sensitivity analysis.
+absorbing it into a free curve.
 
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
@@ -1069,8 +1065,6 @@ quantities.
         ## ([`specimen_intensity_model`](@ref)). `nothing` leaves `τ_test`
         ## alone capping the volume below the suspect inflow.
         specimen_intensity = nothing,
-        positivity = confirmed_positivity_model,
-        positivity_link::Symbol = :composition,
         severity_enrichment = severity_enrichment_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
@@ -1178,63 +1172,58 @@ quantities.
     n_late = length(windows.late_days)
     nv = n_early + n_obs + n_late
 
-    ## Per-window tested BVD share `p_pos`, under whichever link
-    ## `positivity_link` selects (see the docstring).
+    ## Per-window tested BVD share `p_pos`, from the suspect-pool
+    ## composition (see the docstring).
     window_days = vcat(
         windows.early_days, windows.obs_days,
         windows.late_days
     )
-    if positivity_link === :composition
-        enrich_state ~ to_submodel(severity_enrichment, false)
-        δ0 = enrich_state.δ0
-        decay_scale = enrich_state.decay_scale
-        sens_state ~ to_submodel(sensitivity, false)
-        spec_state ~ to_submodel(specificity, false)
-        s_test = sens_state.s_test
-        spec = spec_state.spec
-        ## Suspect-pool composition over each window, carried through the
-        ## report-to-analysed delay so it reflects the specimens actually
-        ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
-        ## so it is omitted here.
-        analysed_bvd_daily = convolve_delay(
-            p_drc .* bvd_reports_daily,
-            receipt_state.pmf
+    enrich_state ~ to_submodel(severity_enrichment, false)
+    δ0 = enrich_state.δ0
+    decay_scale = enrich_state.decay_scale
+    sens_state ~ to_submodel(sensitivity, false)
+    spec_state ~ to_submodel(specificity, false)
+    s_test = sens_state.s_test
+    spec = spec_state.spec
+    ## Suspect-pool composition over each window, carried through the
+    ## report-to-analysed delay so it reflects the specimens actually
+    ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
+    ## so it is omitted here.
+    analysed_bvd_daily = convolve_delay(
+        p_drc .* bvd_reports_daily,
+        receipt_state.pmf
+    )
+    analysed_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
+    if eltype(analysed_bvd_daily) === Any
+        analysed_bvd_daily = convert(
+            Vector{typeof(τ_test)},
+            analysed_bvd_daily
         )
-        analysed_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
-        if eltype(analysed_bvd_daily) === Any
-            analysed_bvd_daily = convert(
-                Vector{typeof(τ_test)},
-                analysed_bvd_daily
-            )
-            analysed_bg_daily = convert(
-                Vector{typeof(τ_test)},
-                analysed_bg_daily
-            )
-        end
-        ## Gate the tested composition to the testing window too, so the
-        ## composition clock and the per-window BVD share start at the testing
-        ## onset rather than rolling the cryptic phase.
-        analysed_bvd_daily = gate_before(analysed_bvd_daily, cap_start)
-        analysed_bg_daily = gate_before(analysed_bg_daily, cap_start)
-        bvd_window = bin_increments(analysed_bvd_daily, window_days)
-        bg_window = bin_increments(analysed_bg_daily, window_days)
-        Tt = eltype(bvd_window)
-        ## Testing clock: cumulative modelled analysed volume at each window.
-        vol_window = bin_increments(analysed_daily, window_days)
-        c_window = cumsum(vol_window)
-        lo = convert(Tt, 1.0e-8)
-        hi = one(Tt) - lo
-        ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
-        ## the clock ratio `0/0` and break the downstream Binomial.
-        dscale = max(convert(Tt, decay_scale), one(Tt))
-        p_pos = composition_positivity(
-            window_days, bvd_window, bg_window,
-            c_window, δ0, dscale, s_test, spec, lo, hi
+        analysed_bg_daily = convert(
+            Vector{typeof(τ_test)},
+            analysed_bg_daily
         )
-    else
-        pos_state ~ to_submodel(positivity(nv))
-        p_pos = pos_state.p_pos
     end
+    ## Gate the tested composition to the testing window too, so the
+    ## composition clock and the per-window BVD share start at the testing
+    ## onset rather than rolling the cryptic phase.
+    analysed_bvd_daily = gate_before(analysed_bvd_daily, cap_start)
+    analysed_bg_daily = gate_before(analysed_bg_daily, cap_start)
+    bvd_window = bin_increments(analysed_bvd_daily, window_days)
+    bg_window = bin_increments(analysed_bg_daily, window_days)
+    Tt = eltype(bvd_window)
+    ## Testing clock: cumulative modelled analysed volume at each window.
+    vol_window = bin_increments(analysed_daily, window_days)
+    c_window = cumsum(vol_window)
+    lo = convert(Tt, 1.0e-8)
+    hi = one(Tt) - lo
+    ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
+    ## the clock ratio `0/0` and break the downstream Binomial.
+    dscale = max(convert(Tt, decay_scale), one(Tt))
+    p_pos = composition_positivity(
+        window_days, bvd_window, bg_window,
+        c_window, δ0, dscale, s_test, spec, lo, hi
+    )
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
     ## modelled analysed volume), the volume binned over each window's own
@@ -3444,9 +3433,8 @@ end
 Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
-  - a baseline logit hazard over the delay dimension `d = 0 … D-1`
-    ([`confirmed_positivity_model`](@ref)'s per-vintage positivity random
-    effect, reindexed to delay instead of vintage):
+  - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
+    partially-pooled non-centred random effect over delay:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad

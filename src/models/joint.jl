@@ -783,8 +783,7 @@ reproduction number implied by the summed patch infections.
         onset_report = onset_reporting_model,
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
-        background_re::Bool = false,
-        confirmed_positivity_link::Symbol = :composition,
+        background_pooling = nothing,
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
@@ -829,22 +828,25 @@ reproduction number implied by the summed patch infections.
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    σ_rw_shared = if background_re
-        bg_pool ~ to_submodel(background_pooling_model())
-        bg_pool.σ_bg
-    else
-        0.0
-    end
-
     bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
     bg_onset = isempty(reported_history.days) ? 1 :
         clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
 
-    make_case_bg = nn -> background_walk_model(
-        nn, σ_rw_shared;
-        onset = bg_onset
-    )
-    case_bg_re = background_re ? make_case_bg : nothing
+    ## `nothing` holds the non-BVD background at the constant rate the
+    ## testing submodel samples. An injected pooling submodel gives it a
+    ## smooth daily random walk instead, whose scale is partially pooled.
+    ## Injected rather than switched on a flag so the unused arm is a
+    ## `Nothing` the compiler folds away, not a second branch: a `Bool`
+    ## reaches the model as a value, so both arms are inferred and the
+    ## resulting `Union`-typed argument specialises the whole
+    ## suspected-case submodel twice.
+    case_bg_re = if background_pooling === nothing
+        nothing
+    else
+        bg_pool ~ to_submodel(background_pooling())
+        σ_rw_shared = bg_pool.σ_bg
+        nn -> background_walk_model(nn, σ_rw_shared; onset = bg_onset)
+    end
 
     ## Cases first so the suspected-case background `bg_daily` is available
     ## to the deaths stream, which scales it by `cfr_bg`, and to the
@@ -870,8 +872,7 @@ reproduction number implied by the summed patch infections.
             tests_analysed, confirmed_break_days,
             confirmed_break_gross = confirmed_break_gross_cases,
             confirmed_break_sd,
-            specimen_intensity = specimen_intensity_model(),
-            positivity_link = confirmed_positivity_link
+            specimen_intensity = specimen_intensity_model()
         )
     )
 

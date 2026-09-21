@@ -28,7 +28,7 @@ model = bvd_joint(
     lab_daily_history = obs.lab_daily_history,
     export_case_days = obs.export_case_days,
     export_death_days = obs.export_death_days,
-    breakpoint = BP, background_re = true,
+    breakpoint = BP, background_pooling = background_pooling_model,
     genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days
 )
 

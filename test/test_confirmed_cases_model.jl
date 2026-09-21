@@ -79,8 +79,7 @@ end
             confirmed_cases_model(
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
-                lab_history = (; days = [20, 40], counts = [5, 9]),
-                positivity_link = :composition
+                lab_history = (; days = [20, 40], counts = [5, 9])
             ),
             false
         )
@@ -161,7 +160,6 @@ end
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
-                positivity_link = :composition,
                 specificity = test_specificity_model(;
                     specificity_prior = Beta(700.0, 300.0)
                 )

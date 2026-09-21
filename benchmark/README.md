@@ -29,6 +29,29 @@ BVD_BENCH_ENZYME=true task benchmark  # plus the Enzyme backend
 task benchmark-compare -- pr.json main.json comment.md
 ```
 
+## Compile cost
+
+`task benchmark` times steady-state gradients. It cannot see the cold
+compile, because that is paid once per process and before any gradient is
+taken: Mooncake builds the reverse rule when the `LogDensityFunction` is
+constructed. Measured per component on the 40-day grid, rule construction is
+roughly 87% of a cold build, against a ~38 s floor any model pays. The full
+`bvd_joint` spends 969 s of its 1095 s cold build there.
+
+`task benchmark-compile` measures it, one fresh process per component, and
+reports the primal build and the rule build separately. The fresh process
+per component is what keeps the fixed floor off whichever component would
+otherwise have run first.
+
+```bash
+task benchmark-compile                      # compile.json
+BVD_BENCH_JOINT=true task benchmark-compile # plus the joint, ~18 min
+```
+
+The saved JSON carries each component's gradient vector as well as its
+timings, so two runs can be checked for an unchanged gradient rather than
+only a changed time.
+
 ## Structure
 
 ```

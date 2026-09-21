@@ -218,10 +218,12 @@ end
 @testitem "bvd_joint runs the pooled background branch" tags = [:slow] begin
     using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
+    using BVDOutbreakSize: load_observations, bvd_joint,
+        genetic_seeding_model, background_pooling_model
 
-    ## `background_re = true` is what every registry fit uses and the only
-    ## path that samples the pooling SD, but nothing else in the suite sets it.
+    ## An injected pooling submodel is what every registry fit uses, and the
+    ## only path that samples the pooling SD, but nothing else in the suite
+    ## sets it.
     obs = load_observations()
     breakpoint = obs.n - obs.who_first_sitrep_days
     m = bvd_joint(
@@ -239,7 +241,7 @@ end
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
-        background_re = true,
+        background_pooling = background_pooling_model,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days
     )

@@ -10,7 +10,35 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v2.1.0.
 
+### Model
+
+- The `:free` confirmed-positivity link is removed, with
+  `confirmed_positivity_model` and the `positivity_link` keyword. It could
+  not run: `confirmed_cases_model` returns `s_test` and `spec`
+  unconditionally but assigned them only on the composition branch, so
+  selecting the free link raised `UndefVarError`. Every fit used the
+  composition link.
+- The pooled background takes a submodel instead of a flag:
+  `background_re = true` becomes
+  `background_pooling = background_pooling_model`. The option is unchanged
+  and the gradients are identical. A flag reaches the model as a value
+  rather than a type, so both arms were inferred on every build and the
+  resulting union specialised the suspected-case submodel twice.
+
 ### Infrastructure
+
+- The precompile workload compiles the fit the report runs, rather than a
+  synthetic model shaped like it. The two had drifted: the workload passed
+  `province_increments = missing` where every fit passes a matrix, and left
+  the isolation and treatment histories empty, so the most expensive stream
+  in the model cached nothing. Both now build their keywords from
+  `joint_fit_args`, and a test asserts the two models are the same type.
+  The headline joint's cold build drops from 1095 s to 292 s, of which
+  rule construction is 969 s and 274 s; the gradient itself is unchanged at
+  about 17.4 ms.
+- `task benchmark-compile` reports the cold AD-compile cost per component.
+  The existing suite times steady-state gradients only, which is why an
+  18 minute cold compile went untracked.
 
 - Pushing a version tag starts a second documentation build of the commit
   that was just pushed to `main`. The two builds used to run at the same

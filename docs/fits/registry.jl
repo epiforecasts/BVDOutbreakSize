@@ -239,8 +239,7 @@ function build_fit_specs(
                 export_death_days = o.export_death_days,
                 onset_curve_history = o.onset_curve_history,
                 breakpoint = bp,
-                background_re = true,
-                confirmed_positivity_link = :composition,
+                background_pooling = background_pooling_model,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days, patch_args...
             );
@@ -380,8 +379,7 @@ function build_fit_specs(
                 export_death_days = obs.export_death_days,
                 onset_curve_history = obs.onset_curve_history,
                 breakpoint = breakpoint,
-                background_re = true,
-                confirmed_positivity_link = :composition,
+                background_pooling = background_pooling_model,
                 deaths = deaths,
                 confirmed = confirmed,
                 genetic = genetic_seeding_model,

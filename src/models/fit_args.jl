@@ -62,8 +62,7 @@ function joint_fit_args(obs; breakpoint, overrides...)
         export_death_days = obs.export_death_days,
         onset_curve_history = obs.onset_curve_history,
         breakpoint = breakpoint,
-        background_re = true,
-        confirmed_positivity_link = :composition,
+        background_pooling = background_pooling_model,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days,
     )
