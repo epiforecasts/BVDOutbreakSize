@@ -1110,3 +1110,69 @@ end
     @test "release_date" in names(out)
     @test "rel_to_baseline" in names(out)
 end
+
+@testitem "drop_superseded_forecasts drops the named stream and window" begin
+    using BVDOutbreakSize: drop_superseded_forecasts,
+        SUPERSEDED_FROZEN_FORECASTS, FROZEN_FIT
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ex = SUPERSEDED_FROZEN_FORECASTS
+    rows = [
+        ## Inside the window, the named stream: the floored reconstruction.
+        (; stream = ex.stream, made_date = ex.from, fit = FROZEN_FIT),
+        (; stream = ex.stream, made_date = ex.to, fit = FROZEN_FIT),
+        ## Same window, another stream: the defect is stream-specific.
+        (; stream = "confirmed cases", made_date = ex.from, fit = FROZEN_FIT),
+        ## The named stream either side of the window, where the same code
+        ## returned a rate rather than a floor.
+        (; stream = ex.stream, made_date = ex.from - Day(1), fit = FROZEN_FIT),
+        (; stream = ex.stream, made_date = ex.to + Day(1), fit = FROZEN_FIT),
+    ]
+    kept = drop_superseded_forecasts(DataFrame(rows))
+    @test size(kept, 1) == 3
+    @test !any(
+        r.stream == ex.stream && ex.from <= r.made_date <= ex.to
+            for r in eachrow(kept)
+    )
+    ## An empty table is the state before any release carries a forecast.
+    empty = DataFrame(stream = String[], made_date = Date[], fit = String[])
+    @test isempty(drop_superseded_forecasts(empty))
+end
+
+@testitem "drop_rescanned_onset_windows drops windows over a reread" begin
+    using BVDOutbreakSize: drop_rescanned_onset_windows
+    using DataFrames: DataFrame
+    using Dates: Date
+    ## A triangle whose total falls on one vintage, which a cumulative
+    ## onset curve cannot do.
+    dates = [Date(2026, 8, d) for d in (1, 8, 15, 22)]
+    totals = [100, 200, 180, 300]
+    row(made, target; stream = "onset reports") = (;
+        stream = stream, made_date = made, target_date = target,
+        fit = "frozen",
+    )
+    rows = [
+        ## Spans the falling vintage on 15 August.
+        row(Date(2026, 8, 8), Date(2026, 8, 15)),
+        row(Date(2026, 8, 1), Date(2026, 8, 22)),
+        ## Anchored on the falling vintage rather than spanning it, so its
+        ## increment is measured from the reread rather than across it.
+        row(Date(2026, 8, 15), Date(2026, 8, 22)),
+        ## Another stream over the same window is untouched.
+        row(Date(2026, 8, 8), Date(2026, 8, 15); stream = "confirmed cases"),
+    ]
+    kept = drop_rescanned_onset_windows(
+        DataFrame(rows); vintage_dates = dates, vintage_totals = totals
+    )
+    @test size(kept, 1) == 2
+    @test all(
+        r.stream != "onset reports" || r.made_date == Date(2026, 8, 15)
+            for r in eachrow(kept)
+    )
+    ## A triangle that never falls leaves every window scored.
+    rising = drop_rescanned_onset_windows(
+        DataFrame(rows); vintage_dates = dates,
+        vintage_totals = [100, 200, 250, 300]
+    )
+    @test size(rising, 1) == length(rows)
+end
