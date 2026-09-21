@@ -33,6 +33,7 @@ The mirror usually lags INSP by a report or two.
 The occupation table (Tableau IV, V, 5, 6 or 7 by vintage, to SitRep 080) and the per-province care-continuity prose from SitRep 081 print, for each province that reports, the patients in isolation at the end of the day, the bed count and often the 24h admissions and discharges.
 `province_care_scanned.csv` holds one row per (SitRep, province) with a printed figure, with the source text quoted, produced by `scripts/scan_province_care.jl`.
 `province_care_read.csv` is an independent blind read of the same PDFs in the same layout, made without sight of the scan.
+A blind reader takes only the `sitrep` and `report_date` columns from `insp_sitrep_scanned.csv`, because its `notes` column already carries per-province occupancy figures for many vintages.
 `scripts/province_care_manifest.jl` reconciles the two: a cell enters the manifest when both reads agree, or when only one read carries a figure for that (SitRep, province), and it stops on any disagreement, which has to be settled against the PDF and recorded in the CSV.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_history]` carry the occupancy and bed series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.

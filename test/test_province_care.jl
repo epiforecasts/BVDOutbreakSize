@@ -268,7 +268,7 @@ end
     @test_throws ErrorException province_bed_table(single, np)
 end
 
-@testitem "province care blocks: sparse, dated and inside the national window" begin
+@testitem "province care blocks: sparse, dated and inside the grid" begin
     using BVDOutbreakSize
 
     obs = load_observations()
@@ -276,11 +276,13 @@ end
     beds = obs.province_bed_capacity_history
     @test length(iso) >= 5
     @test length(beds) >= 5
-    lo, hi = extrema(obs.isolation_history.days)
+    ## The province tables start before the national tile does (the May
+    ## facility tables), so the rows are bounded by the grid, not the tile.
+    hi = maximum(obs.isolation_history.days)
     for (name, h) in iso
         @test issorted(h.days) && allunique(h.days)
         @test all(>=(0), h.counts)
-        @test all(d -> lo <= d <= hi, h.days)
+        @test all(d -> 1 <= d <= hi, h.days)
     end
     for (name, h) in beds
         @test issorted(h.days) && allunique(h.days)
