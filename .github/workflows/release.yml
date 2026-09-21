@@ -1,0 +1,323 @@
+name: Release
+
+# Cut a release from a comment. `@release` on any issue or pull request tags
+# the current `main`, publishes a GitHub release whose notes are the newest
+# section of `docs/src/news.md`, and opens a pull request bumping the version
+# and starting the next section. The notes have always been that section
+# copied across by hand; this does the copying, so the release and the news
+# cannot say different things.
+#
+#   @release          -> patch (2.1.0 -> 2.1.1)
+#   @release minor    -> 2.2.0
+#   @release major    -> 3.0.0
+#
+# The version being released is the one already in `Project.toml`, and the
+# newest news section must match it. The bump is what happens afterwards, so
+# the next merged change has a heading to write under.
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  release:
+    name: Cut a release
+    # Cheap pre-filter so an ordinary comment does not start a job. The step
+    # below is what actually decides, on the first line only.
+    if: contains(github.event.comment.body, '@release')
+    # A release writes a tag, a release and a branch. Two at once race on all
+    # three, and a cancelled one leaves a tag with no release behind it.
+    # On the job rather than the workflow: every comment on the repository
+    # starts a run of this workflow, and a workflow-level group would queue
+    # all of them behind each other for a job that almost always skips.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      # The first line only, and the whole of it, so `@release` inside a
+      # sentence about releasing does not cut one.
+      - name: Parse the command
+        id: parse
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          # Parameter expansion rather than `printf | head`: under
+          # `pipefail`, a comment larger than the pipe buffer makes head exit
+          # first, printf take EPIPE and the step fail.
+          FIRST=$(printf '%s' "${COMMENT%%$'\n'*}" | tr -d '\r')
+          if [[ "$FIRST" =~ ^@release[[:space:]]*$ ]]; then
+            echo "bump=patch" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$FIRST" =~ ^@release[[:space:]]+(major|minor|patch)[[:space:]]*$ ]]; then
+            echo "bump=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Anyone can comment on a public repository, so the release is gated on
+      # write access rather than on the command alone.
+      - name: Check the commenter can release
+        id: permission
+        if: steps.parse.outputs.run == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LEVEL=$(gh api \
+            "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
+            --jq '.permission' 2>/dev/null || echo none)
+          echo "User has permission: $LEVEL"
+          case "$LEVEL" in
+            admin|write|maintain) echo "allowed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "allowed=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Acknowledge the command
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method POST \
+            "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            --field content=rocket
+
+      - name: Say why the command was refused
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            -R "${{ github.repository }}" \
+            --body "Releasing needs write access to this repository, and @${{ github.event.comment.user.login }} does not have it."
+
+      # `main`, not the commented-on branch: a release is cut from what is
+      # merged, wherever the comment was left. Tags are needed to tell an
+      # already-released version from a new one.
+      - name: Check out main
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: julia-actions/setup-julia@v3
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        with:
+          version: '1'
+
+      # `release_notes.jl` reads the version from Project.toml and the notes
+      # from news.md, and fails when the newest section is for some other
+      # version. That mismatch is the failure worth catching: it means the
+      # release and the notes written for it have come apart.
+      - name: Read the version and its notes
+        id: notes
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        run: |
+          set -euo pipefail
+          VERSION=$(julia --startup-file=no --project=scripts -e \
+            'include("scripts/release_notes.jl"); print(project_version(read("Project.toml", String)))')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          julia --startup-file=no --project=scripts \
+            scripts/release_notes.jl notes > release_notes.md
+          echo "Release v$VERSION, $(wc -l < release_notes.md) lines of notes"
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::v$VERSION is already tagged. Bump the version and" \
+              "write its news section before releasing again."
+            exit 1
+          fi
+
+      # The estimates a release publishes are only as good as the fit behind
+      # them, so a release says up front when the fits did not converge. The
+      # verdict is the `Check joint convergence` job of the most recent
+      # completed docs build on `main`. It does not block the release, and a
+      # missing verdict is reported rather than guessed at.
+      - name: Note the convergence verdict on the fits
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: |
+          set -euo pipefail
+          RUN=$(gh run list -R "${{ github.repository }}" \
+            --workflow Documenter --branch main --status completed \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          VERDICT=unknown
+          if [ -n "$RUN" ]; then
+            # Paginated, and 100 per page. The default 30 is already close to
+            # the run's job count (the fit matrix plus the render and combine
+            # jobs), and once it is passed the convergence job falls off the
+            # first page and the verdict silently reads as unknown.
+            # `tail` rather than `head`, which would take EPIPE under pipefail.
+            VERDICT=$(gh api \
+              "repos/${{ github.repository }}/actions/runs/$RUN/jobs?per_page=100" \
+              --paginate \
+              --jq '.jobs[] | select(.name == "Check joint convergence") | .conclusion' \
+              | tail -n 1)
+            VERDICT=${VERDICT:-unknown}
+          fi
+          echo "Convergence verdict on the last main build: $VERDICT"
+          echo "Convergence verdict: \`$VERDICT\`" >> "$GITHUB_STEP_SUMMARY"
+          # `failure` is a judged bad fit. `cancelled` or `timed_out` is a
+          # build that never reached a verdict, which main docs builds have
+          # done before at GitHub's six-hour cap, and says nothing about the
+          # fits either way. Those are different things and the notes say
+          # which. `unknown` stays silent: that is the state before the
+          # convergence job exists at all.
+          BANNER=""
+          case "$VERDICT" in
+            failure)
+              BANNER="> **The fits behind this release did not converge.** The convergence check on the last \`main\` build failed, so the estimates published here should be read with that in mind. The per-parameter diagnostics are on the sensitivity page."
+              ;;
+            cancelled|timed_out)
+              BANNER="> **The fits behind this release were never checked.** The last \`main\` build ended as \`$VERDICT\` before the convergence check ran, so nothing has judged these fits either way."
+              ;;
+          esac
+          if [ -n "$BANNER" ]; then
+            {
+              printf '%s\n\n' "$BANNER"
+              cat release_notes.md
+            } > release_notes.tmp
+            mv release_notes.tmp release_notes.md
+          fi
+
+      # `--latest=false` deliberately. The docs workflow publishes a
+      # `results-*` release on every push to `main` with `make_latest: true`,
+      # and README.md links the self-contained report at
+      # `releases/latest/download/analysis.html`. A version release taking the
+      # latest slot would break that link until the next `main` build.
+      - name: Publish the release
+        id: publish
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "v$VERSION" \
+            -R "${{ github.repository }}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "$VERSION release" \
+            --notes-file release_notes.md \
+            --latest=false
+          URL=$(gh release view "v$VERSION" -R "${{ github.repository }}" \
+            --json url --jq '.url')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      # A tag created through the API by GITHUB_TOKEN does not raise a `push`
+      # event, so the docs workflow would never see the tag. `workflow_dispatch`
+      # is the documented exception, so the tagged build is started here.
+      # Best-effort: the release stands whether or not the build starts, and
+      # the reply says which happened.
+      - name: Start the docs build at the tag
+        id: docs
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: gh workflow run docs.yml -R "${{ github.repository }}" --ref "v$VERSION"
+
+      # The bump is a pull request, not a push to `main`. It is a content
+      # change (the next section's heading) as much as a version change, and
+      # it goes through review like any other. Best-effort: the release is
+      # already published by this point, so a repository that blocks Actions
+      # from opening pull requests must not make a done release look failed.
+      - name: Open the next version
+        id: bump
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+          BUMP: ${{ steps.parse.outputs.bump }}
+          RELEASE_URL: ${{ steps.publish.outputs.url }}
+          ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          NEXT=$(julia --startup-file=no --project=scripts \
+            scripts/release_notes.jl open "$BUMP")
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          BRANCH="auto/open-v$NEXT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add Project.toml docs/src/news.md CITATION.cff
+          cat > commit_message.txt <<EOF
+          chore: open v$NEXT after the v$VERSION release
+
+          Bumps the version and starts the v$NEXT news section, so the next merged
+          change has a heading to write under.
+
+          Released: v$VERSION ($BUMP bump)
+          EOF
+          git commit -F commit_message.txt
+          git push origin "$BRANCH"
+          cat > pr_body.md <<EOF
+          Follows the [v$VERSION release]($RELEASE_URL), cut by @$ACTOR with \`@release $BUMP\`.
+
+          - \`Project.toml\` moves from \`$VERSION\` to \`$NEXT\`.
+          - \`docs/src/news.md\` gains an empty \`## v$NEXT\` section above the released one.
+          - \`CITATION.cff\` moves to \`$VERSION\`, the release just cut, which is the version it cites.
+
+          Merge this so the next change has a heading to write under.
+
+          Note that pull requests opened by Actions do not trigger the \`pull_request\` workflows, so this one lands with no checks run. An empty commit or a close-and-reopen starts them.
+
+          This was opened by a bot. Please ping @seabbs for any questions.
+          EOF
+          gh pr create -R "${{ github.repository }}" \
+            --base main --head "$BRANCH" \
+            --title "chore: open v$NEXT after the v$VERSION release" \
+            --body-file pr_body.md > pr_url.txt
+          echo "pr=$(cat pr_url.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Report back
+        if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.notes.outputs.version }}
+          RELEASE_URL: ${{ steps.publish.outputs.url }}
+          NEXT: ${{ steps.bump.outputs.next }}
+          PR: ${{ steps.bump.outputs.pr }}
+          DOCS_OUTCOME: ${{ steps.docs.outcome }}
+          BUMP_OUTCOME: ${{ steps.bump.outcome }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Released [v$VERSION]($RELEASE_URL), with the \`docs/src/news.md\` section for it as the notes."
+            echo
+            if [ "$DOCS_OUTCOME" = "success" ]; then
+              echo "The docs build at the tag has been started."
+            else
+              echo "The docs build at the tag could not be started. Run the Documenter workflow against \`v$VERSION\` by hand."
+            fi
+            echo
+            if [ "$BUMP_OUTCOME" = "success" ]; then
+              echo "$PR opens \`v$NEXT\` for the next change."
+            else
+              echo "The follow-up bump could not be opened. Bump \`Project.toml\` and start the next \`news.md\` section by hand with \`julia --project=scripts scripts/release_notes.jl open <bump>\`."
+            fi
+          } > reply.md
+          gh issue comment "${{ github.event.issue.number }}" \
+            -R "${{ github.repository }}" --body-file reply.md
+
+      # A release that half happened is worse than one that did not: say so
+      # on the thread rather than leaving the reaction as the only trace.
+      - name: Say the release failed
+        if: failure() && steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            -R "${{ github.repository }}" \
+            --body "The release did not complete. See [the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for why. Nothing has been tagged unless the run got as far as publishing."

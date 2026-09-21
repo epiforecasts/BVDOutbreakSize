@@ -6,12 +6,21 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v2.1.1
 
 Changes since v2.1.0.
 
 ### Infrastructure
 
+- A release is cut by commenting `@release` on any issue or pull request
+  (#767). The notes are the newest `docs/src/news.md` section, which is what
+  they have always been, copied across by hand. The comment tags `main`,
+  publishes the release and opens a pull request bumping the version and
+  starting the next section, so the following change has a heading to write
+  under. `@release minor` and `@release major` choose the size of that bump.
+- `scripts/release_notes.jl` holds the text handling behind it and runs
+  locally through `task release-notes`, so the notes can be read before
+  anything is published.
 - Pushing a version tag starts a second documentation build of the commit
   that was just pushed to `main`. The two builds used to run at the same
   time and each refit every model; for v2.1.0 the tag build's joint fit ran
