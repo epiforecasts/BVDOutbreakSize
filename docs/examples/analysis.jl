@@ -19,15 +19,11 @@
 # [`docs/examples/analysis.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/examples/analysis.jl).
 # The model code it calls is in
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
-# The [limitations](@ref "Limitations") page carries the oversight context behind the Use of AI note.
+# See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
 #
-# **Offline copy.** A self-contained single-file HTML version of this report, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
-#
-# ## Before the results
-#
-# How this work differs from the report it replicates is on the [aim and origins](@ref "Aim and origins") page.
-# What the estimates can and cannot support is on the [limitations](@ref "Limitations") page.
-# Read them before the numbers below.
+# **Offline copy.** A self-contained single-file HTML version of this page, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
+# It carries the methods and results on this page only.
+# Links to the other pages resolve against the hosted site.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
