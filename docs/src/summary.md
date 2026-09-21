@@ -99,10 +99,8 @@ Modelled reported cases against the observed reported cases over time, a check t
 
 ## Where each data stream points
 
-The outbreak size and the reproduction number each data stream implies on its own, fitted to that stream alone, are on the sensitivity page: [outbreak size](sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and [reproduction number](sensitivity.md#Reproduction-number-estimated-by-each-data-stream).
-Agreement between the streams supports the joint estimate.
-Disagreement shows where they pull in different directions.
+The [outbreak size](sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and the [reproduction number](sensitivity.md#Reproduction-number-estimated-by-each-data-stream) each data stream implies on its own are on the sensitivity page.
 
 ---
 
-For the full results, methods and code see the [Analysis](analysis.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
+For the full results, methods and code see the [National](analysis.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
