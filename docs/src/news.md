@@ -82,6 +82,42 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
+- The frozen-fit score tables carry the frozen joint alone, as the
+  cross-release tables carry the joint alone, so a row is one model at one
+  cut-off. The single-stream frozen fits stay in the figures, which compare
+  the fits against each other.
+- The by-horizon and by-cut-off score tables gain figures: the mean CRPS
+  split into its width, its overprediction and its underprediction by
+  horizon, and relative skill against the baseline cut-off by cut-off. Both
+  tables run to hundreds of rows and were unreadable as numbers alone.
+- The frozen forecasts-versus-now overlay draws the frozen joint and the
+  baseline alone. A single-stream frozen fit exists at one cut-off only, so
+  its series landed on top of the joint point beside it.
+- The per-stream projected-trajectory figure crops to twice the joint fit's
+  90% upper bound, the crop the cut-off density figure beside it already
+  used. The exports-only fit's band reaches the source population, which put
+  every other stream on the baseline.
+- The reproduction-number-by-release figures share a fixed axis at three,
+  with intervals past it clamped and marked. The basic reproduction number
+  keeps its own axis, its estimates sitting where that crop would cut them.
+- The frozen evaluation drops the confirmed-death rows of the fourteen
+  reconstructions cut between 16 July and 15 August 2026. The forecaster
+  that built them predated projecting each stream from its own trajectory
+  (#613, #706) and floored the stream at zero, so each carried a one-week median of exactly zero
+  against an observed 250 to 370. The section now lists every scoring
+  exclusion in one place, and the archive keeps the rows.
+- An onset forecast window containing a vintage whose reread total falls is
+  left unscored, the rule province windows holding a harmonisation-break day
+  already follow. The digitised total falls on fourteen vintages, which a
+  cumulative onset curve cannot do, and the scored truth is an increment
+  between two vintages, so such a window charges the forecast for a reread.
+  It bites hardest at the longer horizons: the frozen onset row keeps three
+  of its twenty-nine windows and the cross-release row six of thirty-eight.
+- A single-stream fit's forecast is overlaid on the validation and bed
+  panels as a step outline over the joint's own histogram bins, reweighted
+  to the joint's draw count. It was a kernel density on the density scale
+  against an axis counting draws, which drew it flat along the floor of
+  every panel whatever it said.
 
 ### Fixed
 
