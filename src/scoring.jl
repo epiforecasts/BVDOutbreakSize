@@ -727,6 +727,15 @@ increment the situation reports did not add, so it is left unscored rather
 than charged to the forecast. The fit itself needs no such rule: it carries
 a per-vintage scan level.
 
+A vintage inside the window matters as much as one at its end, which is why
+the test is on the window rather than on the target vintage alone. A reread
+that loses cases depresses the printed level and the vintages after it carry
+that level forward, so the loss lands in the target total whether or not the
+target vintage is itself the one that fell. The worst window in the archive
+is of exactly that shape: an increment of 82 against a typical 400 to 500,
+where the fall sits two days inside the window and neither endpoint is a
+falling vintage.
+
 This is the rule province windows holding a harmonisation-break day already
 follow. It bites hardest at the longer horizons, a four-week window being
 more likely to contain a reread than a one-week one. A window anchored on a

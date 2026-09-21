@@ -160,6 +160,21 @@ function plot_cumulative_trajectories(
     return fig
 end
 
+## Open triangles marking where a series ran past a cropped axis, one per
+## x-position given. Drawn a little inside the crop, since a marker placed
+## exactly on the limit is cut in half by the plot area's clipping.
+##
+## Every cropped axis in this file marks its overflow through here, so the
+## three figures that crop cannot drift apart in marker shape, size or
+## placement.
+function _mark_overflow!(ax, xs::AbstractVector, cap::Real, colour)
+    isempty(xs) && return nothing
+    return scatter!(
+        ax, Float64.(collect(xs)), fill(0.97 * float(cap), length(xs));
+        color = colour, marker = :utriangle, markersize = 10
+    )
+end
+
 """
 Overlaid cumulative-infection trajectories, one per single-stream fit, each
 projected out to the cut-off on day `n` even when that stream's data stops
@@ -226,10 +241,7 @@ function plot_stream_trajectories(
         ## running off rather than as one that simply stops.
         if !isnothing(cap)
             over = findfirst(v -> v > cap, hi90)
-            isnothing(over) || scatter!(
-                ax, [x[over]], [0.97 * cap];
-                color = colour, marker = :utriangle, markersize = 11
-            )
+            isnothing(over) || _mark_overflow!(ax, [x[over]], cap, colour)
         end
         ## Dotted rule in the stream's colour where its data stops reporting.
         ld = get(s, :last_day, nothing)
@@ -885,14 +897,8 @@ function _evolution_panel!(
         color = (:black, 0.4), linestyle = :dash, linewidth = 1
     )
 
-    ## A little inside the crop, so the plot area's clipping does not cut
-    ## the markers in half.
     for (colour, xs) in overflow_x
-        isempty(xs) && continue
-        scatter!(
-            ax, xs, fill(0.97 * float(cap), length(xs));
-            color = colour, marker = :utriangle, markersize = 10
-        )
+        _mark_overflow!(ax, xs, cap, colour)
     end
     return handles, llabels
 end
@@ -1271,14 +1277,7 @@ function plot_forecast_overlay(overlay::DataFrame)
             end
             linesegments!(ax, bx, by; color = (col, 0.45), linewidth = 2)
             mh = scatter!(ax, xs, meds; color = col, markersize = 6)
-            ## A little inside the axis limit, so CairoMakie's plot-area
-            ## clipping does not cut the marker in half.
-            marker_y = 0.97 * cap
-            isempty(overflow_x) ||
-                scatter!(
-                ax, overflow_x, fill(marker_y, length(overflow_x));
-                color = col, marker = :utriangle, markersize = 9
-            )
+            _mark_overflow!(ax, overflow_x, cap, col)
             get!(role_handles, role, mh)
         end
     end
