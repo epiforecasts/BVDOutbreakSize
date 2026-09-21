@@ -142,10 +142,18 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
-- The report is five pages rather than two, grouped in the navigation as
-  Estimates (summary, national, provinces) and Forecasts (forecasts,
-  evaluation), with the sensitivity and comparison analyses under Details
-  (#782). Each renders as its own CI job from the same cached fits.
+- The report is six pages rather than two, grouped in the navigation as
+  Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
+  forecast) and Details (#782). Each renders as its own CI job from the same
+  cached fits.
+- The forecasts, the forecast evaluation and the sensitivity analyses each
+  open on a national section and carry a by-province one, so a health-zone
+  stratum has one place to go on each (#782). The forward forecast split by
+  province previously had no heading and sat inside the national results.
+- The in-sample checks are a page of their own: the posterior predictive
+  checks, the stream calibration, the exports, the posterior correlations and
+  the province composition checks (#782). The estimates pages keep the
+  estimates and the prior-versus-posterior plots that qualify them.
 - The McCabe comparison is a table in the methods, one row per component
   linking to the section that specifies it, rather than bullets in the
   framing (#782).
@@ -250,6 +258,8 @@ Further samples relaunch Julia and do measure a load, and the comment reports a 
 - Julia code is formatted with Runic rather than JuliaFormatter (#744). The old
   compat string `"=2.12.0, 2.12"` was a union that pinned nothing; a quality
   test now checks the pin, and 121 files were reformatted.
+- The Literate report pages move from `docs/examples/` to `docs/pages/`, and
+  `scripts/run.jl` runs all of them rather than the two it named (#782).
 - A local documentation build loads its fits the way CI does (#782).
   `task fetch-fits` downloads them from the latest successful documentation
   run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
