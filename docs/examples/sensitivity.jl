@@ -206,7 +206,7 @@ MarkdownTable(validation_table) #hide
 
 # The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each still-reported count stream the forecast carries.
 # The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
-# Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted density alongside the joint's histogram.
+# Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted step outline on the joint's own histogram bins.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -226,7 +226,7 @@ validation_fig = plot_forecast_vs_truth(
 
 validation_fig #hide
 
-# The bed panel scores last week's projected occupancy against the beds occupied now (the dashed rule), with the individual (treatment-only) fit's own projection overlaid as a dotted density alongside the joint.
+# The bed panel scores last week's projected occupancy against the beds occupied now (the dashed rule), with the individual (treatment-only) fit's own projection overlaid as a dotted step outline on the joint's own histogram bins.
 
 #md # ```@raw html
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
@@ -467,6 +467,14 @@ forecast_relative_skill_fig = plot_forecast_relative_skill(
 
 forecast_relative_skill_fig #hide
 
+# What that error is made of, by horizon: the mean CRPS split into its width, its overprediction and its underprediction, one stacked bar per horizon and fit role.
+
+forecast_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
+    forecast_score_by_horizon_table
+);
+
+forecast_crps_by_horizon_fig #hide
+
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
@@ -476,6 +484,15 @@ MarkdownTable(joint_score_by_horizon_table) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# The same relative skill against the baseline, release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
+
+forecast_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
+    forecast_score_by_release_table;
+    title = "Relative skill against the baseline, by release"
+);
+
+forecast_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
 #md # <details><summary>Scores by release</summary>
@@ -562,7 +579,8 @@ MarkdownTable(province_score_by_horizon_display) #hide
 # ## Frozen-fit forecast evaluation
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
-# Each stream's own frozen fit is scored alongside the joint where one exists, at the one-week-back cut-off and for still-reported streams only.
+# The tables in this section are the frozen joint model's, one row per stream.
+# Each stream's own frozen fit is also scored where one exists, at the one-week-back cut-off and for still-reported streams only, and is carried by the skill figures rather than by the tables.
 # Every other cut-off carries the joint alone.
 # The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
 # The baseline carries a weaker data-vintage guarantee than the cross-release one, since its snapshot was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
@@ -605,11 +623,24 @@ frozen_score_by_release_table = forecast_score_by_release(
     frozen_scores_df; joint_fit = FROZEN_FIT
 )
 
-## `fit` is kept in the display tables. It was single-valued and dropped as
-## degenerate until the archive gained the single-stream fits.
-frozen_score_overview_display = frozen_score_overview_table
-frozen_score_by_horizon_display = frozen_score_by_horizon_table
-frozen_score_by_release_display = frozen_score_by_release_table
+## The tables show the frozen joint alone, as the cross-release tables show
+## the joint alone, so a row reads as one model at one cut-off rather than a
+## stream interleaving two fits. The archive's single-stream frozen fits stay
+## in the scored data and in the figures, which compare the roles against
+## each other. Selecting the joint role leaves `fit` single-valued, so it is
+## dropped and the model named in the prose instead.
+_frozen_joint_only(tbl) = drop_degenerate_fit_column(
+    select_fit_role(tbl, "joint")
+)
+frozen_score_overview_display = _frozen_joint_only(
+    frozen_score_overview_table
+)
+frozen_score_by_horizon_display = _frozen_joint_only(
+    frozen_score_by_horizon_table
+)
+frozen_score_by_release_display = _frozen_joint_only(
+    frozen_score_by_release_table
+)
 
 ## One row per release for the cut-offs more than one release forecast.
 ## See the comment above `joint_score_by_release_table`'s assignment for why
@@ -617,7 +648,9 @@ frozen_score_by_release_display = frozen_score_by_release_table
 frozen_score_by_vintage_table = forecast_score_by_vintage(
     frozen_scores_df; joint_fit = FROZEN_FIT
 )
-frozen_score_by_vintage_display = frozen_score_by_vintage_table;
+frozen_score_by_vintage_display = _frozen_joint_only(
+    frozen_score_by_vintage_table
+);
 
 #md # ```@raw html
 #md # </details>
@@ -633,6 +666,15 @@ frozen_relative_skill_fig = plot_forecast_relative_skill(
 
 frozen_relative_skill_fig #hide
 
+# What that error is made of, by horizon, as in the cross-release section above.
+
+frozen_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
+    frozen_score_by_horizon_table;
+    title = "CRPS decomposition by horizon, frozen cut-offs"
+);
+
+frozen_crps_by_horizon_fig #hide
+
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
@@ -642,6 +684,16 @@ MarkdownTable(frozen_score_by_horizon_display) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# The same relative skill against the baseline, cut-off by cut-off, pooled over the horizons each cut-off forecast.
+
+frozen_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
+    frozen_score_by_release_table;
+    xlabel = "Frozen cut-off",
+    title = "Relative skill against the baseline, by frozen cut-off"
+);
+
+frozen_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
 #md # <details><summary>Scores by frozen cut-off</summary>
@@ -689,8 +741,19 @@ MarkdownTable(frozen_score_by_vintage_display) #hide
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
 #md # ```
 
+## The frozen joint and the persistence baseline only. A single-stream
+## frozen fit exists at the one-week-back cut-off alone, so its series lands
+## on one made date of a panel spanning every cut-off, overplotting the
+## joint point it sits beside rather than reading as a second series. The
+## single-stream frozen fits are compared against the joint in the skill
+## figures and in the validation plot at that cut-off.
 frozen_overlay_fig = plot_forecast_overlay(
-    scored_overlay(frozen_overlay_df)
+    scored_overlay(
+        vcat(
+            select_fit_role(frozen_overlay_df, "joint"),
+            select_fit_role(frozen_overlay_df, "baseline")
+        )
+    )
 );
 
 #md # ```@raw html
@@ -797,6 +860,7 @@ streams_C_table = streams_table(
 MarkdownTable(streams_C_table) #hide
 
 # The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
+# The count axis is cropped to twice the joint fit's 90% upper bound, as the density figure below is, and a stream whose band runs past the crop is marked with an open triangle where it leaves the axis.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream projected-trajectory plot</summary>
@@ -851,7 +915,12 @@ stream_traj_fig = plot_stream_trajectories(
             colour = :mediumpurple,
         ),
     ];
-    n = obs.n, seeding = obs.seeding
+    n = obs.n, seeding = obs.seeding,
+    ## Twice the joint fit's 90% upper, the crop the cut-off density figure
+    ## below already uses. The exports-only fit bounds the infection count
+    ## so weakly that its 90% upper reaches the source population, which on
+    ## a free axis puts every other stream on the baseline.
+    ymax = 2.0 * quantile(posterior_C_joint, 0.95)
 );
 
 #md # ```@raw html
@@ -1037,6 +1106,7 @@ stream_rt_fig #hide
 # The reproduction number estimated at each release, the same kind of release-by-release picture as the outbreak-size evolution above.
 # Each release's cut-off reproduction number $R_T$ is drawn as a discrete estimate, a median with nested 30/60/90% interval bars.
 # The current fit's daily $R_t$ over its established window is drawn as the continuous band, and $R_t = 1$ is marked.
+# The reproduction-number axis is fixed at three across this figure and the by-dataset one below, with an interval running past it clamped and marked with an open triangle.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release with the current-fit band</summary>
@@ -1083,6 +1153,15 @@ rt_release_trajectory = let
     )
 end
 
+## One fixed reproduction-number axis across both figures below. The
+## estimates sit around one and the widest stream's 90% upper pulls a free
+## axis past four, which flattens every panel onto the lower quarter of its
+## range. An interval past the crop is clamped and marked, so nothing is
+## silently cut. The basic reproduction number keeps its own axis: it sits
+## around two with tails near four, and the same crop would clip the
+## estimates themselves.
+const _RT_AXIS_MAX = 3.0
+
 rt_evolution_fig = plot_estimate_evolution(
     rt_release;
     trajectory = rt_release_trajectory,
@@ -1090,7 +1169,8 @@ rt_evolution_fig = plot_estimate_evolution(
     title = "Reproduction number as data accrued",
     released_label = "Released estimate (per project release)",
     trajectory_label = "Current model, current data",
-    refline = 1.0
+    refline = 1.0,
+    ymax = _RT_AXIS_MAX
 );
 
 #md # ```@raw html
@@ -1102,7 +1182,7 @@ rt_evolution_fig #hide
 # ## Reproduction number by release and dataset
 #
 # The same release-by-release reproduction number split into one panel per dataset, so each dataset's history reads against the others and against the joint.
-# Panels share a calendar axis and a y range, and $R_t = 1$ is marked.
+# Panels share a calendar axis and the fixed reproduction-number range, and $R_t = 1$ is marked.
 # Each release's cut-off value is a median with nested 30/60/90% interval bars.
 # A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above.
 # Confirmed deaths carries no band, so its panel shows release points alone.
@@ -1222,6 +1302,7 @@ rt_stream_fig = plot_evolution_by_group(
     title = "Reproduction number as data accrued, by dataset",
     released_label = "Released estimate (per release)",
     refline = 1.0,
+    ymax = _RT_AXIS_MAX,
     empty_note = "No per-dataset reproduction numbers saved yet."
 );
 

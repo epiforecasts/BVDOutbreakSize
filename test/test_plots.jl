@@ -2040,3 +2040,134 @@ end
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
 end
+
+@testitem "plot_evolution_by_group clamps and marks past ymax" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+    ## One release whose 90% upper runs far past the crop and one that does
+    ## not, the case a fixed reproduction-number axis exists for.
+    groups = [
+        "cases" => [
+            ("2026-08-01", 1.2, 1.0, 1.4, 0.9, 1.6, 0.6, 9.0),
+            ("2026-08-08", 1.1, 0.9, 1.3, 0.8, 1.5, 0.5, 2.0),
+        ],
+    ]
+    fig = plot_evolution_by_group(groups; refline = 1.0, ymax = 3.0)
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    @test ax.limits[][2] == (0, 3.0)
+    ## The overflow marker sits just inside the crop, so the clipping does
+    ## not cut it in half.
+    ## Makie converts a marker symbol into a path before it reaches the
+    ## plot, so the triangle is matched against the converted path.
+    tri = CairoMakie.Makie.convert_attribute(
+        :utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
+    )
+    markers = [
+        p for p in ax.scene.plots
+            if p isa CairoMakie.Makie.Scatter && p.marker[] == tri
+    ]
+    @test length(markers) == 1
+    @test all(pt -> pt[2] < 3.0, only(markers)[1][])
+    ## Without a crop the axis still sizes itself to the widest interval.
+    free = plot_evolution_by_group(groups; refline = 1.0)
+    free_ax = only(x for x in free.content if x isa CairoMakie.Makie.Axis)
+    @test free_ax.limits[][2][2] > 9.0
+end
+
+@testitem "plot_stream_trajectories crops to ymax" setup = [HeadlessMakie] begin
+    using BVDOutbreakSize: plot_stream_trajectories
+    using Dates: Date
+    n = 20
+    ## One stream on the scale of the source population and one on the scale
+    ## of the outbreak, the pair that flattens a free axis.
+    streams = [
+        (;
+            label = "wide", trajs = [cumsum(fill(1.0e6, n)) for _ in 1:20],
+            last_day = 10, colour = :seagreen,
+        ),
+        (;
+            label = "narrow", trajs = [cumsum(fill(10.0, n)) for _ in 1:20],
+            last_day = 15, colour = :steelblue,
+        ),
+    ]
+    fig = plot_stream_trajectories(
+        streams; n = n, seeding = Date(2026, 3, 1), ymax = 1.0e4
+    )
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    @test ax.limits[][2] == (0, 1.0e4)
+    ## Makie converts a marker symbol into a path before it reaches the
+    ## plot, so the triangle is matched against the converted path.
+    tri = CairoMakie.Makie.convert_attribute(
+        :utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
+    )
+    markers = [
+        p for p in ax.scene.plots
+            if p isa CairoMakie.Makie.Scatter && p.marker[] == tri
+    ]
+    ## The wide stream leaves the axis and is marked; the narrow one never
+    ## reaches it.
+    @test length(markers) == 1
+    free = plot_stream_trajectories(streams; n = n, seeding = Date(2026, 3, 1))
+    free_ax = only(x for x in free.content if x isa CairoMakie.Makie.Axis)
+    @test free_ax.limits[][2][2] > 1.0e6
+end
+
+@testitem "plot_forecast_crps_by_horizon empty and filled" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_crps_by_horizon, FROZEN_FIT
+    using DataFrames: DataFrame
+    schema = (;
+        stream = String[], horizon = Int[], fit = String[],
+        dispersion = Float64[], overprediction = Float64[],
+        underprediction = Float64[],
+    )
+    @test plot_forecast_crps_by_horizon(DataFrame(schema)) isa
+        CairoMakie.Makie.Figure
+    rows = NamedTuple[]
+    for s in ("confirmed cases", "confirmed deaths"), h in (7, 14),
+            f in (FROZEN_FIT, "confirmed_deaths")
+        push!(
+            rows,
+            (;
+                stream = s, horizon = h, fit = f, dispersion = 40.0,
+                overprediction = 30.0, underprediction = 30.0 + h,
+            )
+        )
+    end
+    fig = plot_forecast_crps_by_horizon(DataFrame(rows))
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 2
+end
+
+@testitem "plot_forecast_skill_by_cutoff empty and filled" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_skill_by_cutoff, FROZEN_FIT
+    using DataFrames: DataFrame
+    using Dates: Date
+    schema = (;
+        stream = String[], made_date = Date[], fit = String[],
+        rel_to_baseline = Float64[],
+    )
+    @test plot_forecast_skill_by_cutoff(DataFrame(schema)) isa
+        CairoMakie.Makie.Figure
+    rows = NamedTuple[]
+    for d in (Date(2026, 7, 16), Date(2026, 8, 4)),
+            f in (FROZEN_FIT, "confirmed")
+        push!(
+            rows,
+            (;
+                stream = "confirmed cases", made_date = d, fit = f,
+                rel_to_baseline = 1.5,
+            )
+        )
+    end
+    fig = plot_forecast_skill_by_cutoff(DataFrame(rows))
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    ## One slot per made date, whichever fits carry it.
+    @test ax.limits[][1] == (0.5, 2.5)
+end

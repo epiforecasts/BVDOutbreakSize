@@ -59,6 +59,29 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
+- The frozen-fit score tables carry the frozen joint alone, as the
+  cross-release tables carry the joint alone, so a row is one model at one
+  cut-off. The single-stream frozen fits stay in the figures, which compare
+  the fits against each other.
+- The by-horizon and by-cut-off score tables gain figures: the mean CRPS
+  split into its width, its overprediction and its underprediction by
+  horizon, and relative skill against the baseline cut-off by cut-off. Both
+  tables run to hundreds of rows and were unreadable as numbers alone.
+- The frozen forecasts-versus-now overlay draws the frozen joint and the
+  baseline alone. A single-stream frozen fit exists at one cut-off only, so
+  its series landed on top of the joint point beside it.
+- The per-stream projected-trajectory figure crops to twice the joint fit's
+  90% upper bound, the crop the cut-off density figure beside it already
+  used. The exports-only fit's band reaches the source population, which put
+  every other stream on the baseline.
+- The reproduction-number-by-release figures share a fixed axis at three,
+  with intervals past it clamped and marked. The basic reproduction number
+  keeps its own axis, its estimates sitting where that crop would cut them.
+- A single-stream fit's forecast is overlaid on the validation and bed
+  panels as a step outline over the joint's own histogram bins, reweighted
+  to the joint's draw count. It was a kernel density on the density scale
+  against an axis counting draws, which drew it flat along the floor of
+  every panel whatever it said.
 
 ### Fixed
 
