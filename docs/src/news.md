@@ -59,6 +59,16 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
+- The summary dashboard is shorter (#782). The fit diagnostics are behind a
+  dropdown, and the per-province infections and parameter panels and the
+  per-stream reproduction number are linked rather than repeated. The
+  by-province headline table stays.
+- The API reference is grouped into eleven pages following the order a fit
+  runs in, and says which names are public and which are internal (#782).
+  It was one undifferentiated `@autodocs` dump.
+- The aim and origins and the limitations are pages of their own rather than
+  dropdowns inside the analysis, and a new page carries the authors, the
+  funding and the citation (#782).
 
 ### Fixed
 
@@ -90,6 +100,11 @@ quality measured on them, with that convergence failure in mind.
 - Julia code is formatted with Runic rather than JuliaFormatter (#744). The old
   compat string `"=2.12.0, 2.12"` was a union that pinned nothing; a quality
   test now checks the pin, and 121 files were reformatted.
+- A local documentation build loads its fits the way CI does (#782).
+  `task fetch-fits` downloads them from the latest successful documentation
+  run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
+  and `task fit-all` takes every available thread instead of fitting the
+  registry one model at a time.
 
 ### Dependencies
 
