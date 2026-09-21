@@ -481,6 +481,16 @@ if !@isdefined(_BVD_SETUP_LOADED)
         _joint_pp_cache[] = pp
         return pp
     end
+    province_lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES)
+    )
+    province_isolation = province_care_observations(
+        obs.province_isolation_history, PROVINCE_NAMES
+    )
+    province_capacity = province_care_observations(
+        obs.province_bed_capacity_history, PROVINCE_NAMES
+    )
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
     ## nested submodels stay distinct; this map only relabels them for display.

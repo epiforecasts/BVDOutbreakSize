@@ -88,6 +88,10 @@ function patch_fit_args(obs)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    prov_lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES)
+    )
     return (;
         n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments,
@@ -96,6 +100,14 @@ function patch_fit_args(obs)
         province_death_days = prov_deaths.days,
         province_testing_covariate =
             province_testing_covariate(obs.province_lab_daily_history),
+        province_lab_increments = prov_lab.increments,
+        province_lab_days = prov_lab.days,
+        province_isolation = province_care_observations(
+            obs.province_isolation_history, PROVINCE_NAMES
+        ),
+        province_capacity = province_care_observations(
+            obs.province_bed_capacity_history, PROVINCE_NAMES
+        ),
     )
 end
 

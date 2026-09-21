@@ -252,6 +252,26 @@ function load_observations(
         return result
     end
 
+    ## Sparse province blocks: one `[block.province]` sub-table per province
+    ## with its own `dates` and `values`, since the isolation and bed
+    ## figures are printed for different provinces on different days. A
+    ## province absent on a day has no entry, never a zero.
+    function province_sparse_history(key)
+        ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, ProvHistory}()
+        haskey(raw, key) || return result
+        for (prov, sub) in raw[key]
+            sub isa AbstractDict || continue
+            haskey(sub, "dates") || continue
+            keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+            idx = Int[_index(d) for d in sub["dates"][keep]]
+            ord = sortperm(idx)
+            vals = Int.(sub["values"][keep])
+            result[String(prov)] = (; days = idx[ord], counts = vals[ord])
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -462,6 +482,10 @@ function load_observations(
         province_confirmed_history = province_history("province_confirmed_history"),
         province_death_history = province_history("province_death_history"),
         province_lab_daily_history = province_history("province_lab_daily_history"),
+        province_isolation_history =
+            province_sparse_history("province_isolation_history"),
+        province_bed_capacity_history =
+            province_sparse_history("province_bed_capacity_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days,
     )
@@ -581,6 +605,102 @@ function province_testing_covariate(
     any(iszero, analysed) && return none
     log_rate = log.(analysed ./ populations)
     return log_rate .- (sum(log_rate) / np)
+end
+
+"""
+    province_care_observations(history, province_names; members)
+
+Long-format province observations for the isolation-occupancy and bed
+splits in [`treatment_flow_model`](@ref): one row per (day, patch) with a
+printed figure, `(; days, patches, counts)` sorted by day. `history` maps
+a source province to its sparse `(days, counts)` series, as
+[`load_observations`](@ref) reads the `province_isolation_history` and
+`province_bed_capacity_history` blocks. A pooled patch (see
+[`PROVINCE_MEMBERS`](@ref)) is present on a day only when every member
+that has printed on or before that day prints that day, and its count is
+their sum, since a partial sum would read a silent member as an empty
+ward. A province absent from `history` never contributes.
+"""
+function province_care_observations(
+        history, province_names::AbstractVector = PROVINCE_NAMES;
+        members = PROVINCE_MEMBERS
+    )
+    days = Int[]
+    patches = Int[]
+    counts = Int[]
+    isempty(history) && return (; days, patches, counts)
+    for (p, name) in enumerate(province_names)
+        ms = [
+            m for m in get(members, name, [name])
+                if haskey(history, m) && !isempty(history[m].days)
+        ]
+        isempty(ms) && continue
+        lookup = [
+            Dict(zip(Int.(history[m].days), Int.(history[m].counts)))
+                for m in ms
+        ]
+        firsts = [minimum(Int.(history[m].days)) for m in ms]
+        all_days = sort!(unique!(reduce(vcat, [Int.(history[m].days) for m in ms])))
+        for d in all_days
+            total = 0
+            present = true
+            for (lk, f) in zip(lookup, firsts)
+                if haskey(lk, d)
+                    total += lk[d]
+                elseif f <= d
+                    present = false
+                    break
+                end
+            end
+            present || continue
+            push!(days, d)
+            push!(patches, p)
+            push!(counts, total)
+        end
+    end
+    ord = sortperm(days; alg = MergeSort)
+    return (; days = days[ord], patches = patches[ord], counts = counts[ord])
+end
+
+"""
+    province_lab_increment_matrix(province_lab_daily_history, province_names,
+                                  n_patches)
+
+Reshape the per-province daily analysed-specimen histories loaded by
+[`load_observations`](@ref) into the `(n_patches × n_days)` matrix of
+analysed counts that the laboratory composition in [`bvd_joint`](@ref)
+scores, together with the shared day indices. A pooled patch sums its
+members' counts day by day (see [`PROVINCE_MEMBERS`](@ref)). Every
+province must be reported on the same days, which the composition
+requires. Returns empty `days` when the history is absent or a patch has
+no analysed series, and the caller skips the term.
+"""
+function province_lab_increment_matrix(
+        province_lab_daily_history,
+        province_names::AbstractVector = PROVINCE_NAMES,
+        n_patches::Integer = length(province_names)
+    )
+    empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
+    isempty(province_lab_daily_history) && return empty
+    names = province_names[1:min(n_patches, length(province_names))]
+    series = [["$(m)_analysed" for m in ms] for ms in patch_members(names)]
+    any(ks -> any(k -> !haskey(province_lab_daily_history, k), ks), series) &&
+        return empty
+    reference = series[1][1]
+    days = province_lab_daily_history[reference].days
+    isempty(days) && return empty
+    increments = zeros(Int, length(names), length(days))
+    for (p, ks) in enumerate(series), k in ks
+
+        h = province_lab_daily_history[k]
+        h.days == days || error(
+            "province series `$(k)` is reported on different days to " *
+                "`$(reference)`; the laboratory composition needs every " *
+                "province on the same days."
+        )
+        increments[p, :] .+= h.counts
+    end
+    return (; days, increments)
 end
 
 """

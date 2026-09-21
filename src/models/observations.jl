@@ -2243,6 +2243,52 @@ function treatment_flow_defaults()
 end
 
 """
+Per-patch latent bed demand: each patch's BVD reports through the
+admission delay at `p_iso_bvd · p_drc`, its share `w[p]` of the national
+non-BVD admissions `A_bg`, the same clinical flows
+([`abscond_thinned_flows`](@ref)) and the same running balance
+([`accumulate_occupancy`](@ref)) as the national stock in
+[`treatment_flow_model`](@ref). Rule-outs are the patch's share of the
+national rule-out flow, since non-BVD admissions leave on one stay. Every
+step is positively homogeneous in the inflow, so an equal split of the
+reports gives equal halves of the national demand. Returns an
+`(n_patches × n)` matrix.
+"""
+function _patch_demand(
+        reports_matrix::AbstractMatrix, A_bg::AbstractVector,
+        w::AbstractVector, p_iso_bvd::Real, p_drc::Real,
+        adm_pmf::AbstractVector, CFR_iso::Real,
+        death_pmf::AbstractVector, recovery_pmf::AbstractVector,
+        ruleout_daily::AbstractVector, κ::Real, conf_hazard::AbstractVector
+    )
+    np, n = size(reports_matrix)
+    T = promote_type(
+        eltype(reports_matrix), eltype(A_bg), eltype(w), typeof(p_iso_bvd),
+        typeof(p_drc), eltype(adm_pmf), typeof(CFR_iso), eltype(death_pmf),
+        eltype(recovery_pmf), eltype(ruleout_daily), typeof(κ),
+        eltype(conf_hazard)
+    )
+    out = Matrix{T}(undef, np, n)
+    scale = p_iso_bvd * p_drc
+    survive = one(CFR_iso) - CFR_iso
+    @inbounds for p in 1:np
+        A_bvd_p = convolve_delay(
+            scale .* vec(@view reports_matrix[p, :]), adm_pmf
+        )
+        deaths_p, recover_p = abscond_thinned_flows(
+            CFR_iso .* A_bvd_p, death_pmf, survive .* A_bvd_p, recovery_pmf,
+            κ, conf_hazard
+        )
+        acc_p = accumulate_occupancy(
+            A_bvd_p, w[p] .* A_bg, deaths_p, recover_p,
+            w[p] .* ruleout_daily, κ, conf_hazard
+        )
+        out[p, :] = acc_p.demand
+    end
+    return out
+end
+
+"""
 DRC treatment-centre patient-flow likelihood. Occupancy is built as a running
 balance of latent admission, discharge and abscond events rather than a
 convolution. The "Patients en isolement" figure is the daily occupied-bed
@@ -2352,6 +2398,21 @@ series for forecasting and replication.
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         ## Prior sd of each occupancy break step (beds), centred on zero.
         occupancy_break_sd::Real = 25.0,
+        ## Per-patch BVD reports `(n_patches × n)`, the rows summing to
+        ## `bvd_reports_daily`. `nothing` is one patch.
+        bvd_reports_matrix::Union{Nothing, AbstractMatrix} = nothing,
+        ## Share of the non-BVD background in each patch, summing to one
+        ## ([`background_split_model`](@ref)).
+        background_split::AbstractVector{<:Real} = [1.0],
+        ## Province occupancy and bed rows, `(; days, patches, counts)` from
+        ## `province_care_observations`, or `nothing`. Scored as splits of
+        ## the printed sum of the provinces present each day.
+        province_isolation = nothing,
+        province_capacity = nothing,
+        patch_capacity = patch_bed_capacity_walk_model,
+        province_split_rho_prior = truncated(
+            Normal(0, 0.1); lower = 0, upper = 1
+        ),
         cutoff::Union{Nothing, Integer} = nothing
     )
     adm_state ~ to_submodel(admission)
@@ -2382,12 +2443,20 @@ series for forecasting and replication.
         Int.(capacity_history.days)
     )
     cap_start = isempty(cap_obs_days) ? 1 : minimum(cap_obs_days)
+    np = bvd_reports_matrix === nothing ? 1 : size(bvd_reports_matrix, 1)
+    length(background_split) == np || error(
+        "treatment_flow_model: $(length(background_split)) background " *
+            "shares for $(np) patches."
+    )
+    ## With patches, one walk per patch and the national capacity their sum.
     cap_state ~ to_submodel(
-        cutoff === nothing ? capacity(n; start = cap_start) :
+        np > 1 ? patch_capacity(n, np; start = cap_start) :
+            cutoff === nothing ? capacity(n; start = cap_start) :
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
     C_T = isempty(C) ? zero(eltype(C)) : C[nc]
+    C_patch = np > 1 ? cap_state.C_patch : reshape(C, 1, :)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2505,6 +2574,17 @@ series for forecasting and replication.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     demand = _typed_as(demand_raw, C)
+
+    ## Per-patch bed demand for the province splits: each patch's inflow
+    ## through the same flows and rates. With one patch it is the national
+    ## demand as one row.
+    demand_patch = np > 1 ?
+        _patch_demand(
+            bvd_reports_matrix, A_bg, background_split, p_iso_bvd, p_drc,
+            adm_delay_state.pmf, CFR_iso, death_los_state.pmf,
+            recovery_los_state.pmf, ruleout_daily, κ, conf_hazard
+        ) : reshape(demand, 1, :)
+
     ## Reclassification offset Δ(t), added to the modelled census total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
     occ_offset = _typed_as(occ_break_offset, C)
@@ -2546,6 +2626,31 @@ series for forecasting and replication.
     bed_capacity ~ to_submodel(
         vintage_increments_model(cap_modelled, cap_obs, k)
     )
+
+    ## Province splits of the occupancy and of the beds, conditional on the
+    ## printed sum of the provinces present each day. The national tile and
+    ## the national implied capacity above keep their likelihoods, so these
+    ## add only the spatial split. Occupancy is split on the censored
+    ## per-patch stock, so a full province takes no more than its beds.
+    occupancy_split_rho = 0.0
+    if np > 1 && province_isolation !== nothing &&
+            !isempty(province_isolation.days)
+        occupancy_split_rho ~ province_split_rho_prior
+        @addlogprob! province_split_logpdf(
+            province_isolation.days, province_isolation.patches,
+            province_isolation.counts, min.(demand_patch, C_patch),
+            occupancy_split_rho
+        )
+    end
+    capacity_split_rho = 0.0
+    if np > 1 && province_capacity !== nothing &&
+            !isempty(province_capacity.days)
+        capacity_split_rho ~ province_split_rho_prior
+        @addlogprob! province_split_logpdf(
+            province_capacity.days, province_capacity.patches,
+            province_capacity.counts, C_patch, capacity_split_rho
+        )
+    end
 
     ## Split likelihoods, guarded by `split_active` so they no-op when the
     ## hazard is structurally zero.
@@ -2668,6 +2773,8 @@ series for forecasting and replication.
         overall_los, abscond_frac, k_isolation = k,
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
+        demand_patch, capacity_patch = C_patch, capacity_series = C,
+        occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
@@ -3783,6 +3890,61 @@ filled in too, so the returned matrix sums to `totals` in every column.
 end
 
 """
+    province_split_logpdf(days, patches, counts, level, ρ)
+
+Log-density of per-province counts as a split of the printed sum of the
+provinces present each day: the stick-breaking BetaBinomial of
+[`province_composition_model`](@ref) over whichever patches print a figure
+that day. `days`, `patches` and `counts` are one row per printed figure,
+sorted by day (see `province_care_observations`); `level[p, d]` is the
+modelled level of patch `p` on grid day `d`, up to a factor common to all
+patches; `ρ` is the overdispersion. A day with one patch printed carries
+no split and adds nothing. Added with `@addlogprob!` for the
+isolation-occupancy and bed splits, whose coverage varies by day, so the
+observation cannot be the full matrix the composition model takes.
+"""
+function province_split_logpdf(
+        days::AbstractVector{<:Integer}, patches::AbstractVector{<:Integer},
+        counts::AbstractVector{<:Integer}, level::AbstractMatrix, ρ::Real
+    )
+    T = promote_type(eltype(level), typeof(float(ρ)))
+    lp = zero(T)
+    m = length(days)
+    m == 0 && return lp
+    nd = size(level, 2)
+    i = 1
+    @inbounds while i <= m
+        d = days[i]
+        j = i
+        while j < m && days[j + 1] == d
+            j += 1
+        end
+        if j > i
+            dd = clamp(Int(d), 1, nd)
+            tot = zero(T)
+            remaining = 0
+            for r in i:j
+                tot += safe_rate(level[patches[r], dd])
+                remaining += counts[r]
+            end
+            tail = one(T)
+            for r in i:(j - 1)
+                share = safe_rate(level[patches[r], dd]) / tot
+                p_cond = clamp(share / tail, 0.0, 1.0)
+                lp += logpdf(
+                    safe_betabinomial(max(remaining, 0), p_cond, ρ),
+                    counts[r]
+                )
+                remaining -= counts[r]
+                tail = max(tail - share, 1.0e-10)
+            end
+        end
+        i = j + 1
+    end
+    return lp
+end
+
+"""
     stick_breaking_loglik(groups, counts, shares, ρ)
 
 Log-likelihood of counts split between the members of each group by
@@ -3910,6 +4072,9 @@ zones). `ρ → 0` recovers a plain Multinomial split.
 - `modelled_confirmed`: `(n_patches × n_vintages)` modelled expected
   per-province confirmed increments, binned to the same vintages.
 - `rho_prior`: prior on the composition overdispersion.
+- `ascertainment_sd_prior`: prior on the pooling scale of the per-patch
+  ascertainment contrast. `nothing` turns the contrast off, so the shares
+  are the modelled split alone; the laboratory composition passes that.
 - `testing_covariate`: per-patch logged per-capita laboratory throughput,
   centred to mean zero ([`province_testing_covariate`](@ref)). Defaults to
   zeros, which leaves the ascertainment prior as the pooled deviation alone
@@ -3985,26 +4150,37 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## caller with no laboratory data keeps the pooled deviation on its own
     ## rather than gaining a dimension the likelihood never sees. The death
     ## composition is such a caller.
-    τ_asc ~ ascertainment_sd_prior
-    z_asc ~ product_distribution(fill(ascertainment_offset_prior, np - 1))
+    ## `ascertainment_sd_prior = nothing` turns the contrast off and the
+    ## shares are the modelled split alone. The laboratory composition uses
+    ## that, since its split is carried by the background shares
+    ## ([`background_split_model`](@ref)) and a second free contrast would be
+    ## confounded with them.
     length(testing_covariate) == np || error(
         "province_composition_model: $(length(testing_covariate)) testing " *
             "covariate entries for $(np) patches."
     )
+    τ_asc = 0.0
     β_asc = 0.0
-    if any(!iszero, testing_covariate)
-        β_asc ~ testing_coefficient_prior
+    asc = ones(np)
+    if ascertainment_sd_prior !== nothing
+        τ_asc ~ ascertainment_sd_prior
+        z_asc ~ product_distribution(
+            fill(ascertainment_offset_prior, np - 1)
+        )
+        if any(!iszero, testing_covariate)
+            β_asc ~ testing_coefficient_prior
+        end
+        ## Read through a local, as `ρ` is above: the tilde assigns `β_asc`
+        ## on one path and the literal on another, so the fused broadcast
+        ## below would box it if it captured `β_asc` itself.
+        beta = β_asc
+        ## The covariate term is centred here so the whole log multiplier
+        ## sums to zero whatever covariate is passed.
+        cov_centred = testing_covariate .- (sum(testing_covariate) / np)
+        log_asc = beta .* cov_centred .+
+            sum_to_zero(sum_to_zero_factor(basis, τ_asc), z_asc)
+        asc = exp.(log_asc)
     end
-    ## Read through a local, as `ρ` is above: the tilde assigns `β_asc` on
-    ## one path and the literal on another, so the fused broadcast below
-    ## would box it if it captured `β_asc` itself.
-    beta = β_asc
-    ## The covariate term is centred here so the whole log multiplier sums
-    ## to zero whatever covariate is passed.
-    cov_centred = testing_covariate .- (sum(testing_covariate) / np)
-    log_asc = beta .* cov_centred .+
-        sum_to_zero(sum_to_zero_factor(basis, τ_asc), z_asc)
-    asc = exp.(log_asc)
     ## Optional second multiplier, per-province severity. The death
     ## composition uses it for the per-province case-fatality ratio, partially
     ## pooled toward the national value on the log scale and constrained to

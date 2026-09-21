@@ -10,6 +10,7 @@ Nothing in the model hardcodes counts.
 |---|---|
 | `observations.toml` | The manifest the model loads. Every stream is a value or a dated `dates`/`values` history plus a prose `source =` citation. Edit this to advance the analysis. |
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
+| `province_care_scanned.csv` | Per-province isolation occupancy, beds and 24h patient flows read from the occupation tables and the care-continuity prose, one row per (SitRep, province) with the source text quoted. Feeds the `province_isolation_history` and `province_bed_capacity_history` blocks. |
 | `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's inline SVG charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
@@ -26,6 +27,15 @@ Two sources feed the manifest:
 
 INSP is the primary source: it publishes first, and since SitRep 059 (12 July 2026) its richer "analytique / édition quotidienne" PDFs carry content the mirror does not transcribe (epidemic curve by symptom-onset date, age/sex pyramids, five provinces).
 The mirror usually lags INSP by a report or two.
+
+## Province isolation occupancy and beds (`province_care_scanned.csv`)
+
+The occupation table (Tableau IV, V, 5, 6 or 7 by vintage, to SitRep 080) and the per-province care-continuity prose from SitRep 081 print, for each province that reports, the patients in isolation at the end of the day, the bed count and often the 24h admissions and discharges.
+`province_care_scanned.csv` holds one row per (SitRep, province) with a printed figure, with the source text quoted, produced by `scripts/scan_province_care.jl` and checked against an independent blind read.
+The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_history]` carry the occupancy and bed series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
+A province that prints nothing on a day has no entry; a printed zero is a zero.
+Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total and the beds are the normed count the printed rate refers to.
+The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
 
 ## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)
 

@@ -39,13 +39,11 @@ end
     ## The per-province analysed counts partition the national daily
     ## analysed series, so each column sums to the national count that day.
     nat = Dict(zip(obs.lab_daily_history.days, obs.lab_daily_history.counts))
-    shared = 0
-    for (i, d) in enumerate(lab.days)
-        haskey(nat, d) || continue
-        shared += 1
-        @test sum(@view lab.increments[:, i]) == nat[d]
+    shared = [i for (i, d) in enumerate(lab.days) if haskey(nat, d)]
+    @test length(shared) > 50
+    for i in shared
+        @test sum(@view lab.increments[:, i]) == nat[lab.days[i]]
     end
-    @test shared > 50
 
     ## A pooled patch is the sum of its members.
     members = PROVINCE_MEMBERS[PROVINCE_NAMES[end]]
@@ -155,5 +153,5 @@ end
     @test !any(contains("τ_bg"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
 
     ## Province laboratory data with one patch would be dropped silently.
-    @test_throws ErrorException build(labh; n_patches = 1)
+    @test_throws ErrorException build(labh; n_patches = 1)()
 end

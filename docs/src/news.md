@@ -150,6 +150,30 @@ Changes since v2.1.0.
 - The API reference is grouped into eleven pages in the order a fit runs, and says which names are public (#782).
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
+- The per-province analysed-specimen volume is scored as a third composition,
+  conditional on the national daily analysed total. The modelled split is each
+  patch's BVD suspects plus its share of the non-BVD background, a partially
+  pooled simplex centred on population share (`background_split_model`) that
+  this term identifies. The testing fraction stays national and the term
+  samples no ascertainment contrast of its own. The per-province positives
+  remain unfitted.
+- Province isolation occupancy and bed counts enter the treatment-flow stream
+  as splits of the printed sum of the provinces present each day, over
+  per-patch bed demand and per-patch capacity walks with one shared innovation
+  scale. The national tile and the national implied capacity keep their
+  likelihoods on every day. Occupancy is split on the censored per-patch
+  stock, so a full province takes no more than its beds, and the fit reports
+  beds, demand, utilisation and shortfall by province at the cut-off.
+- A pooled patch's occupancy or bed count is used on a day only when every
+  member that has printed before prints that day, so a silent member is never
+  read as an empty ward.
+
+### Data
+
+- `province_isolation_history` and `province_bed_capacity_history` blocks,
+  sparse by province, transcribed from the occupation tables to SitRep 080 and
+  the per-province care prose from 081, with `scripts/scan_province_care.jl`
+  and a blind second read reconciled against each other.
 
 ### Fixed
 

@@ -764,6 +764,69 @@ at the same scale.
 end
 
 """
+Per-patch isolation-bed capacity, one [`bed_capacity_walk_model`](@ref)
+walk per patch on the same weekly knots with one shared innovation SD, for
+the province occupancy and bed splits in [`treatment_flow_model`](@ref).
+Each baseline `C0[p]` has a log-normal prior centred on the national
+baseline's median scaled by the patch's population share, with a wide
+spread, since the printed province bed counts pin it. The national
+capacity is the sum of the patch walks, non-decreasing like each of them.
+
+Returns `(; C, C_patch, C0, σ_cap)` with `C_patch` an
+`(n_patches × n)` matrix and `C` its column sums.
+"""
+@model function patch_bed_capacity_walk_model(
+        n::Integer, n_patches::Integer; start::Integer = 1,
+        week::Integer = 7,
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        baseline_median::Real = 450.0,
+        baseline_sd::Real = 1.0,
+        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0)
+    )
+    length(populations) == n_patches || error(
+        "patch_bed_capacity_walk_model: $(length(populations)) populations " *
+            "for $(n_patches) patches."
+    )
+    total_pop = sum(populations)
+    C0 ~ product_distribution(
+        [
+            LogNormal(log(baseline_median * populations[p] / total_pop), baseline_sd)
+                for p in 1:n_patches
+        ]
+    )
+    σ_cap ~ innovation_prior
+    s = clamp(Int(start), 1, n)
+    days = knot_days(n; week = week, start = s)
+    nb = length(days)
+    nsteps = max(nb - 1, 1)
+    ## Non-negative, centred innovations, as in the national walk, laid out
+    ## patch by patch in one vector.
+    steps ~ product_distribution(
+        fill(
+            truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
+            nsteps * n_patches
+        )
+    )
+    Tc = promote_type(eltype(C0), eltype(steps))
+    C_patch = Matrix{Tc}(undef, n_patches, n)
+    nk = max(nb - 1, 0)
+    @inbounds for p in 1:n_patches
+        offset = (p - 1) * nsteps
+        log_knots = vcat(
+            zero(σ_cap), cumsum(@view steps[(offset + 1):(offset + nk)])
+        )
+        walk = interpolate_knots(log_knots, days, n)
+        C_patch[p, :] = C0[p] .* exp.(walk)
+    end
+    C = vec(sum(C_patch; dims = 1))
+    return (; C, C_patch, C0, σ_cap)
+end
+
+"""
 Recovery probability for the recovered-among-confirmed stream
 ([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
 is recovery rather than death is the confirmed-case survival fraction, the
@@ -1893,4 +1956,63 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
         weights[p] = exp(μ_w + τ_w * z_w[p - 1])
     end
     return (; weights, pooling_sd = τ_w, location = μ_w)
+end
+
+"""
+Partially pooled split of the non-BVD suspected-case background across the
+patches. The national background walk `bg_daily`
+([`reported_cases_model`](@ref)) counts suspects who are not BVD cases and
+carries no province, so the patch model needs a share of it per patch to
+build a per-patch suspect pipeline for the laboratory and isolation
+streams. Each share is the patch's population share moved by a pooled log
+deviation,
+
+```math
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
+\\qquad z_1 = 0,
+```
+
+normalised to sum to one. The first patch is the reference, so with
+`n_patches - 1` free deviations the simplex has no redundant direction.
+`τ_bg → 0` recovers the population split. The per-province
+analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
+since the background dominates the specimens analysed where positivity is
+low.
+
+With one patch the whole background belongs to it and nothing is sampled.
+
+Returns `(; w, pooling_sd)`.
+"""
+@model function background_split_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "background_split_model: $(length(populations)) populations for " *
+            "$(n_patches) patches."
+    )
+    τ_bg ~ pooling_sd_prior
+    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
+    total_pop = sum(populations)
+    log_w = Vector{Tw}(undef, n_patches)
+    log_w[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
+    end
+    ## Softmax against the largest term, so a wide deviation cannot
+    ## overflow.
+    peak = maximum(log_w)
+    w = exp.(log_w .- peak)
+    w ./= sum(w)
+    return (; w, pooling_sd = τ_bg)
 end
