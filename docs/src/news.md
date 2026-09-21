@@ -103,6 +103,14 @@ quality measured on them, with that convergence failure in mind.
 
 ### Infrastructure
 
+- The documentation build fails when the headline joint fit has not converged,
+  and says so in a comment on the pull request that is edited in place on each
+  build (#764). The verdict carries the headline diagnostics, which thresholds
+  were breached and the worst-mixing parameters and divergence locations the
+  sensitivity report breaks down in full. It is a leaf job, so the preview
+  still builds and still comments: the pages are how the failure is diagnosed.
+  v2.0.0 was published with a joint fit that had not converged and nothing in
+  the build said so.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17

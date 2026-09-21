@@ -227,18 +227,39 @@ function _scalar_stats(summary; exclude = _DIAGNOSTIC_EXCLUDE)
     return out
 end
 
-function _num_divergences(chn)
+# The sampler's per-draw divergence flag, or `nothing` where the chain
+# carries no sampler extras. One lookup behind both counts below, so they
+# cannot come to be taken over different sets of draws.
+function _numerical_error_flags(chn)
     for e in FlexiChains.extras(chn)
         e.name === :numerical_error || continue
-        return Int(sum(skipmissing(vec(chn[e]))))
+        return vec(chn[e])
     end
-    return 0
+    return nothing
+end
+
+# Divergent transitions across every chain.
+function _num_divergences(chn)
+    flags = _numerical_error_flags(chn)
+    flags === nothing && return 0
+    return Int(sum(skipmissing(flags)))
+end
+
+# Post-warmup draws across every chain. A divergence count means little
+# without it: six divergences in 3200 draws and six in twelve are not the
+# same fit. Draws whose flag is missing are left out, as they are from the
+# count above, so the two are over the same set and their ratio is the
+# divergence rate among the draws whose outcome is known.
+function _num_draws(chn)
+    flags = _numerical_error_flags(chn)
+    flags === nothing && return 0
+    return count(!ismissing, flags)
 end
 
 """
 NUTS fit-quality summary for one chain: the worst (maximum) R-hat, the
-smallest bulk and tail effective sample sizes across parameters, and the
-number of divergent transitions.
+smallest bulk and tail effective sample sizes across parameters, the number
+of divergent transitions and the number of post-warmup draws they are out of.
 """
 function fit_diagnostics(chn)
     ## Drop non-finite entries: a fixed or degenerate quantity has an
@@ -252,6 +273,7 @@ function fit_diagnostics(chn)
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
         min_ess_tail = isempty(tail) ? NaN : minimum(tail),
         n_divergent = _num_divergences(chn),
+        n_draws = _num_draws(chn),
     )
 end
 
