@@ -12,6 +12,13 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The release helper reads a Windows checkout. Its version-heading pattern
+  ended at the line end, which a CRLF file reaches one character late, so
+  `news.md` parsed as a file with no version sections at all and the Windows
+  test cell failed on every push. The bump also rewrote the two lines it
+  touches in `CITATION.cff` with bare newlines, mixing endings in a file it
+  had found consistent.
+
 - The fit cache key CI restores is the one the fits are keyed on (#739). The
   Actions key hashed all of `data/`, including the generated scoring tables
   and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
