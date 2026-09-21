@@ -1,0 +1,4 @@
+# Quoted numbers for paper/main.qmd, read with Quarto meta shortcodes.
+# Written from the release analysed by a script to be added under scripts/;
+# never edited by hand. Empty until that script exists.
+release_tag: "v2.1.0"

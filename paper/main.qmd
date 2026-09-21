@@ -35,7 +35,7 @@ PLAN. Each top-level bullet is the major sentence of one paragraph; sub-bullets 
 RECOLLECTION marks a point needing an author answer from paper/.notes/recollections.md.
 VERIFY marks a claim that rests on agent-written text only (paper/.notes/review-grounding.md) and needs author confirmation.
 Length: about 3500 words; each Methods subsection at most two paragraphs except Model development, which has one short paragraph per model version.
-Numbers: never typed; every quantity is a `{{< meta key >}}` read from generated/numbers.yml, written from the release analysed (v2.1.0, SitRep 125).
+Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (v2.1.0, SitRep 125).
 Dates and durations: never in prose; they live in @tbl-models and @fig-timeline.
 Supporting Information: the single-file report released with the tag (analysis.html); the main text points to it by italic section title.
 Terms: "the joint model" for the method, "the joint estimate" for its output, "single-stream fits" for the comparators, "release" not "vintage", "province" not "patch", "random walk" not "walk".
@@ -136,7 +136,7 @@ Style: paper/.notes/pc-style.md section 10.
 ### Convergence
 
 - Each fit reports R-hat, bulk effective sample size and divergent transitions for every parameter [@gelman1992; @vehtari2021].
-  - NUTS with the chains, draws, adaptation steps and target acceptance read from the release [@hoffman2014nuts]. <!-- {{< meta sampler_* >}} -->
+  - NUTS with the chains, draws, adaptation steps and target acceptance read from the release [@hoffman2014nuts]. <!-- sampler_* keys in generated/numbers.yml -->
 
 ### Implementation
 
