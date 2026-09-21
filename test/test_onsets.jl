@@ -913,10 +913,9 @@ end
     @test all(isfinite, et)
 end
 
-@testitem "bvd_joint: short NUTS run with the onset stream wired in" tags = [
-    :slow,
-] begin
-    using BVDOutbreakSize: bvd_joint, nuts_sample
+@testitem "bvd_joint: the onset stream is wired in" begin
+    using BVDOutbreakSize: bvd_joint
+    using Turing: sample, Prior
 
     n = 40
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
@@ -928,7 +927,7 @@ end
         prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
         increments = [3, 2, 1, 0, 1, 2, 1, 3, 2],
     )
-    chn = nuts_sample(
+    chn = sample(
         bvd_joint(
             n, 2, 18, 905, 0, 27, 50;
             confirmed_deaths = 5,
@@ -938,8 +937,8 @@ end
             lab_history = (; days = [18, 40], counts = [30, 50]),
             onset_curve_history = oc,
             breakpoint = 30
-        );
-        samples = 12, chains = 1, progress = false
+        ),
+        Prior(), 12; progress = false
     )
     C_T = vec(Array(chn[:C_T]))
     et = vec(Array(chn[:expected_onset_reported_T]))
