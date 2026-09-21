@@ -77,6 +77,12 @@ quality measured on them, with that convergence failure in mind.
 - The reproduction-number-by-release figures share a fixed axis at three,
   with intervals past it clamped and marked. The basic reproduction number
   keeps its own axis, its estimates sitting where that crop would cut them.
+- The frozen evaluation drops the confirmed-death rows of the fourteen
+  reconstructions cut between 16 July and 15 August 2026. The forecaster
+  that built them could not project that stream from its own trajectory and
+  floored it at zero, so each carried a one-week median of exactly zero
+  against an observed 250 to 370. The section now lists every scoring
+  exclusion in one place, and the archive keeps the rows.
 - A single-stream fit's forecast is overlaid on the validation and bed
   panels as a step outline over the joint's own histogram bins, reweighted
   to the joint's draw count. It was a kernel density on the density scale

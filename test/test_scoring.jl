@@ -1110,3 +1110,31 @@ end
     @test "release_date" in names(out)
     @test "rel_to_baseline" in names(out)
 end
+
+@testitem "drop_superseded_forecasts drops the named stream and window" begin
+    using BVDOutbreakSize: drop_superseded_forecasts,
+        SUPERSEDED_FROZEN_FORECASTS, FROZEN_FIT
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ex = SUPERSEDED_FROZEN_FORECASTS
+    rows = [
+        ## Inside the window, the named stream: the floored reconstruction.
+        (; stream = ex.stream, made_date = ex.from, fit = FROZEN_FIT),
+        (; stream = ex.stream, made_date = ex.to, fit = FROZEN_FIT),
+        ## Same window, another stream: the defect is stream-specific.
+        (; stream = "confirmed cases", made_date = ex.from, fit = FROZEN_FIT),
+        ## The named stream either side of the window, where the same code
+        ## returned a rate rather than a floor.
+        (; stream = ex.stream, made_date = ex.from - Day(1), fit = FROZEN_FIT),
+        (; stream = ex.stream, made_date = ex.to + Day(1), fit = FROZEN_FIT),
+    ]
+    kept = drop_superseded_forecasts(DataFrame(rows))
+    @test size(kept, 1) == 3
+    @test !any(
+        r.stream == ex.stream && ex.from <= r.made_date <= ex.to
+            for r in eachrow(kept)
+    )
+    ## An empty table is the state before any release carries a forecast.
+    empty = DataFrame(stream = String[], made_date = Date[], fit = String[])
+    @test isempty(drop_superseded_forecasts(empty))
+end

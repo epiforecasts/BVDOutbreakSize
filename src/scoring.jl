@@ -639,6 +639,62 @@ function select_fit_role(table::DataFrame, role::AbstractString)
     return table[_fit_role.(table.fit) .== role, :]
 end
 
+## The frozen archive's confirmed-death rows that a superseded forecaster
+## produced, named as a stream and the window of frozen cut-offs the defect
+## shows in.
+##
+## Those reconstructions were built before the forecaster projected each
+## stream from its own cumulative trajectory (#613, #706). Without one it
+## inferred the cut-off daily rate by inverting the cumulative total under
+## exponential growth, which collapses towards zero as the fitted growth
+## rate reaches zero. Confirmed deaths was the stream carrying no
+## trajectory, and from mid-July the reproduction number sits at one, so
+## the two together floor the projection: every one of the fourteen
+## reconstructions cut between these dates carries a confirmed-death median
+## of exactly zero at the one-week horizon against an observed 250 to 370,
+## and every reconstruction cut after the window projects the stream
+## normally (318 against 295 at the first of them).
+##
+## The same releases' May and June cut-offs are kept. The outbreak was
+## growing then, so the same code returned a rate rather than a floor, and
+## those rows carry no signature of the defect.
+##
+## This lapses when those reconstructions are rebuilt with the current
+## forecaster, which is what the frozen evaluation claims to be: the
+## current model frozen at earlier cut-offs.
+const SUPERSEDED_FROZEN_FORECASTS = (;
+    stream = "confirmed deaths",
+    from = Date(2026, 7, 16),
+    to = Date(2026, 8, 15),
+)
+
+"""
+`tbl` (a frozen scores or overlay table, keyed by `stream` and
+`made_date`) with the rows a superseded forecaster produced removed.
+
+One exclusion is in force, [`SUPERSEDED_FROZEN_FORECASTS`](@ref): the
+confirmed-death rows of the fourteen frozen reconstructions cut between 16
+July and 15 August 2026, whose forecaster could not project that stream
+and floored it at zero. They are dropped rather than read as the model
+forecasting no further deaths.
+
+Nothing is dropped from the archive itself. `data/forecast_scores_frozen.csv`
+and `data/forecast_overlay_frozen.csv` record what was scored; this selects
+what is summarised and drawn, as [`scored_overlay`](@ref) does.
+
+Returns `tbl` unchanged when it is empty or carries no such row.
+"""
+function drop_superseded_forecasts(tbl::DataFrame)
+    isempty(tbl) && return tbl
+    ex = SUPERSEDED_FROZEN_FORECASTS
+    superseded = [
+        tbl.stream[i] == ex.stream &&
+            ex.from <= Date(string(tbl.made_date[i])) <= ex.to
+            for i in 1:size(tbl, 1)
+    ]
+    return tbl[.!superseded, :]
+end
+
 """
 `overlay` (a `data/forecast_overlay.csv`-shaped table) restricted to the
 streams that carry a persistence baseline, dropping every row of a stream

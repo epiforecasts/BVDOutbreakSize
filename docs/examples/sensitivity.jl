@@ -379,10 +379,17 @@ validation_stopped_fig #hide
 # Exports therefore contributes no scored forecast, and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
 # Only a minority of the daily releases examined contribute a row to the table below, each a reconstruction of an earlier model version rather than the current fit.
-# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
-# This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
 # Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
+#
+# Four things are excluded from the scores in this section and the frozen section below, each for a stated reason rather than for scoring badly.
+#
+# - One whole reconstruction (`results-v1.6.0`): its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample rather than a forecast.
+# - The confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026: the forecaster that built them could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
+# - A stream that carries no persistence baseline, which is what makes a window scoreable at all.
+# - A province window holding a harmonisation-break day, since that day's backfill is published for the country and not by province.
+#
+# Nothing is dropped from the archive itself; `data/forecast_scores*.csv` and `data/forecast_overlay*.csv` record everything that was scored.
 #
 # The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
 # Its printed total therefore moves with the scan error as well as with late reporting.
@@ -610,6 +617,13 @@ frozen_overlay_df = _release_data(
         hi60 = Float64, lo90 = Float64, hi90 = Float64,
     )
 )
+## Rows a superseded forecaster produced are dropped before anything is
+## summarised or drawn, from the scores and the overlay alike, so the
+## tables and the figures rest on one set of rows. See
+## `drop_superseded_forecasts` for the one exclusion in force and why.
+frozen_scores_df = drop_superseded_forecasts(frozen_scores_df)
+frozen_overlay_df = drop_superseded_forecasts(frozen_overlay_df)
+
 ## The frozen joint carries `FROZEN_FIT`, so it is named as the joint role
 ## here and compared against each stream's own frozen fit. A release
 ## published before the archive had a `fit` column carries joint rows only.
