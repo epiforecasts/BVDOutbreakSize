@@ -1138,3 +1138,40 @@ end
     empty = DataFrame(stream = String[], made_date = Date[], fit = String[])
     @test isempty(drop_superseded_forecasts(empty))
 end
+
+@testitem "drop_rescanned_onset_windows drops windows over a reread" begin
+    using BVDOutbreakSize: drop_rescanned_onset_windows
+    using DataFrames: DataFrame
+    using Dates: Date
+    ## A triangle whose total falls on one vintage, which a cumulative
+    ## onset curve cannot do.
+    dates = [Date(2026, 8, d) for d in (1, 8, 15, 22)]
+    totals = [100, 200, 180, 300]
+    row(made, target; stream = "onset reports") = (;
+        stream = stream, made_date = made, target_date = target,
+        fit = "frozen",
+    )
+    rows = [
+        ## Spans the falling vintage on 15 August.
+        row(Date(2026, 8, 8), Date(2026, 8, 15)),
+        row(Date(2026, 8, 1), Date(2026, 8, 22)),
+        ## Ends on it, so the reread is outside the window.
+        row(Date(2026, 8, 15), Date(2026, 8, 22)),
+        ## Another stream over the same window is untouched.
+        row(Date(2026, 8, 8), Date(2026, 8, 15); stream = "confirmed cases"),
+    ]
+    kept = drop_rescanned_onset_windows(
+        DataFrame(rows); vintage_dates = dates, vintage_totals = totals
+    )
+    @test size(kept, 1) == 2
+    @test all(
+        r.stream != "onset reports" || r.made_date == Date(2026, 8, 15)
+            for r in eachrow(kept)
+    )
+    ## A triangle that never falls leaves every window scored.
+    rising = drop_rescanned_onset_windows(
+        DataFrame(rows); vintage_dates = dates,
+        vintage_totals = [100, 200, 250, 300]
+    )
+    @test size(rising, 1) == length(rows)
+end

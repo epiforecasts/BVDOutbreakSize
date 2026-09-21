@@ -382,10 +382,11 @@ validation_stopped_fig #hide
 # Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 #
-# Four things are excluded from the scores in this section and the frozen section below, each for a stated reason rather than for scoring badly.
+# Five things are excluded from the scores in this section and the frozen section below, each for a stated reason rather than for scoring badly.
 #
 # - One whole reconstruction (`results-v1.6.0`): its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample rather than a forecast.
 # - The confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026: the forecaster that built them could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
+# - An onset window containing a vintage whose reread total falls, since its increment is not what the situation reports added.
 # - A stream that carries no persistence baseline, which is what makes a window scoreable at all.
 # - A province window holding a harmonisation-break day, since that day's backfill is published for the country and not by province.
 #
@@ -394,8 +395,10 @@ validation_stopped_fig #hide
 # The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
 # Its printed total therefore moves with the scan error as well as with late reporting.
 # On fourteen vintages the reread total falls, which a cumulative onset curve cannot do, and on many others it repeats unchanged.
-# The fit absorbs that with a per-vintage scan level, but the scored truth takes the increment as it stands, so a window spanning a falling vintage is scored against an increment the reports did not add: two of the eleven one-week windows carry an observed 40 and 82 against a typical 400 to 500.
-# Read the onset row's skill against the baseline rather than its coverage, and read it as indicative until the scored truth handles those vintages.
+# The fit absorbs that with a per-vintage scan level; the scored truth cannot, since it is the increment between the vintages at the two ends of a window.
+# A window containing a falling vintage is therefore left unscored, the rule province windows holding a harmonisation-break day already follow.
+# It bites hardest at the longer horizons, a four-week window being more likely to contain a reread than a one-week one: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
+# Read the onset row's skill against the baseline rather than its coverage, and read it as resting on a handful of windows.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -433,6 +436,21 @@ forecast_overlay_df = _release_data(
         hi60 = Float64, lo90 = Float64, hi90 = Float64,
     )
 )
+## The digitised onset triangle's own per-vintage total, as calendar dates,
+## and the windows it makes unscoreable. A vintage that rereads the figure
+## lower gives a window an increment the reports did not add, so the window
+## is dropped from the scores and the overlay alike (see
+## `drop_rescanned_onset_windows`). The current triangle is used to judge
+## every release, since the scored truth is read off this one series.
+_onset_vintage_dates = grid_date.(obs.onset_report_history.days)
+_onset_vintage_totals = obs.onset_report_history.counts
+_drop_rescanned(tbl) = drop_rescanned_onset_windows(
+    tbl; vintage_dates = _onset_vintage_dates,
+    vintage_totals = _onset_vintage_totals
+)
+forecast_scores_df = _drop_rescanned(forecast_scores_df)
+forecast_overlay_df = _drop_rescanned(forecast_overlay_df)
+
 ## One row per (stream, fit) pooled over every horizon and release. The
 ## by-horizon and by-release detail tables carry the same columns at a finer
 ## grain (see src/scoring.jl). Every fit is kept here, since the
@@ -623,8 +641,12 @@ frozen_overlay_df = _release_data(
 ## summarised or drawn, from the scores and the overlay alike, so the
 ## tables and the figures rest on one set of rows. See
 ## `drop_superseded_forecasts` for the one exclusion in force and why.
-frozen_scores_df = drop_superseded_forecasts(frozen_scores_df)
-frozen_overlay_df = drop_superseded_forecasts(frozen_overlay_df)
+frozen_scores_df = _drop_rescanned(
+    drop_superseded_forecasts(frozen_scores_df)
+)
+frozen_overlay_df = _drop_rescanned(
+    drop_superseded_forecasts(frozen_overlay_df)
+)
 
 ## The frozen joint carries `FROZEN_FIT`, so it is named as the joint role
 ## here and compared against each stream's own frozen fit. A release

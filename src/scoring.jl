@@ -695,6 +695,60 @@ function drop_superseded_forecasts(tbl::DataFrame)
     return tbl[.!superseded, :]
 end
 
+## Vintage dates whose reprinted cumulative total is lower than the
+## vintage before them. A cumulative onset curve cannot shrink, so a fall is
+## the figure being reread rather than cases being withdrawn.
+function _onset_falling_vintages(dates, totals)
+    out = Date[]
+    prev = nothing
+    for (d, c) in zip(dates, totals)
+        isnothing(prev) || (c < prev && push!(out, d))
+        prev = c
+    end
+    return out
+end
+
+"""
+`tbl` (a scores or overlay table keyed by `stream`, `made_date` and
+`target_date`) with the onset-report windows spanning a reread of the
+digitised triangle removed. `vintage_dates` and `vintage_totals` are that
+triangle's per-vintage cumulative total (`onset_report_history`, as dates
+rather than grid days).
+
+The onset truth is the increment between the vintages at the two ends of a
+window. Each vintage rereads the whole figure, and on fourteen of them the
+total comes back lower than the one before, which a cumulative onset curve
+cannot do. A window containing such a vintage is scored against an
+increment the situation reports did not add, so it is left unscored rather
+than charged to the forecast. The fit itself needs no such rule: it carries
+a per-vintage scan level.
+
+This is the rule province windows holding a harmonisation-break day already
+follow. It bites hardest at the longer horizons, a four-week window being
+more likely to contain a reread than a one-week one.
+
+Nothing is dropped from the archive; this selects what is summarised and
+drawn, as [`scored_overlay`](@ref) does.
+"""
+function drop_rescanned_onset_windows(
+        tbl::DataFrame;
+        vintage_dates::AbstractVector{<:Date},
+        vintage_totals::AbstractVector{<:Real},
+        stream::AbstractString = "onset reports"
+    )
+    isempty(tbl) && return tbl
+    falling = _onset_falling_vintages(vintage_dates, vintage_totals)
+    isempty(falling) && return tbl
+    keep = trues(size(tbl, 1))
+    for i in 1:size(tbl, 1)
+        tbl.stream[i] == stream || continue
+        made = Date(string(tbl.made_date[i]))
+        target = Date(string(tbl.target_date[i]))
+        keep[i] = !any(d -> made < d <= target, falling)
+    end
+    return tbl[keep, :]
+end
+
 """
 `overlay` (a `data/forecast_overlay.csv`-shaped table) restricted to the
 streams that carry a persistence baseline, dropping every row of a stream

@@ -83,6 +83,13 @@ quality measured on them, with that convergence failure in mind.
   floored it at zero, so each carried a one-week median of exactly zero
   against an observed 250 to 370. The section now lists every scoring
   exclusion in one place, and the archive keeps the rows.
+- An onset forecast window containing a vintage whose reread total falls is
+  left unscored, the rule province windows holding a harmonisation-break day
+  already follow. The digitised total falls on fourteen vintages, which a
+  cumulative onset curve cannot do, and the scored truth is an increment
+  between two vintages, so such a window charges the forecast for a reread.
+  It bites hardest at the longer horizons: the frozen onset row keeps three
+  of its twenty-nine windows and the cross-release row six of thirty-eight.
 - A single-stream fit's forecast is overlaid on the validation and bed
   panels as a step outline over the joint's own histogram bins, reweighted
   to the joint's draw count. It was a kernel density on the density scale
