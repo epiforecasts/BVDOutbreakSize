@@ -27,6 +27,21 @@ repos:
     -   id: runic
         additional_dependencies: ['Runic@1.10.0']
 #####
+# CI path gating
+# The patterns the workflows skip work on are wrong in silence in both
+# directions: too narrow and a change skips the job that would have caught
+# it, too wide and the gate saves nothing. Neither shows up as a failure, so
+# the table is checked here. pre-commit runs on every pull request and is
+# itself ungated, so this cannot be skipped by the thing it is checking.
+-   repo: local
+    hooks:
+    -   id: ci-path-gating
+        name: CI path gating behaves as intended
+        entry: .github/actions/changed-paths/patterns_test.sh
+        language: system
+        pass_filenames: false
+        files: '^\.github/(workflows/(docs|test)\.yml|workflows/codecoverage\.yaml|actions/changed-paths/)'
+#####
 # Secrets
 -   repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
