@@ -77,6 +77,10 @@ The cross-machine error the one-process design removes is the large one.
 The within-machine one that remains is bounded from below rather than measured.
 Treat a ratio inside the stated band as unresolved.
 
+A pull request that changes how the suite samples is not comparable against its own baseline.
+Each arm runs its own `benchmarks.jl`, so the sampling parameters differ between the two arms until that pull request merges.
+Read such a run for whether it completed, not for its ratios.
+
 ## Benchmark parameters
 
 `benchmarks.jl` sets `BenchmarkTools.DEFAULT_PARAMETERS` before it builds the suite, because AirspeedVelocity calls `run(SUITE)` with no arguments and a benchmark's own parameters are the only place left to set a budget.
