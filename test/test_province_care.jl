@@ -267,3 +267,30 @@ end
     )
     @test_throws ErrorException province_bed_table(single, np)
 end
+
+@testitem "province care blocks: sparse, dated and inside the national window" begin
+    using BVDOutbreakSize
+
+    obs = load_observations()
+    iso = obs.province_isolation_history
+    beds = obs.province_bed_capacity_history
+    @test length(iso) >= 5
+    @test length(beds) >= 5
+    lo, hi = extrema(obs.isolation_history.days)
+    for (name, h) in iso
+        @test issorted(h.days) && allunique(h.days)
+        @test all(>=(0), h.counts)
+        @test all(d -> lo <= d <= hi, h.days)
+    end
+    for (name, h) in beds
+        @test issorted(h.days) && allunique(h.days)
+        @test all(>(0), h.counts)
+    end
+    ## The two large provinces print almost every day.
+    @test length(iso["ituri"].days) > 60
+    @test length(iso["nord_kivu"].days) > 60
+    ## The long format the model scores has a split on most days.
+    care = province_care_observations(iso, PROVINCE_NAMES)
+    days = unique(care.days)
+    @test count(d -> count(==(d), care.days) >= 2, days) > 50
+end
