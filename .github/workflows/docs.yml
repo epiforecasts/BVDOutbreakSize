@@ -442,13 +442,13 @@ jobs:
     needs: [fit, overlays]
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
-    # `list` did that once), the render is plots/PPCs only. Split across two
-    # pages, so each does about half.
+    # `list` did that once), the render is plots/PPCs only. Split across three
+    # pages, so each does a share.
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        page: [analysis, sensitivity]
+        page: [analysis, province, forecast, evaluation, sensitivity]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3

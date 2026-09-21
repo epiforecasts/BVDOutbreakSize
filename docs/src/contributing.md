@@ -73,10 +73,9 @@ task test-quick
 julia --project=. scripts/run.jl
 ```
 
-The render never fits.
-A fit it cannot find in the cache fails the build in seconds naming the key, rather than refitting the whole report inline.
-In practice the fits come from CI, so `task fetch-fits` is the usual way to fill the cache, and `task fit-all` is for a working tree CI has not built.
-`fit-all` runs `threads / chains` fits at once, so it takes all available threads; set `JULIA_NUM_THREADS` to cap it on a shared host.
+A fit the render cannot find in the cache fails the build naming the key, rather than refitting the whole report inline.
+`fit-all` runs `threads / chains` fits at once, so it takes all available threads.
+Set `JULIA_NUM_THREADS` to cap it on a shared host.
 
 `BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
 Running `julia --project=. docs/examples/analysis.jl` that way steps through the full narrative and fits every model as it goes.

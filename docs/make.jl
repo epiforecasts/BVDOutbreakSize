@@ -12,15 +12,21 @@ const REPO_ROOT = dirname(@__DIR__)
 const EXAMPLES = joinpath(@__DIR__, "examples")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 
-## The report is split across two literate pages so the expensive fits and the
-## render can fan out across CI runners: `analysis` (methods, results and the
-## one-week-ahead forecast) and `sensitivity` (forecast validation and the
-## comparison/sensitivity analyses). Both load the same cached fits through the
-## shared `docs/examples/_setup.jl`.
-const PAGES = ["analysis", "sensitivity"]
+## The report is split across three literate pages so the expensive fits and
+## the render can fan out across CI runners. `analysis` carries the methods,
+## the national results, `province` the per-province estimates, `forecast`
+## the one-week-ahead projections, `evaluation` their scoring against what
+## arrived, and `sensitivity` the comparison and sensitivity analyses. All
+## load the same cached fits through the shared `docs/examples/_setup.jl`.
+const PAGES = [
+    "analysis", "province", "forecast", "evaluation", "sensitivity",
+]
 
 ## Build stage, so fitting and rendering can be split across jobs:
 ##   render-main         → Literate-execute analysis.jl → src/analysis.md
+##   render-province     → Literate-execute province.jl → src/province.md
+##   render-forecast     → Literate-execute forecast.jl → src/forecast.md
+##   render-evaluation   → Literate-execute evaluation.jl → src/evaluation.md
 ##   render-sensitivity  → Literate-execute sensitivity.jl → sensitivity.md
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
@@ -114,8 +120,15 @@ function combine()
         plugins = [bib],
         pages = [
             "Home" => "index.md",
-            "Summary" => "summary.md",
-            "Analysis" => "analysis.md",
+            "Estimates" => [
+                "Summary" => "summary.md",
+                "National" => "analysis.md",
+                "Provinces" => "province.md",
+            ],
+            "Forecasts" => [
+                "Forecasts" => "forecast.md",
+                "Evaluation" => "evaluation.md",
+            ],
             "Details" => [
                 "Aim and origins" => "aim.md",
                 "Limitations" => "limitations.md",
@@ -168,6 +181,12 @@ end
 
 if STAGE == "render-main"
     render_page("analysis")
+elseif STAGE == "render-province"
+    render_page("province")
+elseif STAGE == "render-forecast"
+    render_page("forecast")
+elseif STAGE == "render-evaluation"
+    render_page("evaluation")
 elseif STAGE == "render-sensitivity"
     render_page("sensitivity")
 elseif STAGE == "combine"
@@ -180,6 +199,7 @@ elseif STAGE == "all"
 else
     error(
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-main, " *
+            "render-province, render-forecast, render-evaluation, " *
             "render-sensitivity, combine, all"
     )
 end

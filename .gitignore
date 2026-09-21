@@ -8,12 +8,18 @@
 Manifest.toml
 /docs/build/
 /docs/src/analysis.md
+/docs/src/province.md
+/docs/src/forecast.md
+/docs/src/evaluation.md
 /docs/src/index.md
 /docs/src/sensitivity.md
 /docs/src/references.md
 /docs/src/summary_assets/
 # Figures a local Literate render writes beside the page markdown
 /docs/src/analysis-*.png
+/docs/src/province-*.png
+/docs/src/forecast-*.png
+/docs/src/evaluation-*.png
 /docs/src/sensitivity-*.png
 /docs/node_modules/
 /output/

@@ -40,6 +40,26 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 
 # ## Methods
 #
+# ### Differences from McCabe et al.
+#
+# This work began as a replication of [mccabe2026](@citet), so the table sets out what is shared and what has changed.
+# Each row links to the section that specifies it.
+#
+# | Component | [mccabe2026](@citet) | This work |
+# |---|---|---|
+# | [Infection process](@ref "Infection process") | Continuous-time closed forms | Discrete-time meta-population renewal on a daily grid, provinces coupled by importation, national incidence their sum |
+# | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | Flat at $R_0$ to the first WHO report, then a weekly log-scale random walk with a response ramp, plus a mean-reverting per-province deviation |
+# | [Seeding and growth](@ref "Seeding and growth") | Start fixed from a single seed | Two-phase seeding, a cryptic exponential phase floored from below by the [genetic bound](@ref "Genetic bound on outbreak age") |
+# | Parameter treatment | Each fixed, a set of scenarios reported | Priors on the reproduction number, case-fatality ratio, delays, traveller volume and dispersion, all sampled in one posterior |
+# | [Onset-to-death delay](@ref "Onset-to-death delay") | Isiro 2012 point estimate of [rosello2015](@citet) | Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite), so the delay carries uncertainty |
+# | Other delays | Fixed | Sampled from priors centred on published Ebola estimates, each double interval censored [charniga2024](@cite) |
+# | [Data streams](@ref methods-data) | Uganda export cases and deaths | Those plus DRC suspected cases, confirmed cases, confirmed deaths and deaths among the exports |
+# | Likelihood scale | One cumulative total | Between-vintage increments across successive situation reports, which sharpens $R_t$ |
+# | [Ascertainment](@ref "Ascertainment") | Not modelled | Outbreak size and each system's reporting fraction estimated jointly |
+# | Projections | None | A [no-onward-transmission counterfactual](@ref "No-onward-transmission counterfactual") and a [one-week-ahead forecast](@ref "One-week-ahead forecast") of every stream |
+#
+# The estimates themselves are set against the published scenarios in the [comparison with McCabe et al.](@ref "Comparison with McCabe et al."), matched at the cut-off each scenario was computed, and a frozen forward projection is set against the [chamla2026](@citet) confirmed-case projection in the [comparison with Chamla et al.](@ref "Comparison with Chamla et al.").
+#
 # ### [Data](@id methods-data)
 #
 # The DRC data come from the situation reports of the Institut National de Santé Publique [insp_sitrep_2026](@cite).
@@ -2466,63 +2486,7 @@ cumulative_traj_fig = plot_cumulative_trajectories(
 cumulative_traj_fig #hide
 
 # The national count above is the sum of the four patches' renewal equations.
-# The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
-
-#md # ```@raw html
-#md # <details><summary>Cross-province overview table</summary>
-#md # ```
-
-province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_overview_table #hide
-
-# The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
-
-#md # ```@raw html
-#md # <details><summary>Modelled infections by province</summary>
-#md # ```
-
-province_infections_fig = plot_infections_patches(
-    chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_infections_fig #hide
-
-# The provinces are coupled by a gravity kernel weighted by destination population, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
-# Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
-# The distances between the patch capitals are 379 km from Bunia to Goma, 322 km from Bunia to Isiro and 206 km from Goma to the pooled patch's centre, so most of what leaves Nord-Kivu lands in the pooled patch.
-
-#md # ```@raw html
-#md # <details><summary>Importation intensity and imports by province</summary>
-#md # ```
-
-importation_table = summary_table(
-    chn_joint, [:importation_epsilon];
-    digits = 4,
-    labels = Dict(:importation_epsilon => "Importation intensity")
-);
-
-province_imports_fig = plot_imports_patches(
-    chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-importation_table #hide
-
-province_imports_fig #hide
+# The per-province sizes, the modelled infections behind them and the importation between provinces are on the [province estimates](@ref "Province estimates") page.
 
 # The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
 # The left panel below shows the posterior for the outbreak start date.
@@ -2660,87 +2624,7 @@ rt_fig = plot_rt(
 
 rt_fig #hide
 
-# The same trajectory by province is below, one panel per province with the national trajectory in grey behind it.
-# The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
-# A panel tracking grey says that province moves with the national trajectory.
-# The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
-
-#md # ```@raw html
-#md # <details><summary>Reproduction number by province</summary>
-#md # ```
-
-province_rt_fig = plot_rt_patches(
-    chn_joint;
-    n = obs.n, breakpoint = _BREAKPOINT,
-    n_patches = N_PATCHES,
-    rt_start = _rt_start_plot,
-    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
-    display_start = _rt_start_plot,
-    as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RT_INTERVENTION_RAMP
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_rt_fig #hide
-
-# The figure below gives each province's estimates, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary figure</summary>
-#md # ```
-
-province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_detail_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary table</summary>
-#md # ```
-
-province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
-
-province_detail_table #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# The spread of those deviations is the spatial diagnostic.
-# The prior admits real divergence, with a 31% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
-# With four patches and the pooled one carrying almost no signal the cross-province correlation is not identified, and it tracks its prior.
-
-#md # ```@raw html
-#md # <details><summary>Spatial hyperparameter summary table</summary>
-#md # ```
-
-spatial_hyper_table = summary_table(
-    chn_joint,
-    [
-        :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :province_testing_coefficient,
-    ];
-    digits = 3,
-    labels = Dict(
-        :region_sd => "Rt deviation spread",
-        :region_halflife => "Rt deviation half-life (days)",
-        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread",
-        :province_testing_coefficient => "Testing effect on ascertainment"
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-spatial_hyper_table #hide
+# The same trajectory split by province, the per-province summary and the spatial hyperparameters are on the [province estimates](@ref "Reproduction number by province") page.
 
 # The table reports the posterior of the response effect on the reproduction number as a multiplier, where a value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
 
@@ -3483,44 +3367,8 @@ joint_ppc_fig #hide
 
 # #### Province compositions
 #
-# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
-# The panels below show that modelled share at every spatial vintage against the observed one.
-# Each panel carries two bands.
-# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
-# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# The observed points should fall inside it.
-# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
-# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
-# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
-# The vintages stop before the cut-off, so the panels end earlier than the national posterior predictive checks above.
-
-#md # ```@raw html
-#md # <details><summary>Province composition posterior predictive checks</summary>
-#md # ```
-
-province_case_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_shares,
-    obs_increments = province_cases.increments,
-    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed case share by province"
-);
-
-province_death_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_death_shares,
-    obs_increments = province_deaths.increments,
-    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed death share by province"
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_case_ppc_fig #hide
-
-province_death_ppc_fig #hide
+# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total.
+# Those checks are on the [province estimates](@ref province-compositions) page.
 
 # ### Symptom-onset reporting delay and ascertainment
 #
@@ -3534,19 +3382,10 @@ province_death_ppc_fig #hide
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
 #md # ```
 
-## The report-date grid the calendar walk spans is a fixed function of the
-## digitised triangle, not sampled, so it is recomputed once directly from
-## `obs.onset_curve_history` rather than pulled from the chain (mirroring
-## `onset_reporting_model`'s own `grid_start`/`grid_end` construction).
-_onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
-    minimum(obs.onset_curve_history.onset_days)
-_onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
-    _onset_grid_start :
-    max(
-        maximum(obs.onset_curve_history.report_days),
-        _onset_grid_start
-    )
-
+## The report-date grid the calendar walk spans, `_onset_grid_start` to
+## `_onset_grid_end`, is a fixed function of the digitised triangle rather
+## than chain contents, so the shared setup builds it once from
+## `obs.onset_curve_history`.
 ## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
 ## (the report-date calendar walk), rebuilt from the non-centred
 ## innovations the chain stores. `reconstruct_onset_hazard` is the package
@@ -4135,268 +3974,9 @@ province_cfr = province_cfr_table(
 
 province_cfr #hide
 
-# ### One-week-ahead forecast results
+# ### Forecast results
 #
-# The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
-# The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
-# The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
-# The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
-
-#md # ```@raw html
-#md # <details><summary>Generate the one-week-ahead forecast</summary>
-#md # ```
-
-forecast = forecast_reported(
-    chn_joint;
-    horizon = 7,
-    obs_cases = obs.reported_cases,
-    obs_deaths = obs.total_deaths,
-    obs_confirmed = obs.confirmed_cases,
-    obs_confirmed_deaths = obs.confirmed_deaths,
-    obs_recovered = obs.recovered_cases
-);
-forecast_summary = forecast_table(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead forecast summary table</summary>
-#md # ```
-
-forecast_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# The latent figure shows the new infections, symptom onsets and deaths over the horizon, with the reproduction number left to keep evolving across it.
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead latent forecast plot</summary>
-#md # ```
-
-forecast_latent_fig = plot_forecast_latent(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_latent_fig #hide
-
-# The observed figure shows the new count each observed stream adds over the horizon: suspected cases, suspected deaths, laboratory-confirmed cases, confirmed deaths and recovered, one panel per stream the forecast carries.
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead observed forecast plot</summary>
-#md # ```
-
-forecast_fig = plot_forecast(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_fig #hide
-
-# The bed figure shows the projected isolation/treatment-bed demand (the need a week ahead, under unconstrained supply) against the supply-limited occupancy the beds can actually meet.
-# The gap between the two is the projected bed shortfall, shown in the right panel.
-# The reported "Patients en isolement" count is the occupied-bed count (the report computes the "Taux d'occupation" as that count over the bed capacity), so isolation is bed usage, gated by supply.
-# The demand is its unobserved counterpart, the number who need a bed.
-# The model carries a single national bed capacity, so it cannot represent local saturation, and the national shortfall understates local unmet need.
-# On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%; beds free in one province cannot serve patients in another.
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
-#md # ```
-
-forecast_beds_fig = plot_forecast_beds(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_beds_fig #hide
-
-# The flow figure projects the daily isolation/treatment flows a week ahead: new admissions, in-care deaths and rule-outs, each grown from its cut-off daily rate and replicated through the isolation dispersion.
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead treatment-flow forecast plot</summary>
-#md # ```
-
-forecast_flows_fig = plot_forecast_flows(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_flows_fig #hide
-
-# The forecast split by province is below, for the two streams the spatial tables report.
-# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week.
-
-#md # ```@raw html
-#md # <details><summary>Province forecast split</summary>
-#md # ```
-
-province_forecast_fig = plot_province_forecast(
-    chn_joint, forecast;
-    n_patches = N_PATCHES
-);
-province_forecast = province_forecast_table(
-    chn_joint, forecast;
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_forecast_fig #hide
-
-# ### Symptom-onset nowcast and forecast results
-#
-# The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
-# The two halves must not be added together: the first three rows are the state of the outbreak at the cut-off, the next three the coming week.
-#
-# "Onsets not yet reported at T" is not a backlog that will all arrive, because ascertainment does not reach one.
-# The row holds two things together: the reporting backlog, and the cases surveillance will never confirm.
-# The "reports this week of onsets before T" row is the part of it the coming week should actually clear.
-# It is the smaller number.
-
-#md # ```@raw html
-#md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
-#md # ```
-
-## The triangle's own grid, recomputed from the observations exactly as
-## `onset_reporting_model` derives it, since it is data rather than chain
-## contents. `_onset_grid_start`/`_onset_grid_end` are already built for the
-## reporting-delay section above and reused here.
-onset_forecast = forecast_onsets(
-    chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end,
-    n = obs.n, horizon = 7,
-    obs_value = something(obs.onset_curve_history.last_total, 0)
-);
-onset_forecast_summary = onset_forecast_table(onset_forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Symptom-onset nowcast and forecast summary table</summary>
-#md # ```
-
-onset_forecast_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# The left panel splits the coming week's new onset reports into reports of onsets that had already happened by the cut-off and reports of onsets still to come, and shows their sum.
-# The fourth bar is the same sum after it has been through the observation model, which is what the next vintage will actually print.
-# It is much wider than the sum it replicates, and the gap is the rescan.
-# At a printed total of a couple of thousand cases the per-scan level error alone is worth tens of cases either way, well above the epidemic uncertainty on a week of new reports.
-# Only the fourth bar is comparable to a digitised figure, and only it is scored.
-#
-# The right panel puts the nowcast itself on the same axes, the onsets that have happened against the share of them the triangle has printed.
-
-#md # ```@raw html
-#md # <details><summary>Symptom-onset nowcast and forecast plot</summary>
-#md # ```
-
-onset_forecast_fig = let
-    fig = CairoMakie.Figure(; size = (960, 420))
-    ## Two-line tick labels rather than rotated ones: the leftmost rotated
-    ## label overhangs the axis and is clipped at the figure edge.
-    ax1 = CairoMakie.Axis(
-        fig[1, 1];
-        title = "New onset reports over the coming week",
-        ylabel = "cases", xticks = (
-            1:4,
-            [
-                "already\nhappened", "not yet\nhappened", "sum of\nthe two",
-                "as the next\nfigure reads it",
-            ],
-        )
-    )
-    ## The first three bars are latent, so the third is exactly the first
-    ## two added. The fourth is that same sum replicated through the
-    ## observation model, which is the scored quantity and the only one
-    ## comparable to a digitised figure; it is wider by the per-scan level
-    ## error, which is why the three latent bars are shown as well rather
-    ## than a decomposition that appears not to add up.
-    _latent_total = onset_forecast.onset_reports_backfill .+
-        onset_forecast.onset_reports_future
-    for (i, d, col) in (
-            (
-                1, onset_forecast.onset_reports_backfill,
-                :mediumpurple,
-            ),
-            (2, onset_forecast.onset_reports_future, :mediumpurple),
-            (3, _latent_total, :mediumpurple),
-            (4, Float64.(onset_forecast.onset_reports_new), :slategray),
-        )
-        s = posterior_summary(d)
-        CairoMakie.rangebars!(
-            ax1, [Float64(i)], [s.lo90], [s.hi90];
-            color = col, linewidth = 3
-        )
-        CairoMakie.rangebars!(
-            ax1, [Float64(i)], [s.lo60], [s.hi60];
-            color = col, linewidth = 8
-        )
-        CairoMakie.scatter!(
-            ax1, [Float64(i)], [quantile(d, 0.5)];
-            color = :black, markersize = 9
-        )
-    end
-    ax2 = CairoMakie.Axis(
-        fig[1, 2];
-        title = "Symptom onsets by the cut-off",
-        ylabel = "cases", xticks = (
-            1:3,
-            ["onsets\nto date", "reported\nby T", "not yet\nreported"],
-        )
-    )
-    for (i, d) in enumerate(
-            (
-                onset_forecast.onsets_to_date,
-                onset_forecast.onset_reports_to_date,
-                onset_forecast.onsets_unreported,
-            )
-        )
-        s = posterior_summary(d)
-        CairoMakie.rangebars!(
-            ax2, [Float64(i)], [s.lo90], [s.hi90];
-            color = :seagreen, linewidth = 3
-        )
-        CairoMakie.rangebars!(
-            ax2, [Float64(i)], [s.lo60], [s.hi60];
-            color = :seagreen, linewidth = 8
-        )
-        CairoMakie.scatter!(
-            ax2, [Float64(i)], [quantile(d, 0.5)];
-            color = :black, markersize = 9
-        )
-    end
-    ## The digitised total the "reported by T" bar is a model of, so the
-    ## reader can see the fitted reported level against the figure itself.
-    ismissing(obs.onset_curve_history.last_total) ||
-        CairoMakie.hlines!(
-        ax2,
-        [Float64(obs.onset_curve_history.last_total)];
-        color = :black, linestyle = :dash
-    )
-    fig
-end;
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-onset_forecast_fig #hide
+# The one-week-ahead projection of every stream, the symptom-onset nowcast and the scoring against what arrived are on the [forecasts](@ref "Forecasts") page.
 
 # ## Saving results
 #
@@ -4832,7 +4412,7 @@ CSV.write(
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (the national reproduction number, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -4844,14 +4424,11 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t) nationally and by province, latent infections
-## over time, and the modelled versus observed reported cases. All are
-## produced in the Results sections above; here we just write them out at the
-## dashboard size. The per-province infections and parameter panels stay on
-## this page, which the dashboard links to for the detail behind its
-## by-province table.
+## Figures: estimated R(t) nationally, latent infections over time, and the
+## modelled versus observed reported cases. All are produced in the Results
+## sections above; here we just write them out at the dashboard size. The
+## province page writes the by-province figure and table it owns.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
-CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
 CairoMakie.save(
     joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig
@@ -4896,12 +4473,6 @@ open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
 end
 open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
-end
-
-## Province table: the cross-province overview from the Results section,
-## which is the by-province counterpart of the two headline tables above.
-open(joinpath(dashboard_dir, "provinces.md"), "w") do io
-    print(io, markdown_table(province_overview_table))
 end
 
 ## Fit diagnostics: the same table the Results section shows, so the

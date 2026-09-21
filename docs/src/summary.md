@@ -1,8 +1,9 @@
 # Summary dashboard
 
 A one-page overview of the headline results for readers with limited time.
-Every number, table and figure on this page is produced by the same model fit as the full [Analysis](analysis.md) and refreshes whenever the data updates.
-See the [Analysis](analysis.md) page for the methods, assumptions and supporting detail behind each result, and the [Sensitivity](sensitivity.md) page for the forecast validation, the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
+Every number, table and figure on this page is produced by the same model fit as the full report and refreshes whenever the data updates.
+See the [National](analysis.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](forecast.md) page for the week ahead and the [Evaluation](evaluation.md) page for how past forecasts scored.
+The [Sensitivity](sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
 Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
 
 ```@eval
@@ -42,7 +43,7 @@ All intervals are equal-tailed 30%, 60% and 90% credible intervals from the join
 The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the three below.
 Each cell is a median with a 90% credible interval.
 The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
-Modelled infections by province and the per-province parameter detail are in the [joint model estimates](analysis.md#Joint-model-estimates) and the [reproduction number over time](analysis.md#Reproduction-number-over-time) on the analysis page.
+Modelled infections by province, the per-province parameter detail and the composition checks are on the [provinces](province.md) page.
 
 ```@eval
 using Markdown, BVDOutbreakSize

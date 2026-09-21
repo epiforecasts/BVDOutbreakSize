@@ -312,4 +312,28 @@ if !@isdefined(_BVD_SETUP_LOADED)
     _rt_start_plot = clamp(
         obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n
     )
+
+    ## The symptom-onset triangle's own grid, derived from the observations
+    ## exactly as `onset_reporting_model` derives it, since it is data rather
+    ## than chain contents. The national page's reporting-delay section and
+    ## the forecast page's nowcast both read it.
+    _onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
+        minimum(obs.onset_curve_history.onset_days)
+    _onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
+        _onset_grid_start :
+        max(
+            maximum(obs.onset_curve_history.report_days),
+            _onset_grid_start
+        )
+
+    ## Cross-release score tables written by `scripts/score_releases.jl`.
+    ## The committed files are header-only until a release carries the asset,
+    ## so the common path reads a real file to a zero-row frame; the typed
+    ## `schema` is the fallback for a file that is absent entirely, since
+    ## CSV.read throws on a missing path and would take the build with it.
+    function _release_data(name, schema::NamedTuple)
+        path = joinpath(pkgdir(BVDOutbreakSize), "data", name)
+        isfile(path) && return CSV.read(path, DataFrame)
+        return DataFrame([k => T[] for (k, T) in pairs(schema)])
+    end
 end # _BVD_SETUP_LOADED guard

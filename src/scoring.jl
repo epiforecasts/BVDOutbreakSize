@@ -662,6 +662,11 @@ end
 ## This lapses when those reconstructions are rebuilt with the current
 ## forecaster, which is what the frozen evaluation claims to be: the
 ## current model frozen at earlier cut-offs.
+"""
+The one frozen-forecast exclusion in force, as a stream name and the cut-off
+window it covers. [`drop_superseded_forecasts`](@ref) applies it. The comment
+above records why the window is excluded and when the exclusion lapses.
+"""
 const SUPERSEDED_FROZEN_FORECASTS = (;
     stream = "confirmed deaths",
     from = Date(2026, 7, 16),

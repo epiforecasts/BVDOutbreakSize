@@ -13,5 +13,6 @@ Pages = ["internals.md"]
 ## Reference
 
 ```@autodocs
-Modules = [BVDOutbreakSize] Public = false
+Modules = [BVDOutbreakSize]
+Public = false
 ```
