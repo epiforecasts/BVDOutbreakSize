@@ -556,7 +556,7 @@ end
             :region_drift_sd, :log_rt_contrast,
         )
         @test all(
-            v -> length(v) == length(PROVINCE_NAMES),
+            v -> length(v) == np,
             vec(collect(chn[q]))
         )
     end
@@ -591,7 +591,7 @@ end
 
     chn = patch_chain
 
-    df = patch_summary_table(chn, length(PROVINCE_NAMES))
+    df = patch_summary_table(chn, np)
     @test df isa DataFrame
     ## Seven quantities per patch: cumulative infections, Rt,
     ## daily infections, the log-Rt deviation from the national trend, the
@@ -600,7 +600,7 @@ end
     ## identifies only their product, so reporting a provincial Rt without the
     ## ascertainment beside it invites a case-finding artefact to be read as
     ## epidemiology.
-    @test nrow(df) == 7 * length(PROVINCE_NAMES)
+    @test nrow(df) == 7 * np
     quantities = unique(df[!, "Quantity"])
     @test "Relative case ascertainment" in quantities
     @test "log-Rt vs primary patch" in quantities
@@ -635,9 +635,9 @@ end
     ## The cross-province overview is one ROW per province, not one row per
     ## (province, quantity). This is the whole point of it: the long-format
     ## table is unreadable as a comparison across provinces.
-    ov = patch_overview_table(chn, length(PROVINCE_NAMES))
+    ov = patch_overview_table(chn, np)
     @test ov isa DataFrame
-    @test nrow(ov) == length(PROVINCE_NAMES)
+    @test nrow(ov) == np
     @test ov[!, "Province"] == PROVINCE_LABELS
     @test "Reproduction number" in names(ov)
     @test "Share of infections (%)" in names(ov)
@@ -650,21 +650,21 @@ end
 
     ## Selecting one province gives that province's rows only, and drops the
     ## Patch column, which would otherwise repeat one value down every row.
-    full = patch_summary_table(chn, length(PROVINCE_NAMES))
-    one = patch_summary_table(chn, length(PROVINCE_NAMES); patch = "Nord-Kivu")
-    @test nrow(one) == nrow(full) / length(PROVINCE_NAMES)
+    full = patch_summary_table(chn, np)
+    one = patch_summary_table(chn, np; patch = "Nord-Kivu")
+    @test nrow(one) == nrow(full) / np
     @test !("Patch" in names(one))
     @test "Quantity" in names(one)
     ## Selecting by index and by label must agree.
-    @test patch_summary_table(chn, length(PROVINCE_NAMES); patch = 2) == one
+    @test patch_summary_table(chn, np; patch = 2) == one
     ## The selected rows must be the same numbers the full table reports for
     ## that province, not a re-summary of a different patch.
     nk = full[full[!, "Patch"] .== "Nord-Kivu", :]
     @test one[!, "Lower 90%"] == nk[!, "Lower 90%"]
     @test one[!, "Upper 90%"] == nk[!, "Upper 90%"]
 
-    @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = "Kinshasa")
-    @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = 9)
+    @test_throws ErrorException patch_summary_table(chn, np; patch = "Kinshasa")
+    @test_throws ErrorException patch_summary_table(chn, np; patch = 9)
 end
 
 @testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags = [
@@ -686,10 +686,10 @@ end
     rt = reconstruct_patch_rt(
         chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
-        n_patches = length(PROVINCE_NAMES),
+        n_patches = np,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
-    @test length(rt) == length(PROVINCE_NAMES)
+    @test length(rt) == np
     @test all(size(r) == (PATCH_DRAWS, obs.n) for r in rt)
 
     ## THE test that makes the figure trustworthy: rebuilding the provincial
@@ -697,8 +697,7 @@ end
     ## `R_T_patch` the model itself computed. Without this the panels could
     ## drift from the tables and nothing would catch it.
     rtp = [collect(v) for v in vec(collect(chn[:R_T_patch]))]
-    npr = length(PROVINCE_NAMES)
-    for p in 1:npr, i in 1:length(rtp)
+    for p in 1:np, i in 1:length(rtp)
 
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol = 1.0e-8
     end
@@ -714,7 +713,7 @@ end
     )
     for i in 1:5, d in (obs.n, obs.n - 7)
 
-        gm = exp(sum(log(rt[p][i, d]) for p in 1:npr) / npr)
+        gm = exp(sum(log(rt[p][i, d]) for p in 1:np) / np)
         @test gm ≈ nat[i, d] rtol = 1.0e-8
     end
 
@@ -738,7 +737,7 @@ end
     @test_throws ErrorException reconstruct_patch_rt(
         chn1; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
-        n_patches = length(PROVINCE_NAMES),
+        n_patches = np,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
 end
