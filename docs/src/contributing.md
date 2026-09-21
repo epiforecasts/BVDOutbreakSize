@@ -84,6 +84,16 @@ To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or t
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
 
+## Releases
+
+A release is cut by commenting `@release` on any issue or pull request.
+`.github/workflows/release.yml` tags `main`, publishes a GitHub release whose notes are the newest section of `docs/src/news.md`, and opens a pull request bumping the version and starting the next section.
+`@release minor` and `@release major` choose the size of that bump; plain `@release` is a patch.
+
+The version being released is the one already in `Project.toml`, and the newest news section must match it.
+Write the entry for a change under the open section at the top of `news.md` as part of the change itself.
+`task release-notes` prints what would be published, so the notes can be read before anything is cut.
+
 ## Model architecture
 
 The model is assembled from small, swappable Turing submodels rather than one monolithic block (the build-up is drawn as a flowchart on the [Analysis](analysis.md) page).
