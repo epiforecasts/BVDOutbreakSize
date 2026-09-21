@@ -13,23 +13,23 @@ Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
 **Start here:**
-[summary dashboard](https://epiforecasts.io/BVDOutbreakSize/stable/summary) ·
-[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/forecast) ·
+[summary dashboard](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/summary) ·
+[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/limitations).
 
 **Full results:**
-[national](https://epiforecasts.io/BVDOutbreakSize/stable/analysis) ·
-[by province](https://epiforecasts.io/BVDOutbreakSize/stable/province) ·
-[forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecast) ·
-[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation).
+[national](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national) ·
+[by province](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/province) ·
+[forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
+[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast).
 
 **Go deeper:**
-[methods](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Methods) ·
-[how this differs from McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-published-estimates) ·
-[reproduction number over time](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Reproduction-number-over-time) ·
-[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Posterior-predictive-checks) ·
-[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation#Forecast-scoring-across-releases) ·
-[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation#Frozen-fit-forecast-evaluation) ·
+[methods](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Methods) ·
+[how this differs from McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Comparison-with-published-estimates) ·
+[reproduction number over time](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Reproduction-number-over-time) ·
+[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample#Posterior-predictive-checks) ·
+[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Forecast-scoring-across-releases) ·
+[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Frozen-fit-forecast-evaluation) ·
 [how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
 [estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
 [estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
@@ -92,7 +92,7 @@ julia --project=. scripts/run.jl
 ```
 
 `scripts/run.jl` fits the models and writes the output CSVs (the analysis literate is also run as part of the docs build).
-Running `docs/pages/analysis.jl` directly instead steps through the full narrative.
+Running `docs/pages/estimates/national.jl` directly instead steps through the full narrative.
 
 ### Re-fit without cloning
 

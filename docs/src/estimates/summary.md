@@ -2,8 +2,8 @@
 
 A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model fit as the full report and refreshes whenever the data updates.
-See the [National](analysis.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](forecast.md) page for the week ahead and the [Evaluation](evaluation.md) page for how past forecasts scored.
-The [Sensitivity](sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
+See the [National](national.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](../forecasts/national.md) page for the week ahead and the [Evaluation](../evaluation/forecast.md) page for how past forecasts scored.
+The [Sensitivity](../sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
 Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
 
 ```@eval
@@ -60,7 +60,7 @@ Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
 The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
 A divergent transition is a step the sampler could not take accurately.
-The [Sensitivity](sensitivity.md) page breaks these numbers down by parameter.
+The [Sensitivity](../sensitivity.md) page breaks these numbers down by parameter.
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -77,30 +77,30 @@ Markdown.parse(read(joinpath(dir, "diagnostics.md"), String))
 The time-varying reproduction number R(t), the average number of further infections caused by each infection.
 A value above one means the outbreak is growing.
 
-![Estimated reproduction number over time](summary_assets/rt.png)
+![Estimated reproduction number over time](../summary_assets/rt.png)
 
 The same trajectory by province, with the national one in grey behind each panel.
 A panel tracking grey says that province moves with the national trend.
 
-![Estimated reproduction number over time by province](summary_assets/rt_provinces.png)
+![Estimated reproduction number over time by province](../summary_assets/rt_provinces.png)
 
 ## Infections over time
 
 Modelled cumulative infections, symptom onsets and deaths.
 These are the underlying outbreak, upstream of the testing and reporting that produce the observed counts, so they are larger than the reported cases.
 
-![Estimated cumulative infections, onsets and deaths over time](summary_assets/infections.png)
+![Estimated cumulative infections, onsets and deaths over time](../summary_assets/infections.png)
 
 ## Reported cases: model versus observed
 
 Modelled reported cases against the observed reported cases over time, a check that the fit reproduces what was seen on the ground.
 
-![Modelled versus observed reported cases over time](summary_assets/reported_cases.png)
+![Modelled versus observed reported cases over time](../summary_assets/reported_cases.png)
 
 ## Estimate variation by data stream
 
-The [outbreak size](sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and the [reproduction number](sensitivity.md#Reproduction-number-estimated-by-each-data-stream) each data stream implies on its own are on the sensitivity page.
+The [outbreak size](../sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and the [reproduction number](../sensitivity.md#Reproduction-number-estimated-by-each-data-stream) each data stream implies on its own are on the sensitivity page.
 
 ---
 
-For the full results, methods and code see the [National](analysis.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
+For the full results, methods and code see the [National](national.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.

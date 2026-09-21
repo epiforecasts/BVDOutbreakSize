@@ -496,7 +496,7 @@ jobs:
   # loads the chains it needs (no refitting) and emits its markdown, figures
   # and its half of the shared output/ and summary_assets/.
   render:
-    name: Render ${{ matrix.page }}
+    name: Render ${{ matrix.id }}
     needs: [fit, overlays]
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
@@ -506,7 +506,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        page: [analysis, province, insample, forecast, evaluation, sensitivity]
+        # `id` is the page path under docs/pages; `slug` is the same with
+        # the separator flattened, because an artifact name cannot carry a
+        # slash.
+        include:
+          - id: estimates/national
+            slug: estimates-national
+          - id: estimates/province
+            slug: estimates-province
+          - id: forecasts/national
+            slug: forecasts-national
+          - id: evaluation/insample
+            slug: evaluation-insample
+          - id: evaluation/forecast
+            slug: evaluation-forecast
+          - id: sensitivity
+            slug: sensitivity
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -556,9 +571,9 @@ jobs:
         with:
           name: overlays
           path: data
-      - name: Render ${{ matrix.page }}
+      - name: Render ${{ matrix.id }}
         env:
-          BVD_DOC_PAGE: ${{ matrix.page }}
+          BVD_DOC_PAGE: ${{ matrix.id }}
           BVD_FIT_CACHE: logs/fit_cache
           # The fit matrix has already produced every fit and they are collected
           # above, so the render must only ever load from cache. Fail fast and
@@ -570,7 +585,7 @@ jobs:
         run: julia --project=docs docs/execute.jl
       - uses: actions/upload-artifact@v7
         with:
-          name: render-${{ matrix.page }}
+          name: render-${{ matrix.slug }}
           # The whole docs/src delta (the page markdown, its figures and its
           # share of summary_assets/) plus its half of output/. Disjoint file
           # names between the pages, so the combine step's merge is a union.

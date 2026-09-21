@@ -19,17 +19,19 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## arrived, and `sensitivity` the comparison and sensitivity analyses. All
 ## load the same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
-    "analysis", "province", "insample", "forecast", "evaluation",
+    "estimates/national", "estimates/province",
+    "forecasts/national",
+    "evaluation/insample", "evaluation/forecast",
     "sensitivity",
 ]
 
 ## Build stage, so fitting and rendering can be split across jobs:
-##   render-main         → Literate-execute analysis.jl → src/analysis.md
-##   render-province     → Literate-execute province.jl → src/province.md
-##   render-insample     → Literate-execute insample.jl → src/insample.md
-##   render-forecast     → Literate-execute forecast.jl → src/forecast.md
-##   render-evaluation   → Literate-execute evaluation.jl → src/evaluation.md
-##   render-sensitivity  → Literate-execute sensitivity.jl → sensitivity.md
+##   render-main         → estimates/national.jl → src/estimates/national.md
+##   render-province     → estimates/province.jl
+##   render-insample     → evaluation/insample.jl
+##   render-forecast     → forecasts/national.jl
+##   render-evaluation   → evaluation/forecast.jl
+##   render-sensitivity  → sensitivity.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
 ##   all (default)       → render both pages then combine, for local builds
@@ -41,9 +43,13 @@ isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 ## combine step assembles the site without re-running any code.
 function render_page(page)
     @info "Literate render" page
+    ## A page id is its path under `docs/pages`, so a grouped page renders
+    ## into the matching folder under `docs/src` and keeps its own file name.
+    out = joinpath(LITERATE_OUT, dirname(page))
+    isdir(out) || mkpath(out)
     return Literate.markdown(
-        joinpath(PAGES_DIR, "$page.jl"), LITERATE_OUT;
-        name = page,
+        joinpath(PAGES_DIR, "$page.jl"), out;
+        name = basename(page),
         flavor = Literate.DocumenterFlavor(),
         execute = true,
         credit = false
@@ -86,8 +92,10 @@ function write_index()
             slug = match(r"#([^)]+)\)$", m).captures[1]
             "(@ref \"" * replace(slug, '-' => ' ') * "\")"
         end,
-        Regex(docs_url.pattern * "([a-z_-]+)\\)") =>
-            m -> "(" * match(r"/([a-z_-]+)\)$", m).captures[1] * ".md)"
+        Regex(docs_url.pattern * "((?:[a-z_-]+/)*[a-z_-]+)\\)") =>
+            m -> "(" * match(
+            r"/BVDOutbreakSize/[^)/]+/((?:[a-z_-]+/)*[a-z_-]+)\)$", m
+        ).captures[1] * ".md)"
     )
     return write(joinpath(LITERATE_OUT, "index.md"), readme)
 end
@@ -123,14 +131,14 @@ function combine()
         pages = [
             "Home" => "index.md",
             "Estimates" => [
-                "Summary" => "summary.md",
-                "National" => "analysis.md",
-                "Provinces" => "province.md",
+                "Summary" => "estimates/summary.md",
+                "National" => "estimates/national.md",
+                "Provinces" => "estimates/province.md",
             ],
-            "Forecasts" => "forecast.md",
+            "Forecasts" => "forecasts/national.md",
             "Evaluation" => [
-                "In-sample" => "insample.md",
-                "Forecast" => "evaluation.md",
+                "In-sample" => "evaluation/insample.md",
+                "Forecast" => "evaluation/forecast.md",
             ],
             "Details" => [
                 "Aim and origins" => "aim.md",
@@ -183,15 +191,15 @@ function combine()
 end
 
 if STAGE == "render-main"
-    render_page("analysis")
+    render_page("estimates/national")
 elseif STAGE == "render-province"
-    render_page("province")
+    render_page("estimates/province")
 elseif STAGE == "render-insample"
-    render_page("insample")
+    render_page("evaluation/insample")
 elseif STAGE == "render-forecast"
-    render_page("forecast")
+    render_page("forecasts/national")
 elseif STAGE == "render-evaluation"
-    render_page("evaluation")
+    render_page("evaluation/forecast")
 elseif STAGE == "render-sensitivity"
     render_page("sensitivity")
 elseif STAGE == "combine"

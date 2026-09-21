@@ -12,7 +12,9 @@ using BVDOutbreakSize
 
 const REPO_ROOT = pkgdir(BVDOutbreakSize)
 
-for page in
-    ("analysis", "province", "forecast", "evaluation", "sensitivity")
+for page in (
+        "estimates/national", "estimates/province", "evaluation/insample",
+        "forecasts/national", "evaluation/forecast", "sensitivity",
+    )
     include(joinpath(REPO_ROOT, "docs", "pages", "$page.jl"))
 end

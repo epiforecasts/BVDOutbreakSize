@@ -7,22 +7,16 @@
 # test/jet/, test/enzyme/, test/formatter/, scripts/).
 Manifest.toml
 /docs/build/
-/docs/src/analysis.md
-/docs/src/province.md
-/docs/src/insample.md
-/docs/src/forecast.md
-/docs/src/evaluation.md
 /docs/src/index.md
+/docs/src/estimates/national.md
+/docs/src/estimates/province.md
+/docs/src/forecasts/
+/docs/src/evaluation/
 /docs/src/sensitivity.md
+# Figures a local Literate render writes beside the page markdown
+/docs/src/**/*-[0-9]*.png
 /docs/src/references.md
 /docs/src/summary_assets/
-# Figures a local Literate render writes beside the page markdown
-/docs/src/analysis-*.png
-/docs/src/province-*.png
-/docs/src/insample-*.png
-/docs/src/forecast-*.png
-/docs/src/evaluation-*.png
-/docs/src/sensitivity-*.png
 /docs/node_modules/
 /output/
 .DS_Store

@@ -16,7 +16,7 @@
 #md # ```
 #
 # This page is generated from
-# [`docs/pages/analysis.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/analysis.jl).
+# [`docs/pages/estimates/national.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/national.jl).
 # The model code it calls is in
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
 # See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
