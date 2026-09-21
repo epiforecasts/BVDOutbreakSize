@@ -875,8 +875,11 @@ function _evolution_panel!(
     )
 
     ## Optional horizontal reference line, e.g. Rt = 1 for a reproduction
-    ## number, drawn faint so it reads behind the estimates.
-    isnothing(refline) ||
+    ## number, drawn faint so it reads behind the estimates. A reference
+    ## line past the crop is not drawn at all rather than clamped onto it,
+    ## since a rule sitting at the top of the axis reads as a reference at
+    ## that value.
+    (isnothing(refline) || _over(refline)) ||
         hlines!(
         ax, [float(refline)];
         color = (:black, 0.4), linestyle = :dash, linewidth = 1
@@ -1636,7 +1639,15 @@ function plot_forecast_crps_by_horizon(
     nrows = cld(length(streams), usedcols)
     fig = Figure(; size = (320 * usedcols, 260 * nrows + 110))
 
-    drawn_roles = String[]
+    ## The dodge slot is taken over every role the table carries, not over
+    ## the roles one panel happens to draw, so a role keeps its position
+    ## across panels and the note under the legend reads true of all of
+    ## them. A panel missing a role leaves its slot empty.
+    drawn_roles = [
+        role for role in role_order
+            if !isempty(select_fit_role(scores, role))
+    ]
+    dodge_of = Dict(role => i for (i, role) in enumerate(drawn_roles))
     for (i, s) in enumerate(streams)
         r, c = fldmod1(i, usedcols)
         cell = scores[scores.stream .== s, :]
@@ -1649,11 +1660,10 @@ function plot_forecast_crps_by_horizon(
                 [string(h) for h in horizons],
             )
         )
-        ## One stacked bar per (horizon, role). The roles present vary by
-        ## stream, so the dodge index is taken over the roles this panel
-        ## draws rather than over every role in the table.
+        ## One stacked bar per (horizon, role), for the roles this stream
+        ## carries.
         roles = [
-            role for role in role_order
+            role for role in drawn_roles
                 if !isempty(select_fit_role(cell, role))
         ]
         isempty(roles) && continue
@@ -1662,8 +1672,8 @@ function plot_forecast_crps_by_horizon(
         stack = Int[]
         dodge = Int[]
         colours = Symbol[]
-        for (di, role) in enumerate(roles)
-            role in drawn_roles || push!(drawn_roles, role)
+        for role in roles
+            di = dodge_of[role]
             rs = select_fit_role(cell, role)
             for row in eachrow(rs)
                 for (pi, (col, _, colour)) in enumerate(_CRPS_PARTS)
@@ -1680,7 +1690,7 @@ function plot_forecast_crps_by_horizon(
         isempty(xs) && continue
         CairoMakie.barplot!(
             ax, xs, ys; stack = stack, dodge = dodge,
-            color = colours, n_dodge = length(roles),
+            color = colours, n_dodge = length(drawn_roles),
             gap = 0.25, dodge_gap = 0.06
         )
     end

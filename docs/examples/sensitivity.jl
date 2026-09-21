@@ -382,10 +382,10 @@ validation_stopped_fig #hide
 # Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 #
-# Five things are excluded from the scores in this section and the frozen section below, each for a stated reason rather than for scoring badly.
+# Five things are excluded from the scores here and in the frozen section below, each for a stated reason rather than for scoring badly, and the second of them applies to the frozen section alone.
 #
 # - One whole reconstruction (`results-v1.6.0`): its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample rather than a forecast.
-# - The confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026: the forecaster that built them could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
+# - Frozen section only: the confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026, whose forecaster could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
 # - An onset window containing a vintage whose reread total falls, since its increment is not what the situation reports added.
 # - A stream that carries no persistence baseline, which is what makes a window scoreable at all.
 # - A province window holding a harmonisation-break day, since that day's backfill is published for the country and not by province.

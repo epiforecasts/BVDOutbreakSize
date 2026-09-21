@@ -1155,7 +1155,8 @@ end
         ## Spans the falling vintage on 15 August.
         row(Date(2026, 8, 8), Date(2026, 8, 15)),
         row(Date(2026, 8, 1), Date(2026, 8, 22)),
-        ## Ends on it, so the reread is outside the window.
+        ## Anchored on the falling vintage rather than spanning it, so its
+        ## increment is measured from the reread rather than across it.
         row(Date(2026, 8, 15), Date(2026, 8, 22)),
         ## Another stream over the same window is untouched.
         row(Date(2026, 8, 8), Date(2026, 8, 15); stream = "confirmed cases"),

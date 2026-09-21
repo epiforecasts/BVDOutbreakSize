@@ -678,6 +678,10 @@ July and 15 August 2026, whose forecaster could not project that stream
 and floored it at zero. They are dropped rather than read as the model
 forecasting no further deaths.
 
+Every fit over a dropped window goes, the persistence baseline included, so
+a relative skill is never taken against a baseline whose own window was
+withheld.
+
 Nothing is dropped from the archive itself. `data/forecast_scores_frozen.csv`
 and `data/forecast_overlay_frozen.csv` record what was scored; this selects
 what is summarised and drawn, as [`scored_overlay`](@ref) does.
@@ -713,7 +717,7 @@ end
 `target_date`) with the onset-report windows spanning a reread of the
 digitised triangle removed. `vintage_dates` and `vintage_totals` are that
 triangle's per-vintage cumulative total (`onset_report_history`, as dates
-rather than grid days).
+rather than grid days), in date order.
 
 The onset truth is the increment between the vintages at the two ends of a
 window. Each vintage rereads the whole figure, and on fourteen of them the
@@ -725,7 +729,13 @@ a per-vintage scan level.
 
 This is the rule province windows holding a harmonisation-break day already
 follow. It bites hardest at the longer horizons, a four-week window being
-more likely to contain a reread than a one-week one.
+more likely to contain a reread than a one-week one. A window anchored on a
+falling vintage but containing none is kept: its increment is measured from
+the reread rather than across it.
+
+Every fit over a dropped window goes, the persistence baseline included, so
+a relative skill is never taken against a baseline whose own window was
+withheld.
 
 Nothing is dropped from the archive; this selects what is summarised and
 drawn, as [`scored_overlay`](@ref) does.
