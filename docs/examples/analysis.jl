@@ -19,120 +19,15 @@
 # [`docs/examples/analysis.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/examples/analysis.jl).
 # The model code it calls is in
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
-# See the *LLM-driven reimplementation* limitation below for the oversight context behind the Use of AI note.
+# The [limitations](@ref "Limitations") page carries the oversight context behind the Use of AI note.
 #
 # **Offline copy.** A self-contained single-file HTML version of this report, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
 #
-# ## Origins of this work
+# ## Before the results
 #
-# This work began as a replication of the [mccabe2026](@citet) report.
-# It has since evolved into a real-time joint Bayesian estimate of the current outbreak size.
-# The model is a discrete-time renewal process with a time-varying reproduction number, fitted to more of the available data streams than the original.
-# The Methods section carries the full treatment, and the later [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") sets the current estimates against theirs.
-#
-#md # ```@raw html
-#md # <details><summary>Expand: differences from the report</summary>
-#md # ```
-#md #
-# **Latent process and parameters**
-#
-# - *Discrete-time meta-population renewal model.* The whole model runs on a daily grid.
-#   Each province follows the discrete renewal equation $I_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s} g_s$, where $g$ is the discretised generation-interval PMF, and the provinces are coupled by importation.
-#   National incidence is their sum, and every delay is applied as a discrete convolution.
-#   [mccabe2026](@citet) use continuous-time closed forms.
-# - *Time-varying reproduction number.* The trend $R^{\text{trend}}_t$ the provinces pool toward is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
-#   It then follows a weekly Gaussian random walk on the log scale, interpolated within weeks.
-#   A logistic outbreak-response ramp of about three weeks starts from that report.
-#   Each province's reproduction number is that trend plus a mean-reverting deviation, and the deviations sum to zero.
-#   McCabe et al. use one constant exponential growth rate.
-# - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
-#   [mccabe2026](@citet) fix each and report a set of scenarios.
-# - *Two-phase seeding with a wide, genetically-floored outbreak age.* A single import grows through an unobserved cryptic exponential phase before the renewal process takes over.
-#   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a prior on the number of cryptic generations.
-#   The established reproduction number is derived forward from that growth rate.
-#   The genetic time to the most recent common ancestor floors the cryptic duration from below.
-#   McCabe et al. fix the start from a single seed.
-#
-# **Delays and convolutions**
-#
-# - *Delays re-estimated with uncertainty.* [mccabe2026](@citet) take the onset-to-death delay from the Isiro 2012 point estimate of [rosello2015](@citet).
-#   We instead use a Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite) that re-estimates the delay with uncertainty.
-#   We sample every other delay (generation interval, incubation period, onset-to-report, onset-to-confirmation and onset-to-hospitalisation abroad) from a prior centred on published Ebola estimates.
-#   Each is discretised with double interval censoring [charniga2024](@cite), so the delay uncertainty propagates.
-#
-# **Likelihoods and data streams**
-#
-# - *More streams fitted.* [mccabe2026](@citet) fit the Uganda export cases and deaths.
-#   We add the DRC suspected cases, the laboratory-confirmed cases, the confirmed deaths and the deaths among the Uganda exports.
-# - *Per-vintage time-series fitting.* The DRC streams are fitted on the incidence scale, as the between-vintage increments across successive sitreps (the first vintage being the cumulative count to that date).
-#   This sharpens $R_t$.
-#   McCabe et al. condition on a single cumulative total.
-# - *Ascertainment estimated.* We jointly estimate the outbreak size and the fraction of cases each surveillance system reports.
-#   McCabe et al. have no ascertainment component.
-# - *Comparison against published scenarios.* The model is set beside the [mccabe2026](@citet) scenario estimates as an external sense-check, matched in time at the cut-off each scenario was computed.
-#   The cumulative infection count, the running sum of the daily infections, is the headline quantity reported separately.
-#   A forward projection from a frozen fit is also set against the [chamla2026](@citet) confirmed-case projection and the data observed since.
-#
-# **Extensions**
-#
-# - *No-onward-transmission counterfactual and one-week-ahead forecasts.* Future expected deaths from infections already seeded, and a posterior-predictive projection of each stream.
-#md #
-#md # ```@raw html
-#md # </details>
-#md # ```
-#
-# ## Limitations
-#
-# The limitations are grouped by the data, the model assumptions and design, and the implementation, with the most consequential first in each group.
-#
-#md # ```@raw html
-#md # <details><summary>Expand: limitations</summary>
-#md # ```
-#md #
-# **Data and what it can support**
-#
-# - *Most quantities rest on weakly-informed priors.* Nearly all of the delays, the case-fatality ratio and the laboratory assumptions are set by priors informed at best by a handful of literature sources, often from other outbreaks.
-#   In places the priors instead reflect our own judgement rather than anything from this outbreak.
-#   The data do little to move them, so these posteriors largely track their priors.
-#   We fit the between-report increments, so the trajectory informs the change in the reproduction number over the window.
-#   It is uninformative about the delays, the surveillance dispersion or the reporting fractions on their own.
-# - *Almost every count is report-dated.* The digitised onset curve is the only series carrying symptom-onset dates, and it covers confirmed cases from SitRep 059 onward.
-#   Everything else is a total at the report date, so the epidemic's timing is recovered mainly through the assumed delays.
-# - *Fitted to aggregate counts.* The DRC data are national and per-province situation-report totals, and the Uganda data are three export cases with one death.
-#   We do not have a line list or information on case definitions or reporting completeness.
-#   The laboratory testing series gives partial information on testing capacity, but it is incomplete and stops at the cut-off.
-#   Every estimate is a model-based extrapolation under strong assumptions, not a measurement.
-# - *Later sitreps revise earlier figures.* A later situation report can revise an earlier total up or down as suspects are reclassified and newly-reporting health zones are added, and ascertainment probably rose over the window.
-#   We do not model this revision process.
-# - *Streams share one case pool.* They are fitted as conditionally independent given latent incidence but observe overlapping people.
-#   This can understate uncertainty.
-#   Whether the streams imply mutually consistent outbreak sizes is not assessed here.
-#
-# **Model assumptions and design**
-#
-# - *Inherits McCabe et al.'s epidemiological assumptions.* A single zoonotic seed, an assumed generation interval, and no depletion of susceptibles.
-#   The onset-to-death delay is grounded on Isiro 2012 and the genetic seeding bound on an external clock rate.
-#   Neither propagates cross-outbreak or clock uncertainty.
-# - *Importation structure is assumed, not measured.* There is no mobility or origin-destination data for this outbreak, so the gravity kernel is a structural assumption.
-#   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
-# - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
-#   Transmission within a patch is well mixed, so spread inside a province is not represented.
-# - *Provincial testing enters the prior, not the likelihood.* The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
-#   It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
-# - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
-# - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
-#   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
-#   The national bed shortfall therefore understates local unmet need.
-#
-# **Implementation**
-#
-# - *LLM-driven reimplementation.* The model code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report and the companion delay reanalysis.
-#   It was then reviewed and revised.
-#   It has not been independently replicated against the authors' code.
-#md #
-#md # ```@raw html
-#md # </details>
-#md # ```
+# How this work differs from the report it replicates is on the [aim and origins](@ref "Aim and origins") page.
+# What the estimates can and cannot support is on the [limitations](@ref "Limitations") page.
+# Read them before the numbers below.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>

@@ -12,6 +12,9 @@ Manifest.toml
 /docs/src/sensitivity.md
 /docs/src/references.md
 /docs/src/summary_assets/
+# Figures a local Literate render writes beside the page markdown
+/docs/src/analysis-*.png
+/docs/src/sensitivity-*.png
 /docs/node_modules/
 /output/
 .DS_Store

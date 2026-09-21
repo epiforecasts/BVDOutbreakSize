@@ -47,15 +47,16 @@ end
 ## the shared prose, but they must not appear on the rendered home page
 ## (the Vitepress typographer mangles the `--` and shows them as text).
 ##
-## The README links to analysis-page sections with absolute hosted URLs
-## so they work when read on GitHub. On the rendered home page those would
-## pin to a fixed version (/stable/); rewrite them to Documenter `@ref`
-## cross-references so they instead resolve within whichever version is
-## being viewed. `@ref` resolves a section by title across all pages, so a
-## link still resolves after a section moves from the analysis page to the
-## sensitivity page. The link target is the section anchor, whose Documenter
-## slug is the header title with spaces replaced by dashes, so reversing
-## that recovers the title for `@ref`.
+## The README links into the hosted report with absolute URLs so they work
+## when read on GitHub. On the rendered home page those would pin to a fixed
+## version (/stable/); rewrite them so they instead resolve within whichever
+## version is being viewed. A link to a section becomes a Documenter `@ref`,
+## which resolves by section title across every page and so survives a
+## section moving page; the anchor's Documenter slug is the title with spaces
+## replaced by dashes, so reversing that recovers the title. A link to a whole
+## page becomes a relative link to that page's markdown. Only links to the
+## documentation host are rewritten, so the badges and the repository links
+## are left alone.
 function write_index()
     readme = read(joinpath(REPO_ROOT, "README.md"), String)
     readme = replace(readme, r"^<!-- SHARED:END -->\n"m => "")
@@ -69,13 +70,16 @@ function write_index()
         r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
         r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof."
     )
+    docs_url = r"\(https?://epiforecasts\.io/BVDOutbreakSize/[^)/]+/"
     readme = replace(
         readme,
-        r"\(https?://[^)]*?/(analysis|sensitivity)#([^)]+)\)" =>
+        Regex(docs_url.pattern * "[a-z_/-]+#([^)]+)\\)") =>
             m -> begin
             slug = match(r"#([^)]+)\)$", m).captures[1]
             "(@ref \"" * replace(slug, '-' => ' ') * "\")"
-        end
+        end,
+        Regex(docs_url.pattern * "([a-z_-]+)\\)") =>
+            m -> "(" * match(r"/([a-z_-]+)\)$", m).captures[1] * ".md)"
     )
     return write(joinpath(LITERATE_OUT, "index.md"), readme)
 end
@@ -112,11 +116,30 @@ function combine()
             "Home" => "index.md",
             "Summary" => "summary.md",
             "Analysis" => "analysis.md",
-            "Sensitivity" => "sensitivity.md",
-            "API" => "api.md",
-            "Contributing" => "contributing.md",
-            "News" => "news.md",
-            "References" => "references.md",
+            "Details" => [
+                "Aim and origins" => "aim.md",
+                "Limitations" => "limitations.md",
+                "Sensitivity" => "sensitivity.md",
+            ],
+            "API" => [
+                "Overview" => "lib/api.md",
+                "Data and constants" => "lib/data.md",
+                "Renewal and delays" => "lib/renewal.md",
+                "Priors and latent submodels" => "lib/priors.md",
+                "Observation models" => "lib/observations.md",
+                "Joint and single-stream models" => "lib/joint.md",
+                "Fitting" => "lib/fitting.md",
+                "Summaries and diagnostics" => "lib/summaries.md",
+                "Forecasts and scoring" => "lib/forecasts.md",
+                "Plotting" => "lib/plotting.md",
+                "Internals" => "lib/internals.md",
+            ],
+            "About" => [
+                "Authors and funding" => "about.md",
+                "Contributing" => "contributing.md",
+                "News" => "news.md",
+                "References" => "references.md",
+            ],
         ],
         format = DocumenterVitepress.MarkdownVitepress(;
             repo = "github.com/epiforecasts/BVDOutbreakSize",
