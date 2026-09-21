@@ -12,6 +12,16 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The automatic version increment is gone (#607). It opened a patch-bump pull
+  request on every push to `main` where the version had not changed, which is
+  now both redundant and harmful: `@release` bumps the version as part of
+  cutting a release, and the automatic one moved it without opening a news
+  section, which is what left a merged change with no heading to write under.
+  It could also open a second pull request racing the one `@release` opens,
+  bumping the same field by a different route. It had not run since v1.14.0
+  in any case, wedged behind a stale branch its own guard would not clear.
+  `/version major|minor|patch` on a pull request is unaffected.
+
 - A release is cut by commenting `@release` on any issue or pull request
   (#767). The notes are the newest `docs/src/news.md` section, which is what
   they have always been, copied across by hand. The comment tags `main`,
