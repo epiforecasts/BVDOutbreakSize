@@ -20,6 +20,24 @@ Changes since v2.1.0.
   the hashing rule itself would not have invalidated anything. The key is now
   taken from `fit_content_hash` rather than restated, so there is one list.
 
+- The automatic version increment is gone (#607). It opened a patch-bump pull
+  request on every push to `main` where the version had not changed, which is
+  now both redundant and harmful: `@release` bumps the version as part of
+  cutting a release, and the automatic one moved it without opening a news
+  section, which is what left a merged change with no heading to write under.
+  It could also open a second pull request racing the one `@release` opens,
+  bumping the same field by a different route. It had not run since v1.14.0
+  in any case, wedged behind a stale branch its own guard would not clear.
+  `/version major|minor|patch` on a pull request is unaffected.
+
+- A pull request only builds the report, runs the tests and measures coverage
+  when it changes something they are built from (#776). The fits alone cost
+  hours, and a change to the test suite, the benchmarks or an unrelated
+  workflow produced a site identical to the one on `main`; a change to the
+  analysis pages or the README ran the whole test suite to no purpose. Each
+  workflow decides in a job of its own, so a skipped build says so in its
+  summary rather than leaving no check at all. A push, a tag and a manual run
+  are never gated.
 - A release is cut by commenting `@release` on any issue or pull request
   (#767). The notes are the newest `docs/src/news.md` section, which is what
   they have always been, copied across by hand. The comment tags `main`,
