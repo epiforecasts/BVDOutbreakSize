@@ -137,15 +137,10 @@ jobs:
           fi
 
       # The estimates a release publishes are only as good as the fit behind
-      # them. v2.0.0 went out with a joint fit that had not converged and the
-      # notes had to say so afterwards. This reads the verdict from the most
-      # recent completed docs build on `main` and puts the warning in the
-      # notes up front instead. It does not block the release: a warning that
-      # readers can see beats one nobody wrote.
-      #
-      # The verdict comes from the `Check joint convergence` job added in
-      # #766. Until that is on `main` the lookup finds nothing, and a missing
-      # verdict is reported rather than guessed at.
+      # them, so a release says up front when the fits did not converge. The
+      # verdict is the `Check joint convergence` job of the most recent
+      # completed docs build on `main`. It does not block the release, and a
+      # missing verdict is reported rather than guessed at.
       - name: Note the convergence verdict on the fits
         if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
         env:
