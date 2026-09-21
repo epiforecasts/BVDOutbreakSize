@@ -3,13 +3,14 @@
 
 Shared AD gradient scenarios and backend metadata for BVDOutbreakSize.
 
-This file is included by `test/test_ad_gradients.jl` and by
-`benchmark/benchmarks.jl`, so the surface the tests assert is
-differentiable is the surface the benchmarks time. It is a plain file
-rather than a path package because `[sources]` needs Julia 1.11 and the
-LTS test cell runs 1.10, where an unregistered path dependency cannot
-resolve. Its imports come from whichever environment includes it, and
-both carry every package named below.
+This file is included by `test/test_ad_gradients.jl`, by
+`test/enzyme/runtests.jl` and by `benchmark/benchmarks.jl`, so the surface
+the tests assert is differentiable is the surface the benchmarks time and
+the surface the Enzyme sweep checks. It is a plain file rather than a path
+package because `[sources]` needs Julia 1.11 and the LTS test cell runs
+1.10, where an unregistered path dependency cannot resolve. Its imports
+come from whichever environment includes it, and each carries every package
+named below.
 
 A scenario is one model plus a seeded unconstrained point. The units are
 per component rather than the full joint: the observation submodels from
@@ -41,7 +42,8 @@ using LogDensityProblems: logdensity_and_gradient
 using Random: seed!
 using Turing: DynamicPPL, returned
 
-export Scenario, scenarios, backends, linked_point, gradient_is_finite
+export Scenario, scenarios, backends, linked_point, gradient_is_finite,
+    enzyme_broken_scenarios, enzyme_skip_scenarios
 
 """
 One AD scenario: a named model, the group it belongs to and the seed used
@@ -192,6 +194,18 @@ const BED_CAPACITY_HISTORY = (;
     days = [28, 30, 32, 34, 36], counts = [60, 60, 80, 80, 80],
 )
 const EXPORT_CASE_DAYS = [21, 27, 33]
+## Cut-off totals, each the last cumulative count of its history (and, for
+## the exports, one detected case per dated export day). A scenario passes
+## these rather than `missing` so it is the likelihood a fit differentiates:
+## a `missing` total puts the whole stream on DynamicPPL's
+## predictive-generator path, where the observations are sampled into a
+## `Union{Missing, Int}` container instead of scored. Mooncake differentiates
+## either, so the distinction is invisible until Enzyme, whose type analysis
+## rejects the union.
+const REPORTED_TOTAL = REPORTED_HISTORY.counts[end]
+const CONFIRMED_TOTAL = CONFIRMED_HISTORY.counts[end]
+const DEATHS_TOTAL = DEATHS_HISTORY.counts[end]
+const EXPORT_TOTAL = length(EXPORT_CASE_DAYS)
 const ONSET_CURVE_HISTORY = (;
     onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
     report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
@@ -265,7 +279,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "reported_cases_model", "Submodel",
             reported_cases_model(
-                REPORTED_HISTORY, missing, onsets, k,
+                REPORTED_HISTORY, REPORTED_TOTAL, onsets, k,
                 p_drc;
                 suspected_daily_history = SUSPECTED_DAILY_HISTORY
             ), SEED
@@ -276,7 +290,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "confirmed_cases_model", "Submodel",
             confirmed_cases_model(
-                CONFIRMED_HISTORY, missing, onsets, k,
+                CONFIRMED_HISTORY, CONFIRMED_TOTAL, onsets, k,
                 p_drc, cases.bg_daily, cases.τ_test, cases.bvd_reports_daily;
                 lab_history = LAB_HISTORY,
                 lab_daily_history = LAB_DAILY_HISTORY
@@ -287,7 +301,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         out,
         Scenario(
             "deaths_model", "Submodel",
-            deaths_model(DEATHS_HISTORY, missing, onsets, k), SEED
+            deaths_model(DEATHS_HISTORY, DEATHS_TOTAL, onsets, k), SEED
         )
     )
     push!(
@@ -295,7 +309,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "exports_model", "Submodel",
             exports_model(
-                missing, infections, 0.02;
+                EXPORT_TOTAL, infections, 0.02;
                 export_case_days = EXPORT_CASE_DAYS,
                 incubation_pmf = lat.incubation_pmf
             ), SEED
@@ -335,7 +349,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "exports_only_model", "Composer",
             exports_only_model(
-                n, missing;
+                n, EXPORT_TOTAL;
                 export_case_days = EXPORT_CASE_DAYS
             ), SEED
         )
@@ -345,7 +359,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "deaths_only_model", "Composer",
             deaths_only_model(
-                n, missing;
+                n, DEATHS_TOTAL;
                 deaths_history = DEATHS_HISTORY
             ), SEED
         )
@@ -355,7 +369,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "cases_only_model", "Composer",
             cases_only_model(
-                n, missing;
+                n, REPORTED_TOTAL;
                 reported_history = REPORTED_HISTORY,
                 suspected_daily_history = SUSPECTED_DAILY_HISTORY
             ), SEED
@@ -366,7 +380,7 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         Scenario(
             "confirmed_only_model", "Composer",
             confirmed_only_model(
-                n, missing;
+                n, CONFIRMED_TOTAL;
                 confirmed_history = CONFIRMED_HISTORY,
                 lab_history = LAB_HISTORY,
                 lab_daily_history = LAB_DAILY_HISTORY
@@ -403,6 +417,51 @@ function scenarios(; n::Integer = N, joint::Bool = false)
         )
     )
     return out
+end
+
+"""
+    enzyme_broken_scenarios()
+
+Scenario names whose Enzyme gradient is known to fail, as a `Set{String}`.
+
+The Enzyme sweep in `test/enzyme/runtests.jl` computes each scenario's
+pass/fail itself and falls back to `@test_broken` only when a listed
+scenario really did fail, so listing a name that has since been fixed
+costs nothing. A failure not listed here reds the run.
+"""
+function enzyme_broken_scenarios()
+    ## Both fail on "Taking the type of an opaque pointer is illegal",
+    ## inside Enzyme's own LLVM work rather than in anything `src/` does
+    ## (epiforecasts/BVDOutbreakSize#445 recorded a `nodecayed_phis!`
+    ## failure for the joint on an older Enzyme; this is what it gives
+    ## now). `patch_infection_model` fails at one patch as well as three,
+    ## a byte-identical copy of its body defined outside the package
+    ## differentiates cleanly at every stage of a staged bisect, and every
+    ## numeric helper it calls differentiates on its own, so the model
+    ## code is not what Enzyme is rejecting.
+    return Set(
+        [
+            "bvd_joint",
+            "patch_infection_model (uncoupled)",
+            "patch_infection_model (coupled)",
+        ]
+    )
+end
+
+"""
+    enzyme_skip_scenarios()
+
+Scenario names not run under Enzyme at all, as a `Set{String}`.
+
+For a pair that hangs rather than throws: a `@test_broken` still has to
+reach a verdict, and one that never returns stalls the run instead of
+recording a failure.
+"""
+function enzyme_skip_scenarios()
+    ## Enzyme's reverse-mode compile of the bed-occupancy stream had not
+    ## returned after 25 minutes, against ~1 minute for the next slowest
+    ## component.
+    return Set(["treatment_flow_model", "treatment_only_model"])
 end
 
 end # module
