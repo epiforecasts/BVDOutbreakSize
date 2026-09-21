@@ -62,6 +62,12 @@ Every release is signed off by a person, who cuts it with an `@release` comment 
 
 <!-- SHARED:END -->
 
+## Paper
+
+A short preprint describing how this work developed, the current model, its evaluation and the lessons learnt is drafted under [`paper/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/paper).
+It is written in Quarto and pinned to a tagged release of this report, which serves as its supplement.
+Render it with `task paper` (needs [Quarto](https://quarto.org)).
+
 ## Installing the package
 
 To use the model and the bundled outbreak data from your own Julia environment, add the package from the repository:

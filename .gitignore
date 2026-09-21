@@ -73,3 +73,9 @@ logs/
 
 # Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
 /worktrees/
+
+# Rendered preprint outputs; the sources under paper/ are what is tracked.
+/paper/*.pdf
+/paper/*.tex
+/paper/main_files/
+/paper/si_files/
