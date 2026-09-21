@@ -235,10 +235,22 @@ function _num_divergences(chn)
     return 0
 end
 
+# Post-warmup draws across every chain, read off the sampler's per-draw
+# divergence flag. A divergence count means little without it: six
+# divergences in 3200 draws and six in twelve are not the same fit. Zero
+# when the chain carries no sampler extras.
+function _num_draws(chn)
+    for e in FlexiChains.extras(chn)
+        e.name === :numerical_error || continue
+        return length(vec(chn[e]))
+    end
+    return 0
+end
+
 """
 NUTS fit-quality summary for one chain: the worst (maximum) R-hat, the
-smallest bulk and tail effective sample sizes across parameters, and the
-number of divergent transitions.
+smallest bulk and tail effective sample sizes across parameters, the number
+of divergent transitions and the number of post-warmup draws they are out of.
 """
 function fit_diagnostics(chn)
     ## Drop non-finite entries: a fixed or degenerate quantity has an
@@ -252,6 +264,7 @@ function fit_diagnostics(chn)
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
         min_ess_tail = isempty(tail) ? NaN : minimum(tail),
         n_divergent = _num_divergences(chn),
+        n_draws = _num_draws(chn),
     )
 end
 

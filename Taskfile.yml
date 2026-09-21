@@ -107,6 +107,16 @@ tasks:
     cmds:
       - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
+  check-convergence:
+    desc: >
+      Decide whether the cached fits converged well enough to publish, the
+      same gate CI runs after the fit matrix. Reads the chains from
+      logs/fit_cache without refitting, prints the verdict, the headline
+      diagnostics and the parameters responsible, and exits non-zero on a
+      failure. Set BVD_CONVERGENCE_IDS to gate fits other than `joint`.
+    cmds:
+      - julia --project=docs docs/fits/check_convergence.jl {{.CLI_ARGS}}
+
   fit-all:
     desc: >
       Fit and cache every model in one parallel pass, then `task docs` renders
