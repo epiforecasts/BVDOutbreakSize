@@ -25,6 +25,18 @@ Changes since v2.1.0.
   rather than a type, so both arms were inferred on every build and the
   resulting union specialised the suspected-case submodel twice.
 
+||||||| parent of 25a7788e (docs(news): note the calibrated onset cell noise)
+### Model
+
+- The onset reporting-triangle likelihood reads each vintage pair's bar
+  noise off the settled part of the curve, where the true increment is near
+  zero, instead of a fixed 2.1 counts per read (#793). The scans have grown
+  noisier, from about 1 count per bar in July to 10 to 13 from SitRep 113
+  (4 September), so the September cells were weighted 10 to 30 times too
+  heavily and pulled the onset hazard and its calendar walk, the worst
+  mixers in the joint fit. Every fit-cache key changes, so the next build
+  refits.
+
 ### Infrastructure
 
 - The release helper reads a Windows checkout. Its version-heading pattern
