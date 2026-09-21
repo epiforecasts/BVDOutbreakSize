@@ -83,8 +83,9 @@ function fit_key(id; samples::Integer = 500, chains::Integer = 2)
 end
 
 ## Canonical fit-setup values, so `analysis.jl`, `fit_one.jl` and this registry
-## agree on the breakpoint, the validation cut-off and the frozen cut-offs.
-default_breakpoint(obs) = obs.n - obs.who_first_sitrep_days
+## agree on the validation cut-off and the frozen cut-offs. The breakpoint
+## comes from the package (`default_breakpoint`), alongside the fit keywords
+## `src/precompile.jl` shares, so a copy here cannot shadow it and drift.
 default_validation_cutoff(obs) = string(obs.cutoff - Day(7))
 default_frozen_cutoffs() = ["2026-05-20", "2026-05-23", "2026-05-27"]
 ## Chamla et al.'s confirmed-case calibration anchor (598 confirmed by 8 June),
