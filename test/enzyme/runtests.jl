@@ -64,8 +64,9 @@ end
 ## boolean is computed first and `@test_broken` reached only on a real
 ## failure, so over-listing a name is safe: a scenario that starts passing
 ## is recorded as a pass whether or not it is still listed. Under-listing
-## reds the run, which is the direction that should be loud, given how
-## much of what Enzyme rejects here is upstream of this package.
+## fails, which is the direction that should be loud, given how much of
+## what Enzyme rejects here is upstream of this package. The exit code
+## below is what carries that distinction out to the caller.
 function check_scenario(name, matched, broken)
     return if matched
         @test matched
@@ -76,46 +77,69 @@ function check_scenario(name, matched, broken)
     end
 end
 
-@testset "Enzyme extension" begin
-    @testset "enzyme_adtype is an AutoEnzyme with runtime activity" begin
-        ad = enzyme_adtype()
-        @test ad isa AutoEnzyme
-        @test ad isa AutoEnzyme{<:Any, Enzyme.Duplicated}
-        @test ad.mode === Enzyme.set_runtime_activity(Enzyme.Reverse)
-    end
+## The exit code separates a scenario that did not behave as declared
+## from the script never getting as far as running, so
+## `test/package/EnzymeExt.jl` can tolerate the second without swallowing
+## the first. Enzyme being unusable on a platform is what that wrapper
+## exists to absorb; a scenario that regresses without being declared
+## broken is not, and would otherwise be absorbed identically.
+##
+##   0  every scenario behaved as declared
+##   2  at least one did not: a failed assertion, or an error the testset
+##      caught (an Enzyme throw is not one of these, `enzyme_matches_
+##      mooncake` turns it into a plain `false`)
+##   anything else  the script could not run: a load or precompile
+##      failure before the testset, or a crash that takes the process
+##      down with it
+failed = try
+    @testset "Enzyme extension" begin
+        @testset "enzyme_adtype is an AutoEnzyme with runtime activity" begin
+            ad = enzyme_adtype()
+            @test ad isa AutoEnzyme
+            @test ad isa AutoEnzyme{<:Any, Enzyme.Duplicated}
+            @test ad.mode === Enzyme.set_runtime_activity(Enzyme.Reverse)
+        end
 
-    @testset "gradient matches Mooncake on a single-stream model" begin
-        @test enzyme_matches_mooncake(exports_only_model(3, 2))
-    end
+        @testset "gradient matches Mooncake on a single-stream model" begin
+            @test enzyme_matches_mooncake(exports_only_model(3, 2))
+        end
 
-    @testset "every AD component matches Mooncake" begin
-        broken = ADFixtures.enzyme_broken_scenarios()
-        skipped = ADFixtures.enzyme_skip_scenarios()
-        scenarios = ADFixtures.scenarios()
-        ## The same lower bound the Mooncake suite asserts: the fixtures are
-        ## the benchmark component list too, so a truncated list would pass
-        ## here while quietly shrinking what is swept.
-        @test length(scenarios) >= 16
-        for scen in scenarios
-            @testset "$(scen.group): $(scen.name)" begin
-                if scen.name in skipped
-                    @test_skip "declared too slow to run under Enzyme"
-                else
-                    check_scenario(
-                        scen.name, enzyme_matches_mooncake(scen.model), broken
-                    )
+        @testset "every AD component matches Mooncake" begin
+            broken = ADFixtures.enzyme_broken_scenarios()
+            skipped = ADFixtures.enzyme_skip_scenarios()
+            scenarios = ADFixtures.scenarios()
+            @test length(scenarios) >= ADFixtures.MIN_SCENARIOS
+            for scen in scenarios
+                @testset "$(scen.group): $(scen.name)" begin
+                    if scen.name in skipped
+                        @test_skip "declared too slow to run under Enzyme"
+                    else
+                        check_scenario(
+                            scen.name, enzyme_matches_mooncake(scen.model), broken
+                        )
+                    end
                 end
             end
         end
-    end
 
-    @testset "gradient matches Mooncake on the joint" begin
-        check_scenario(
-            "bvd_joint",
-            enzyme_matches_mooncake(
-                bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
-            ),
-            ADFixtures.enzyme_broken_scenarios()
-        )
+        @testset "gradient matches Mooncake on the joint" begin
+            check_scenario(
+                "bvd_joint",
+                enzyme_matches_mooncake(
+                    bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
+                ),
+                ADFixtures.enzyme_broken_scenarios()
+            )
+        end
     end
+    false
+catch err
+    ## A failing `@testset` throws this at the end of the block. Anything
+    ## else is the script failing to run at all, which is the case the
+    ## wrapper tolerates, so it propagates and leaves the exit code to
+    ## Julia.
+    err isa Test.TestSetException || rethrow()
+    true
 end
+
+exit(failed ? 2 : 0)

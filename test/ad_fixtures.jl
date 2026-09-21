@@ -43,7 +43,7 @@ using Random: seed!
 using Turing: DynamicPPL, returned
 
 export Scenario, scenarios, backends, linked_point, gradient_is_finite,
-    enzyme_broken_scenarios, enzyme_skip_scenarios
+    enzyme_broken_scenarios, enzyme_skip_scenarios, MIN_SCENARIOS
 
 """
 One AD scenario: a named model, the group it belongs to and the seed used
@@ -418,6 +418,15 @@ function scenarios(; n::Integer = N, joint::Bool = false)
     )
     return out
 end
+
+"""
+Lower bound on the number of scenarios [`scenarios`](@ref) returns.
+
+Asserted by both gradient suites. The fixtures are the benchmark suite's
+component list too, so a truncated list would pass those suites while
+quietly shrinking what is timed.
+"""
+const MIN_SCENARIOS = 16
 
 """
     enzyme_broken_scenarios()
