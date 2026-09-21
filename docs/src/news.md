@@ -6,88 +6,55 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## v2.1.1
+## v2.2.0
 
 Changes since v2.1.0.
 
 ### Model
 
-- The `:free` confirmed-positivity link is removed, with
-  `confirmed_positivity_model` and the `positivity_link` keyword. It could
-  not run: `confirmed_cases_model` returns `s_test` and `spec`
-  unconditionally but assigned them only on the composition branch, so
-  selecting the free link raised `UndefVarError`. Every fit used the
-  composition link.
-- The pooled background takes a submodel instead of a flag:
-  `background_re = true` becomes
-  `background_pooling = background_pooling_model`. The option is unchanged
-  and the gradients are identical. A flag reaches the model as a value
-  rather than a type, so both arms were inferred on every build and the
-  resulting union specialised the suspected-case submodel twice.
+- The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
+It could never have run.
+`confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
+Every fit used the composition link.
+- The pooled background takes a submodel rather than a flag.
+`background_re = true` becomes `background_pooling = background_pooling_model`.
+The option and the gradients are unchanged.
+A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
 
 ### Infrastructure
 
-- The release helper reads a Windows checkout. Its version-heading pattern
-  ended at the line end, which a CRLF file reaches one character late, so
-  `news.md` parsed as a file with no version sections at all and the Windows
-  test cell failed on every push. The bump also rewrote the two lines it
-  touches in `CITATION.cff` with bare newlines, mixing endings in a file it
-  had found consistent.
-- The precompile workload compiles the fit the report runs, rather than a
-  synthetic model shaped like it. The two had drifted: the workload passed
-  `province_increments = missing` where every fit passes a matrix, and left
-  the isolation and treatment histories empty, so the most expensive stream
-  in the model cached nothing. Both now build their keywords from
-  `joint_fit_args`, and a test asserts the two models are the same type.
-  The headline joint's cold build drops from 1095 s to 292 s, of which
-  rule construction is 969 s and 274 s; the gradient itself is unchanged at
-  about 17.4 ms.
+- A release is cut by commenting `@release` on any issue or pull request (#767).
+The notes are the newest `news.md` section, which is what they have always been, copied across by hand.
+The comment tags `main`, publishes the release, and opens a pull request bumping the version and starting the next section.
+`@release minor` and `@release major` set the size of that bump.
+`task release-notes` prints the notes before anything is published.
+- The documentation build fails when the headline joint fit has not converged (#764).
+The verdict is a comment on the pull request, edited in place on each build, naming the thresholds breached and the worst-mixing parameters.
+It is a leaf job, so the preview still builds and still comments.
+- A pull request builds the report, runs the tests and measures coverage only when it changes something they are built from (#776).
+Each workflow decides in a job of its own, so a skipped build says so rather than leaving no check at all.
+A push, a tag and a manual run are never gated.
+- The fit cache key CI restores is the one the fits are keyed on (#739).
+The Actions key hashed all of `data/`, including the generated tables that `FIT_DATA_EXCLUDE` drops, so a rescore commit refit every model for inputs no fit reads.
+It also left out `docs/fits/cache.jl`.
+The key now comes from `fit_content_hash`, so there is one list.
+- The automatic version increment is gone (#607).
+`@release` bumps the version as part of cutting a release.
+The automatic one moved it without opening a news section, and could open a second pull request racing the one `@release` opens.
+It had not run since v1.14.0 in any case.
+`/version major|minor|patch` on a pull request is unaffected.
+- A version tag's documentation build waits for the `main` build of the same commit and reuses its cached fits (#765).
+The two used to run together and each refit every model.
+For v2.1.0 the tag build passed the job's time limit, so no `results-v2.1.0` release was published.
+Each fit job's summary now names the runner's CPU, because the same fit runs up to half again as long on some runners.
+- The precompile workload compiles the fit the report runs, rather than a model shaped like it.
+The two had drifted, so the most expensive stream in the model cached nothing.
+Both now build their keywords from `joint_fit_args`, and a test asserts the two models are the same type.
+The headline joint's cold build drops from 1095 s to 292 s.
 - `task benchmark-compile` reports the cold AD-compile cost per component.
-  The existing suite times steady-state gradients only, which is why an
-  18 minute cold compile went untracked.
-
-- The fit cache key CI restores is the one the fits are keyed on (#739). The
-  Actions key hashed all of `data/`, including the generated scoring tables
-  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
-  rescore commit or a README edit missed the cache and refit every model for
-  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
-  the hashing rule itself would not have invalidated anything. The key is now
-  taken from `fit_content_hash` rather than restated, so there is one list.
-
-- The automatic version increment is gone (#607). It opened a patch-bump pull
-  request on every push to `main` where the version had not changed, which is
-  now both redundant and harmful: `@release` bumps the version as part of
-  cutting a release, and the automatic one moved it without opening a news
-  section, which is what left a merged change with no heading to write under.
-  It could also open a second pull request racing the one `@release` opens,
-  bumping the same field by a different route. It had not run since v1.14.0
-  in any case, wedged behind a stale branch its own guard would not clear.
-  `/version major|minor|patch` on a pull request is unaffected.
-
-- A pull request only builds the report, runs the tests and measures coverage
-  when it changes something they are built from (#776). The fits alone cost
-  hours, and a change to the test suite, the benchmarks or an unrelated
-  workflow produced a site identical to the one on `main`; a change to the
-  analysis pages or the README ran the whole test suite to no purpose. Each
-  workflow decides in a job of its own, so a skipped build says so in its
-  summary rather than leaving no check at all. A push, a tag and a manual run
-  are never gated.
-- A release is cut by commenting `@release` on any issue or pull request
-  (#767). The notes are the newest `docs/src/news.md` section, which is what
-  they have always been, copied across by hand. The comment tags `main`,
-  publishes the release and opens a pull request bumping the version and
-  starting the next section, so the following change has a heading to write
-  under. `@release minor` and `@release major` choose the size of that bump.
-- `scripts/release_notes.jl` holds the text handling behind it and runs
-  locally through `task release-notes`, so the notes can be read before
-  anything is published.
-- Pushing a version tag starts a second documentation build of the commit
-  that was just pushed to `main`. The two builds used to run at the same
-  time and each refit every model; for v2.1.0 the tag build's joint fit ran
-  past the job's time limit, so no `results-v2.1.0` release was published.
-  The tag build now waits for the `main` build to finish and reuses its
-  cached fits (#765). Each fit job's summary also names the runner's CPU,
-  because the same fit runs up to half again as long on some runners.
+The existing suite times steady-state gradients only, which is why an 18 minute cold compile went untracked.
+- The release helper reads a Windows checkout.
+Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
 
 ## v2.1.0
 
@@ -240,14 +207,6 @@ BenchmarkTools runs a warmup evaluation before it samples and that warmup perfor
 Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
 - The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
 `key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
-- The documentation build fails when the headline joint fit has not converged,
-  and says so in a comment on the pull request that is edited in place on each
-  build (#764). The verdict carries the headline diagnostics, which thresholds
-  were breached and the worst-mixing parameters and divergence locations the
-  sensitivity report breaks down in full. It is a leaf job, so the preview
-  still builds and still comments: the pages are how the failure is diagnosed.
-  v2.0.0 was published with a joint fit that had not converged and nothing in
-  the build said so.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17
