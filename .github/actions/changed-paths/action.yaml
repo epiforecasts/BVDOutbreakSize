@@ -1,0 +1,75 @@
+name: 'Changed paths'
+description: >
+  Whether a pull request touches any file that the calling workflow's work
+  depends on. Outside a pull request it always answers yes, so a push to
+  `main`, a tag and a manual run are never gated.
+inputs:
+  patterns:
+    description: >
+      Extended regular expression matched against each changed path,
+      relative to the repository root.
+    required: true
+  label:
+    description: >
+      What the caller builds or runs, named in the job summary, e.g.
+      "the report" or "the test suite".
+    required: true
+outputs:
+  matched:
+    description: "'true' when the work is needed, 'false' when it is not"
+    value: ${{ steps.decide.outputs.matched }}
+runs:
+  using: 'composite'
+  steps:
+    - id: decide
+      shell: bash
+      env:
+        PATTERNS: ${{ inputs.patterns }}
+        LABEL: ${{ inputs.label }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        if [ "$EVENT" != "pull_request" ]; then
+          echo "matched=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $LABEL: building"
+            echo
+            echo "Not a pull request ($EVENT), so nothing is gated."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        # `actions/checkout` leaves the pull request's merge commit at HEAD,
+        # so its first parent is the base and this is exactly what the pull
+        # request changes. Using the merge commit rather than the recorded
+        # base sha means a base that has moved since the pull request opened
+        # does not show as a change.
+        CHANGED=$(git diff --name-only HEAD^1 HEAD)
+        echo "Changed files:"
+        echo "$CHANGED" | sed 's/^/  /'
+        # `grep` exits 1 on no match, which `pipefail` would turn into a
+        # failed step, so the no-match case is handled rather than trapped.
+        MATCHES=$(echo "$CHANGED" | grep -E "$PATTERNS" || true)
+        if [ -n "$MATCHES" ]; then
+          echo "matched=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $LABEL: building"
+            echo
+            echo "Changed files it depends on:"
+            echo
+            echo "$MATCHES" | sed 's/^/- `/; s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "matched=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $LABEL: skipped"
+            echo
+            echo "Nothing this pull request changes feeds $LABEL, so it"
+            echo "would produce the same result as on \`main\`."
+            echo
+            echo "It matches none of:"
+            echo
+            echo '```'
+            echo "$PATTERNS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
