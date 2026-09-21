@@ -25,7 +25,12 @@ const CITATION_PATH = joinpath(dirname(@__DIR__), "CITATION.cff")
 
 ## A version heading and nothing else on the line, so a `###` subsection
 ## heading inside a release cannot be mistaken for the start of the next one.
-const VERSION_HEADING = r"^##[ \t]+v([0-9]+\.[0-9]+\.[0-9]+)[ \t]*$"m
+##
+## `\r` is in the trailing class because a Windows checkout has CRLF line
+## endings and `$` under the `m` flag matches before the `\n`, leaving the
+## `\r` to be matched. Without it no heading matches at all on Windows and
+## every release looks like a file with no version sections.
+const VERSION_HEADING = r"^##[ \t]+v([0-9]+\.[0-9]+\.[0-9]+)[ \t\r]*$"m
 
 """
     project_version(toml::AbstractString) -> String
@@ -128,8 +133,11 @@ function bump_citation(
         cff::AbstractString, released::AbstractString,
         date::AbstractString
     )
-    version = Regex("^version:[ \\t]*.*\$", "m")
-    released_on = Regex("^date-released:[ \\t]*.*\$", "m")
+    ## `[^\\r\\n]*` and no `$`, so the line ending that follows is left
+    ## alone rather than being consumed and rewritten as a bare newline on a
+    ## CRLF checkout.
+    version = Regex("^version:[ \\t]*[^\\r\\n]*", "m")
+    released_on = Regex("^date-released:[ \\t]*[^\\r\\n]*", "m")
     occursin(version, cff) ||
         error("CITATION.cff carries no version field")
     occursin(released_on, cff) ||

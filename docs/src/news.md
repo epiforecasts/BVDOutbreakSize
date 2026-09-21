@@ -27,6 +27,12 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The release helper reads a Windows checkout. Its version-heading pattern
+  ended at the line end, which a CRLF file reaches one character late, so
+  `news.md` parsed as a file with no version sections at all and the Windows
+  test cell failed on every push. The bump also rewrote the two lines it
+  touches in `CITATION.cff` with bare newlines, mixing endings in a file it
+  had found consistent.
 - The precompile workload compiles the fit the report runs, rather than a
   synthetic model shaped like it. The two had drifted: the workload passed
   `province_increments = missing` where every fit passes a matrix, and left
