@@ -393,7 +393,9 @@ validation_stopped_fig #hide
 #
 # The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
 # Its printed total therefore moves with the scan error as well as with late reporting.
-# Its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
+# On fourteen vintages the reread total falls, which a cumulative onset curve cannot do, and on many others it repeats unchanged.
+# The fit absorbs that with a per-vintage scan level, but the scored truth takes the increment as it stands, so a window spanning a falling vintage is scored against an increment the reports did not add: two of the eleven one-week windows carry an observed 40 and 82 against a typical 400 to 500.
+# Read the onset row's skill against the baseline rather than its coverage, and read it as indicative until the scored truth handles those vintages.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
