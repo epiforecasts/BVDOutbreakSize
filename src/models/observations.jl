@@ -3160,7 +3160,7 @@ increment cells difference. Cell `i` reads its current level off scan
     \\ell_{\\text{prev},i} c_{p_i},
 ```
 
-with `scan_level[s] = 1 + σ_scan · z_scan[s]` the level a whole published
+with `scan_level[s] ~ Normal(1, σ_scan)` the level a whole published
 figure was read at ([`onset_reporting_model`](@ref)). One multiplier per
 scan, not per cell: the ~28 bars digitised off one figure share a single
 level error, so a scan that reads high moves that snapshot's whole row of
@@ -3672,10 +3672,14 @@ SitRep 088, whose digitised total falls 184 below SitRep 087 on the same
 render size, edge softness and plotted window, so the level is sampled free
 rather than regressed on the observable covariates.
 
-The per-scan level is therefore a sampled `1 + σ_scan · z_scan[s]` on the
-modelled cumulative levels each cell differences
+The per-scan level is therefore a sampled `scan_level[s] ~ Normal(1,
+σ_scan)` on the modelled cumulative levels each cell differences
 ([`onset_scan_adjust`](@ref)), and the per-cell scale keeps counting and
-pixel noise alone. Scored as independent per-cell noise instead, a
+pixel noise alone. The levels are sampled centred rather than as
+`1 + σ_scan · z[s]`: a 1.5% level on a curve of several thousand cases is
+tens of cases, visible against every cell's noise, so each level is well
+informed and the non-centred form funnels between `σ_scan` and the `z`s,
+where the joint fit's divergent transitions concentrated. Scored as independent per-cell noise instead, a
 snapshot's cells can only miss in uncorrelated directions, so the net
 correction is far too tightly predicted (1 of 11 snapshots inside a nominal
 50% interval) even though the aggregate variance ratio is 1.07.
@@ -3769,19 +3773,18 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     alpha = asc_state.alpha
     σ_mult ~ slack_prior
 
-    ## Per-scan level error: one non-centred multiplier per surviving
-    ## vintage, the level that scan's whole figure was read at. It sits on
-    ## the modelled level rather than in the per-cell scale, which carries
-    ## counting and pixel noise alone.
+    ## Per-scan level error: one multiplier per surviving vintage, the
+    ## level that scan's whole figure was read at, sampled centred about 1.
+    ## It sits on the modelled level rather than in the per-cell scale,
+    ## which carries counting and pixel noise alone.
     vintages = onset_vintage_indices(report_days, prev_report_days)
     σ_scan ~ scan_sd_prior
-    z_scan ~ product_distribution(
+    scan_level ~ product_distribution(
         fill(
-            Normal(0, 1),
+            Normal(one(σ_scan), σ_scan),
             max(vintages.n_vintages, 1)
         )
     )
-    scan_level = one(σ_scan) .+ σ_scan .* z_scan
 
     moments = onset_report_moments(
         cdf_table, grid_start, onsets,
