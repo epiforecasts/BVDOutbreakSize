@@ -119,7 +119,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     background_walk_model,
     expand_vintage_rate,
     test_sensitivity_model, test_specificity_model, lab_delay_model,
-    confirmed_positivity_model, confirmed_overdispersion_model,
+    confirmed_overdispersion_model,
     severity_enrichment_model,
     death_testing_fraction_model, death_testing_scaling_model,
     specimen_intensity_model,
@@ -154,6 +154,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     PROVINCE_DISTANCE_DECAY, haversine_km,
     province_distance_matrix, province_importation_kernel,
     province_increment_matrix, province_testing_covariate,
+    joint_fit_args, patch_fit_args, production_joint,
+    default_breakpoint,
     patch_infections, importation_from_kernel,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
@@ -176,6 +178,7 @@ include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
+include("models/fit_args.jl")
 include("precompile.jl")
 
 end # module

@@ -155,12 +155,18 @@ end
     ## print the same first tick (06 avr 2026) and the same last tick (14
     ## sept 2026), both read off 12x crops of the embedded figures, so the
     ## two axes are calibrated identically and no one-day offset between
-    ## them is possible.
+    ## them is possible. 125->126 and 126->127 both prefer shift -1 (full
+    ## 724 against 831 at 0 and 1146 at +1 for 125->126; 600 against 647 at
+    ## 0 and 1047 at +1 for 126->127; stable region agrees in both cases).
+    ## 125, 126 and 127 all print the same first tick (06 avr 2026) and the
+    ## same last tick (14 sept 2026), each read directly and agreed by two
+    ## blind readers with zero disagreements, so again no axis miscalibration
+    ## is possible between them.
     documented = Dict(
         "093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
         "119" => "120", "120" => "121", "121" => "122", "122" => "123",
-        "123" => "124"
+        "123" => "124", "125" => "126", "126" => "127"
     )
 
     unexpected = Tuple{String, String, Int, Int}[]

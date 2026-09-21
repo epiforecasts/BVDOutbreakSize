@@ -15,7 +15,6 @@ using Serialization: serialize
 const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
-const PLINK = length(ARGS) >= 4 ? Symbol(ARGS[4]) : :free
 
 ## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
 ## Its weak-dep extension registers only once `Enzyme` is loaded.
@@ -43,8 +42,7 @@ model = bvd_joint(
     export_case_days = obs.export_case_days,
     export_death_days = obs.export_death_days,
     breakpoint = BREAKPOINT,
-    background_re = true,
-    confirmed_positivity_link = PLINK,
+    background_pooling = background_pooling_model,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days
 )
@@ -53,7 +51,7 @@ isdir("logs") || mkdir("logs")
 cb = progress_callback(; path = "logs/joint_fit.log", every = 25)
 
 println(
-    "Fitting joint ($(SAMPLES)x$(CHAINS), n=$(obs.n), background_re=true, ",
+    "Fitting joint ($(SAMPLES)x$(CHAINS), n=$(obs.n), background walk, ",
     "ascertainment≈75%, AD=$(AD)). Tail logs/joint_fit.log for live progress.\n"
 )
 chn = nuts_sample(

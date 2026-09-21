@@ -338,8 +338,7 @@ function preregistry_joint_call(code_tag, samples, chains)
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
                 breakpoint = bp,
-                background_re = true,
-                confirmed_positivity_link = :composition,
+                background_pooling = background_pooling_model,
                 genetic = genetic_seeding_model,
                 tmrca_days = obs.tmrca_days);
             samples = $(samples), chains = $(chains))"""
@@ -363,8 +362,7 @@ function preregistry_joint_call(code_tag, samples, chains)
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
                 breakpoint = bp,
-                background_re = true,
-                confirmed_positivity_link = :composition,
+                background_pooling = background_pooling_model,
                 genetic = genetic_seeding_model,
                 tmrca_days = obs.tmrca_days);
             samples = $(samples), chains = $(chains))"""
@@ -392,8 +390,7 @@ function preregistry_joint_call(code_tag, samples, chains)
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
                 breakpoint = bp,
-                background_re = true,
-                confirmed_positivity_link = :composition,
+                background_pooling = background_pooling_model,
                 genetic = genetic_seeding_model,
                 tmrca_days = obs.tmrca_days);
             samples = $(samples), chains = $(chains))"""

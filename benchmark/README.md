@@ -103,6 +103,23 @@ task benchmark-pair -- v2.0.0 HEAD    # any two revisions
 It checks the two revisions out under `.benchmark-worktrees/` and writes both arms' results and the rendered comment to `benchmark-results/`.
 Read it only from a quiet machine.
 
+## Compile cost
+
+`task benchmark` and `task benchmark-pair` time steady-state gradients.
+Neither can see the cold compile, because it is paid once per process and before any gradient is taken: Mooncake builds the reverse rule when the `LogDensityFunction` is constructed.
+Measured per component on the 40-day grid, rule construction is roughly 87% of a cold build, against a ~38 s floor any model pays.
+The full `bvd_joint` spends 969 s of its 1095 s cold build there.
+
+`task benchmark-compile` measures it, one fresh process per component, and reports the primal build and the rule build separately.
+The fresh process per component is what keeps the fixed floor off whichever component would otherwise have run first.
+
+```bash
+task benchmark-compile                      # compile.json
+BVD_BENCH_JOINT=true task benchmark-compile # plus the joint, ~18 min
+```
+
+The saved JSON carries each component's gradient vector as well as its timings, so two runs can be checked for an unchanged gradient rather than only a changed time.
+
 ## Structure
 
 ```
@@ -155,6 +172,8 @@ They also measure pure helpers below the component level this suite reports.
 | `run.jl` | Times one revision once, for local profiling |
 | `ci/run_pair.jl` | Times two worktrees in one process under AirspeedVelocity |
 | `ci/comment.jl` | Turns the two results files into the PR comment |
+| `compile.jl` | Cold AD-compile cost per component, a process each |
+| `compile_one.jl` | One component's cold compile, run by `compile.jl` |
 
 `ci/Project.toml` carries the harness only, with no model dependency.
 `Project.toml` is the environment the suite itself runs in, and is taken from each arm's own worktree.
