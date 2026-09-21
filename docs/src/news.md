@@ -12,12 +12,13 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
-- A release tag's documentation run queues behind the `main` push of the same
-  commit rather than racing it (#765). The two runs used to refit every
-  model side by side, and the tag's joint fit was the one to hit the job's
-  time limit, which is why v2.1.0 published no tagged results release. Each
-  refit job's summary now names the runner's CPU, so a slow fit can be told
-  apart from a slow machine.
+- Pushing a version tag starts a second documentation build of the commit
+  that was just pushed to `main`. The two builds used to run at the same
+  time and each refit every model; for v2.1.0 the tag build's joint fit ran
+  past the job's time limit, so no `results-v2.1.0` release was published.
+  The tag build now waits for the `main` build to finish and reuses its
+  cached fits (#765). Each fit job's summary also names the runner's CPU,
+  because the same fit runs up to half again as long on some runners.
 
 ## v2.1.0
 
