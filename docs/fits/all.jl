@@ -8,9 +8,9 @@
 #
 #   julia -t auto --project=docs docs/fits/all.jl
 #
-# The threads are the whole point: `fit_parallel` runs `threads ÷ chains` fits
-# at once, each keeping `chains` threads for its own chains, so a single-thread
-# process fits the registry one model at a time. `task fit-all` passes
+# `fit_parallel` runs `threads ÷ chains` fits at once, each keeping `chains`
+# threads for its own chains, so a single-thread process fits the registry one
+# model at a time. `task fit-all` passes
 # `JULIA_NUM_THREADS` when it is set and `auto` otherwise, so setting that
 # variable caps the fan-out on a shared box.
 #

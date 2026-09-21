@@ -1,17 +1,13 @@
 # [API overview](@id api-overview)
 
-The code is a Julia package, `BVDOutbreakSize`, and the report pages are
-literate scripts that call it.
-This section documents what the package offers, grouped by the job each part
-does.
+The code is a Julia package, `BVDOutbreakSize`, and the report pages are literate scripts that call it.
+This section documents what the package offers, grouped by the job each part does.
 
 ## Public and internal
 
 Everything the package exports is public and documented here.
-The exported surface is what the report pages, the fit registry and the
-scripts use, and it is what a reader should build on.
-Anything not exported is an implementation detail, kept on the
-[internals](internals.md) page, and may change without notice.
+The exported surface is what the report pages, the fit registry and the scripts use, and it is what a reader should build on.
+Anything not exported is an implementation detail, kept on the [internals](internals.md) page, and may change without notice.
 
 ## The groups
 
