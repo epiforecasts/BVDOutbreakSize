@@ -106,9 +106,11 @@ jobs:
         with:
           # macOS is the portability cell and the slowest runner: give it
           # the platform-sensitive items only. Everything tagged `:quality`
-          # runs once in the `quality` job below rather than on any matrix
-          # cell: those items do not vary by platform or Julia version, and
-          # carrying them made the one cell that ran them outgrow the timeout.
+          # or `:ad` runs once in the `quality` and `ad-gradients` jobs below
+          # rather than on any matrix cell: those items do not vary by
+          # platform or Julia version, and carrying them made the one cell
+          # that ran them outgrow the timeout. The `:ad` items are ~19 min of
+          # Mooncake gradient compilation, which every cell was paying.
           # See test/runtests.jl.
           test_args: ${{ matrix.os == 'macOS-latest' && 'fast' || 'skip_quality' }}
 
@@ -133,6 +135,28 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           test_args: 'quality_only'
+
+  ad-gradients:
+    name: AD gradients (Mooncake)
+    runs-on: ubuntu-latest
+    # The `:ad` items are ~20 min on a warm depot; a first run on a cold one
+    # pays the package precompile on top, so this is not sized to 20.
+    timeout-minutes: 150
+    # Pinned pkgimage targets, as on the `test` matrix above.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          save-always: false
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          test_args: 'ad_only'
 
   downgrade-compat:
     name: Downgrade compat (Julia 1.11)
@@ -161,5 +185,5 @@ jobs:
         with:
           # `downgrade` ARG also skips :ad items: Mooncake-gradient
           # tolerances drift on the downgraded dep set; the AD plumbing
-          # is exercised at the pinned versions on every other cell.
+          # is exercised at the pinned versions in the `ad-gradients` job.
           test_args: downgrade
