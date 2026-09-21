@@ -316,11 +316,19 @@ jobs:
           path: logs/fit_cache
       # `continue-on-error` so the verdict is commented before the job fails
       # on it. The failure is re-raised in the last step.
+      #
+      # `BVD_CONVERGENCE_IDS` is set here rather than left to its default so
+      # that this job's scope and the artifact fetched above are one edit
+      # apart. The gate takes any list of fit ids, which is what it is for
+      # locally, but a CI run can only judge fits whose chains it has: adding
+      # an id here without adding its artifact above gives a strict cache
+      # miss, not a verdict.
       - name: Check convergence
         id: check
         continue-on-error: true
         env:
           BVD_FIT_CACHE: logs/fit_cache
+          BVD_CONVERGENCE_IDS: joint
           BVD_CONVERGENCE_REPORT: logs/convergence.md
         run: julia --project=docs docs/fits/check_convergence.jl
       # One comment per pull request, edited in place on every build, so the
