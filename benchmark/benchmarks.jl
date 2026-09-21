@@ -1,6 +1,7 @@
 # Benchmark suite for BVDOutbreakSize. Defines a BenchmarkTools
-# `BenchmarkGroup` named `SUITE`, which `run.jl` executes and `compare.jl`
-# turns into a PR comment.
+# `BenchmarkGroup` named `SUITE`. `benchmark/ci/run_pair.jl` runs it against
+# each of two revisions under AirspeedVelocity; `run.jl` runs it once,
+# locally.
 #
 # Groups:
 #   "Log density"  — one unconstrained log-density evaluation per component,
@@ -22,6 +23,18 @@
 
 using BenchmarkTools
 
+## AirspeedVelocity calls `run(SUITE)` with no arguments, so a benchmark's
+## own parameters are the only place left to set a budget. The defaults are
+## five seconds each and a garbage collection before every trial. This suite
+## reports a minimum, which a collection pause cannot lower, and thirty-two
+## components at the default budget is most of an hour per revision. Set
+## before the suite is built: `@benchmarkable` reads these at construction.
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1
+BenchmarkTools.DEFAULT_PARAMETERS.gctrial = false
+BenchmarkTools.DEFAULT_PARAMETERS.gcsample = false
+
+## Resolved from this worktree, so each revision is timed with its own
+## component list.
 include(joinpath(@__DIR__, "..", "test", "ad_fixtures.jl"))
 
 const BENCH_ENZYME = lowercase(get(ENV, "BVD_BENCH_ENZYME", "false")) == "true"
@@ -29,9 +42,12 @@ if BENCH_ENZYME
     @eval using Enzyme
 end
 
-# The full `bvd_joint` is off by default: one gradient is ~14 ms over 76
-# parameters behind a cold compile of ~18 min under Mooncake, which no CI
-# run can afford. `BVD_BENCH_JOINT=true` adds it for a local investigation.
+# The full `bvd_joint`: one gradient is ~14 ms over 76 parameters behind a
+# cold compile of ~18 min under Mooncake. Off by default so a local run of
+# the component suite stays quick; the benchmark workflow sets
+# `BVD_BENCH_JOINT=true`, and that comparison is the only place the joint's
+# gradient is timed. The test suite asserts the components differentiate and
+# leaves the joint to this and to the docs build's fits.
 const BENCH_JOINT = lowercase(get(ENV, "BVD_BENCH_JOINT", "false")) == "true"
 
 const SCENARIOS = ADFixtures.scenarios(; joint = BENCH_JOINT)

@@ -6,7 +6,7 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v2.1.1
 
 Changes since v2.1.0.
 
@@ -40,6 +40,41 @@ Changes since v2.1.0.
   The existing suite times steady-state gradients only, which is why an
   18 minute cold compile went untracked.
 
+- The fit cache key CI restores is the one the fits are keyed on (#739). The
+  Actions key hashed all of `data/`, including the generated scoring tables
+  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
+  rescore commit or a README edit missed the cache and refit every model for
+  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
+  the hashing rule itself would not have invalidated anything. The key is now
+  taken from `fit_content_hash` rather than restated, so there is one list.
+
+- The automatic version increment is gone (#607). It opened a patch-bump pull
+  request on every push to `main` where the version had not changed, which is
+  now both redundant and harmful: `@release` bumps the version as part of
+  cutting a release, and the automatic one moved it without opening a news
+  section, which is what left a merged change with no heading to write under.
+  It could also open a second pull request racing the one `@release` opens,
+  bumping the same field by a different route. It had not run since v1.14.0
+  in any case, wedged behind a stale branch its own guard would not clear.
+  `/version major|minor|patch` on a pull request is unaffected.
+
+- A pull request only builds the report, runs the tests and measures coverage
+  when it changes something they are built from (#776). The fits alone cost
+  hours, and a change to the test suite, the benchmarks or an unrelated
+  workflow produced a site identical to the one on `main`; a change to the
+  analysis pages or the README ran the whole test suite to no purpose. Each
+  workflow decides in a job of its own, so a skipped build says so in its
+  summary rather than leaving no check at all. A push, a tag and a manual run
+  are never gated.
+- A release is cut by commenting `@release` on any issue or pull request
+  (#767). The notes are the newest `docs/src/news.md` section, which is what
+  they have always been, copied across by hand. The comment tags `main`,
+  publishes the release and opens a pull request bumping the version and
+  starting the next section, so the following change has a heading to write
+  under. `@release minor` and `@release major` choose the size of that bump.
+- `scripts/release_notes.jl` holds the text handling behind it and runs
+  locally through `task release-notes`, so the notes can be read before
+  anything is published.
 - Pushing a version tag starts a second documentation build of the commit
   that was just pushed to `main`. The two builds used to run at the same
   time and each refit every model; for v2.1.0 the tag build's joint fit ran
@@ -101,6 +136,42 @@ quality measured on them, with that convergence failure in mind.
   overlay draws only the streams that carry a persistence baseline (#737).
 - The frozen-fit evaluation reports skill by release as well as pooled, and
   scores each stream's own frozen fit alongside the joint (#742).
+- The frozen-fit score tables carry the frozen joint alone, as the
+  cross-release tables carry the joint alone, so a row is one model at one
+  cut-off. The single-stream frozen fits stay in the figures, which compare
+  the fits against each other.
+- The by-horizon and by-cut-off score tables gain figures: the mean CRPS
+  split into its width, its overprediction and its underprediction by
+  horizon, and relative skill against the baseline cut-off by cut-off. Both
+  tables run to hundreds of rows and were unreadable as numbers alone.
+- The frozen forecasts-versus-now overlay draws the frozen joint and the
+  baseline alone. A single-stream frozen fit exists at one cut-off only, so
+  its series landed on top of the joint point beside it.
+- The per-stream projected-trajectory figure crops to twice the joint fit's
+  90% upper bound, the crop the cut-off density figure beside it already
+  used. The exports-only fit's band reaches the source population, which put
+  every other stream on the baseline.
+- The reproduction-number-by-release figures share a fixed axis at three,
+  with intervals past it clamped and marked. The basic reproduction number
+  keeps its own axis, its estimates sitting where that crop would cut them.
+- The frozen evaluation drops the confirmed-death rows of the fourteen
+  reconstructions cut between 16 July and 15 August 2026. The forecaster
+  that built them predated projecting each stream from its own trajectory
+  (#613, #706) and floored the stream at zero, so each carried a one-week median of exactly zero
+  against an observed 250 to 370. The section now lists every scoring
+  exclusion in one place, and the archive keeps the rows.
+- An onset forecast window containing a vintage whose reread total falls is
+  left unscored, the rule province windows holding a harmonisation-break day
+  already follow. The digitised total falls on fourteen vintages, which a
+  cumulative onset curve cannot do, and the scored truth is an increment
+  between two vintages, so such a window charges the forecast for a reread.
+  It bites hardest at the longer horizons: the frozen onset row keeps three
+  of its twenty-nine windows and the cross-release row six of thirty-eight.
+- A single-stream fit's forecast is overlaid on the validation and bed
+  panels as a step outline over the joint's own histogram bins, reweighted
+  to the joint's draw count. It was a kernel density on the density scale
+  against an axis counting draws, which drew it flat along the floor of
+  every panel whatever it said.
 
 ### Fixed
 
@@ -122,6 +193,30 @@ quality measured on them, with that convergence failure in mind.
 
 ### Infrastructure
 
+- The AD benchmark times both revisions in one job on one machine (#763).
+Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
+Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+AirspeedVelocity runs the two arms and `benchmark/ci/comment.jl` reports them, replacing `benchmark/compare.jl`.
+The workflow materialises both revisions as git worktrees and benchmarks them from those paths, because this repository declares a submodule and Pkg cannot check out a tree that does.
+Each arm runs its own suite, fixtures and benchmark environment, so a pull request's changes to the suite are exercised by that pull request.
+`task benchmark-pair` runs the same comparison locally.
+- The benchmark comment measures its neutral band from the run rather than fixing it at 5% (#763).
+The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
+That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
+- The benchmark comment drops AirspeedVelocity's package-load row (#763).
+BenchmarkTools runs a warmup evaluation before it samples and that warmup performs the load, so the in-process sample times a warm re-import.
+Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
+- The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
+`key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
+- The documentation build fails when the headline joint fit has not converged,
+  and says so in a comment on the pull request that is edited in place on each
+  build (#764). The verdict carries the headline diagnostics, which thresholds
+  were breached and the worst-mixing parameters and divergence locations the
+  sensitivity report breaks down in full. It is a leaf job, so the preview
+  still builds and still comments: the pages are how the failure is diagnosed.
+  v2.0.0 was published with a joint fit that had not converged and nothing in
+  the build said so.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17

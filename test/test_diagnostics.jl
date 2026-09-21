@@ -23,6 +23,10 @@
     @test d.min_ess_bulk > 0
     @test d.min_ess_tail > 0
     @test d.n_divergent >= 0
+    ## The divergence count is reported against the draws it is out of, so a
+    ## rate can be formed from the summary alone.
+    @test d.n_draws == 400
+    @test d.n_divergent <= d.n_draws
 end
 
 @testitem "diagnostics_table has one row per fit" tags = [:slow] begin

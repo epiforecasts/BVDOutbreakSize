@@ -41,8 +41,9 @@ end
     @test isfinite(logjoint(m, draw))
 end
 
-@testitem "bvd_joint exposes lab-pipeline deterministics" tags = [:slow] begin
-    using BVDOutbreakSize: bvd_joint, nuts_sample, load_observations
+@testitem "bvd_joint exposes lab-pipeline deterministics" begin
+    using BVDOutbreakSize: bvd_joint, load_observations
+    using Turing: sample, Prior
     using Statistics: mean
 
     obs = load_observations()
@@ -60,7 +61,7 @@ end
         breakpoint = obs.n - obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days
     )
-    chn = nuts_sample(m; samples = 25, chains = 1, progress = false)
+    chn = sample(m, Prior(), 25; progress = false)
     for key in (
             :expected_confirmed_T, :expected_analysed_T,
             :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,

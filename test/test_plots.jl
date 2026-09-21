@@ -8,54 +8,35 @@
     CairoMakie.activate!(type = "png")
 end
 
-@testitem "plot_cumulative_cases returns a figure-grid" setup = [
+@testitem "draw-vector plots return a renderable figure" setup = [
     HeadlessMakie,
 ] begin
     using Random: MersenneTwister
-    using BVDOutbreakSize: plot_cumulative_cases
+    using BVDOutbreakSize: plot_cumulative_cases, plot_density_overlay,
+        plot_posterior_predictive, plot_prior_predictive
     rng = MersenneTwister(4)
     a = randn(rng, 300) .* 50 .+ 400
     b = randn(rng, 300) .* 80 .+ 600
-    fg = plot_cumulative_cases("fit A" => a, "fit B" => b; xmax = 1_500)
-    @test fg !== nothing
-    # AlgebraOfGraphics.draw returns a FigureGrid wrapping a Makie Figure.
-    @test fg.figure isa CairoMakie.Makie.Figure
-end
 
-@testitem "plot_density_overlay returns a figure-grid" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_density_overlay
-    rng = MersenneTwister(14)
-    a = randn(rng, 300) .* 5 .+ 50
-    b = randn(rng, 300) .* 5 .+ 40
-    fg = plot_density_overlay(
-        "fit A" => a, "fit B" => b;
-        xlabel = "Seeding time", title = "by clock rate"
-    )
-    @test fg !== nothing
-    @test fg.figure isa CairoMakie.Makie.Figure
-end
+    ## AlgebraOfGraphics.draw returns a FigureGrid wrapping a Makie Figure.
+    for fg in (
+            plot_cumulative_cases("fit A" => a, "fit B" => b; xmax = 1_500),
+            plot_density_overlay(
+                "fit A" => a, "fit B" => b;
+                xlabel = "Seeding time", title = "by clock rate"
+            ),
+        )
+        @test fg.figure isa CairoMakie.Makie.Figure
+    end
 
-@testitem "plot_posterior_predictive returns a Makie figure" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_posterior_predictive
-    rng = MersenneTwister(5)
+    ## The prior and posterior predictive panels take the same arguments.
     pp_exports = rand(rng, 0:10, 500)
     pp_deaths = rand(rng, 0:5, 500)
-    fig = plot_posterior_predictive(pp_exports, pp_deaths, 3, 1)
-    @test fig isa CairoMakie.Makie.Figure
-end
+    for f in (plot_posterior_predictive, plot_prior_predictive)
+        @test f(pp_exports, pp_deaths, 3, 1) isa CairoMakie.Makie.Figure
+    end
 
-@testitem "plot_posterior_predictive lays out four streams" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_posterior_predictive
-    rng = MersenneTwister(15)
+    ## The optional streams add panels to the posterior predictive.
     fig = plot_posterior_predictive(
         rand(rng, 0:10, 400), rand(rng, 0:60, 400), 3, 40;
         pp_cases = rand(rng, 0:30, 400), obs_cases = 20,
@@ -63,18 +44,6 @@ end
         pp_confirmed_deaths = rand(rng, 0:30, 400),
         obs_confirmed_deaths = 17
     )
-    @test fig isa CairoMakie.Makie.Figure
-end
-
-@testitem "plot_prior_predictive returns a Makie figure" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_prior_predictive
-    rng = MersenneTwister(6)
-    pp_exports = rand(rng, 0:10, 500)
-    pp_deaths = rand(rng, 0:5, 500)
-    fig = plot_prior_predictive(pp_exports, pp_deaths, 3, 1)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -432,14 +401,13 @@ end
     @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_overlay crops each panel's y-axis" setup = [
-    HeadlessMakie,
-] begin
+@testitem "plot_forecast_overlay crops the panel and places the overflow
+    marker" setup = [HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
     using Dates: Date, Day
     ## One stream and horizon, with a joint interval far wider than the
-    ## observed value or either fit's median, the case that can squash
+    ## observed value or either fit's median: the case that can squash
     ## every series in the panel to a line near the bottom.
     md = Date(2026, 6, 21)
     rows = [
@@ -457,40 +425,18 @@ end
     fig = plot_forecast_overlay(DataFrame(rows))
     ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
     _, ylims = ax.limits[]
+    cap = ylims[2]
+
     ## Cropped to three times the larger of the observed value (21) and the
     ## largest median (22), not to the joint's much wider 90% interval.
-    @test ylims[2] ≈ 3.0 * 22.0
-    @test ylims[2] < 100.0
-end
+    @test cap ≈ 3.0 * 22.0
+    @test cap < 100.0
 
-@testitem "plot_forecast_overlay overflow marker stays clear of the axis
-    limit" setup = [HeadlessMakie] begin
-    using BVDOutbreakSize: plot_forecast_overlay
-    using DataFrames: DataFrame
-    using Dates: Date, Day
-    ## Same overflowing joint interval as the crop test: the marker must
-    ## sit strictly below the axis's own upper limit, not coincident with
-    ## it, or CairoMakie's plot-area clipping cuts the triangle in half.
-    md = Date(2026, 6, 21)
-    rows = [
-        (;
-            stream = "confirmed cases", made_date = md, horizon = 7,
-            target_date = md + Day(7), fit = "baseline", observed = 21.0,
-            median = 20.0, lo90 = 16.0, hi90 = 24.0,
-        ),
-        (;
-            stream = "confirmed cases", made_date = md, horizon = 7,
-            target_date = md + Day(7), fit = "joint", observed = 21.0,
-            median = 22.0, lo90 = 5.0, hi90 = 6000.0,
-        ),
-    ]
-    fig = plot_forecast_overlay(DataFrame(rows))
-    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
-    _, ylims = ax.limits[]
-    cap = ylims[2]
-    ## Makie converts a marker symbol into a path before it reaches the
-    ## plot, so the triangle is matched against the same converted path
-    ## rather than against the `:utriangle` symbol.
+    ## The marker must sit strictly below the axis's own upper limit, not
+    ## coincident with it, or CairoMakie's plot-area clipping cuts the
+    ## triangle in half. Makie converts a marker symbol into a path before
+    ## it reaches the plot, so the triangle is matched against the
+    ## converted path rather than against the `:utriangle` symbol.
     tri = CairoMakie.Makie.convert_attribute(
         :utriangle,
         CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
@@ -801,89 +747,41 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup = [
+@testitem "vintage PPC panels render cumulative and daily views" setup = [
     HeadlessMakie,
 ] begin
     using Random: MersenneTwister
-    using BVDOutbreakSize: plot_vintage_conditional_ppc
+    using BVDOutbreakSize: plot_vintage_conditional_ppc,
+        plot_vintage_incidence_ppc
     rng = MersenneTwister(21)
     dates = [
         "2026-05-18", "2026-05-19", "2026-05-20",
         "2026-05-21", "2026-05-22", "2026-05-23",
     ]
-    ## Per-draw per-bin increment vectors, as the predictive chain
-    ## returns them (here a plain vector of draws).
+    ## Per-draw per-bin increment vectors, as the predictive chain returns
+    ## them. A cumulative panel takes a running total as `observed`; a
+    ## `cumulative = false` panel takes the raw per-day counts.
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
-    observed = cumsum([18, 9, 12, 7, 6, 5])
-    fig = plot_vintage_conditional_ppc(
-        [
-            (;
-                title = "Suspected", dates = dates,
-                replicates = reps, observed = observed, colour = :steelblue,
-            ),
-            (;
-                title = "Confirmed", dates = dates,
-                replicates = reps, observed = observed,
-            ),
-        ]
-    )
-    @test fig isa CairoMakie.Makie.Figure
-end
-
-@testitem "plot_vintage_conditional_ppc draws a non-cumulative panel" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_vintage_conditional_ppc
-    rng = MersenneTwister(22)
-    ## The daily new-suspect inflow: per-day counts, not cumulated. With
-    ## `cumulative = false` the observed are the raw daily counts and each
-    ## replicate is its own daily count (no running baseline).
-    dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
-    reps = [rand(rng, 80:180, length(dates)) for _ in 1:150]
-    observed = [153, 119, 117, 94]
-    fig = plot_vintage_conditional_ppc(
-        [
-            (;
-                title = "New suspects/day", dates = dates,
-                replicates = reps, observed = observed,
-                colour = :slateblue, cumulative = false,
-            ),
-        ]
-    )
-    @test fig isa CairoMakie.Makie.Figure
-end
-
-@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup = [
-    HeadlessMakie,
-] begin
-    using Random: MersenneTwister
-    using BVDOutbreakSize: plot_vintage_incidence_ppc
-    rng = MersenneTwister(23)
-    dates = [
-        "2026-05-18", "2026-05-19", "2026-05-20",
-        "2026-05-21", "2026-05-22", "2026-05-23",
+    daily = [18, 9, 12, 7, 6, 5]
+    cumulative = cumsum(daily)
+    panels = [
+        (;
+            title = "Suspected", dates = dates,
+            replicates = reps, observed = cumulative, colour = :steelblue,
+        ),
+        (;
+            title = "Confirmed", dates = dates,
+            replicates = reps, observed = cumulative,
+        ),
+        (;
+            title = "New suspects/day", dates = dates,
+            replicates = reps, observed = daily,
+            colour = :slateblue, cumulative = false,
+        ),
     ]
-    reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
-    ## A cumulative panel (observed is the running total; the incidence view
-    ## differences it) and a non-cumulative daily panel (observed already a
-    ## per-vintage count).
-    cum_observed = cumsum([18, 9, 12, 7, 6, 5])
-    daily_observed = [18, 9, 12, 7, 6, 5]
-    fig = plot_vintage_incidence_ppc(
-        [
-            (;
-                title = "Suspected", dates = dates,
-                replicates = reps, observed = cum_observed, colour = :steelblue,
-            ),
-            (;
-                title = "New suspects/day", dates = dates,
-                replicates = reps, observed = daily_observed,
-                cumulative = false,
-            ),
-        ]
-    )
-    @test fig isa CairoMakie.Makie.Figure
+    for f in (plot_vintage_conditional_ppc, plot_vintage_incidence_ppc)
+        @test f(panels) isa CairoMakie.Makie.Figure
+    end
 end
 
 @testitem "_vintage_ticks labels about one vintage a week" begin
@@ -2039,4 +1937,135 @@ end
         n_patches = 3
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
+end
+
+@testitem "plot_evolution_by_group clamps and marks past ymax" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+    ## One release whose 90% upper runs far past the crop and one that does
+    ## not, the case a fixed reproduction-number axis exists for.
+    groups = [
+        "cases" => [
+            ("2026-08-01", 1.2, 1.0, 1.4, 0.9, 1.6, 0.6, 9.0),
+            ("2026-08-08", 1.1, 0.9, 1.3, 0.8, 1.5, 0.5, 2.0),
+        ],
+    ]
+    fig = plot_evolution_by_group(groups; refline = 1.0, ymax = 3.0)
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    @test ax.limits[][2] == (0, 3.0)
+    ## The overflow marker sits just inside the crop, so the clipping does
+    ## not cut it in half.
+    ## Makie converts a marker symbol into a path before it reaches the
+    ## plot, so the triangle is matched against the converted path.
+    tri = CairoMakie.Makie.convert_attribute(
+        :utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
+    )
+    markers = [
+        p for p in ax.scene.plots
+            if p isa CairoMakie.Makie.Scatter && p.marker[] == tri
+    ]
+    @test length(markers) == 1
+    @test all(pt -> pt[2] < 3.0, only(markers)[1][])
+    ## Without a crop the axis still sizes itself to the widest interval.
+    free = plot_evolution_by_group(groups; refline = 1.0)
+    free_ax = only(x for x in free.content if x isa CairoMakie.Makie.Axis)
+    @test free_ax.limits[][2][2] > 9.0
+end
+
+@testitem "plot_stream_trajectories crops to ymax" setup = [HeadlessMakie] begin
+    using BVDOutbreakSize: plot_stream_trajectories
+    using Dates: Date
+    n = 20
+    ## One stream on the scale of the source population and one on the scale
+    ## of the outbreak, the pair that flattens a free axis.
+    streams = [
+        (;
+            label = "wide", trajs = [cumsum(fill(1.0e6, n)) for _ in 1:20],
+            last_day = 10, colour = :seagreen,
+        ),
+        (;
+            label = "narrow", trajs = [cumsum(fill(10.0, n)) for _ in 1:20],
+            last_day = 15, colour = :steelblue,
+        ),
+    ]
+    fig = plot_stream_trajectories(
+        streams; n = n, seeding = Date(2026, 3, 1), ymax = 1.0e4
+    )
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    @test ax.limits[][2] == (0, 1.0e4)
+    ## Makie converts a marker symbol into a path before it reaches the
+    ## plot, so the triangle is matched against the converted path.
+    tri = CairoMakie.Makie.convert_attribute(
+        :utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"()
+    )
+    markers = [
+        p for p in ax.scene.plots
+            if p isa CairoMakie.Makie.Scatter && p.marker[] == tri
+    ]
+    ## The wide stream leaves the axis and is marked; the narrow one never
+    ## reaches it.
+    @test length(markers) == 1
+    free = plot_stream_trajectories(streams; n = n, seeding = Date(2026, 3, 1))
+    free_ax = only(x for x in free.content if x isa CairoMakie.Makie.Axis)
+    @test free_ax.limits[][2][2] > 1.0e6
+end
+
+@testitem "plot_forecast_crps_by_horizon empty and filled" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_crps_by_horizon, FROZEN_FIT
+    using DataFrames: DataFrame
+    schema = (;
+        stream = String[], horizon = Int[], fit = String[],
+        dispersion = Float64[], overprediction = Float64[],
+        underprediction = Float64[],
+    )
+    @test plot_forecast_crps_by_horizon(DataFrame(schema)) isa
+        CairoMakie.Makie.Figure
+    rows = NamedTuple[]
+    for s in ("confirmed cases", "confirmed deaths"), h in (7, 14),
+            f in (FROZEN_FIT, "confirmed_deaths")
+        push!(
+            rows,
+            (;
+                stream = s, horizon = h, fit = f, dispersion = 40.0,
+                overprediction = 30.0, underprediction = 30.0 + h,
+            )
+        )
+    end
+    fig = plot_forecast_crps_by_horizon(DataFrame(rows))
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 2
+end
+
+@testitem "plot_forecast_skill_by_cutoff empty and filled" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_skill_by_cutoff, FROZEN_FIT
+    using DataFrames: DataFrame
+    using Dates: Date
+    schema = (;
+        stream = String[], made_date = Date[], fit = String[],
+        rel_to_baseline = Float64[],
+    )
+    @test plot_forecast_skill_by_cutoff(DataFrame(schema)) isa
+        CairoMakie.Makie.Figure
+    rows = NamedTuple[]
+    for d in (Date(2026, 7, 16), Date(2026, 8, 4)),
+            f in (FROZEN_FIT, "confirmed")
+        push!(
+            rows,
+            (;
+                stream = "confirmed cases", made_date = d, fit = f,
+                rel_to_baseline = 1.5,
+            )
+        )
+    end
+    fig = plot_forecast_skill_by_cutoff(DataFrame(rows))
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    ## One slot per made date, whichever fits carry it.
+    @test ax.limits[][1] == (0.5, 2.5)
 end

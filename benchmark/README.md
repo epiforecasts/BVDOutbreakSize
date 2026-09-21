@@ -5,17 +5,85 @@ Each benchmark times one unconstrained log-density evaluation, and one gradient 
 
 ## Why per component
 
-The sampler's cost is the gradient of `bvd_joint`, but that is not a useful benchmark.
+The sampler's cost is the gradient of `bvd_joint`, but on its own that is not a useful benchmark.
 One gradient is about 14 ms over 76 parameters, behind a cold compile of roughly 18 minutes, most of it type inference rather than Mooncake.
-A full-joint benchmark would cost more per CI run than the rest of the test suite and would report a single number that says nothing about where the time went.
+A full-joint number alone says nothing about where the time went.
 
 The components are the units the joint is built from.
 The observation submodels in `src/models/observations.jl` are one unit each, evaluated on a fixed prior draw of the latent trajectory.
 The single-stream composers in `src/models/joint.jl` are the same submodels with the shared infection and onset process attached, so a composer minus the `latent` baseline is the marginal cost that stream's likelihood adds.
 That difference is what guides optimisation: earlier profiling found `onset_reporting` and `treatment_flow` together were about 44% of the three-patch gradient and the spatial structure about 18%.
 
-The joint is available as a component but off by default.
+The joint is a component too, off by default so a local run of the components stays quick.
 `BVD_BENCH_JOINT=true` adds it; expect the compile cost above.
+The benchmark workflow sets it, because this comparison is the only place the joint's gradient is exercised: the test suite asserts the components differentiate and leaves the joint to this and to the fits the docs build runs.
+
+## Why both revisions on one machine
+
+A comparison is only as good as the machine underneath it.
+GitHub's hosted runner pool is heterogeneous by about a factor of two, so a ratio taken across two jobs divides one runner's speed by another's and that difference lands whole on the ratio.
+At this suite's resolution it swamps what is being measured.
+
+[AirspeedVelocity](https://github.com/MilesCranmer/AirspeedVelocity.jl) times both revisions in one process, so there is no second runner to divide by.
+`docs/src/news.md` records the measurements behind this.
+
+## Why a driver rather than `benchpkg`
+
+AirspeedVelocity's own entry points, the `action-v1` action and the `benchpkg` CLI, obtain a revision by handing it to `Pkg.add` as a git tree.
+Pkg cannot check out a tree that declares a submodule:
+
+```
+GitError(Code:ERROR, Class:Submodule, cannot get submodules without a working tree)
+```
+
+This repository declares `external/bdbv-linelist-analysis`, so every route through `Pkg.add` fails, whether the package is named by url or by path.
+
+`rev = "dirty"` is AirspeedVelocity's supported local mode.
+It calls `Pkg.develop` on a path, which never clones and so never reaches the submodule.
+`ci/run_pair.jl` uses that mode against two git worktrees, which `git worktree add` materialises with the submodule left uninitialised.
+Nothing under `src/` reads the submodule, so an uninitialised one costs the benchmarks nothing.
+
+Each worktree runs its own `benchmarks.jl`, its own `test/ad_fixtures.jl` and its own `Project.toml`.
+So a pull request's changes to the suite are exercised by that pull request rather than the one after it, both arms resolve the versions their own revision pins, and a component that exists on one side only is reported as added or removed rather than failing the other arm.
+
+## Why the comment is built here rather than by AirspeedVelocity
+
+AirspeedVelocity runs the suite; `ci/comment.jl` reports it.
+
+Two things the comment needs are not in AirspeedVelocity's own table.
+
+It has no neutral band and no way to set one.
+A band fixed below the harness's own resolution reports noise as regression, so the band here is measured from the run.
+It is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+
+That table also cannot show whether the benchmarks moved together.
+Unrelated components share no cause, so one factor applied to all of them points at an environment difference rather than at the diff.
+The comment reports the range of the ratios across benchmarks and warns when they all move as one.
+
+Both are recoverable because AirspeedVelocity writes the raw per-sample times into its results JSON, not only a summary.
+
+The ratio stays `PR / main`, so below 1 means the pull request is faster.
+
+AirspeedVelocity's own package-load benchmark is dropped rather than reported.
+BenchmarkTools runs a warmup evaluation before it samples, and that warmup performs the `using`, so the in-process sample times a warm re-import rather than a load.
+Further samples relaunch Julia and do measure a load, but the comment reports a minimum, so the warm sample always wins.
+
+## What it still cannot resolve
+
+The band is a lower bound.
+Each revision is run once, one after the other, with no interleaving and no repeated rounds.
+So the spread it can measure is dispersion within one revision's own samples, not drift between the two revisions, and those are separated by the twenty minutes it takes to compile the second one's gradients.
+
+The cross-machine error the one-process design removes is the large one.
+The within-machine one that remains is bounded from below rather than measured.
+Treat a ratio inside the stated band as unresolved.
+
+## Benchmark parameters
+
+`benchmarks.jl` sets `BenchmarkTools.DEFAULT_PARAMETERS` before it builds the suite, because AirspeedVelocity calls `run(SUITE)` with no arguments and a benchmark's own parameters are the only place left to set a budget.
+The budget is one second per benchmark rather than the default five.
+`gctrial` and `gcsample` are off: both exist to keep a mean or a median honest, and this suite reports a minimum.
+`run.jl` takes the same parameters, so a local run and a CI arm sample the same way.
 
 ## Running
 
@@ -25,32 +93,32 @@ task benchmark -- out.json            # somewhere else
 BVD_BENCH_JOINT=true task benchmark   # plus the full joint
 BVD_BENCH_ENZYME=true task benchmark  # plus the Enzyme backend
 
-# Compare two saved runs the way CI does
-task benchmark-compare -- pr.json main.json comment.md
+# Reproduce the CI comparison: two revisions, one process, plus the comment
+task benchmark-pair                   # main vs HEAD
+task benchmark-pair -- v2.0.0 HEAD    # any two revisions
 ```
+
+`task benchmark` times one revision, which is what you want while profiling a change in place.
+`task benchmark-pair` is the CI comparison, and costs roughly twice as much.
+It checks the two revisions out under `.benchmark-worktrees/` and writes both arms' results and the rendered comment to `benchmark-results/`.
+Read it only from a quiet machine.
 
 ## Compile cost
 
-`task benchmark` times steady-state gradients. It cannot see the cold
-compile, because that is paid once per process and before any gradient is
-taken: Mooncake builds the reverse rule when the `LogDensityFunction` is
-constructed. Measured per component on the 40-day grid, rule construction is
-roughly 87% of a cold build, against a ~38 s floor any model pays. The full
-`bvd_joint` spends 969 s of its 1095 s cold build there.
+`task benchmark` and `task benchmark-pair` time steady-state gradients.
+Neither can see the cold compile, because it is paid once per process and before any gradient is taken: Mooncake builds the reverse rule when the `LogDensityFunction` is constructed.
+Measured per component on the 40-day grid, rule construction is roughly 87% of a cold build, against a ~38 s floor any model pays.
+The full `bvd_joint` spends 969 s of its 1095 s cold build there.
 
-`task benchmark-compile` measures it, one fresh process per component, and
-reports the primal build and the rule build separately. The fresh process
-per component is what keeps the fixed floor off whichever component would
-otherwise have run first.
+`task benchmark-compile` measures it, one fresh process per component, and reports the primal build and the rule build separately.
+The fresh process per component is what keeps the fixed floor off whichever component would otherwise have run first.
 
 ```bash
 task benchmark-compile                      # compile.json
 BVD_BENCH_JOINT=true task benchmark-compile # plus the joint, ~18 min
 ```
 
-The saved JSON carries each component's gradient vector as well as its
-timings, so two runs can be checked for an unchanged gradient rather than
-only a changed time.
+The saved JSON carries each component's gradient vector as well as its timings, so two runs can be checked for an unchanged gradient rather than only a changed time.
 
 ## Structure
 
@@ -77,8 +145,9 @@ A pair that throws or comes back degenerate is skipped with a line on stderr, so
 Enzyme cannot differentiate `bvd_joint` at all, for two stacked reasons: boxed `map(do)` closures in the model, and then an upstream `nodecayed_phis!` LLVM bug once those are removed.
 That is [issue #445](https://github.com/epiforecasts/BVDOutbreakSize/issues/445), and it is the standing reason for the smoke test.
 
+The suite is built once per revision, so the smoke test runs against each revision's own `src/`.
 Because a pair is registered only when its smoke test passes, a pair that disappears between two revisions is a component that stopped differentiating.
-`compare.jl` calls that out separately from the timing tables.
+`ci/comment.jl` calls that out separately from the timing tables.
 
 ## Shared fixtures
 
@@ -93,7 +162,30 @@ They are one-off diagnostics that time a superseded implementation against the c
 Folding them in would mean carrying those reimplementations in the benchmark environment to report a ratio that never moves.
 They also measure pure helpers below the component level this suite reports.
 
+## Files
+
+| File | What it does |
+|---|---|
+| `benchmarks.jl` | Builds `SUITE` from the shared fixtures |
+| `src/log_density.jl` | One evaluation per component |
+| `src/ad_gradients.jl` | One gradient per component per backend |
+| `run.jl` | Times one revision once, for local profiling |
+| `ci/run_pair.jl` | Times two worktrees in one process under AirspeedVelocity |
+| `ci/comment.jl` | Turns the two results files into the PR comment |
+| `compile.jl` | Cold AD-compile cost per component, a process each |
+| `compile_one.jl` | One component's cold compile, run by `compile.jl` |
+
+`ci/Project.toml` carries the harness only, with no model dependency.
+`Project.toml` is the environment the suite itself runs in, and is taken from each arm's own worktree.
+
 ## CI
 
-`.github/workflows/benchmark.yaml` runs the suite on pull requests that touch `src/`, `ext/`, `benchmark/` or `test/ad_fixtures.jl`, once per revision in its own job, and posts a single comparison comment.
+`.github/workflows/benchmark.yaml` runs on pull requests that touch `src/`, `ext/`, `benchmark/` or `test/ad_fixtures.jl`.
 It does not run on pushes to `main` and records no history.
+There is no companion `benchmark-history.yaml`: the docs workflow already spends hours fitting and the runner queue has no room for a timeline.
+
+The workflow is one job, and `scripts/run_benchmark_pair.sh` runs the same steps locally.
+It checks the repository out with full history, materialises both revisions as worktrees, runs `ci/run_pair.jl` over them and posts the comment `ci/comment.jl` renders, which also goes to the job summary.
+Fork pull requests are skipped: the workflow uses `pull_request` rather than `pull_request_target`, so a fork never runs with a write token, and it could not post the comment anyway.
+
+A run lands near 70 minutes, most of it compiling gradients twice.

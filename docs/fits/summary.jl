@@ -6,15 +6,12 @@
 using BVDOutbreakSize: fit_diagnostics, posterior_summary
 using Statistics: median
 
+include(joinpath(@__DIR__, "shared.jl"))
+
 ## Headline quantities reported when the chain carries them: the cumulative
 ## infections to the cut-off and the reproduction number there.
 const SUMMARY_PARAMETERS = (:C_T, :R_T)
 
-## The frozen fits return `(; cutoff, o, chn)` rather than the chain itself.
-_summary_chain(x) = x isa NamedTuple && haskey(x, :chn) ? x.chn : x
-
-_fmt_count(x) = isfinite(x) ? string(round(Int, x)) : "n/a"
-_fmt_value(x) = string(round(x; sigdigits = 3))
 
 ## Median and 90% credible interval of one quantity, or `nothing` when the
 ## chain does not carry it (a single-stream fit lacks some of them).
@@ -43,9 +40,9 @@ function fit_summary_markdown(id, chn)
     println(io, "| max R-hat | min ESS bulk | min ESS tail | divergences |")
     println(io, "| --- | --- | --- | --- |")
     println(
-        io, "| ", _fmt_value(d.max_rhat),
-        " | ", _fmt_count(d.min_ess_bulk),
-        " | ", _fmt_count(d.min_ess_tail),
+        io, "| ", fmt_value(d.max_rhat),
+        " | ", fmt_count(d.min_ess_bulk),
+        " | ", fmt_count(d.min_ess_tail),
         " | ", d.n_divergent, " |"
     )
     rows = Any[]
@@ -59,8 +56,8 @@ function fit_summary_markdown(id, chn)
         println(io, "| --- | --- | --- |")
         for (p, (m, lo, hi)) in rows
             println(
-                io, "| `", p, "` | ", _fmt_value(m),
-                " | ", _fmt_value(lo), " to ", _fmt_value(hi), " |"
+                io, "| `", p, "` | ", fmt_value(m),
+                " | ", fmt_value(lo), " to ", fmt_value(hi), " |"
             )
         end
     end
@@ -78,7 +75,7 @@ is too expensive to lose to its summary.
 """
 function write_fit_summary(id, result)
     try
-        md = fit_summary_markdown(id, _summary_chain(result))
+        md = fit_summary_markdown(id, fit_chain(result))
         print(stdout, md)
         path = get(ENV, "GITHUB_STEP_SUMMARY", "")
         isempty(path) || open(io -> print(io, md), path, "a")
