@@ -3,8 +3,7 @@
 # good enough to publish a report from, and names the parameters responsible
 # when they are not. The joint fit is the one the headline outbreak size comes
 # from, so a build that publishes a joint fit which has not converged publishes
-# a number nobody should read. That happened with v2.0.0 and was caught by
-# hand, after release.
+# a number nobody should read.
 #
 # Two thresholds per diagnostic rather than one. The fail threshold marks a
 # fit that has not converged at all (an R-hat of 2.6 is a chain stuck at its
@@ -16,6 +15,8 @@
 using BVDOutbreakSize: fit_diagnostics, parameter_diagnostics,
     worst_parameters_table, family_diagnostics_table,
     divergence_location_table, markdown_table
+
+include(joinpath(@__DIR__, "shared.jl"))
 
 ## Fails a build. An R-hat this far from one, an effective sample size this
 ## small or a divergence rate this high is a sampler that has not explored the
@@ -38,11 +39,18 @@ const CONVERGENCE_IDS = ["joint"]
 ## A threshold read from the environment. A malformed value names the
 ## variable it came from: the parse failure alone says only that some number
 ## could not be read, and the report is never written to say which.
+##
+## `nan` and `inf` parse, and either one turns the threshold off without
+## saying so, because every comparison against them is false. A gate that a
+## typo can silently disable is the failure this exists to prevent, so a
+## threshold has to be finite.
 function _env_number(name, default)
     v = strip(get(ENV, name, ""))
     isempty(v) && return default
     n = tryparse(Float64, v)
     n === nothing && error("$name is \"$v\", which is not a number")
+    isfinite(n) ||
+        error("$name is \"$v\"; a threshold has to be a finite number")
     return n
 end
 
@@ -73,8 +81,6 @@ function convergence_thresholds()
     )
 end
 
-_fmt(x) = isfinite(x) ? string(round(x; sigdigits = 3)) : "n/a"
-_fmt_count(x) = isfinite(x) ? string(round(Int, x)) : "n/a"
 
 ## A diagnostic that could not be computed (every parameter degenerate, or a
 ## chain carrying no sampler extras) is not evidence of convergence, but it is
@@ -95,20 +101,20 @@ function convergence_verdict(d; thresholds = convergence_thresholds())
     checks = (
         (
             "max R-hat", d.max_rhat, >,
-            thresholds.fail.rhat, thresholds.warn.rhat, _fmt,
+            thresholds.fail.rhat, thresholds.warn.rhat, fmt_value,
         ),
         (
             "min bulk ESS", d.min_ess_bulk, <,
-            thresholds.fail.ess_bulk, thresholds.warn.ess_bulk, _fmt_count,
+            thresholds.fail.ess_bulk, thresholds.warn.ess_bulk, fmt_count,
         ),
         (
             "min tail ESS", d.min_ess_tail, <,
-            thresholds.fail.ess_tail, thresholds.warn.ess_tail, _fmt_count,
+            thresholds.fail.ess_tail, thresholds.warn.ess_tail, fmt_count,
         ),
         (
             "divergent fraction", fraction, >,
             thresholds.fail.divergent_fraction,
-            thresholds.warn.divergent_fraction, _fmt,
+            thresholds.warn.divergent_fraction, fmt_value,
         ),
     )
     failures = String[]
@@ -170,9 +176,9 @@ function _headline_table(io, checks)
     for c in checks
         d = c.diagnostics
         println(
-            io, "| `", c.id, "` | ", _fmt(d.max_rhat),
-            " | ", _fmt_count(d.min_ess_bulk),
-            " | ", _fmt_count(d.min_ess_tail),
+            io, "| `", c.id, "` | ", fmt_value(d.max_rhat),
+            " | ", fmt_count(d.min_ess_bulk),
+            " | ", fmt_count(d.min_ess_tail),
             " | ", d.n_divergent, " | ", d.n_draws, " |"
         )
     end
@@ -269,14 +275,14 @@ function convergence_markdown(
     end
     println(
         io,
-        "Thresholds — fail: R-hat above ", _fmt(thresholds.fail.rhat),
-        ", bulk ESS below ", _fmt_count(thresholds.fail.ess_bulk),
-        ", tail ESS below ", _fmt_count(thresholds.fail.ess_tail),
-        ", divergences above ", _fmt(thresholds.fail.divergent_fraction),
-        " of draws; warn: ", _fmt(thresholds.warn.rhat), ", ",
-        _fmt_count(thresholds.warn.ess_bulk), ", ",
-        _fmt_count(thresholds.warn.ess_tail), ", ",
-        _fmt(thresholds.warn.divergent_fraction), "."
+        "Thresholds — fail: R-hat above ", fmt_value(thresholds.fail.rhat),
+        ", bulk ESS below ", fmt_count(thresholds.fail.ess_bulk),
+        ", tail ESS below ", fmt_count(thresholds.fail.ess_tail),
+        ", divergences above ", fmt_value(thresholds.fail.divergent_fraction),
+        " of draws; warn: ", fmt_value(thresholds.warn.rhat), ", ",
+        fmt_count(thresholds.warn.ess_bulk), ", ",
+        fmt_count(thresholds.warn.ess_tail), ", ",
+        fmt_value(thresholds.warn.divergent_fraction), "."
     )
     println(io)
     println(

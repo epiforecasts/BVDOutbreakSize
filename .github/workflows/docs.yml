@@ -252,8 +252,7 @@ jobs:
   # comments the preview link: the pages are how anyone diagnoses the failure,
   # and the fit diagnostics are on them. What this job adds is that the build
   # goes red and says so in a comment of its own, rather than the failure being
-  # something a reader has to go looking for. That is what happened with
-  # v2.0.0, which was published with a joint fit that had not converged.
+  # something a reader has to go looking for.
   convergence:
     name: Check joint convergence
     needs: fit
@@ -392,11 +391,23 @@ jobs:
               commit_sha: context.sha,
               body: fs.readFileSync(path, 'utf8')
             });
-      - name: Fail the build when a gated fit has not converged
+      # Two ways to get here, and they need different messages. A verdict of
+      # `fail` means the fit is bad. No verdict at all means the check never
+      # got that far (a missing fit, a malformed threshold), so there is
+      # nothing in the job summary to point anyone at and the fits have not
+      # been judged either way.
+      - name: Fail the build when the gate did not pass
         if: steps.check.outcome == 'failure'
+        env:
+          STATUS: ${{ steps.check.outputs.status }}
         run: |
-          echo "::error::a gated fit did not clear the convergence" \
-            "thresholds; the verdict is in this job's summary"
+          if [ -z "$STATUS" ]; then
+            echo "::error::the convergence check did not reach a verdict," \
+              "so the fits are unjudged; see this job's log"
+          else
+            echo "::error::a gated fit did not clear the convergence" \
+              "thresholds; the verdict is in this job's summary"
+          fi
           exit 1
 
   # Execute each literate page from the cached fits, in parallel. Each render

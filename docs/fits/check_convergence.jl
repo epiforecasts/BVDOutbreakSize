@@ -34,9 +34,6 @@ const REPORT = strip(get(ENV, "BVD_CONVERGENCE_REPORT", ""))
 ## rather than leaving a new comment per build.
 const MARKER = "<!-- bvd-fit-convergence -->"
 
-## The frozen fits hand back `(; cutoff, o, chn)` rather than the chain.
-_chain(x) = x isa NamedTuple && haskey(x, :chn) ? x.chn : x
-
 ## Where this verdict came from, so a comment read weeks later still says
 ## which commit and which run produced it.
 function _context()
@@ -58,7 +55,7 @@ checks = map(IDS) do id
         fit_key(id), () -> nothing;
         cache_dir = CACHE, strict = true
     )
-    fit_convergence(id, _chain(result))
+    fit_convergence(id, fit_chain(result))
 end
 
 md = convergence_markdown(checks; marker = MARKER, context = _context())

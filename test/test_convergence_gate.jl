@@ -192,4 +192,21 @@ end
         @test e isa ErrorException
         @test occursin("BVD_CONVERGENCE_FAIL_RHAT", e.msg)
     end
+
+    ## `nan` and `inf` parse as numbers and then turn the threshold off in
+    ## silence, since nothing compares greater than either. A gate a typo can
+    ## disable without saying so is the failure this gate exists to prevent.
+    for bad in ("nan", "inf", "-inf")
+        withenv("BVD_CONVERGENCE_FAIL_ESS_BULK" => bad) do
+            e = try
+                convergence_thresholds()
+                nothing
+            catch err
+                err
+            end
+            @test e isa ErrorException
+            @test occursin("BVD_CONVERGENCE_FAIL_ESS_BULK", e.msg)
+            @test occursin("finite", e.msg)
+        end
+    end
 end
