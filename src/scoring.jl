@@ -644,10 +644,10 @@ end
 ## shows in.
 ##
 ## Those reconstructions were built before the forecaster projected each
-## stream from its own cumulative trajectory (#613, #706). Without one it
-## inferred the cut-off daily rate by inverting the cumulative total under
-## exponential growth, which collapses towards zero as the fitted growth
-## rate reaches zero. Confirmed deaths was the stream carrying no
+## stream from its own cumulative trajectory. Without one it inferred the
+## cut-off daily rate by inverting the cumulative total under exponential
+## growth, which collapses towards zero as the fitted growth rate reaches
+## zero. Confirmed deaths was the stream carrying no
 ## trajectory, and from mid-July the reproduction number sits at one, so
 ## the two together floor the projection: every one of the fourteen
 ## reconstructions cut between these dates carries a confirmed-death median

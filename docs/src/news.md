@@ -79,8 +79,8 @@ quality measured on them, with that convergence failure in mind.
   keeps its own axis, its estimates sitting where that crop would cut them.
 - The frozen evaluation drops the confirmed-death rows of the fourteen
   reconstructions cut between 16 July and 15 August 2026. The forecaster
-  that built them could not project that stream from its own trajectory and
-  floored it at zero, so each carried a one-week median of exactly zero
+  that built them predated projecting each stream from its own trajectory
+  (#613, #706) and floored the stream at zero, so each carried a one-week median of exactly zero
   against an observed 250 to 370. The section now lists every scoring
   exclusion in one place, and the archive keeps the rows.
 - An onset forecast window containing a vintage whose reread total falls is
