@@ -4941,7 +4941,7 @@ CSV.write(
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -4953,21 +4953,14 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t) nationally and by province, infections by
-## province, the per-province summary, the R(t) each data stream implies on
-## its own, latent infections over time, and the modelled versus observed
-## reported cases. All are produced in the Results sections above; here we
-## just write them out at the dashboard size.
+## Figures: estimated R(t) nationally and by province, latent infections
+## over time, and the modelled versus observed reported cases. All are
+## produced in the Results sections above; here we just write them out at the
+## dashboard size. The per-province infections and parameter panels stay on
+## this page, which the dashboard links to for the detail behind its
+## by-province table.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
-CairoMakie.save(
-    joinpath(dashboard_dir, "infections_provinces.png"),
-    province_infections_fig
-)
-CairoMakie.save(
-    joinpath(dashboard_dir, "provinces_summary.png"),
-    province_detail_fig
-)
 CairoMakie.save(
     joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig

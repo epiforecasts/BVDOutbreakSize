@@ -24,6 +24,7 @@ This page covers how the project is laid out, how to run it, and the conventions
   Both load their fits through the shared `docs/examples/_setup.jl`.
   `analysis.jl` is the main artifact.
 - `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), and `list.jl` (print fit ids for the CI matrix).
+- `scripts/fetch_fits.sh` — download a CI run's fits into `logs/fit_cache` (`task fetch-fits`), so a local render loads the same chains CI rendered from.
 - `docs/execute.jl` — runs one Literate page against the fit cache and writes its markdown, figures and half of `output/` (used by `task docs-main` and `task docs-sensitivity`).
 - `docs/make.jl` — the Vitepress combine step: copies `README.md` to `index.md`, assembles the site from the already-rendered markdown, and builds the bibliography (used by `task docs`).
 - `data/observations.toml` — single source of truth for observation data (case and death counts, traveller volumes, sources).
@@ -44,9 +45,13 @@ The ones used day to day:
 # Instantiate the package environment (no task wraps this)
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Fit and cache every model, then render the docs from the cache
-task fit-all
+# Download the fits from the latest successful CI build, then render the
+# docs from them
+task fetch-fits
 task docs
+
+# Or fit every model locally instead, in one parallel pass
+task fit-all
 
 # Fit and cache a single model by id (list ids with
 # `julia --project=docs docs/fits/list.jl`)
@@ -68,9 +73,14 @@ task test-quick
 julia --project=. scripts/run.jl
 ```
 
-Running `julia --project=. docs/examples/analysis.jl` directly instead steps through the full narrative without going through the fit cache, fitting every model inline.
+The render never fits.
+A fit it cannot find in the cache fails the build in seconds naming the key, rather than refitting the whole report inline.
+In practice the fits come from CI, so `task fetch-fits` is the usual way to fill the cache, and `task fit-all` is for a working tree CI has not built.
+`fit-all` runs `threads / chains` fits at once, so it takes all available threads; set `JULIA_NUM_THREADS` to cap it on a shared host.
+
+`BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
+Running `julia --project=. docs/examples/analysis.jl` that way steps through the full narrative and fits every model as it goes.
 This is the slow path.
-Prefer `task fit-all && task docs` for anything beyond reading the source.
 
 A build streams per-fit progress by default: every NUTS fit writes `logs/<fit>.log` (iteration, log-density, divergences) and a TensorBoard run under `logs/tensorboard/<fit>/`, controlled by `BVD_FIT_LOG` (`all` when unset, or `progress`, `tensorboard`, `none`).
 CI release builds set `BVD_FIT_LOG=none`.

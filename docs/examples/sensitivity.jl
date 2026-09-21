@@ -2219,7 +2219,7 @@ frozen_contrast_fig #hide
 
 # ## Saving sensitivity results
 #
-# The stream-comparison and frozen-fit tables and the per-stream reproduction number figure are written to the shared output directory.
+# The stream-comparison and frozen-fit tables are written to the shared output directory.
 # The main analysis writes the rest, so the combined release and summary dashboard pick up both pages' outputs.
 
 #md # ```@raw html
@@ -2250,14 +2250,6 @@ CSV.write(
         made_date = frozen_lastweek.o.cutoff, thin = 5
     )
 )
-
-## The per-stream reproduction-number figure for the summary dashboard; the
-## main analysis writes the other three dashboard figures.
-dashboard_dir = joinpath(
-    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
-)
-mkpath(dashboard_dir)
-CairoMakie.save(joinpath(dashboard_dir, "rt_streams.png"), stream_rt_fig)
 
 #md # ```@raw html
 #md # </details>

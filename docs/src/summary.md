@@ -42,6 +42,7 @@ All intervals are equal-tailed 30%, 60% and 90% credible intervals from the join
 The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the three below.
 Each cell is a median with a 90% credible interval.
 The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
+Modelled infections by province and the per-province parameter detail are in the [joint model estimates](analysis.md#Joint-model-estimates) and the [reproduction number over time](analysis.md#Reproduction-number-over-time) on the analysis page.
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -51,7 +52,10 @@ Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 
 ### Fit diagnostics
 
-How the fits behind these numbers sampled.
+```@raw html
+<details><summary>Expand: how the fits behind these numbers sampled</summary>
+```
+
 R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
 The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
 A divergent transition is a step the sampler could not take accurately.
@@ -61,6 +65,10 @@ The [Sensitivity](sensitivity.md) page breaks these numbers down by parameter.
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "diagnostics.md"), String))
+```
+
+```@raw html
+</details>
 ```
 
 ## Estimated reproduction number
@@ -75,15 +83,6 @@ A panel tracking grey says that province moves with the national trend.
 
 ![Estimated reproduction number over time by province](summary_assets/rt_provinces.png)
 
-## Provinces
-
-Modelled infections by province, and each province's size, reproduction
-number and relative case ascertainment.
-
-![Modelled infections over time by province](summary_assets/infections_provinces.png)
-
-![Per-province summary](summary_assets/provinces_summary.png)
-
 ## Infections over time
 
 Modelled cumulative infections, symptom onsets and deaths.
@@ -97,12 +96,11 @@ Modelled reported cases against the observed reported cases over time, a check t
 
 ![Modelled versus observed reported cases over time](summary_assets/reported_cases.png)
 
-## Reproduction number by data stream
+## Where each data stream points
 
-The reproduction number each data stream implies on its own, fitted to that stream alone.
-Agreement between the streams supports the joint estimate; disagreement shows where they pull in different directions.
-
-![Reproduction number implied by each data stream](summary_assets/rt_streams.png)
+The outbreak size and the reproduction number each data stream implies on its own, fitted to that stream alone, are on the sensitivity page: [outbreak size](sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and [reproduction number](sensitivity.md#Reproduction-number-estimated-by-each-data-stream).
+Agreement between the streams supports the joint estimate.
+Disagreement shows where they pull in different directions.
 
 ---
 

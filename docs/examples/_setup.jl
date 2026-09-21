@@ -167,13 +167,14 @@ if !@isdefined(_BVD_SETUP_LOADED)
     end
     _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in
         ("all", "true", "1")
-    ## In CI the per-fit matrix produces every fit before the render, so a
-    ## render cache miss is a bug (usually a wrong `BVD_FIT_CACHE`).
-    ## `BVD_FIT_STRICT` makes such a miss fail in seconds naming the key,
-    ## rather than silently refitting the whole report and hitting the
-    ## render-job timeout. Off by default so a local cold build still fits.
-    _strict = lowercase(strip(get(ENV, "BVD_FIT_STRICT", ""))) in
-        ("all", "true", "1", "yes", "on")
+    ## Fits are produced by the per-fit CI matrix (or `task fit-all` /
+    ## `task fetch-fits` locally) before the render, so a render cache miss is
+    ## a bug, usually a wrong `BVD_FIT_CACHE` or a fit the matrix never made.
+    ## Strict mode fails in seconds naming the key rather than silently
+    ## refitting the whole report into the render-job timeout. On by default;
+    ## `BVD_FIT_STRICT=false` restores inline fitting for a cold local build.
+    _strict = lowercase(strip(get(ENV, "BVD_FIT_STRICT", ""))) ∉
+        ("false", "0", "no", "off")
     _fit_specs = build_fit_specs(
         obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
