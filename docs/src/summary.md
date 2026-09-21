@@ -97,7 +97,7 @@ Modelled reported cases against the observed reported cases over time, a check t
 
 ![Modelled versus observed reported cases over time](summary_assets/reported_cases.png)
 
-## Where each data stream points
+## Estimate variation by data stream
 
 The [outbreak size](sensitivity.md#Outbreak-size-estimated-by-each-data-stream) and the [reproduction number](sensitivity.md#Reproduction-number-estimated-by-each-data-stream) each data stream implies on its own are on the sensitivity page.
 
