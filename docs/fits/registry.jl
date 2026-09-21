@@ -23,6 +23,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "priors.jl"),
     joinpath(_PKG, "src", "models", "observations.jl"),
     joinpath(_PKG, "src", "models", "joint.jl"),
+    joinpath(_PKG, "src", "models", "fit_args.jl"),
     joinpath(_PKG, "src", "renewal.jl"),
     joinpath(_PKG, "src", "sampling.jl"),
     joinpath(_PKG, "src", "constants.jl"),
@@ -408,72 +409,23 @@ function build_fit_specs(
     clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
-    ## Per-province spatial-table data for the patch fit, reshaped once here.
-    ## It must not be built inside the model body: it looks provinces up by
-    ## name in a `Dict{String}`, and a string compare on the AD tape is a
-    ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
-    ## gradient of the whole joint.
-    patch_prov = province_increment_matrix(
-        obs.province_confirmed_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES)
-    )
-    patch_prov_deaths = province_increment_matrix(
-        obs.province_death_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES)
-    )
-    patch_testing = province_testing_covariate(obs.province_lab_daily_history)
-
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
     ## between their C_T posteriors is read as evidence about the spatial
     ## structure, which is only meaningful if nothing else differs. Splatting
     ## one shared NamedTuple into both is what keeps them from drifting apart
     ## a keyword at a time.
-    joint_common = (;
-        confirmed_deaths = obs.confirmed_deaths,
-        recovered_cases = obs.recovered_cases,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        recovered_history = obs.recovered_history,
-        treatment_admissions_history = obs.treatment_admissions_history,
-        treatment_deaths_history = obs.treatment_deaths_history,
-        treatment_ruleout_history = obs.treatment_ruleout_history,
-        treatment_absconded_history = obs.treatment_absconded_history,
-        treatment_confirmed_incare_history =
-            obs.treatment_confirmed_incare_history,
-        treatment_suspect_incare_history =
-            obs.treatment_suspect_incare_history,
-        occupancy_break_days = obs.occupancy_break_days,
-        confirmed_break_days = obs.confirmed_break_days,
-        confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
-        confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        onset_curve_history = obs.onset_curve_history,
-        breakpoint = breakpoint,
-        background_re = true,
-        confirmed_positivity_link = :composition,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days,
-    )
+    ##
+    ## The list lives in the package (`src/models/fit_args.jl`) rather than
+    ## here because `src/precompile.jl` builds its workload from the same
+    ## call. Mooncake caches a reverse rule against a method signature, and a
+    ## model's type carries the types of its arguments, so a workload that
+    ## differs from this call in any argument type compiles a rule no fit
+    ## reaches.
+    joint_common = joint_fit_args(obs; breakpoint = breakpoint)
 
     ## The only difference between the headline and the control.
-    patch_only = (;
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = patch_prov.increments,
-        province_days = patch_prov.days,
-        province_death_increments = patch_prov_deaths.increments,
-        province_death_days = patch_prov_deaths.days,
-        province_testing_covariate = patch_testing,
-    )
+    patch_only = patch_fit_args(obs)
 
     specs = Any[
         ## Headline fit. The patch (meta-population) model is the joint. With

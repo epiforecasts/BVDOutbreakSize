@@ -151,6 +151,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     PROVINCE_DISTANCE_DECAY, haversine_km,
     province_distance_matrix, province_importation_kernel,
     province_increment_matrix, province_testing_covariate,
+    joint_fit_args, patch_fit_args, production_joint,
+    default_breakpoint,
     patch_infections, importation_from_kernel,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
@@ -173,6 +175,7 @@ include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
+include("models/fit_args.jl")
 include("precompile.jl")
 
 end # module
