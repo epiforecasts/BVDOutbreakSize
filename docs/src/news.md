@@ -80,6 +80,19 @@ quality measured on them, with that convergence failure in mind.
 
 ### Infrastructure
 
+- The AD benchmark times both revisions in one job on one machine (#763).
+Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
+Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+AirspeedVelocity runs the two arms and `benchmark/ci/comment.jl` reports them, replacing `benchmark/compare.jl`.
+The workflow materialises both revisions as git worktrees and benchmarks them from those paths, because this repository declares a submodule and Pkg cannot check out a tree that does.
+Each arm runs its own suite, fixtures and benchmark environment, so a pull request's changes to the suite are exercised by that pull request.
+`task benchmark-pair` runs the same comparison locally.
+- The benchmark comment measures its neutral band from the run rather than fixing it at 5% (#763).
+The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
+That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
+- The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
+`key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17
