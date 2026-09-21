@@ -11,6 +11,17 @@ tasks:
     cmds:
       - julia --project=scripts scripts/refresh_releases.jl {{.CLI_ARGS}}
 
+  release-notes:
+    desc: >
+      Print the release notes for the version in Project.toml, taken from the
+      newest section of docs/src/news.md. This is what an `@release` comment
+      publishes, so the notes can be read before anything is cut. Pass
+      `-- next patch` to see the following version, or `-- open patch` to
+      write the bump and the new section locally.
+    cmds:
+      - julia --project=scripts scripts/release_notes.jl
+        {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}notes{{end}}
+
   download-sitreps:
     desc: >
       Download the MVE situation-report PDFs from the INSP site (insp.cd,
@@ -67,12 +78,15 @@ tasks:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
 
-  benchmark-compare:
+  benchmark-pair:
     desc: >
-      Turn two saved result files into the Markdown comparison CI posts on a
-      PR. Usage: task benchmark-compare -- pr.json main.json comment.md.
+      Reproduce the CI comparison locally: benchmark two revisions of this
+      repository in one process and write the PR comment. Usage:
+      task benchmark-pair -- <base-rev> <head-rev>. Worktrees go under
+      .benchmark-worktrees/ and results under benchmark-results/. Costs
+      roughly twice a single `task benchmark`.
     cmds:
-      - julia --project=benchmark benchmark/compare.jl {{.CLI_ARGS}}
+      - ./scripts/run_benchmark_pair.sh {{.CLI_ARGS}}
 
   docs:
     desc: >
@@ -106,6 +120,16 @@ tasks:
       Example: BVD_FIT_ID=deaths task fit.
     cmds:
       - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
+
+  check-convergence:
+    desc: >
+      Decide whether the cached fits converged well enough to publish, the
+      same gate CI runs after the fit matrix. Reads the chains from
+      logs/fit_cache without refitting, prints the verdict, the headline
+      diagnostics and the parameters responsible, and exits non-zero on a
+      failure. Set BVD_CONVERGENCE_IDS to gate fits other than `joint`.
+    cmds:
+      - julia --project=docs docs/fits/check_convergence.jl {{.CLI_ARGS}}
 
   fit-all:
     desc: >

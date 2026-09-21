@@ -19,8 +19,34 @@ permissions:
   contents: read
 
 jobs:
+  # A change to the analysis pages, the README or another workflow cannot
+  # change what the tests do. `docs/fits/` and `scripts/` are in the list
+  # because test files include `cache.jl`, `registry.jl`, `summary.jl` and
+  # `score_releases.jl` directly.
+  changes:
+    name: Decide whether the test suite needs to run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      needed: ${{ steps.filter.outputs.matched }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge commit's first parent is the base, which the action
+          # diffs against, so the full history is needed rather than a
+          # single-commit checkout.
+          fetch-depth: 0
+      - id: filter
+        uses: ./.github/actions/changed-paths
+        with:
+          label: 'the test suite'
+          patterns: >-
+            ^(src/|ext/|test/|data/|docs/fits/|scripts/|Project\.toml|\.github/(workflows/(test\.yml|codecoverage\.yaml)|actions/changed-paths/))
+
   test:
     name: Julia ${{ matrix.julia-version }} - ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     # Below GitHub's 6h job ceiling, which a stalled cell otherwise sits on
@@ -90,6 +116,8 @@ jobs:
 
   quality:
     name: Quality (package and docstring checks)
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     # Pinned pkgimage targets, as on the `test` matrix above.
@@ -132,6 +160,8 @@ jobs:
 
   downgrade-compat:
     name: Downgrade compat (Julia 1.11)
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     # Pinned pkgimage targets, as on the `test` matrix above.
     env:

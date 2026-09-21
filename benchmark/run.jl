@@ -11,9 +11,8 @@ out_file = get(ARGS, 1, "results.json")
 
 include(joinpath(@__DIR__, "benchmarks.jl"))  # defines `SUITE`
 
-# A short per-benchmark budget keeps the run affordable. The minimum-time
-# estimator the comparison uses is stable well below the default 5 s, and
-# the slowest components here are milliseconds per call.
-results = run(SUITE; verbose = true, seconds = 1)
+# The budget comes from `DEFAULT_PARAMETERS` in `benchmarks.jl`, so a local
+# run and a CI arm sample the same way.
+results = run(SUITE; verbose = true)
 BenchmarkTools.save(out_file, results)
 println("Saved benchmark results to ", out_file)

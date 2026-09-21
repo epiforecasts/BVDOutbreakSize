@@ -20,13 +20,20 @@ on:
 
 # Superseding a run is right on a pull request and destructive on `main`.
 # `github.head_ref` is set only on a pull request, so a push to `main`, a tag
-# or a manual run falls back to `github.run_id`.
-# That gives each of those a group of its own that nothing supersedes.
-# A cancelled run here also loses the hours of fitting it had done and the
-# results release it would have published.
+# or a manual run falls back to the commit SHA, and only a pull request
+# cancels the run before it. A cancelled run here also loses the hours of
+# fitting it had done and the results release it would have published.
+#
+# Keying the non-PR runs on the SHA rather than the run id queues a release
+# tag behind the `main` push of the same commit instead of racing it. The two
+# runs otherwise fit the same content-addressed keys side by side, neither
+# sees the other's cache until its own fit job has finished, and the tag's
+# joint fit, on a slower runner, was the one that hit the job's time limit
+# (v2.1.0). Queued, the tag run starts after the `main` run has written every
+# fit cache and restores all of them.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Compile pkgimages for a fixed set of x86-64 targets rather than for the
 # machine that happens to run the job. GitHub's ubuntu-latest fleet is mixed,
@@ -42,11 +49,38 @@ env:
     generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
 
 jobs:
+  # Nothing else here runs unless a pull request touches something the
+  # rendered report is built from. The fits alone cost hours, and a change
+  # to the test suite, the benchmarks or another workflow produces a site
+  # identical to the one on `main`. A push, a tag and a manual run are
+  # never gated.
+  changes:
+    name: Decide whether the report needs rebuilding
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      needed: ${{ steps.filter.outputs.matched }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge commit's first parent is the base, which the action
+          # diffs against, so the full history is needed rather than a
+          # single-commit checkout.
+          fetch-depth: 0
+      - id: filter
+        uses: ./.github/actions/changed-paths
+        with:
+          label: 'the report'
+          patterns: >-
+            ^(src/|ext/|data/|docs/|scripts/|README\.md|Project\.toml|\.github/(workflows/docs\.yml|actions/changed-paths/))
+
   # Resolve and precompile the single shared environment once, list the fit
   # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
   # included; on main/PR builds they are skipped.
   list:
     name: Resolve env and list fits
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.ids.outputs.ids }}
@@ -157,6 +191,15 @@ jobs:
         with:
           name: manifest
           path: .
+      # The fleet is mixed and the joint fit's wall clock varies by half
+      # again between runs of the same commit, so the summary names the CPU
+      # a refit ran on. Read it next to the fit's timing when a job runs long.
+      - name: Record the runner's CPU
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "\`fit ${{ matrix.id }}\` on $(julia -e 'print(Sys.CPU_NAME)')," \
+            "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)" \
+            >> "$GITHUB_STEP_SUMMARY"
       - name: Fit ${{ matrix.id }}
         if: steps.cache.outputs.cache-hit != 'true'
         env:
@@ -189,7 +232,8 @@ jobs:
   # environment is resolved.
   overlays:
     name: Refresh release overlays
-    needs: list
+    needs: [changes, list]
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -242,6 +286,183 @@ jobs:
           path: data/*.csv
           if-no-files-found: error
           retention-days: 3
+
+  # Gate the build on the headline joint fit having converged. It reads the
+  # same cached chains the render does, so it costs a load and a few thousand
+  # R-hats rather than a refit.
+  #
+  # A leaf job on purpose. `combine` does not need it, so a build whose joint
+  # fit has not converged still renders the report, deploys the preview and
+  # comments the preview link: the pages are how anyone diagnoses the failure,
+  # and the fit diagnostics are on them. What this job adds is that the build
+  # goes red and says so in a comment of its own, rather than the failure being
+  # something a reader has to go looking for.
+  convergence:
+    name: Check joint convergence
+    needs: fit
+    # Not the default `success()`. The verdict is one comment edited in
+    # place, so a build where this job never ran leaves the previous build's
+    # verdict on the thread reading as current: "no new comment" and "still
+    # converged" look the same. The fit matrix is `fail-fast: false`, so one
+    # failed leg would otherwise skip this job silently. Running anyway
+    # reaches the steps below, which find no fit and say the check could not
+    # be made.
+    #
+    # A cancelled run has nothing to report. A `fit` that was skipped means
+    # no fit was attempted, either because this change does not reach the
+    # report and the whole build was gated off, or because `list` failed and
+    # the build is already red for a reason that has nothing to do with
+    # convergence. Neither is a verdict on the fits.
+    #
+    # Dependabot runs with a read-only token that cannot comment, so it is
+    # skipped outright as `combine` skips it. A dependency bump does not
+    # change a fit cache key, so the gate would only restate `main`'s verdict.
+    #
+    # The `${{ }}` is required, not decoration: an `if` whose expression
+    # starts with `!` has to be wrapped or quoted.
+    if: >-
+      ${{ !cancelled() && needs.fit.result != 'skipped' &&
+      github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
+      - name: Pin the resolved manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: .
+      - name: Install docs dependencies
+        run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      # Only the gated fit, not the whole `fit-*` set: the single-stream
+      # chains are not gated and downloading them all costs minutes.
+      # `continue-on-error` so a missing fit reaches the check, which fails
+      # on the strict cache miss naming the key it looked for, rather than
+      # ending the job here with nothing said on the pull request.
+      - name: Collect the joint fit
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: fit-joint
+          path: logs/fit_cache
+      # `continue-on-error` so the verdict is commented before the job fails
+      # on it. The failure is re-raised in the last step.
+      #
+      # `BVD_CONVERGENCE_IDS` is set here rather than left to its default so
+      # that this job's scope and the artifact fetched above are one edit
+      # apart. The gate takes any list of fit ids, which is what it is for
+      # locally, but a CI run can only judge fits whose chains it has: adding
+      # an id here without adding its artifact above gives a strict cache
+      # miss, not a verdict.
+      - name: Check convergence
+        id: check
+        continue-on-error: true
+        env:
+          BVD_FIT_CACHE: logs/fit_cache
+          BVD_CONVERGENCE_IDS: joint
+          BVD_CONVERGENCE_REPORT: logs/convergence.md
+        run: julia --project=docs docs/fits/check_convergence.jl
+      # One comment per pull request, edited in place on every build, so the
+      # thread carries the current verdict rather than one comment per push.
+      # A comment that cannot be posted must not decide the verdict, hence
+      # `continue-on-error` — the last step is what fails the build.
+      - name: Comment the convergence verdict
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- bvd-fit-convergence -->';
+            const path = 'logs/convergence.md';
+            const status = '${{ steps.check.outputs.status }}';
+
+            // The check itself failed to run (a missing fit, a load error).
+            // Say that rather than leaving the thread silent.
+            const body = fs.existsSync(path)
+              ? fs.readFileSync(path, 'utf8')
+              : `${marker}\n## Fit convergence: could not be checked\n\n` +
+                `The convergence check did not produce a verdict. ` +
+                `See the job log.\n`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number }
+            );
+            const existing = comments.find(c => c.body.includes(marker));
+
+            // Nothing to say on a passing build that has never had a comment
+            // here: the green check is the signal. An existing comment is
+            // updated so a fix shows as resolved in place.
+            if (!existing && status === 'pass') {
+              return;
+            }
+            if (existing) {
+              await github.rest.issues.updateComment(
+                { owner, repo, comment_id: existing.id, body }
+              );
+            } else {
+              await github.rest.issues.createComment(
+                { owner, repo, issue_number, body }
+              );
+            }
+      # A push to `main` or a tag has no pull request to comment on, and it is
+      # the build that publishes the results release. Leave the verdict on the
+      # commit so it is visible from the history rather than only inside a
+      # workflow run.
+      - name: Comment the convergence verdict on the commit
+        if: >-
+          steps.check.outcome == 'failure' && github.event_name == 'push'
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = 'logs/convergence.md';
+            if (!fs.existsSync(path)) return;
+            const { owner, repo } = context.repo;
+            await github.rest.repos.createCommitComment({
+              owner, repo,
+              commit_sha: context.sha,
+              body: fs.readFileSync(path, 'utf8')
+            });
+      # Two ways to get here, and they need different messages. A verdict of
+      # `fail` means the fit is bad. No verdict at all means the check never
+      # got that far (a missing fit, a malformed threshold), so there is
+      # nothing in the job summary to point anyone at and the fits have not
+      # been judged either way.
+      - name: Fail the build when the gate did not pass
+        if: steps.check.outcome == 'failure'
+        env:
+          STATUS: ${{ steps.check.outputs.status }}
+        run: |
+          if [ -z "$STATUS" ]; then
+            echo "::error::the convergence check did not reach a verdict," \
+              "so the fits are unjudged; see this job's log"
+          else
+            echo "::error::a gated fit did not clear the convergence" \
+              "thresholds; the verdict is in this job's summary"
+          fi
+          exit 1
 
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures

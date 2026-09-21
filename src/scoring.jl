@@ -639,6 +639,135 @@ function select_fit_role(table::DataFrame, role::AbstractString)
     return table[_fit_role.(table.fit) .== role, :]
 end
 
+## The frozen archive's confirmed-death rows that a superseded forecaster
+## produced, named as a stream and the window of frozen cut-offs the defect
+## shows in.
+##
+## Those reconstructions were built before the forecaster projected each
+## stream from its own cumulative trajectory. Without one it inferred the
+## cut-off daily rate by inverting the cumulative total under exponential
+## growth, which collapses towards zero as the fitted growth rate reaches
+## zero. Confirmed deaths was the stream carrying no
+## trajectory, and from mid-July the reproduction number sits at one, so
+## the two together floor the projection: every one of the fourteen
+## reconstructions cut between these dates carries a confirmed-death median
+## of exactly zero at the one-week horizon against an observed 250 to 370,
+## and every reconstruction cut after the window projects the stream
+## normally (318 against 295 at the first of them).
+##
+## The same releases' May and June cut-offs are kept. The outbreak was
+## growing then, so the same code returned a rate rather than a floor, and
+## those rows carry no signature of the defect.
+##
+## This lapses when those reconstructions are rebuilt with the current
+## forecaster, which is what the frozen evaluation claims to be: the
+## current model frozen at earlier cut-offs.
+const SUPERSEDED_FROZEN_FORECASTS = (;
+    stream = "confirmed deaths",
+    from = Date(2026, 7, 16),
+    to = Date(2026, 8, 15),
+)
+
+"""
+`tbl` (a frozen scores or overlay table, keyed by `stream` and
+`made_date`) with the rows a superseded forecaster produced removed.
+
+One exclusion is in force, [`SUPERSEDED_FROZEN_FORECASTS`](@ref): the
+confirmed-death rows of the fourteen frozen reconstructions cut between 16
+July and 15 August 2026, whose forecaster could not project that stream
+and floored it at zero. They are dropped rather than read as the model
+forecasting no further deaths.
+
+Every fit over a dropped window goes, the persistence baseline included, so
+a relative skill is never taken against a baseline whose own window was
+withheld.
+
+Nothing is dropped from the archive itself. `data/forecast_scores_frozen.csv`
+and `data/forecast_overlay_frozen.csv` record what was scored; this selects
+what is summarised and drawn, as [`scored_overlay`](@ref) does.
+
+Returns `tbl` unchanged when it is empty or carries no such row.
+"""
+function drop_superseded_forecasts(tbl::DataFrame)
+    isempty(tbl) && return tbl
+    ex = SUPERSEDED_FROZEN_FORECASTS
+    superseded = [
+        tbl.stream[i] == ex.stream &&
+            ex.from <= Date(string(tbl.made_date[i])) <= ex.to
+            for i in 1:size(tbl, 1)
+    ]
+    return tbl[.!superseded, :]
+end
+
+## Vintage dates whose reprinted cumulative total is lower than the
+## vintage before them. A cumulative onset curve cannot shrink, so a fall is
+## the figure being reread rather than cases being withdrawn.
+function _onset_falling_vintages(dates, totals)
+    out = Date[]
+    prev = nothing
+    for (d, c) in zip(dates, totals)
+        isnothing(prev) || (c < prev && push!(out, d))
+        prev = c
+    end
+    return out
+end
+
+"""
+`tbl` (a scores or overlay table keyed by `stream`, `made_date` and
+`target_date`) with the onset-report windows spanning a reread of the
+digitised triangle removed. `vintage_dates` and `vintage_totals` are that
+triangle's per-vintage cumulative total (`onset_report_history`, as dates
+rather than grid days), in date order.
+
+The onset truth is the increment between the vintages at the two ends of a
+window. Each vintage rereads the whole figure, and on fourteen of them the
+total comes back lower than the one before, which a cumulative onset curve
+cannot do. A window containing such a vintage is scored against an
+increment the situation reports did not add, so it is left unscored rather
+than charged to the forecast. The fit itself needs no such rule: it carries
+a per-vintage scan level.
+
+A vintage inside the window matters as much as one at its end, which is why
+the test is on the window rather than on the target vintage alone. A reread
+that loses cases depresses the printed level and the vintages after it carry
+that level forward, so the loss lands in the target total whether or not the
+target vintage is itself the one that fell. The worst window in the archive
+is of exactly that shape: an increment of 82 against a typical 400 to 500,
+where the fall sits two days inside the window and neither endpoint is a
+falling vintage.
+
+This is the rule province windows holding a harmonisation-break day already
+follow. It bites hardest at the longer horizons, a four-week window being
+more likely to contain a reread than a one-week one. A window anchored on a
+falling vintage but containing none is kept: its increment is measured from
+the reread rather than across it.
+
+Every fit over a dropped window goes, the persistence baseline included, so
+a relative skill is never taken against a baseline whose own window was
+withheld.
+
+Nothing is dropped from the archive; this selects what is summarised and
+drawn, as [`scored_overlay`](@ref) does.
+"""
+function drop_rescanned_onset_windows(
+        tbl::DataFrame;
+        vintage_dates::AbstractVector{<:Date},
+        vintage_totals::AbstractVector{<:Real},
+        stream::AbstractString = "onset reports"
+    )
+    isempty(tbl) && return tbl
+    falling = _onset_falling_vintages(vintage_dates, vintage_totals)
+    isempty(falling) && return tbl
+    keep = trues(size(tbl, 1))
+    for i in 1:size(tbl, 1)
+        tbl.stream[i] == stream || continue
+        made = Date(string(tbl.made_date[i]))
+        target = Date(string(tbl.target_date[i]))
+        keep[i] = !any(d -> made < d <= target, falling)
+    end
+    return tbl[keep, :]
+end
+
 """
 `overlay` (a `data/forecast_overlay.csv`-shaped table) restricted to the
 streams that carry a persistence baseline, dropping every row of a stream
