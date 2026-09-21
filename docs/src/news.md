@@ -21,6 +21,13 @@ Changes since v2.1.0.
 - `scripts/release_notes.jl` holds the text handling behind it and runs
   locally through `task release-notes`, so the notes can be read before
   anything is published.
+- Pushing a version tag starts a second documentation build of the commit
+  that was just pushed to `main`. The two builds used to run at the same
+  time and each refit every model; for v2.1.0 the tag build's joint fit ran
+  past the job's time limit, so no `results-v2.1.0` release was published.
+  The tag build now waits for the `main` build to finish and reuses its
+  cached fits (#765). Each fit job's summary also names the runner's CPU,
+  because the same fit runs up to half again as long on some runners.
 
 ## v2.1.0
 
