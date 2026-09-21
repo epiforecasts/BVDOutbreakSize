@@ -308,9 +308,11 @@ jobs:
     # reaches the steps below, which find no fit and say the check could not
     # be made.
     #
-    # A cancelled run has nothing to report, and a `fit` that was skipped
-    # means `list` failed, so no fit was ever attempted and the docs build is
-    # already red for a reason that has nothing to do with convergence.
+    # A cancelled run has nothing to report. A `fit` that was skipped means
+    # no fit was attempted, either because this change does not reach the
+    # report and the whole build was gated off, or because `list` failed and
+    # the build is already red for a reason that has nothing to do with
+    # convergence. Neither is a verdict on the fits.
     #
     # Dependabot runs with a read-only token that cannot comment, so it is
     # skipped outright as `combine` skips it. A dependency bump does not
