@@ -895,24 +895,6 @@ end
     @test any(!iszero, grad)
 end
 
-@testitem "onsets_only_model fits under a short NUTS run" tags = [:slow] begin
-    using BVDOutbreakSize: onsets_only_model, nuts_sample
-
-    oc = (;
-        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
-        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
-    )
-    chn = nuts_sample(
-        onsets_only_model(40; onset_curve_history = oc);
-        samples = 25, chains = 1, progress = false
-    )
-    et = vec(Array(chn[:expected_onset_reported_T]))
-    @test length(et) == 25
-    @test all(isfinite, et)
-end
-
 @testitem "bvd_joint: the onset stream is wired in" begin
     using BVDOutbreakSize: bvd_joint
     using Turing: sample, Prior

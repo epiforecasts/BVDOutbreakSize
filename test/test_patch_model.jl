@@ -2,6 +2,41 @@
 ## primitives in src/renewal.jl, the per-patch Rt and infection models, the
 ## per-province composition likelihood, and the bvd_joint composer.
 
+## The three-patch joint on the live observations, compiled once and drawn
+## from once. Four items below read the same chain; building it per item
+## cost four compilations of the largest model in the package.
+@testsnippet PatchJointChain begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+
+    const PATCH_DRAWS = 100
+
+    obs = load_observations()
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    np = length(PROVINCE_NAMES)
+    patch_model = bvd_joint(
+        obs.n,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        n_patches = np,
+        province_increments = prov.increments,
+        province_days = prov.days,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days
+    )
+    patch_chain = sample(
+        patch_model, Prior(), PATCH_DRAWS;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+end
+
 @testitem "patch_infections: uncoupled patches match single-patch renewal" begin
     using BVDOutbreakSize: patch_infections, renewal_infections
 
@@ -495,44 +530,21 @@ end
     @test isfinite(DynamicPPL.logjoint(build(none), vi))
 end
 
-@testitem "bvd_joint: carries the bvd_joint headline quantities" tags = [:slow] begin
-    using BVDOutbreakSize
-    using Turing: sample, Prior
-    import FlexiChains
+@testitem "bvd_joint: carries the bvd_joint headline quantities" tags = [
+    :slow,
+] setup = [PatchJointChain] begin
     using DataFrames: nrow
 
     ## A patch chain must drop into the existing summary machinery, which
     ## keys off these names. Missing any of them silently breaks analysis.jl,
     ## so assert on a real chain rather than on the model's return value.
-    obs = load_observations()
-    prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        deaths_history = obs.deaths_history,
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = prov.increments,
-        province_days = prov.days,
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days
-    )
-
-    chn = sample(
-        m, Prior(), 50; chain_type = FlexiChains.VNChain,
-        progress = false
-    )
+    chn = patch_chain
 
     ## The headline quantities analysis.jl summarises, under the same names
     ## bvd_joint uses.
     for q in (:C_T, :R_T, :r, :r0, :T, :CFR, :R0, :doubling_time)
         draws = vec(Array(chn[q]))
-        @test length(draws) == 50
+        @test length(draws) == PATCH_DRAWS
         @test all(isfinite, draws)
     end
     ## summary_table must work on a patch chain unchanged.
@@ -570,35 +582,14 @@ end
     )
 end
 
-@testitem "patch_summary_table: one block per patch, ordered quantiles" tags = [:slow] begin
-    using BVDOutbreakSize
-    using Turing: sample, Prior, @model
+@testitem "patch_summary_table: one block per patch, ordered quantiles" tags = [
+    :slow,
+] setup = [PatchJointChain] begin
+    using Turing: @model
     using Distributions: Normal
-    import FlexiChains
     using DataFrames: DataFrame, nrow
 
-    obs = load_observations()
-    prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        deaths_history = obs.deaths_history,
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = prov.increments,
-        province_days = prov.days,
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days
-    )
-    chn = sample(
-        m, Prior(), 100; chain_type = FlexiChains.VNChain,
-        progress = false
-    )
+    chn = patch_chain
 
     df = patch_summary_table(chn, length(PROVINCE_NAMES))
     @test df isa DataFrame
@@ -634,34 +625,12 @@ end
     @test_throws ErrorException patch_summary_table(plain, 3)
 end
 
-@testitem "patch reporting: one table per province, and an overview" tags = [:slow] begin
-    using BVDOutbreakSize
-    using Turing: sample, Prior
-    import FlexiChains
+@testitem "patch reporting: one table per province, and an overview" tags = [
+    :slow,
+] setup = [PatchJointChain] begin
     using DataFrames: DataFrame, nrow, names
 
-    obs = load_observations()
-    prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        deaths_history = obs.deaths_history,
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = prov.increments,
-        province_days = prov.days,
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days
-    )
-    chn = sample(
-        m, Prior(), 100; chain_type = FlexiChains.VNChain,
-        progress = false
-    )
+    chn = patch_chain
 
     ## The cross-province overview is one ROW per province, not one row per
     ## (province, quantity). This is the whole point of it: the long-format
@@ -698,34 +667,12 @@ end
     @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = 9)
 end
 
-@testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags = [:slow] begin
-    using BVDOutbreakSize
-    using Turing: sample, Prior
-    import FlexiChains
+@testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags = [
+    :slow,
+] setup = [PatchJointChain] begin
     using Statistics: median
 
-    obs = load_observations()
-    prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        deaths_history = obs.deaths_history,
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = prov.increments,
-        province_days = prov.days,
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days
-    )
-    chn = sample(
-        m, Prior(), 40; chain_type = FlexiChains.VNChain,
-        progress = false
-    )
+    chn = patch_chain
 
     ## The same renewal start and walk start the model derives internally.
     rt_start = clamp(
@@ -743,7 +690,7 @@ end
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
     @test length(rt) == length(PROVINCE_NAMES)
-    @test all(size(r) == (40, obs.n) for r in rt)
+    @test all(size(r) == (PATCH_DRAWS, obs.n) for r in rt)
 
     ## THE test that makes the figure trustworthy: rebuilding the provincial
     ## trajectory from the deviation knots must reproduce, at the cut-off, the
