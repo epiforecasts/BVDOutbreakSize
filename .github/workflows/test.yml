@@ -111,7 +111,9 @@ jobs:
   ad-gradients:
     name: AD gradients (Mooncake)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The `:ad` items are ~20 min on a warm depot; a first run on a cold one
+    # pays the package precompile on top, so this is not sized to 20.
+    timeout-minutes: 150
     # Pinned pkgimage targets, as on the `test` matrix above.
     env:
       JULIA_CPU_TARGET: >-

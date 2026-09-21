@@ -10,13 +10,13 @@
 ## cannot be benchmarked without also being asserted differentiable, or
 ## asserted without being timed. Adding a model there adds it to both.
 ##
-## The full `bvd_joint` is not a component here: differentiating it under
-## Mooncake takes ~10 min and is unstable on the Julia LTS runner (the same
-## path that makes the `bvd_joint` NUTS fits flaky there), so a dedicated
-## check would reintroduce exactly the slowness and flakiness this file
-## removes. The joint's gradient is still exercised end-to-end whenever the
-## per-vintage predict/fit tests sample it (test_vintage_predict,
-## test_lab_pipeline).
+## The full `bvd_joint` is not a component here and is not differentiated
+## anywhere in the suite: one gradient sits behind a cold Mooncake compile
+## of roughly 18 minutes. The components below are the submodels, the latent
+## process and every single-stream composer, so the joint is a composition
+## of surfaces each asserted differentiable here. Its own gradient is timed
+## by the benchmark suite and exercised end to end by the NUTS fits the docs
+## build runs.
 ##
 ## Tagged `:ad`, the tag the downgrade-compat run skips (AD gradients drift
 ## below the package's pinned dependency versions), matching the other

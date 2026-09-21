@@ -1,10 +1,12 @@
 name: Benchmark
 
 # Per-component AD gradient comparison against `main`, posted as a single PR
-# comment. The components are the observation submodels, the latent process
-# and the single-stream composers, not the full `bvd_joint`: the joint's
-# gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, which
-# no CI run can afford (see benchmark/README.md).
+# comment. The components are the observation submodels, the latent process,
+# the single-stream composers and the full `bvd_joint`. The joint's gradient
+# is ~14 ms over 76 parameters behind a ~18 min cold compile, so it is the
+# dominant cost of this workflow; it is carried here rather than in the test
+# suite, which asserts the components differentiate and leaves the joint to
+# this comparison and to the docs build's fits (see benchmark/README.md).
 #
 # Paths-filtered, so it runs only when the differentiated surface or the
 # suite itself changes. It does not run on pushes to `main`, and there is no
@@ -46,7 +48,13 @@ jobs:
   benchmark:
     name: Benchmark (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # The joint's ~18 min cold compile sits on top of a suite that already
+    # ran 42-55 min without it.
+    timeout-minutes: 150
+    env:
+      # Benchmark the full joint, not just the components. This is the only
+      # place its gradient is timed.
+      BVD_BENCH_JOINT: 'true'
     strategy:
       fail-fast: false
       matrix:

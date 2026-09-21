@@ -5,17 +5,18 @@ Each benchmark times one unconstrained log-density evaluation, and one gradient 
 
 ## Why per component
 
-The sampler's cost is the gradient of `bvd_joint`, but that is not a useful benchmark.
+The sampler's cost is the gradient of `bvd_joint`, but on its own that is not a useful benchmark.
 One gradient is about 14 ms over 76 parameters, behind a cold compile of roughly 18 minutes, most of it type inference rather than Mooncake.
-A full-joint benchmark would cost more per CI run than the rest of the test suite and would report a single number that says nothing about where the time went.
+A full-joint number alone says nothing about where the time went.
 
 The components are the units the joint is built from.
 The observation submodels in `src/models/observations.jl` are one unit each, evaluated on a fixed prior draw of the latent trajectory.
 The single-stream composers in `src/models/joint.jl` are the same submodels with the shared infection and onset process attached, so a composer minus the `latent` baseline is the marginal cost that stream's likelihood adds.
 That difference is what guides optimisation: earlier profiling found `onset_reporting` and `treatment_flow` together were about 44% of the three-patch gradient and the spatial structure about 18%.
 
-The joint is available as a component but off by default.
+The joint is a component too, off by default so a local run of the components stays quick.
 `BVD_BENCH_JOINT=true` adds it; expect the compile cost above.
+The benchmark workflow sets it, because this comparison is the only place the joint's gradient is exercised: the test suite asserts the components differentiate and leaves the joint to this and to the fits the docs build runs.
 
 ## Running
 
