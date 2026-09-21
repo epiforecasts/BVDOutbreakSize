@@ -182,19 +182,24 @@ function main(args)
             ## Read the notes first. They validate that the section and the
             ## version agree, and neither file should be written when they
             ## do not.
+            ## Every rewrite is built before any of them is written, so a
+            ## failure in the last one cannot leave the first two on disk and
+            ## the repository half bumped.
             release_notes(news, version)
-            write(NEWS_PATH, open_section(news, version, upcoming))
-            write(PROJECT_PATH, bump_project(project, version, upcoming))
             ## CITATION.cff cites the release just cut, not the version the
             ## repository moves on to, so it takes `version` rather than
             ## `upcoming`. Nothing else was updating it, so it would have
             ## drifted a version further behind with every release.
-            write(
-                CITATION_PATH,
-                bump_citation(
+            written = (
+                NEWS_PATH => open_section(news, version, upcoming),
+                PROJECT_PATH => bump_project(project, version, upcoming),
+                CITATION_PATH => bump_citation(
                     read(CITATION_PATH, String), version, string(today())
-                )
+                ),
             )
+            for (path, text) in written
+                write(path, text)
+            end
             print(upcoming)
         end
     else

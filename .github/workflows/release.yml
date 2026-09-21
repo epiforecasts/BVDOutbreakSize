@@ -49,7 +49,10 @@ jobs:
           COMMENT: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
-          FIRST=$(printf '%s' "$COMMENT" | head -n 1 | tr -d '\r')
+          # Parameter expansion rather than `printf | head`: under
+          # `pipefail`, a comment larger than the pipe buffer makes head exit
+          # first, printf take EPIPE and the step fail.
+          FIRST=$(printf '%s' "${COMMENT%%$'\n'*}" | tr -d '\r')
           if [[ "$FIRST" =~ ^@release[[:space:]]*$ ]]; then
             echo "bump=patch" >> "$GITHUB_OUTPUT"
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -155,18 +158,38 @@ jobs:
             --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           VERDICT=unknown
           if [ -n "$RUN" ]; then
-            VERDICT=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN/jobs" \
-              --jq '[.jobs[] | select(.name == "Check joint convergence")][0].conclusion // "unknown"')
+            # Paginated, and 100 per page. The default 30 is already close to
+            # the run's job count (the fit matrix plus the render and combine
+            # jobs), and once it is passed the convergence job falls off the
+            # first page and the verdict silently reads as unknown.
+            # `tail` rather than `head`, which would take EPIPE under pipefail.
+            VERDICT=$(gh api \
+              "repos/${{ github.repository }}/actions/runs/$RUN/jobs?per_page=100" \
+              --paginate \
+              --jq '.jobs[] | select(.name == "Check joint convergence") | .conclusion' \
+              | tail -n 1)
+            VERDICT=${VERDICT:-unknown}
           fi
           echo "Convergence verdict on the last main build: $VERDICT"
           echo "Convergence verdict: \`$VERDICT\`" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$VERDICT" = "failure" ]; then
+          # `failure` is a judged bad fit. `cancelled` or `timed_out` is a
+          # build that never reached a verdict, which main docs builds have
+          # done before at GitHub's six-hour cap, and says nothing about the
+          # fits either way. Those are different things and the notes say
+          # which. `unknown` stays silent: that is the state before the
+          # convergence job exists at all.
+          BANNER=""
+          case "$VERDICT" in
+            failure)
+              BANNER="> **The fits behind this release did not converge.** The convergence check on the last \`main\` build failed, so the estimates published here should be read with that in mind. The per-parameter diagnostics are on the sensitivity page."
+              ;;
+            cancelled|timed_out)
+              BANNER="> **The fits behind this release were never checked.** The last \`main\` build ended as \`$VERDICT\` before the convergence check ran, so nothing has judged these fits either way."
+              ;;
+          esac
+          if [ -n "$BANNER" ]; then
             {
-              printf '> **The fits behind this release did not converge.**'
-              printf " The convergence check on the last \`main\` build failed,"
-              printf ' so the estimates published here should be read with'
-              printf ' that in mind. The per-parameter diagnostics are on the'
-              printf ' sensitivity page.\n\n'
+              printf '%s\n\n' "$BANNER"
               cat release_notes.md
             } > release_notes.tmp
             mv release_notes.tmp release_notes.md
@@ -252,6 +275,10 @@ jobs:
           - \`CITATION.cff\` moves to \`$VERSION\`, the release just cut, which is the version it cites.
 
           Merge this so the next change has a heading to write under.
+
+          Note that pull requests opened by Actions do not trigger the \`pull_request\` workflows, so this one lands with no checks run. An empty commit or a close-and-reopen starts them.
+
+          This was opened by a bot. Please ping @seabbs for any questions.
           EOF
           gh pr create -R "${{ github.repository }}" \
             --base main --head "$BRANCH" \
