@@ -78,6 +78,18 @@ tasks:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}
 
+  benchmark-compile:
+    desc: >
+      Measure the cold AD-compile cost of each model component, one fresh
+      process each, and save it to compile.json (pass another path to change
+      it). This is the cost `task benchmark` cannot see: Mooncake builds the
+      reverse rule when the log-density function is constructed, which is
+      about 87% of a component's cold build and 969 s of the full joint's
+      1095 s. Set BVD_BENCH_JOINT=true to add the joint.
+    cmds:
+      - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
+      - julia --project=benchmark benchmark/compile.jl {{.CLI_ARGS}}
+
   benchmark-pair:
     desc: >
       Reproduce the CI comparison locally: benchmark two revisions of this

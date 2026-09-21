@@ -10,8 +10,68 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v2.1.0.
 
+### Model
+
+- The `:free` confirmed-positivity link is removed, with
+  `confirmed_positivity_model` and the `positivity_link` keyword. It could
+  not run: `confirmed_cases_model` returns `s_test` and `spec`
+  unconditionally but assigned them only on the composition branch, so
+  selecting the free link raised `UndefVarError`. Every fit used the
+  composition link.
+- The pooled background takes a submodel instead of a flag:
+  `background_re = true` becomes
+  `background_pooling = background_pooling_model`. The option is unchanged
+  and the gradients are identical. A flag reaches the model as a value
+  rather than a type, so both arms were inferred on every build and the
+  resulting union specialised the suspected-case submodel twice.
+
 ### Infrastructure
 
+- The release helper reads a Windows checkout. Its version-heading pattern
+  ended at the line end, which a CRLF file reaches one character late, so
+  `news.md` parsed as a file with no version sections at all and the Windows
+  test cell failed on every push. The bump also rewrote the two lines it
+  touches in `CITATION.cff` with bare newlines, mixing endings in a file it
+  had found consistent.
+- The precompile workload compiles the fit the report runs, rather than a
+  synthetic model shaped like it. The two had drifted: the workload passed
+  `province_increments = missing` where every fit passes a matrix, and left
+  the isolation and treatment histories empty, so the most expensive stream
+  in the model cached nothing. Both now build their keywords from
+  `joint_fit_args`, and a test asserts the two models are the same type.
+  The headline joint's cold build drops from 1095 s to 292 s, of which
+  rule construction is 969 s and 274 s; the gradient itself is unchanged at
+  about 17.4 ms.
+- `task benchmark-compile` reports the cold AD-compile cost per component.
+  The existing suite times steady-state gradients only, which is why an
+  18 minute cold compile went untracked.
+
+- The fit cache key CI restores is the one the fits are keyed on (#739). The
+  Actions key hashed all of `data/`, including the generated scoring tables
+  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
+  rescore commit or a README edit missed the cache and refit every model for
+  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
+  the hashing rule itself would not have invalidated anything. The key is now
+  taken from `fit_content_hash` rather than restated, so there is one list.
+
+- The automatic version increment is gone (#607). It opened a patch-bump pull
+  request on every push to `main` where the version had not changed, which is
+  now both redundant and harmful: `@release` bumps the version as part of
+  cutting a release, and the automatic one moved it without opening a news
+  section, which is what left a merged change with no heading to write under.
+  It could also open a second pull request racing the one `@release` opens,
+  bumping the same field by a different route. It had not run since v1.14.0
+  in any case, wedged behind a stale branch its own guard would not clear.
+  `/version major|minor|patch` on a pull request is unaffected.
+
+- A pull request only builds the report, runs the tests and measures coverage
+  when it changes something they are built from (#776). The fits alone cost
+  hours, and a change to the test suite, the benchmarks or an unrelated
+  workflow produced a site identical to the one on `main`; a change to the
+  analysis pages or the README ran the whole test suite to no purpose. Each
+  workflow decides in a job of its own, so a skipped build says so in its
+  summary rather than leaving no check at all. A push, a tag and a manual run
+  are never gated.
 - A release is cut by commenting `@release` on any issue or pull request
   (#767). The notes are the newest `docs/src/news.md` section, which is what
   they have always been, copied across by hand. The comment tags `main`,

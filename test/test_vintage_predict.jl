@@ -1,43 +1,38 @@
 ## The DRC sitrep streams are proper per-vintage observations scored with
-## `~`, so `predict` replicates them and the joint fits under NUTS without
-## the `check_model = false` escape. These items exercise both.
+## `~`, so `predict` replicates them and no stream leaves a sampled
+## discrete latent. The replication structure does not depend on the draws
+## being a posterior, so these items sample the prior: a NUTS fit here
+## would compile the joint's gradient (~18 min) to assert nothing extra.
+## The joint's convergence is covered by the fits in the docs build.
 
-@testitem "bvd_joint fits under NUTS without check_model=false" tags = [
-    :slow,
-] begin
-    import FlexiChains
-    using BVDOutbreakSize: bvd_joint, nuts_sample
+@testitem "bvd_joint leaves no sampled discrete latent" begin
+    using Turing: DynamicPPL
+    using BVDOutbreakSize: bvd_joint
 
     n = 40
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
     rh = (; days = [13, 18, 40], counts = [340, 516, 905])
     ch = (; days = [13, 18, 40], counts = [9, 17, 27])
-    ## Default check_model = true: a passing fit proves no stream leaves a
-    ## sampled discrete latent.
-    chn = nuts_sample(
-        bvd_joint(
-            n, 2, 18, 905, 0, 27, 50;
-            confirmed_deaths = 5,
-            deaths_history = dh,
-            reported_history = rh,
-            confirmed_history = ch,
-            lab_history = (; days = [18, 40], counts = [30, 50]),
-            breakpoint = 30
-        );
-        samples = 12, chains = 1, progress = false
+    m = bvd_joint(
+        n, 2, 18, 905, 0, 27, 50;
+        confirmed_deaths = 5,
+        deaths_history = dh,
+        reported_history = rh,
+        confirmed_history = ch,
+        lab_history = (; days = [18, 40], counts = [30, 50]),
+        breakpoint = 30
     )
-    C_T = vec(Array(chn[:C_T]))
-    @test length(C_T) == 12
-    @test all(isfinite, C_T)
-    @test all(C_T .> 0)
+    ## The property `nuts_sample`'s default `check_model = true` enforces,
+    ## asserted directly rather than through a fit.
+    @test DynamicPPL.check_model(
+        m; error_on_failure = false, fail_if_discrete = true
+    )
 end
 
-@testitem "predict replicates the per-vintage DRC streams" tags = [
-    :slow,
-] begin
+@testitem "predict replicates the per-vintage DRC streams" begin
     import FlexiChains
-    using BVDOutbreakSize: bvd_joint, nuts_sample, confirmed_positivity_windows
-    using Turing: predict, @varname
+    using BVDOutbreakSize: bvd_joint, confirmed_positivity_windows
+    using Turing: predict, sample, Prior, @varname
 
     n = 40
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
@@ -53,7 +48,7 @@ end
         deaths_history = dh, reported_history = rh, confirmed_history = ch,
         lab_history = lh, suspected_daily_history = sdh, breakpoint = 30
     )
-    chn = nuts_sample(fitted; samples = 12, chains = 1, progress = false)
+    chn = sample(fitted, Prior(), 12; progress = false)
 
     ## Keep the reported and death vintage day grids but drop their counts,
     ## so their increments are resampled by `predict`. The confirmed early
@@ -116,12 +111,10 @@ end
     end
 end
 
-@testitem "predict replicates late windows incl 24h-anchored days" tags = [
-    :slow,
-] begin
+@testitem "predict replicates late windows incl 24h-anchored days" begin
     import FlexiChains
-    using BVDOutbreakSize: bvd_joint, nuts_sample, confirmed_positivity_windows
-    using Turing: predict, @varname
+    using BVDOutbreakSize: bvd_joint, confirmed_positivity_windows
+    using Turing: predict, sample, Prior, @varname
 
     ## A scenario with confirmed vintages after the last cumulative
     ## laboratory date (28) — so there are late windows — one of which (35)
@@ -141,7 +134,7 @@ end
         deaths_history = dh, reported_history = rh, confirmed_history = ch,
         lab_history = lh, lab_daily_history = ldh, breakpoint = 30
     )
-    chn = nuts_sample(fitted; samples = 12, chains = 1, progress = false)
+    chn = sample(fitted, Prior(), 12; progress = false)
 
     _days_only(h) = (; days = h.days, counts = Int[])
     gen = bvd_joint(

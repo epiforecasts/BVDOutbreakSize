@@ -49,16 +49,6 @@ end
     @test w1.early_increments == [4]
 end
 
-@testitem "confirmed_positivity_model draws per-window probabilities" begin
-    using BVDOutbreakSize: confirmed_positivity_model
-    using Random: seed!
-    seed!(1)
-    s = confirmed_positivity_model(5)()
-    @test length(s.p_pos) == 5
-    @test all(0 .<= s.p_pos .<= 1)
-    @test s.σ_q >= 0
-end
-
 @testitem "confirmed_deaths_model bounds the confirmation probability" begin
     using BVDOutbreakSize: confirmed_deaths_model
     using Turing: returned

@@ -92,6 +92,15 @@ To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or t
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
 
+On a pull request each of those runs only when the change touches something it is built from.
+The test suite and coverage need `src/`, `ext/`, `test/`, `data/`, `Project.toml`, and `docs/fits/` and `scripts/` because test items include files from both.
+The report needs `src/`, `ext/`, `data/`, `docs/`, `scripts/`, `README.md` and `Project.toml`.
+A workflow that skips says so in the summary of its `changes` job, so a skipped build is visible rather than being an absent check.
+A push to `main`, a tag and a manual run are never gated.
+
+The lists live in each workflow's `changes` job and are checked by `.github/actions/changed-paths/patterns_test.sh`, which pre-commit runs whenever one of them is edited.
+Widen the list when something new feeds a build: a pattern that is too narrow skips the job that would have caught the change, and nothing reports that as a failure.
+
 ## Releases
 
 A release is cut by commenting `@release` on any issue or pull request.

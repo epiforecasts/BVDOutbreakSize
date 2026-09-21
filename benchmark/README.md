@@ -5,17 +5,18 @@ Each benchmark times one unconstrained log-density evaluation, and one gradient 
 
 ## Why per component
 
-The sampler's cost is the gradient of `bvd_joint`, but that is not a useful benchmark.
+The sampler's cost is the gradient of `bvd_joint`, but on its own that is not a useful benchmark.
 One gradient is about 14 ms over 76 parameters, behind a cold compile of roughly 18 minutes, most of it type inference rather than Mooncake.
-A full-joint benchmark would cost more per CI run than the rest of the test suite and would report a single number that says nothing about where the time went.
+A full-joint number alone says nothing about where the time went.
 
 The components are the units the joint is built from.
 The observation submodels in `src/models/observations.jl` are one unit each, evaluated on a fixed prior draw of the latent trajectory.
 The single-stream composers in `src/models/joint.jl` are the same submodels with the shared infection and onset process attached, so a composer minus the `latent` baseline is the marginal cost that stream's likelihood adds.
 That difference is what guides optimisation: earlier profiling found `onset_reporting` and `treatment_flow` together were about 44% of the three-patch gradient and the spatial structure about 18%.
 
-The joint is available as a component but off by default.
+The joint is a component too, off by default so a local run of the components stays quick.
 `BVD_BENCH_JOINT=true` adds it; expect the compile cost above.
+The benchmark workflow sets it, because this comparison is the only place the joint's gradient is exercised: the test suite asserts the components differentiate and leaves the joint to this and to the fits the docs build runs.
 
 ## Why both revisions on one machine
 
@@ -102,6 +103,23 @@ task benchmark-pair -- v2.0.0 HEAD    # any two revisions
 It checks the two revisions out under `.benchmark-worktrees/` and writes both arms' results and the rendered comment to `benchmark-results/`.
 Read it only from a quiet machine.
 
+## Compile cost
+
+`task benchmark` and `task benchmark-pair` time steady-state gradients.
+Neither can see the cold compile, because it is paid once per process and before any gradient is taken: Mooncake builds the reverse rule when the `LogDensityFunction` is constructed.
+Measured per component on the 40-day grid, rule construction is roughly 87% of a cold build, against a ~38 s floor any model pays.
+The full `bvd_joint` spends 969 s of its 1095 s cold build there.
+
+`task benchmark-compile` measures it, one fresh process per component, and reports the primal build and the rule build separately.
+The fresh process per component is what keeps the fixed floor off whichever component would otherwise have run first.
+
+```bash
+task benchmark-compile                      # compile.json
+BVD_BENCH_JOINT=true task benchmark-compile # plus the joint, ~18 min
+```
+
+The saved JSON carries each component's gradient vector as well as its timings, so two runs can be checked for an unchanged gradient rather than only a changed time.
+
 ## Structure
 
 ```
@@ -154,6 +172,8 @@ They also measure pure helpers below the component level this suite reports.
 | `run.jl` | Times one revision once, for local profiling |
 | `ci/run_pair.jl` | Times two worktrees in one process under AirspeedVelocity |
 | `ci/comment.jl` | Turns the two results files into the PR comment |
+| `compile.jl` | Cold AD-compile cost per component, a process each |
+| `compile_one.jl` | One component's cold compile, run by `compile.jl` |
 
 `ci/Project.toml` carries the harness only, with no model dependency.
 `Project.toml` is the environment the suite itself runs in, and is taken from each arm's own worktree.

@@ -898,20 +898,6 @@ cfr_prior_fig #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: confirmed_positivity_model</summary>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, CodeTracking, Markdown
-#md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.confirmed_positivity_model(5)), "\n```"))
-#md # ```
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
 #md # ```
 
@@ -1982,8 +1968,7 @@ prior_chn = let
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
-        background_re = true,
-        confirmed_positivity_link = :composition,
+        background_pooling = background_pooling_model,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days
     )

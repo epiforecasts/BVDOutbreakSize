@@ -42,9 +42,12 @@ if BENCH_ENZYME
     @eval using Enzyme
 end
 
-# The full `bvd_joint` is off by default: one gradient is ~14 ms over 76
-# parameters behind a cold compile of ~18 min under Mooncake, which no CI
-# run can afford. `BVD_BENCH_JOINT=true` adds it for a local investigation.
+# The full `bvd_joint`: one gradient is ~14 ms over 76 parameters behind a
+# cold compile of ~18 min under Mooncake. Off by default so a local run of
+# the component suite stays quick; the benchmark workflow sets
+# `BVD_BENCH_JOINT=true`, and that comparison is the only place the joint's
+# gradient is timed. The test suite asserts the components differentiate and
+# leaves the joint to this and to the docs build's fits.
 const BENCH_JOINT = lowercase(get(ENV, "BVD_BENCH_JOINT", "false")) == "true"
 
 const SCENARIOS = ADFixtures.scenarios(; joint = BENCH_JOINT)

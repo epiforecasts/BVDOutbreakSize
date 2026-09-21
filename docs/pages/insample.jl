@@ -109,8 +109,7 @@ pp_joint = predict(
             increments = missing,
         ),
         breakpoint = _BREAKPOINT,
-        background_re = true,
-        confirmed_positivity_link = :composition,
+        background_pooling = background_pooling_model,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days,
         ## The generator must be the model that was fitted. `n_patches`

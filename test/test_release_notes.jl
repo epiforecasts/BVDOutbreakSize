@@ -110,6 +110,58 @@ end
     )
 end
 
+@testitem "CRLF files are read the same as LF ones" begin
+    include(joinpath(@__DIR__, "..", "scripts", "release_notes.jl"))
+
+    ## A Windows checkout has CRLF line endings, and the repository carries
+    ## no `.gitattributes` to stop that. Every function here matches on line
+    ## structure, so a stray `\r` before the line end silently found no
+    ## version sections at all and the release read as a file with no notes.
+    lf = """
+    # News
+
+    ## v2.1.1
+
+    Changes since v2.1.0.
+
+    ### Infrastructure
+
+    - A change (#1).
+
+    ## v2.1.0
+
+    Changes since v2.0.0.
+    """
+    crlf = replace(lf, "\n" => "\r\n")
+
+    @test [s.version for s in news_sections(crlf)] ==
+        [s.version for s in news_sections(lf)]
+    ## The body is a slice of the text it was given, so CRLF in means CRLF
+    ## out. That is right: the notes go to the release verbatim. What has to
+    ## hold is that the same content is found, not that the bytes match.
+    @test replace(release_notes(crlf, "2.1.1"), "\r\n" => "\n") ==
+        release_notes(lf, "2.1.1")
+    @test occursin("- A change (#1).", release_notes(crlf, "2.1.1"))
+
+    opened = open_section(crlf, "2.1.1", "2.1.2")
+    @test [s.version for s in news_sections(opened)] ==
+        ["2.1.2", "2.1.1", "2.1.0"]
+
+    ## The bump leaves the line endings it found rather than rewriting the
+    ## line as a bare newline and mixing the two.
+    cff = replace(
+        "cff-version: 1.2.0\nversion: 2.1.0\ndate-released: \"2026-09-17\"\n",
+        "\n" => "\r\n"
+    )
+    bumped = bump_citation(cff, "2.1.1", "2026-09-21")
+    @test occursin("version: 2.1.1\r\n", bumped)
+    @test occursin("date-released: \"2026-09-21\"\r\n", bumped)
+    @test !occursin("version: 2.1.1\n\n", bumped)
+
+    toml = replace("name = \"X\"\nversion = \"2.1.0\"\n", "\n" => "\r\n")
+    @test project_version(bump_project(toml, "2.1.0", "2.1.1")) == "2.1.1"
+end
+
 @testitem "the shipped news.md, Project.toml and CITATION.cff agree" begin
     include(joinpath(@__DIR__, "..", "scripts", "release_notes.jl"))
 
