@@ -23,7 +23,7 @@ This page covers how the project is laid out, how to run it, and the conventions
   `sensitivity.jl` carries the forecast validation and the comparison/sensitivity analyses.
   Both load their fits through the shared `docs/examples/_setup.jl`.
   `analysis.jl` is the main artifact.
-- `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), and `list.jl` (print fit ids for the CI matrix).
+- `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), `list.jl` (print fit ids for the CI matrix), and `convergence.jl` with `check_convergence.jl` (the convergence gate, `task check-convergence`).
 - `docs/execute.jl` — runs one Literate page against the fit cache and writes its markdown, figures and half of `output/` (used by `task docs-main` and `task docs-sensitivity`).
 - `docs/make.jl` — the Vitepress combine step: copies `README.md` to `index.md`, assembles the site from the already-rendered markdown, and builds the bibliography (used by `task docs`).
 - `data/observations.toml` — single source of truth for observation data (case and death counts, traveller volumes, sources).
@@ -83,6 +83,16 @@ Refit rather than debugging a `KeyError` on a stale chain.
 To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or temporarily comment out the others in `runtests.jl`.
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
+
+## Releases
+
+A release is cut by commenting `@release` on any issue or pull request.
+`.github/workflows/release.yml` tags `main`, publishes a GitHub release whose notes are the newest section of `docs/src/news.md`, and opens a pull request bumping the version and starting the next section.
+`@release minor` and `@release major` choose the size of that bump; plain `@release` is a patch.
+
+The version being released is the one already in `Project.toml`, and the newest news section must match it.
+Write the entry for a change under the open section at the top of `news.md` as part of the change itself.
+`task release-notes` prints what would be published, so the notes can be read before anything is cut.
 
 ## Model architecture
 

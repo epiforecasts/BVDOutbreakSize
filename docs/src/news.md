@@ -6,6 +6,29 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v2.1.1
+
+Changes since v2.1.0.
+
+### Infrastructure
+
+- A release is cut by commenting `@release` on any issue or pull request
+  (#767). The notes are the newest `docs/src/news.md` section, which is what
+  they have always been, copied across by hand. The comment tags `main`,
+  publishes the release and opens a pull request bumping the version and
+  starting the next section, so the following change has a heading to write
+  under. `@release minor` and `@release major` choose the size of that bump.
+- `scripts/release_notes.jl` holds the text handling behind it and runs
+  locally through `task release-notes`, so the notes can be read before
+  anything is published.
+- Pushing a version tag starts a second documentation build of the commit
+  that was just pushed to `main`. The two builds used to run at the same
+  time and each refit every model; for v2.1.0 the tag build's joint fit ran
+  past the job's time limit, so no `results-v2.1.0` release was published.
+  The tag build now waits for the `main` build to finish and reuses its
+  cached fits (#765). Each fit job's summary also names the runner's CPU,
+  because the same fit runs up to half again as long on some runners.
+
 ## v2.1.0
 
 Changes since v2.0.0.
@@ -96,6 +119,14 @@ BenchmarkTools runs a warmup evaluation before it samples and that warmup perfor
 Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
 - The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
 `key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
+- The documentation build fails when the headline joint fit has not converged,
+  and says so in a comment on the pull request that is edited in place on each
+  build (#764). The verdict carries the headline diagnostics, which thresholds
+  were breached and the worst-mixing parameters and divergence locations the
+  sensitivity report breaks down in full. It is a leaf job, so the preview
+  still builds and still comments: the pages are how the failure is diagnosed.
+  v2.0.0 was published with a joint fit that had not converged and nothing in
+  the build said so.
 - A push to `main` no longer cancels the run before it in the documentation,
   test and coverage workflows; only pull-request runs are superseded (#749).
   This is why the published site and results release went stale on 17
