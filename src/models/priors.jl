@@ -953,10 +953,9 @@ from it. Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
-Severity-enrichment prior for the composition-linked confirmed positivity
-(the default `positivity = nothing` in [`confirmed_cases_model`](@ref)). In
-that mode the per-window tested BVD share is not a free random effect. It
-is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
+Severity-enrichment prior for the confirmed positivity in
+[`confirmed_cases_model`](@ref). The per-window tested BVD share is the
+suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
 λ_bg_v)` over each laboratory window, upsampled by a severity enrichment
 that decays as testing widens:
 
