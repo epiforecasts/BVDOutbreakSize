@@ -5,6 +5,10 @@
 #
 # Signatures are restricted to `Array{<:IEEEFloat}`, what every call site
 # passes. Anything else falls through to Mooncake's derived rule.
+#
+# These earn their place only while the backend's own derivation is worse.
+# `task benchmark-rules` times both arms; if the gap has closed after a
+# backend upgrade, delete this file rather than maintain it.
 
 using Mooncake: CoDual, NoRData, primal, tangent, zero_fcodual
 
