@@ -93,6 +93,10 @@ The existing suite times steady-state gradients only, which is why an 18 minute 
 Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
 - The Literate report pages move from `docs/examples/` to `docs/pages/`, and
   `scripts/run.jl` runs all of them rather than the two it named (#782).
+- The offline `analysis.html` resolves its pages by path rather than by
+  basename (#807). Two pages render to `national.html`, the national
+  estimates and the forecasts, and directory order decided which one the
+  release asset carried.
 - The documentation build no longer runs for changes it cannot see (#805).
   The gate named `ext/` and `scripts/` as whole directories; it now names the one
   extension the build loads and the three scripts it runs, so a change to the

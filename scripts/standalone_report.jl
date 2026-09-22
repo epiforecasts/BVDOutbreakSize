@@ -56,11 +56,30 @@ function embed_fonts(css::AbstractString, assets_dir::AbstractString)
     )
 end
 
-function find_one(root::AbstractString, name::AbstractString)
+## Locate the one file under `root` whose trailing path components are
+## `suffix`. The suffix is matched component by component rather than as a
+## basename, and more than one match is an error rather than a choice,
+## because two pages render to `national.html` (the national estimates and
+## the forecasts). Taking whichever `walkdir` reached first would publish
+## the wrong page as `analysis.html`, and would do it silently, since both
+## are valid pages that lift cleanly.
+function find_one(root::AbstractString, suffix::AbstractString)
+    want = splitpath(suffix)
+    hits = String[]
     for (dir, _, files) in walkdir(root)
-        name in files && return joinpath(dir, name)
+        for f in files
+            parts = splitpath(joinpath(dir, f))
+            length(parts) >= length(want) &&
+                parts[(end - length(want) + 1):end] == want &&
+                push!(hits, joinpath(dir, f))
+        end
     end
-    error("$name not found under $root")
+    isempty(hits) && error("$suffix not found under $root")
+    length(hits) == 1 || error(
+        "$suffix matches more than one file under $root: " *
+            join(sort(hits), ", ")
+    )
+    return only(hits)
 end
 
 function build_standalone(build_dir::AbstractString, out_file::AbstractString)
@@ -68,7 +87,7 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     ## copy carries the model as well as the results. The published asset
     ## keeps the name `analysis.html` so the release download link does not
     ## move.
-    page = find_one(build_dir, "national.html")
+    page = find_one(build_dir, joinpath("estimates", "national.html"))
     methods_page = find_one(build_dir, "methods.html")
     assets = joinpath(dirname(page), "assets")
     html = read(page, String)
