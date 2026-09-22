@@ -74,7 +74,7 @@ This moves the non-BVD death background, so fitted values change.
   It keeps the "Last updated" and "Data as of" dates at the top.
   The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
   The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
-- The summary dashboard opens with the abstract, read from `README.md`, and a line pointing to the rest of the report and the Methods page.
+- The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
 

@@ -9,8 +9,10 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
-The other pages of the report give the detail behind each result, and the [Methods](../methods.md) page describes the model.
-Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
+See the [National](national.md) and [Provinces](province.md) pages for the estimates at each level.
+See [Forecasts](../forecasts/national.md) for the week ahead.
+See [In-sample](../evaluation/insample.md) for how the model fits the data and [Forecast](../evaluation/forecast.md) evaluation for how past forecasts scored.
+See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
 
