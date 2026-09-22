@@ -18,6 +18,54 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 # ## National
 
+# ### Prior predictive check
+#
+# Before any observation is taken into account, what does the prior imply about replicated exports, deaths and reported cases?
+# Draws from the prior over the unobserved data should bracket the observed counts.
+
+# The draws come from the shared setup, with every observation withheld, so
+# the national page overlays the same ones on each posterior.
+
+#md # ```@raw html
+#md # <details><summary>Summarise the joint prior</summary>
+#md # ```
+
+prior_C_table = summary_table(prior_chn, [:C_T]; digits = 0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Show prior summary table</summary>
+#md # ```
+
+prior_C_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Pair plot of the prior over the latent quantities.
+
+#md # ```@raw html
+#md # <details><summary>Prior pair plot</summary>
+#md # ```
+
+prior_pair_fig = plot_pair(
+    prior_chn,
+    [
+        :C_T, :R_T, :r, :T, :CFR, :k,
+        :p_drc, :p_uganda,
+    ]
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+prior_pair_fig #hide
+
 # ### Posterior predictive checks
 #
 # A posterior predictive check draws replicated observations from the fitted joint model and compares them to the observed counts.

@@ -64,9 +64,12 @@ function find_one(root::AbstractString, name::AbstractString)
 end
 
 function build_standalone(build_dir::AbstractString, out_file::AbstractString)
-    ## The national estimates page. The published asset keeps the name
-    ## `analysis.html` so the release download link does not move.
+    ## The methods and the national estimates, in that order, so the offline
+    ## copy carries the model as well as the results. The published asset
+    ## keeps the name `analysis.html` so the release download link does not
+    ## move.
     page = find_one(build_dir, "national.html")
+    methods_page = find_one(build_dir, "methods.html")
     assets = joinpath(dirname(page), "assets")
     html = read(page, String)
 
@@ -74,11 +77,18 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
         m === nothing ? "Analysis" : m.captures[1]
     end
 
-    content = extract_balanced_div(html, "vp-doc _")
-    # Rewrite same-page cross-references to bare anchors so the in-page
-    # jump links work in the standalone file rather than navigating to
-    # the hosted site.
-    content = replace(content, r"/BVDOutbreakSize/[^\"#]*national#" => "#")
+    content = join(
+        (
+            extract_balanced_div(read(methods_page, String), "vp-doc _"),
+            extract_balanced_div(html, "vp-doc _"),
+        ), "\n"
+    )
+    # Rewrite cross-references to either of the two pages in this file as
+    # bare anchors, so the in-page jump links work in the standalone file
+    # rather than navigating to the hosted site.
+    content = replace(
+        content, r"/BVDOutbreakSize/[^\"#]*(?:national|methods)#" => "#"
+    )
     # Any remaining root-relative site links point at other doc pages
     # (citations resolve to the references page, etc.) that are not part
     # of this single file. Absolutise them against the hosted site so
