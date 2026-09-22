@@ -224,7 +224,7 @@ MarkdownTable(vintage_table) #hide
 # The table below shows which parameters inform each observation submodel.
 # The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
 # The *confirmed* positives are scored as a Binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
-# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing fraction and a death-pool composition positivity built from the same assay:
+# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -241,7 +241,7 @@ MarkdownTable(vintage_table) #hide
 # | Onset-to-hospitalisation delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● | ● |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
-# | Death testing fraction $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
+# | Death testing intensity $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
 # | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  | ● | ● | ● | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
