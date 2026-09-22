@@ -209,11 +209,10 @@ row per draw and columns:
   chain carries the fitted reporting hazard. `onset_grid_start` is the
   hazard's own grid start ([`onset_hazard_grid_start`](@ref));
   `onset_alpha_grid_start` is the ascertainment walk's, always
-  `minimum(onset_days)`, and defaults to `onset_grid_start` (correct only
-  when the two coincide). Of them only `onset_reports_new` is archived and
-  scored, since it is the one the triangle gives an observation for. The
-  model cut-off grid day goes in as `grid_n` rather than `n`, which is
-  already the draw count here.
+  `minimum(onset_days)`, and defaults to `onset_grid_start`. Of them only
+  `onset_reports_new` is archived and scored, since it is the one the
+  triangle gives an observation for. The model cut-off grid day goes in as
+  `grid_n` rather than `n`, which is already the draw count here.
 
 Reads `:r`, `:T`, `:expected_reports_T`, `:expected_deaths_T`,
 `:expected_infections_T`, `:R_T`, the per-stream dispersions (`:k_cases`,
@@ -553,30 +552,27 @@ Columns, all per draw:
     `obs_value` (the triangle's own cumulative total at the cut-off) is
     supplied, so the projection can be plotted on the observed scale.
 
-`onset_reports_new` is replicated through the stream's own observation model
-rather than a negative binomial. The increment is scored under
+`onset_reports_new` is replicated through the stream's own observation
+model rather than a negative binomial: scored under
 [`onset_report_scale`](@ref)'s scale (counting variation, digitisation
-noise, per-scan level error), and perturbed by a Student-t with the same
-`ν` the likelihood uses. The digitisation-noise term uses the fitted noise
-scale `τ` of the chain's most recent surviving snapshot for both reads,
-since the projected snapshot has not happened yet and so has no `τ` of its
-own. The scale is applied once to the whole projected total, so its
-scan-level term takes the fitted shared per-scan coefficient `σ_scan`
-rather than the whole measured per-bar error. At a total of a couple of
-thousand cases the per-scan level term dominates by an order of magnitude,
-so the interval on a weekly increment is mostly digitisation error rather
-than epidemic uncertainty. The forecast is therefore more useful as a check
-that the fitted delay and ascertainment reproduce the next vintage than as
-a case-count prediction.
+noise, per-scan level error) and perturbed by a Student-t with the same
+`ν` the likelihood uses. The digitisation-noise term uses the fitted `τ`
+of the chain's most recent surviving snapshot for both reads, since the
+projected snapshot has no `τ` of its own yet. The scale is applied once to
+the whole projected total, so its scan-level term takes the fitted shared
+coefficient `σ_scan` rather than the whole per-bar error; at a total of a
+couple of thousand cases it dominates by an order of magnitude, so the
+interval is mostly digitisation error rather than epidemic uncertainty.
+The forecast is therefore more a check that the fitted delay and
+ascertainment reproduce the next vintage than a case-count prediction.
 
 `grid_start` is the hazard's own grid start
 ([`onset_hazard_grid_start`](@ref)) and `grid_end` the fitted triangle's
 last report day (see [`reconstruct_onset_hazard`](@ref)); `alpha_grid_start`
-is the ascertainment walk's own start, always `minimum(onset_days)`, and
-defaults to `grid_start` (correct only when the two coincide). `n` is the
-model cut-off grid day and `breakpoint` the intervention breakpoint, needed
-only when the chain is a single-stream fit that does not carry `R_T`/`r`
-(see [`forecast_stream`](@ref)).
+is the ascertainment walk's own start, always `minimum(onset_days)`,
+defaulting to `grid_start`. `n` is the model cut-off grid day and
+`breakpoint` the intervention breakpoint, needed only when the chain is a
+single-stream fit without `R_T`/`r` (see [`forecast_stream`](@ref)).
 """
 function forecast_onsets(
         chn;
@@ -616,11 +612,9 @@ function forecast_onsets(
     ## scale here. A chain that does not sample it falls back to `scan_frac`.
     σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
         _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
-    ## Fitted digitisation-noise scale of the most recent surviving
-    ## snapshot, used for both reads of the projected increment (the
-    ## snapshot it would be checked against has not happened yet, so it has
-    ## no `τ` of its own). A chain that does not sample it falls back to the
-    ## walk's prior median of 3 counts.
+    ## Fitted noise scale of the most recent surviving snapshot, used for
+    ## both reads of the projected increment, which has no `τ` of its own
+    ## yet. Falls back to the walk's prior median of 3 counts.
     τ_last = _has_key(chn, :onset_noise_scale) ?
         [last(collect(v)) for v in vec(collect(chn[:onset_noise_scale]))] :
         nothing
@@ -1342,9 +1336,8 @@ That needs the fitted triangle's own onset/report-day grid, so
 `onset_grid_start` (the hazard's own grid start,
 [`onset_hazard_grid_start`](@ref)) and `onset_grid_end` must be passed for
 this stream; `onset_alpha_grid_start` is the ascertainment walk's own start
-(always `minimum(onset_days)`) and defaults to `onset_grid_start`, correct
-only when the two coincide. Of [`forecast_onsets`](@ref)'s quantities this
-returns only the scored one.
+(always `minimum(onset_days)`), defaulting to `onset_grid_start`. Of
+[`forecast_onsets`](@ref)'s quantities this returns only the scored one.
 
 `obs_value` is the stream's observed count at the cut-off, the cumulative
 total for the incident streams or the observed occupancy for

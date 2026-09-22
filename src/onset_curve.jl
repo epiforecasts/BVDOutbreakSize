@@ -132,20 +132,18 @@ each onset date `u` both figures print, one increment cell is built:
 y = confirmed_total(s, u) - confirmed_total(s-1, u)
 ```
 
-The stream has two components. Between-vintage increments are the
-nowcasting half, corrections that right truncation
-([`onset_report_cdf`](@ref)) undoes through the delay hazard and calendar
-walk. The first surviving vintage's own printed extent, differenced
-against a virtual empty predecessor rather than dropped (below), is the
-second: a complete but noisy curve of `alpha(u) · onsets(u)` running back
-to the start of the digitised window (late April in the current data),
-anchoring the ascertainment level in a way corrections alone cannot.
+The stream has two components: between-vintage increments (corrections
+that right truncation, [`onset_report_cdf`](@ref), undoes through the
+delay hazard and calendar walk) and the first surviving vintage's own
+printed extent, differenced against a virtual empty predecessor (below).
+The second gives a noisy `alpha(u) · onsets(u)` curve back to the start of
+the digitised window (late April in the current data), anchoring
+ascertainment in a way corrections alone cannot.
 
 Every printed onset date both vintages of a pair cover is scored:
 [`onset_reporting_model`](@ref) fits a per-snapshot noise scale on its own
-report-date random walk, so a settled increment cell (true value ~0) still
-carries information, about that scale, rather than needing to be dropped to
-avoid diluting the likelihood with near-zero signal.
+report-date walk, so a settled cell (true value ~0) still carries
+information about that scale.
 
 The window is clipped to the onset dates both vintages' figures actually
 print. Each block has its own printed extent, its earliest to latest
@@ -189,9 +187,8 @@ increment for the fourth) ready for [`onset_reporting_model`](@ref).
 by each surviving vintage, keyed on its report day, in the same
 `(days, counts)` shape every other stream's history carries. They are
 built from every printed bar of a vintage, not from the scored cells,
-which now cover the same window in practice but are conceptually distinct
-(a future vintage with a much wider extent than its predecessor would
-still score only the pair's shared coverage). `last_total` is the final
+which can cover a narrower window (an asymmetric vintage pair scores only
+their shared coverage). `last_total` is the final
 entry of `total_counts`, or `missing` when no vintage survives.
 
 The per-vintage totals are not monotone across vintages. The roughly 4%
@@ -273,9 +270,9 @@ function load_onset_curve(
         end
     end
     ## Per-vintage cumulative confirmed total, over every printed bar rather
-    ## than the scored cells: a future vintage pair with an asymmetric
-    ## extent would score only their shared coverage, a rolling partial sum
-    ## rather than the total the figure reports.
+    ## than the scored cells: an asymmetric vintage pair scores only their
+    ## shared coverage, a rolling partial sum rather than the total the
+    ## figure reports.
     total_days = [_idx(snap.report_date) for snap in snaps]
     total_counts = [sum(values(snap.onsets)) for snap in snaps]
     return (;
@@ -289,21 +286,17 @@ end
 
 Report-date grid day the reporting-delay calendar walk `γ`
 ([`onset_report_hazard_model`](@ref)) starts from: bounded below by the
-earliest scored onset date (the walk never predates it) but otherwise
-pulled forward to one delay support's width before the earliest report day,
-`max(minimum(onset_days), minimum(report_days) - D + 1, 1)`. A knot further
-back than that would carry weekly steps over onset dates no scored cell can
-reach, widening the walk for no identifying cells. Returns `1` for an empty
-`onset_days`.
+earliest scored onset date, otherwise pulled forward to one delay
+support's width before the earliest report day,
+`max(minimum(onset_days), minimum(report_days) - D + 1, 1)`. Returns `1`
+for an empty `onset_days`.
 
-[`onset_reporting_model`](@ref) uses this internally to build its own
-`γ`. Every caller that reconstructs the fitted hazard from outside the
-model (`reconstruct_onset_hazard`, `forecast_onsets`) must use the exact
-same rule, or its rebuilt `γ` will disagree in length with the chain's own
-non-centred walk innovations. `alpha`'s own grid
-([`onset_ascertainment_model`](@ref)) is unaffected and always starts at
-`minimum(onset_days)`, so it is not this function's concern. Pure,
-top-level.
+[`onset_reporting_model`](@ref) uses this to build its own `γ`. Every
+caller that reconstructs the fitted hazard outside the model
+(`reconstruct_onset_hazard`, `forecast_onsets`) must use the same rule, or
+its rebuilt `γ` disagrees in length with the chain's walk innovations.
+`alpha`'s own grid ([`onset_ascertainment_model`](@ref)) always starts at
+`minimum(onset_days)` and is unaffected. Pure, top-level.
 """
 function onset_hazard_grid_start(
         onset_days::AbstractVector{<:Integer},

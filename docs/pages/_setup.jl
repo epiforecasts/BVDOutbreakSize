@@ -348,11 +348,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
             _onset_grid_start
         )
     ## The reporting-delay calendar walk's own grid start
-    ## (`onset_hazard_grid_start`), which the hazard fits from rather than
-    ## `_onset_grid_start`: the two agree only when the surveillance window
-    ## is short relative to the delay support `D`. Callers reconstructing
-    ## the fitted hazard (`reconstruct_onset_hazard`, `forecast_onsets`)
-    ## need this one; callers indexing `alpha` need `_onset_grid_start`.
+    ## (`onset_hazard_grid_start`), distinct from `_onset_grid_start`.
+    ## Callers reconstructing the fitted hazard (`reconstruct_onset_hazard`,
+    ## `forecast_onsets`) need this one; callers indexing `alpha` need
+    ## `_onset_grid_start`.
     _onset_hazard_grid_start = onset_hazard_grid_start(
         obs.onset_curve_history.onset_days,
         obs.onset_curve_history.report_days

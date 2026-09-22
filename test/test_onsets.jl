@@ -288,9 +288,9 @@ end
 
 @testitem "load_onset_curve: every printed date is scored, not a trailing window" begin
     ## A synthetic 3-vintage triangle with wide printed extents (58-68
-    ## days), wide enough that the old trailing 28-day window would have
-    ## dropped most of the settled early dates. Every printed date both
-    ## vintages of a pair cover is now scored.
+    ## days), wide enough that a trailing 28-day window would drop most of
+    ## the settled early dates. Every printed date both vintages of a pair
+    ## cover is scored.
     using BVDOutbreakSize: load_onset_curve, ONSET_REPORT_MAX_DELAY
     using Dates: Date, Day
 
@@ -326,11 +326,11 @@ end
 end
 
 @testitem "onset_report_moments: full coverage agrees with the old window on shared cells" begin
-    ## The trailing 28-day window `load_onset_curve` used to apply is now a
-    ## strict subset of what it scores. `onset_report_moments` is a pure
-    ## per-cell function, so its means and levels must agree exactly on the
-    ## cells the old window also covered, and every added cell whose two
-    ## reads are both beyond the delay support scores a mean of exactly 0.
+    ## A trailing 28-day window is a strict subset of what `load_onset_curve`
+    ## scores. `onset_report_moments` is a pure per-cell function, so its
+    ## means and levels must agree exactly on the cells that window covers,
+    ## and every added cell whose two reads are both beyond the delay
+    ## support scores a mean of exactly 0.
     using BVDOutbreakSize: load_onset_curve, onset_report_moments,
         ONSET_REPORT_MAX_DELAY
     using Dates: Date, Day
@@ -738,13 +738,12 @@ end
 end
 
 @testitem "load_onset_curve: the archive's first snapshot covers one cell per printed bar" begin
-    ## The seeding day sits before the genetic TMRCA bound (mid-March) and
-    ## the earliest digitised onset date is in late April, so every scored
-    ## cell should sit inside the 1-based grid; pins that invariant rather
-    ## than assuming it. Also pins that the first surviving vintage (scored
-    ## as levels against the virtual empty predecessor, the second of the
-    ## stream's two components, see `onset_reporting_model`) gets exactly
-    ## one cell per onset date in its own printed extent.
+    ## The seeding day sits before the genetic TMRCA bound and the earliest
+    ## digitised onset date is in late April, so every scored cell sits
+    ## inside the 1-based grid. Also pins that the first surviving vintage
+    ## (scored as levels against the virtual empty predecessor, see
+    ## `onset_reporting_model`) gets exactly one cell per onset date in its
+    ## own printed extent.
     using BVDOutbreakSize: BVDOutbreakSize, load_observations
     using Dates: Day
 
@@ -889,8 +888,8 @@ end
 
 @testitem "onsets_only_model: the noise-walk parameters enter the VarInfo" begin
     ## Smoke test that the per-snapshot noise-walk parameters are actually
-    ## sampled (building a `VarInfo` runs the model once) and that the
-    ## removed slack multiplier is gone.
+    ## sampled (building a `VarInfo` runs the model once) and that
+    ## `σ_mult` is absent.
     using BVDOutbreakSize: onsets_only_model
     using Turing: DynamicPPL
 
@@ -1213,10 +1212,9 @@ end
 @testitem "reconstruct_onset_hazard and forecast_onsets handle a narrowed hazard grid" begin
     ## Report days starting more than D days after the first onset day, so
     ## the hazard's own grid start (`onset_hazard_grid_start`) diverges from
-    ## `minimum(onset_days)`, the grid `alpha` is indexed from. Before
-    ## `reconstruct_onset_hazard`/`forecast_onsets` took a separate
-    ## `alpha_grid_start`, calling either with one shared grid either raised
-    ## (a `γ`/`alpha` length mismatch) or silently misindexed `alpha`.
+    ## `minimum(onset_days)`, the grid `alpha` is indexed from.
+    ## `reconstruct_onset_hazard`/`forecast_onsets` must index `γ` and
+    ## `alpha` off their own separate grid starts.
     using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
         forecast_onsets, onset_hazard_grid_start, ONSET_REPORT_MAX_DELAY
     using Turing: Prior, sample
@@ -1232,7 +1230,6 @@ end
     alpha_grid_start = minimum(oc.onset_days)
     grid_end = maximum(oc.report_days)
     grid_start = onset_hazard_grid_start(oc.onset_days, oc.report_days; D)
-    ## The fixture actually exercises the divergence this test is for.
     @test grid_start > alpha_grid_start
 
     chn = sample(
@@ -1587,10 +1584,10 @@ end
     v = onset_vintage_indices(cur_idx, prev_idx)
     groups = [findall(==(s), v.vintage_idx) for s in 1:v.n_vintages]
 
-    ## Per-cell noise scale standing in for the old fixed pixel floor
-    ## (≈2.1 counts/read): a constant `τ` on every read, and `0` for a read
-    ## against the virtual empty predecessor, so the total variance a level
-    ## cell and a correction cell carry matches the old formula exactly.
+    ## Per-cell noise scale matching the old fixed pixel floor (≈2.1
+    ## counts/read): constant `τ` on every read, `0` for a read against the
+    ## virtual empty predecessor, so total variance for a level cell and a
+    ## correction cell matches that formula exactly.
     τ_cur = fill(2.1, length(prev_idx))
     τ_prev = [p == 0 ? 0.0 : 2.1 for p in prev_idx]
 

@@ -2218,14 +2218,12 @@ daily grid `[grid_start, grid_end]`. `alpha` is read off the chain's
 `onset_ascertainment` deterministic rather than rebuilt, since it depends on
 the confirmed pipeline's anchor series, which is not itself stored.
 
-`grid_start` is `γ`'s own origin ([`onset_hazard_grid_start`](@ref)) and
-`alpha_grid_start` is `alpha`'s (always `minimum(onset_days)`); they default
-to the same value, correct only when the two coincide (a short surveillance
-window relative to the delay support `D`). Both are properties of the
-digitised triangle rather than of the chain, so the caller supplies them. A
-grid whose knot count, or whose span, disagrees with what the chain stores
-raises rather than silently building a walk of the wrong length or reading
-`alpha` at the wrong offset.
+`grid_start` is `γ`'s origin ([`onset_hazard_grid_start`](@ref));
+`alpha_grid_start` is `alpha`'s (always `minimum(onset_days)`). They
+default to the same value, correct only when the two coincide. Both are
+properties of the digitised triangle, so the caller supplies them. A grid
+whose knot count or span disagrees with what the chain stores raises
+rather than silently building a walk of the wrong length.
 
 Shared by the report's reporting-delay figures and by
 [`forecast_onsets`](@ref), so the fitted hazard the analysis plots and the
@@ -2298,11 +2296,11 @@ the prediction will be compared against to keep the two like for like.
 `onsets` holds each draw's daily onsets indexed by grid day, the `diff` of
 the chain's `cumulative_onsets`. `hazard` is
 [`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`. `grid_start`
-is `γ`'s own origin ([`onset_hazard_grid_start`](@ref)); `alpha` is indexed
+is `γ`'s origin ([`onset_hazard_grid_start`](@ref)); `alpha` is indexed
 from `alpha_grid_start` (always `minimum(onset_days)`, defaults to
-`grid_start`, correct only when the two coincide), and both are held flat
-outside their fitted grid. `onsets` and `hazard` are paired draw by draw and
-must come from one fit. Summarised by [`plot_onset_nowcast_grid`](@ref).
+`grid_start`), and both are held flat outside their fitted grid. `onsets`
+and `hazard` are paired draw by draw and must come from one fit.
+Summarised by [`plot_onset_nowcast_grid`](@ref).
 """
 function onset_nowcast_draws(
         days::AbstractVector{<:Integer},
@@ -2465,24 +2463,15 @@ end
 """
     onset_report_delay_pmf(logit_h0, γ, t, grid_start)
 
-Delay probability mass function, `d = 0 … D-1`, for symptom-onset reports
-arriving on calendar day `t`: the calendar-walk effect is held at `γ`'s own
-value for `t` across the whole delay support, rather than letting it vary
-with the onset date `t - d` each delay implies.
-[`onset_report_cdf_extrapolated`](@ref) already clamps its calendar index to
-`γ`'s length, so passing it a length-one `γ` holds that single value at
-every delay: the survival-hazard product it returns is then driven by
-`logit_h0` alone, `cdf(d) = onset_report_cdf_extrapolated(d, logit_h0, [γ_t],
-0, 0)`. `pmf[d+1] = cdf(d) - cdf(d-1)` (`cdf(-1) = 0`), normalised by its own
-last entry through [`safe_rate`](@ref)'s guard, so it sums to one even where
-`cdf(D-1)` falls short from underflow.
-
-A reading that instead let `γ` vary with each delay's own onset date `t - d`
-would mix cohorts from different onset dates into one distribution with no
-guarantee of monotonicity. Holding `t`'s own calendar level fixed keeps this
-a proper distribution: what the fitted delay shape alone implies for a
-report landing on day `t`. Used by [`onset_report_delay_moments`](@ref) and
-[`plot_onset_delay_profile`](@ref). Pure, top-level.
+Delay probability mass function, `d = 0 … D-1`, for reports arriving on
+calendar day `t`: `γ` is held at its value for `t` across the whole delay
+support, via [`onset_report_cdf_extrapolated`](@ref)'s clamp on a
+length-one `γ`, so `cdf(d) = onset_report_cdf_extrapolated(d, logit_h0,
+[γ_t], 0, 0)` and `pmf[d+1] = cdf(d) - cdf(d-1)`, normalised by its last
+entry ([`safe_rate`](@ref)) so it sums to one under underflow. Letting `γ`
+vary with each delay's own onset date `t - d` would mix cohorts with no
+guarantee of monotonicity. Used by [`onset_report_delay_moments`](@ref)
+and [`plot_onset_delay_profile`](@ref). Pure, top-level.
 """
 function onset_report_delay_pmf(
         logit_h0::AbstractVector, γ::AbstractVector,
@@ -2533,20 +2522,18 @@ end
     plot_onset_delay_profile(hazard; grid_start, grid_end, seeding,
         week = 7)
 
-Fitted onset-to-report delay distribution over report time: the mean and SD
-of [`onset_report_delay_pmf`](@ref) for every report day
-`grid_start:grid_end`, one value per posterior draw, summarised as the
-median with 50%/90% credible ribbons and plotted against calendar date
-(`seeding` is the calendar date of grid day 1). Two panels share the x-axis,
-mean delay above and SD below. `hazard` is
-[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`; only
-`logit_h0` and `γ` are read.
+Fitted onset-to-report delay distribution over report time: mean and SD of
+[`onset_report_delay_pmf`](@ref) for every report day
+`grid_start:grid_end`, one value per posterior draw, summarised as median
+with 50%/90% credible ribbons against calendar date (`seeding` is grid
+day 1's calendar date). Two panels share the x-axis, mean above and SD
+below. `hazard` is [`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ,
+alpha)`; only `logit_h0` and `γ` are read.
 
-A report day near `grid_end`, where the delay hazard has only the shortest
-delays to inform it (see [`onset_reporting_model`](@ref)), still returns a
-finite mean and SD, since [`onset_report_cdf_extrapolated`](@ref) holds the
-walk flat past its fitted edge; read those days as resting on partial
-pooling to `η0` rather than on data.
+A report day near `grid_end` still returns a finite mean and SD, since
+[`onset_report_cdf_extrapolated`](@ref) holds the walk flat past its
+fitted edge; read those days as resting on partial pooling to `η0`
+(see [`onset_reporting_model`](@ref)) rather than on data.
 """
 function plot_onset_delay_profile(
         hazard::NamedTuple; grid_start::Integer, grid_end::Integer,
@@ -2605,34 +2592,29 @@ end
         vintage_idx; grid_start, alpha_grid_start = grid_start,
         target_delay = nothing, ν = 4.0, n_rep = 4, rng = default_rng())
 
-Posterior predictive replicate of onset date `u`'s reported level, read
-through one vintage's own fitted digitisation noise: a sample from
-[`onset_increments_model`](@ref)'s `missing` branch rather than a hand-built
-Student-t call, so the replicate carries the fitted `τ`, `scan_level` and
-heavy tail exactly as the likelihood scores a level cell (see
-[`onset_reporting_model`](@ref)'s level-cell case, `τ_prev = 0`).
+Posterior predictive replicate of onset date `u`'s reported level, through
+one vintage's fitted digitisation noise: sampled from
+[`onset_increments_model`](@ref)'s `missing` branch, so it carries the
+fitted `τ`, `scan_level` and heavy tail exactly as the likelihood scores a
+level cell (see [`onset_reporting_model`](@ref), `τ_prev = 0`).
 
-`target_delay` is the delay the level is read at. The default `nothing`
-targets the eventual total ([`onset_report_F`](@ref) at delay `D - 1`,
-`= alpha(u)` exactly, the walk's own asymptote); an integer targets a
-snapshot's own reach instead (`report_day - u`), as the first surviving
-vintage's own printed extent is scored at.
+`target_delay` is the delay the level is read at. `nothing` (default)
+targets the eventual total (`onset_report_F` at delay `D - 1`, `=
+alpha(u)`); an integer targets a snapshot's own reach instead
+(`report_day - u`).
 
 `hazard` is [`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`;
-`onsets` holds each draw's daily onset series (the `diff` of the chain's
-`cumulative_onsets` trajectory). `scan_level` and `noise_scale` are the
-chain's `onset_scan_level`/`onset_noise_scale` deterministics, one vector
-per draw indexed by vintage in the same order
-[`onset_vintage_indices`](@ref) sorts report days into. `vintage_idx`
-outside a draw's own `scan_level`/`noise_scale` range falls back to a
-multiplier of one and a noise scale of zero, mirroring
-[`onset_scan_adjust`](@ref)'s sentinel for the virtual empty predecessor.
+`onsets` holds each draw's daily onset series (`diff` of
+`cumulative_onsets`). `scan_level` and `noise_scale` are the chain's
+`onset_scan_level`/`onset_noise_scale` deterministics, one vector per draw
+indexed by vintage in [`onset_vintage_indices`](@ref)'s order.
+`vintage_idx` outside a draw's range falls back to a multiplier of one and
+a noise scale of zero, mirroring [`onset_scan_adjust`](@ref)'s sentinel.
 
-`n_rep` replicates are drawn per posterior draw, Monte Carlo smoothing for
-the credible ribbon a caller summarises this by: `means`/`sds` are tiled and
-[`onset_increments_model`](@ref) is sampled once rather than once per
-replicate. Returns a `length(onsets) * n_rep`-long vector of replicate
-draws, not grouped by posterior draw.
+`n_rep` replicates per posterior draw smooth the credible ribbon: `means`
+and `sds` are tiled and [`onset_increments_model`](@ref) sampled once
+rather than per replicate. Returns a `length(onsets) * n_rep`-long vector
+of replicate draws, not grouped by posterior draw.
 """
 function onset_level_predictive_draws(
         u::Integer,
@@ -2702,7 +2684,7 @@ One panel of a modelled band (30%/60%/90% credible ribbon with a median
 line) against a `Date`-indexed observed series, `draws[k]` the
 posterior(-predictive) draws for `dates[k]`. Shared by the first-snapshot
 complete-curve figure and the symptom-onsets-by-onset-date posterior
-predictive check, so both read off one plotting function.
+predictive check.
 
 `dates`, `observed` and `draws` must be the same length; a mismatch raises.
 An empty `dates` returns a blank figure. Weekly tick labels

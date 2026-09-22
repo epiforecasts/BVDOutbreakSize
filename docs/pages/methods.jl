@@ -1677,11 +1677,12 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean and a fitted per-snapshot digitisation-noise scale $\tau$, on a weekly random walk over the report-date span rather than fixed; a level cell reads one snapshot's $\tau$ and a correction reads two, since that differences two reads.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean and a fitted per-snapshot digitisation-noise scale $\tau$, on a weekly random walk over the report-date span.
+# A level cell reads one snapshot's $\tau$, a correction reads two.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 #
 # A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute error is per bar and the multiplicative error is one number for the whole figure.
-# The modelled level each cell differences therefore carries its own scan's sampled level $\mathrm{scan\_level}_s \sim \mathrm{Normal}(1,\ \sigma_{\text{scan}})$, sampled centred, with $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ unbounded above.
+# The modelled level each cell differences therefore carries its own scan's sampled level $\mathrm{scan\_level}_s \sim \mathrm{Normal}(1,\ \sigma_{\text{scan}})$, with $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ unbounded above.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.

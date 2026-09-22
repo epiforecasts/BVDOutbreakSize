@@ -588,19 +588,17 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The noise-walk and per-scan level rows are diagnostics: a fitted `τ` that keeps climbing over the surveillance window, or a `σ_scan` pinned near its prior mean, says the digitised figures need more slack than counting variation and a per-scan level error alone explain.
+# The noise-walk and per-scan rows are diagnostics: a climbing `τ` or a `σ_scan` pinned near its prior mean says the figures need more slack than counting variation and a per-scan level error alone explain.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
 #md # ```
 
 ## The report-date grid the calendar walk spans, `_onset_hazard_grid_start`
-## to `_onset_grid_end`, is a fixed function of the digitised triangle
-## rather than chain contents, so the shared setup builds it once from
-## `obs.onset_curve_history`. `_onset_grid_start` (the ascertainment walk's
-## own, always the earliest scored onset date) is generally earlier; the
-## two coincide only when the surveillance window is short relative to the
-## delay support `D` (see `onset_hazard_grid_start`).
+## to `_onset_grid_end`, is a fixed function of the digitised triangle, so
+## the shared setup builds it once from `obs.onset_curve_history`.
+## `_onset_grid_start` (the ascertainment walk's own, always the earliest
+## scored onset date) is generally earlier; see `onset_hazard_grid_start`.
 ## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
 ## (the report-date calendar walk), rebuilt from the non-centred
 ## innovations the chain stores. `reconstruct_onset_hazard` is the package
@@ -614,12 +612,11 @@ _onset_hazard = reconstruct_onset_hazard(
 )
 
 ## Cell indices grouped by their snapshot's report day, the daily onsets
-## series per posterior draw (the diff of the chain's stored
-## `cumulative_onsets` trajectory; the model does not store the daily
-## series itself, only its running sum), and the chain's per-vintage scan
-## level and digitisation-noise scale. Built here, ahead of the summary
-## table, so the per-snapshot noise-scale rows below and the predictive
-## figures further down share one computation.
+## series per posterior draw (`diff` of the chain's `cumulative_onsets`
+## trajectory; the model stores only the running sum), and the chain's
+## per-vintage scan level and noise scale. Built here so the noise-scale
+## table below and the predictive figures further down share one
+## computation.
 _onset_cells_by_report = Dict{Int, Vector{Int}}()
 for (i, r) in enumerate(obs.onset_curve_history.report_days)
     push!(get!(_onset_cells_by_report, r, Int[]), i)
@@ -763,10 +760,7 @@ onset_summary #hide
 #md # </details>
 #md # ```
 
-# The digitisation-noise scale `τ` is fitted per snapshot rather than as one
-# shared value, so it is reported here as its own compact table alongside
-# `log_τ0`, `σ_τ` and `σ_scan` above: the median and 90% credible interval
-# of each surviving vintage's own `τ`, in report-date order.
+# The digitisation-noise scale `τ` is fitted per snapshot, reported here as its own table alongside `log_τ0`, `σ_τ` and `σ_scan` above: median and 90% credible interval of each surviving vintage's own `τ`, in report-date order.
 
 #md # ```@raw html
 #md # <details><summary>Symptom-onset digitisation-noise scale per snapshot</summary>
@@ -826,13 +820,8 @@ onset_pair_fig = plot_pair(
 
 onset_pair_fig #hide
 
-# The figure below reads the same fitted hazard a different way: the
-# onset-to-report delay distribution implied for a report arriving on a
-# given calendar day, holding that day's own calendar-walk level fixed
-# across the delay axis rather than following it back through earlier
-# onset dates (`onset_report_delay_pmf`).
-# The top panel is the mean delay, the bottom the delay's SD, both with
-# 50%/90% credible ribbons over report time.
+# The figure below reads the fitted hazard differently: the onset-to-report delay distribution implied for a report on a given calendar day, holding that day's calendar-walk level fixed across the delay axis (`onset_report_delay_pmf`).
+# The top panel is the mean delay, the bottom the delay's SD, both with 50%/90% credible ribbons over report time.
 
 #md # ```@raw html
 #md # <details><summary>Symptom-onset reporting delay over report time</summary>
@@ -892,9 +881,9 @@ onset_first_snapshot_fig #hide
 
 # Each panel below is one digitised snapshot, plotted by onset date.
 # The grey crosses are the counts that snapshot's own figure printed.
-# The band is the model's posterior predictive of the eventual reported total for each onset date: modelled onsets times ascertainment, sampled through `onset_increments_model`'s `missing` branch so the replicate carries the fitted τ, `scan_level` and Student-t tail exactly as the likelihood scores a level cell.
-# The black points are the latest figure's own reading for the same onset dates, shown for context rather than as the target the band is read against.
-# A panel stops short on the right because each snapshot's own figure prints only to its own last onset date, and the band does not run past it.
+# The band is the model's posterior predictive of each onset date's eventual reported total: modelled onsets times ascertainment, sampled through `onset_increments_model`'s `missing` branch so it carries the fitted τ, `scan_level` and Student-t tail as the likelihood scores a level cell.
+# The black points are the latest figure's own reading, shown for context rather than as the target the band is read against.
+# A panel stops short at the snapshot's own last printed onset date.
 # Every snapshot is fitted, but only the first and the eight most recent are shown here.
 
 #md # ```@raw html
@@ -924,12 +913,11 @@ for snap in _onset_snaps
     end
 end
 
-## The first snapshot plus the eight most recent, rather than every
-## surviving vintage: up to 48 panels is more than a reader can take in
-## individually, and the earliest and the latest carry the most
-## information (the complete-curve level cells, and the most current
+## The first snapshot plus the eight most recent, not every surviving
+## vintage: up to 48 panels is too many, and the earliest and latest carry
+## the most information (complete-curve level cells, most current
 ## nowcast). Every snapshot still enters the likelihood; this only trims
-## which ones get their own panel here.
+## which get their own panel.
 _onset_selected_report_days = length(_onset_report_grid_days) <= 9 ?
     _onset_report_grid_days :
     sort(
@@ -941,12 +929,12 @@ _onset_selected_report_days = length(_onset_report_grid_days) <= 9 ?
         )
     )
 
-## One panel per selected snapshot: that snapshot's own printed counts
-## against the model's posterior predictive of the eventual reported total
-## for those onset dates (`onset_level_predictive_draws`'s default
-## `target_delay = nothing`). `v_idx` is the snapshot's own position in the
-## full `_onset_report_grid_days` (not the reduced selection), the index
-## its fitted `scan_level`/`τ` are stored under.
+## One panel per selected snapshot: printed counts against the model's
+## posterior predictive of the eventual reported total
+## (`onset_level_predictive_draws`'s default `target_delay = nothing`).
+## `v_idx` is the snapshot's position in the full
+## `_onset_report_grid_days`, the index its `scan_level`/`τ` are stored
+## under.
 _onset_panels = map(_onset_selected_report_days) do R
     v_idx = findfirst(==(R), _onset_report_grid_days)
     snap = _onset_snap_by_day[R]
@@ -994,11 +982,11 @@ _onset_by_date_onsets = [
         for u in _onset_by_date_days
 ]
 ## The count the latest figure should print for each date, read at the
-## current cut-off's own delay (`_onset_grid_end - u`) rather than the
-## eventual total, put through the same predictive measurement error a
-## single digitised bar carries (`onset_level_predictive_draws`'s
-## level-cell case). `v_idx` is the vintage that last printed each onset
-## date, the same lookup the snapshot panels use.
+## current cut-off's delay (`_onset_grid_end - u`) rather than the eventual
+## total, through the same predictive measurement error a single digitised
+## bar carries (`onset_level_predictive_draws`'s level-cell case). `v_idx`
+## is the vintage that last printed each date, the lookup the snapshot
+## panels use.
 _onset_by_date_vidx = [
     findfirst(==(_onset_last_report_day[u]), _onset_report_grid_days)
         for u in _onset_by_date_days
@@ -1361,8 +1349,8 @@ frozen_forecast_archive = DataFrame(
 ## The onset grid belongs to the triangle each frozen fit actually saw, not
 ## to the live one: the May cut-offs predate the digitised figure entirely,
 ## so their grid is empty and the onset block is simply absent for them.
-## Returns `(alpha_grid_start, hazard_grid_start, grid_end)`, the two grid
-## starts diverging exactly as they do for the live fit (see
+## Returns `(alpha_grid_start, hazard_grid_start, grid_end)`; the two grid
+## starts diverge exactly as for the live fit (see
 ## `onset_hazard_grid_start`).
 function _frozen_onset_grid(o)
     isempty(o.onset_curve_history.onset_days) &&
