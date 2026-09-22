@@ -17,19 +17,28 @@ using Literate
 using BVDOutbreakSize
 
 const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
-PAGE in ("analysis", "sensitivity") ||
-    error("BVD_DOC_PAGE must be \"analysis\" or \"sensitivity\", got \"$PAGE\"")
+PAGE in (
+    "estimates/national", "estimates/province", "forecasts/national",
+    "evaluation/insample", "evaluation/forecast", "sensitivity",
+) ||
+    error(
+    "BVD_DOC_PAGE must be one of estimates/national, " *
+        "estimates/province, forecasts/national, evaluation/insample, " *
+        "evaluation/forecast, sensitivity; got \"$PAGE\""
+)
 
-const LITERATE_SRC = joinpath(@__DIR__, "examples", "$PAGE.jl")
+const LITERATE_SRC = joinpath(@__DIR__, "pages", "$PAGE.jl")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 
 @info "Executing $PAGE.jl (fits are loaded from BVD_FIT_CACHE)…" cache = get(
     ENV, "BVD_FIT_CACHE", "logs/fit_cache"
 )
+const PAGE_OUT = joinpath(LITERATE_OUT, dirname(PAGE))
+isdir(PAGE_OUT) || mkpath(PAGE_OUT)
 Literate.markdown(
-    LITERATE_SRC, LITERATE_OUT;
-    name = PAGE,
+    LITERATE_SRC, PAGE_OUT;
+    name = basename(PAGE),
     flavor = Literate.DocumenterFlavor(),
     execute = true,
     credit = false

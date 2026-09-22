@@ -104,8 +104,10 @@ tasks:
     desc: >
       Build the full docs site locally: render both literate pages (analysis
       and sensitivity) from the cached fits and assemble the Vitepress site.
-      Missing fits are computed and cached under logs/fit_cache on first run;
-      set BVD_REFIT=all to refit. deploydocs is a no-op outside CI.
+      The render never fits: a missing fit fails naming its key, so run
+      `task fetch-fits` or `task fit-all` first. Set BVD_FIT_STRICT=false to
+      fit inline instead, or BVD_REFIT=all to refit. deploydocs is a no-op
+      outside CI.
     cmds:
       - BVD_DOCS_STAGE=all julia --project=docs docs/make.jl {{.CLI_ARGS}}
 
@@ -125,13 +127,26 @@ tasks:
       - BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
+  fetch-fits:
+    desc: >
+      Download the fits from the latest successful docs CI run into
+      logs/fit_cache, so a local render loads them instead of fitting.
+      Canonical local build: `task fetch-fits && task docs`. Pass a run id to
+      pull a specific build, or set BVD_FIT_REF to pull from another branch.
+      A fit is loaded only when the working tree's model source and data match
+      the commit that produced it; change either and `task fit-all` is needed.
+      Needs the `gh` CLI authenticated against the repo.
+    cmds:
+      - ./scripts/fetch_fits.sh {{.CLI_ARGS}}
+
   fit:
     desc: >
       Run and cache a single model fit by id (BVD_FIT_ID), matching one CI
       matrix job. List ids with `julia --project=docs docs/fits/list.jl`.
-      Example: BVD_FIT_ID=deaths task fit.
+      Example: BVD_FIT_ID=deaths task fit. Threads match the CI fit job, so
+      the fit's two chains run in parallel.
     cmds:
-      - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
+      - julia -t 4 --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
   check-convergence:
     desc: >
@@ -146,10 +161,13 @@ tasks:
   fit-all:
     desc: >
       Fit and cache every model in one parallel pass, then `task docs` renders
-      from the cache without refitting. Canonical local full build:
-      `task fit-all && task docs`.
+      from the cache without refitting. `fit_parallel` runs
+      threads / chains fits at once, so this takes all available threads:
+      with the default two chains per fit, a 32-thread machine runs 16 fits
+      side by side. Set JULIA_NUM_THREADS to cap it on a shared host.
     cmds:
-      - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
+      - julia -t "${JULIA_NUM_THREADS:-auto}" --project=docs docs/fits/all.jl
+        {{.CLI_ARGS}}
 
   format:
     desc: >

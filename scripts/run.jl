@@ -1,16 +1,20 @@
 # Entry point for regenerating the published results.
 #
-# Runs both report pages (analysis and sensitivity), which fit the models
-# (loaded from the content-addressed cache when present) and write the summary
-# tables, thinned posterior draws, per-stream and frozen-fit comparisons and a
-# copy of the input data into `output/` at the repo root. The Release workflow
-# bundles that directory into a GitHub Release on each push to `main`. Both
-# pages share `docs/examples/_setup.jl`, which is loaded once per session, so
-# the second include reuses the first's fitted chains rather than refitting.
+# Runs every report page, which fits the models (loaded from the
+# content-addressed cache when present) and writes the summary tables, thinned
+# posterior draws, forecasts, per-stream and frozen-fit comparisons and a copy
+# of the input data into `output/` at the repo root. The Release workflow
+# bundles that directory into a GitHub Release on each push to `main`. The
+# pages share `docs/pages/_setup.jl`, which is loaded once per session, so
+# each include after the first reuses the fitted chains rather than refitting.
 
 using BVDOutbreakSize
 
 const REPO_ROOT = pkgdir(BVDOutbreakSize)
 
-include(joinpath(REPO_ROOT, "docs", "examples", "analysis.jl"))
-include(joinpath(REPO_ROOT, "docs", "examples", "sensitivity.jl"))
+for page in (
+        "estimates/national", "estimates/province", "evaluation/insample",
+        "forecasts/national", "evaluation/forecast", "sensitivity",
+    )
+    include(joinpath(REPO_ROOT, "docs", "pages", "$page.jl"))
+end

@@ -64,7 +64,9 @@ function find_one(root::AbstractString, name::AbstractString)
 end
 
 function build_standalone(build_dir::AbstractString, out_file::AbstractString)
-    page = find_one(build_dir, "analysis.html")
+    ## The national estimates page. The published asset keeps the name
+    ## `analysis.html` so the release download link does not move.
+    page = find_one(build_dir, "national.html")
     assets = joinpath(dirname(page), "assets")
     html = read(page, String)
 
@@ -76,7 +78,7 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     # Rewrite same-page cross-references to bare anchors so the in-page
     # jump links work in the standalone file rather than navigating to
     # the hosted site.
-    content = replace(content, r"/BVDOutbreakSize/[^\"#]*analysis#" => "#")
+    content = replace(content, r"/BVDOutbreakSize/[^\"#]*national#" => "#")
     # Any remaining root-relative site links point at other doc pages
     # (citations resolve to the references page, etc.) that are not part
     # of this single file. Absolutise them against the hosted site so

@@ -7,9 +7,20 @@
 # test/jet/, test/enzyme/, test/formatter/, scripts/).
 Manifest.toml
 /docs/build/
-/docs/src/analysis.md
 /docs/src/index.md
+/docs/src/estimates/national.md
+/docs/src/estimates/province.md
+/docs/src/forecasts/
+/docs/src/evaluation/
 /docs/src/sensitivity.md
+/docs/src/analysis.md
+/docs/src/province.md
+/docs/src/forecast.md
+/docs/src/evaluation.md
+/docs/src/insample.md
+/docs/src/summary.md
+# Figures a local Literate render writes beside the page markdown
+/docs/src/**/*-[0-9]*.png
 /docs/src/references.md
 /docs/src/summary_assets/
 /docs/node_modules/
@@ -55,6 +66,9 @@ logs/
 /.benchmark-worktrees/
 
 *.html
+# The redirect stubs that keep the pre-reorganisation URLs working are
+# checked in; Vitepress copies `docs/src/public/` through unchanged.
+!/docs/src/public/**/*.html
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log
