@@ -1,19 +1,7 @@
-#md # ```@eval
-#md # using BVDOutbreakSize, Markdown, Dates
-#md # readme = read(joinpath(pkgdir(BVDOutbreakSize), "README.md"), String)
-#md # body = strip(match(r"^(.*?)<!-- SHARED:END -->"s, readme).captures[1])
-#md # # Keep the dates current automatically: "Last updated" is the build
-#md # # date and "Data as of" is the loaded cut-off, so a rebuild always
-#md # # refreshes them without a manual edit to README.md.
-#md # built = Dates.format(Dates.today(), "d U yyyy")
-#md # asof = Dates.format(load_observations().cutoff, "d U yyyy")
-#md # body = replace(body,
-#md #     r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
-#md #     r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.",
-#md #     r"https://epiforecasts\.io/BVDOutbreakSize/stable/analysis" => "",
-#md #     "https://epiforecasts.io/BVDOutbreakSize/stable/contributing" => "../contributing.md")
-#md # Markdown.parse(body)
-#md # ```
+# # National estimates
+#
+# The national results of the joint model: the outbreak size, the infections and deaths to date, the reproduction number, the observation delays and the ascertainment of each surveillance stream.
+# The model behind them is on the [Methods](@ref "Methods") page.
 #
 # This page is generated from
 # [`docs/pages/estimates/national.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/national.jl).
@@ -21,8 +9,8 @@
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
 # See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
 #
-# **Offline copy.** A self-contained single-file HTML version of this page, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
-# It carries the methods and the national results, and links to the other pages resolve against the hosted site.
+# **Offline copy.** A self-contained single-file HTML version of this report, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
+# It carries the front matter, the methods and the national results, and links to the other pages resolve against the hosted site.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
