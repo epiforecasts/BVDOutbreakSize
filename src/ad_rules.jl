@@ -1,15 +1,57 @@
 # Hand-written reverse-mode derivative rules for the numeric kernels in
 # `renewal.jl`.
 #
-# The rules are plain `ChainRulesCore.rrule` methods with explicit
-# pullbacks, so they carry nothing backend-specific. Mooncake picks them up
-# through the `Mooncake.@from_rrule` registrations at the bottom of this
-# file; the Enzyme extension imports the same methods with
-# `Enzyme.@import_rrule`, so both backends differentiate one derivation.
+# The rules are native `Mooncake.rrule!!` methods. Mooncake is the
+# production backend, so each kernel is declared a primitive and its
+# pullback accumulates straight into the argument tangents.
 #
-# Each kernel is a loop over a daily grid. Left to a backend, every
+# Each kernel is a loop over a daily grid. Left to the backend, every
 # iteration's intermediates go on the tape. The rules below replace that
 # with a closed-form adjoint loop of the same shape as the forward one.
+#
+# The primitive signatures are restricted to `Array{<:IEEEFloat}`
+# arguments: that is what every model call site passes, and it keeps the
+# tangent types Mooncake builds for the rule concrete. Anything else falls
+# through to Mooncake's own derived rule, which still differentiates the
+# plain Julia body.
+
+using Mooncake: CoDual, NoRData, primal, tangent, zero_fcodual
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(convolve_delay), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(convolve_survival), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(convolve_pmf), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(interpolate_knots), Array{<:Mooncake.IEEEFloat},
+        Array{<:Integer}, Integer,
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+    },
+)
 
 ## Adjoint of the daily delay convolution, shared by `convolve_delay` and
 ## `convolve_survival`. For
@@ -41,182 +83,156 @@ function _convolve_delay_adjoint(
     return x̄, d̄
 end
 
-function ChainRulesCore.rrule(
-        ::typeof(convolve_delay), x::AbstractVector,
-        delay::AbstractVector
+function Mooncake.rrule!!(
+        ::CoDual{typeof(convolve_delay)},
+        x::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        delay::CoDual{<:Array{<:Mooncake.IEEEFloat}}
     )
-    y = convolve_delay(x, delay)
-    function convolve_delay_pullback(Δy)
-        ȳ = ChainRulesCore.unthunk(Δy)
-        x̄, d̄ = _convolve_delay_adjoint(ȳ, x, delay)
-        return ChainRulesCore.NoTangent(), x̄, d̄
+    xp = primal(x)
+    dp = primal(delay)
+    x̄ = tangent(x)
+    d̄ = tangent(delay)
+    y = convolve_delay(xp, dp)
+    ȳ = zero(y)
+    function convolve_delay_pullback!!(::NoRData)
+        Δx, Δd = _convolve_delay_adjoint(ȳ, xp, dp)
+        x̄ .+= Δx
+        d̄ .+= Δd
+        return NoRData(), NoRData(), NoRData()
     end
-    return y, convolve_delay_pullback
+    return CoDual(y, ȳ), convolve_delay_pullback!!
 end
 
-function ChainRulesCore.rrule(
-        ::typeof(convolve_survival), x::AbstractVector,
-        los::AbstractVector
+function Mooncake.rrule!!(
+        ::CoDual{typeof(convolve_survival)},
+        x::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        los::CoDual{<:Array{<:Mooncake.IEEEFloat}}
     )
-    L = length(los)
-    surv = survival_weights(los)
-    y = convolve_delay(x, surv)
-    function convolve_survival_pullback(Δy)
-        ȳ = ChainRulesCore.unthunk(Δy)
-        x̄, s̄ = _convolve_delay_adjoint(ȳ, x, surv)
+    xp = primal(x)
+    lp = primal(los)
+    x̄ = tangent(x)
+    l̄ = tangent(los)
+    surv = survival_weights(lp)
+    y = convolve_delay(xp, surv)
+    ȳ = zero(y)
+    function convolve_survival_pullback!!(::NoRData)
+        Δx, s̄ = _convolve_delay_adjoint(ȳ, xp, surv)
+        x̄ .+= Δx
         ## `surv[i] = Σ_{j ≥ i} los[j]`, so `los[j]` feeds every survival
         ## weight at or below `j`: the adjoint is the forward cumulative
         ## sum of the survival adjoint.
-        l̄ = zeros(eltype(s̄), L)
         run = zero(eltype(s̄))
-        @inbounds for j in 1:L
+        @inbounds for j in eachindex(s̄)
             run += s̄[j]
-            l̄[j] = run
+            l̄[j] += run
         end
-        return ChainRulesCore.NoTangent(), x̄, l̄
+        return NoRData(), NoRData(), NoRData()
     end
-    return y, convolve_survival_pullback
+    return CoDual(y, ȳ), convolve_survival_pullback!!
 end
 
-function ChainRulesCore.rrule(
-        ::typeof(convolve_pmf), a::AbstractVector,
-        b::AbstractVector
+function Mooncake.rrule!!(
+        ::CoDual{typeof(convolve_pmf)},
+        a::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        b::CoDual{<:Array{<:Mooncake.IEEEFloat}}
     )
-    y = convolve_pmf(a, b)
-    function convolve_pmf_pullback(Δy)
-        ȳ = ChainRulesCore.unthunk(Δy)
-        na = length(a)
-        nb = length(b)
-        ā = zeros(promote_type(eltype(ȳ), eltype(b)), na)
-        b̄ = zeros(promote_type(eltype(ȳ), eltype(a)), nb)
+    ap = primal(a)
+    bp = primal(b)
+    ā = tangent(a)
+    b̄ = tangent(b)
+    y = convolve_pmf(ap, bp)
+    ȳ = zero(y)
+    function convolve_pmf_pullback!!(::NoRData)
+        na = length(ap)
+        nb = length(bp)
         @inbounds for i in 1:na, j in 1:nb
 
             g = ȳ[i + j - 1]
-            ā[i] += g * b[j]
-            b̄[j] += g * a[i]
+            ā[i] += g * bp[j]
+            b̄[j] += g * ap[i]
         end
-        return ChainRulesCore.NoTangent(), ā, b̄
+        return NoRData(), NoRData(), NoRData()
     end
-    return y, convolve_pmf_pullback
+    return CoDual(y, ȳ), convolve_pmf_pullback!!
 end
 
-function ChainRulesCore.rrule(
-        ::typeof(interpolate_knots), knot_vals::AbstractVector,
-        days::AbstractVector{<:Integer}, n::Integer
+function Mooncake.rrule!!(
+        ::CoDual{typeof(interpolate_knots)},
+        knot_vals::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        days::CoDual{<:Array{<:Integer}}, n::CoDual{<:Integer}
     )
-    out = interpolate_knots(knot_vals, days, n)
-    function interpolate_knots_pullback(Δout)
-        ō = ChainRulesCore.unthunk(Δout)
-        nb = length(days)
-        k̄ = zeros(eltype(ō), nb)
+    kp = primal(knot_vals)
+    dayp = primal(days)
+    np = primal(n)
+    k̄ = tangent(knot_vals)
+    out = interpolate_knots(kp, dayp, np)
+    ō = zero(out)
+    function interpolate_knots_pullback!!(::NoRData)
+        nb = length(dayp)
         if nb == 1
-            @inbounds for t in 1:n
+            @inbounds for t in 1:np
                 k̄[1] += ō[t]
             end
-            return (
-                ChainRulesCore.NoTangent(), k̄,
-                ChainRulesCore.NoTangent(), ChainRulesCore.NoTangent(),
-            )
+            return NoRData(), NoRData(), NoRData(), NoRData()
         end
         Tf = eltype(ō)
-        @inbounds for t in 1:n
+        @inbounds for t in 1:np
             b = 1
-            while b < nb - 1 && t > days[b + 1]
+            while b < nb - 1 && t > dayp[b + 1]
                 b += 1
             end
-            d0 = days[b]
-            d1 = days[b + 1]
+            d0 = dayp[b]
+            d1 = dayp[b + 1]
             frac = d1 == d0 ? zero(Tf) :
                 clamp(Tf(t - d0) / Tf(d1 - d0), zero(Tf), one(Tf))
             g = ō[t]
             k̄[b] += (one(Tf) - frac) * g
             k̄[b + 1] += frac * g
         end
-        return (
-            ChainRulesCore.NoTangent(), k̄,
-            ChainRulesCore.NoTangent(), ChainRulesCore.NoTangent(),
-        )
+        return NoRData(), NoRData(), NoRData(), NoRData()
     end
-    return out, interpolate_knots_pullback
+    return CoDual(out, ō), interpolate_knots_pullback!!
 end
 
-function ChainRulesCore.rrule(
-        ::typeof(renewal_infections), Rt::AbstractVector,
-        g::AbstractVector, seed::AbstractVector
+function Mooncake.rrule!!(
+        ::CoDual{typeof(renewal_infections)},
+        Rt::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        g::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        seed::CoDual{<:Array{<:Mooncake.IEEEFloat}}
     )
-    n = length(Rt)
-    L = length(seed)
-    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
+    Rtp = primal(Rt)
+    gp = primal(g)
+    seedp = primal(seed)
+    R̄ = tangent(Rt)
+    ḡ = tangent(g)
+    s̄ = tangent(seed)
+    n = length(Rtp)
+    L = length(seedp)
     ## The forward pass is the model's own, which also hands back the
     ## per-day force the pullback needs, so the recursion is defined once.
-    I, force = renewal_infections_with_force(Rt, g, seed)
-    function renewal_infections_pullback(ΔI)
+    I, force = renewal_infections_with_force(Rtp, gp, seedp)
+    Ī = zero(I)
+    function renewal_infections_pullback!!(::NoRData)
         ## The recursion is sequential, so the reverse pass walks the days
         ## backwards, pushing each day's infection adjoint onto the lagged
         ## infections it was built from before those days are themselves read.
-        Ī = collect(float.(ChainRulesCore.unthunk(ΔI)))
-        Tb = eltype(Ī)
-        R̄ = zeros(Tb, n)
-        ḡ = zeros(Tb, length(g))
-        s̄ = zeros(Tb, L)
+        ## The incoming cotangent is Mooncake's, so the walk accumulates
+        ## into a working copy of it.
+        acc = copy(Ī)
         @inbounds for t in n:-1:(L + 1)
-            it = Ī[t]
+            it = acc[t]
             R̄[t] += it * force[t]
-            f̄ = it * Rt[t]
-            kmax = min(t - 1, length(g))
+            f̄ = it * Rtp[t]
+            kmax = min(t - 1, length(gp))
             for s in 1:kmax
-                Ī[t - s] += f̄ * g[s]
+                acc[t - s] += f̄ * gp[s]
                 ḡ[s] += f̄ * I[t - s]
             end
         end
         @inbounds for j in 1:min(L, n)
-            s̄[j] = Ī[j]
+            s̄[j] += acc[j]
         end
-        return ChainRulesCore.NoTangent(), R̄, ḡ, s̄
+        return NoRData(), NoRData(), NoRData(), NoRData()
     end
-    return I, renewal_infections_pullback
+    return CoDual(I, Ī), renewal_infections_pullback!!
 end
-
-## --- Mooncake registration ----------------------------------------------
-##
-## Mooncake is the package default, so the rules above are wired into it
-## here rather than in an extension. The signatures are restricted to
-## `Array{<:IEEEFloat}` arguments: that is what every model call site
-## passes, and it keeps the tangent types Mooncake builds for the rule
-## concrete. Anything else falls through to Mooncake's own derived rule,
-## which still differentiates the plain Julia body.
-Mooncake.@from_rrule(
-    Mooncake.DefaultCtx,
-    Tuple{
-        typeof(convolve_delay), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@from_rrule(
-    Mooncake.DefaultCtx,
-    Tuple{
-        typeof(convolve_survival), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@from_rrule(
-    Mooncake.DefaultCtx,
-    Tuple{
-        typeof(convolve_pmf), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@from_rrule(
-    Mooncake.DefaultCtx,
-    Tuple{
-        typeof(interpolate_knots), Array{<:Mooncake.IEEEFloat},
-        Array{<:Integer}, Integer,
-    },
-)
-Mooncake.@from_rrule(
-    Mooncake.DefaultCtx,
-    Tuple{
-        typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-    },
-)

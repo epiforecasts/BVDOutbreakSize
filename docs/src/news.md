@@ -18,10 +18,8 @@ Changes since v2.1.0.
   grid, so left to the backend every iteration's intermediates reach the
   tape; the rules replace that with a closed-form adjoint of the same
   shape. Gradients of the delay-heavy observation submodels drop 18-34%
-  under Mooncake, the default backend. The rules are plain
-  `ChainRulesCore.rrule` methods registered with `Mooncake.@from_rrule`, so
-  one derivation serves any backend that reads ChainRules. Values are
-  unchanged: each rule is checked against central differences and against
+  under Mooncake, the default backend. Each is a native `Mooncake.rrule!!`
+  method on a declared primitive signature. Values are unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
 
 ### Model

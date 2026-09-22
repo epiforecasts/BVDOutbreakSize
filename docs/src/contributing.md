@@ -11,8 +11,7 @@ This page covers how the project is laid out, how to run it, and the conventions
 - `src/constants.jl` — fixed constants, including the published Imperial point estimates (`REPORT_SCENARIOS`, `REPORT_SCENARIOS_CI`).
 - `src/sampling.jl` — NUTS sampling (`nuts_sample`, `fit_parallel`) and the AD backend setup.
 - `src/renewal.jl` — the shared renewal-process helpers: `renewal_infections`, the delay convolutions `convolve_delay`, `convolve_survival` and `convolve_pmf`, and `discretise_censored`.
-- `src/ad_rules.jl` — hand-written `ChainRulesCore.rrule` methods for the `renewal.jl` kernels, registered with Mooncake through `Mooncake.@from_rrule`.
-  One derivation per kernel, so the Enzyme extension can import the same rules.
+- `src/ad_rules.jl` — hand-written `Mooncake.rrule!!` methods for the `renewal.jl` kernels, each on a signature declared primitive with `Mooncake.@is_primitive`.
 - `src/models/priors.jl`, `src/models/observations.jl`, `src/models/joint.jl` — the building-block submodels, the observation submodels and the composers.
   See [Model architecture](#Model-architecture) below.
 - `src/summaries.jl`, `src/scoring.jl` — summary and comparison tables, and forecast scoring.
