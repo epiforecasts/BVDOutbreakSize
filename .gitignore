@@ -76,3 +76,9 @@ logs/
 
 # Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
 /worktrees/
+
+# `task benchmark-rules` writes this to toggle the AD rules off and on.
+# Committing it would silently pin the benchmark to one arm, so the
+# comparison would measure a state nobody chose. `docs/LocalPreferences.toml`
+# is tracked deliberately and is not covered here.
+benchmark/LocalPreferences.toml
