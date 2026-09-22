@@ -71,10 +71,12 @@ This moves the non-BVD death background, so fitted values change.
   The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
   The offline `analysis.html` carries both the methods and the national results.
 - The National page opens with its own title and summary rather than a copy of the README front matter.
+  It keeps the "Last updated" and "Data as of" dates at the top.
   The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
   The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
 - The summary dashboard opens with the abstract, read from `README.md`, and one line pointing to the National, Methods and Limitations pages.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
+  It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
 
 ### Infrastructure
 
