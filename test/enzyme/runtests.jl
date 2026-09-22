@@ -60,13 +60,8 @@ function enzyme_matches_mooncake(model)
         isapprox(g_enzyme, g_mooncake; rtol = 1.0e-6)
 end
 
-## Assert one scenario, allowing a declared-broken name to fail. The
-## boolean is computed first and `@test_broken` reached only on a real
-## failure, so over-listing a name is safe: a scenario that starts passing
-## is recorded as a pass whether or not it is still listed. Under-listing
-## fails, which is the direction that should be loud, given how much of
-## what Enzyme rejects here is upstream of this package. The exit code
-## below is what carries that distinction out to the caller.
+## Assert one scenario. `@test_broken` is reached only on a real failure,
+## so over-listing a name is safe and under-listing fails.
 function check_scenario(name, matched, broken)
     return if matched
         @test matched
@@ -77,20 +72,9 @@ function check_scenario(name, matched, broken)
     end
 end
 
-## The exit code separates a scenario that did not behave as declared
-## from the script never getting as far as running, so
-## `test/package/EnzymeExt.jl` can tolerate the second without swallowing
-## the first. Enzyme being unusable on a platform is what that wrapper
-## exists to absorb; a scenario that regresses without being declared
-## broken is not, and would otherwise be absorbed identically.
-##
-##   0  every scenario behaved as declared
-##   2  at least one did not: a failed assertion, or an error the testset
-##      caught (an Enzyme throw is not one of these, `enzyme_matches_
-##      mooncake` turns it into a plain `false`)
-##   anything else  the script could not run: a load or precompile
-##      failure before the testset, or a crash that takes the process
-##      down with it
+## Exit code 2 means a scenario did not behave as declared; any other
+## non-zero code means the script could not run. `test/package/EnzymeExt.jl`
+## fails on the first and tolerates the second.
 failed = try
     @testset "Enzyme extension" begin
         @testset "enzyme_adtype is an AutoEnzyme with runtime activity" begin
