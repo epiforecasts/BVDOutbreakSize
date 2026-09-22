@@ -263,9 +263,13 @@ jobs:
             last=""
             start=$SECONDS
             while sleep 60; do
-              newest=$(ls -t logs/*.log 2>/dev/null | head -n 1)
+              # `|| true` on both: GitHub runs the step under `bash -e`, and
+              # before the first progress line lands the glob matches nothing
+              # and `ls` exits 2, which would kill this subshell on its first
+              # tick and silently disable the heartbeat for the whole fit.
+              newest=$(ls -t logs/*.log 2>/dev/null | head -n 1) || true
               [ -n "$newest" ] || continue
-              line=$(tail -n 1 "$newest" 2>/dev/null)
+              line=$(tail -n 1 "$newest" 2>/dev/null) || true
               [ -n "$line" ] && [ "$line" != "$last" ] || continue
               printf '[%3dm] %s\n' "$(( (SECONDS - start) / 60 ))" "$line"
               last="$line"
