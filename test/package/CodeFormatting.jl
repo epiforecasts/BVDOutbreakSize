@@ -13,9 +13,9 @@
         # Without this the exact pin in `test/formatter/Project.toml` is
         # unresolvable from a depot cached before that version was registered.
         resolve = "using Pkg; Pkg.Registry.update(); Pkg.instantiate()"
-        run(`julia --project=$formatter_env -e $resolve`)
+        run(`julia --startup-file=no --project=$formatter_env -e $resolve`)
         cmd = Cmd(
-            `julia --project=$formatter_env $(joinpath(formatter_env, "runtests.jl"))`;
+            `julia --startup-file=no --project=$formatter_env $(joinpath(formatter_env, "runtests.jl"))`;
             ignorestatus = true
         )
         result = run(pipeline(cmd, stdout = stdout, stderr = stderr); wait = true)

@@ -71,8 +71,14 @@ jobs:
         uses: ./.github/actions/changed-paths
         with:
           label: 'the report'
+          # `ext/` and `scripts/` are named file by file rather than as
+          # directories. The Enzyme extension is never loaded here (Enzyme is
+          # not in the docs environment), and of the scripts only these three
+          # run in this workflow, so a change to the SitRep downloader, the
+          # scanners or the backfill driver used to rebuild the whole report
+          # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|ext/|data/|docs/|scripts/|README\.md|Project\.toml|\.github/(workflows/docs\.yml|actions/changed-paths/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|standalone_report)\.jl|\.github/(workflows/docs\.yml|actions/changed-paths/))
 
   # Resolve and precompile the single shared environment once, list the fit
   # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
@@ -253,11 +259,9 @@ jobs:
           retention-days: 3
 
   # Rescore the published releases and refresh the release overlays, once, in
-  # parallel with the fits. Both render jobs used to run this identically,
-  # each paying ~6 min on the critical path for the same ten CSVs. Nothing
-  # here reads this run's fits: the scoring compares past releases' saved
-  # forecasts against the current data, so it can start as soon as the
-  # environment is resolved.
+  # parallel with the fits. Nothing here reads this run's fits: the scoring
+  # compares past releases' saved forecasts against the current data, so it
+  # can start as soon as the environment is resolved.
   overlays:
     name: Refresh release overlays
     needs: [changes, list]
