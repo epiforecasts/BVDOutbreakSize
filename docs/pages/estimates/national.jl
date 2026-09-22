@@ -1,7 +1,7 @@
 # # National estimates
 #
 # The national results of the joint model: the outbreak size, the infections and deaths to date, the reproduction number, the observation delays and the ascertainment of each surveillance stream.
-# The model behind them is on the [Methods](@ref "Methods") page.
+# The methods for this model are on the [Methods](@ref "Methods") page.
 #
 # This page is generated from
 # [`docs/pages/estimates/national.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/national.jl).
