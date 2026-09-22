@@ -784,6 +784,66 @@ function stream_forecast_columns(stream)
 end
 
 """
+Date a dated `history` was first reported, or `missing` when it has no
+vintages. A `history` is any `(; days)` series of day-indices, and
+`grid_date` maps one of those indices to its calendar date, so a
+per-province or an assembled series reads the same way a manifest field
+does. Before the first vintage a cumulative total reads zero because the
+series has not started, which is the absence of a series rather than a
+count of zero.
+"""
+function history_first_date(grid_date, history)::Union{Date, Missing}
+    isempty(history.days) && return missing
+    return grid_date(minimum(history.days))
+end
+
+"""
+Date a dated `history` was last reported, or `missing` when it has no
+vintages. A `history` is any `(; days)` series of day-indices, and
+`grid_date` maps one of those indices to its calendar date. Past the last
+vintage the series is only ever repeated at its last reported value
+rather than genuinely observed.
+"""
+function history_last_date(grid_date, history)::Union{Date, Missing}
+    isempty(history.days) && return missing
+    return grid_date(maximum(history.days))
+end
+
+## The dated series `stream` is read from, as a `(; days)` history on
+## `obs`'s grid, empty when `obs` does not carry the stream. The Uganda
+## exports are a dated list of detections rather than a series of vintages,
+## so their series is the detected imports and the detected import deaths
+## together.
+function _stream_series(obs, stream)
+    id = stream_id(stream)
+    if id === :exports
+        days = Int[]
+        for f in (:export_case_days, :export_death_days)
+            hasproperty(obs, f) && append!(days, Int.(getproperty(obs, f)))
+        end
+        return (; days)
+    end
+    field = _stream_entry(id).field
+    hasproperty(obs, field) || return (; days = Int[])
+    return getproperty(obs, field)
+end
+
+"""
+Date `stream` was first reported in `obs`, or `missing` when `obs` does
+not carry the stream or the stream has no vintages. This is the date of
+the stream's first vintage, where its series begins.
+
+The Uganda exports are a dated list of detections rather than a series of
+vintages, so their first reported date is the earlier of the first
+detected import and the first detected import death.
+"""
+function stream_first_date(obs, stream)::Union{Date, Missing}
+    return history_first_date(
+        day -> grid_date(obs, day), _stream_series(obs, stream)
+    )
+end
+
+"""
 Date `stream` was last reported in `obs`, or `missing` when `obs` does
 not carry the stream or the stream has no vintages. This is the date of
 the stream's last vintage, since past it the series is only ever repeated
@@ -794,20 +854,9 @@ vintages, so their last reported date is the later of the last detected
 import and the last detected import death.
 """
 function stream_last_date(obs, stream)::Union{Date, Missing}
-    id = stream_id(stream)
-    if id === :exports
-        days = Int[]
-        for f in (:export_case_days, :export_death_days)
-            hasproperty(obs, f) && append!(days, Int.(getproperty(obs, f)))
-        end
-        isempty(days) && return missing
-        return grid_date(obs, maximum(days))
-    end
-    field = _stream_entry(id).field
-    hasproperty(obs, field) || return missing
-    h = getproperty(obs, field)
-    isempty(h.days) && return missing
-    return grid_date(obs, maximum(h.days))
+    return history_last_date(
+        day -> grid_date(obs, day), _stream_series(obs, stream)
+    )
 end
 
 """

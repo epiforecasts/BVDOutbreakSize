@@ -416,8 +416,8 @@ end
 ## with no vintages at all has no coverage.
 function stream_coverage_end(obs, grid_date, stream)
     h, _ = stream_history(obs, stream)
-    isempty(h.days) && return typemin(Date)
-    return grid_date(maximum(h.days))
+    d = history_last_date(grid_date, h)
+    return ismissing(d) ? typemin(Date) : d
 end
 
 ## The first date a stream's own truth source carries an observation: the
@@ -435,8 +435,8 @@ end
 function stream_coverage_start(obs, grid_date, stream)
     haskey(STREAM_ASSEMBLED, stream) && return typemin(Date)
     h, _ = stream_history(obs, stream)
-    isempty(h.days) && return typemax(Date)
-    return grid_date(minimum(h.days))
+    d = history_first_date(grid_date, h)
+    return ismissing(d) ? typemax(Date) : d
 end
 
 ## Where a scoring window opens: the horizon back from `made_date` for an
