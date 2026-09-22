@@ -73,6 +73,8 @@ This moves the non-BVD death background, so fitted values change.
 - The National page opens with its own title and summary rather than a copy of the README front matter.
   The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
   The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
+- The summary dashboard opens with the abstract, read from `README.md`, and one line pointing to the National, Methods and Limitations pages.
+  It replaces a list of every other page, which still sent readers to the National page for the methods.
 
 ### Infrastructure
 

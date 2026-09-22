@@ -26,3 +26,13 @@ function front_matter()
     m === nothing && error("README.md has no <!-- SHARED:END --> marker")
     return strip(m.captures[1])
 end
+
+## The abstract paragraph of the front matter, without its "**Abstract.**"
+## label. It needs no dates, so it reads README.md directly rather than
+## loading the data.
+function readme_abstract()
+    readme = read(joinpath(dirname(@__DIR__), "README.md"), String)
+    m = match(r"^\*\*Abstract\.\*\* (.*?)\n\n"ms, readme)
+    m === nothing && error("README.md has no **Abstract.** paragraph")
+    return m.captures[1]
+end
