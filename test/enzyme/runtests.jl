@@ -1,24 +1,16 @@
-## Enzyme AD extension checks, isolated in their own environment.
+## Enzyme AD extension checks, isolated in their own environment because
+## Enzyme is platform- and version-dependent for this model and must not
+## enter the main test environment. Run as a tolerated subprocess by
+## `test/package/EnzymeExt.jl`.
 ##
-## Enzyme is kept out of the main test environment because its
-## reverse-mode support is platform- and version-dependent for this model
-## (a native access violation on Windows, an `EnzymeInternalError` LLVM
-## compile failure on the joint on some Linux runners, a wrong gradient
-## from mishandling the Gauss-Legendre quadrature in the censored-delay
-## path on Julia LTS). Loading it in the main env also tripped Aqua's
-## persistent-task check and broke precompilation on Windows. Here it is a
-## dependency of this sub-environment only, run as a tolerated subprocess
-## by `test/package/EnzymeExt.jl` on the platforms where it is viable.
+## Mooncake is the default and is asserted to differentiate every model in
+## the main suite. This checks the Enzyme opt-in against it over the shared
+## AD scenarios from `test/ad_fixtures.jl`, which also declare what is
+## expected to fail and what is too slow to run.
 ##
-## Mooncake is the package default and is asserted to differentiate every
-## model in the main suite; this script checks the Enzyme opt-in matches
-## Mooncake where Enzyme produces a correct gradient, and records a broken
-## test otherwise. The components are the shared AD scenarios from
-## `test/ad_fixtures.jl`, so the surface benchmarked and asserted under
-## Mooncake is the surface swept here, and a component cannot be added to
-## one without the other. Which scenarios are expected to fail, and which
-## are too slow to run at all, is declared there rather than by trimming
-## the sweep.
+## Exit code 2 means a scenario did not behave as declared; any other
+## non-zero code means the script could not run. The wrapper fails on the
+## first and tolerates the second.
 
 using Test
 using ADTypes: AutoEnzyme

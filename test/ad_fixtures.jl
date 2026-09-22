@@ -429,20 +429,11 @@ quietly shrinking what is timed.
 const MIN_SCENARIOS = 16
 
 """
-    enzyme_broken_scenarios()
-
-Scenario names whose Enzyme gradient is known to fail, as a `Set{String}`.
-
-The Enzyme sweep in `test/enzyme/runtests.jl` computes each scenario's
-pass/fail itself and falls back to `@test_broken` only when a listed
-scenario really did fail, so listing a name that has since been fixed
-costs nothing. A failure not listed here reds the run.
+Scenario names whose Enzyme gradient is known to fail. Over-listing is
+safe; a failure not listed here reds the run.
 """
 function enzyme_broken_scenarios()
-    ## Reverse mode on Julia 1.13 only. Both differentiate on 1.11.9 with
-    ## the same Enzyme and Mooncake, and the patch model differentiates on
-    ## 1.13 under forward mode. `bvd_joint` composes
-    ## `patch_infection_model`, so the two are one failure.
+    ## Enzyme reverse mode on Julia 1.13; both differentiate on 1.11.
     return Set(
         [
             "bvd_joint",
@@ -453,13 +444,7 @@ function enzyme_broken_scenarios()
 end
 
 """
-    enzyme_skip_scenarios()
-
-Scenario names not run under Enzyme at all, as a `Set{String}`.
-
-For a pair that hangs rather than throws: a `@test_broken` still has to
-reach a verdict, and one that never returns stalls the run instead of
-recording a failure.
+Scenario names not run under Enzyme at all.
 """
 function enzyme_skip_scenarios()
     ## Fails type analysis rather than returning a verdict a

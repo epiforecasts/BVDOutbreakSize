@@ -1322,11 +1322,7 @@ scales and the correlation matrix.
     δ_halflife ~ region_halflife_prior
     φ = exp2(-week / δ_halflife)
     Ω_L ~ lkj_prior
-    ## Densified: indexing the triangular factor goes through a BLAS path
-    ## Enzyme's reverse mode has no rule for, and the walk fails to
-    ## differentiate at more than one patch without this. The same values,
-    ## at an O(n_patches^2) copy against the factorisation already paid.
-    L = Matrix(Ω_L.L)
+    L = Ω_L.L
     ## Standard-normal draws for the level and for each knot's innovation.
     z_level ~ product_distribution(fill(region_offset_prior, n_patches))
     z_drift ~ product_distribution(
