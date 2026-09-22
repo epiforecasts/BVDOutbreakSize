@@ -1,6 +1,6 @@
 # # National estimates
 #
-# The national results of the joint model: the outbreak size, the infections and deaths to date, the reproduction number, the observation delays and the ascertainment of each surveillance stream.
+# This page gives the national estimates from the joint model.
 # The methods for this model are on the [Methods](@ref "Methods") page.
 #
 # This page is generated from

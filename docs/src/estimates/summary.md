@@ -9,7 +9,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
-See the [National](national.md) page for the full results, the [Methods](../methods.md) page for the model and the [Limitations](../limitations.md) page for its caveats.
+The other pages of the report give the detail behind each result, and the [Methods](../methods.md) page describes the model.
 Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
 
 ## Headline estimates
