@@ -877,7 +877,7 @@ m_0 = m_\\text{base} +
     \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
 ```
 
-For the integral backfill only, where `m` counts doublings over the whole
+For the integral model only, where `m` counts doublings over the whole
 outbreak and `2^m` is the cut-off cumulative case total, so a base of 9
 matches McCabe et al.'s Method 2 central 501 cases.
 
@@ -885,6 +885,11 @@ Not for a renewal fit. There `m` counts the cryptic generations and the
 seed is the daily incidence reached over them, so an advancing
 outbreak-size centre would give a seed of order half a million per day.
 `exponential_growth_model` carries its own default.
+
+The defaults here do not reproduce any fit. The v1.3.0 integral backfill
+runs inside that release's own worktree and resolves this function
+against v1.3.0's constants, and no other caller passes them. Pass
+`m_base` and `doubling_days` explicitly for a known configuration.
 """
 function m_prior_centre(
         as_of_date::Union{Date, AbstractString};

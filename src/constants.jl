@@ -139,10 +139,9 @@ const REPORT_SCENARIOS_CI = [
 """
     M_PRIOR_BASE_DATE
 
-Base date for the integral-model doubling-count prior centre. McCabe et
-al.'s first report (18 May 2026), whose Method 2 central scenario of 501
-cases gives `m ≈ log2(501) ≈ 9` when `2^m` is the cumulative case total.
-Used only by [`m_prior_centre`](@ref), which serves the integral backfill.
+Base date for the doubling-count prior centre, McCabe et al.'s first
+report (18 May 2026). Used only as [`m_prior_centre`](@ref)'s default
+base date.
 """
 const M_PRIOR_BASE_DATE = "2026-05-18"
 
@@ -159,13 +158,19 @@ const M_PRIOR_DOUBLING_DAYS = 11.7
 """
     M_PRIOR_BASE
 
-Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing
-doubling-count prior used by the backfill fits via
+Default base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for
 [`m_prior_centre`](@ref), so that
 `m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-The main fit's `m` prior centre is set directly in
-[`exponential_growth_model`](@ref) and counts transmission generations
-rather than doublings.
+
+No fit reads it. The headline fit sets its own `m` centre in
+[`exponential_growth_model`](@ref), where `m` counts transmission
+generations rather than doublings of the cumulative case total. The
+v1.3.0 integral backfill does call [`m_prior_centre`](@ref), but
+`scripts/backfill_forecasts.jl` runs each release inside that release's
+own worktree, so it resolves against v1.3.0's constants (a base of 9
+over a 20-day doubling time, where `2^m` is the cumulative case total and
+McCabe et al.'s Method 2 central scenario of 501 cases gives
+`m ≈ log2(501) ≈ 9`) rather than these.
 """
 const M_PRIOR_BASE = 3.0
 
