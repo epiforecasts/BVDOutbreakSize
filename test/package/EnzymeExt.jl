@@ -24,13 +24,22 @@
                 stdout = stdout, stderr = stderr
             )
         )
-        ## Enzyme's platform/version instability is tolerated: a non-zero
-        ## exit (an upstream Enzyme/LLVM failure, not a model issue) is
-        ## recorded as broken rather than failing the suite. Mooncake, the
-        ## default backend, is asserted to differentiate every model in the
-        ## main suite.
+        ## Enzyme's platform/version instability is tolerated: a crash
+        ## (an upstream Enzyme/LLVM failure, not a model issue) is recorded
+        ## as broken rather than failing the suite. Mooncake, the default
+        ## backend, is asserted to differentiate every model in the main
+        ## suite.
+        ##
+        ## Exit code 2 is the script's own marker for a scenario that did
+        ## not behave as `ADFixtures` declares, which is a regression
+        ## rather than an upstream wobble and fails here. Tolerating it
+        ## identically would leave the sweep unable to report anything it
+        ## had not already been told to expect. Every other non-zero code
+        ## is the script failing to run, which stays tolerated.
         if result.exitcode == 0
             @test true
+        elseif result.exitcode == 2
+            @test result.exitcode == 0
         else
             @test_broken result.exitcode == 0
         end

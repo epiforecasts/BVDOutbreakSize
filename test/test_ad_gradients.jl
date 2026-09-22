@@ -31,10 +31,7 @@
     include(joinpath(@__DIR__, "ad_fixtures.jl"))
 
     scenarios = ADFixtures.scenarios()
-    ## The fixtures are the benchmark suite's component list too, so a
-    ## truncated list would pass this testset while quietly shrinking the
-    ## benchmarks.
-    @test length(scenarios) >= 16
+    @test length(scenarios) >= ADFixtures.MIN_SCENARIOS
 
     for scen in scenarios
         @testset "$(scen.group): $(scen.name)" begin

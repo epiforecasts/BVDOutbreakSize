@@ -121,6 +121,65 @@ Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a f
   resolves them against its own constants, so nothing here read them. No
   fitted values change.
 
+  The existing suite times steady-state gradients only, which is why an
+  18 minute cold compile went untracked.
+
+- The fit cache key CI restores is the one the fits are keyed on (#739). The
+  Actions key hashed all of `data/`, including the generated scoring tables
+  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
+  rescore commit or a README edit missed the cache and refit every model for
+  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
+  the hashing rule itself would not have invalidated anything. The key is now
+  taken from `fit_content_hash` rather than restated, so there is one list.
+
+- The opt-in Enzyme backend now differentiates every observation submodel
+  and single-stream composer, and the AD check sweeps them all rather than
+  one composer and the joint (#789). The scenarios had passed `missing`
+  for their cut-off totals, which scores nothing and puts the stream on the
+  predictive-generator path, so what was benchmarked and asserted was a
+  surface no fit differentiates. Mooncake, the default, differentiates
+  either, so this was invisible until Enzyme rejected the union element
+  type that path allocates. `bvd_joint` and `patch_infection_model` are
+  still broken under Enzyme, and the bed-occupancy stream is too slow to
+  compile to run at all; all three are declared in the fixtures rather
+  than left out of the sweep.
+
+- The automatic version increment is gone (#607). It opened a patch-bump pull
+  request on every push to `main` where the version had not changed, which is
+  now both redundant and harmful: `@release` bumps the version as part of
+  cutting a release, and the automatic one moved it without opening a news
+  section, which is what left a merged change with no heading to write under.
+  It could also open a second pull request racing the one `@release` opens,
+  bumping the same field by a different route. It had not run since v1.14.0
+  in any case, wedged behind a stale branch its own guard would not clear.
+  `/version major|minor|patch` on a pull request is unaffected.
+
+- A pull request only builds the report, runs the tests and measures coverage
+  when it changes something they are built from (#776). The fits alone cost
+  hours, and a change to the test suite, the benchmarks or an unrelated
+  workflow produced a site identical to the one on `main`; a change to the
+  analysis pages or the README ran the whole test suite to no purpose. Each
+  workflow decides in a job of its own, so a skipped build says so in its
+  summary rather than leaving no check at all. A push, a tag and a manual run
+  are never gated.
+- A release is cut by commenting `@release` on any issue or pull request
+  (#767). The notes are the newest `docs/src/news.md` section, which is what
+  they have always been, copied across by hand. The comment tags `main`,
+  publishes the release and opens a pull request bumping the version and
+  starting the next section, so the following change has a heading to write
+  under. `@release minor` and `@release major` choose the size of that bump.
+- `scripts/release_notes.jl` holds the text handling behind it and runs
+  locally through `task release-notes`, so the notes can be read before
+  anything is published.
+- Pushing a version tag starts a second documentation build of the commit
+  that was just pushed to `main`. The two builds used to run at the same
+  time and each refit every model; for v2.1.0 the tag build's joint fit ran
+  past the job's time limit, so no `results-v2.1.0` release was published.
+  The tag build now waits for the `main` build to finish and reuses its
+  cached fits (#765). Each fit job's summary also names the runner's CPU,
+  because the same fit runs up to half again as long on some runners.
+
+
 ## v2.1.0
 
 Changes since v2.0.0.
