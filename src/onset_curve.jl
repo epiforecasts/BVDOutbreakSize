@@ -132,11 +132,20 @@ each onset date `u` both figures print, one increment cell is built:
 y = confirmed_total(s, u) - confirmed_total(s-1, u)
 ```
 
-Every printed onset date both vintages cover is scored, not just a trailing
-window: [`onset_reporting_model`](@ref) fits a per-snapshot noise scale on
-its own report-date random walk, so a settled cell (true increment ~0)
-still carries information, about that scale, rather than needing to be
-dropped to avoid diluting the likelihood with near-zero signal.
+The stream has two components. Between-vintage increments are the
+nowcasting half, corrections that right truncation
+([`onset_report_cdf`](@ref)) undoes through the delay hazard and calendar
+walk. The first surviving vintage's own printed extent, differenced
+against a virtual empty predecessor rather than dropped (below), is the
+second: a complete but noisy curve of `alpha(u) · onsets(u)` running back
+to the start of the digitised window (late April in the current data),
+anchoring the ascertainment level in a way corrections alone cannot.
+
+Every printed onset date both vintages of a pair cover is scored:
+[`onset_reporting_model`](@ref) fits a per-snapshot noise scale on its own
+report-date random walk, so a settled increment cell (true value ~0) still
+carries information, about that scale, rather than needing to be dropped to
+avoid diluting the likelihood with near-zero signal.
 
 The window is clipped to the onset dates both vintages' figures actually
 print. Each block has its own printed extent, its earliest to latest
@@ -161,16 +170,16 @@ data. Delay zero is never observed, and the hazard there rests on partial
 pooling towards the baseline (`σ_h0`,
 [`onset_report_hazard_model`](@ref)) rather than on data.
 
-The first in-cutoff vintage is differenced against an implicit empty
-predecessor via the sentinel `prev_report_days[i] = 0`.
-[`onset_report_cdf`](@ref) returns `0` for any negative delay and grid day
-`0` postdates no valid onset day, so this recovers signal from the first
-digitised vintage as a difference from nothing, with no extra branch
-downstream. Those cells score a level rather than a correction, which is
-what anchors `alpha`. Corrections only pin differences of `F`, so without
-a level somewhere `alpha` would float. [`onset_report_scales`](@ref) gives
-them the counting variation a level carries and a correction largely does
-not.
+The first in-cutoff vintage, the second component above, is differenced
+against an implicit empty predecessor via the sentinel
+`prev_report_days[i] = 0`. [`onset_report_cdf`](@ref) returns `0` for any
+negative delay and grid day `0` postdates no valid onset day, so this
+recovers signal from the first digitised vintage as a difference from
+nothing, with no extra branch downstream. Those cells score a level rather
+than a correction, which is what anchors `alpha`. Corrections only pin
+differences of `F`, so without a level somewhere `alpha` would float.
+[`onset_report_scales`](@ref) gives them the counting variation a level
+carries and a correction largely does not.
 
 Returns `(; onset_days, report_days, prev_report_days, increments,
 total_days, total_counts, last_total)`. The first four are length-matched

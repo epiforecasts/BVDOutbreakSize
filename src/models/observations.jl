@@ -3562,14 +3562,22 @@ max(grid_end - grid_start + 1, 1)`.
 end
 
 """
-Symptom-onset reporting-triangle observation model: fits the between-vintage
-increments of the digitised reporting triangle
-([`load_onset_curve`](@ref)) against the shared latent daily onset series
-`onsets`, through a nonparametric delay hazard
+Symptom-onset reporting-triangle observation model: fits the digitised
+reporting triangle ([`load_onset_curve`](@ref)) against the shared latent
+daily onset series `onsets`, through a nonparametric delay hazard
 ([`onset_report_hazard_model`](@ref)) and an explicit ascertainment level
 ([`onset_ascertainment_model`](@ref)). See [`onset_report_F`](@ref) for how
 the two combine and [`onset_report_cdf`](@ref) for how right truncation
 enters.
+
+The triangle carries two components, scored by the same cell likelihood.
+Between-vintage increments are the nowcasting half, corrections that right
+truncation undoes through the delay hazard and calendar walk. The first
+surviving vintage's own printed extent is scored as levels against a
+virtual empty predecessor rather than dropped: a complete but noisy curve
+of `alpha(u) · onsets(u)` running back to the start of the digitised window
+(late April in the current data), which anchors the ascertainment level in
+a way corrections alone cannot.
 
 Close in spirit to how the R package `baselinenowcast` treats a reporting
 triangle: a triangle of between-vintage increments, not a single total

@@ -737,6 +737,45 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
+@testitem "load_onset_curve: the archive's first snapshot covers one cell per printed bar" begin
+    ## The seeding day sits before the genetic TMRCA bound (mid-March) and
+    ## the earliest digitised onset date is in late April, so every scored
+    ## cell should sit inside the 1-based grid; pins that invariant rather
+    ## than assuming it. Also pins that the first surviving vintage (scored
+    ## as levels against the virtual empty predecessor, the second of the
+    ## stream's two components, see `onset_reporting_model`) gets exactly
+    ## one cell per onset date in its own printed extent.
+    using BVDOutbreakSize: BVDOutbreakSize, load_observations
+    using Dates: Day
+
+    obs = load_observations()
+    h = obs.onset_curve_history
+    @test !isempty(h.onset_days)
+    @test minimum(h.onset_days) >= 1
+
+    path = joinpath(
+        pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv"
+    )
+    blocks = filter(
+        b -> b.report_date <= obs.cutoff,
+        BVDOutbreakSize._dedup_onset_blocks(
+            BVDOutbreakSize._read_onset_curve_blocks(path)
+        )
+    )
+    first_block = blocks[1]
+    lo, hi = extrema(keys(first_block.onsets))
+    _date(u) = obs.cutoff - Day(obs.n - u)
+
+    first_report_day = h.report_days[1]
+    ## Every one of the first vintage's cells is a level cell.
+    @test all(==(0), h.prev_report_days[h.report_days .== first_report_day])
+    first_dates = sort(
+        _date.(h.onset_days[h.report_days .== first_report_day])
+    )
+    @test first_dates == collect(lo:Day(1):hi)
+end
+
 @testitem "onset_report_scales: error formula match, grows with magnitude" begin
     using BVDOutbreakSize: onset_report_scales
 

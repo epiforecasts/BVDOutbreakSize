@@ -20,20 +20,21 @@ Every fit used the composition link.
 `background_re = true` becomes `background_pooling = background_pooling_model`.
 The option and the gradients are unchanged.
 A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
-- The onset reporting-triangle likelihood carries a per-snapshot
+- The onset reporting-triangle likelihood now fits two components: the
+  first surviving snapshot's complete printed curve, scored as levels
+  against a virtual empty predecessor rather than dropped, and every later
+  bar as a between-vintage increment (#793). Both carry a per-snapshot
   digitisation-noise scale on a weekly random walk over the report-date
-  span, rather than a fixed 2.1 counts per read, and the per-scan levels
-  are sampled centred (#793). The scans have grown noisier, from about 1
-  count per bar in July to 10 to 13 from SitRep 113 (4 September), and the
-  walk lets the fitted scale track that drift instead of relying on a
-  multiplicative slack. Every printed cell both vintages of a pair cover is
-  now scored, not just a trailing 28-day window, so a settled cell still
-  informs the noise scale even though its own true increment has levelled
-  off. The calendar walk's own report-date grid no longer runs back to the
-  earliest digitised onset date, only as far as one delay support's width
-  before the earliest report day, so it no longer carries knots over onset
-  dates nobody reports on. Every fit-cache key changes, so the next build
-  refits.
+  span, rather than a fixed 2.1 counts per read and the calibrated
+  settled-cell floor. The scans have grown noisier, from about 1 count per
+  bar in July to 10 to 13 from SitRep 113 (4 September), and the walk lets
+  the fitted scale track that drift; the multiplicative slack that used to
+  paper over the mismatch is removed. The per-scan levels are sampled
+  centred and `σ_scan`'s prior is unbounded above. The calendar walk's own
+  report-date grid no longer runs back to the earliest digitised onset
+  date, only as far as one delay support's width before the earliest
+  report day, so it no longer carries knots over onset dates nobody reports
+  on. Every fit-cache key changes, so the next build refits.
 
 ### Report
 
