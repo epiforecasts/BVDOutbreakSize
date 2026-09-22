@@ -1,11 +1,14 @@
 # Summary dashboard
 
-A one-page overview of the headline results for readers with limited time.
-Every number, table and figure on this page is produced by the same model fit as the full report and refreshes whenever the data updates.
-See the [National](national.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](../forecasts/national.md) page for the week ahead and the [Evaluation](../evaluation/forecast.md) page for how past forecasts scored.
-The [Sensitivity](../sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
+```@eval
+using Markdown, BVDOutbreakSize
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl"))
+Markdown.parse(readme_abstract())
+```
+
+This page summarises the headline results.
+See the [National](national.md) page for the full results, the [Methods](../methods.md) page for the model and the [Limitations](../limitations.md) page for its caveats.
 Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
-Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
 
 ```@eval
 using Markdown, BVDOutbreakSize
