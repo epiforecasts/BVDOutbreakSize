@@ -12,15 +12,28 @@ DRC counts come from the situation reports of the Institut National de Santé Pu
 Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
-**See:**
-[current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
-[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
-[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
-[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
-[comparison with Chamla et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-Chamla-et-al.) ·
+**Start here:**
+[summary dashboard](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/summary) ·
+[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
+[limitations](https://epiforecasts.io/BVDOutbreakSize/stable/limitations).
+
+**Full results:**
+[national](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national) ·
+[by province](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/province) ·
+[forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
+[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast).
+
+**Go deeper:**
+[methods](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Methods) ·
+[how this differs from McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Comparison-with-published-estimates) ·
+[reproduction number over time](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Reproduction-number-over-time) ·
+[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample#Posterior-predictive-checks) ·
+[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Forecast-scoring-across-releases) ·
+[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Frozen-fit-forecast-evaluation) ·
 [how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
-[limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
-[full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
+[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
+[estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
+[aim and origins](https://epiforecasts.io/BVDOutbreakSize/stable/aim).
 
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
@@ -79,7 +92,7 @@ julia --project=. scripts/run.jl
 ```
 
 `scripts/run.jl` fits the models and writes the output CSVs (the analysis literate is also run as part of the docs build).
-Running `docs/examples/analysis.jl` directly instead steps through the full narrative.
+Running `docs/pages/estimates/national.jl` directly instead steps through the full narrative.
 
 ### Re-fit without cloning
 

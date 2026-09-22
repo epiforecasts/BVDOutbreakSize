@@ -18,12 +18,12 @@ This page covers how the project is laid out, how to run it, and the conventions
 - `src/forecast.jl` — forecast helpers (`forecast_reported`).
 - `src/confirmed_cfr.jl` — delay-corrected confirmed-case-fatality-ratio helpers.
 - `src/plots.jl` — plotting.
-- `docs/examples/analysis.jl` and `docs/examples/sensitivity.jl` — the Literate walkthroughs, split so the expensive fits and the render can fan out across CI runners.
-  `analysis.jl` carries the methods, results and one-week-ahead forecast.
-  `sensitivity.jl` carries the forecast validation and the comparison/sensitivity analyses.
-  Both load their fits through the shared `docs/examples/_setup.jl`.
-  `analysis.jl` is the main artifact.
+- `docs/pages/` — the Literate report pages, one file per rendered page, in a folder per navigation group so a new geographic stratum is a new file in an existing folder.
+  `estimates/national.jl` carries the methods and the national results, `estimates/province.jl` the per-province estimates, `forecasts/national.jl` the one-week-ahead projections, `evaluation/insample.jl` the posterior predictive checks, `evaluation/forecast.jl` the scoring against what arrived, and `sensitivity.jl` the comparison and sensitivity analyses.
+  All load their fits through the shared `_setup.jl`, and anything two pages both need lives there rather than on whichever page defined it first.
+  `estimates/national.jl` is the main artifact, published as `analysis.html` on each release.
 - `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), `list.jl` (print fit ids for the CI matrix), and `convergence.jl` with `check_convergence.jl` (the convergence gate, `task check-convergence`).
+- `scripts/fetch_fits.sh` — download a CI run's fits into `logs/fit_cache` (`task fetch-fits`), so a local render loads the same chains CI rendered from.
 - `docs/execute.jl` — runs one Literate page against the fit cache and writes its markdown, figures and half of `output/` (used by `task docs-main` and `task docs-sensitivity`).
 - `docs/make.jl` — the Vitepress combine step: copies `README.md` to `index.md`, assembles the site from the already-rendered markdown, and builds the bibliography (used by `task docs`).
 - `data/observations.toml` — single source of truth for observation data (case and death counts, traveller volumes, sources).
@@ -44,9 +44,13 @@ The ones used day to day:
 # Instantiate the package environment (no task wraps this)
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
-# Fit and cache every model, then render the docs from the cache
-task fit-all
+# Download the fits from the latest successful CI build, then render the
+# docs from them
+task fetch-fits
 task docs
+
+# Or fit every model locally instead, in one parallel pass
+task fit-all
 
 # Fit and cache a single model by id (list ids with
 # `julia --project=docs docs/fits/list.jl`)
@@ -68,9 +72,13 @@ task test-quick
 julia --project=. scripts/run.jl
 ```
 
-Running `julia --project=. docs/examples/analysis.jl` directly instead steps through the full narrative without going through the fit cache, fitting every model inline.
+A fit the render cannot find in the cache fails the build naming the key, rather than refitting the whole report inline.
+`fit-all` runs `threads / chains` fits at once, so it takes all available threads.
+Set `JULIA_NUM_THREADS` to cap it on a shared host.
+
+`BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
+Running `julia --project=. docs/pages/estimates/national.jl` that way steps through the full narrative and fits every model as it goes.
 This is the slow path.
-Prefer `task fit-all && task docs` for anything beyond reading the source.
 
 A build streams per-fit progress by default: every NUTS fit writes `logs/<fit>.log` (iteration, log-density, divergences) and a TensorBoard run under `logs/tensorboard/<fit>/`, controlled by `BVD_FIT_LOG` (`all` when unset, or `progress`, `tensorboard`, `none`).
 CI release builds set `BVD_FIT_LOG=none`.
@@ -105,7 +113,7 @@ Write the entry for a change under the open section at the top of `news.md` as p
 
 ## Model architecture
 
-The model is assembled from small, swappable Turing submodels rather than one monolithic block (the build-up is drawn as a flowchart on the [Analysis](analysis.md) page).
+The model is assembled from small, swappable Turing submodels rather than one monolithic block (the build-up is drawn as a flowchart on the [Analysis](estimates/national.md) page).
 There are three layers.
 
 **Building-block submodels**, one per parameter family, each owning its own priors:
@@ -133,7 +141,7 @@ Pass a stream as `missing` to drop its likelihood.
   This rule is for prose only.
 - The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
   Edit it in `README.md` only.
-  `docs/examples/analysis.jl` loads it at build time via a Documenter `@eval` block that reads `README.md` and extracts everything before that marker, so do not duplicate it into the analysis page.
+  `docs/pages/estimates/national.jl` loads it at build time via a Documenter `@eval` block that reads `README.md` and extracts everything before that marker, so do not duplicate it into the analysis page.
 - Table-construction and other setup code in `analysis.jl` is hidden inside `<details>` dropdowns via `#md # @raw html` blocks.
   The bare result object follows (with `#hide`) so only the output renders.
 - The surveillance dispersion prior is a half-normal `truncated(Normal(0.6, 0.2); lower = 0)` on `inv_sqrt_k`, following the Stan prior-choice recommendations.
@@ -185,7 +193,7 @@ println(any(x -> occursin("Core.Box", string(x)),
 
 ### Analysis report prose
 
-These apply to the narrative prose in `docs/examples/analysis.jl`, and to write-up prose generally.
+These apply to the narrative prose in `docs/pages/estimates/national.jl`, and to write-up prose generally.
 Use the existing report text as the template for tone.
 The measured sentence- and paragraph-level rules below were reverse-engineered from a manuscript the maintainers are happy with.
 The repo-specific rules that follow take precedence where the two disagree.

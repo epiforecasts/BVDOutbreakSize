@@ -6,7 +6,13 @@
 # refitting. Uses the same `docs/` environment as the render, so the chains are
 # serialized and deserialized under identical package versions.
 #
-#   julia --project=docs docs/fits/all.jl
+#   julia -t auto --project=docs docs/fits/all.jl
+#
+# `fit_parallel` runs `threads ÷ chains` fits at once, each keeping `chains`
+# threads for its own chains, so a single-thread process fits the registry one
+# model at a time. `task fit-all` passes
+# `JULIA_NUM_THREADS` when it is set and `auto` otherwise, so setting that
+# variable caps the fan-out on a shared box.
 #
 # Set `BVD_FIT_CACHE` to choose the cache directory (default `logs/fit_cache`),
 # `BVD_REFIT=all` to ignore existing cache entries, and `BVD_RUN_SENSITIVITY`
@@ -25,7 +31,7 @@ const REFIT = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1"
 
 obs = load_observations()
 specs = build_fit_specs(obs)
-@info "Fitting $(length(specs)) models into the cache" cache = CACHE refit = REFIT
+@info "Fitting $(length(specs)) models into the cache" cache = CACHE refit = REFIT threads = Threads.nthreads()
 fit_parallel(
     [
         () -> fit_or_load(
