@@ -8,14 +8,14 @@
             isdir(jet_env) && isfile(joinpath(jet_env, "Project.toml"))
         run(
             pipeline(
-                `julia --project=$jet_env -e "using Pkg; Pkg.instantiate()"`,
+                `julia --startup-file=no --project=$jet_env -e "using Pkg; Pkg.instantiate()"`,
                 stdout = stdout, stderr = stderr
             )
         )
         result = run(
             pipeline(
                 Cmd(
-                    `julia --project=$jet_env $(joinpath(jet_env, "runtests.jl"))`;
+                    `julia --startup-file=no --project=$jet_env $(joinpath(jet_env, "runtests.jl"))`;
                     ignorestatus = true
                 ),
                 stdout = stdout, stderr = stderr
