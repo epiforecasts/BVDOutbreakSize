@@ -59,12 +59,7 @@ function ChainRulesCore.rrule(
         los::AbstractVector
     )
     L = length(los)
-    surv = similar(los)
-    acc = zero(eltype(los))
-    @inbounds for i in L:-1:1
-        acc += los[i]
-        surv[i] = acc
-    end
+    surv = survival_weights(los)
     y = convolve_delay(x, surv)
     function convolve_survival_pullback(Δy)
         ȳ = ChainRulesCore.unthunk(Δy)
@@ -152,20 +147,9 @@ function ChainRulesCore.rrule(
     n = length(Rt)
     L = length(seed)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
-    I = zeros(Tp, n)
-    force = zeros(Tp, n)
-    @inbounds for j in 1:min(L, n)
-        I[j] = seed[j]
-    end
-    @inbounds for t in (L + 1):n
-        f = zero(Tp)
-        kmax = min(t - 1, length(g))
-        for s in 1:kmax
-            f += I[t - s] * g[s]
-        end
-        force[t] = f
-        I[t] = Rt[t] * f
-    end
+    ## The forward pass is the model's own, which also hands back the
+    ## per-day force the pullback needs, so the recursion is defined once.
+    I, force = renewal_infections_with_force(Rt, g, seed)
     function renewal_infections_pullback(ΔI)
         ## The recursion is sequential, so the reverse pass walks the days
         ## backwards, pushing each day's infection adjoint onto the lagged
