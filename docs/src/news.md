@@ -59,6 +59,11 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Infrastructure
 
+- `ChainRulesCore` is no longer a direct dependency (#808).
+It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
+Nothing has referenced it since, and Aqua's stale-dependency check missed it because the self-named import counted as a use.
+It stays in the resolved manifest through DynamicPPL and Mooncake, so nothing changes at runtime.
+
 - A release is cut by commenting `@release` on any issue or pull request (#767).
 The notes are the newest `news.md` section, which is what they have always been, copied across by hand.
 The comment tags `main`, publishes the release, and opens a pull request bumping the version and starting the next section.
