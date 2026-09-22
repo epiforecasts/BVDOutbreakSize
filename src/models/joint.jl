@@ -826,19 +826,40 @@ function _patch_confirmed_increments(
         kernel::AbstractVector, s_test::Real,
         province_days::AbstractVector{<:Integer}
     )
-    np = size(onsets_matrix, 1)
-    nv = length(province_days)
-    scaled_kernel = s_test .* kernel
-    first_daily = convolve_delay(
-        vec(@view onsets_matrix[1, :]), scaled_kernel
+    return _patch_confirmed_increments(
+        _patch_carried(onsets_matrix, kernel), s_test, province_days
     )
-    out = Matrix{eltype(first_daily)}(undef, np, nv)
-    @inbounds out[1, :] = bin_increments(first_daily, province_days)
-    @inbounds for p in 2:np
-        daily = convolve_delay(
-            vec(@view onsets_matrix[p, :]), scaled_kernel
+end
+
+## The same binning from an already carried `(n_patches × n)` matrix.
+function _patch_confirmed_increments(
+        carried::AbstractMatrix, s_test::Real,
+        province_days::AbstractVector{<:Integer}
+    )
+    np = size(carried, 1)
+    nv = length(province_days)
+    T = promote_type(eltype(carried), typeof(float(s_test)))
+    out = Matrix{T}(undef, np, nv)
+    @inbounds for p in 1:np
+        out[p, :] = bin_increments(
+            s_test .* vec(@view carried[p, :]), province_days
         )
-        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
+end
+
+"""
+Each patch's onsets carried through a delay kernel, an `(n_patches × n)`
+matrix. The confirmed composition and the laboratory composition both carry
+the onsets through the onset-to-confirmation kernel, so [`bvd_joint`](@ref)
+carries them once and hands the matrix to both.
+"""
+function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
+    np, n = size(onsets_matrix)
+    T = promote_type(eltype(onsets_matrix), eltype(kernel))
+    out = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        out[p, :] = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
     end
     return out
 end
@@ -864,34 +885,32 @@ end
 """
 Modelled per-patch analysed-specimen volume summed over the laboratory
 bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
-the national factors the composition normalises away. Each patch's onsets
-are pushed through the onset-to-confirmation kernel (report ⊕ receipt) and
-thinned by `p_drc`, and joined by the patch's share `w[p]` of the non-BVD
+the national factors the composition normalises away. `carried` is each
+patch's onsets through the onset-to-confirmation kernel (report ⊕ receipt,
+[`_patch_carried`](@ref)), thinned by `p_drc`, and joined by the patch's
+share `w[p]` of the non-BVD
 background carried to receipt (`bg_carried`). Summed over the patches this
 is the national suspect pipeline [`confirmed_cases_model`](@ref) scales
 into the analysed volume, so the shares are exact. `lab_days` are grid day
 indices. Returns an `(n_patches × n_days)` matrix.
 """
 function _patch_analysed_increments(
-        onsets_matrix::AbstractMatrix, kernel::AbstractVector,
+        carried::AbstractMatrix,
         p_drc::Real, bg_carried::AbstractVector, w::AbstractVector,
         lab_days::AbstractVector{<:Integer},
         lab_bins::AbstractVector{<:Integer} = 1:length(lab_days)
     )
-    np = size(onsets_matrix, 1)
-    n = size(onsets_matrix, 2)
+    np, n = size(carried)
     nb = isempty(lab_bins) ? 0 : maximum(lab_bins)
     T = promote_type(
-        eltype(onsets_matrix), eltype(kernel), typeof(float(p_drc)),
-        eltype(bg_carried), eltype(w)
+        eltype(carried), typeof(float(p_drc)), eltype(bg_carried), eltype(w)
     )
     out = zeros(T, np, nb)
     @inbounds for p in 1:np
-        carried = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
         wp = w[p]
         for (i, day) in enumerate(lab_days)
             d = clamp(Int(day), 1, n)
-            out[p, lab_bins[i]] += p_drc * carried[d] + wp * bg_carried[d]
+            out[p, lab_bins[i]] += p_drc * carried[p, d] + wp * bg_carried[d]
         end
     end
     return out
@@ -1318,13 +1337,18 @@ density there, is the fitted model's.
         )
     end
 
-    if !isempty(province_days)
-        confirmed_kernel = convolve_pmf(
-            cases_state.report_pmf, confirmed_state.receipt_pmf
+    ## The confirmed and laboratory compositions both carry the patch
+    ## onsets through the onset-to-confirmation kernel, once here.
+    if !isempty(province_days) || !isempty(province_lab_days)
+        confirmed_carried = _patch_carried(
+            patch_state.onsets_matrix,
+            convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
         )
+    end
+
+    if !isempty(province_days)
         modelled_prov = _patch_confirmed_increments(
-            patch_state.onsets_matrix, confirmed_kernel,
-            confirmed_state.s_test, province_days
+            confirmed_carried, confirmed_state.s_test, province_days
         )
         composition_state ~ to_submodel(
             composition(
@@ -1347,11 +1371,8 @@ density there, is the fitted model's.
     end
 
     if !isempty(province_lab_days)
-        lab_kernel = convolve_pmf(
-            cases_state.report_pmf, confirmed_state.receipt_pmf
-        )
         modelled_lab = _patch_analysed_increments(
-            patch_state.onsets_matrix, lab_kernel, p_drc,
+            confirmed_carried, p_drc,
             convolve_delay(cases_state.bg_daily, confirmed_state.receipt_pmf),
             bg_split_state.w, province_lab_days, province_lab_bins
         )
@@ -1462,6 +1483,10 @@ density there, is the fitted model's.
             0.0
         )
         province_capacity_share := treatment_state.capacity_shares
+        ## Daily share of the national bed demand by patch, the modelled
+        ## centre of the occupancy split.
+        province_occupancy_share := treatment_state.demand_patch ./
+            sum(treatment_state.demand_patch; dims = 1)
         province_occupancy_split_rho := treatment_state.occupancy_split_rho
         province_capacity_split_rho := treatment_state.capacity_split_rho
     end

@@ -3196,12 +3196,23 @@ end
 ## death composition as `province_death_composition_rho`. A chain carrying
 ## neither still has the submodel's own sampled `rho` under its prefix.
 function _composition_rho_keys(share_key::Symbol)
-    return share_key === :province_death_shares ?
-        [
-            :province_death_composition_rho,
-            Symbol("death_composition_state.ρ"),
-        ] :
-        [:province_composition_rho, Symbol("composition_state.ρ")]
+    share_key === :province_death_shares && return [
+        :province_death_composition_rho,
+        Symbol("death_composition_state.ρ"),
+    ]
+    share_key === :province_lab_shares && return [
+        :province_lab_composition_rho,
+        Symbol("lab_composition_state.ρ"),
+    ]
+    share_key === :province_occupancy_share && return [
+        :province_occupancy_split_rho,
+        Symbol("treatment_state.occupancy_split_rho"),
+    ]
+    share_key === :province_capacity_share && return [
+        :province_capacity_split_rho,
+        Symbol("treatment_state.capacity_split_rho"),
+    ]
+    return [:province_composition_rho, Symbol("composition_state.ρ")]
 end
 
 ## Per-draw composition overdispersion, or `nothing` when the chain carries
@@ -3364,6 +3375,146 @@ function plot_province_composition_ppc(
         "share. Black points are the observed share at each vintage " *
         "and should fall inside the grey band. Each panel starts at " *
         "zero and takes its own upper limit."
+    CairoMakie.Label(
+        fig[2, 1:np], caption;
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
+    CairoMakie.Label(fig[0, 1:np], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+## Predictive shares for a split scored on the provinces present each day
+## (`province_split_logpdf`): the stick-breaking allocation over the present
+## patches at that day's printed total, one trajectory per draw, NaN where a
+## patch is absent. `share` gives a draw's share of patch `p` on grid day
+## `d`, and `present[j]` the patches printed on the `j`-th kept day.
+function _split_predictive(
+        share, rho, days::AbstractVector{<:Integer}, present, totals,
+        np::Integer; seed::Integer = 20_240
+    )
+    rng = MersenneTwister(seed)
+    nd = length(rho)
+    nk = length(days)
+    preds = [[fill(NaN, nk) for _ in 1:nd] for _ in 1:np]
+    for i in 1:nd, j in 1:nk
+
+        ps = present[j]
+        total = totals[j]
+        (total > 0 && length(ps) >= 2) || continue
+        raw = [share(i, p, days[j]) for p in ps]
+        tot = sum(raw)
+        tot > 0 || continue
+        remaining = total
+        tail = 1.0
+        for (k, p) in enumerate(ps)
+            if k < length(ps)
+                p_cond = clamp(raw[k] / tot / tail, 0.0, 1.0)
+                c = rand(
+                    rng, safe_betabinomial(max(remaining, 0), p_cond, rho[i])
+                )
+                remaining -= c
+                tail = max(tail - raw[k] / tot, 1.0e-10)
+            else
+                c = max(remaining, 0)
+            end
+            preds[p][i][j] = c / total
+        end
+    end
+    return preds
+end
+
+"""
+Posterior predictive check on a province split scored on the provinces
+present each day ([`province_split_logpdf`](@ref)): the isolation
+occupancy (`share_key = :province_occupancy_share`, a daily share matrix)
+and the beds (`share_key = :province_capacity_share`, one static share per
+patch). Each panel shows the modelled share of that province among the
+provinces printed that day, with the observed share as black points, over
+the days the split is scored (`rows`, the long format from
+`province_care_observations` the fit was given). The grey band is the
+posterior predictive interval on the observed share, the stick-breaking
+allocation at the day's printed total under the split's overdispersion, and
+the coloured ribbon the expected share alone. A day on which a province is
+absent leaves a gap. Reads like [`plot_province_composition_ppc`](@ref).
+"""
+function plot_province_split_ppc(
+        chn; share_key::Symbol, rows, seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        colours = [:firebrick, :steelblue, :seagreen, :darkorange],
+        rho_key::Union{Nothing, Symbol} = nothing,
+        title::AbstractString = "Province share, modelled against observed"
+    )
+    np = min(n_patches, length(patch_labels))
+    draws = [collect(v) for v in vec(collect(chn[share_key]))]
+    nd = length(draws)
+    ## A vector share is static; a matrix share is daily.
+    share(i, p, d) = ndims(draws[i]) == 1 ? Float64(draws[i][p]) :
+        Float64(draws[i][p, clamp(d, 1, size(draws[i], 2))])
+    days = unique(rows.days)
+    nk = length(days)
+    present = [
+        Int[rows.patches[r] for r in eachindex(rows.days) if rows.days[r] == d]
+            for d in days
+    ]
+    counts = [
+        Int[rows.counts[r] for r in eachindex(rows.days) if rows.days[r] == d]
+            for d in days
+    ]
+    totals = [sum(c) for c in counts]
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, nd)
+    preds = rho === nothing ? nothing :
+        _split_predictive(share, rho, days, present, totals, np)
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in days]
+    fig = Figure(; size = (460 * np, 400))
+    for p in 1:np
+        colour = colours[mod1(p, length(colours))]
+        ## Expected share among the provinces present that day.
+        trajs = [
+            Float64[
+                p in present[j] ?
+                    share(i, p, days[j]) /
+                    sum(share(i, q, days[j]) for q in present[j]) : NaN
+                    for j in 1:nk
+            ] for i in 1:nd
+        ]
+        ax = Axis(
+            fig[1, p]; xlabel = "Day", ylabel = "Share of provinces present",
+            title = patch_labels[p], titlecolor = colour,
+            xticklabelrotation = pi / 6
+        )
+        preds === nothing ||
+            _draw_pred_bands!(ax, x, _traj_bands_missing(preds[p], nk))
+        _draw_traj_bands!(ax, x, _traj_bands_missing(trajs, nk), colour)
+        obs = [
+            begin
+                k = findfirst(==(p), present[j])
+                k === nothing || totals[j] == 0 ? NaN :
+                    counts[j][k] / totals[j]
+            end for j in 1:nk
+        ]
+        CairoMakie.scatter!(ax, x, obs; color = :black, markersize = 8)
+        CairoMakie.ylims!(ax, 0, nothing)
+        loax = floor(Int, minimum(x))
+        hiax = ceil(Int, maximum(x))
+        ax.xticks = collect(loax:14:hiax)
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
+    end
+    caption = preds === nothing ?
+        "Bands are 30/60/90% credible intervals on the expected share " *
+        "among the provinces printed that day. Black points are the " *
+        "observed share." :
+        "Grey band is the 30/60/90% posterior predictive interval on " *
+        "the observed share among the provinces printed that day, " *
+        "dashed at its 90% edges. The coloured ribbon inside it is the " *
+        "same intervals on the expected share. Black points are the " *
+        "observed share and should fall inside the grey band."
     CairoMakie.Label(
         fig[2, 1:np], caption;
         fontsize = 12, padding = (0, 0, 0, 6)

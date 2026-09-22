@@ -171,6 +171,11 @@ Changes since v2.1.0.
 - A pooled patch's occupancy or bed count is used on a day only when every
   member that has printed before prints that day, so a silent member is never
   read as an empty ward.
+- The in-sample checks page carries posterior predictive checks on the three
+  province terms, the weekly laboratory split as a composition and the
+  occupancy and bed splits over the provinces present each day
+  (`plot_province_split_ppc`), and the province page a table of beds,
+  demand, occupied beds, utilisation and shortfall by province.
 
 ### Data
 

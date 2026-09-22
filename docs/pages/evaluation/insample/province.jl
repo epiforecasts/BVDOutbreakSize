@@ -152,6 +152,53 @@ province_case_ppc_fig #hide
 
 province_death_ppc_fig #hide
 
+# The three province terms added with the isolation and laboratory data are checked the same way.
+# The laboratory panel is the split of each calendar week's analysed specimens, which the background split identifies.
+# The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
+# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's static share of the national capacity.
+# A gap in a panel is a day on which that province printed nothing.
+
+#md # ```@raw html
+#md # <details><summary>Province laboratory, occupancy and bed split posterior predictive checks</summary>
+#md # ```
+
+province_lab_bin_days = [
+    maximum(province_lab.days[province_lab.bins .== b])
+        for b in 1:maximum(province_lab.bins)
+];
+
+province_lab_ppc_fig = plot_province_composition_ppc(
+    chn_joint;
+    share_key = :province_lab_shares,
+    obs_increments = province_lab.increments,
+    days = province_lab_bin_days, seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Analysed specimen share by province, by week"
+);
+
+province_occupancy_ppc_fig = plot_province_split_ppc(
+    chn_joint;
+    share_key = :province_occupancy_share, rows = province_isolation,
+    seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Isolation occupancy share by province"
+);
+
+province_beds_ppc_fig = plot_province_split_ppc(
+    chn_joint;
+    share_key = :province_capacity_share, rows = province_capacity,
+    seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Isolation bed share by province"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_lab_ppc_fig #hide
+
+province_occupancy_ppc_fig #hide
+
+province_beds_ppc_fig #hide
+
 # ## Province stream calibration
 #
 # Whether each province's share predictions are calibrated at the observed national total, scored as in the national [stream calibration](@ref "Stream calibration").

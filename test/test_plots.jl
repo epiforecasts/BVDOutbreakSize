@@ -2208,3 +2208,54 @@ end
     ## One slot per made date, whichever fits carry it.
     @test ax.limits[][1] == (0.5, 2.5)
 end
+
+@testitem "plot_province_split_ppc: daily and static shares over present provinces" setup = [
+    HeadlessMakie,
+] begin
+    using Dates: Date
+    using BVDOutbreakSize: plot_province_split_ppc
+
+    nd = 60
+    n = 30
+    seeding = Date(2025, 8, 1)
+    ## Rows on three days; the third province prints on the last day only.
+    rows = (;
+        days = [10, 10, 20, 20, 30, 30, 30],
+        patches = [1, 2, 1, 2, 1, 2, 3],
+        counts = [300, 100, 280, 120, 250, 100, 50],
+    )
+    daily = [vcat(fill(0.6, 1, n), fill(0.25, 1, n), fill(0.15, 1, n)) for _ in 1:nd]
+    chn = (;
+        province_occupancy_share = daily,
+        province_occupancy_split_rho = fill(0.05, nd),
+    )
+    fig = plot_province_split_ppc(
+        chn; share_key = :province_occupancy_share, rows, seeding, n_patches = 3
+    )
+    @test fig isa CairoMakie.Makie.Figure
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 3
+    for ax in axes
+        @test count(p -> p isa CairoMakie.Makie.Band, ax.scene.plots) == 6
+    end
+
+    ## A static share per patch, as the beds carry, draws the same panels.
+    static = (;
+        province_capacity_share = [[0.6, 0.25, 0.15] for _ in 1:nd],
+        province_capacity_split_rho = fill(0.05, nd),
+    )
+    sfig = plot_province_split_ppc(
+        static; share_key = :province_capacity_share, rows, seeding,
+        n_patches = 3
+    )
+    sax = [x for x in sfig.content if x isa CairoMakie.Makie.Axis]
+    @test length(sax) == 3
+    ## Without the overdispersion only the expected ribbon is drawn.
+    plain = (; province_capacity_share = [[0.6, 0.25, 0.15] for _ in 1:nd])
+    pfig = plot_province_split_ppc(
+        plain; share_key = :province_capacity_share, rows, seeding,
+        n_patches = 3
+    )
+    pax = first(x for x in pfig.content if x isa CairoMakie.Makie.Axis)
+    @test count(p -> p isa CairoMakie.Makie.Band, pax.scene.plots) == 3
+end
