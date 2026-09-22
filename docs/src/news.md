@@ -73,6 +73,11 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Infrastructure
 
+- One rule decides when a stream first and last reported (#817).
+`stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
+They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
+Every date is unchanged, checked against the previous bodies over 18 weekly vintages.
+
 - `ChainRulesCore` is no longer a direct dependency (#808).
 It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
 Nothing has referenced it since, and Aqua's stale-dependency check missed it because the self-named import counted as a use.

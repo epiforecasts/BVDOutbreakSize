@@ -70,6 +70,54 @@ end
     @test stream_last_date(obs, :exports) == cutoff - Day(n - 22)
 end
 
+@testitem "stream_first_date is the stream's first vintage" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: stream_first_date
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    obs = (;
+        cutoff = cutoff, n = n,
+        reported_history = (; days = [5, 12], counts = [50.0, 90.0]),
+        deaths_history = (; days = Int[], counts = Float64[]),
+    )
+    @test stream_first_date(obs, :suspected_cases) == cutoff - Day(n - 5)
+    ## A history with no vintages, and a stream this observation set does
+    ## not carry at all, both have no first reported date.
+    @test ismissing(stream_first_date(obs, :suspected_deaths))
+    @test ismissing(stream_first_date(obs, :confirmed_cases))
+end
+
+@testitem "stream_first_date reads exports from the dated detections" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: stream_first_date
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    ## The earlier of the import and import-death detections is the first
+    ## thing that stream reported.
+    obs = (;
+        cutoff = cutoff, n = n,
+        export_case_days = [8, 15, 20], export_death_days = [6, 22],
+    )
+    @test stream_first_date(obs, :exports) == cutoff - Day(n - 6)
+end
+
+@testitem "history dates read any series on the grid" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: history_first_date, history_last_date
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    ## Keyed on the series and a grid function rather than the registry, so
+    ## a per-province or an assembled history reads the same way a manifest
+    ## field does, and a caller with its own grid needs no observation set.
+    h = (; days = [7, 19, 31], counts = [1.0, 4.0, 9.0])
+    @test history_first_date(grid_date, h) == grid_date(7)
+    @test history_last_date(grid_date, h) == grid_date(31)
+    empty = (; days = Int[], counts = Float64[])
+    @test ismissing(history_first_date(grid_date, empty))
+    @test ismissing(history_last_date(grid_date, empty))
+end
+
 @testitem "stream_reporting turns over at the grace boundary" begin
     using Dates: Date, Day
     using BVDOutbreakSize: stream_reporting, STREAM_REPORTING_GRACE_DAYS
