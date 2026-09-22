@@ -616,7 +616,7 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The noise-walk and per-scan rows are diagnostics: a climbing `τ` or a `σ_scan` pinned near its prior mean says the figures need more slack than counting variation and a per-scan level error alone explain.
+# The noise-walk and per-scan level rows are diagnostics.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
