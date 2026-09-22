@@ -161,12 +161,15 @@ end
     ## 125, 126 and 127 all print the same first tick (06 avr 2026) and the
     ## same last tick (14 sept 2026), each read directly and agreed by two
     ## blind readers with zero disagreements, so again no axis miscalibration
-    ## is possible between them.
+    ## is possible between them. 127->128 prefers shift -1 too, but only
+    ## marginally (full 1123 against 1159 at 0 and 1203 at +1; stable region
+    ## 918 against 988 at 0 and 978 at +1) - 127 and 128 print the same 14
+    ## sept 2026 last tick, so no axis miscalibration explains it either.
     documented = Dict(
         "093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
         "119" => "120", "120" => "121", "121" => "122", "122" => "123",
-        "123" => "124", "125" => "126", "126" => "127"
+        "123" => "124", "125" => "126", "126" => "127", "127" => "128"
     )
 
     unexpected = Tuple{String, String, Int, Int}[]
