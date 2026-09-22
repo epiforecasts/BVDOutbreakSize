@@ -12,6 +12,12 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse("**Data as of:** " * read(joinpath(dir, "cutoff.md"), String))
 ```
 
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "stream_currency.md"), String))
+```
+
 ## Headline estimates
 
 ```@eval

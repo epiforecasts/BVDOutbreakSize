@@ -1623,6 +1623,40 @@ open(joinpath(dashboard_dir, "cutoff.md"), "w") do io
     print(io, string(obs.cutoff))
 end
 
+## Which fitted streams actually reach that cut-off. A single "data as of"
+## date reads as though every stream is current to it, and several are
+## frozen well before it, so the exceptions are named on the dashboard
+## rather than left to the inclusion rules in `data/README.md`.
+open(joinpath(dashboard_dir, "stream_currency.md"), "w") do io
+    status = stream_report_status(obs)
+    stale = status[.!status.reporting, :]
+    if isempty(stale)
+        print(io, "Every fitted stream reports to the cut-off.")
+    else
+        oldest = maximum(skipmissing(stale.days_since))
+        print(
+            io,
+            "Not every fitted stream reaches that date. ",
+            nrow(stale), " of ", nrow(status), " stopped earlier, the ",
+            "longest ", oldest, " days before it, and the estimates carry ",
+            "them frozen:\n\n",
+            markdown_table(
+                DataFrame(
+                    "Stream" => stale.label,
+                    "Last reported" => [
+                        ismissing(d) ? "never" : string(d)
+                            for d in stale.last_date
+                    ],
+                    "Days before cut-off" => [
+                        ismissing(d) ? "-" : string(d)
+                            for d in stale.days_since
+                    ]
+                )
+            )
+        )
+    end
+end
+
 #md # ```@raw html
 #md # </details>
 #md # ```
