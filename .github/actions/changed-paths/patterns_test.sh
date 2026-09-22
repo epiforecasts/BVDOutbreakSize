@@ -52,16 +52,23 @@ check() { # description, newline-separated paths, expect report, expect tests
 check "model change"           "src/models/joint.jl"                       true  true
 check "new data vintage"       "data/observations.toml"                    true  true
 check "package source"         "src/scoring.jl"                            true  true
-check "an extension"           "ext/EnzymeExt.jl"                          true  true
+# `ext/` is split. The Enzyme extension is never loaded by the docs build,
+# since Enzyme is not in the docs environment, so it must not rebuild the
+# report. The TensorBoardLogger one is loaded, so it must.
+check "the Enzyme extension"   "ext/BVDOutbreakSizeEnzymeExt.jl"           false true
+check "the logging extension"  "ext/BVDOutbreakSizeTensorBoardLoggerExt.jl" true true
 check "Project.toml"           "Project.toml"                              true  true
 check "test only"              "test/test_renewal.jl"                      false true
-check "analysis page"          "docs/examples/analysis.jl"                 true  false
+check "analysis page"          "docs/pages/estimates/national.jl"          true  false
 check "news and contributing"  $'docs/src/news.md\ndocs/src/contributing.md' true false
 check "README"                 "README.md"                                 true  false
 # Test items include cache.jl, registry.jl, summary.jl and score_releases.jl
 # directly, so these reach the tests as well as the report.
 check "a fit-registry helper"  "docs/fits/registry.jl"                     true  true
 check "a build script"         "scripts/score_releases.jl"                 true  true
+# `scripts/` is split the same way: only the three the docs workflow runs
+# rebuild the report. The scanners and the backfill driver do not.
+check "a data scanner"         "scripts/download_sitreps.jl"               false true
 check "benchmarks"             "benchmark/run.jl"                          false false
 check "Taskfile"               "Taskfile.yml"                              false false
 check "agent instructions"     "AGENTS.md"                                 false false
