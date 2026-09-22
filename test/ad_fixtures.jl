@@ -440,14 +440,21 @@ costs nothing. A failure not listed here reds the run.
 """
 function enzyme_broken_scenarios()
     ## Both fail on "Taking the type of an opaque pointer is illegal",
-    ## inside Enzyme's own LLVM work rather than in anything `src/` does
-    ## (epiforecasts/BVDOutbreakSize#445 recorded a `nodecayed_phis!`
-    ## failure for the joint on an older Enzyme; this is what it gives
-    ## now). `patch_infection_model` fails at one patch as well as three,
-    ## a byte-identical copy of its body defined outside the package
-    ## differentiates cleanly at every stage of a staged bisect, and every
-    ## numeric helper it calls differentiates on its own, so the model
-    ## code is not what Enzyme is rejecting.
+    ## inside Enzyme's own LLVM work rather than in anything `src/` does.
+    ## `bvd_joint` composes `patch_infection_model` unconditionally (see
+    ## `_patch_latent`), so the two are one failure, not two.
+    ##
+    ## It is specific to reverse mode on Julia 1.13. With Enzyme 0.13.204
+    ## and Mooncake 0.5.59 held fixed, both models differentiate on Julia
+    ## 1.11.9, and `patch_infection_model` differentiates on 1.13 under
+    ## forward mode. Ten reverse-mode configurations do not help: loose
+    ## type analysis, relaxed aliasing, raised type depth and offset, a
+    ## `Const` function annotation, no runtime activity, and package
+    ## images disabled.
+    ##
+    ## epiforecasts/BVDOutbreakSize#445 recorded a `nodecayed_phis!`
+    ## failure for the joint on an older toolchain; this is what it gives
+    ## now.
     return Set(
         [
             "bvd_joint",
