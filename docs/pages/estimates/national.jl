@@ -25,6 +25,9 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl")) #hide
+MarkdownTable(report_dates(obs.cutoff)) #hide
+
 # ## Results
 #
 # ### Summary

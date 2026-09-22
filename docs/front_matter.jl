@@ -2,17 +2,30 @@
 ## scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->`
 ## marker. The home page shows the whole README and the offline
 ## `analysis.html` opens with the front matter, so both read it from here.
+## The summary and National pages take the abstract and the dates from here
+## too.
 
 using BVDOutbreakSize: load_observations
 import Dates
+
+## The report's dates as they appear on the site, e.g. "20 September 2026".
+format_report_date(d) = Dates.format(d, "d U yyyy")
+
+## The "Last updated" and "Data as of" lines for the top of a report page.
+## "Last updated" is the day the page was built and "Data as of" is the data
+## cut-off of the fit it shows.
+function report_dates(cutoff::Dates.Date)
+    return "**Last updated:** $(format_report_date(Dates.today())).\n\n" *
+        "**Data as of:** $(format_report_date(cutoff))."
+end
 
 ## The README with its live dates filled in: "Last updated" is the build date
 ## and "Data as of" is the loaded data cut-off, so a rebuild refreshes them
 ## without editing README.md.
 function readme_with_dates()
     readme = read(joinpath(dirname(@__DIR__), "README.md"), String)
-    built = Dates.format(Dates.today(), "d U yyyy")
-    asof = Dates.format(load_observations().cutoff, "d U yyyy")
+    built = format_report_date(Dates.today())
+    asof = format_report_date(load_observations().cutoff)
     return replace(
         readme,
         r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",

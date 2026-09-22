@@ -1,20 +1,16 @@
 # Summary dashboard
 
 ```@eval
-using Markdown, BVDOutbreakSize
+using Markdown, BVDOutbreakSize, Dates
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl"))
-Markdown.parse(readme_abstract())
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+cutoff = Date(strip(read(joinpath(dir, "cutoff.md"), String)))
+Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
 See the [National](national.md) page for the full results, the [Methods](../methods.md) page for the model and the [Limitations](../limitations.md) page for its caveats.
 Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
-
-```@eval
-using Markdown, BVDOutbreakSize
-dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse("**Data as of:** " * read(joinpath(dir, "cutoff.md"), String))
-```
 
 ## Headline estimates
 
