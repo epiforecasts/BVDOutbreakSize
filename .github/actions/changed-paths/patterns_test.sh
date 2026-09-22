@@ -67,8 +67,9 @@ check "README"                 "README.md"                                 true 
 check "a fit-registry helper"  "docs/fits/registry.jl"                     true  true
 check "a build script"         "scripts/score_releases.jl"                 true  true
 # `scripts/` is split the same way: only the three the docs workflow runs
-# rebuild the report. The scanners and the backfill driver do not.
-check "a data scanner"         "scripts/download_sitreps.jl"               false true
+# rebuild the report. The SitRep downloader, the scanners and the backfill
+# driver do not.
+check "the SitRep downloader"  "scripts/download_sitreps.jl"               false true
 check "benchmarks"             "benchmark/run.jl"                          false false
 check "Taskfile"               "Taskfile.yml"                              false false
 check "agent instructions"     "AGENTS.md"                                 false false
