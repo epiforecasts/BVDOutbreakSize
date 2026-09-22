@@ -17,9 +17,11 @@ Changes since v2.1.0.
   `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
   grid, so left to the backend every iteration's intermediates reach the
   tape; the rules replace that with a closed-form adjoint of the same
-  shape. Gradients of the delay-heavy observation submodels drop 18-34%
-  under Mooncake, the default backend. Each is a native `Mooncake.rrule!!`
-  method on a declared primitive signature. Values are unchanged: each rule is checked against central differences and against
+  shape. The joint's gradient drops about 20%
+  under Mooncake, the default backend, and the delay-heavy observation
+  submodels rather more; the measurements are in #810. Each is a native
+  `Mooncake.rrule!!` method on a declared primitive signature. Values are
+  unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
 
 ### Model
