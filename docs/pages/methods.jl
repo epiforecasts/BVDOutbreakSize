@@ -841,7 +841,8 @@ cfr_prior_fig #hide
 # We assume that more severe cases, more likely to be Ebola, are preferentially tested.
 # This is captured by an enrichment factor $\delta_0$ that raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
 # The confirmed deaths mirror this laboratory pipeline rather than enriching the case composition.
-# A fraction $\tau_{\text{death}}$ of suspected deaths reach the laboratory, and they confirm at the assay positivity $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$.
+# The death analysed volume is $\tau_{\text{death}}$ specimens per suspected death, which is not a share and may exceed one for the same reason the case side is not bounded by the suspect count.
+# Those specimens confirm at the assay positivity $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$.
 # This positivity is built from the same assay sensitivity and specificity as the confirmed cases, but uses the death-pool BVD share $q_{\text{death}}$.
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR [rieger2016](@cite) rather than the Zaire-specific GeneXpert Ebola assay.
 # The GeneXpert assay does not reliably detect Bundibugyo virus [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite).
