@@ -510,6 +510,8 @@ jobs:
         # the separator flattened, because an artifact name cannot carry a
         # slash.
         include:
+          - id: methods
+            slug: methods
           - id: estimates/national
             slug: estimates-national
           - id: estimates/province
