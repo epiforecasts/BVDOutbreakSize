@@ -240,9 +240,43 @@ jobs:
           BVD_FIT_ID: ${{ matrix.id }}
           BVD_FIT_CACHE: logs/fit_cache
           JULIA_NUM_THREADS: '4'
-          BVD_FIT_LOG: none
+          # `progress`, not `none`: the dependency-free stream from
+          # `progress_callback`, one `iteration= lp= divergences=` line per
+          # ten iterations into `logs/<name>.log`. It needs no
+          # TensorBoardLogger and costs an appended line per ten steps. The
+          # heartbeat below lifts it into the job log, because the joint fit
+          # runs for hours and otherwise prints nothing at all between its
+          # initial step size and its result.
+          BVD_FIT_LOG: progress
         run: |
+          set -uo pipefail
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          mkdir -p logs
+          # Report the newest progress line once a minute, and only when it
+          # has moved. A fit that is running prints a rising iteration count;
+          # one that has stalled prints nothing, which is the distinction the
+          # job log cannot otherwise make. The callback names its file after
+          # the fit, which is not always the matrix id (the frozen fits carry
+          # their cut-off date), so take whichever log is newest rather than
+          # guessing the name. One fit runs per job.
+          (
+            last=""
+            start=$SECONDS
+            while sleep 60; do
+              # `|| true` on both: GitHub runs the step under `bash -e`, and
+              # before the first progress line lands the glob matches nothing
+              # and `ls` exits 2, which would kill this subshell on its first
+              # tick and silently disable the heartbeat for the whole fit.
+              newest=$(ls -t logs/*.log 2>/dev/null | head -n 1) || true
+              [ -n "$newest" ] || continue
+              line=$(tail -n 1 "$newest" 2>/dev/null) || true
+              [ -n "$line" ] && [ "$line" != "$last" ] || continue
+              printf '[%3dm] %s\n' "$(( (SECONDS - start) / 60 ))" "$line"
+              last="$line"
+            done
+          ) &
+          heartbeat=$!
+          trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
           julia --project=docs docs/fits/one.jl
       # `one.jl` writes the fit's diagnostics to the job summary itself. A
       # cache hit skips it, so say so rather than leaving the job blank.
