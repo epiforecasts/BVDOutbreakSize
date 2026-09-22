@@ -26,6 +26,12 @@ Changes since v2.1.0.
 
 ### Model
 
+- The death analysed volume is no longer capped at the suspected-death pool (#820).
+`tau_death` becomes an intensity, specimens per suspected death, and may exceed one.
+A suspect yields more than one specimen through repeat exclusion testing, and swabbed community deaths enter the laboratory denominator without being counted as suspects, which is why the case side was never capped either.
+The death-only composer still draws a bounded fraction, since it has no case volume to scale from.
+Fitted values change.
+
 - The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
 It could never have run.
 `confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
