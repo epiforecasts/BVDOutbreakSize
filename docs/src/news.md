@@ -72,6 +72,7 @@ This moves the non-BVD death background, so fitted values change.
   The offline `analysis.html` carries both the methods and the national results.
 - The National page opens with its own title and summary rather than a copy of the README front matter.
   It keeps the "Last updated" and "Data as of" dates at the top.
+- The Provinces page opens the same way as the National page, with the "Last updated" and "Data as of" dates, and its links no longer call the National page "analysis".
   The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
   The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
