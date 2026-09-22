@@ -2422,7 +2422,7 @@ series for forecasting and replication.
         ## the printed sum of the provinces present each day.
         province_isolation = nothing,
         province_capacity = nothing,
-        patch_capacity = patch_bed_capacity_walk_model,
+        patch_capacity = patch_capacity_share_model,
         province_split_rho_prior = truncated(
             Normal(0, 0.1); lower = 0, upper = 1
         ),
@@ -2469,16 +2469,20 @@ series for forecasting and replication.
     split_cap = np > 1 && province_capacity !== nothing &&
         !isempty(province_capacity.days)
     by_patch = split_occ || split_cap
-    ## With province splits, one walk per patch and the national capacity
-    ## their sum.
     cap_state ~ to_submodel(
-        by_patch ? patch_capacity(n, np; start = cap_start) :
-            cutoff === nothing ? capacity(n; start = cap_start) :
+        cutoff === nothing ? capacity(n; start = cap_start) :
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
     C_T = isempty(C) ? zero(eltype(C)) : C[nc]
-    C_patch = by_patch ? cap_state.C_patch : reshape(C, 1, :)
+    ## With province splits, each patch holds a static share of the
+    ## national walk ([`patch_capacity_share_model`](@ref)).
+    cap_shares = ones(1)
+    if by_patch
+        cap_share_state ~ to_submodel(patch_capacity(np))
+        cap_shares = cap_share_state.s
+    end
+    C_patch = cap_shares .* reshape(C, 1, :)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2798,6 +2802,7 @@ series for forecasting and replication.
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
         demand_patch, capacity_patch = C_patch, capacity_series = C,
+        capacity_shares = cap_shares,
         occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,

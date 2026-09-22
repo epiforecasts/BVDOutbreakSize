@@ -53,6 +53,21 @@ end
     )
     @test lab.increments[end, :] == pooled
 
+    ## Weekly bins sum the daily columns, calendar weeks from the first day.
+    weekly = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES, np; every = 7
+    )
+    @test weekly.days == lab.days
+    @test length(weekly.bins) == length(lab.days)
+    @test size(weekly.increments, 2) == maximum(weekly.bins)
+    @test size(weekly.increments, 2) < length(lab.days) ÷ 4
+    @test sum(weekly.increments) == sum(lab.increments)
+    for (i, b) in enumerate(weekly.bins)
+        @test fld(lab.days[i] - lab.days[1], 7) ==
+            fld(lab.days[findfirst(==(b), weekly.bins)] - lab.days[1], 7)
+    end
+    @test lab.bins == 1:length(lab.days)
+
     ## No data, no term.
     none = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
     @test isempty(province_lab_increment_matrix(none, PROVINCE_NAMES, np).days)
@@ -117,6 +132,7 @@ end
             n_patches,
             province_lab_increments = lab.increments,
             province_lab_days = lab.days,
+            province_lab_bins = lab.bins,
             tmrca_days = obs.tmrca_days
         )
     end

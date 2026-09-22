@@ -709,23 +709,27 @@ end
 
 """
     province_lab_increment_matrix(province_lab_daily_history, province_names,
-                                  n_patches)
+                                  n_patches; every)
 
 Reshape the per-province daily analysed-specimen histories loaded by
-[`load_observations`](@ref) into the `(n_patches × n_days)` matrix of
+[`load_observations`](@ref) into the `(n_patches × n_bins)` matrix of
 analysed counts that the laboratory composition in [`bvd_joint`](@ref)
-scores, together with the shared day indices. A pooled patch sums its
-members' counts day by day (see [`PROVINCE_MEMBERS`](@ref)). Every
-province must be reported on the same days, which the composition
+scores, with the printed day indices `days` and the bin each day falls in
+(`bins`). `every = 1` scores each printed day as its own bin. `every = 7`
+sums the printed days into calendar weeks from the first day, so the
+composition scores a weekly split; the split of a week's volume carries
+the same spatial information at a seventh of the cost of a daily one. A
+pooled patch sums its members' counts (see [`PROVINCE_MEMBERS`](@ref)).
+Every province must be reported on the same days, which the composition
 requires. Returns empty `days` when the history is absent or a patch has
 no analysed series, and the caller skips the term.
 """
 function province_lab_increment_matrix(
         province_lab_daily_history,
         province_names::AbstractVector = PROVINCE_NAMES,
-        n_patches::Integer = length(province_names)
+        n_patches::Integer = length(province_names); every::Integer = 1
     )
-    empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
+    empty = (; days = Int[], bins = Int[], increments = Matrix{Int}(undef, 0, 0))
     isempty(province_lab_daily_history) && return empty
     names = province_names[1:min(n_patches, length(province_names))]
     series = [["$(m)_analysed" for m in ms] for ms in patch_members(names)]
@@ -734,7 +738,12 @@ function province_lab_increment_matrix(
     reference = series[1][1]
     days = province_lab_daily_history[reference].days
     isempty(days) && return empty
-    increments = zeros(Int, length(names), length(days))
+    ## Calendar bins from the first printed day, renumbered to be
+    ## consecutive so a week with no printed day leaves no empty column.
+    raw_bins = [fld(Int(d) - Int(days[1]), max(every, 1)) + 1 for d in days]
+    bin_ids = unique(raw_bins)
+    bins = [findfirst(==(b), bin_ids) for b in raw_bins]
+    increments = zeros(Int, length(names), length(bin_ids))
     for (p, ks) in enumerate(series), k in ks
 
         h = province_lab_daily_history[k]
@@ -743,9 +752,11 @@ function province_lab_increment_matrix(
                 "`$(reference)`; the laboratory composition needs every " *
                 "province on the same days."
         )
-        increments[p, :] .+= h.counts
+        for (i, b) in enumerate(bins)
+            increments[p, b] += h.counts[i]
+        end
     end
-    return (; days, increments)
+    return (; days = collect(Int, days), bins, increments)
 end
 
 """

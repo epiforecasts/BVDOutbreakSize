@@ -88,9 +88,11 @@ function patch_fit_args(obs)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    ## Weekly laboratory bins: the split of a week's analysed volume at a
+    ## seventh of the cost of the daily one.
     prov_lab = province_lab_increment_matrix(
         obs.province_lab_daily_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES)
+        length(PROVINCE_NAMES); every = 7
     )
     return (;
         n_patches = length(PROVINCE_NAMES),
@@ -102,6 +104,7 @@ function patch_fit_args(obs)
             province_testing_covariate(obs.province_lab_daily_history),
         province_lab_increments = prov_lab.increments,
         province_lab_days = prov_lab.days,
+        province_lab_bins = prov_lab.bins,
         ## Weekly occupancy splits and bed splits on change days only: a
         ## stock reprinted daily is not a fresh draw of the split.
         province_isolation = province_care_observations(

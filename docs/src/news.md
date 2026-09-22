@@ -159,8 +159,11 @@ Changes since v2.1.0.
   remain unfitted.
 - Province isolation occupancy and bed counts enter the treatment-flow stream
   as splits of the printed sum of the provinces present each day, over
-  per-patch bed demand and per-patch capacity walks with one shared innovation
-  scale. The national tile and the national implied capacity keep their
+  per-patch bed demand (the national demand shared out by each patch's
+  admissions through the stays) and per-patch shares of the national capacity
+  walk. The occupancy split is scored weekly and the bed split on days a
+  province's count changes, since a stock reprinted daily is not a fresh draw
+  of the split. The national tile and the national implied capacity keep their
   likelihoods on every day. Occupancy is split on the uncapped per-patch
   demand, since a province can print more patients than beds where patients
   are held outside the counted structures, and the fit reports beds, demand,

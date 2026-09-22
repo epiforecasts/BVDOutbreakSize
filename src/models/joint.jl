@@ -862,7 +862,8 @@ function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVecto
 end
 
 """
-Modelled per-patch analysed-specimen volume on the laboratory days, up to
+Modelled per-patch analysed-specimen volume summed over the laboratory
+bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
 the national factors the composition normalises away. Each patch's onsets
 are pushed through the onset-to-confirmation kernel (report ⊕ receipt) and
 thinned by `p_drc`, and joined by the patch's share `w[p]` of the non-BVD
@@ -874,22 +875,23 @@ indices. Returns an `(n_patches × n_days)` matrix.
 function _patch_analysed_increments(
         onsets_matrix::AbstractMatrix, kernel::AbstractVector,
         p_drc::Real, bg_carried::AbstractVector, w::AbstractVector,
-        lab_days::AbstractVector{<:Integer}
+        lab_days::AbstractVector{<:Integer},
+        lab_bins::AbstractVector{<:Integer} = 1:length(lab_days)
     )
     np = size(onsets_matrix, 1)
     n = size(onsets_matrix, 2)
-    nd = length(lab_days)
+    nb = isempty(lab_bins) ? 0 : maximum(lab_bins)
     T = promote_type(
         eltype(onsets_matrix), eltype(kernel), typeof(float(p_drc)),
         eltype(bg_carried), eltype(w)
     )
-    out = Matrix{T}(undef, np, nd)
+    out = zeros(T, np, nb)
     @inbounds for p in 1:np
         carried = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
         wp = w[p]
         for (i, day) in enumerate(lab_days)
             d = clamp(Int(day), 1, n)
-            out[p, i] = p_drc * carried[d] + wp * bg_carried[d]
+            out[p, lab_bins[i]] += p_drc * carried[d] + wp * bg_carried[d]
         end
     end
     return out
@@ -998,7 +1000,9 @@ patch's BVD suspects (its onsets through the onset-to-confirmation kernel,
 thinned by `p_drc`) plus its share of the non-BVD background, the share a
 partially pooled simplex ([`background_split_model`](@ref)) carries and
 this term identifies. Pass `province_lab_increments` with
-`province_lab_days`, built by [`province_lab_increment_matrix`](@ref).
+`province_lab_days` and `province_lab_bins`, built by
+[`province_lab_increment_matrix`](@ref), which sums the printed days into
+calendar weeks for the production fit.
 The testing fraction stays national and the composition samples no
 ascertainment contrast of its own. The per-province positives are not
 fitted, being the differencing of the confirmed counts already scored.
@@ -1083,6 +1087,7 @@ density there, is the fitted model's.
             Missing, AbstractMatrix{<:Integer},
         } = missing,
         province_lab_days::AbstractVector{<:Integer} = Int[],
+        province_lab_bins::AbstractVector{<:Integer} = 1:length(province_lab_days),
         lab_composition = province_composition_model,
         background_split = background_split_model,
         province_isolation = nothing,
@@ -1348,7 +1353,7 @@ density there, is the fitted model's.
         modelled_lab = _patch_analysed_increments(
             patch_state.onsets_matrix, lab_kernel, p_drc,
             convolve_delay(cases_state.bg_daily, confirmed_state.receipt_pmf),
-            bg_split_state.w, province_lab_days
+            bg_split_state.w, province_lab_days, province_lab_bins
         )
         ## No ascertainment contrast: the split is carried by the background
         ## shares, and the testing fraction is national.
@@ -1456,6 +1461,7 @@ density there, is the fitted model's.
                 treatment_state.capacity_patch[:, n],
             0.0
         )
+        province_capacity_share := treatment_state.capacity_shares
         province_occupancy_split_rho := treatment_state.occupancy_split_rho
         province_capacity_split_rho := treatment_state.capacity_split_rho
     end

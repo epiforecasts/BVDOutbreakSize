@@ -764,66 +764,53 @@ at the same scale.
 end
 
 """
-Per-patch isolation-bed capacity, one [`bed_capacity_walk_model`](@ref)
-walk per patch on the same weekly knots with one shared innovation SD, for
-the province occupancy and bed splits in [`treatment_flow_model`](@ref).
-Each baseline `C0[p]` has a log-normal prior centred on the national
-baseline's median scaled by the patch's population share, with a wide
-spread, since the printed province bed counts pin it. The national
-capacity is the sum of the patch walks, non-decreasing like each of them.
+Per-patch shares of the national isolation-bed capacity, for the province
+bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
+capacity is the national walk `C(t)` times a share drawn from a partially
+pooled simplex centred on population share,
 
-Returns `(; C, C_patch, C0, σ_cap)` with `C_patch` an
-`(n_patches × n)` matrix and `C` its column sums.
+```math
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+```
+
+with the first patch the reference. The printed province bed counts move
+little relative to each other over the series, so a static share carries
+the split; one walk per patch would add some sixty truncated-normal
+innovations for a tenth more gradient cost. The bed split identifies the
+shares and the split's overdispersion absorbs the residual drift.
+
+Returns `(; s, pooling_sd)`.
 """
-@model function patch_bed_capacity_walk_model(
-        n::Integer, n_patches::Integer; start::Integer = 1,
-        week::Integer = 7,
+@model function patch_capacity_share_model(
+        n_patches::Integer;
         populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
             1:min(
                 n_patches, end
             ),
         ],
-        baseline_median::Real = 450.0,
-        baseline_sd::Real = 1.0,
-        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0)
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
     )
+    if n_patches <= 1
+        return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
     length(populations) == n_patches || error(
-        "patch_bed_capacity_walk_model: $(length(populations)) populations " *
+        "patch_capacity_share_model: $(length(populations)) populations " *
             "for $(n_patches) patches."
     )
+    τ_cap ~ pooling_sd_prior
+    z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
     total_pop = sum(populations)
-    C0 ~ product_distribution(
-        [
-            LogNormal(log(baseline_median * populations[p] / total_pop), baseline_sd)
-                for p in 1:n_patches
-        ]
-    )
-    σ_cap ~ innovation_prior
-    s = clamp(Int(start), 1, n)
-    days = knot_days(n; week = week, start = s)
-    nb = length(days)
-    nsteps = max(nb - 1, 1)
-    ## Non-negative, centred innovations, as in the national walk, laid out
-    ## patch by patch in one vector.
-    steps ~ product_distribution(
-        fill(
-            truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
-            nsteps * n_patches
-        )
-    )
-    Tc = promote_type(eltype(C0), eltype(steps))
-    C_patch = Matrix{Tc}(undef, n_patches, n)
-    nk = max(nb - 1, 0)
-    @inbounds for p in 1:n_patches
-        offset = (p - 1) * nsteps
-        log_knots = vcat(
-            zero(σ_cap), cumsum(@view steps[(offset + 1):(offset + nk)])
-        )
-        walk = interpolate_knots(log_knots, days, n)
-        C_patch[p, :] = C0[p] .* exp.(walk)
+    log_s = Vector{Ts}(undef, n_patches)
+    log_s[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
     end
-    C = vec(sum(C_patch; dims = 1))
-    return (; C, C_patch, C0, σ_cap)
+    peak = maximum(log_s)
+    s = exp.(log_s .- peak)
+    s ./= sum(s)
+    return (; s, pooling_sd = τ_cap)
 end
 
 """

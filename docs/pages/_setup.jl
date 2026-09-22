@@ -483,7 +483,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     end
     province_lab = province_lab_increment_matrix(
         obs.province_lab_daily_history, PROVINCE_NAMES,
-        length(PROVINCE_NAMES)
+        length(PROVINCE_NAMES); every = 7
     )
     ## The same thinning as `patch_fit_args`, so the generator is the model
     ## that was fitted.
