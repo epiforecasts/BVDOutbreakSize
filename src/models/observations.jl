@@ -2279,7 +2279,7 @@ function _patch_demand(
     bg_stock = convolve_delay(A_bg, _tail_sums(ruleout_pmf))
     @inbounds for p in 1:np
         A_bvd_p = convolve_delay(
-            scale .* vec(@view reports_matrix[p, :]), adm_pmf
+            scale .* reports_matrix[p, :], adm_pmf
         )
         O_bvd_p = convolve_delay(A_bvd_p, S_clin)
         wp = w[p]

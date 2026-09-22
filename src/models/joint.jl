@@ -779,11 +779,11 @@ function _patch_death_increments(
     )
     np = size(onsets_matrix, 1)
     nv = length(province_days)
-    first_daily = convolve_delay(vec(@view onsets_matrix[1, :]), kernel)
+    first_daily = convolve_delay(onsets_matrix[1, :], kernel)
     out = Matrix{eltype(first_daily)}(undef, np, nv)
     @inbounds out[1, :] = bin_increments(first_daily, province_days)
     @inbounds for p in 2:np
-        daily = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
+        daily = convolve_delay(onsets_matrix[p, :], kernel)
         out[p, :] = bin_increments(daily, province_days)
     end
     return out
@@ -842,7 +842,7 @@ function _patch_confirmed_increments(
     out = Matrix{T}(undef, np, nv)
     @inbounds for p in 1:np
         out[p, :] = bin_increments(
-            s_test .* vec(@view carried[p, :]), province_days
+            s_test .* carried[p, :], province_days
         )
     end
     return out
@@ -859,7 +859,7 @@ function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
     T = promote_type(eltype(onsets_matrix), eltype(kernel))
     out = Matrix{T}(undef, np, n)
     @inbounds for p in 1:np
-        out[p, :] = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
+        out[p, :] = convolve_delay(onsets_matrix[p, :], kernel)
     end
     return out
 end
@@ -877,7 +877,7 @@ function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVecto
     T = promote_type(eltype(onsets_matrix), eltype(report_pmf))
     out = Matrix{T}(undef, np, n)
     @inbounds for p in 1:np
-        out[p, :] = convolve_delay(vec(@view onsets_matrix[p, :]), report_pmf)
+        out[p, :] = convolve_delay(onsets_matrix[p, :], report_pmf)
     end
     return out
 end
