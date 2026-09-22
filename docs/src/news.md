@@ -132,6 +132,12 @@ Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a f
   the hashing rule itself would not have invalidated anything. The key is now
   taken from `fit_content_hash` rather than restated, so there is one list.
 
+- `patch_rt_model` densifies the LKJ Cholesky factor before indexing it
+  (#789). Indexing the triangular factor goes through a BLAS path Enzyme's
+  reverse mode has no rule for, so the per-patch reproduction-number walk
+  failed to differentiate at more than one patch. The values are unchanged,
+  and Mooncake, the default, was never affected.
+
 - The opt-in Enzyme backend now differentiates every observation submodel
   and single-stream composer, and the AD check sweeps them all rather than
   one composer and the joint (#789). The scenarios had passed `missing`
