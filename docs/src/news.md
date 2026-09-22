@@ -20,6 +20,10 @@ Every fit used the composition link.
 `background_re = true` becomes `background_pooling = background_pooling_model`.
 The option and the gradients are unchanged.
 A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
+- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)` (#800).
+Mean 0.10 rather than 0.25, keeping 99% of its mass below the BVD CFR mean of 0.33.
+The previous prior sat close to the BVD CFR itself, against the submodel's own reasoning that non-BVD suspect illness is less lethal.
+This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
@@ -90,6 +94,10 @@ Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a f
   run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
   and `task fit-all` takes every available thread instead of fitting the
   registry one model at a time.
+- `M_PRIOR_BASE` and `m_prior_centre` say that no fit reads them (#800).
+  The v1.3.0 integral backfill runs inside that release's own worktree and
+  resolves them against its own constants, and the headline fit sets its `m`
+  centre in `exponential_growth_model`. No values change.
 
 ## v2.1.0
 
