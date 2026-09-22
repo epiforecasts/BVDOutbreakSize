@@ -1,16 +1,18 @@
 # # Province estimates
 #
-# The outbreak by province.
-# The model runs one renewal equation per province and fits the national
-# streams against the summed provinces, so the national estimates on the
-# [analysis](@ref "Results") page are the sum of the provinces here.
+# This page gives the province estimates from the joint model.
+# The methods for this model are on the [Methods](@ref "Methods") page.
 #
-# The per-province case-fatality ratio sits with the national one in the
-# [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
-# The per-province forecast is in the
-# [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
-# and its scoring in the [forecast by province](@ref "Forecast by province").
+# The model runs one renewal equation per province and fits the national streams against the summed provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
+# The per-province case-fatality ratio sits with the national one in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
+# The per-province forecast is in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") and its scoring in the [forecast by province](@ref "Forecast by province").
 # Each needs a quantity the page it sits on already computes.
+#
+# This page is generated from
+# [`docs/pages/estimates/province.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/province.jl).
+# The model code it calls is in
+# [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
+# See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -25,9 +27,12 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl")) #hide
+MarkdownTable(report_dates(obs.cutoff)) #hide
+
 # ## Size and infections
 
-# The national outbreak size on the [analysis](@ref "Joint model estimates") page is the sum of the four patches' renewal equations.
+# The national outbreak size in the [joint model estimates](@ref "Joint model estimates") is the sum of the four patches' renewal equations.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 
 #md # ```@raw html
@@ -88,7 +93,7 @@ province_imports_fig #hide
 
 # ## Reproduction number by province
 
-# The national reproduction number is on the [analysis](@ref "Reproduction number over time") page.
+# The national reproduction number is in [reproduction number over time](@ref "Reproduction number over time").
 # Below it is split by province, one panel per province with the national trajectory in grey behind it.
 # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
 # A panel tracking grey says that province moves with the national trajectory.

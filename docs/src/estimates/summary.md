@@ -1,17 +1,18 @@
 # Summary dashboard
 
-A one-page overview of the headline results for readers with limited time.
-Every number, table and figure on this page is produced by the same model fit as the full report and refreshes whenever the data updates.
-See the [National](national.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](../forecasts/national.md) page for the week ahead and the [Evaluation](../evaluation/forecast.md) page for how past forecasts scored.
-The [Sensitivity](../sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
-Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
-Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
-
 ```@eval
-using Markdown, BVDOutbreakSize
+using Markdown, BVDOutbreakSize, Dates
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl"))
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse("**Data as of:** " * read(joinpath(dir, "cutoff.md"), String))
+cutoff = Date(strip(read(joinpath(dir, "cutoff.md"), String)))
+Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
+
+This page summarises the headline results.
+See the [National](national.md) and [Provinces](province.md) pages for the estimates at each level.
+See [Forecasts](../forecasts/national.md) for the week ahead.
+See [In-sample](../evaluation/insample.md) for how the model fits the data and [Forecast](../evaluation/forecast.md) evaluation for how past forecasts scored.
+See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
 

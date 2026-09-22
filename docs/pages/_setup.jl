@@ -52,7 +52,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     grid_date(day) = obs.cutoff - Day(obs.n - day)
     ## Date a cumulative history last reports (the cut-off for streams that
     ## run to it, or the freeze date for streams that stop earlier).
-    hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
+    hist_last_date(h) = history_last_date(grid_date, h)
 
     ## The forecast's count streams, split by whether the situation reports
     ## still update each one (`stream_reporting`). A stream that has stopped

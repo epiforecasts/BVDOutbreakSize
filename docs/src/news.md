@@ -78,8 +78,21 @@ This moves the non-BVD death background, so fitted values change.
   The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
   The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
   The offline `analysis.html` carries both the methods and the national results.
+- The National page opens with its own title and summary rather than a copy of the README front matter.
+  It keeps the "Last updated" and "Data as of" dates at the top.
+- The Provinces page opens the same way as the National page, with the "Last updated" and "Data as of" dates, and its links no longer call the National page "analysis".
+  The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
+  The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
+- The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
+  It replaces a list of every other page, which still sent readers to the National page for the methods.
+  It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
 
 ### Infrastructure
+
+- One rule decides when a stream first and last reported (#817).
+`stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
+They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
+Every date is unchanged, checked against the previous bodies over 18 weekly vintages.
 
 - `ChainRulesCore` is no longer a direct dependency (#808).
 It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
