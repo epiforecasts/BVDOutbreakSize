@@ -11,7 +11,7 @@
 #md #     r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
 #md #     r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.",
 #md #     r"https://epiforecasts\.io/BVDOutbreakSize/stable/analysis" => "",
-#md #     "https://epiforecasts.io/BVDOutbreakSize/stable/contributing" => "contributing.md")
+#md #     "https://epiforecasts.io/BVDOutbreakSize/stable/contributing" => "../contributing.md")
 #md # Markdown.parse(body)
 #md # ```
 #
