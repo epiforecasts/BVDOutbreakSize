@@ -70,9 +70,9 @@ This moves the non-BVD death background, so fitted values change.
   The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
   The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
   The offline `analysis.html` carries both the methods and the national results.
-- The contributing guide link on the national estimates page resolves.
-  It pointed at `estimates/contributing` once the page moved into
-  `estimates/`.
+- The National page opens with its own title and summary rather than a copy of the README front matter.
+  The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
+  The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
 
 ### Infrastructure
 

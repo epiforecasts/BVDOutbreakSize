@@ -6,7 +6,6 @@ using DocumenterCitations
 using DocumenterVitepress
 using Literate
 using BVDOutbreakSize
-import Dates
 
 const REPO_ROOT = dirname(@__DIR__)
 const PAGES_DIR = joinpath(@__DIR__, "pages")
@@ -60,10 +59,12 @@ function render_page(page)
     )
 end
 
-## Copy the README to the home page, stripping the SHARED-block marker
-## comments. The analysis page reads them from the source README to load
-## the shared prose, but they must not appear on the rendered home page
-## (the Vitepress typographer mangles the `--` and shows them as text).
+include(joinpath(@__DIR__, "front_matter.jl"))
+
+## Copy the README to the home page, with its live dates filled in and the
+## SHARED-block marker comment stripped: it must not appear on the rendered
+## home page (the Vitepress typographer mangles the `--` and shows it as
+## text).
 ##
 ## The README links into the hosted report with absolute URLs so they work
 ## when read on GitHub. On the rendered home page those would pin to a fixed
@@ -76,18 +77,7 @@ end
 ## documentation host are rewritten, so the badges and the repository links
 ## are left alone.
 function write_index()
-    readme = read(joinpath(REPO_ROOT, "README.md"), String)
-    readme = replace(readme, r"^<!-- SHARED:END -->\n"m => "")
-    ## Fill the live dates on the home page the same way the analysis page
-    ## does: "Last updated" is the build date and "Data as of" is the loaded
-    ## data cut-off, so a rebuild refreshes them without editing README.md.
-    built = Dates.format(Dates.today(), "d U yyyy")
-    asof = Dates.format(load_observations().cutoff, "d U yyyy")
-    readme = replace(
-        readme,
-        r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
-        r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof."
-    )
+    readme = replace(readme_with_dates(), r"^<!-- SHARED:END -->\n"m => "")
     docs_url = r"\(https?://epiforecasts\.io/BVDOutbreakSize/[^)/]+/"
     readme = replace(
         readme,

@@ -1,5 +1,6 @@
-# Build a self-contained single-file HTML copy of the rendered analysis
-# page.
+# Build a self-contained single-file HTML copy of the rendered report: the
+# front matter from `README.md`, then the methods and national estimates
+# pages.
 #
 # The Vitepress build statically pre-renders the full analysis content
 # (tables, math, images as base64 data URIs) into the page HTML. This
@@ -9,10 +10,13 @@
 # file that opens offline. It is published as a release asset by the
 # docs workflow.
 #
-# Usage: julia scripts/standalone_report.jl [build_dir] [out_file]
+# Usage:
+#   julia --project=docs scripts/standalone_report.jl [build_dir] [out_file]
 #   build_dir defaults to docs/build, out_file to output/analysis.html.
 
 using Base64: base64encode
+using Markdown: Markdown
+include(joinpath(@__DIR__, "..", "docs", "front_matter.jl"))
 
 # Walk forward from the marker to the matching </div>, returning the
 # whole balanced <div>…</div> that contains it.
@@ -92,22 +96,26 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     assets = joinpath(dirname(page), "assets")
     html = read(page, String)
 
-    title = let m = match(r"<title>(.*?)\s*\|", html)
-        m === nothing ? "Analysis" : m.captures[1]
-    end
+    ## The front matter (title, authors, dates, abstract, scope) is not on
+    ## any rendered page other than the home page, so render it from the
+    ## README here. Its first line is the report title.
+    front = front_matter()
+    title = match(r"^# (.*)$"m, front).captures[1]
 
     content = join(
         (
+            Markdown.html(Markdown.parse(front)),
             extract_balanced_div(read(methods_page, String), "vp-doc _"),
             extract_balanced_div(html, "vp-doc _"),
         ), "\n"
     )
     # Rewrite cross-references to either of the two pages in this file as
     # bare anchors, so the in-page jump links work in the standalone file
-    # rather than navigating to the hosted site.
-    content = replace(
-        content, r"/BVDOutbreakSize/[^\"#]*(?:national|methods)#" => "#"
-    )
+    # rather than navigating to the hosted site. The front matter links with
+    # absolute URLs, so the host is optional.
+    in_file = r"(?:https://epiforecasts\.io)?/BVDOutbreakSize/[^\"#]*" *
+        r"(?:estimates/national|methods)#"
+    content = replace(content, in_file => "#")
     # Any remaining root-relative site links point at other doc pages
     # (citations resolve to the references page, etc.) that are not part
     # of this single file. Absolutise them against the hosted site so

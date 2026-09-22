@@ -142,7 +142,8 @@ Pass a stream as `missing` to drop its likelihood.
   This rule is for prose only.
 - The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
   Edit it in `README.md` only.
-  `docs/pages/estimates/national.jl` loads it at build time via a Documenter `@eval` block that reads `README.md` and extracts everything before that marker, so do not duplicate it into the analysis page.
+  `docs/front_matter.jl` reads it at build time and fills in the dates.
+  `docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
 - Table-construction and other setup code in `analysis.jl` is hidden inside `<details>` dropdowns via `#md # @raw html` blocks.
   The bare result object follows (with `#hide`) so only the output renders.
 - The surveillance dispersion prior is a half-normal `truncated(Normal(0.6, 0.2); lower = 0)` on `inv_sqrt_k`, following the Stan prior-choice recommendations.
