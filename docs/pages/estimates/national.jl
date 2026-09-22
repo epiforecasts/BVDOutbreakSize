@@ -850,14 +850,7 @@ onset_delay_profile_fig = plot_onset_delay_profile(
 
 onset_delay_profile_fig #hide
 
-# The figure below is the first surviving snapshot's own complete curve
-# (onset dates from the start of the digitised window up to that snapshot's
-# report date), against the model's fitted level for those same cells: the
-# modelled onsets times ascertainment, read at each onset date's own delay
-# as of that report, scaled by that snapshot's own fitted scan level and
-# put through its own digitisation-noise scale `τ`.
-# This is the complete-but-noisy component the model's ascertainment level
-# is anchored on (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# The figure below is the first surviving snapshot's own printed curve against the model's fitted level for those same cells (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section for why this snapshot is scored as levels rather than corrections).
 
 #md # ```@raw html
 #md # <details><summary>First snapshot: complete curve against fitted level</summary>
