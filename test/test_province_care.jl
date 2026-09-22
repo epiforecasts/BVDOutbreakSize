@@ -316,3 +316,30 @@ end
     days = unique(care.days)
     @test count(d -> count(==(d), care.days) >= 2, days) > 50
 end
+
+@testitem "province_care_observations: weekly and change-day thinning" begin
+    using BVDOutbreakSize: province_care_observations
+
+    names = ["a", "b"]
+    members = Dict{String, Vector{String}}()
+    days = collect(1:21)
+    hist = Dict(
+        "a" => (; days = days, counts = fill(10, 21)),
+        "b" => (; days = days, counts = vcat(fill(5, 10), fill(7, 11))),
+    )
+    weekly = province_care_observations(hist, names; members, every = 7)
+    @test unique(weekly.days) == [1, 8, 15]
+    @test length(weekly.days) == 6
+
+    ## Change days: the first day, and the day b moves from 5 to 7.
+    changes = province_care_observations(hist, names; members, changes_only = true)
+    @test unique(changes.days) == [1, 11]
+    @test length(changes.days) == 4
+
+    ## Days with a single province carry no split and do not count in the
+    ## weekly spacing.
+    hist["b"] = (; days = [1, 2, 9, 10], counts = [5, 5, 5, 5])
+    weekly2 = province_care_observations(hist, names; members, every = 7)
+    @test unique(weekly2.days) == [1, 9]
+    @test all(d -> count(==(d), weekly2.days) == 2, unique(weekly2.days))
+end

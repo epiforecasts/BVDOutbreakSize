@@ -102,11 +102,14 @@ function patch_fit_args(obs)
             province_testing_covariate(obs.province_lab_daily_history),
         province_lab_increments = prov_lab.increments,
         province_lab_days = prov_lab.days,
+        ## Weekly occupancy splits and bed splits on change days only: a
+        ## stock reprinted daily is not a fresh draw of the split.
         province_isolation = province_care_observations(
-            obs.province_isolation_history, PROVINCE_NAMES
+            obs.province_isolation_history, PROVINCE_NAMES; every = 7
         ),
         province_capacity = province_care_observations(
-            obs.province_bed_capacity_history, PROVINCE_NAMES
+            obs.province_bed_capacity_history, PROVINCE_NAMES;
+            changes_only = true
         ),
     )
 end

@@ -608,7 +608,8 @@ function province_testing_covariate(
 end
 
 """
-    province_care_observations(history, province_names; members)
+    province_care_observations(history, province_names; members, every,
+                               changes_only)
 
 Long-format province observations for the isolation-occupancy and bed
 splits in [`treatment_flow_model`](@ref): one row per (day, patch) with a
@@ -620,10 +621,20 @@ a source province to its sparse `(days, counts)` series, as
 that has printed on or before that day prints that day, and its count is
 their sum, since a partial sum would read a silent member as an empty
 ward. A province absent from `history` never contributes.
+
+The split scores each kept day as a fresh draw, and a stock reprinted
+daily is not one: the same in-patients fill the same beds from one report
+to the next. `every = 7` keeps one day in seven of the days with a split,
+about one bed stay apart, so the kept days are close to independent; with
+every day kept the split over-constrains the per-patch demand and slows
+the sampler. `changes_only = true` keeps a day only when some province's
+count differs from its last kept count, for the bed counts, which the
+reports repeat unchanged for weeks.
 """
 function province_care_observations(
         history, province_names::AbstractVector = PROVINCE_NAMES;
-        members = PROVINCE_MEMBERS
+        members = PROVINCE_MEMBERS, every::Integer = 1,
+        changes_only::Bool = false
     )
     days = Int[]
     patches = Int[]
@@ -659,7 +670,41 @@ function province_care_observations(
         end
     end
     ord = sortperm(days; alg = MergeSort)
-    return (; days = days[ord], patches = patches[ord], counts = counts[ord])
+    days, patches, counts = days[ord], patches[ord], counts[ord]
+    keep = trues(length(days))
+    if changes_only
+        last = Dict{Int, Int}()
+        i = 1
+        while i <= length(days)
+            j = i
+            while j < length(days) && days[j + 1] == days[i]
+                j += 1
+            end
+            changed = any(get(last, patches[r], -1) != counts[r] for r in i:j)
+            for r in i:j
+                keep[r] = changed
+                changed && (last[patches[r]] = counts[r])
+            end
+            i = j + 1
+        end
+    end
+    if every > 1
+        ## Thin over the days that carry a split (two or more patches),
+        ## keeping a day only once `every` days have passed since the last
+        ## kept one.
+        kept_days = Set{Int}()
+        last_kept = typemin(Int) ÷ 2
+        for d in unique(days)
+            count(==(d), days) >= 2 || continue
+            d - last_kept >= every || continue
+            push!(kept_days, d)
+            last_kept = d
+        end
+        for r in eachindex(days)
+            keep[r] = keep[r] && days[r] in kept_days
+        end
+    end
+    return (; days = days[keep], patches = patches[keep], counts = counts[keep])
 end
 
 """

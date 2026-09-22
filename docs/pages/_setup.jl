@@ -485,11 +485,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_lab_daily_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    ## The same thinning as `patch_fit_args`, so the generator is the model
+    ## that was fitted.
     province_isolation = province_care_observations(
-        obs.province_isolation_history, PROVINCE_NAMES
+        obs.province_isolation_history, PROVINCE_NAMES; every = 7
     )
     province_capacity = province_care_observations(
-        obs.province_bed_capacity_history, PROVINCE_NAMES
+        obs.province_bed_capacity_history, PROVINCE_NAMES; changes_only = true
     )
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
