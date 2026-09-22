@@ -52,6 +52,10 @@ This moves the non-BVD death background, so fitted values change.
 - The aim and origins and the limitations are pages of their own rather than
   dropdowns inside the analysis, and a new page carries the authors, the
   funding and the citation (#782).
+- The methods are a page of their own under Details (#804).
+  The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
+  The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
+  The offline `analysis.html` carries both the methods and the national results.
 
 ### Infrastructure
 
