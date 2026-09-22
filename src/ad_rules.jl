@@ -1,19 +1,10 @@
-# Hand-written reverse-mode derivative rules for the numeric kernels in
-# `renewal.jl`.
+# Native `Mooncake.rrule!!` methods for the `renewal.jl` kernels. Each is a
+# loop over a daily grid, so left to the backend every iteration's
+# intermediates go on the tape; these replace that with a closed-form
+# adjoint of the same shape as the forward loop.
 #
-# The rules are native `Mooncake.rrule!!` methods. Mooncake is the
-# production backend, so each kernel is declared a primitive and its
-# pullback accumulates straight into the argument tangents.
-#
-# Each kernel is a loop over a daily grid. Left to the backend, every
-# iteration's intermediates go on the tape. The rules below replace that
-# with a closed-form adjoint loop of the same shape as the forward one.
-#
-# The primitive signatures are restricted to `Array{<:IEEEFloat}`
-# arguments: that is what every model call site passes, and it keeps the
-# tangent types Mooncake builds for the rule concrete. Anything else falls
-# through to Mooncake's own derived rule, which still differentiates the
-# plain Julia body.
+# Signatures are restricted to `Array{<:IEEEFloat}`, what every call site
+# passes. Anything else falls through to Mooncake's derived rule.
 
 using Mooncake: CoDual, NoRData, primal, tangent, zero_fcodual
 
@@ -54,16 +45,12 @@ Mooncake.@is_primitive(
 )
 
 ## Adjoint of the daily delay convolution, shared by `convolve_delay` and
-## `convolve_survival`. For
+## `convolve_survival`. A convolution's pullback is the matching
+## correlation, one pass over the same `(t, d)` pairs:
 ##
-##     y[t] = Σ_d x[t−d] · delay[d+1]    (d ≥ 0, t−d ≥ 1)
-##
-## the two input adjoints are
-##
-##     x̄[s]          += Σ_d ȳ[s+d] · delay[d+1]
-##     delaybar[d+1] += Σ_t ȳ[t] · x[t−d]
-##
-## which is one pass over the same `(t, d)` pairs the forward loop walks.
+##     y[t]    = Σ_d x[t−d] · w[d+1]
+##     x̄[s]   += Σ_d ȳ[s+d] · w[d+1]
+##     w̄[d+1] += Σ_t ȳ[t] · x[t−d]
 function _convolve_delay_adjoint(
         ȳ::AbstractVector, x::AbstractVector,
         delay::AbstractVector
@@ -213,11 +200,9 @@ function Mooncake.rrule!!(
     I, force = renewal_infections_with_force(Rtp, gp, seedp)
     Ī = zero(I)
     function renewal_infections_pullback!!(::NoRData)
-        ## The recursion is sequential, so the reverse pass walks the days
-        ## backwards, pushing each day's infection adjoint onto the lagged
-        ## infections it was built from before those days are themselves read.
-        ## The incoming cotangent is Mooncake's, so the walk accumulates
-        ## into a working copy of it.
+        ## Sequential recursion, so the walk runs backwards: each day's
+        ## adjoint must land on the lagged infections before those days
+        ## are read. `Ī` is Mooncake's buffer, so accumulate into a copy.
         acc = copy(Ī)
         @inbounds for t in n:-1:(L + 1)
             it = acc[t]
