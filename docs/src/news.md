@@ -93,6 +93,10 @@ The existing suite times steady-state gradients only, which is why an 18 minute 
 Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
 - The Literate report pages move from `docs/examples/` to `docs/pages/`, and
   `scripts/run.jl` runs all of them rather than the two it named (#782).
+- The offline `analysis.html` resolves its pages by path rather than by
+  basename (#807). Two pages render to `national.html`, the national
+  estimates and the forecasts, and directory order decided which one the
+  release asset carried.
 - A local documentation build loads its fits the way CI does (#782).
   `task fetch-fits` downloads them from the latest successful documentation
   run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
