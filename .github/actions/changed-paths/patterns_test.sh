@@ -52,7 +52,8 @@ check() { # description, newline-separated paths, expect report, expect tests
 check "model change"           "src/models/joint.jl"                       true  true
 check "new data vintage"       "data/observations.toml"                    true  true
 check "package source"         "src/scoring.jl"                            true  true
-check "an extension"           "ext/EnzymeExt.jl"                          true  true
+check "the Enzyme extension"   "ext/BVDOutbreakSizeEnzymeExt.jl"           false true
+check "the logging extension"  "ext/BVDOutbreakSizeTensorBoardLoggerExt.jl" true  true
 check "Project.toml"           "Project.toml"                              true  true
 check "test only"              "test/test_renewal.jl"                      false true
 check "analysis page"          "docs/examples/analysis.jl"                 true  false
