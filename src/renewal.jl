@@ -211,22 +211,37 @@ function renewal_infections(
         Rt::AbstractVector, g::AbstractVector,
         seed::AbstractVector
     )
+    return first(renewal_infections_with_force(Rt, g, seed))
+end
+
+"""
+The renewal trajectory and the per-day force of infection it was built
+from, as `(infections, force)`. [`renewal_infections`](@ref) returns the
+first; the derivative rule needs the second, which it would otherwise
+have to rebuild from a copy of this loop.
+"""
+function renewal_infections_with_force(
+        Rt::AbstractVector, g::AbstractVector,
+        seed::AbstractVector
+    )
     n = length(Rt)
     L = length(seed)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
     I = zeros(Tp, n)
+    force = zeros(Tp, n)
     @inbounds for j in 1:min(L, n)
         I[j] = seed[j]
     end
     @inbounds for t in (L + 1):n
-        force = zero(Tp)
+        f = zero(Tp)
         kmax = min(t - 1, length(g))
         for s in 1:kmax
-            force += I[t - s] * g[s]
+            f += I[t - s] * g[s]
         end
-        I[t] = Rt[t] * force
+        force[t] = f
+        I[t] = Rt[t] * f
     end
-    return I
+    return I, force
 end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
@@ -407,6 +422,23 @@ function convolve_delay(x::AbstractVector, delay::AbstractVector)
 end
 
 """
+Reverse-cumulative tail sums of a length-of-stay PMF `los`, the survival
+weights `S(τ) = Σ_{j ≥ τ} los[j]` that [`convolve_survival`](@ref)
+convolves with. Split out so the derivative rule for `convolve_survival`
+weights with the same definition rather than a copy of it.
+"""
+function survival_weights(los::AbstractVector)
+    L = length(los)
+    surv = similar(los)
+    acc = zero(eltype(los))
+    @inbounds for i in L:-1:1
+        acc += los[i]
+        surv[i] = acc
+    end
+    return surv
+end
+
+"""
 Survival-weighted convolution for an occupancy (prevalence) stream. Given a
 daily admission series `x` and a length-of-stay PMF `los` (indexed from lag
 0, so `los[1] = P(LOS = 0)`), return the daily occupancy
@@ -425,14 +457,7 @@ so for a normalised PMF `S(0) = 1`, and the occupancy is
 follows the inputs.
 """
 function convolve_survival(x::AbstractVector, los::AbstractVector)
-    L = length(los)
-    surv = similar(los)
-    acc = zero(eltype(los))
-    @inbounds for i in L:-1:1
-        acc += los[i]
-        surv[i] = acc
-    end
-    return convolve_delay(x, surv)
+    return convolve_delay(x, survival_weights(los))
 end
 
 """

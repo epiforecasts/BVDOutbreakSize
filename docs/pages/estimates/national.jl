@@ -245,6 +245,34 @@ fit_diagnostics_table = diagnostics_table(
 
 fit_diagnostics_table #hide
 
+# #### Data currency
+#
+# The cut-off is the last date any stream reports.
+# Streams that stopped before it are carried frozen.
+
+#md # ```@raw html
+#md # <details><summary>Streams that stop before the cut-off</summary>
+#md # ```
+
+stream_currency_table = let status = stream_report_status(obs),
+        stale = status[.!status.reporting, :]
+    DataFrame(
+        "Stream" => stale.label,
+        "Last reported" => [
+            ismissing(d) ? "never" : string(d) for d in stale.last_date
+        ],
+        "Days before cut-off" => [
+            ismissing(d) ? "-" : string(d) for d in stale.days_since
+        ]
+    )
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(stream_currency_table) #hide
+
 # ### Joint model estimates
 #
 

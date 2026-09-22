@@ -40,6 +40,10 @@ on:
       # Prose only. A README edit changes nothing that is timed.
       - '!benchmark/README.md'
       - 'test/ad_fixtures.jl'
+      # An AD backend bump changes every gradient timed here, and is the
+      # thing that could make the hand-written rules in `src/ad_rules.jl`
+      # redundant. Dependabot raises those as a `Project.toml` edit alone.
+      - 'Project.toml'
       - '.github/workflows/benchmark.yaml'
   workflow_dispatch:
 
