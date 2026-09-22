@@ -2242,48 +2242,61 @@ function treatment_flow_defaults()
     )
 end
 
+## Reverse-cumulative tail sums of a stay PMF, the inclusive survival
+## `S(d) = P(stay >= d)` that a stock convolves its admissions with.
+function _tail_sums(pmf::AbstractVector)
+    return reverse(cumsum(reverse(pmf)))
+end
+
 """
-Per-patch latent bed demand: each patch's BVD reports through the
-admission delay at `p_iso_bvd · p_drc`, its share `w[p]` of the national
-non-BVD admissions `A_bg`, the same clinical flows
-([`abscond_thinned_flows`](@ref)) and the same running balance
-([`accumulate_occupancy`](@ref)) as the national stock in
-[`treatment_flow_model`](@ref). Rule-outs are the patch's share of the
-national rule-out flow, since non-BVD admissions leave on one stay. Every
-step is positively homogeneous in the inflow, so an equal split of the
-reports gives equal halves of the national demand. Returns an
-`(n_patches × n)` matrix.
+Per-patch latent bed demand for the province splits: the national demand
+`demand` shared out by each patch's approximate stock, its BVD reports
+through the admission delay at `p_iso_bvd · p_drc` and then the
+clinical-stay survival `S_clin`, plus its share `w[p]` of the national
+non-BVD admissions `A_bg` through the abscond-thinned rule-out stay
+`ruleout_pmf`. The national stock in [`treatment_flow_model`](@ref) carries
+the abscond and confirmation dynamics; those are shared across patches and
+cancel in the shares to first order, so the split needs the stays alone,
+one convolution per patch rather than a copy of the flow machinery, whose
+cost is a fifth of the whole gradient. Returns an `(n_patches × n)` matrix
+whose columns sum to `demand`; an equal split of the reports gives equal
+halves.
 """
 function _patch_demand(
         reports_matrix::AbstractMatrix, A_bg::AbstractVector,
         w::AbstractVector, p_iso_bvd::Real, p_drc::Real,
-        adm_pmf::AbstractVector, CFR_iso::Real,
-        death_pmf::AbstractVector, recovery_pmf::AbstractVector,
-        ruleout_daily::AbstractVector, κ::Real, conf_hazard::AbstractVector
+        adm_pmf::AbstractVector, S_clin::AbstractVector,
+        ruleout_pmf::AbstractVector, demand::AbstractVector
     )
     np, n = size(reports_matrix)
     T = promote_type(
         eltype(reports_matrix), eltype(A_bg), eltype(w), typeof(p_iso_bvd),
-        typeof(p_drc), eltype(adm_pmf), typeof(CFR_iso), eltype(death_pmf),
-        eltype(recovery_pmf), eltype(ruleout_daily), typeof(κ),
-        eltype(conf_hazard)
+        typeof(p_drc), eltype(adm_pmf), eltype(S_clin), eltype(ruleout_pmf),
+        eltype(demand)
     )
-    out = Matrix{T}(undef, np, n)
+    stock = Matrix{T}(undef, np, n)
     scale = p_iso_bvd * p_drc
-    survive = one(CFR_iso) - CFR_iso
+    bg_stock = convolve_delay(A_bg, _tail_sums(ruleout_pmf))
     @inbounds for p in 1:np
         A_bvd_p = convolve_delay(
             scale .* vec(@view reports_matrix[p, :]), adm_pmf
         )
-        deaths_p, recover_p = abscond_thinned_flows(
-            CFR_iso .* A_bvd_p, death_pmf, survive .* A_bvd_p, recovery_pmf,
-            κ, conf_hazard
-        )
-        acc_p = accumulate_occupancy(
-            A_bvd_p, w[p] .* A_bg, deaths_p, recover_p,
-            w[p] .* ruleout_daily, κ, conf_hazard
-        )
-        out[p, :] = acc_p.demand
+        O_bvd_p = convolve_delay(A_bvd_p, S_clin)
+        wp = w[p]
+        for t in 1:n
+            stock[p, t] = O_bvd_p[t] + wp * bg_stock[t]
+        end
+    end
+    out = Matrix{T}(undef, np, n)
+    z = zero(T)
+    @inbounds for t in 1:n
+        tot = z
+        for p in 1:np
+            tot += stock[p, t]
+        end
+        for p in 1:np
+            out[p, t] = tot > z ? demand[t] * stock[p, t] / tot : demand[t] / np
+        end
     end
     return out
 end
@@ -2584,14 +2597,14 @@ series for forecasting and replication.
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     demand = _typed_as(demand_raw, C)
 
-    ## Per-patch bed demand for the province splits: each patch's inflow
-    ## through the same flows and rates. With one patch it is the national
-    ## demand as one row.
+    ## Per-patch bed demand for the province splits: the national demand
+    ## shared out by each patch's stock of admissions through the stays.
+    ## With one patch it is the national demand as one row.
     demand_patch = by_patch ?
         _patch_demand(
             bvd_reports_matrix, A_bg, background_split, p_iso_bvd, p_drc,
-            adm_delay_state.pmf, CFR_iso, death_los_state.pmf,
-            recovery_los_state.pmf, ruleout_daily, κ, conf_hazard
+            adm_delay_state.pmf, S_clin,
+            abscond_thinned(ruleout_los_state.pmf, κ), demand
         ) : reshape(demand, 1, :)
 
     ## Reclassification offset Δ(t), added to the modelled census total only.
