@@ -82,16 +82,15 @@ observations_table = DataFrame(
         "source_population",
     ],
     date = [
-        isempty(obs.export_case_days) ? missing :
-            grid_date(maximum(obs.export_case_days)),
-        isempty(obs.export_death_days) ? missing :
-            grid_date(maximum(obs.export_death_days)),
+        history_last_date(grid_date, (; days = obs.export_case_days)),
+        history_last_date(grid_date, (; days = obs.export_death_days)),
         hist_last_date(obs.deaths_history),
         hist_last_date(obs.reported_history),
         hist_last_date(obs.confirmed_history),
         hist_last_date(obs.confirmed_deaths_history),
-        isempty(obs.onset_curve_history.report_days) ? missing :
-            grid_date(maximum(obs.onset_curve_history.report_days)),
+        history_last_date(
+            grid_date, (; days = obs.onset_curve_history.report_days)
+        ),
         hist_last_date(obs.lab_history),
         hist_last_date(obs.treatment_admissions_history),
         hist_last_date(obs.treatment_deaths_history),

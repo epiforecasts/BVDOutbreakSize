@@ -10,6 +10,20 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v2.1.0.
 
+### Performance
+
+- Hand-written reverse-mode rules for the daily convolution and renewal
+  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
+  `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
+  grid, so left to the backend every iteration's intermediates reach the
+  tape; the rules replace that with a closed-form adjoint of the same
+  shape. The joint's gradient drops about 20%
+  under Mooncake, the default backend, and the delay-heavy observation
+  submodels rather more; the measurements are in #810. Each is a native
+  `Mooncake.rrule!!` method on a declared primitive signature. Values are
+  unchanged: each rule is checked against central differences and against
+  the gradient of an unregistered clone of the same function body.
+
 ### Model
 
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
@@ -64,6 +78,11 @@ This moves the non-BVD death background, so fitted values change.
   The offline `analysis.html` carries both the methods and the national results.
 
 ### Infrastructure
+
+- One rule decides when a stream first and last reported (#817).
+`stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
+They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
+Every date is unchanged, checked against the previous bodies over 18 weekly vintages.
 
 - `ChainRulesCore` is no longer a direct dependency (#808).
 It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
