@@ -10,6 +10,20 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v2.1.0.
 
+### Performance
+
+- Hand-written reverse-mode rules for the daily convolution and renewal
+  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
+  `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
+  grid, so left to the backend every iteration's intermediates reach the
+  tape; the rules replace that with a closed-form adjoint of the same
+  shape. The joint's gradient drops about 20%
+  under Mooncake, the default backend, and the delay-heavy observation
+  submodels rather more; the measurements are in #810. Each is a native
+  `Mooncake.rrule!!` method on a declared primitive signature. Values are
+  unchanged: each rule is checked against central differences and against
+  the gradient of an unregistered clone of the same function body.
+
 ### Model
 
 - The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
