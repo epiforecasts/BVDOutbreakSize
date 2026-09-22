@@ -171,3 +171,22 @@ end
     ## Province laboratory data with one patch would be dropped silently.
     @test_throws ErrorException build(labh; n_patches = 1)()
 end
+
+@testitem "_patch_analysed_increments: ascertainment scales the BVD part only" begin
+    using BVDOutbreakSize: _patch_analysed_increments
+
+    carried = [10.0 20.0 30.0; 5.0 5.0 5.0]
+    bg = [100.0, 100.0, 100.0]
+    w = [0.5, 0.5]
+    days = [1, 2, 3]
+    flat = _patch_analysed_increments(carried, 0.5, [1.0, 1.0], bg, w, days)
+    ## Doubling one patch's ascertainment doubles its BVD contribution and
+    ## leaves its background share and the other patch alone.
+    up = _patch_analysed_increments(carried, 0.5, [2.0, 1.0], bg, w, days)
+    @test up[2, :] == flat[2, :]
+    @test up[1, :] ≈ flat[1, :] .+ 0.5 .* carried[1, :]
+    ## Bins sum the printed days.
+    binned = _patch_analysed_increments(carried, 0.5, [1.0, 1.0], bg, w, days, [1, 1, 2])
+    @test binned[:, 1] ≈ flat[:, 1] .+ flat[:, 2]
+    @test binned[:, 2] ≈ flat[:, 3]
+end

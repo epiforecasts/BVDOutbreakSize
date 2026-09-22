@@ -887,7 +887,8 @@ Modelled per-patch analysed-specimen volume summed over the laboratory
 bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
 the national factors the composition normalises away. `carried` is each
 patch's onsets through the onset-to-confirmation kernel (report ⊕ receipt,
-[`_patch_carried`](@ref)), thinned by `p_drc`, and joined by the patch's
+[`_patch_carried`](@ref)), thinned by `p_drc` and the patch's relative
+ascertainment `asc[p]` (the case composition's), and joined by the patch's
 share `w[p]` of the non-BVD
 background carried to receipt (`bg_carried`). Summed over the patches this
 is the national suspect pipeline [`confirmed_cases_model`](@ref) scales
@@ -896,21 +897,23 @@ indices. Returns an `(n_patches × n_days)` matrix.
 """
 function _patch_analysed_increments(
         carried::AbstractMatrix,
-        p_drc::Real, bg_carried::AbstractVector, w::AbstractVector,
-        lab_days::AbstractVector{<:Integer},
+        p_drc::Real, asc::AbstractVector, bg_carried::AbstractVector,
+        w::AbstractVector, lab_days::AbstractVector{<:Integer},
         lab_bins::AbstractVector{<:Integer} = 1:length(lab_days)
     )
     np, n = size(carried)
     nb = isempty(lab_bins) ? 0 : maximum(lab_bins)
     T = promote_type(
-        eltype(carried), typeof(float(p_drc)), eltype(bg_carried), eltype(w)
+        eltype(carried), typeof(float(p_drc)), eltype(asc), eltype(bg_carried),
+        eltype(w)
     )
     out = zeros(T, np, nb)
     @inbounds for p in 1:np
         wp = w[p]
+        ap = asc[p] * p_drc
         for (i, day) in enumerate(lab_days)
             d = clamp(Int(day), 1, n)
-            out[p, lab_bins[i]] += p_drc * carried[p, d] + wp * bg_carried[d]
+            out[p, lab_bins[i]] += ap * carried[p, d] + wp * bg_carried[d]
         end
     end
     return out
@@ -1018,7 +1021,9 @@ conditional on the national daily total. The modelled split is each
 patch's BVD suspects (its onsets through the onset-to-confirmation kernel,
 thinned by `p_drc`) plus its share of the non-BVD background, the share a
 partially pooled simplex ([`background_split_model`](@ref)) carries and
-this term identifies. Pass `province_lab_increments` with
+this term identifies. The BVD suspects carry the case composition's
+relative ascertainment, so the two compositions agree on how many of a
+patch's cases reach the laboratory. Pass `province_lab_increments` with
 `province_lab_days` and `province_lab_bins`, built by
 [`province_lab_increment_matrix`](@ref), which sums the printed days into
 calendar weeks for the production fit.
@@ -1371,13 +1376,20 @@ density there, is the fitted model's.
     end
 
     if !isempty(province_lab_days)
+        ## The same relative ascertainment the case composition scores, so a
+        ## patch's tested BVD suspects scale as its confirmed cases do and
+        ## the background shares carry only the non-BVD split. Without it
+        ## the shares absorb the ascertainment contrast instead.
+        lab_asc = isempty(province_days) ? ones(n_patches) :
+            composition_state.province_ascertainment
         modelled_lab = _patch_analysed_increments(
-            confirmed_carried, p_drc,
+            confirmed_carried, p_drc, lab_asc,
             convolve_delay(cases_state.bg_daily, confirmed_state.receipt_pmf),
             bg_split_state.w, province_lab_days, province_lab_bins
         )
-        ## No ascertainment contrast: the split is carried by the background
-        ## shares, and the testing fraction is national.
+        ## No ascertainment contrast of its own: the split is carried by the
+        ## background shares and the case composition's ascertainment, and
+        ## the testing fraction is national.
         lab_composition_state ~ to_submodel(
             lab_composition(
                 province_lab_increments, modelled_lab;

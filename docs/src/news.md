@@ -154,8 +154,10 @@ Changes since v2.1.0.
   conditional on the national daily analysed total. The modelled split is each
   patch's BVD suspects plus its share of the non-BVD background, a partially
   pooled simplex centred on population share (`background_split_model`) that
-  this term identifies. The testing fraction stays national and the term
-  samples no ascertainment contrast of its own. The per-province positives
+  this term identifies. The BVD suspects carry the case composition's
+  relative ascertainment, so the two compositions agree on how many of a
+  patch's cases reach the laboratory; the testing fraction stays national
+  and the term samples no contrast of its own. The per-province positives
   remain unfitted.
 - Province isolation occupancy and bed counts enter the treatment-flow stream
   as splits of the printed sum of the provinces present each day, over
