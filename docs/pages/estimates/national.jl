@@ -881,7 +881,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case stream and is described with it below.
-# The suspected deaths carry a death ascertainment $p_{\text{death}} \sim \mathrm{logit}^{-1}\mathrm{Normal}(\mathrm{logit}\,0.9,\ 0.5)$ and a non-BVD death background tied to the case background by a background CFR $\mathrm{cfr}_{\text{bg}} \sim \mathrm{Beta}(2,\ 6)$.
+# The suspected deaths carry a death ascertainment $p_{\text{death}} \sim \mathrm{logit}^{-1}\mathrm{Normal}(\mathrm{logit}\,0.9,\ 0.5)$ and a non-BVD death background tied to the case background by a background CFR $\mathrm{cfr}_{\text{bg}} \sim \mathrm{Beta}(2,\ 18)$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>

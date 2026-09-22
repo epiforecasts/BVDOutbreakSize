@@ -533,11 +533,15 @@ a free rate of their own removes the degeneracy that keeps a free
 `λ_bg_death` switched off. The case background is pinned by the laboratory
 positivity link, so scaling it by `cfr_bg` gives the death background a
 level and time profile without a second free rate competing with outbreak
-size. The default `Beta(2, 6)` (mean ≈ 0.25, 90% ≈ 0.05–0.52) is weakly
-informative and centred below the BVD CFR, since non-BVD suspect illness is
-on average less lethal. Pass `cfr_prior` to override. Returns `(; cfr_bg)`.
+size. The default `Beta(2, 18)` (mean ≈ 0.10, 90% ≈ 0.02–0.23) is weakly
+informative and sits well below the BVD CFR (`Beta(6.6, 13.4)`, mean
+≈ 0.33). Other severe febrile or haemorrhagic illness meeting the suspect
+definition does not carry a case-fatality ratio near a filovirus one. The
+prior keeps 99% of its mass below the BVD CFR mean while still spanning
+an order of magnitude, so the data can move it. Pass `cfr_prior` to
+override. Returns `(; cfr_bg)`.
 """
-@model function background_cfr_model(; cfr_prior = Beta(2.0, 6.0))
+@model function background_cfr_model(; cfr_prior = Beta(2.0, 18.0))
     cfr_bg ~ cfr_prior
     return (; cfr_bg)
 end
