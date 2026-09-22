@@ -4,7 +4,7 @@ using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
-using Random: AbstractRNG, MersenneTwister
+using Random: AbstractRNG, MersenneTwister, default_rng
 using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
@@ -84,6 +84,9 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_divergence_locations, plot_diagnostic_contrast,
     reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
     onset_nowcast_draws, plot_onset_nowcast_grid,
+    onset_report_delay_pmf, onset_report_delay_moments,
+    onset_level_predictive_draws,
+    plot_onset_delay_profile, plot_onset_level_band,
     predict_no_onward_deaths, plot_no_onward_deaths,
     forecast_reported, forecast_stream, forecast_table, forecast_archive,
     province_forecast_archive,
@@ -132,7 +135,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     confirmed_deaths_model,
     treatment_flow_model, recovered_model,
     exports_model, exports_deaths_model,
-    safe_studentt, onset_report_cdf, onset_report_cdf_extrapolated,
+    safe_studentt, onset_increments_model,
+    onset_report_cdf, onset_report_cdf_extrapolated,
     onset_report_cdf_table,
     onset_report_G, onset_report_F, onset_nowcast,
     onset_report_anchor, onset_report_anchor_series,

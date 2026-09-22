@@ -2462,6 +2462,297 @@ function plot_onset_nowcast_grid(
     return fig
 end
 
+"""
+    onset_report_delay_pmf(logit_h0, γ, t, grid_start)
+
+Delay probability mass function, `d = 0 … D-1`, for symptom-onset reports
+arriving on calendar day `t`: the calendar-walk effect is held at `γ`'s own
+value for `t` across the whole delay support, rather than letting it vary
+with the onset date `t - d` each delay implies.
+[`onset_report_cdf_extrapolated`](@ref) already clamps its calendar index to
+`γ`'s length, so passing it a length-one `γ` holds that single value at
+every delay: the survival-hazard product it returns is then driven by
+`logit_h0` alone, `cdf(d) = onset_report_cdf_extrapolated(d, logit_h0, [γ_t],
+0, 0)`. `pmf[d+1] = cdf(d) - cdf(d-1)` (`cdf(-1) = 0`), normalised by its own
+last entry through [`safe_rate`](@ref)'s guard, so it sums to one even where
+`cdf(D-1)` falls short from underflow.
+
+A reading that instead let `γ` vary with each delay's own onset date `t - d`
+would mix cohorts from different onset dates into one distribution with no
+guarantee of monotonicity. Holding `t`'s own calendar level fixed keeps this
+a proper distribution: what the fitted delay shape alone implies for a
+report landing on day `t`. Used by [`onset_report_delay_moments`](@ref) and
+[`plot_onset_delay_profile`](@ref). Pure, top-level.
+"""
+function onset_report_delay_pmf(
+        logit_h0::AbstractVector, γ::AbstractVector,
+        t::Integer, grid_start::Integer
+    )
+    D = length(logit_h0)
+    ng = length(γ)
+    γt = γ[clamp(Int(t) - Int(grid_start) + 1, 1, ng)]
+    γ1 = [γt]
+    T = promote_type(eltype(logit_h0), eltype(γ))
+    pmf = Vector{T}(undef, D)
+    cdf_prev = zero(T)
+    for d in 0:(D - 1)
+        c = onset_report_cdf_extrapolated(d, logit_h0, γ1, 0, 0)
+        pmf[d + 1] = c - cdf_prev
+        cdf_prev = c
+    end
+    pmf ./= safe_rate(cdf_prev)
+    return pmf
+end
+
+"""
+    onset_report_delay_moments(logit_h0, γ, t, grid_start)
+
+Mean and SD of the onset-to-report delay distribution
+([`onset_report_delay_pmf`](@ref)) for reports arriving on calendar day `t`:
+`mean = Σ d · pmf(d)`, `sd = sqrt(max(Σ d² · pmf(d) - mean², 0))`, the floor
+guarding against a rounding-negative variance. Used by
+[`plot_onset_delay_profile`](@ref), one call per posterior draw per report
+day. Pure, top-level.
+"""
+function onset_report_delay_moments(
+        logit_h0::AbstractVector, γ::AbstractVector,
+        t::Integer, grid_start::Integer
+    )
+    pmf = onset_report_delay_pmf(logit_h0, γ, t, grid_start)
+    T = eltype(pmf)
+    m = zero(T)
+    m2 = zero(T)
+    for d in 0:(length(pmf) - 1)
+        m += d * pmf[d + 1]
+        m2 += d^2 * pmf[d + 1]
+    end
+    return (; mean = m, sd = sqrt(max(m2 - m^2, zero(T))))
+end
+
+"""
+    plot_onset_delay_profile(hazard; grid_start, grid_end, seeding,
+        week = 7)
+
+Fitted onset-to-report delay distribution over report time: the mean and SD
+of [`onset_report_delay_pmf`](@ref) for every report day
+`grid_start:grid_end`, one value per posterior draw, summarised as the
+median with 50%/90% credible ribbons and plotted against calendar date
+(`seeding` is the calendar date of grid day 1). Two panels share the x-axis,
+mean delay above and SD below. `hazard` is
+[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`; only
+`logit_h0` and `γ` are read.
+
+A report day near `grid_end`, where the delay hazard has only the shortest
+delays to inform it (see [`onset_reporting_model`](@ref)), still returns a
+finite mean and SD, since [`onset_report_cdf_extrapolated`](@ref) holds the
+walk flat past its fitted edge; read those days as resting on partial
+pooling to `η0` rather than on data.
+"""
+function plot_onset_delay_profile(
+        hazard::NamedTuple; grid_start::Integer, grid_end::Integer,
+        seeding::Date, week::Integer = 7
+    )
+    days = collect(Int(grid_start):Int(grid_end))
+    ndraws = length(hazard.logit_h0)
+    means = Matrix{Float64}(undef, ndraws, length(days))
+    sds = Matrix{Float64}(undef, ndraws, length(days))
+    for i in 1:ndraws
+        for (k, t) in enumerate(days)
+            m = onset_report_delay_moments(
+                hazard.logit_h0[i], hazard.γ[i], t, grid_start
+            )
+            means[i, k] = m.mean
+            sds[i, k] = m.sd
+        end
+    end
+    q(mat, k, pr) = quantile(@view(mat[:, k]), pr)
+    epoch = date2epochdays(seeding)
+    x = [epoch + (t - 1) for t in days]
+
+    fig = Figure(; size = (900, 560))
+    ax1 = Axis(
+        fig[1, 1]; ylabel = "mean delay (days)",
+        title = "Symptom-onset reporting delay over report time"
+    )
+    ax2 = Axis(fig[2, 1]; xlabel = "Report date", ylabel = "delay SD (days)")
+    for (ax, mat, colour) in (
+            (ax1, means, :steelblue), (ax2, sds, :darkorange),
+        )
+        lo90 = [q(mat, k, 0.05) for k in eachindex(days)]
+        hi90 = [q(mat, k, 0.95) for k in eachindex(days)]
+        lo50 = [q(mat, k, 0.25) for k in eachindex(days)]
+        hi50 = [q(mat, k, 0.75) for k in eachindex(days)]
+        med = [q(mat, k, 0.5) for k in eachindex(days)]
+        band!(ax, x, lo90, hi90; color = (colour, 0.18))
+        band!(ax, x, lo50, hi50; color = (colour, 0.35))
+        lines!(ax, x, med; color = colour, linewidth = 2)
+        ax.xticklabelrotation = pi / 6
+    end
+    lo = floor(Int, minimum(x))
+    hi = ceil(Int, maximum(x))
+    for ax in (ax1, ax2)
+        CairoMakie.xlims!(ax, lo, hi)
+        ax.xticks = collect(lo:week:hi)
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v))) for v in vals
+        ]
+    end
+    return fig
+end
+
+"""
+    onset_level_predictive_draws(u, onsets, hazard, scan_level, noise_scale,
+        vintage_idx; grid_start, alpha_grid_start = grid_start,
+        target_delay = nothing, ν = 4.0, n_rep = 4, rng = default_rng())
+
+Posterior predictive replicate of onset date `u`'s reported level, read
+through one vintage's own fitted digitisation noise: a sample from
+[`onset_increments_model`](@ref)'s `missing` branch rather than a hand-built
+Student-t call, so the replicate carries the fitted `τ`, `scan_level` and
+heavy tail exactly as the likelihood scores a level cell (see
+[`onset_reporting_model`](@ref)'s level-cell case, `τ_prev = 0`).
+
+`target_delay` is the delay the level is read at. The default `nothing`
+targets the eventual total ([`onset_report_F`](@ref) at delay `D - 1`,
+`= alpha(u)` exactly, the walk's own asymptote); an integer targets a
+snapshot's own reach instead (`report_day - u`), as the first surviving
+vintage's own printed extent is scored at.
+
+`hazard` is [`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`;
+`onsets` holds each draw's daily onset series (the `diff` of the chain's
+`cumulative_onsets` trajectory). `scan_level` and `noise_scale` are the
+chain's `onset_scan_level`/`onset_noise_scale` deterministics, one vector
+per draw indexed by vintage in the same order
+[`onset_vintage_indices`](@ref) sorts report days into. `vintage_idx`
+outside a draw's own `scan_level`/`noise_scale` range falls back to a
+multiplier of one and a noise scale of zero, mirroring
+[`onset_scan_adjust`](@ref)'s sentinel for the virtual empty predecessor.
+
+`n_rep` replicates are drawn per posterior draw, Monte Carlo smoothing for
+the credible ribbon a caller summarises this by: `means`/`sds` are tiled and
+[`onset_increments_model`](@ref) is sampled once rather than once per
+replicate. Returns a `length(onsets) * n_rep`-long vector of replicate
+draws, not grouped by posterior draw.
+"""
+function onset_level_predictive_draws(
+        u::Integer,
+        onsets::AbstractVector{<:AbstractVector{<:Real}},
+        hazard::NamedTuple,
+        scan_level::AbstractVector{<:AbstractVector{<:Real}},
+        noise_scale::AbstractVector{<:AbstractVector{<:Real}},
+        vintage_idx::Integer;
+        grid_start::Integer, alpha_grid_start::Integer = grid_start,
+        target_delay::Union{Nothing, Integer} = nothing,
+        ν::Real = 4.0, n_rep::Integer = 4,
+        rng::AbstractRNG = default_rng()
+    )
+    ndraws = length(onsets)
+    if length(hazard.alpha) != ndraws || length(hazard.logit_h0) != ndraws ||
+            length(hazard.γ) != ndraws || length(scan_level) != ndraws ||
+            length(noise_scale) != ndraws
+        error(
+            "onset_level_predictive_draws: `onsets`, `hazard`, " *
+                "`scan_level` and `noise_scale` must all come from the " *
+                "same fit, got $ndraws onset draws against " *
+                "$(length(hazard.alpha)) ascertainment, " *
+                "$(length(hazard.logit_h0)) baseline-hazard, " *
+                "$(length(hazard.γ)) calendar-walk, " *
+                "$(length(scan_level)) scan-level and " *
+                "$(length(noise_scale)) noise-scale draws."
+        )
+    end
+    ndays = ndraws == 0 ? 0 : length(first(onsets))
+    (1 <= u <= ndays) ||
+        error(
+        "onset_level_predictive_draws: onset date $u is outside the " *
+            "onset series, which runs 1:$ndays."
+    )
+    means = Vector{Float64}(undef, ndraws)
+    sds = Vector{Float64}(undef, ndraws)
+    for i in 1:ndraws
+        a = hazard.alpha[i]
+        α = a[clamp(u - Int(alpha_grid_start) + 1, 1, length(a))]
+        D = length(hazard.logit_h0[i])
+        δ = isnothing(target_delay) ? D - 1 : Int(target_delay)
+        level = onsets[i][u] * onset_report_F(
+            δ, hazard.logit_h0[i], hazard.γ[i], u, grid_start, α
+        )
+        sl = scan_level[i]
+        c = (vintage_idx >= 1 && vintage_idx <= length(sl)) ?
+            sl[vintage_idx] : one(eltype(sl))
+        means[i] = level * c
+        ns = noise_scale[i]
+        τ = (vintage_idx >= 1 && vintage_idx <= length(ns)) ?
+            ns[vintage_idx] : zero(eltype(ns))
+        sds[i] = onset_report_scale(means[i], means[i], 0.0, τ, 0.0)
+    end
+    rep_means = repeat(means, n_rep)
+    rep_sds = repeat(sds, n_rep)
+    draw = onset_increments_model(rep_means, rep_sds, missing, ν)(rng)
+    return Float64.(draw.increments)
+end
+
+"""
+    plot_onset_level_band(dates, observed, draws; title,
+        xlabel = "onset date", ylabel = "cases", band_colour = :seagreen,
+        obs_colour = :black, obs_label = "digitised",
+        band_label = "modelled posterior predictive")
+
+One panel of a modelled band (30%/60%/90% credible ribbon with a median
+line) against a `Date`-indexed observed series, `draws[k]` the
+posterior(-predictive) draws for `dates[k]`. Shared by the first-snapshot
+complete-curve figure and the symptom-onsets-by-onset-date posterior
+predictive check, so both read off one plotting function.
+
+`dates`, `observed` and `draws` must be the same length; a mismatch raises.
+An empty `dates` returns a blank figure. Weekly tick labels
+(`_vintage_ticks`).
+"""
+function plot_onset_level_band(
+        dates::AbstractVector, observed::AbstractVector,
+        draws::AbstractVector; title::AbstractString,
+        xlabel::AbstractString = "onset date",
+        ylabel::AbstractString = "cases",
+        band_colour = :seagreen, obs_colour = :black,
+        obs_label::AbstractString = "digitised",
+        band_label::AbstractString = "modelled posterior predictive"
+    )
+    n = length(dates)
+    if length(observed) != n || length(draws) != n
+        error(
+            "plot_onset_level_band: `dates`, `observed` and `draws` must " *
+                "have the same length, got $n, $(length(observed)) and " *
+                "$(length(draws))."
+        )
+    end
+    fig = Figure(; size = (900, 380))
+    ax = Axis(fig[1, 1]; title, xlabel, ylabel)
+    n == 0 && return fig
+    x = collect(1:n)
+    sorted = [sort(float.(d)) for d in draws]
+    q(pr) = [quantile(d, pr; sorted = true) for d in sorted]
+    band!(ax, x, q(0.05), q(0.95); color = (band_colour, 0.18))
+    band!(ax, x, q(0.25), q(0.75); color = (band_colour, 0.35))
+    lines!(ax, x, q(0.5); color = band_colour, linewidth = 2)
+    scatter!(
+        ax, x, float.(observed); color = obs_colour, marker = :cross,
+        markersize = 9
+    )
+    ticks, labels = _vintage_ticks(dates)
+    ax.xticks = (ticks, labels)
+    ax.xticklabelrotation = pi / 4
+    CairoMakie.Legend(
+        fig[2, 1],
+        [
+            CairoMakie.MarkerElement(color = obs_colour, marker = :cross),
+            CairoMakie.PolyElement(color = (band_colour, 0.35)),
+        ],
+        [obs_label, band_label];
+        orientation = :horizontal, tellwidth = false, tellheight = true
+    )
+    return fig
+end
+
 ## Per-day quantile `pr` of an established-window Rt matrix, skipping the
 ## masked (pre-renewal) days: `missing` where a day has no established draws.
 function _rt_quantile(rt::AbstractMatrix, d::Integer, pr::Real)

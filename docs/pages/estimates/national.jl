@@ -2779,7 +2779,7 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The scale slack row is a diagnostic, and a posterior on its lower bound of one says the fit would like a tighter likelihood than the figures can support.
+# The noise-walk and per-scan level rows are diagnostics: a fitted `τ` that keeps climbing over the surveillance window, or a `σ_scan` pinned near its prior mean, says the digitised figures need more slack than counting variation and a per-scan level error alone explain.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -2802,6 +2802,52 @@ _onset_hazard = reconstruct_onset_hazard(
     chn_joint;
     grid_start = _onset_hazard_grid_start, grid_end = _onset_grid_end,
     alpha_grid_start = _onset_grid_start
+)
+
+## Cell indices grouped by their snapshot's report day, the daily onsets
+## series per posterior draw (the diff of the chain's stored
+## `cumulative_onsets` trajectory; the model does not store the daily
+## series itself, only its running sum), and the chain's per-vintage scan
+## level and digitisation-noise scale. Built here, ahead of the summary
+## table, so the per-snapshot noise-scale rows below and the predictive
+## figures further down share one computation.
+_onset_cells_by_report = Dict{Int, Vector{Int}}()
+for (i, r) in enumerate(obs.onset_curve_history.report_days)
+    push!(get!(_onset_cells_by_report, r, Int[]), i)
+end
+_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
+_onset_daily_draws = [
+    vcat(v[1], diff(v))
+        for v in vec(collect(chn_joint[:cumulative_onsets]))
+]
+_onset_scan_level = [
+    collect(v) for v in vec(collect(chn_joint[:onset_scan_level]))
+]
+_onset_noise_scale = [
+    collect(v) for v in vec(collect(chn_joint[:onset_noise_scale]))
+]
+
+## The digitised, deduplicated, cut-off-filtered snapshot blocks
+## `load_onset_curve` scores, kept here for their raw cumulative
+## onset-date counts: the fitted stream only ever sees between-vintage
+## increments, so the observed cumulative levels the figures below plot
+## are read back from the source blocks directly rather than
+## reconstructed from the fitted increments.
+_onset_path = joinpath(
+    pkgdir(BVDOutbreakSize), "data",
+    "onset_curve_scanned.csv"
+)
+_onset_snaps = filter(
+    b -> b.report_date <= obs.cutoff,
+    BVDOutbreakSize._dedup_onset_blocks(
+        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)
+    )
+)
+## Keyed by report day rather than kept in order: a snapshot whose printed
+## extent misses the scored window contributes no cells, so the panels and
+## the snapshot blocks are not guaranteed to line up positionally.
+_onset_snap_by_day = Dict(
+    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps
 )
 
 ## A representative onset day (the median scored onset date), so the 7-day
@@ -2908,6 +2954,46 @@ onset_summary #hide
 #md # </details>
 #md # ```
 
+# The digitisation-noise scale `τ` is fitted per snapshot rather than as one
+# shared value, so it is reported here as its own compact table alongside
+# `log_τ0`, `σ_τ` and `σ_scan` above: the median and 90% credible interval
+# of each surviving vintage's own `τ`, in report-date order.
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset digitisation-noise scale per snapshot</summary>
+#md # ```
+
+onset_tau_raw = DataFrame(
+    report_date = String[], median = Float64[],
+    lower_90 = Float64[], upper_90 = Float64[]
+)
+for (v_idx, R) in enumerate(_onset_report_grid_days)
+    draws = [d[v_idx] for d in _onset_noise_scale]
+    push!(
+        onset_tau_raw,
+        (
+            string(grid_date(R)), round(median(draws); digits = 2),
+            round(quantile(draws, 0.05); digits = 2),
+            round(quantile(draws, 0.95); digits = 2),
+        )
+    )
+end
+onset_tau_table = BVDOutbreakSize._prettify(onset_tau_raw);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Show symptom-onset digitisation-noise scale per snapshot</summary>
+#md # ```
+
+onset_tau_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 #md # ```@raw html
 #md # <details><summary>Symptom-onset reporting-delay pair plot (prior overlaid)</summary>
 #md # ```
@@ -2931,92 +3017,87 @@ onset_pair_fig = plot_pair(
 
 onset_pair_fig #hide
 
-# Each panel below is one digitised snapshot, nowcast rather than fitted.
-# The grey crosses are the counts that snapshot's own figure printed by onset date.
-# The band predicts what the latest figure covering each of those dates prints: the snapshot's own count plus the reporting the fitted delay curve puts between the two figures' delays, through the measurement error one digitised bar carries.
-# The black points are that latest reading, so the band and the point it is read against are the same quantity, and the band should cover it.
-# The band narrows to a bar's own scan error on the onset dates where reporting had already finished when the snapshot went out, and opens where the snapshot was still missing cases.
-# That gap is the right-truncation the model has to undo (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# The figure below reads the same fitted hazard a different way: the
+# onset-to-report delay distribution implied for a report arriving on a
+# given calendar day, holding that day's own calendar-walk level fixed
+# across the delay axis rather than following it back through earlier
+# onset dates (`onset_report_delay_pmf`).
+# The top panel is the mean delay, the bottom the delay's SD, both with
+# 50%/90% credible ribbons over report time.
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset reporting delay over report time</summary>
+#md # ```
+
+onset_delay_profile_fig = plot_onset_delay_profile(
+    _onset_hazard;
+    grid_start = _onset_hazard_grid_start, grid_end = _onset_grid_end,
+    seeding = obs.seeding
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_delay_profile_fig #hide
+
+# The figure below is the first surviving snapshot's own complete curve
+# (onset dates from the start of the digitised window up to that snapshot's
+# report date), against the model's fitted level for those same cells: the
+# modelled onsets times ascertainment, read at each onset date's own delay
+# as of that report, scaled by that snapshot's own fitted scan level and
+# put through its own digitisation-noise scale `τ`.
+# This is the complete-but-noisy component the model's ascertainment level
+# is anchored on (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+
+#md # ```@raw html
+#md # <details><summary>First snapshot: complete curve against fitted level</summary>
+#md # ```
+
+_onset_first_R = first(_onset_report_grid_days)
+_onset_first_snap = _onset_snap_by_day[_onset_first_R]
+_onset_first_us = sort(
+    obs.onset_curve_history.onset_days[
+        _onset_cells_by_report[_onset_first_R],
+    ]
+)
+_onset_first_observed = Float64[
+    get(_onset_first_snap.onsets, grid_date(u), 0) for u in _onset_first_us
+]
+_onset_first_draws = [
+    onset_level_predictive_draws(
+        u, _onset_daily_draws, _onset_hazard, _onset_scan_level,
+        _onset_noise_scale, 1;
+        grid_start = _onset_hazard_grid_start,
+        alpha_grid_start = _onset_grid_start,
+        target_delay = _onset_first_R - u
+    )
+        for u in _onset_first_us
+]
+_onset_first_title = "First snapshot " *
+    "($(string(_onset_first_snap.report_date))): " *
+    "complete curve vs fitted level"
+onset_first_snapshot_fig = plot_onset_level_band(
+    grid_date.(_onset_first_us), _onset_first_observed, _onset_first_draws;
+    title = _onset_first_title, band_colour = :mediumpurple
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_first_snapshot_fig #hide
+
+# Each panel below is one digitised snapshot, plotted by onset date.
+# The grey crosses are the counts that snapshot's own figure printed.
+# The band is the model's posterior predictive of the eventual reported total for each onset date: modelled onsets times ascertainment, sampled through `onset_increments_model`'s `missing` branch so the replicate carries the fitted τ, `scan_level` and Student-t tail exactly as the likelihood scores a level cell.
+# The black points are the latest figure's own reading for the same onset dates, shown for context rather than as the target the band is read against.
+# A panel stops short on the right because each snapshot's own figure prints only to its own last onset date, and the band does not run past it.
+# Every snapshot is fitted, but only the first and the eight most recent are shown here.
 
 #md # ```@raw html
 #md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
 #md # ```
-
-## The digitised, deduplicated, cut-off-filtered snapshot blocks
-## `load_onset_curve` scores, kept here for their raw cumulative
-## onset-date counts: the fitted stream only ever sees between-vintage
-## increments, so the observed cumulative levels this figure plots are
-## read back from the source blocks directly rather than reconstructed
-## from the fitted increments.
-_onset_path = joinpath(
-    pkgdir(BVDOutbreakSize), "data",
-    "onset_curve_scanned.csv"
-)
-_onset_snaps = filter(
-    b -> b.report_date <= obs.cutoff,
-    BVDOutbreakSize._dedup_onset_blocks(
-        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)
-    )
-)
-## Keyed by report day rather than kept in order: a snapshot whose printed
-## extent misses the scored window contributes no cells, so the panels and
-## the snapshot blocks are not guaranteed to line up positionally.
-_onset_snap_by_day = Dict(
-    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps
-)
-
-## Cell indices grouped by their snapshot's report day, and the daily
-## onsets series per posterior draw (the diff of the chain's stored
-## `cumulative_onsets` trajectory; the model does not store the daily
-## series itself, only its running sum).
-_onset_cells_by_report = Dict{Int, Vector{Int}}()
-for (i, r) in enumerate(obs.onset_curve_history.report_days)
-    push!(get!(_onset_cells_by_report, r, Int[]), i)
-end
-_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
-_onset_daily_draws = [
-    vcat(v[1], diff(v))
-        for v in vec(collect(chn_joint[:cumulative_onsets]))
-]
-
-## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
-## the fitted grid the same way the model extrapolates it.
-function _onset_alpha(i::Integer, u::Integer)
-    a = _onset_hazard.alpha[i]
-    return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
-end
-
-## The same counts put through the stream's own observation model, so the
-## band is a posterior predictive of a digitised bar rather than of the
-## latent count behind it. A bar is one read off one scan with no previous
-## level to difference against, which is `onset_report_scale`'s level case
-## (`τ_prev = 0`) — the case the first scored snapshot's own cells carry.
-## Without this the band is the modelled count alone and covers 42% of the
-## observed bars at a nominal 90%.
-_onset_noise_scale = [
-    collect(v) for v in vec(collect(chn_joint[:onset_noise_scale]))
-]
-_onset_σ_scan = vec(collect(chn_joint[Symbol("onset_report_state.σ_scan")]))
-_onset_ppc_rng = Random.MersenneTwister(20260729)
-## Four replicates per draw rather than one: the band is a 90% interval of
-## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
-## from Monte Carlo error alone. `v_idx` is the snapshot's own position in
-## `_onset_report_grid_days`, whose fitted noise scale stands in for the
-## bar's own read (`τ_prev = 0`, the level case).
-function _onset_replicated(draws::AbstractVector, v_idx::Integer)
-    return [
-        begin
-            μ = draws[i]
-            τ_cur = _onset_noise_scale[i][v_idx]
-            σ = onset_report_scale(
-                μ, μ, 0.0, τ_cur, 0.0;
-                scan_sd = _onset_σ_scan[i]
-            )
-            μ + σ * rand(_onset_ppc_rng, TDist(4.0))
-        end
-            for _ in 1:4 for i in eachindex(draws)
-    ]
-end
 
 ## Latest printed value for each onset date the digitised figures cover,
 ## and the report day that reading came off. Ordered by report date, so the
@@ -3041,29 +3122,46 @@ for snap in _onset_snaps
     end
 end
 
-## One panel per snapshot, nowcast from the delay that snapshot had run to
-## up to the delay of the figure each of its onset dates was last printed
-## on, then through the same bar measurement error the summary figure uses.
-## Both are needed for the band and the reading it is read against to be
-## the same quantity: nowcasting to the eventual total would ride above a
-## reading that is itself still truncated, and the latent count carries no
-## scan error where the delay has run out, so it could not cover a second
-## scan of the same bar.
-_onset_panels = map(enumerate(_onset_report_grid_days)) do (v_idx, R)
+## The first snapshot plus the eight most recent, rather than every
+## surviving vintage: up to 48 panels is more than a reader can take in
+## individually, and the earliest and the latest carry the most
+## information (the complete-curve level cells, and the most current
+## nowcast). Every snapshot still enters the likelihood; this only trims
+## which ones get their own panel here.
+_onset_selected_report_days = length(_onset_report_grid_days) <= 9 ?
+    _onset_report_grid_days :
+    sort(
+        unique(
+            vcat(
+                first(_onset_report_grid_days),
+                last(_onset_report_grid_days, 8)
+            )
+        )
+    )
+
+## One panel per selected snapshot: that snapshot's own printed counts
+## against the model's posterior predictive of the eventual reported total
+## for those onset dates (`onset_level_predictive_draws`'s default
+## `target_delay = nothing`). `v_idx` is the snapshot's own position in the
+## full `_onset_report_grid_days` (not the reduced selection), the index
+## its fitted `scan_level`/`τ` are stored under.
+_onset_panels = map(_onset_selected_report_days) do R
+    v_idx = findfirst(==(R), _onset_report_grid_days)
     snap = _onset_snap_by_day[R]
     us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-    nowcast = onset_nowcast_draws(
-        us, observed, [R - u for u in us],
-        _onset_daily_draws, _onset_hazard;
-        grid_start = _onset_hazard_grid_start,
-        alpha_grid_start = _onset_grid_start,
-        target_delays = [_onset_last_report_day[u] - u for u in us]
-    )
+    nowcast = [
+        onset_level_predictive_draws(
+            u, _onset_daily_draws, _onset_hazard, _onset_scan_level,
+            _onset_noise_scale, v_idx;
+            grid_start = _onset_hazard_grid_start,
+            alpha_grid_start = _onset_grid_start
+        )
+            for u in us
+    ]
     (;
         title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast = [_onset_replicated(d, v_idx) for d in nowcast],
-        latest = [_onset_last_printed[u] for u in us],
+        nowcast, latest = [_onset_last_printed[u] for u in us],
     )
 end
 
@@ -3076,7 +3174,7 @@ onset_fit_fig #hide
 #md # ```
 #
 # The posterior predictive below reads the same reporting triangle along the onset date instead of the report date.
-# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
+# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, read at the current cut-off's own delay, and against the modelled onsets themselves.
 # The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
 
 #md # ```@raw html
@@ -3085,12 +3183,7 @@ onset_fit_fig #hide
 
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
-## Modelled onsets on each of those days, and the count the latest figure
-## should print for them: the same onsets times the cumulative reported
-## proportion at that figure's own delay, `_onset_grid_end - u`, so the
-## band is a predictive for the bar actually plotted rather than for the
-## eventual total. `onset_report_F` holds the calendar walk flat past its
-## fitted support, which the most recent onset dates run into.
+## Modelled onsets on each of those days.
 _onset_by_date_onsets = [
     [
         _onset_daily_draws[i][u]
@@ -3098,30 +3191,25 @@ _onset_by_date_onsets = [
     ]
         for u in _onset_by_date_days
 ]
-_onset_by_date_printed = [
-    [
-        _onset_daily_draws[i][u] *
-            onset_report_F(
-            _onset_grid_end - u,
-            _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
-            u, _onset_hazard_grid_start, _onset_alpha(i, u)
-        )
-            for i in eachindex(_onset_daily_draws)
-    ]
-        for u in _onset_by_date_days
-]
-## That count put through the same measurement error a single digitised
-## bar carries (`onset_report_scale`'s level case, as above the snapshot
-## grid), replicated four times per draw for the same reason. `v_idx` is
-## the vintage that last printed each onset date, the same lookup the
-## snapshot panels use.
+## The count the latest figure should print for each date, read at the
+## current cut-off's own delay (`_onset_grid_end - u`) rather than the
+## eventual total, put through the same predictive measurement error a
+## single digitised bar carries (`onset_level_predictive_draws`'s
+## level-cell case). `v_idx` is the vintage that last printed each onset
+## date, the same lookup the snapshot panels use.
 _onset_by_date_vidx = [
     findfirst(==(_onset_last_report_day[u]), _onset_report_grid_days)
         for u in _onset_by_date_days
 ]
 _onset_by_date_reps = [
-    _onset_replicated(_onset_by_date_printed[k], _onset_by_date_vidx[k])
-        for k in eachindex(_onset_by_date_printed)
+    onset_level_predictive_draws(
+        u, _onset_daily_draws, _onset_hazard, _onset_scan_level,
+        _onset_noise_scale, _onset_by_date_vidx[k];
+        grid_start = _onset_hazard_grid_start,
+        alpha_grid_start = _onset_grid_start,
+        target_delay = _onset_grid_end - u
+    )
+        for (k, u) in enumerate(_onset_by_date_days)
 ]
 
 onset_ppc_by_date_fig = let

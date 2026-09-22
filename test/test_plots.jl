@@ -1413,6 +1413,173 @@ end
     )
 end
 
+@testitem "onset_report_delay_pmf sums to one and stays nonnegative" begin
+    using BVDOutbreakSize: onset_report_delay_pmf
+    using Random: MersenneTwister
+
+    logit_h0 = randn(MersenneTwister(1), 28) .- 1.0
+    γ = 0.3 .* randn(MersenneTwister(2), 10)
+    for t in (1, 5, 10)
+        pmf = onset_report_delay_pmf(logit_h0, γ, t, 1)
+        @test length(pmf) == 28
+        @test all(>=(0), pmf)
+        @test sum(pmf) ≈ 1.0 atol = 1.0e-8
+    end
+    ## `t` outside `[grid_start, grid_start + length(γ) - 1]` holds the
+    ## calendar effect flat at the walk's nearest edge rather than erroring.
+    pmf_before = onset_report_delay_pmf(logit_h0, γ, -5, 1)
+    pmf_edge = onset_report_delay_pmf(logit_h0, γ, 1, 1)
+    @test pmf_before ≈ pmf_edge
+end
+
+@testitem "onset_report_delay_moments matches a hand-computed pmf" begin
+    ## D = 2, a flat hazard (logit_h0 both zero) and no calendar effect: the
+    ## un-normalised cdf is the truncated-geometric survival product, hand
+    ## computable, and the pmf is that normalised by its own last entry
+    ## (`onset_report_delay_pmf`'s guard against underflow).
+    using BVDOutbreakSize: onset_report_delay_moments, onset_report_delay_pmf
+    using StatsFuns: logistic
+
+    logit_h0 = [0.0, 0.0]
+    γ = [0.0]
+    h = logistic(0.0)
+    cdf0 = 1 - (1 - h)
+    cdf1 = 1 - (1 - h)^2
+    p0 = cdf0 / cdf1
+    p1 = (cdf1 - cdf0) / cdf1
+    pmf = onset_report_delay_pmf(logit_h0, γ, 1, 1)
+    @test pmf ≈ [p0, p1] atol = 1.0e-8
+
+    m = onset_report_delay_moments(logit_h0, γ, 1, 1)
+    @test m.mean ≈ 0 * pmf[1] + 1 * pmf[2] atol = 1.0e-8
+    @test m.sd ≈
+        sqrt(max(0^2 * pmf[1] + 1^2 * pmf[2] - m.mean^2, 0)) atol = 1.0e-8
+end
+
+@testitem "onset_level_predictive_draws samples through the missing branch" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: onset_level_predictive_draws, onsets_only_model,
+        reconstruct_onset_hazard, onset_report_F
+    using Turing: Prior, sample
+    using Random: MersenneTwister
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 40
+    chn = sample(
+        onsets_only_model(n; onset_curve_history = oc), Prior(), 20;
+        progress = false
+    )
+    grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
+    scan_level = [collect(v) for v in vec(collect(chn[:onset_scan_level]))]
+    noise_scale = [collect(v) for v in vec(collect(chn[:onset_noise_scale]))]
+    u = 12
+
+    draws = onset_level_predictive_draws(
+        u, daily, hz, scan_level, noise_scale, 1;
+        grid_start, alpha_grid_start = grid_start, n_rep = 5,
+        rng = MersenneTwister(11)
+    )
+    @test length(draws) == 20 * 5
+    @test all(isfinite, draws)
+
+    ## Same seed, same replicate: the model call is deterministic given an
+    ## explicit `rng`.
+    draws_again = onset_level_predictive_draws(
+        u, daily, hz, scan_level, noise_scale, 1;
+        grid_start, alpha_grid_start = grid_start, n_rep = 5,
+        rng = MersenneTwister(11)
+    )
+    @test draws == draws_again
+
+    ## `target_delay` reduces the truncation the level is read at: for every
+    ## draw, the target mean at a short delay is no larger than at the
+    ## walk's asymptote (the eventual total, `target_delay = nothing`).
+    for i in eachindex(hz.logit_h0)
+        a = hz.alpha[i]
+        α = a[clamp(u - grid_start + 1, 1, length(a))]
+        f_short = onset_report_F(3, hz.logit_h0[i], hz.γ[i], u, grid_start, α)
+        f_full = onset_report_F(27, hz.logit_h0[i], hz.γ[i], u, grid_start, α)
+        @test f_short <= f_full + 1.0e-10
+    end
+
+    ## A vintage index outside the fitted range falls back to a scan
+    ## multiplier of one and a noise scale of zero rather than indexing out
+    ## of bounds.
+    draws_oob = onset_level_predictive_draws(
+        u, daily, hz, scan_level, noise_scale, 999;
+        grid_start, alpha_grid_start = grid_start,
+        rng = MersenneTwister(12)
+    )
+    @test length(draws_oob) == 20 * 4
+    @test all(isfinite, draws_oob)
+
+    @test_throws ErrorException onset_level_predictive_draws(
+        999, daily, hz, scan_level, noise_scale, 1;
+        grid_start, alpha_grid_start = grid_start
+    )
+end
+
+@testitem "plot_onset_delay_profile returns a Makie figure" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
+        plot_onset_delay_profile
+    using Turing: Prior, sample
+    using Dates: Date
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc), Prior(), 10;
+        progress = false
+    )
+    grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
+    fig = plot_onset_delay_profile(
+        hz; grid_start, grid_end, seeding = Date("2026-01-01")
+    )
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_onset_level_band returns a Makie figure" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_onset_level_band
+    using Dates: Date, Day
+    using Random: MersenneTwister
+
+    rng = MersenneTwister(77)
+    dates = [Date("2026-06-01") + Day(i) for i in 0:9]
+    observed = [10.0 + i for i in 0:9]
+    draws = [observed[k] .+ randn(rng, 200) for k in eachindex(dates)]
+
+    fig = plot_onset_level_band(dates, observed, draws; title = "test")
+    @test fig isa CairoMakie.Makie.Figure
+    ## An empty series is a blank figure, not an error.
+    @test plot_onset_level_band(Date[], Float64[], []; title = "empty") isa
+        CairoMakie.Makie.Figure
+    @test_throws ErrorException plot_onset_level_band(
+        dates, observed, draws[1:3]; title = "mismatch"
+    )
+end
+
 @testitem "_composition_predictive: allocates the observed total, wider with rho" begin
     using Statistics: mean, std
     using BVDOutbreakSize: _composition_predictive
