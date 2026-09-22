@@ -20,6 +20,15 @@ Every fit used the composition link.
 `background_re = true` becomes `background_pooling = background_pooling_model`.
 The option and the gradients are unchanged.
 A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
+- The onset reporting-triangle likelihood reads each vintage pair's bar
+  noise off the settled part of the curve, where the true increment is near
+  zero, instead of a fixed 2.1 counts per read, and the per-scan levels are
+  sampled centred (#793). The scans have grown noisier, from about 1 count
+  per bar in July to 10 to 13 from SitRep 113 (4 September), while the
+  scored cells' scale understated that by a factor of two to four and the
+  shared slack multiplier could not stretch to it because the quieter July
+  and August cells hold it at its floor. Every fit-cache key changes, so
+  the next build refits.
 
 ### Report
 
@@ -48,18 +57,6 @@ A flag reaches the model as a value rather than a type, so both arms were inferr
 - The aim and origins and the limitations are pages of their own rather than
   dropdowns inside the analysis, and a new page carries the authors, the
   funding and the citation (#782).
-
-||||||| parent of 25a7788e (docs(news): note the calibrated onset cell noise)
-### Model
-
-- The onset reporting-triangle likelihood reads each vintage pair's bar
-  noise off the settled part of the curve, where the true increment is near
-  zero, instead of a fixed 2.1 counts per read (#793). The scans have grown
-  noisier, from about 1 count per bar in July to 10 to 13 from SitRep 113
-  (4 September), so the September cells were weighted 10 to 30 times too
-  heavily and pulled the onset hazard and its calendar walk, the worst
-  mixers in the joint fit. Every fit-cache key changes, so the next build
-  refits.
 
 ### Infrastructure
 

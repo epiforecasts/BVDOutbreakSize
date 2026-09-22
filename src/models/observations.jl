@@ -3731,11 +3731,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     report_days = onset_curve_history.report_days
     prev_report_days = onset_curve_history.prev_report_days
     m = length(onset_days)
-    ## Per-cell calibrated noise SD ([`load_onset_curve`](@ref)'s
-    ## `noise_sd`), or an all-zero fallback for a caller whose history has
-    ## no such field (an old caller, or the synthetic histories the
-    ## predictive path builds), which defers every cell to the fixed
-    ## `pixel_sd` floor in `onset_report_scales` below.
+    ## Falls back to an all-zero `cell_sd` for a history that predates
+    ## `noise_sd` (an old caller, or a synthetic history).
     cell_sd = hasproperty(onset_curve_history, :noise_sd) ?
         onset_curve_history.noise_sd : zeros(m)
     ## Report-date grid the calendar walk spans: the union of every onset
