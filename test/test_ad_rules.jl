@@ -7,14 +7,13 @@
 ##
 ##   1. the pullback against central finite differences, on both (or all
 ##      three) of its differentiable arguments;
-##   2. the Mooncake gradient with the rule registered against the Mooncake
-##      gradient of an unregistered clone of the same function body, which
-##      is the gradient the backend derives without the rule.
+##   2. the Mooncake gradient, which the rule serves, against ForwardDiff
+##      on the same objective.
 ##
-## The second check is what proves the rule is both active and faithful:
-## the clone shares the body but not the `Tuple{typeof(f), ...}` signature
-## the rule is registered against, so Mooncake differentiates it the old
-## way.
+## The second check proves the rule is both active and faithful.
+## ForwardDiff does not consult Mooncake's rule table, so it differentiates
+## the kernel body itself, and it is exact, so the two must agree to
+## round-off rather than to a finite-difference tolerance.
 ##
 ## Tagged `:ad` with the rest of the gradient items.
 
@@ -123,155 +122,90 @@
     end
 end
 
-@testitem "AD rules: Mooncake with the rule matches Mooncake without it" tags = [
+@testitem "AD rules: Mooncake with the rule matches ForwardDiff" tags = [
     :ad,
 ] begin
     using Random: seed!
+    using ForwardDiff: ForwardDiff
     using Mooncake: Mooncake
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
         interpolate_knots, renewal_infections
 
-    ## Unregistered clones. Same bodies as `src/renewal.jl`, different
-    ## signatures, so no rule fires and Mooncake derives the gradient the
-    ## way it did before `src/ad_rules.jl` existed.
-    function cd_ref(x::AbstractVector, delay::AbstractVector)
-        n = length(x)
-        Tp = promote_type(eltype(x), eltype(delay))
-        y = zeros(Tp, n)
-        @inbounds for t in 1:n
-            acc = zero(Tp)
-            dmax = min(t - 1, length(delay) - 1)
-            for d in 0:dmax
-                acc += x[t - d] * delay[d + 1]
-            end
-            y[t] = acc
-        end
-        return y
-    end
-    function cs_ref(x::AbstractVector, los::AbstractVector)
-        L = length(los)
-        surv = similar(los)
-        acc = zero(eltype(los))
-        @inbounds for i in L:-1:1
-            acc += los[i]
-            surv[i] = acc
-        end
-        return cd_ref(x, surv)
-    end
-    function cp_ref(a::AbstractVector, b::AbstractVector)
-        na, nb = length(a), length(b)
-        Tp = promote_type(eltype(a), eltype(b))
-        y = zeros(Tp, na + nb - 1)
-        @inbounds for i in 1:na, j in 1:nb
-
-            y[i + j - 1] += a[i] * b[j]
-        end
-        return y
-    end
-    function ik_ref(
-            kv::AbstractVector, days::AbstractVector{<:Integer},
-            n::Integer
-        )
-        Tp = eltype(kv)
-        out = Vector{Tp}(undef, n)
-        nb = length(days)
-        nb == 1 && return fill!(out, kv[1])
-        @inbounds for t in 1:n
-            b = 1
-            while b < nb - 1 && t > days[b + 1]
-                b += 1
-            end
-            d0 = days[b]
-            d1 = days[b + 1]
-            frac = d1 == d0 ? zero(Tp) :
-                clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
-            out[t] = kv[b] + frac * (kv[b + 1] - kv[b])
-        end
-        return out
-    end
-    function ri_ref(Rt::AbstractVector, g::AbstractVector, seed::AbstractVector)
-        n = length(Rt)
-        L = length(seed)
-        Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
-        I = zeros(Tp, n)
-        @inbounds for j in 1:min(L, n)
-            I[j] = seed[j]
-        end
-        @inbounds for t in (L + 1):n
-            force = zero(Tp)
-            kmax = min(t - 1, length(g))
-            for s in 1:kmax
-                force += I[t - s] * g[s]
-            end
-            I[t] = Rt[t] * force
-        end
-        return I
-    end
-
+    ## Mooncake's gradient of `f` with respect to each of its arguments.
+    ## The registered rule fires here, so this is the gradient the model
+    ## actually sees.
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
         _, g = Mooncake.value_and_gradient!!(rule, f, args...)
         return g[2:end]
     end
 
+    ## ForwardDiff's gradient of the same objective, one argument at a time.
+    ## ForwardDiff never consults Mooncake's rule table, so it differentiates
+    ## the kernel body in `src/renewal.jl` itself.
+    function fgrad(f, args...)
+        return ntuple(length(args)) do i
+            ForwardDiff.gradient(args[i]) do v
+                f(ntuple(j -> j == i ? v : args[j], length(args))...)
+            end
+        end
+    end
+
+    ## Both are exact methods on the same body, so they agree to round-off.
+    function check_grads(f, args...)
+        m = mgrad(f, args...)
+        d = fgrad(f, args...)
+        for (mi, di) in zip(m, d)
+            @test mi ≈ di rtol = 1.0e-10
+        end
+        return nothing
+    end
+
     seed!(20260518)
-    x = abs.(randn(40)) .+ 0.5
-    w = abs.(randn(15)) .+ 0.1
-    w ./= sum(w)
-    ȳ = randn(40)
-    @test all(
-        isapprox.(
-            mgrad((a, b) -> sum(ȳ .* convolve_delay(a, b)), x, w),
-            mgrad((a, b) -> sum(ȳ .* cd_ref(a, b)), x, w);
-            rtol = 1.0e-10
-        )
-    )
 
-    l = abs.(randn(12)) .+ 0.1
-    l ./= sum(l)
-    @test all(
-        isapprox.(
-            mgrad((a, b) -> sum(ȳ .* convolve_survival(a, b)), x, l),
-            mgrad((a, b) -> sum(ȳ .* cs_ref(a, b)), x, l);
-            rtol = 1.0e-10
-        )
-    )
+    @testset "convolve_delay" begin
+        x = abs.(randn(40)) .+ 0.5
+        w = abs.(randn(15)) .+ 0.1
+        w ./= sum(w)
+        ȳ = randn(40)
+        check_grads((a, b) -> sum(ȳ .* convolve_delay(a, b)), x, w)
+    end
 
-    a = abs.(randn(14)) .+ 0.1
-    b = abs.(randn(9)) .+ 0.1
-    z̄ = randn(22)
-    @test all(
-        isapprox.(
-            mgrad((u, v) -> sum(z̄ .* convolve_pmf(u, v)), a, b),
-            mgrad((u, v) -> sum(z̄ .* cp_ref(u, v)), a, b);
-            rtol = 1.0e-10
-        )
-    )
+    @testset "convolve_survival" begin
+        x = abs.(randn(40)) .+ 0.5
+        l = abs.(randn(12)) .+ 0.1
+        l ./= sum(l)
+        ȳ = randn(40)
+        check_grads((a, b) -> sum(ȳ .* convolve_survival(a, b)), x, l)
+    end
 
-    days = collect(1:7:40)
-    kv = randn(length(days))
-    ō = randn(40)
-    @test all(
-        isapprox.(
-            mgrad(v -> sum(ō .* interpolate_knots(v, days, 40)), kv),
-            mgrad(v -> sum(ō .* ik_ref(v, days, 40)), kv);
-            rtol = 1.0e-10
-        )
-    )
+    @testset "convolve_pmf" begin
+        a = abs.(randn(14)) .+ 0.1
+        b = abs.(randn(9)) .+ 0.1
+        z̄ = randn(22)
+        check_grads((u, v) -> sum(z̄ .* convolve_pmf(u, v)), a, b)
+    end
 
-    Rt = abs.(randn(40)) .* 0.3 .+ 1.2
-    g = abs.(randn(12)) .+ 0.1
-    g ./= sum(g)
-    seed_vec = abs.(randn(7)) .+ 1.0
-    Ī = randn(40)
-    @test all(
-        isapprox.(
-            mgrad(
-                (p, q, r) -> sum(Ī .* renewal_infections(p, q, r)),
-                Rt, g, seed_vec
-            ),
-            mgrad((p, q, r) -> sum(Ī .* ri_ref(p, q, r)), Rt, g, seed_vec);
-            rtol = 1.0e-10
+    @testset "interpolate_knots" begin
+        ## The knot days and the grid length carry no derivative, so they
+        ## stay closed over rather than differentiated.
+        for days in (collect(1:7:40), [1, 40], [5, 12, 19, 40], [1])
+            n = 40
+            kv = randn(length(days))
+            ō = randn(n)
+            check_grads(v -> sum(ō .* interpolate_knots(v, days, n)), kv)
+        end
+    end
+
+    @testset "renewal_infections" begin
+        Rt = abs.(randn(40)) .* 0.3 .+ 1.2
+        g = abs.(randn(12)) .+ 0.1
+        g ./= sum(g)
+        seed_vec = abs.(randn(7)) .+ 1.0
+        Ī = randn(40)
+        check_grads(
+            (p, q, r) -> sum(Ī .* renewal_infections(p, q, r)),
+            Rt, g, seed_vec
         )
-    )
+    end
 end
