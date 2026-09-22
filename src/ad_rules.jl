@@ -10,7 +10,7 @@
 # `task benchmark-rules` times both arms; if the gap has closed after a
 # backend upgrade, delete this file rather than maintain it.
 
-using Mooncake: CoDual, NoRData, primal, tangent, zero_fcodual
+using Mooncake: CoDual, NoRData, primal, tangent
 
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
