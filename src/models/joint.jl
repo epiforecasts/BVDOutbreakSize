@@ -638,7 +638,8 @@ suspected deaths ("cas suspects du jour N (M deces)").
 
 The confirmed deaths mirror the confirmed-case laboratory pipeline. A
 death "analysed" volume (the suspected deaths carried to laboratory
-receipt and thinned by the death testing fraction `tau_death`) is scored
+receipt and scaled by the death testing intensity `tau_death`, specimens
+per suspected death, which may exceed one) is scored
 through a death-pool composition positivity
 `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of
 the suspected deaths (see [`confirmed_deaths_model`](@ref)). The
@@ -669,7 +670,7 @@ rate), `T` (outbreak age), `R_T` (current reproduction number), the
 per-stream expected counts, the testing fraction `tau_test`, the specimens
 analysed per suspect (`specimens_per_suspect`), the background rate
 `lambda_bg`, the death ascertainment `death_ascertainment`, the background
-CFR `background_cfr`, the death testing fraction `tau_death`, the implied
+CFR `background_cfr`, the death testing intensity `tau_death`, the implied
 per-suspected (`suspected_positivity`) and per-test (`test_positivity`)
 positivities, and the death-pool BVD composition (`death_composition`) and
 death-confirmation positivity (`death_confirmation`).
