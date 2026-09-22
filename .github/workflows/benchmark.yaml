@@ -37,6 +37,8 @@ on:
       - 'src/**'
       - 'ext/**'
       - 'benchmark/**'
+      # Prose only. A README edit changes nothing that is timed.
+      - '!benchmark/README.md'
       - 'test/ad_fixtures.jl'
       - '.github/workflows/benchmark.yaml'
   workflow_dispatch:

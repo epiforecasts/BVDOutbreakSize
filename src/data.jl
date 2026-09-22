@@ -864,35 +864,3 @@ function stream_report_status(
         ]
     )
 end
-
-"""
-    m_prior_centre(as_of_date; base_date, m_base, doubling_days)
-
-Centre for the doubling-count prior `m`, based on `m_base` doublings at
-`base_date` and advancing by one doubling per `doubling_days` of elapsed
-time to `as_of_date`:
-
-```math
-m_0 = m_\\text{base} +
-    \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
-```
-
-For the integral backfill only, where `m` counts doublings over the whole
-outbreak and `2^m` is the cut-off cumulative case total, so a base of 9
-matches McCabe et al.'s Method 2 central 501 cases.
-
-Not for a renewal fit. There `m` counts the cryptic generations and the
-seed is the daily incidence reached over them, so an advancing
-outbreak-size centre would give a seed of order half a million per day.
-`exponential_growth_model` carries its own default.
-"""
-function m_prior_centre(
-        as_of_date::Union{Date, AbstractString};
-        base_date::AbstractString = M_PRIOR_BASE_DATE,
-        m_base::Real = M_PRIOR_BASE,
-        doubling_days::Real = M_PRIOR_DOUBLING_DAYS
-    )
-    as_of = as_of_date isa Date ? as_of_date : Date(String(as_of_date))
-    elapsed = date2epochdays(as_of) - date2epochdays(Date(base_date))
-    return m_base + elapsed / doubling_days
-end

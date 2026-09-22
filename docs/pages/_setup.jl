@@ -195,6 +195,28 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
+    ## Draws from the joint prior, with every observation withheld. The
+    ## in-sample page shows them as the prior predictive check; the national
+    ## page overlays them on each posterior. Drawn here, at one point in the
+    ## shared setup, so every page overlays the same draws rather than a
+    ## different stream from the same seed.
+    prior_chn = let
+        breakpoint = obs.n - obs.who_first_sitrep_days
+        m = bvd_joint(
+            obs.n, missing, missing, missing, missing, missing;
+            deaths_history = (; days = Int[], counts = Int[]),
+            reported_history = (; days = Int[], counts = Int[]),
+            confirmed_history = (; days = Int[], counts = Int[]),
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = breakpoint,
+            background_pooling = background_pooling_model,
+            genetic = genetic_seeding_model,
+            tmrca_days = obs.tmrca_days
+        )
+        sample(m, Prior(), 2_000; progress = false)
+    end
+
     ## The headline joint is the patch (meta-population) model, run over the
     ## three affected provinces. With `n_patches = 1` the same model collapses
     ## exactly onto the single-population one, so there is one model, not two;

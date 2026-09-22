@@ -13,13 +13,13 @@
     if runnable
         run(
             pipeline(
-                `julia --project=$enzyme_env -e "using Pkg; Pkg.instantiate()"`,
+                `julia --startup-file=no --project=$enzyme_env -e "using Pkg; Pkg.instantiate()"`,
                 stdout = stdout, stderr = stderr
             )
         )
         result = run(
             pipeline(
-                Cmd(`julia --project=$enzyme_env $(joinpath(enzyme_env,
+                Cmd(`julia --startup-file=no --project=$enzyme_env $(joinpath(enzyme_env,
                 "runtests.jl"))`; ignorestatus = true),
                 stdout = stdout, stderr = stderr
             )

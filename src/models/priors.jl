@@ -288,11 +288,8 @@ with an origin that early. The 99th percentile seed is about 150 infections
 per day, against a fitted outbreak of order ten thousand in total.
 
 In the renewal, `C_T` is the prior seed at the renewal start, which the
-renewal recursion grows forward under `R_t`. Pass `m_prior` to override. Do
-not pass a centre from [`m_prior_centre`](@ref), which is scaled for the
-backfill parameterisation where `2^m` is the cut-off cumulative case total
-and would give a renewal seed of order half a million per day. Returns
-`(; τ, r, m, T, C_T, G)`.
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
+Returns `(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(
         g::AbstractVector;
@@ -533,11 +530,12 @@ a free rate of their own removes the degeneracy that keeps a free
 `λ_bg_death` switched off. The case background is pinned by the laboratory
 positivity link, so scaling it by `cfr_bg` gives the death background a
 level and time profile without a second free rate competing with outbreak
-size. The default `Beta(2, 6)` (mean ≈ 0.25, 90% ≈ 0.05–0.52) is weakly
-informative and centred below the BVD CFR, since non-BVD suspect illness is
-on average less lethal. Pass `cfr_prior` to override. Returns `(; cfr_bg)`.
+size. The default `Beta(2, 18)` (mean ≈ 0.10, 90% ≈ 0.02–0.23) is weakly
+informative and sits well below the BVD CFR (`Beta(6.6, 13.4)`, mean
+≈ 0.33), since non-BVD suspect illness is less lethal. Pass `cfr_prior`
+to override. Returns `(; cfr_bg)`.
 """
-@model function background_cfr_model(; cfr_prior = Beta(2.0, 6.0))
+@model function background_cfr_model(; cfr_prior = Beta(2.0, 18.0))
     cfr_bg ~ cfr_prior
     return (; cfr_bg)
 end

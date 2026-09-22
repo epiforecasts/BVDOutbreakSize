@@ -20,6 +20,10 @@ Every fit used the composition link.
 `background_re = true` becomes `background_pooling = background_pooling_model`.
 The option and the gradients are unchanged.
 A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
+- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)` (#800).
+Mean 0.10 rather than 0.25, keeping 99% of its mass below the BVD CFR mean of 0.33.
+The previous prior sat close to the BVD CFR itself, against the submodel's own reasoning that non-BVD suspect illness is less lethal.
+This moves the non-BVD death background, so fitted values change.
 - The onset reporting-triangle likelihood now fits two components: the
   first surviving snapshot's complete printed curve, scored as levels
   against a virtual empty predecessor rather than dropped, and every later
@@ -63,6 +67,10 @@ A flag reaches the model as a value rather than a type, so both arms were inferr
 - The aim and origins and the limitations are pages of their own rather than
   dropdowns inside the analysis, and a new page carries the authors, the
   funding and the citation (#782).
+- The methods are a page of their own under Details (#804).
+  The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
+  The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
+  The offline `analysis.html` carries both the methods and the national results.
 
 ### Infrastructure
 
@@ -100,11 +108,28 @@ The existing suite times steady-state gradients only, which is why an 18 minute 
 Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
 - The Literate report pages move from `docs/examples/` to `docs/pages/`, and
   `scripts/run.jl` runs all of them rather than the two it named (#782).
+- The offline `analysis.html` resolves its pages by path rather than by
+  basename (#807). Two pages render to `national.html`, the national
+  estimates and the forecasts, and directory order decided which one the
+  release asset carried.
+- The documentation build no longer runs for changes it cannot see (#805).
+  The gate named `ext/` and `scripts/` as whole directories; it now names the one
+  extension the build loads and the three scripts it runs, so a change to the
+  Enzyme extension, the SitRep downloader, a scanner or the backfill driver no
+  longer rebuilds the report.
+  A prose-only change under `benchmark/` no longer starts a two-arm benchmark
+  run, and the benchmark comment buckets the memory column on its own terms
+  rather than on the band measured from timing spread.
 - A local documentation build loads its fits the way CI does (#782).
   `task fetch-fits` downloads them from the latest successful documentation
   run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
   and `task fit-all` takes every available thread instead of fitting the
   registry one model at a time.
+- `M_PRIOR_BASE`, `M_PRIOR_BASE_DATE` and `m_prior_centre` are removed (#800).
+  They served the integral model, which the renewal model replaced. The
+  v1.3.0 integral backfill runs inside that release's own worktree and
+  resolves them against its own constants, so nothing here read them. No
+  fitted values change.
 
 ## v2.1.0
 

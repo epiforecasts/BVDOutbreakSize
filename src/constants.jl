@@ -137,37 +137,15 @@ const REPORT_SCENARIOS_CI = [
 ]
 
 """
-    M_PRIOR_BASE_DATE
-
-Base date for the integral-model doubling-count prior centre. McCabe et
-al.'s first report (18 May 2026), whose Method 2 central scenario of 501
-cases gives `m ≈ log2(501) ≈ 9` when `2^m` is the cumulative case total.
-Used only by [`m_prior_centre`](@ref), which serves the integral backfill.
-"""
-const M_PRIOR_BASE_DATE = "2026-05-18"
-
-"""
     M_PRIOR_DOUBLING_DAYS
 
 Median doubling time (days) for the size and growth priors, from the
 BEAST X analysis (mbalaplacide2026, exponential growth model, 11.7 d,
-95% HPD 6.8-17.5). The doubling-count prior centre advances by one
-doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
+95% HPD 6.8-17.5). Sets the median of the growth-rate prior in
+[`exponential_growth_model`](@ref), `r ~ LogNormal(log(log2 /
+M_PRIOR_DOUBLING_DAYS), 0.40)`.
 """
 const M_PRIOR_DOUBLING_DAYS = 11.7
-
-"""
-    M_PRIOR_BASE
-
-Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing
-doubling-count prior used by the backfill fits via
-[`m_prior_centre`](@ref), so that
-`m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-The main fit's `m` prior centre is set directly in
-[`exponential_growth_model`](@ref) and counts transmission generations
-rather than doublings.
-"""
-const M_PRIOR_BASE = 3.0
 
 """
     RENEWAL_START_LEAD
