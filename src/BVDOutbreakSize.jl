@@ -8,6 +8,7 @@ using Random: AbstractRNG, MersenneTwister
 using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
+using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
@@ -167,7 +168,16 @@ include("data.jl")
 include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
-include("ad_rules.jl")
+## The hand-written Mooncake rules for the renewal kernels. On by
+## default, since they are the shipped behaviour. Switching them off
+## leaves Mooncake to derive the kernels itself, which is what an A/B of
+## the speedup compares against. Disable with
+##   using Preferences
+##   set_preferences!(BVDOutbreakSize, "ad_rules" => false)
+## Changing the preference triggers one recompilation.
+if @load_preference("ad_rules", true)
+    include("ad_rules.jl")
+end
 include("summaries.jl")
 include("diagnostics.jl")
 include("scoring.jl")
