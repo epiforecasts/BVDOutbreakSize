@@ -2448,15 +2448,24 @@ series for forecasting and replication.
         "treatment_flow_model: $(length(background_split)) background " *
             "shares for $(np) patches."
     )
-    ## With patches, one walk per patch and the national capacity their sum.
+    ## The per-patch demand and capacity walks are built only when a
+    ## province split scores them; without province rows the stream is the
+    ## national one whatever the patch count.
+    split_occ = np > 1 && province_isolation !== nothing &&
+        !isempty(province_isolation.days)
+    split_cap = np > 1 && province_capacity !== nothing &&
+        !isempty(province_capacity.days)
+    by_patch = split_occ || split_cap
+    ## With province splits, one walk per patch and the national capacity
+    ## their sum.
     cap_state ~ to_submodel(
-        np > 1 ? patch_capacity(n, np; start = cap_start) :
+        by_patch ? patch_capacity(n, np; start = cap_start) :
             cutoff === nothing ? capacity(n; start = cap_start) :
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
     C_T = isempty(C) ? zero(eltype(C)) : C[nc]
-    C_patch = np > 1 ? cap_state.C_patch : reshape(C, 1, :)
+    C_patch = by_patch ? cap_state.C_patch : reshape(C, 1, :)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2578,7 +2587,7 @@ series for forecasting and replication.
     ## Per-patch bed demand for the province splits: each patch's inflow
     ## through the same flows and rates. With one patch it is the national
     ## demand as one row.
-    demand_patch = np > 1 ?
+    demand_patch = by_patch ?
         _patch_demand(
             bvd_reports_matrix, A_bg, background_split, p_iso_bvd, p_drc,
             adm_delay_state.pmf, CFR_iso, death_los_state.pmf,
@@ -2638,8 +2647,7 @@ series for forecasting and replication.
     ## Saturation is reported through the per-patch utilisation and
     ## shortfall instead.
     occupancy_split_rho = 0.0
-    if np > 1 && province_isolation !== nothing &&
-            !isempty(province_isolation.days)
+    if split_occ
         occupancy_split_rho ~ province_split_rho_prior
         @addlogprob! province_split_logpdf(
             province_isolation.days, province_isolation.patches,
@@ -2647,8 +2655,7 @@ series for forecasting and replication.
         )
     end
     capacity_split_rho = 0.0
-    if np > 1 && province_capacity !== nothing &&
-            !isempty(province_capacity.days)
+    if split_cap
         capacity_split_rho ~ province_split_rho_prior
         @addlogprob! province_split_logpdf(
             province_capacity.days, province_capacity.patches,

@@ -105,11 +105,14 @@ end
     reports = vcat(bvd' .* 0.5, bvd' .* 0.5)
     iso = (; days = collect(30:40), counts = fill(40, 11))
 
+    ## Province rows switch the per-patch demand and capacity on.
+    rows = (; days = [35, 35, 36, 36], patches = [1, 2, 1, 2], counts = [20, 20, 21, 19])
     seed!(11)
     res = treatment_flow_model(
         iso, bvd, bg, 0.5, 0.3;
         bvd_reports_matrix = reports,
-        background_split = [0.5, 0.5]
+        background_split = [0.5, 0.5],
+        province_isolation = rows
     )()
     @test size(res.demand_patch) == (2, n)
     @test size(res.capacity_patch) == (2, n)
@@ -123,6 +126,13 @@ end
     single = treatment_flow_model(iso, bvd, bg, 0.5, 0.3)()
     @test size(single.demand_patch) == (1, n)
     @test single.demand_patch[1, :] == single.demand
+    ## Patches without province rows stay on the national walk and demand.
+    quiet = treatment_flow_model(
+        iso, bvd, bg, 0.5, 0.3;
+        bvd_reports_matrix = reports, background_split = [0.5, 0.5]
+    )()
+    @test size(quiet.demand_patch) == (1, n)
+    @test size(quiet.capacity_patch) == (1, n)
 end
 
 @testitem "bvd_joint: province occupancy and beds enter as splits" begin
@@ -209,9 +219,13 @@ end
         DynamicPPL.logjoint(build(iso_h, shifted_cap), vi), base; rtol = 1.0e-8
     )
 
-    ## Without province rows the terms are absent and the density is finite.
+    ## Without province rows the terms are absent, the stream is back on the
+    ## national walk, and the density is finite at that model's own draw.
     none = Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}()
-    @test isfinite(DynamicPPL.logjoint(build(none, none), vi))
+    m_none = build(none, none)
+    vi_none = DynamicPPL.VarInfo(Xoshiro(7), m_none)
+    @test isfinite(DynamicPPL.logjoint(m_none, vi_none))
+    @test !any(contains("occupancy_split_rho"), string.(keys(vi_none)))
 
     ## Province care data with one patch would be dropped silently.
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
@@ -236,6 +250,12 @@ end
         isolation_history = obs.isolation_history,
         bed_capacity_history = obs.bed_capacity_history,
         n_patches = np,
+        province_isolation = province_care_observations(
+            obs.province_isolation_history, PROVINCE_NAMES
+        ),
+        province_capacity = province_care_observations(
+            obs.province_bed_capacity_history, PROVINCE_NAMES
+        ),
         breakpoint = obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days
     )

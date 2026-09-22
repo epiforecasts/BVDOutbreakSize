@@ -1437,9 +1437,10 @@ density there, is the fitted model's.
     expected_infections_T := @inbounds(patch_state.infections_total[n])
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
-    if n_patches > 1
+    if n_patches > 1 && size(treatment_state.capacity_patch, 1) == n_patches
         ## Cut-off beds, demand and censored occupancy by patch, from the
-        ## province splits of the isolation stream.
+        ## province splits of the isolation stream. Present only when a
+        ## province split scored them.
         province_bed_capacity := treatment_state.capacity_patch[:, n]
         province_bed_demand := treatment_state.demand_patch[:, n]
         province_expected_isolation := min.(
