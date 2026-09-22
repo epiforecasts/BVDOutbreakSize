@@ -4,18 +4,13 @@ A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model fit as the full report and refreshes whenever the data updates.
 See the [National](national.md) page for the methods, assumptions and supporting detail behind each result, the [Provinces](province.md) page for the outbreak by province, the [Forecasts](../forecasts/national.md) page for the week ahead and the [Evaluation](../evaluation/forecast.md) page for how past forecasts scored.
 The [Sensitivity](../sensitivity.md) page carries the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
+Not every stream reports to the cut-off; the [National](national.md) page lists when each last did.
 Which streams each vintage carries, and which are frozen, is recorded in the inclusion rules in `data/README.md`.
 
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse("**Data as of:** " * read(joinpath(dir, "cutoff.md"), String))
-```
-
-```@eval
-using Markdown, BVDOutbreakSize
-dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse(read(joinpath(dir, "stream_currency.md"), String))
 ```
 
 ## Headline estimates
