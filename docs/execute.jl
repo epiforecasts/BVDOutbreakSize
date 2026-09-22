@@ -1,8 +1,10 @@
 # Execute one report page via Literate to produce docs/src/<page>.md. Select
-# the page with the `BVD_DOC_PAGE` environment variable (`analysis` or
-# `sensitivity`; default `analysis`). Every model fit is loaded from the
-# content-addressed cache (`BVD_FIT_CACHE`) rather than refitted, so this is
-# fast once the per-fit matrix (or an earlier run) has populated the cache.
+# the page with the `BVD_DOC_PAGE` environment variable (one of `methods`,
+# `estimates/national`, `estimates/province`, `forecasts/national`,
+# `evaluation/insample`, `evaluation/forecast`, `sensitivity`). Every model
+# fit is loaded from the content-addressed cache (`BVD_FIT_CACHE`) rather
+# than refitted, so this is fast once the per-fit matrix (or an earlier run)
+# has populated the cache.
 #
 #   BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
 #
@@ -18,11 +20,12 @@ using BVDOutbreakSize
 
 const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
 PAGE in (
+    "methods",
     "estimates/national", "estimates/province", "forecasts/national",
     "evaluation/insample", "evaluation/forecast", "sensitivity",
 ) ||
     error(
-    "BVD_DOC_PAGE must be one of estimates/national, " *
+    "BVD_DOC_PAGE must be one of methods, estimates/national, " *
         "estimates/province, forecasts/national, evaluation/insample, " *
         "evaluation/forecast, sensitivity; got \"$PAGE\""
 )

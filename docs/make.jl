@@ -12,13 +12,16 @@ const REPO_ROOT = dirname(@__DIR__)
 const PAGES_DIR = joinpath(@__DIR__, "pages")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 
-## The report is split across three literate pages so the expensive fits and
-## the render can fan out across CI runners. `analysis` carries the methods,
-## the national results, `province` the per-province estimates, `forecast`
-## the one-week-ahead projections, `evaluation` their scoring against what
-## arrived, and `sensitivity` the comparison and sensitivity analyses. All
-## load the same cached fits through the shared `docs/pages/_setup.jl`.
+## The report is split across literate pages so the expensive fits and the
+## render can fan out across CI runners. `methods` carries the data, the
+## model and how it is fitted, `estimates/national` the national results,
+## `estimates/province` the per-province estimates, `forecasts/national` the
+## one-week-ahead projections, `evaluation/insample` the prior and posterior
+## predictive checks, `evaluation/forecast` the scoring against what arrived,
+## and `sensitivity` the comparison and sensitivity analyses. All load the
+## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
+    "methods",
     "estimates/national", "estimates/province",
     "forecasts/national",
     "evaluation/insample", "evaluation/forecast",
@@ -26,6 +29,7 @@ const PAGES = [
 ]
 
 ## Build stage, so fitting and rendering can be split across jobs:
+##   render-methods      → methods.jl → src/methods.md
 ##   render-main         → estimates/national.jl → src/estimates/national.md
 ##   render-province     → estimates/province.jl
 ##   render-insample     → evaluation/insample.jl
@@ -142,6 +146,7 @@ function combine()
             ],
             "Details" => [
                 "Aim and origins" => "aim.md",
+                "Methods" => "methods.md",
                 "Limitations" => "limitations.md",
                 "Sensitivity" => "sensitivity.md",
             ],
@@ -190,7 +195,9 @@ function combine()
     )
 end
 
-if STAGE == "render-main"
+if STAGE == "render-methods"
+    render_page("methods")
+elseif STAGE == "render-main"
     render_page("estimates/national")
 elseif STAGE == "render-province"
     render_page("estimates/province")
@@ -211,7 +218,8 @@ elseif STAGE == "all"
     combine()
 else
     error(
-        "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-main, " *
+        "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-methods, " *
+            "render-main, " *
             "render-province, render-insample, render-forecast, " *
             "render-evaluation, " *
             "render-sensitivity, combine, all"
