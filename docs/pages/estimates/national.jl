@@ -2834,7 +2834,8 @@ _onset_labels = merge(
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.σ_mult") => "onset-report scale slack",
+        Symbol("onset_report_state.log_τ0") => "onset-report noise scale (log, first snapshot)",
+        Symbol("onset_report_state.σ_τ") => "onset-report noise-walk step size",
         Symbol("onset_report_state.σ_scan") => "shared per-scan level error"
     )
 );
@@ -2880,7 +2881,8 @@ onset_summary = vcat(
         [
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.σ_mult"),
+            Symbol("onset_report_state.log_τ0"),
+            Symbol("onset_report_state.σ_τ"),
             Symbol("onset_report_state.σ_scan"),
         ];
         digits = 3, labels = _onset_labels
@@ -2912,7 +2914,8 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
-        Symbol("onset_report_state.σ_mult"),
+        Symbol("onset_report_state.log_τ0"),
+        Symbol("onset_report_state.σ_τ"),
         Symbol("onset_report_state.σ_scan"),
     ];
     prior = prior_chn, labels = _onset_labels
@@ -2983,22 +2986,26 @@ end
 ## band is a posterior predictive of a digitised bar rather than of the
 ## latent count behind it. A bar is one read off one scan with no previous
 ## level to difference against, which is `onset_report_scale`'s level case
-## (`reads = 1`, `level_prev = 0`) — the case the first scored snapshot's
-## own cells carry. Without this the band is the modelled count alone and
-## covers 42% of the observed bars at a nominal 90%.
-_onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
+## (`τ_prev = 0`) — the case the first scored snapshot's own cells carry.
+## Without this the band is the modelled count alone and covers 42% of the
+## observed bars at a nominal 90%.
+_onset_noise_scale = [
+    collect(v) for v in vec(collect(chn_joint[:onset_noise_scale]))
+]
 _onset_σ_scan = vec(collect(chn_joint[Symbol("onset_report_state.σ_scan")]))
 _onset_ppc_rng = Random.MersenneTwister(20260729)
 ## Four replicates per draw rather than one: the band is a 90% interval of
 ## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
-## from Monte Carlo error alone.
-function _onset_replicated(draws::AbstractVector)
+## from Monte Carlo error alone. `v_idx` is the snapshot's own position in
+## `_onset_report_grid_days`, whose fitted noise scale stands in for the
+## bar's own read (`τ_prev = 0`, the level case).
+function _onset_replicated(draws::AbstractVector, v_idx::Integer)
     return [
         begin
             μ = draws[i]
-            σ = _onset_σ_mult[i] *
-                onset_report_scale(
-                μ, μ, 0.0, 1;
+            τ_cur = _onset_noise_scale[i][v_idx]
+            σ = onset_report_scale(
+                μ, μ, 0.0, τ_cur, 0.0;
                 scan_sd = _onset_σ_scan[i]
             )
             μ + σ * rand(_onset_ppc_rng, TDist(4.0))
@@ -3038,7 +3045,7 @@ end
 ## reading that is itself still truncated, and the latent count carries no
 ## scan error where the delay has run out, so it could not cover a second
 ## scan of the same bar.
-_onset_panels = map(_onset_report_grid_days) do R
+_onset_panels = map(enumerate(_onset_report_grid_days)) do (v_idx, R)
     snap = _onset_snap_by_day[R]
     us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
@@ -3049,7 +3056,7 @@ _onset_panels = map(_onset_report_grid_days) do R
     )
     (;
         title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast = [_onset_replicated(d) for d in nowcast],
+        nowcast = [_onset_replicated(d, v_idx) for d in nowcast],
         latest = [_onset_last_printed[u] for u in us],
     )
 end
@@ -3099,8 +3106,17 @@ _onset_by_date_printed = [
 ]
 ## That count put through the same measurement error a single digitised
 ## bar carries (`onset_report_scale`'s level case, as above the snapshot
-## grid), replicated four times per draw for the same reason.
-_onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
+## grid), replicated four times per draw for the same reason. `v_idx` is
+## the vintage that last printed each onset date, the same lookup the
+## snapshot panels use.
+_onset_by_date_vidx = [
+    findfirst(==(_onset_last_report_day[u]), _onset_report_grid_days)
+        for u in _onset_by_date_days
+]
+_onset_by_date_reps = [
+    _onset_replicated(_onset_by_date_printed[k], _onset_by_date_vidx[k])
+        for k in eachindex(_onset_by_date_printed)
+]
 
 onset_ppc_by_date_fig = let
     fig = CairoMakie.Figure(; size = (900, 380))

@@ -463,7 +463,7 @@ function forecast_reported(
     ## carries the reporting hazard.
     if !isnothing(onset_grid_start) && !isnothing(onset_grid_end) &&
             !isnothing(grid_n) &&
-            _has_key(chn, Symbol("onset_report_state.σ_mult"))
+            _has_key(chn, Symbol("onset_report_state.σ_τ"))
         onset_fc = forecast_onsets(
             chn; grid_start = onset_grid_start,
             grid_end = onset_grid_end, n = grid_n, horizon = horizon,
@@ -548,16 +548,19 @@ Columns, all per draw:
 
 `onset_reports_new` is replicated through the stream's own observation model
 rather than a negative binomial. The increment is scored under
-[`onset_report_scale`](@ref)'s three-term scale (counting variation,
-pixel-reading noise, per-scan level error), inflated by the fitted `σ_mult`,
-and perturbed by a Student-t with the same `ν` the likelihood uses. The scale
-is applied once to the whole projected total, so its scan-level term takes
-the fitted shared per-scan coefficient `σ_scan` rather than the whole
-measured per-bar error. At a total of a couple of thousand cases the per-scan
-level term dominates by an order of magnitude, so the interval on a weekly
-increment is mostly digitisation error rather than epidemic uncertainty. The
-forecast is therefore more useful as a check that the fitted delay and
-ascertainment reproduce the next vintage than as a case-count prediction.
+[`onset_report_scale`](@ref)'s scale (counting variation, digitisation
+noise, per-scan level error), and perturbed by a Student-t with the same
+`ν` the likelihood uses. The digitisation-noise term uses the fitted noise
+scale `τ` of the chain's most recent surviving snapshot for both reads,
+since the projected snapshot has not happened yet and so has no `τ` of its
+own. The scale is applied once to the whole projected total, so its
+scan-level term takes the fitted shared per-scan coefficient `σ_scan`
+rather than the whole measured per-bar error. At a total of a couple of
+thousand cases the per-scan level term dominates by an order of magnitude,
+so the interval on a weekly increment is mostly digitisation error rather
+than epidemic uncertainty. The forecast is therefore more useful as a check
+that the fitted delay and ascertainment reproduce the next vintage than as
+a case-count prediction.
 
 `grid_start` and `grid_end` are the fitted triangle's own onset/report-day
 grid (see [`reconstruct_onset_hazard`](@ref)). `n` is the model cut-off
@@ -574,7 +577,6 @@ function forecast_onsets(
         obs_value::Union{Real, Missing} = missing,
         week::Integer = 7,
         ν::Real = 4.0,
-        pixel_sd::Real = 2.1,
         scan_frac::Real = 0.04,
         breakpoint::Union{Nothing, Real} = nothing,
         rt_start::Integer = 1,
@@ -590,7 +592,6 @@ function forecast_onsets(
         )
     )
     hazard = reconstruct_onset_hazard(chn; grid_start, grid_end, week)
-    σ_mult = _draws(chn, Symbol("onset_report_state.σ_mult"))
     ## A chain that does not sample the onset-report overdispersion falls
     ## back to no quadratic term, which is that fit's own likelihood.
     k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
@@ -602,6 +603,14 @@ function forecast_onsets(
     ## scale here. A chain that does not sample it falls back to `scan_frac`.
     σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
         _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
+    ## Fitted digitisation-noise scale of the most recent surviving
+    ## snapshot, used for both reads of the projected increment (the
+    ## snapshot it would be checked against has not happened yet, so it has
+    ## no `τ` of its own). A chain that does not sample it falls back to the
+    ## walk's prior median of 3 counts.
+    τ_last = _has_key(chn, :onset_noise_scale) ?
+        [last(collect(v)) for v in vec(collect(chn[:onset_noise_scale]))] :
+        nothing
 
     R_T = _cutoff_rt(
         chn; n = n, breakpoint = breakpoint,
@@ -667,19 +676,18 @@ function forecast_onsets(
         backfill[i] = past_then - past_now
         future[i] = fut_then
 
-        ## Replicate the projected increment through the same three-term
-        ## observation scale a scored correction cell carries: two reads
-        ## (`reads = 2`, this is a difference of two vintages), the levels
-        ## being the reported totals at the two ends of the horizon.
+        ## Replicate the projected increment through the same observation
+        ## scale a scored correction cell carries, the levels being the
+        ## reported totals at the two ends of the horizon and both reads
+        ## taking the last fitted snapshot's noise scale (see above).
         μ = backfill[i] + future[i]
+        τi = isnothing(τ_last) ? 3.0 : τ_last[i]
         base = onset_report_scale(
-            μ, past_then, past_now, 2;
-            pixel_sd, scan_sd = isnothing(σ_scan) ? scan_frac : σ_scan[i]
+            μ, past_then, past_now, τi, τi;
+            scan_sd = isnothing(σ_scan) ? scan_frac : σ_scan[i]
         )
-        σ = σ_mult[i] * (
-            isnothing(k_onset) ? base :
-                sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64)))
-        )
+        σ = isnothing(k_onset) ? base :
+            sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64)))
         reports_new[i] = max(round(Int, μ + σ * rand(rng, TDist(ν))), 0)
     end
 

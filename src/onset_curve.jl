@@ -113,40 +113,7 @@ function _dedup_onset_blocks(blocks)
 end
 
 """
-    _settled_noise_sd(snap, snap_prev, cov_lo, cov_hi, settle_from, _date)
-
-Robust noise SD for one consecutive vintage pair, from the cells the
-reporting signal has already settled in: onset dates `u` in `cov_lo:cov_hi`
-(both vintages' printed extent) with `u < settle_from`, well beyond the
-scored window. There the true increment is ~0, so the spread of
-`cur[u] - prev[u]` across these cells is digitisation noise alone, read with
-a median absolute deviation (scaled `1.4826 * mad` estimates a Normal SD and
-is not pulled around by the rare cell still mid-settling) rather than the
-plain SD a handful of outliers would inflate. Returns `NaN` when fewer than
-10 settled cells are available, meaning "no calibration"; the caller falls
-back to the fixed pixel-noise term. Pure, top-level.
-"""
-function _settled_noise_sd(
-        snap, snap_prev, cov_lo::Integer, cov_hi::Integer,
-        settle_from::Integer, _date::Function
-    )
-    hi = min(cov_hi, settle_from - 1)
-    hi < cov_lo && return NaN
-    vals = Float64[]
-    for u in cov_lo:hi
-        d = _date(u)
-        prev = get(snap_prev.onsets, d, 0)
-        cur = get(snap.onsets, d, 0)
-        push!(vals, cur - prev)
-    end
-    length(vals) < 10 && return NaN
-    med = median(vals)
-    return 1.4826 * median(abs.(vals .- med))
-end
-
-"""
-    load_onset_curve(path; cutoff, seeding,
-        max_delay = ONSET_REPORT_MAX_DELAY, horizon = max_delay)
+    load_onset_curve(path; cutoff, seeding)
 
 Load the digitised symptom-onset reporting triangle at `path` and build the
 between-vintage increment cells [`onset_reporting_model`](@ref) fits.
@@ -159,28 +126,32 @@ advancing the manifest `as_of_date` past a newly-digitised vintage's
 report date picks that vintage up with no code change.
 
 For each pair of consecutive (post-dedup, in-cutoff) vintages `s-1, s` and
-each onset date `u` in the trailing `horizon`-day window
-`[report_day(s) - horizon + 1, report_day(s)]` (clamped to grid day 1), one
-increment cell is built:
+each onset date `u` both figures print, one increment cell is built:
 
 ```
 y = confirmed_total(s, u) - confirmed_total(s-1, u)
 ```
 
-The window is further clipped to the onset dates both vintages' figures
-actually print. Each block has its own printed extent, its earliest to
-latest digitised onset date, and the published figures stop their x axis
-short of the report date by anything from zero to eight days. The axis
-simply ends, with substantial counts on the last printed bar, rather than
-running on with zero-height bars. Reading an uncovered date as zero would
-assert that nothing had been reported at that onset date when the figure
-says nothing about it, and the axis gap is close to the reporting delay
-itself, so the assertion lands on the fastest part of the delay
-distribution. Cells outside either vintage's extent are dropped instead,
-as unobserved rather than zero. The choice of axis limit does not depend
-on the counts it hides, so dropping them treats them as missing at random.
-Inside a block's own extent a missing row is a digitisation omission of a
-zero-height bar and does read as a true zero.
+Every printed onset date both vintages cover is scored, not just a trailing
+window: [`onset_reporting_model`](@ref) fits a per-snapshot noise scale on
+its own report-date random walk, so a settled cell (true increment ~0)
+still carries information, about that scale, rather than needing to be
+dropped to avoid diluting the likelihood with near-zero signal.
+
+The window is clipped to the onset dates both vintages' figures actually
+print. Each block has its own printed extent, its earliest to latest
+digitised onset date, and the published figures stop their x axis short of
+the report date by anything from zero to eight days. The axis simply ends,
+with substantial counts on the last printed bar, rather than running on
+with zero-height bars. Reading an uncovered date as zero would assert that
+nothing had been reported at that onset date when the figure says nothing
+about it, and the axis gap is close to the reporting delay itself, so the
+assertion lands on the fastest part of the delay distribution. Cells
+outside either vintage's extent are dropped instead, as unobserved rather
+than zero. The choice of axis limit does not depend on the counts it hides,
+so dropping them treats them as missing at random. Inside a block's own
+extent a missing row is a digitisation omission of a zero-height bar and
+does read as a true zero.
 
 The cost is that the shortest delays are observed rarely or not at all. A
 correction cell needs both vintages to print the date, so the smallest
@@ -201,37 +172,17 @@ a level somewhere `alpha` would float. [`onset_report_scales`](@ref) gives
 them the counting variation a level carries and a correction largely does
 not.
 
-`horizon` defaults to `max_delay` rather than being a second free
-hyperparameter. That is exactly the hazard's own support, so scoring
-covers every onset date the model expects a non-negligible increment for
-while dropping settled dates that carry only digitisation noise. The
-settled dates' levels are given up along with their noise, so the stream
-informs the onset curve over the trailing four weeks only.
-
-Each pair's own noise floor is read off its settled cells: onset dates both
-vintages print, at a delay more than a week past `horizon`
-(`R - u > horizon + 7`), so well outside the scored window where the true
-increment has levelled off to ~0. The spread of `cur[u] - prev[u]` there is
-read with a robust median-absolute-deviation SD
-([`_settled_noise_sd`](@ref)), needing at least 10 such cells or the pair
-gets `NaN`, meaning "not calibrated"; the likelihood then falls back to its
-fixed pixel-noise term. The first vintage has no predecessor to settle
-against, so it is always `NaN`.
-
 Returns `(; onset_days, report_days, prev_report_days, increments,
-noise_sd, vintage_noise_sd, total_days, total_counts, last_total)`. The
-first four are length-matched `Vector{Int}`s (1-based grid day-indices for
-the first three, the observed increment for the fourth) ready for
-[`onset_reporting_model`](@ref). `noise_sd` is a `Vector{Float64}` the same
-length, the calibrated noise SD of the cell's own vintage pair (`NaN`
-where uncalibrated). `vintage_noise_sd` is a `Vector{Float64}`, one entry
-per surviving vintage in vintage order (`NaN` for the first), for
-reporting. `total_days` and `total_counts` are the cumulative confirmed
-total printed
+total_days, total_counts, last_total)`. The first four are length-matched
+`Vector{Int}`s (1-based grid day-indices for the first three, the observed
+increment for the fourth) ready for [`onset_reporting_model`](@ref).
+`total_days` and `total_counts` are the cumulative confirmed total printed
 by each surviving vintage, keyed on its report day, in the same
 `(days, counts)` shape every other stream's history carries. They are
 built from every printed bar of a vintage, not from the scored cells,
-which cover only the trailing `horizon` window. `last_total` is the final
+which now cover the same window in practice but are conceptually distinct
+(a future vintage with a much wider extent than its predecessor would
+still score only the pair's shared coverage). `last_total` is the final
 entry of `total_counts`, or `missing` when no vintage survives.
 
 The per-vintage totals are not monotone across vintages. The roughly 4%
@@ -248,14 +199,11 @@ rather than throwing.
 """
 function load_onset_curve(
         path::AbstractString;
-        cutoff::Date, seeding::Date,
-        max_delay::Integer = ONSET_REPORT_MAX_DELAY,
-        horizon::Integer = max_delay
+        cutoff::Date, seeding::Date
     )
     noop = (;
         onset_days = Int[], report_days = Int[],
         prev_report_days = Int[], increments = Int[],
-        noise_sd = Float64[], vintage_noise_sd = Float64[],
         total_days = Int[], total_counts = Int[], last_total = missing,
     )
     isfile(path) || return noop
@@ -286,9 +234,6 @@ function load_onset_curve(
     report_days = Int[]
     prev_report_days = Int[]
     increments = Int[]
-    noise_sd = Float64[]
-    vintage_noise_sd = fill(NaN, length(snaps))
-    H = max(Int(horizon), 1)
     for s in eachindex(snaps)
         R = _idx(snaps[s].report_date)
         Rprev = s == 1 ? 0 : _idx(snaps[s - 1].report_date)
@@ -300,18 +245,7 @@ function load_onset_curve(
             cov_lo = max(cov_lo, extents[s - 1][1])
             cov_hi = min(cov_hi, extents[s - 1][2])
         end
-        ## This pair's own noise floor, from cells well past the scored
-        ## window (delay > horizon + 7) where the true increment has
-        ## settled to ~0. The first vintage has no predecessor to settle
-        ## against and stays `NaN`. See [`_settled_noise_sd`](@ref).
-        if s > 1
-            vintage_noise_sd[s] = _settled_noise_sd(
-                snaps[s], snaps[s - 1], cov_lo, cov_hi,
-                R - Int(horizon) - 7, _date
-            )
-        end
-        pair_sd = vintage_noise_sd[s]
-        lo = max(R - H + 1, 1, cov_lo)
+        lo = max(1, cov_lo)
         ## A cell differences this vintage against its predecessor, so the
         ## predecessor must have been able to report that onset date. An
         ## onset day past `Rprev` has a negative previous delay, for which
@@ -327,18 +261,16 @@ function load_onset_curve(
             push!(report_days, R)
             push!(prev_report_days, Rprev)
             push!(increments, cur - prev)
-            push!(noise_sd, pair_sd)
         end
     end
     ## Per-vintage cumulative confirmed total, over every printed bar rather
-    ## than the scored cells. The scored window covers only the trailing
-    ## `horizon` days, so summing the cells would give a rolling partial sum
-    ## instead of the total the figure reports.
+    ## than the scored cells: a future vintage pair with an asymmetric
+    ## extent would score only their shared coverage, a rolling partial sum
+    ## rather than the total the figure reports.
     total_days = [_idx(snap.report_date) for snap in snaps]
     total_counts = [sum(values(snap.onsets)) for snap in snaps]
     return (;
         onset_days, report_days, prev_report_days, increments,
-        noise_sd, vintage_noise_sd,
         total_days, total_counts, last_total = total_counts[end],
     )
 end

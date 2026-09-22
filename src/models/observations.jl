@@ -3199,11 +3199,11 @@ function onset_scan_adjust(
 end
 
 """
-    onset_report_scales(means, level_cur, level_prev, prev_report_idx;
-        pixel_sd = 2.1, scan_sd = 0.0, cell_sd = 0.0)
+    onset_report_scales(means, level_cur, level_prev, τ_cur, τ_prev;
+        scan_sd = 0.0)
 
 Per-cell observation scale for the reporting-triangle increment likelihood,
-the square root of a variance built from three sources.
+the square root of a variance built from two sources.
 
   - Counting variation of the cases the cell actually reports. The cell is a
     count of newly reported cases, so it carries its own sampling variation
@@ -3214,17 +3214,12 @@ the square root of a variance built from three sources.
     has counting variation of about `sqrt(40) ≈ 6`, far larger than the
     reading error below, and scoring it on reading error alone would let 28
     level cells dominate the joint likelihood.
-  - Reading noise, the larger of a fixed per-bar floor (`pixel_sd`, ≈2.1
-    cases; an increment differences two independent reads, so its variance
-    doubles) and a per-cell calibrated noise SD (`cell_sd`,
-    [`load_onset_curve`](@ref)'s `noise_sd`, the settled-cell spread
-    measured directly off that vintage pair). The floor exists for pairs
-    `cell_sd` was not calibrated for (`NaN`, or a non-finite value, reads as
-    `0` and defers to the floor); where it was, the settled-cell spread
-    dominates once digitisation noise outgrows the fixed floor, as it does
-    in the later, blurrier scans, instead of leaving those cells
-    over-weighted. The first snapshot's level cells read only one bar, so
-    the fixed floor there does not double.
+  - Digitisation noise, the fitted per-snapshot scale `τ`
+    ([`onset_reporting_model`](@ref)'s noise-walk) each of the cell's two
+    reads carries: `τ_cur` for the snapshot the cell belongs to, `τ_prev`
+    for the one it corrects against, `0` for the virtual empty predecessor.
+    An increment differences two independent reads, so the two variances add
+    rather than one term doubling.
   - An optional multiplicative level error `scan_sd` on each read's own
     cumulative level, off by default. A bar's height is read in pixels and
     converted with the figure's own axis scale, so the multiplicative part
@@ -3236,12 +3231,9 @@ the square root of a variance built from three sources.
     fitted per-scan level SD here.
 
 ```math
-\\sigma_i = \\sqrt{\\max(\\mu_i, 0) +
-    \\max(\\text{pixel\\_sd}^2 \\cdot r_i, \\text{cell\\_sd}_i^2) +
-    \\text{scan\\_sd}^2 \\cdot
+\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + \\tau_{\\text{cur},i}^2 +
+    \\tau_{\\text{prev},i}^2 + \\text{scan\\_sd}^2 \\cdot
     (\\ell_{\\text{cur},i}^2 + \\ell_{\\text{prev},i}^2)},
-\\qquad r_i = \\begin{cases} 1 & \\text{prev\\_report\\_idx}_i = 0
-    \\ \\text{(virtual first pair)} \\\\ 2 & \\text{otherwise} \\end{cases},
 ```
 
 with `μ_i = means[i]` the modelled increment. The counting term cancels for
@@ -3253,78 +3245,65 @@ formula covers both cell kinds without a branch.
 Every magnitude entering the scale is modelled (`means`, `level_cur`,
 `level_prev` from [`onset_report_moments`](@ref)), never the raw observed
 count: feeding the likelihood's own noisy observation back into its variance
-would bias towards overconfidence on cells that happen to undershoot.
-`cell_sd` is the one exception, since it is measured off the settled cells
-rather than the scored ones, so it carries no such feedback. The caller
-([`onset_reporting_model`](@ref)) applies a sampled multiplicative slack on
-top, so this fixed, measurement-derived formula is correctable by the data.
-Pure, top-level, single indexed loop.
+would bias towards overconfidence on cells that happen to undershoot. `τ` is
+fitted rather than fixed, so this formula is correctable by the data without
+a separate multiplicative slack. Pure, top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
-parameter. `σ_mult` is the diagnostic for that shortfall, but read it in
-the right direction: its prior is bounded below at 1 and unbounded above,
-so `σ_mult` mass well above 1 says the term needs its own parameter, while
-a posterior on the lower bound says the fit would like a tighter likelihood
-than the measurement floor allows. The test is the empirical over modelled
-residual ratio across bins of `means`, against the `sqrt(ν/(ν-2))` a
-Student-t implies. It is in the report's symptom-onset reporting-delay
-section, along with the per-snapshot coverage test for the shared scan
-error, which shows up only once a snapshot's cells are summed.
+parameter. The test is the empirical over modelled residual ratio across
+bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
+the report's symptom-onset reporting-delay section, along with the
+per-snapshot coverage test for the shared scan error, which shows up only
+once a snapshot's cells are summed.
 """
 function onset_report_scales(
         means::AbstractVector,
         level_cur::AbstractVector,
         level_prev::AbstractVector,
-        prev_report_idx::AbstractVector{<:Integer};
-        pixel_sd::Real = 2.1, scan_sd::Real = 0.0,
-        cell_sd::Union{AbstractVector, Real} = 0.0
+        τ_cur::AbstractVector,
+        τ_prev::AbstractVector;
+        scan_sd::Real = 0.0
     )
     m = length(level_cur)
     T = promote_type(
         eltype(means), eltype(level_cur), eltype(level_prev),
-        typeof(float(pixel_sd)), typeof(float(scan_sd))
+        eltype(τ_cur), eltype(τ_prev), typeof(float(scan_sd))
     )
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
-        r = prev_report_idx[i] > 0 ? 2 : 1
-        c = cell_sd isa AbstractVector ? cell_sd[i] : cell_sd
         out[i] = onset_report_scale(
-            means[i], level_cur[i], level_prev[i], r;
-            pixel_sd, scan_sd, cell_sd = c
+            means[i], level_cur[i], level_prev[i], τ_cur[i], τ_prev[i];
+            scan_sd
         )
     end
     return out
 end
 
 """
-    onset_report_scale(μ, level_cur, level_prev, reads;
-        pixel_sd = 2.1, scan_sd = 0.0, cell_sd = 0.0)
+    onset_report_scale(μ, level_cur, level_prev, τ_cur, τ_prev;
+        scan_sd = 0.0)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
-increment mean `μ` between two modelled cumulative levels `level_cur`
-and `level_prev` read off `reads` bars (`1` for a level differenced
-against an empty predecessor, `2` for a genuine correction). The vector
-method calls this, so the two cannot drift apart. `cell_sd` is that cell's
-calibrated noise SD; a non-finite value (the uncalibrated `NaN`
-[`load_onset_curve`](@ref) reports, or any other non-finite input) reads as
-`0` and so never overrides the fixed `pixel_sd` floor. The forecast
-([`forecast_onsets`](@ref)) calls it directly to give a projected
-reporting increment the same observation scale the likelihood gives a
-scored cell. See [`onset_report_scales`](@ref) for what each term means.
+increment mean `μ` between two modelled cumulative levels `level_cur` and
+`level_prev`, each read with its own snapshot's fitted digitisation-noise
+scale (`τ_cur`, `τ_prev`; `0` for a read against the virtual empty
+predecessor). The vector method calls this, so the two cannot drift apart.
+The forecast ([`forecast_onsets`](@ref)) calls it directly to give a
+projected reporting increment the same observation scale the likelihood
+gives a scored cell. See [`onset_report_scales`](@ref) for what each term
+means.
 """
 function onset_report_scale(
         μ::Real, level_cur::Real, level_prev::Real,
-        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0,
-        cell_sd::Real = 0.0
+        τ_cur::Real, τ_prev::Real; scan_sd::Real = 0.0
     )
     T = promote_type(
         typeof(float(μ)), typeof(float(level_cur)),
-        typeof(float(level_prev)), typeof(float(pixel_sd)),
-        typeof(float(scan_sd)), typeof(float(cell_sd))
+        typeof(float(level_prev)), typeof(float(τ_cur)),
+        typeof(float(τ_prev)), typeof(float(scan_sd))
     )
-    c = isfinite(cell_sd) ? cell_sd : zero(T)
     return sqrt(
-        max(μ, zero(T)) + max(pixel_sd^2 * reads, c^2) +
+        max(μ, zero(T)) + τ_cur^2 + τ_prev^2 +
             scan_sd^2 * (level_cur^2 + level_prev^2)
     )
 end
@@ -3367,7 +3346,8 @@ function onset_report_cdf_extrapolated(
 end
 
 """
-    onset_report_expected_total(onsets, logit_h0, γ, grid_start, alpha, as_of)
+    onset_report_expected_total(onsets, logit_h0, γ, grid_start, alpha,
+        as_of; alpha_grid_start = grid_start)
 
 Expected reported symptom-onset total as of grid day `as_of`,
 `Σ_u onsets[u] · F(u, as_of - u)` for `u` in `1:as_of` (clamped to
@@ -3378,13 +3358,17 @@ Expected reported symptom-onset total as of grid day `as_of`,
 series. Passing the triangle's own last report day instead would give a
 total anchored a few days earlier than every sibling.
 
-`γ` and `alpha` both span only the digitised triangle's own grid (see
-[`onset_reporting_model`](@ref)), which starts after grid day 1 and ends at
-or before `as_of`, so both the oldest and the most recent terms need a
-calendar effect and an ascertainment level the fit has no estimate for.
-[`onset_report_F`](@ref) already holds both flat at their nearest fitted
-edge (see [`onset_report_G`](@ref)), so no separate extrapolated form is
-needed here.
+`grid_start` is `γ`'s own origin (the calendar walk's, which
+[`onset_reporting_model`](@ref) may start later than the earliest scored
+onset date) and `alpha_grid_start` is `alpha`'s (the ascertainment walk's,
+always the earliest scored onset date). They default to the same value,
+which is correct whenever the two coincide, but must be passed separately
+once the calendar walk's own grid has been narrowed. Both spans start
+after grid day 1 and end at or before `as_of`, so both the oldest and the
+most recent terms need a calendar effect and an ascertainment level the
+fit has no estimate for. [`onset_report_F`](@ref) already holds both flat
+at their nearest fitted edge (see [`onset_report_G`](@ref)), so no
+separate extrapolated form is needed here.
 
 Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
@@ -3393,7 +3377,8 @@ in range. Pure, top-level, single indexed loop.
 function onset_report_expected_total(
         onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
-        grid_start::Integer, alpha::AbstractVector, as_of::Integer
+        grid_start::Integer, alpha::AbstractVector, as_of::Integer;
+        alpha_grid_start::Integer = grid_start
     )
     T = promote_type(
         eltype(onsets), eltype(logit_h0), eltype(γ),
@@ -3405,7 +3390,7 @@ function onset_report_expected_total(
     ge = min(Int(as_of), n)
     @inbounds for u in 1:ge
         δ = as_of - u
-        α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
+        α = alpha[clamp(u - Int(alpha_grid_start) + 1, 1, na)]
         total += onsets[u] * onset_report_F(δ, logit_h0, γ, u, grid_start, α)
     end
     return total
@@ -3639,24 +3624,22 @@ only `confirmed_total` is fitted, since the confirmed-death stream already
 carries that split from other data.
 
 `onset_curve_history` is the [`load_onset_curve`](@ref) return shape
-`(; onset_days, report_days, prev_report_days, increments)`, plus an
-optional `noise_sd` (per-cell calibrated noise SD, one per scored cell); a
-history without it, an old caller's or a synthetic one built by hand, reads
-as all-zero and every cell falls back to the fixed pixel-noise floor. The
-default empty history makes every loop here a no-op, the degrade-gracefully
-path for a missing input file. `increments` may be `missing` to sample
-instead of condition (the predictive-generator path).
+`(; onset_days, report_days, prev_report_days, increments)`. The default
+empty history makes every loop here a no-op, the degrade-gracefully path
+for a missing input file. `increments` may be `missing` to sample instead
+of condition (the predictive-generator path).
 
 The observation scale ([`onset_report_scales`](@ref)) is built from
-counting variation, reading noise (the larger of the measured per-bar pixel
-noise, `pixel_sd` ≈2.1 cases/bar, and each cell's own calibrated noise SD
-where [`load_onset_curve`](@ref) calibrated one), and a sampled
-multiplicative slack `σ_mult ~ slack_prior` bounded below at 1. Each scale
-term is a lower bound on the truth, so a
-fitted scale below them would let a couple of hundred cells outvote every
-other stream. A short onsets-only run pulls the slack to that bound; in the
-joint fit a `σ_mult` posterior well above 1 says the scale is missing a
-term.
+counting variation and a fitted digitisation-noise scale `τ`, one per
+surviving snapshot, carried on a weekly random walk over the report-date
+span (`log_τ0 ~ Normal(log(3), 0.7)`, `σ_τ ~ truncated(Normal(0, 0.5);
+lower = 0)`, the walk sampled centred like
+[`background_walk_model`](@ref)'s). A cell's scale reads `τ` off both the
+snapshot it belongs to and the one it corrects against, so a level cell
+(differenced against the virtual empty predecessor) carries one snapshot's
+noise and a genuine correction carries two. `τ`'s prior median of 3 counts
+is the old fixed two-read pixel floor; the walk lets it drift with the
+scans, which have grown noisier over the surveillance window.
 
 **The scan error belongs to the figure, not to the bar.** A bar's height is
 read in pixels and converted with the axis scale that scan calibrated, so
@@ -3679,17 +3662,18 @@ pixel noise alone. The levels are sampled centred rather than as
 `1 + σ_scan · z[s]`: a 1.5% level on a curve of several thousand cases is
 tens of cases, visible against every cell's noise, so each level is well
 informed and the non-centred form funnels between `σ_scan` and the `z`s,
-where the joint fit's divergent transitions concentrated. Scored as independent per-cell noise instead, a
-snapshot's cells can only miss in uncorrelated directions, so the net
-correction is far too tightly predicted (1 of 11 snapshots inside a nominal
-50% interval) even though the aggregate variance ratio is 1.07.
+where the joint fit's divergent transitions concentrated. Scored as
+independent per-cell noise instead (the per-cell scale carrying counting
+variation and the fitted `τ` noise scale alone), a snapshot's cells can
+only miss in uncorrelated directions, so the net correction is far too
+tightly predicted (1 of 11 snapshots inside a nominal 50% interval) even
+though the aggregate variance ratio is 1.07.
 
 `σ_scan ~ scan_sd_prior` is estimated rather than fixed at the audited
 spread, which rests on a handful of vintages, but its prior is a
-half-normal centred to put that spread (an SD of about 2.5%) in its bulk.
-The upper bound is the audit's own reach: no vintage has read more than 5%
-away from its printed total, so a level error past 8% is excluded by a data
-check.
+half-normal centred to put that spread (an SD of about 2.5%) in its bulk,
+unbounded above so a scan noisier than the audited handful is reachable
+rather than excluded by construction.
 
 The shared level also gives the fit somewhere to put a snapshot that
 reprints nothing new. A vintage whose figure reads at the same level as its
@@ -3704,13 +3688,28 @@ sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
+The calendar walk's own grid starts no earlier than
+`max(minimum(onset_days), minimum(report_days) - D + 1)`: a knot further
+back than one delay support's width before the earliest report day would
+carry weekly steps over onset dates no scored cell can reach, widening the
+walk for no identifying cells. The delay-CDF table and the ascertainment
+walk still span the full onset-date grid from `minimum(onset_days)`, since
+[`onset_report_cdf_table`](@ref) clamps the calendar index at both ends.
+
 Returns `(; increments, modelled, unscanned, scan_level, logit_h0, γ,
-grid_start, grid_end, alpha, σ_mult, σ_scan, η0, σ_h0, σ_γ, β, σ_a)` with
-`modelled` the per-cell increment means the likelihood scores (each
-vintage's scan level applied), `unscanned` the same means before it (the
-epidemiological signal alone), `scan_level` the per-vintage multipliers,
-`grid_end` the report-date grid day the calendar walk was built up to
-(`max(report_days)`, or `grid_start` when the history is empty), and the
+grid_start, grid_end, alpha, alpha_grid_start, noise_scale, σ_τ, log_τ0,
+σ_scan, η0, σ_h0, σ_γ, β, σ_a)` with `modelled` the per-cell increment means
+the likelihood scores (each vintage's scan level applied), `unscanned` the
+same means before it (the epidemiological signal alone), `scan_level` the
+per-vintage multipliers, `grid_start` the report-date grid day the
+calendar walk `γ` is indexed from (see above; not necessarily
+`minimum(onset_days)`), `grid_end` the report-date grid day the calendar
+walk was built up to (`max(report_days)`, or `grid_start` when the history
+is empty), `alpha_grid_start` the onset-date grid day `alpha` is indexed
+from (always `minimum(onset_days)`, or `1` when the history is empty; see
+[`onset_report_expected_total`](@ref) for why this is kept separate from
+`grid_start`), `noise_scale` the fitted per-snapshot digitisation-noise
+scale (one entry per surviving vintage in vintage order), and the
 hyperparameters re-exposed at this level for the pairs-plot summary.
 """
 @model function onset_reporting_model(
@@ -3719,34 +3718,32 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        pixel_sd::Real = 2.1,
-        scan_sd_prior = truncated(
-            Normal(0.0, 0.03);
-            lower = 0.0, upper = 0.08
-        ),
-        slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
+        scan_sd_prior = truncated(Normal(0.0, 0.03); lower = 0.0),
+        tau0_prior = Normal(log(3.0), 0.7),
+        tau_walk_sigma_prior = truncated(Normal(0.0, 0.5); lower = 0.0),
         ν::Real = 4.0
     )
     onset_days = onset_curve_history.onset_days
     report_days = onset_curve_history.report_days
     prev_report_days = onset_curve_history.prev_report_days
     m = length(onset_days)
-    ## Falls back to an all-zero `cell_sd` for a history that predates
-    ## `noise_sd` (an old caller, or a synthetic history).
-    cell_sd = hasproperty(onset_curve_history, :noise_sd) ?
-        onset_curve_history.noise_sd : zeros(m)
-    ## Report-date grid the calendar walk spans: the union of every onset
-    ## and report day a scored cell can touch. Falls back to a degenerate
-    ## length-1 grid `[1, 1]` when the history is empty (the no-op path),
-    ## which `onset_report_hazard_model` handles via its own `nt` floor.
-    grid_start = m > 0 ? minimum(onset_days) : 1
-    grid_end = m > 0 ? max(maximum(report_days), grid_start) : 1
+    ## Onset-date grid origin: the earliest scored onset date, or 1 for an
+    ## empty history. The delay-CDF table and the ascertainment walk both
+    ## span `[u_lo, grid_end]`.
+    u_lo = m > 0 ? minimum(onset_days) : 1
+    grid_end = m > 0 ? max(maximum(report_days), u_lo) : 1
+    ## Calendar-walk origin: bounded below by `u_lo` (the walk never
+    ## predates the earliest scored onset date) but otherwise pulled
+    ## forward to one delay support's width before the earliest report day,
+    ## so `γ` does not carry knots over onset dates no scored cell reaches.
+    hazard_start = m > 0 ?
+        max(u_lo, minimum(report_days) - Int(D) + 1, 1) : u_lo
     ## Unprefixed (`false`): the hazard model has no `:=` deterministics to
     ## collide with, and hoisting its sampled variables into this frame
     ## surfaces them as a flat `onset_report_state.η0` at the composer level
     ## rather than the double-nested form a prefixed attachment would give.
     ## The pairs-plot summary indexes the flat names.
-    hazard_state ~ to_submodel(hazard(grid_start, grid_end; D), false)
+    hazard_state ~ to_submodel(hazard(hazard_start, grid_end; D), false)
 
     ## Delay-weighted anchor series over the onset-date grid, built from the
     ## fitted hazard and the caller-supplied calendar-indexed daily
@@ -3757,24 +3754,28 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## evaluated once per (delay, onset date) cell for the whole stream.
     cdf_table = onset_report_cdf_table(
         hazard_state.logit_h0,
-        hazard_state.γ, hazard_state.grid_start, grid_start,
+        hazard_state.γ, hazard_state.grid_start, u_lo,
         grid_end
     )
     anchor_series = onset_report_anchor_series(
-        cdf_table, grid_start,
+        cdf_table, u_lo,
         anchor
     )
     asc_state ~ to_submodel(
-        ascertainment(anchor_series, grid_start, grid_end), false
+        ascertainment(anchor_series, u_lo, grid_end), false
     )
     alpha = asc_state.alpha
-    σ_mult ~ slack_prior
+
+    ## Which cells share a scan (for the per-scan level error) and which
+    ## share a noise-walk knot window (for `τ`, below): both are indexed
+    ## by vintage, the sorted distinct report days of the scored cells.
+    vintages = onset_vintage_indices(report_days, prev_report_days)
 
     ## Per-scan level error: one multiplier per surviving vintage, the
     ## level that scan's whole figure was read at, sampled centred about 1.
     ## It sits on the modelled level rather than in the per-cell scale,
-    ## which carries counting and pixel noise alone.
-    vintages = onset_vintage_indices(report_days, prev_report_days)
+    ## which carries counting variation and the fitted `τ` noise scale
+    ## alone.
     σ_scan ~ scan_sd_prior
     scan_level ~ product_distribution(
         fill(
@@ -3783,9 +3784,47 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         )
     )
 
+    ## Per-snapshot digitisation-noise scale `τ`, on a weekly random walk
+    ## over the report-date span `[min(report_days), max(report_days)]`.
+    ## Sampled centred (each step directly at `Normal(0, σ_τ)`, mirroring
+    ## `background_walk_model`'s centred form): the triangle scores every
+    ## printed cell, so the walk is strongly informed and the non-centred
+    ## form would funnel. `log_τ0` anchors the walk's level at the earliest
+    ## surviving vintage; `τ_steps` carries it from there.
+    nt_r = m > 0 ?
+        max(maximum(report_days) - minimum(report_days) + 1, 1) : 1
+    tau_days = knot_days(nt_r; week = 7, start = 1)
+    nb_r = length(tau_days)
+    log_τ0 ~ tau0_prior
+    σ_τ ~ tau_walk_sigma_prior
+    τ_steps ~ product_distribution(
+        fill(Normal(0, σ_τ + eps(typeof(float(σ_τ)))), max(nb_r - 1, 1))
+    )
+    log_τ_knots = vcat(
+        log_τ0, log_τ0 .+ cumsum(τ_steps[1:max(nb_r - 1, 0)])
+    )
+    log_τ = interpolate_knots(log_τ_knots, tau_days, nt_r)
+    ## One `τ` per surviving vintage, in the same sorted-report-day order
+    ## `onset_vintage_indices` uses, then broadcast onto each cell's own
+    ## current and previous read. A cell's previous read is the sentinel
+    ## `0` for the virtual empty predecessor, which contributes a `τ_prev`
+    ## of exactly zero rather than indexing out of bounds.
+    min_report = m > 0 ? minimum(report_days) : 0
+    report_day_list = m > 0 ? sort(unique(report_days)) : Int[]
+    noise_scale = [
+        exp(log_τ[rd - min_report + 1]) for rd in report_day_list
+    ]
+    τT = eltype(noise_scale)
+    τ_cur = [noise_scale[vintages.vintage_idx[i]] for i in 1:m]
+    τ_prev = [
+        vintages.prev_vintage_idx[i] == 0 ? zero(τT) :
+            noise_scale[vintages.prev_vintage_idx[i]]
+            for i in 1:m
+    ]
+
     moments = onset_report_moments(
-        cdf_table, grid_start, onsets,
-        hazard_state.grid_start, alpha, onset_days, report_days,
+        cdf_table, u_lo, onsets,
+        u_lo, alpha, onset_days, report_days,
         prev_report_days
     )
     scanned = onset_scan_adjust(
@@ -3794,7 +3833,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     )
     scales = onset_report_scales(
         scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd, cell_sd
+        scanned.level_prev, τ_cur, τ_prev
     )
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
@@ -3804,7 +3843,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## cells keep the flat `increments[i]` names the predictive path indexes.
     increments_state ~ to_submodel(
         onset_increments_model(
-            scanned.means, σ_mult .* scales,
+            scanned.means, scales,
             onset_curve_history.increments, ν
         ), false
     )
@@ -3814,7 +3853,9 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         increments, modelled = scanned.means,
         unscanned = moments.means, scan_level,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
-        grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
+        grid_start = hazard_state.grid_start, grid_end, alpha,
+        alpha_grid_start = u_lo,
+        noise_scale, σ_τ, log_τ0,
         σ_scan, η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
     )
