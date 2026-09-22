@@ -137,42 +137,15 @@ const REPORT_SCENARIOS_CI = [
 ]
 
 """
-    M_PRIOR_BASE_DATE
-
-Base date for the doubling-count prior centre, McCabe et al.'s first
-report (18 May 2026). Used only as [`m_prior_centre`](@ref)'s default
-base date.
-"""
-const M_PRIOR_BASE_DATE = "2026-05-18"
-
-"""
     M_PRIOR_DOUBLING_DAYS
 
 Median doubling time (days) for the size and growth priors, from the
 BEAST X analysis (mbalaplacide2026, exponential growth model, 11.7 d,
-95% HPD 6.8-17.5). The doubling-count prior centre advances by one
-doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
+95% HPD 6.8-17.5). Sets the median of the growth-rate prior in
+[`exponential_growth_model`](@ref), `r ~ LogNormal(log(log2 /
+M_PRIOR_DOUBLING_DAYS), 0.40)`.
 """
 const M_PRIOR_DOUBLING_DAYS = 11.7
-
-"""
-    M_PRIOR_BASE
-
-Default base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for
-[`m_prior_centre`](@ref), so that
-`m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-
-No fit reads it. The headline fit sets its own `m` centre in
-[`exponential_growth_model`](@ref), where `m` counts transmission
-generations rather than doublings of the cumulative case total. The
-v1.3.0 integral backfill does call [`m_prior_centre`](@ref), but
-`scripts/backfill_forecasts.jl` runs each release inside that release's
-own worktree, so it resolves against v1.3.0's constants (a base of 9
-over a 20-day doubling time, where `2^m` is the cumulative case total and
-McCabe et al.'s Method 2 central scenario of 501 cases gives
-`m ≈ log2(501) ≈ 9`) rather than these.
-"""
-const M_PRIOR_BASE = 3.0
 
 """
     RENEWAL_START_LEAD

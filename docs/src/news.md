@@ -94,10 +94,11 @@ Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a f
   run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
   and `task fit-all` takes every available thread instead of fitting the
   registry one model at a time.
-- `M_PRIOR_BASE` and `m_prior_centre` say that no fit reads them (#800).
-  The v1.3.0 integral backfill runs inside that release's own worktree and
-  resolves them against its own constants, and the headline fit sets its `m`
-  centre in `exponential_growth_model`. No values change.
+- `M_PRIOR_BASE`, `M_PRIOR_BASE_DATE` and `m_prior_centre` are removed (#800).
+  They served the integral model, which the renewal model replaced. The
+  v1.3.0 integral backfill runs inside that release's own worktree and
+  resolves them against its own constants, so nothing here read them. No
+  fitted values change.
 
 ## v2.1.0
 

@@ -947,7 +947,10 @@ end
     g = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))().g
     r = 0.0593
     Rtv = fill(r_to_R0(r, g), n)
-    seed0 = seed_at_renewal_start(2.0^m_prior_centre(obs.cutoff))
+    ## The share below is a ratio of two patches driven by the same seed,
+    ## so it is invariant to the seed level. Take the renewal `m` prior
+    ## median, which is the scale the model itself starts from.
+    seed0 = seed_at_renewal_start(2.0^2.75)
 
     ## Share of infections in patch 2 at ZERO Rt difference, for a given seed
     ## fraction of the primary patch's seed.
