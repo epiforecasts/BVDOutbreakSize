@@ -325,6 +325,16 @@ if !@isdefined(_BVD_SETUP_LOADED)
             maximum(obs.onset_curve_history.report_days),
             _onset_grid_start
         )
+    ## The reporting-delay calendar walk's own grid start
+    ## (`onset_hazard_grid_start`), which the hazard fits from rather than
+    ## `_onset_grid_start`: the two agree only when the surveillance window
+    ## is short relative to the delay support `D`. Callers reconstructing
+    ## the fitted hazard (`reconstruct_onset_hazard`, `forecast_onsets`)
+    ## need this one; callers indexing `alpha` need `_onset_grid_start`.
+    _onset_hazard_grid_start = onset_hazard_grid_start(
+        obs.onset_curve_history.onset_days,
+        obs.onset_curve_history.report_days
+    )
 
     ## Cross-release score tables written by `scripts/score_releases.jl`.
     ## The committed files are header-only until a release carries the asset,

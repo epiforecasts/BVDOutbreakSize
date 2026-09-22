@@ -2785,10 +2785,13 @@ surveillance_pair_fig #hide
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
 #md # ```
 
-## The report-date grid the calendar walk spans, `_onset_grid_start` to
-## `_onset_grid_end`, is a fixed function of the digitised triangle rather
-## than chain contents, so the shared setup builds it once from
-## `obs.onset_curve_history`.
+## The report-date grid the calendar walk spans, `_onset_hazard_grid_start`
+## to `_onset_grid_end`, is a fixed function of the digitised triangle
+## rather than chain contents, so the shared setup builds it once from
+## `obs.onset_curve_history`. `_onset_grid_start` (the ascertainment walk's
+## own, always the earliest scored onset date) is generally earlier; the
+## two coincide only when the surveillance window is short relative to the
+## delay support `D` (see `onset_hazard_grid_start`).
 ## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
 ## (the report-date calendar walk), rebuilt from the non-centred
 ## innovations the chain stores. `reconstruct_onset_hazard` is the package
@@ -2797,7 +2800,8 @@ surveillance_pair_fig #hide
 ## the same reconstruction that could drift apart.
 _onset_hazard = reconstruct_onset_hazard(
     chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end
+    grid_start = _onset_hazard_grid_start, grid_end = _onset_grid_end,
+    alpha_grid_start = _onset_grid_start
 )
 
 ## A representative onset day (the median scored onset date), so the 7-day
@@ -2811,7 +2815,7 @@ _onset_7d_fraction = [
     onset_report_G(
         6, _onset_hazard.logit_h0[i],
         _onset_hazard.γ[i], _onset_u_ref,
-        _onset_grid_start
+        _onset_hazard_grid_start
     )
         for i in eachindex(_onset_hazard.logit_h0)
 ]
@@ -3051,7 +3055,9 @@ _onset_panels = map(enumerate(_onset_report_grid_days)) do (v_idx, R)
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
     nowcast = onset_nowcast_draws(
         us, observed, [R - u for u in us],
-        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
+        _onset_daily_draws, _onset_hazard;
+        grid_start = _onset_hazard_grid_start,
+        alpha_grid_start = _onset_grid_start,
         target_delays = [_onset_last_report_day[u] - u for u in us]
     )
     (;
@@ -3098,7 +3104,7 @@ _onset_by_date_printed = [
             onset_report_F(
             _onset_grid_end - u,
             _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
-            u, _onset_grid_start, _onset_alpha(i, u)
+            u, _onset_hazard_grid_start, _onset_alpha(i, u)
         )
             for i in eachindex(_onset_daily_draws)
     ]
@@ -3417,8 +3423,9 @@ forecast_runs = [
             obs_confirmed_deaths = obs.confirmed_deaths,
             obs_recovered = obs.recovered_cases,
             grid_n = obs.n,
-            onset_grid_start = _onset_grid_start,
-            onset_grid_end = _onset_grid_end
+            onset_grid_start = _onset_hazard_grid_start,
+            onset_grid_end = _onset_grid_end,
+            onset_alpha_grid_start = _onset_grid_start
         ),
     )
         for h in forecast_horizons
@@ -3464,13 +3471,21 @@ frozen_forecast_archive = DataFrame(
 ## The onset grid belongs to the triangle each frozen fit actually saw, not
 ## to the live one: the May cut-offs predate the digitised figure entirely,
 ## so their grid is empty and the onset block is simply absent for them.
+## Returns `(alpha_grid_start, hazard_grid_start, grid_end)`, the two grid
+## starts diverging exactly as they do for the live fit (see
+## `onset_hazard_grid_start`).
 function _frozen_onset_grid(o)
-    isempty(o.onset_curve_history.onset_days) && return (nothing, nothing)
+    isempty(o.onset_curve_history.onset_days) &&
+        return (nothing, nothing, nothing)
     gs = minimum(o.onset_curve_history.onset_days)
-    return (gs, max(maximum(o.onset_curve_history.report_days), gs))
+    ge = max(maximum(o.onset_curve_history.report_days), gs)
+    hgs = onset_hazard_grid_start(
+        o.onset_curve_history.onset_days, o.onset_curve_history.report_days
+    )
+    return (gs, hgs, ge)
 end
 for f in frozen_forecast_fits
-    _fgs, _fge = _frozen_onset_grid(f.o)
+    _fgs, _fhgs, _fge = _frozen_onset_grid(f.o)
     runs = [
         (
             h,
@@ -3482,7 +3497,8 @@ for f in frozen_forecast_fits
                 obs_confirmed_deaths = f.o.confirmed_deaths,
                 obs_recovered = f.o.recovered_cases,
                 grid_n = f.o.n,
-                onset_grid_start = _fgs, onset_grid_end = _fge
+                onset_grid_start = _fhgs, onset_grid_end = _fge,
+                onset_alpha_grid_start = _fgs
             ),
         )
             for h in forecast_horizons
@@ -3699,8 +3715,9 @@ for f in stream_fits, (stream, label, obs_value) in f.streams,
         f.chn, stream; horizon = h,
         obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
         rt_start = f.rt_start, rt_walk_start = f.rt_walk_start,
-        onset_grid_start = _onset_grid_start,
-        onset_grid_end = _onset_grid_end
+        onset_grid_start = _onset_hazard_grid_start,
+        onset_grid_end = _onset_grid_end,
+        onset_alpha_grid_start = _onset_grid_start
     )
     for (d, i) in enumerate(1:stream_thin:length(_vals))
         push!(

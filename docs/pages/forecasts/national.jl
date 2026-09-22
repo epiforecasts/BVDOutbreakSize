@@ -133,11 +133,13 @@ forecast_flows_fig #hide
 #md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
 #md # ```
 
-## `_onset_grid_start`/`_onset_grid_end` are the triangle's own grid, built
-## from the observations in the shared setup.
+## `_onset_hazard_grid_start`/`_onset_grid_end` are the calendar walk's own
+## grid, and `_onset_grid_start` the ascertainment walk's, built from the
+## observations in the shared setup (see `onset_hazard_grid_start`).
 onset_forecast = forecast_onsets(
     chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end,
+    grid_start = _onset_hazard_grid_start, grid_end = _onset_grid_end,
+    alpha_grid_start = _onset_grid_start,
     n = obs.n, horizon = 7,
     obs_value = something(obs.onset_curve_history.last_total, 0)
 );

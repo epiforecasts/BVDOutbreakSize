@@ -274,3 +274,34 @@ function load_onset_curve(
         total_days, total_counts, last_total = total_counts[end],
     )
 end
+
+"""
+    onset_hazard_grid_start(onset_days, report_days; D = ONSET_REPORT_MAX_DELAY)
+
+Report-date grid day the reporting-delay calendar walk `γ`
+([`onset_report_hazard_model`](@ref)) starts from: bounded below by the
+earliest scored onset date (the walk never predates it) but otherwise
+pulled forward to one delay support's width before the earliest report day,
+`max(minimum(onset_days), minimum(report_days) - D + 1, 1)`. A knot further
+back than that would carry weekly steps over onset dates no scored cell can
+reach, widening the walk for no identifying cells. Returns `1` for an empty
+`onset_days`.
+
+[`onset_reporting_model`](@ref) uses this internally to build its own
+`γ`. Every caller that reconstructs the fitted hazard from outside the
+model (`reconstruct_onset_hazard`, `forecast_onsets`) must use the exact
+same rule, or its rebuilt `γ` will disagree in length with the chain's own
+non-centred walk innovations. `alpha`'s own grid
+([`onset_ascertainment_model`](@ref)) is unaffected and always starts at
+`minimum(onset_days)`, so it is not this function's concern. Pure,
+top-level.
+"""
+function onset_hazard_grid_start(
+        onset_days::AbstractVector{<:Integer},
+        report_days::AbstractVector{<:Integer};
+        D::Integer = ONSET_REPORT_MAX_DELAY
+    )
+    isempty(onset_days) && return 1
+    u_lo = minimum(onset_days)
+    return max(u_lo, minimum(report_days) - Int(D) + 1, 1)
+end

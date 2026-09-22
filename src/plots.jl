@@ -2204,7 +2204,8 @@ function reconstruct_rt(
 end
 
 """
-    reconstruct_onset_hazard(chn; grid_start, grid_end, week = 7)
+    reconstruct_onset_hazard(chn; grid_start, grid_end,
+        alpha_grid_start = grid_start, week = 7)
 
 Reconstruct each posterior draw's symptom-onset reporting-delay hazard from
 the non-centred components the chain stores, returning `(; logit_h0, γ,
@@ -2217,10 +2218,14 @@ daily grid `[grid_start, grid_end]`. `alpha` is read off the chain's
 `onset_ascertainment` deterministic rather than rebuilt, since it depends on
 the confirmed pipeline's anchor series, which is not itself stored.
 
-`grid_start` and `grid_end` are properties of the digitised triangle rather
-than of the chain, so the caller supplies them. A grid whose knot count
-disagrees with the stored innovation length raises rather than silently
-building a walk of the wrong length.
+`grid_start` is `γ`'s own origin ([`onset_hazard_grid_start`](@ref)) and
+`alpha_grid_start` is `alpha`'s (always `minimum(onset_days)`); they default
+to the same value, correct only when the two coincide (a short surveillance
+window relative to the delay support `D`). Both are properties of the
+digitised triangle rather than of the chain, so the caller supplies them. A
+grid whose knot count, or whose span, disagrees with what the chain stores
+raises rather than silently building a walk of the wrong length or reading
+`alpha` at the wrong offset.
 
 Shared by the report's reporting-delay figures and by
 [`forecast_onsets`](@ref), so the fitted hazard the analysis plots and the
@@ -2228,7 +2233,8 @@ one the forecast projects forward are the same object.
 """
 function reconstruct_onset_hazard(
         chn; grid_start::Integer,
-        grid_end::Integer, week::Integer = 7
+        grid_end::Integer, alpha_grid_start::Integer = grid_start,
+        week::Integer = 7
     )
     η0 = _draws(chn, Symbol("onset_report_state.η0"))
     σ_h0 = _draws(chn, Symbol("onset_report_state.σ_h0"))
@@ -2246,21 +2252,21 @@ function reconstruct_onset_hazard(
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
     days = knot_days(nt; week, start = 1)
     nb = length(days)
+    nt_alpha = max(Int(grid_end) - Int(alpha_grid_start) + 1, 1)
     if !isempty(zγ) && length(zγ[1]) != max(nb - 1, 1)
         error(
             "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
                 "gives $(max(nb - 1, 1)) calendar-walk steps but the chain " *
-                "has $(length(zγ[1])); pass the same grid the fit used " *
-                "(minimum onset day to maximum report day of the scored " *
-                "cells)."
+                "has $(length(zγ[1])); pass the hazard's own grid start " *
+                "(`onset_hazard_grid_start`), not the earliest onset day."
         )
     end
-    if !isempty(alpha) && length(alpha[1]) != nt
+    if !isempty(alpha) && length(alpha[1]) != nt_alpha
         error(
-            "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
-                "gives $nt onset dates but the chain's `onset_ascertainment` " *
-                "has length $(length(alpha[1])); pass the same grid the fit " *
-                "used."
+            "reconstruct_onset_hazard: the grid [$alpha_grid_start, " *
+                "$grid_end] gives $nt_alpha onset dates but the chain's " *
+                "`onset_ascertainment` has length $(length(alpha[1])); " *
+                "pass `alpha_grid_start = minimum(onset_days)`."
         )
     end
 
@@ -2277,7 +2283,8 @@ end
 
 """
     onset_nowcast_draws(days, observed, delays, onsets, hazard;
-                        grid_start, target_delays)
+                        grid_start, alpha_grid_start = grid_start,
+                        target_delays)
 
 [`onset_nowcast`](@ref) per posterior draw, one `ndraws`-long vector per
 onset day in `days`. `observed[k]` is the count a digitised figure prints
@@ -2290,10 +2297,12 @@ the prediction will be compared against to keep the two like for like.
 
 `onsets` holds each draw's daily onsets indexed by grid day, the `diff` of
 the chain's `cumulative_onsets`. `hazard` is
-[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`, with `alpha`
-indexed from `grid_start` and held flat outside the fitted grid. The two are
-paired draw by draw and must come from one fit. Summarised by
-[`plot_onset_nowcast_grid`](@ref).
+[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`. `grid_start`
+is `γ`'s own origin ([`onset_hazard_grid_start`](@ref)); `alpha` is indexed
+from `alpha_grid_start` (always `minimum(onset_days)`, defaults to
+`grid_start`, correct only when the two coincide), and both are held flat
+outside their fitted grid. `onsets` and `hazard` are paired draw by draw and
+must come from one fit. Summarised by [`plot_onset_nowcast_grid`](@ref).
 """
 function onset_nowcast_draws(
         days::AbstractVector{<:Integer},
@@ -2301,6 +2310,7 @@ function onset_nowcast_draws(
         delays::AbstractVector{<:Integer},
         onsets::AbstractVector{<:AbstractVector{<:Real}},
         hazard::NamedTuple; grid_start::Integer,
+        alpha_grid_start::Integer = grid_start,
         target_delays::Union{Nothing, AbstractVector{<:Integer}} = nothing
     )
     n = length(days)
@@ -2343,7 +2353,7 @@ function onset_nowcast_draws(
         out[k] = [
             begin
                 a = hazard.alpha[i]
-                α = a[clamp(u - Int(grid_start) + 1, 1, length(a))]
+                α = a[clamp(u - Int(alpha_grid_start) + 1, 1, length(a))]
                 onset_nowcast(
                     y, onsets[i][u], δ, hazard.logit_h0[i],
                     hazard.γ[i], u, grid_start, α; until

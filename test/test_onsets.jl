@@ -1171,6 +1171,48 @@ end
     )
 end
 
+@testitem "reconstruct_onset_hazard and forecast_onsets handle a narrowed hazard grid" begin
+    ## Report days starting more than D days after the first onset day, so
+    ## the hazard's own grid start (`onset_hazard_grid_start`) diverges from
+    ## `minimum(onset_days)`, the grid `alpha` is indexed from. Before
+    ## `reconstruct_onset_hazard`/`forecast_onsets` took a separate
+    ## `alpha_grid_start`, calling either with one shared grid either raised
+    ## (a `γ`/`alpha` length mismatch) or silently misindexed `alpha`.
+    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
+        forecast_onsets, onset_hazard_grid_start, ONSET_REPORT_MAX_DELAY
+    using Turing: Prior, sample
+
+    oc = (;
+        onset_days = [1, 2, 3, 4, 1, 2, 3, 4, 5],
+        report_days = [50, 50, 50, 50, 55, 55, 55, 55, 55],
+        prev_report_days = [0, 0, 0, 0, 50, 50, 50, 50, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 80
+    D = ONSET_REPORT_MAX_DELAY
+    alpha_grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    grid_start = onset_hazard_grid_start(oc.onset_days, oc.report_days; D)
+    ## The fixture actually exercises the divergence this test is for.
+    @test grid_start > alpha_grid_start
+
+    chn = sample(
+        onsets_only_model(n; onset_curve_history = oc, breakpoint = 30),
+        Prior(), 5; progress = false
+    )
+
+    hz = reconstruct_onset_hazard(chn; grid_start, grid_end, alpha_grid_start)
+    @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
+    @test all(length(a) == grid_end - alpha_grid_start + 1 for a in hz.alpha)
+
+    fc = forecast_onsets(
+        chn; grid_start, grid_end, alpha_grid_start, n,
+        horizon = 7, breakpoint = 30
+    )
+    @test all(isfinite, fc.onset_reports_new)
+    @test all(fc.onset_reports_new .>= 0)
+end
+
 @testitem "forecast_onsets separates not-reported from not-yet-happened" begin
     using BVDOutbreakSize: onsets_only_model, forecast_onsets
     using Turing: Prior, sample

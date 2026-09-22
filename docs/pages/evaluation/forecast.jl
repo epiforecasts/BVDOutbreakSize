@@ -55,6 +55,14 @@ _val_grid_end = isnothing(_val_grid_start) ? nothing :
         maximum(frozen_lastweek.o.onset_curve_history.report_days),
         _val_grid_start
     )
+## The reporting-delay calendar walk's own grid start (see
+## `onset_hazard_grid_start`), which may run later than `_val_grid_start`;
+## `nothing` when the frozen fit's own triangle is empty, same as above.
+_val_hazard_grid_start = isnothing(_val_grid_start) ? nothing :
+    onset_hazard_grid_start(
+        _val_onset_days,
+        frozen_lastweek.o.onset_curve_history.report_days
+    )
 validation_forecast = forecast_reported(
     frozen_lastweek.chn;
     horizon = 7,
@@ -64,7 +72,8 @@ validation_forecast = forecast_reported(
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
     obs_recovered = frozen_lastweek.o.recovered_cases,
     grid_n = frozen_lastweek.o.n,
-    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end
+    onset_grid_start = _val_hazard_grid_start, onset_grid_end = _val_grid_end,
+    onset_alpha_grid_start = _val_grid_start
 );
 
 ## Each frozen individual (single-stream) fit's own one-week-ahead new-count

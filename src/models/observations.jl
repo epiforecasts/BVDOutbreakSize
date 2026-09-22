@@ -3688,12 +3688,12 @@ sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
-The calendar walk's own grid starts no earlier than
-`max(minimum(onset_days), minimum(report_days) - D + 1)`: a knot further
-back than one delay support's width before the earliest report day would
-carry weekly steps over onset dates no scored cell can reach, widening the
-walk for no identifying cells. The delay-CDF table and the ascertainment
-walk still span the full onset-date grid from `minimum(onset_days)`, since
+The calendar walk's own grid starts at
+[`onset_hazard_grid_start`](@ref), no earlier than one delay support's
+width before the earliest report day: a knot further back would carry
+weekly steps over onset dates no scored cell can reach, widening the walk
+for no identifying cells. The delay-CDF table and the ascertainment walk
+still span the full onset-date grid from `minimum(onset_days)`, since
 [`onset_report_cdf_table`](@ref) clamps the calendar index at both ends.
 
 Returns `(; increments, modelled, unscanned, scan_level, logit_h0, γ,
@@ -3732,12 +3732,10 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## span `[u_lo, grid_end]`.
     u_lo = m > 0 ? minimum(onset_days) : 1
     grid_end = m > 0 ? max(maximum(report_days), u_lo) : 1
-    ## Calendar-walk origin: bounded below by `u_lo` (the walk never
-    ## predates the earliest scored onset date) but otherwise pulled
-    ## forward to one delay support's width before the earliest report day,
-    ## so `γ` does not carry knots over onset dates no scored cell reaches.
-    hazard_start = m > 0 ?
-        max(u_lo, minimum(report_days) - Int(D) + 1, 1) : u_lo
+    ## Calendar-walk origin, shared with every external reconstruction of
+    ## the fitted hazard (see [`onset_hazard_grid_start`](@ref)) so a
+    ## caller outside the model cannot drift from what was actually fitted.
+    hazard_start = onset_hazard_grid_start(onset_days, report_days; D)
     ## Unprefixed (`false`): the hazard model has no `:=` deterministics to
     ## collide with, and hoisting its sampled variables into this frame
     ## surfaces them as a flat `onset_report_state.η0` at the composer level

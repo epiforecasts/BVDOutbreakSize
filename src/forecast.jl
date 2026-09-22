@@ -206,10 +206,14 @@ row per draw and columns:
 - the [`forecast_onsets`](@ref) columns (`onsets_to_date`,
   `onsets_unreported`, `onset_reports_backfill`, `onset_reports_new`, …),
   present when `onset_grid_start` and `onset_grid_end` are supplied and the
-  chain carries the fitted reporting hazard. Of them only `onset_reports_new`
-  is archived and scored, since it is the one the triangle gives an
-  observation for. The model cut-off grid day goes in as `grid_n` rather than
-  `n`, which is already the draw count here.
+  chain carries the fitted reporting hazard. `onset_grid_start` is the
+  hazard's own grid start ([`onset_hazard_grid_start`](@ref));
+  `onset_alpha_grid_start` is the ascertainment walk's, always
+  `minimum(onset_days)`, and defaults to `onset_grid_start` (correct only
+  when the two coincide). Of them only `onset_reports_new` is archived and
+  scored, since it is the one the triangle gives an observation for. The
+  model cut-off grid day goes in as `grid_n` rather than `n`, which is
+  already the draw count here.
 
 Reads `:r`, `:T`, `:expected_reports_T`, `:expected_deaths_T`,
 `:expected_infections_T`, `:R_T`, the per-stream dispersions (`:k_cases`,
@@ -240,6 +244,7 @@ function forecast_reported(
         obs_recovered::Union{Real, Missing} = missing,
         onset_grid_start::Union{Nothing, Integer} = nothing,
         onset_grid_end::Union{Nothing, Integer} = nothing,
+        onset_alpha_grid_start::Union{Nothing, Integer} = onset_grid_start,
         grid_n::Union{Nothing, Integer} = nothing,
         seed::Integer = 20260520
     )
@@ -466,7 +471,9 @@ function forecast_reported(
             _has_key(chn, Symbol("onset_report_state.σ_τ"))
         onset_fc = forecast_onsets(
             chn; grid_start = onset_grid_start,
-            grid_end = onset_grid_end, n = grid_n, horizon = horizon,
+            grid_end = onset_grid_end,
+            alpha_grid_start = onset_alpha_grid_start,
+            n = grid_n, horizon = horizon,
             seed = seed
         )
         ## `onsets_new` is already a column here, built from the same cut-off
@@ -562,16 +569,20 @@ than epidemic uncertainty. The forecast is therefore more useful as a check
 that the fitted delay and ascertainment reproduce the next vintage than as
 a case-count prediction.
 
-`grid_start` and `grid_end` are the fitted triangle's own onset/report-day
-grid (see [`reconstruct_onset_hazard`](@ref)). `n` is the model cut-off
-grid day and `breakpoint` the intervention breakpoint, needed only when
-the chain is a single-stream fit that does not carry `R_T`/`r`
+`grid_start` is the hazard's own grid start
+([`onset_hazard_grid_start`](@ref)) and `grid_end` the fitted triangle's
+last report day (see [`reconstruct_onset_hazard`](@ref)); `alpha_grid_start`
+is the ascertainment walk's own start, always `minimum(onset_days)`, and
+defaults to `grid_start` (correct only when the two coincide). `n` is the
+model cut-off grid day and `breakpoint` the intervention breakpoint, needed
+only when the chain is a single-stream fit that does not carry `R_T`/`r`
 (see [`forecast_stream`](@ref)).
 """
 function forecast_onsets(
         chn;
         grid_start::Integer,
         grid_end::Integer,
+        alpha_grid_start::Integer = grid_start,
         n::Integer,
         horizon::Real = 7,
         obs_value::Union{Real, Missing} = missing,
@@ -591,7 +602,9 @@ function forecast_onsets(
                 "onset stream."
         )
     )
-    hazard = reconstruct_onset_hazard(chn; grid_start, grid_end, week)
+    hazard = reconstruct_onset_hazard(
+        chn; grid_start, grid_end, alpha_grid_start, week
+    )
     ## A chain that does not sample the onset-report overdispersion falls
     ## back to no quadratic term, which is that fit's own likelihood.
     k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
@@ -656,7 +669,7 @@ function forecast_onsets(
         past_then = 0.0
         ge = min(n, length(o))
         for u in 1:ge
-            αu = α[clamp(u - grid_start + 1, 1, na)]
+            αu = α[clamp(u - alpha_grid_start + 1, 1, na)]
             f_now = onset_report_F(n - u, lh0, γ, u, grid_start, αu)
             f_then = onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
             past_now += o[u] * f_now
@@ -665,7 +678,7 @@ function forecast_onsets(
         fut_then = 0.0
         for d in 1:h
             u = n + d
-            αu = α[clamp(u - grid_start + 1, 1, na)]
+            αu = α[clamp(u - alpha_grid_start + 1, 1, na)]
             fut_then += fut[d] *
                 onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
         end
@@ -1326,8 +1339,12 @@ the new reported count the digitised triangle should add over the horizon,
 which [`forecast_onsets`](@ref) builds by differencing two reported totals
 under the fitted delay hazard rather than by growing a cut-off expectation.
 That needs the fitted triangle's own onset/report-day grid, so
-`onset_grid_start` and `onset_grid_end` must be passed for this stream. Of
-[`forecast_onsets`](@ref)'s quantities this returns only the scored one.
+`onset_grid_start` (the hazard's own grid start,
+[`onset_hazard_grid_start`](@ref)) and `onset_grid_end` must be passed for
+this stream; `onset_alpha_grid_start` is the ascertainment walk's own start
+(always `minimum(onset_days)`) and defaults to `onset_grid_start`, correct
+only when the two coincide. Of [`forecast_onsets`](@ref)'s quantities this
+returns only the scored one.
 
 `obs_value` is the stream's observed count at the cut-off, the cumulative
 total for the incident streams or the observed occupancy for
@@ -1364,6 +1381,7 @@ function forecast_stream(
         rt_walk_start::Integer = rt_start,
         onset_grid_start::Union{Nothing, Integer} = nothing,
         onset_grid_end::Union{Nothing, Integer} = nothing,
+        onset_alpha_grid_start::Union{Nothing, Integer} = onset_grid_start,
         seed::Integer = 20260520
     )
     spec = get(_STREAM_SPEC, stream, nothing)
@@ -1395,7 +1413,9 @@ function forecast_stream(
         )
         fc = forecast_onsets(
             chn; grid_start = onset_grid_start,
-            grid_end = onset_grid_end, n = n, horizon = horizon,
+            grid_end = onset_grid_end,
+            alpha_grid_start = onset_alpha_grid_start,
+            n = n, horizon = horizon,
             breakpoint = breakpoint, rt_start = rt_start,
             rt_walk_start = rt_walk_start, seed = seed
         )
