@@ -19,7 +19,7 @@ The limitations are grouped by the data, the model assumptions and design, and t
   We do not model this revision process.
 - *Streams share one case pool.* They are fitted as conditionally independent given latent incidence but observe overlapping people.
   This can understate uncertainty.
-  Whether the streams imply mutually consistent outbreak sizes is not assessed here.
+  Whether they imply mutually consistent outbreak sizes is assessed on the sensitivity page, which fits each count stream on its own and sets the resulting cumulative intervals against the joint.
 
 **Model assumptions and design**
 

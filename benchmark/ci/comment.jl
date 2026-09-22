@@ -38,6 +38,14 @@ const BAND_FLOOR = 0.02
 const BAND_CEILING = 0.2
 const BAND_UNMEASURED = 0.05
 
+## Neutral band for the memory column. Allocation counts are deterministic
+## for a given code path, so a memory ratio carries none of the
+## sample-to-sample spread the timing band is measured from. Colouring it
+## with that band renders a real change of a percent or two as neutral.
+## The tolerance here is only to absorb a backend that accounts
+## allocations differently between runs.
+const MEM_BAND = 0.005
+
 ## Quantile of the per-benchmark sample spread that sets the band.
 const BAND_QUANTILE = 0.9
 
@@ -192,7 +200,7 @@ function render_table(rows, band)
             " | ", fmt_time(r.pr_time),
             " | ", fmt_ratio(r.time_ratio, band),
             " | ", fmt_pct(r.noise),
-            " | ", fmt_ratio(memratio, band), " |"
+            " | ", fmt_ratio(memratio, MEM_BAND), " |"
         )
     end
     return String(take!(io))
@@ -322,6 +330,13 @@ function main(args)
         io,
         "Buckets are **PR time as a % of `main`, so lower is faster** ",
         "(🟢 faster, ⚪ within ", round(Int, 100band), "%, 🔴 slower)."
+    )
+    println(
+        io,
+        "\nThe memory column is bucketed to ",
+        round(100MEM_BAND; digits = 1),
+        "% rather than that band. Allocations are deterministic, so a ",
+        "change there is real rather than sampling noise."
     )
     if isnan(noise)
         println(
