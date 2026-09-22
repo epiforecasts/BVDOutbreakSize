@@ -100,7 +100,10 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     ## any rendered page other than the home page, so render it from the
     ## README here. Its first line is the report title.
     front = front_matter()
-    title = match(r"^# (.*)$"m, front).captures[1]
+    heading = match(r"^# (.*)$"m, front)
+    heading === nothing &&
+        error("front matter has no top-level heading to use as the title")
+    title = heading.captures[1]
 
     content = join(
         (
