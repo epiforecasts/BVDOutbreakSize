@@ -126,7 +126,9 @@ advancing the manifest `as_of_date` past a newly-digitised vintage's
 report date picks that vintage up with no code change.
 
 For each pair of consecutive (post-dedup, in-cutoff) vintages `s-1, s` and
-each onset date `u` both figures print, one increment cell is built:
+each onset date `u` both figures print within `settled_window` days past
+the delay support (`R - u <= ONSET_REPORT_MAX_DELAY + settled_window`), one
+increment cell is built:
 
 ```
 y = confirmed_total(s, u) - confirmed_total(s-1, u)
@@ -205,7 +207,8 @@ rather than throwing.
 """
 function load_onset_curve(
         path::AbstractString;
-        cutoff::Date, seeding::Date
+        cutoff::Date, seeding::Date,
+        settled_window::Integer = ONSET_REPORT_MAX_DELAY
     )
     noop = (;
         onset_days = Int[], report_days = Int[],
@@ -251,7 +254,12 @@ function load_onset_curve(
             cov_lo = max(cov_lo, extents[s - 1][1])
             cov_hi = min(cov_hi, extents[s - 1][2])
         end
-        lo = max(1, cov_lo)
+        ## Increment cells reach `settled_window` days past the delay
+        ## support, where the modelled increment is zero and only the
+        ## noise scale is informed; the first snapshot's levels cover its
+        ## whole extent.
+        lo = s == 1 ? max(1, cov_lo) :
+            max(1, cov_lo, R - ONSET_REPORT_MAX_DELAY - settled_window + 1)
         ## A cell differences this vintage against its predecessor, so the
         ## predecessor must have been able to report that onset date. An
         ## onset day past `Rprev` has a negative previous delay, for which
