@@ -77,9 +77,11 @@ end
     @test all(0 .<= vec(Array(chn[:death_composition])) .<= 1)
     @test all(0 .<= vec(Array(chn[:death_ascertainment])) .<= 1)
     ## `tau_death` here is the realised cut-off death-testing intensity
-    ## (scaling * analysed / suspected), surfaced as a diagnostic. The death
-    ## volume is capped at the suspected-death pool each day, so the realised
-    ## intensity stays in [0, 1] (it can sit at 1 on a backlog day, where the
-    ## uncapped intensity would have exceeded the suspected pool).
-    @test all(0 .<= vec(Array(chn[:tau_death])) .<= 1)
+    ## (scaling * analysed / suspected), surfaced as a diagnostic. It is
+    ## specimens per suspected death rather than a probability, so it is
+    ## bounded below and not above: a laboratory analysing more specimens
+    ## than there are suspected deaths puts it above one. The rows above are
+    ## probabilities and keep their upper bound.
+    @test all(isfinite, vec(Array(chn[:tau_death])))
+    @test all(0 .<= vec(Array(chn[:tau_death])))
 end

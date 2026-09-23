@@ -26,6 +26,12 @@ Changes since v2.1.0.
 
 ### Model
 
+- The death analysed volume is no longer capped at the suspected-death pool (#820).
+`tau_death` becomes an intensity, specimens per suspected death, and may exceed one.
+A suspect yields more than one specimen through repeat exclusion testing, and swabbed community deaths enter the laboratory denominator without being counted as suspects, which is why the case side was never capped either.
+The death-only composer still draws a bounded fraction, since it has no case volume to scale from.
+Fitted values change.
+
 - The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
 It could never have run.
 `confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
@@ -41,6 +47,9 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- Forecasts is split into a National and a Provinces page (#830).
+  The Provinces page shows the province split's credible intervals and,
+  per province, a forecast histogram against its most recent observed week.
 - The report is six pages rather than two, grouped in the navigation as
   Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
   forecast) and Details (#782). Each renders as its own CI job from the same
@@ -83,6 +92,8 @@ This moves the non-BVD death background, so fitted values change.
 - The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block reads the same credible intervals (#832).
 - The summary dashboard no longer shows the modelled against observed reported cases (#832).
   The evaluation pages carry that check.
+- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
+  It links to the home page for installing, running and updating the data rather than repeating it.
 
 ### Infrastructure
 
