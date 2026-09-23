@@ -559,7 +559,8 @@ The first province vintage is the cumulative count to date, so it takes
 `baseline`, the national count before the first replicated increment, as
 well as every national increment up to it. Every province day must be on
 the national grid, and the national replicates must pair one to one with
-the chain draws. Each panel is a daily panel (`cumulative = false`).
+the chain draws, each with one increment per national day. Each panel is
+a daily panel (`cumulative = false`).
 """
 function province_count_panels(
         chn; share_key::Symbol, obs_increments::AbstractMatrix,
@@ -576,6 +577,10 @@ function province_count_panels(
     length(reps) == length(ms) || error(
         "province_count_panels: $(length(reps)) national replicates for " *
             "$(length(ms)) chain draws."
+    )
+    all(r -> length(r) == length(national_days), reps) || error(
+        "province_count_panels: every national replicate must have one " *
+            "increment per national day ($(length(national_days)))."
     )
     idx = [findfirst(==(d), national_days) for d in province_days]
     any(isnothing, idx) && error(

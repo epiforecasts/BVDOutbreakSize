@@ -351,7 +351,7 @@ province_correlation_fig = plot_correlation_heatmap(
 
 province_correlation_fig #hide
 
-# The totals plot takes each posterior predictive draw from the calibration panels above, sums each province's cases and deaths over the spatial vintages, and marks the observed totals with a crosshair.
+# The totals plot takes each posterior predictive draw from the composition calibration panels above, sums each province's cases and deaths over the spatial vintages, and marks the observed totals with a crosshair.
 # The diagonal panels are the predictive spread of each total against the observed value.
 # Within cases, and within deaths, the provinces split a national total that is held at its observed value, so their totals sum to that value in every draw.
 # The off-diagonal panels between two provinces' cases, or two provinces' deaths, therefore trade off by construction.
@@ -430,7 +430,7 @@ evaluation_insample_province_summary = let
             filter(
                 r -> isfinite(r["Bias"]), province_count_calibration_table
             ),
-            " on the count scale"
+            ""
         ),
     ]
     rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
