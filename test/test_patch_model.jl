@@ -562,12 +562,13 @@ end
     using DataFrames: nrow
 
     ## A patch chain must drop into the existing summary machinery, which
-    ## keys off these names. Missing any of them silently breaks analysis.jl,
-    ## so assert on a real chain rather than on the model's return value.
+    ## keys off these names. Missing any of them silently breaks the report
+    ## pages, so assert on a real chain rather than on the model's return
+    ## value.
     chn = patch_chain
 
-    ## The headline quantities analysis.jl summarises, under the same names
-    ## bvd_joint uses.
+    ## The headline quantities the report pages summarise, under the same
+    ## names bvd_joint uses.
     for q in (:C_T, :R_T, :r, :r0, :T, :CFR, :R0, :doubling_time)
         draws = vec(Array(chn[q]))
         @test length(draws) == PATCH_DRAWS
@@ -1087,10 +1088,10 @@ end
     import FlexiChains
 
     ## The patch model is the headline joint, not a side analysis. So a patch
-    ## chain must carry every quantity a single-patch chain does: analysis.jl,
-    ## the forecast machinery and the plots all key off these names, and a
-    ## missing one is a silent failure at report-render time rather than a
-    ## test failure here.
+    ## chain must carry every quantity a single-patch chain does: the report
+    ## pages, the forecast machinery and the plots all key off these names,
+    ## and a missing one is a silent failure at report-render time rather
+    ## than a test failure here.
     ##
     ## `forecast_reported` in particular reads a long list of `expected_*_T`
     ## deterministics off the chain; if any is absent the one-week-ahead

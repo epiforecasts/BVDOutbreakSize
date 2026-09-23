@@ -19,7 +19,7 @@ Pkg.instantiate()
 using Literate
 using BVDOutbreakSize
 
-const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
+const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "estimates/national")))
 PAGE in (
     "methods",
     "estimates/national", "estimates/province", "forecasts/national",

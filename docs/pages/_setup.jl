@@ -1,6 +1,6 @@
-# Shared setup for the analysis and sensitivity report pages. This is plain
-# Julia (not a Literate page): both `analysis.jl` and `sensitivity.jl` include
-# it so each page can render on its own from the same fitted chains. It loads
+# Shared setup for the report pages. This is plain Julia (not a Literate
+# page): every page under `docs/pages/` includes it so each page can render
+# on its own from the same fitted chains. It loads
 # the packages, the observations, the fit registry (`docs/fits/registry.jl`)
 # and every model fit through the content-addressed cache (`fit_or_load`),
 # then unpacks the named chains, cumulative-infection draws and display
