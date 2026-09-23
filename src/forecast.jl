@@ -788,51 +788,99 @@ function _knot_interp(ks, d::Integer, week::Integer)
 end
 
 """
-    forecast_provinces(chn; horizon = 7, n_patches, patch_labels, seed)
-        -> DataFrame
+    PROVINCE_FORECAST_METHOD
 
-Per-province forward projection from a fitted patch chain: each province's
-renewal equation continued `horizon` days past the cut-off, the patches still
-coupled by importation. It uses the fitted chain as it is and needs no refit.
+The `method` [`province_forecast_archive`](@ref) records on each row, and the
+only one the release scoring scores. It names the version of
+[`forecast_provinces`](@ref), so archives of an earlier projection are never
+scored alongside it.
+"""
+const PROVINCE_FORECAST_METHOD = "projection-v2"
+
+## Per-draw lower Cholesky factors of the fitted cross-province correlation
+## (`Ω_L`). A fitted chain stores each draw as a `Cholesky`, whose `L` is the
+## factor the model multiplies its standard-normal innovations by.
+function _cholesky_factors(chn, key::Symbol)
+    return [
+        Matrix(hasproperty(x, :L) ? x.L : x)
+            for x in vec(collect(chn[key]))
+    ]
+end
+
+## Split each draw's national total `N` across the patches the way
+## [`province_composition_model`](@ref) generates a vintage's split:
+## stick-breaking over the patches with [`safe_betabinomial`](@ref) at the
+## conditional share and overdispersion `rho`, the last patch taking the
+## remainder. `shares` are the expected shares, before normalising.
+function _composition_split(rng, N::Integer, shares::AbstractVector, rho)
+    np = length(shares)
+    π = [safe_rate(x) for x in shares]
+    π ./= sum(π)
+    out = zeros(Int, np)
+    remaining = N
+    tail = 1.0
+    for p in 1:(np - 1)
+        p_cond = clamp(π[p] / tail, 0.0, 1.0)
+        out[p] = rand(rng, safe_betabinomial(max(remaining, 0), p_cond, rho))
+        remaining -= out[p]
+        tail = max(tail - π[p], 1.0e-10)
+    end
+    out[np] = max(remaining, 0)
+    return out
+end
+
+"""
+    forecast_provinces(chn, national; horizon = 7, n_patches, patch_labels,
+                       breakpoint = missing, seed) -> DataFrame
+
+Per-province forward projection from a fitted patch chain, continuing the
+patch model's own generative process `horizon` days past the cut-off. It
+uses the fitted chain as it is and needs no refit. `national` is the
+national [`forecast_reported`](@ref) result at the same horizon, one row per
+chain draw, whose confirmed totals the provinces split.
+
 Returns one row per province and draw, with columns `patch` (the patch
 index), `province` (its label in `patch_labels`), `draw`,
 `infections_new` (new latent infections over the horizon) and `rt_forecast`
 (the province's reproduction number at the horizon), plus `confirmed_new`
-and `confirmed_deaths_new` when the chain carries what they need.
+and `confirmed_deaths_new` when the chain carries the matching composition.
 
-For each draw the province reproduction number over the horizon is its
-cut-off value `R_T_patch` moved by two walks, continued as
-[`patch_rt_model`](@ref) defines them.
+For each draw the province reproduction number continues
+[`patch_rt_model`](@ref) from its cut-off value `R_T_patch`, with a knot at
+the cut-off and one every week after it.
 
 - The national log-Rt walk takes fresh weekly innovations at its fitted step
-  size `rt_state.sigma_rw`, shared by every province, as
-  [`forecast_reported`](@ref) continues it.
-- Each province's deviation from it reverts toward zero with the fitted
-  half-life `region_halflife` and takes fresh weekly innovations at its own
-  scale `region_drift_sd`, centred across the provinces so they still sum to
-  zero. The innovations are drawn independently, without the fitted
-  cross-province correlation.
+  size `rt_state.sigma_rw`, one path shared by every province, as
+  [`forecast_reported`](@ref) continues it. The fitted intervention effect
+  follows its ramp past the cut-off when `breakpoint` is given.
+- Each province's deviation reverts toward zero with the fitted half-life
+  `region_halflife`. Its weekly innovations are the fitted scales
+  `region_drift_sd` times the fitted correlation's Cholesky factor `Ω_L`
+  times standard normals, centred across the provinces, as the model draws
+  them.
 
-The cut-off is treated as a knot. The last generation-interval's worth of
-each province's fitted daily infections (`infections_patch`) seeds
-[`patch_infections`](@ref), which renews the provinces over the horizon with
-the generation interval, the importation kernel and the importation
-intensity at the cut-off (`importation_epsilon_patch`, zero when the chain
-was fitted uncoupled).
+The last generation interval's worth of each province's fitted daily
+infections (`infections_patch`) seeds [`patch_infections`](@ref), which
+renews the provinces over the horizon with the generation interval, the
+importation kernel and each origin's fitted importation intensity
+(`importation_epsilon_patch`, moved along the same ramp by
+`importation_epsilon_effect`, and zero when the chain was fitted uncoupled).
 
-The confirmed streams start from the national daily rate at the cut-off (the
-last increment of `cumulative_confirmed` or `cumulative_confirmed_deaths`)
-times the province's modelled share at the most recent spatial vintage
-(`province_shares`, and `province_death_shares` for the deaths where the
-chain carries it). Each day then grows with the
-province's own projected infections, `I_{p,n+d} / I_{p,n}`, with no delay
-between infection and report, as the national forecast grows its streams.
-Each day is replicated through the stream's fitted dispersion and the days
-are summed. The provinces are projected on their own, so they need not sum
-to the national forecast draw by draw.
+The confirmed streams follow the model's factorisation of the province
+data into a national total and its split. Each province's infections, fitted
+and projected, pass through the fitted incubation period, then the fitted
+onset-to-confirmation kernel (`onset_to_confirmation_pmf`) for cases or
+onset-to-death-confirmation kernel (`onset_to_death_confirmation_pmf`) for
+deaths. The expected counts over the forecast window, weighted by relative
+ascertainment (`province_ascertainment`, and for deaths
+`province_death_ascertainment` times `province_cfr_relative`), are the
+composition's expected shares. Each draw's national total from `national`
+is then split across the provinces by the composition's own stick-breaking
+beta-binomial at its fitted overdispersion, so the provinces sum to the
+national forecast draw by draw.
 """
 function forecast_provinces(
-        chn;
+        chn, national::DataFrame;
         horizon::Integer = 7,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
@@ -840,6 +888,9 @@ function forecast_provinces(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)),
+        breakpoint::Union{Missing, Real} = missing,
+        ramp::Real = RT_INTERVENTION_RAMP,
         week::Integer = 7,
         seed::Integer = 20260521
     )
@@ -848,37 +899,57 @@ function forecast_provinces(
     R_T = _draw_vectors(chn, :R_T_patch)
     δ_T = _draw_vectors(chn, :delta_patch)
     σ_δ = _draw_vectors(chn, :region_drift_sd)
+    Ω_L = _cholesky_factors(chn, :Ω_L)
     halflife = _draws(chn, :region_halflife)
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
+    effect = _draws(chn, Symbol("rt_state.intervention_effect"))
     α = _draws(chn, Symbol("gi_state.α"))
     θ = _draws(chn, Symbol("gi_state.θ"))
+    inc_mean = _draws(chn, Symbol("inc_state.delay_mean"))
+    inc_sd = _draws(chn, Symbol("inc_state.delay_sd"))
     I_flat = _draw_vectors(chn, :infections_patch)
     ε = _has_key(chn, :importation_epsilon_patch) ?
         _draw_vectors(chn, :importation_epsilon_patch) : nothing
+    β_ε = isnothing(ε) ? nothing : _draws(chn, :importation_epsilon_effect)
     nd = length(halflife)
+    nrow(national) == nd || throw(
+        ArgumentError(
+            "national forecast has $(nrow(national)) draws for a chain " *
+                "of $nd; the provinces split its draws one for one."
+        )
+    )
     n = length(first(I_flat)) ÷ np
+    ## The intervention ramp over the cut-off and horizon, relative to its
+    ## value at the cut-off, which the fitted `R_T_patch` and intensities
+    ## already carry. All zero without a breakpoint.
+    ramp_shift = let r = sigmoid_ramp(n + h, breakpoint; ramp)
+        r[(n + 1):(n + h)] .- r[n]
+    end
 
-    ## A confirmed stream is projected when the chain carries its national
-    ## cut-off rate, its dispersion and its provincial shares. A chain with
-    ## no death composition splits the deaths by the case shares.
-    function stream(cum_key, share_keys, k_keys)
-        i = findfirst(k -> _has_key(chn, k), share_keys)
-        isnothing(i) && return nothing
-        share_key = share_keys[i]
-        daily = _daily_at_cutoff(chn, cum_key)
-        isnothing(daily) && return nothing
-        k = _resolve_draws(chn, k_keys)
-        isnothing(k) && return nothing
-        return (; daily, k, share = _per_patch_last_share(chn, share_key, np))
+    ## A confirmed stream is projected when the chain carries the fitted
+    ## composition that generates it and the national forecast its total.
+    function stream(col, kernel_key, weight_keys, rho_key)
+        col in propertynames(national) || return nothing
+        all(k -> _has_key(chn, k), (kernel_key, rho_key, weight_keys...)) ||
+            return nothing
+        weights = [_draw_vectors(chn, k) for k in weight_keys]
+        return (;
+            total = national[!, col],
+            kernel = _draw_vectors(chn, kernel_key),
+            weight = [
+                reduce(.*, (w[i][1:np] for w in weights)) for i in 1:nd
+            ],
+            rho = _draws(chn, rho_key),
+        )
     end
     conf = stream(
-        :cumulative_confirmed, (:province_shares,),
-        _STREAM_SPEC[:confirmed_cases].dispersion
+        :confirmed_new, :onset_to_confirmation_pmf,
+        (:province_ascertainment,), :province_composition_rho
     )
     conf_deaths = stream(
-        :cumulative_confirmed_deaths,
-        (:province_death_shares, :province_shares),
-        _STREAM_SPEC[:confirmed_deaths].dispersion
+        :confirmed_deaths_new, :onset_to_death_confirmation_pmf,
+        (:province_death_ascertainment, :province_cfr_relative),
+        :province_death_composition_rho
     )
 
     rng = MersenneTwister(seed)
@@ -895,12 +966,15 @@ function forecast_provinces(
         ## National walk: one path shared by every province.
         nat_innov = sigma[i] .* randn(rng, nknots)
         nat_cum = cumsum(nat_innov)
-        ## Provincial deviations: mean-reverting, centred at every knot.
+        ## Provincial deviations: mean-reverting, with correlated innovations
+        ## centred at every knot, as `patch_rt_model` draws them.
         φ = exp2(-week / halflife[i])
+        Lc = Ω_L[i]
         δ = zeros(np, nknots + 1)
         δ[:, 1] = δ_T[i][1:np]
         for kk in 2:(nknots + 1)
-            innov = σ_δ[i][1:np] .* randn(rng, np)
+            z = randn(rng, np)
+            innov = σ_δ[i][1:np] .* (Lc[1:np, 1:np] * z)
             innov .-= sum(innov) / np
             δ[:, kk] = φ .* δ[:, kk - 1] .+ innov
         end
@@ -908,32 +982,58 @@ function forecast_provinces(
         for p in 1:np, d in 1:h
 
             shift = _walk_log_rt(0.0, nat_innov, nat_cum, d, week) +
+                effect[i] * ramp_shift[d] +
                 _knot_interp(view(δ, p, :), d, week) - δ[p, 1]
             Rt[p, L + d] = R_T[i][p] * exp(shift)
         end
         seeds = [I_flat[i][(t - 1) * np + p] for p in 1:np, t in (n - L + 1):n]
-        eps = isnothing(ε) ? zeros(np, L + h) :
-            repeat(ε[i][1:np], 1, L + h)
+        eps = zeros(np, L + h)
+        if !isnothing(ε)
+            for q in 1:np
+                eps[q, 1:L] .= ε[i][q]
+                for d in 1:h
+                    eps[q, L + d] = min(
+                        ε[i][q] * exp(β_ε[i] * ramp_shift[d]), 1.0
+                    )
+                end
+            end
+        end
         I = patch_infections(Rt, g, seeds, importation_kernel, eps).infections
         for p in 1:np
-            I_T = I[p, L]
-            growth = [I_T > 0 ? I[p, L + d] / I_T : 0.0 for d in 1:h]
             push!(
                 out, (
                     p, String(patch_labels[p]), i,
                     sum(@view I[p, (L + 1):(L + h)]), Rt[p, L + h],
                 )
             )
-            for (s, dest) in ((conf, conf_new), (conf_deaths, conf_deaths_new))
-                isnothing(s) && continue
-                push!(
-                    dest,
-                    _nb_new(
-                        rng, s.k[i],
-                        s.daily[i] * s.share[p][i] .* growth
-                    )
+        end
+        (isnothing(conf) && isnothing(conf_deaths)) && continue
+        ## Each province's onsets over the whole grid, fitted then projected,
+        ## through the fitted incubation period.
+        inc_pmf = discretise_censored(
+            lognormal_meansd(inc_mean[i], inc_sd[i]), incubation_nmax
+        )
+        onsets = [
+            convolve_delay(
+                vcat(
+                    [I_flat[i][(t - 1) * np + p] for t in 1:n],
+                    I[p, (L + 1):(L + h)]
+                ), inc_pmf
+            ) for p in 1:np
+        ]
+        for (s, dest) in ((conf, conf_new), (conf_deaths, conf_deaths_new))
+            isnothing(s) && continue
+            expected = [
+                s.weight[i][p] * bin_increments(
+                    convolve_delay(onsets[p], s.kernel[i]), [n, n + h]
+                )[2] for p in 1:np
+            ]
+            append!(
+                dest,
+                _composition_split(
+                    rng, round(Int, s.total[i]), expected, s.rho[i]
                 )
-            end
+            )
         end
     end
     isnothing(conf) || (out.confirmed_new = conf_new)
@@ -950,9 +1050,10 @@ patch chain the forecasts were made from, `fcs` an iterable of
 `(horizon, fc)` pairs and `made_date` the cut-off `Date`. Returns one row
 per `(province, stream, horizon, draw)` with columns `made_date`,
 `horizon`, `target_date`, `province`, `stream`, `draw`, `value` and
-`method`. `method` is `"projection"`, so scoring can tell these rows from
-older archives, which split the national forecast by share and carry no
-`method` column.
+`method`. `method` is `"projection-v2"`, the projection that continues the
+fitted generative process, so scoring can tell these rows from earlier
+archives: the first projection wrote `"projection"`, and the share split
+before it wrote no `method` column.
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`
@@ -971,7 +1072,8 @@ function province_forecast_archive(
         chn, fcs; made_date::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_NAMES,
-        thin::Integer = 1
+        thin::Integer = 1,
+        breakpoint::Union{Missing, Real} = missing
     )
     np = min(n_patches, length(patch_labels))
     out = DataFrame(
@@ -983,14 +1085,14 @@ function province_forecast_archive(
         h = Int(horizon)
         target = made_date + Day(h)
         for (label, province, vals) in _province_forecast_draws(
-                chn, fc, np, patch_labels; horizon = h
+                chn, fc, np, patch_labels; horizon = h, breakpoint
             )
             for (d, i) in enumerate(1:thin:length(vals))
                 push!(
                     out,
                     (
                         made_date, h, target, province, label, d,
-                        Float64(vals[i]), "projection",
+                        Float64(vals[i]), PROVINCE_FORECAST_METHOD,
                     )
                 )
             end

@@ -1077,20 +1077,21 @@ const _PROVINCE_FORECAST_STREAMS = (
 )
 
 ## A [`forecast_provinces`](@ref) frame for the province summaries. A frame
-## that already is one passes through. Anything else, such as a national
-## [`forecast_reported`](@ref) result from an older call site, is replaced by
-## the projection from `chn` at `horizon`, so every province summary reads
-## one method.
+## that already is one passes through. A national [`forecast_reported`](@ref)
+## result is the national forecast the projection splits, so it is projected
+## from `chn` at `horizon` and every province summary reads one method.
 function _as_province_projection(
         chn, fc, np::Integer, patch_labels::AbstractVector;
-        horizon::Integer = 7
+        horizon::Integer = 7, breakpoint::Union{Missing, Real} = missing
     )
     :patch in propertynames(fc) && return fc
     _has_key(chn, :R_T_patch) || error(
         "chain carries no `R_T_patch`; it was not sampled from `bvd_joint` " *
             "with more than one patch, so it cannot be projected by province."
     )
-    return forecast_provinces(chn; horizon, n_patches = np, patch_labels)
+    return forecast_provinces(
+        chn, fc; horizon, n_patches = np, patch_labels, breakpoint
+    )
 end
 
 ## Per-province forecast draws: one `(stream_label, province, draws)` entry
@@ -1100,9 +1101,11 @@ end
 function _province_forecast_draws(
         chn, fc, np::Integer,
         patch_labels::AbstractVector;
-        horizon::Integer = 7
+        horizon::Integer = 7, breakpoint::Union{Missing, Real} = missing
     )
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(
+        chn, fc, np, patch_labels; horizon, breakpoint
+    )
     return _province_projection_draws(proj, np, patch_labels)
 end
 
@@ -1159,10 +1162,13 @@ function province_forecast_table(
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         horizon::Integer = 7,
+        breakpoint::Union{Missing, Real} = missing,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(
+        chn, fc, np, patch_labels; horizon, breakpoint
+    )
     entries = [
         (province, "New $(label) by T+$(horizon)", draws, digits)
             for (label, province, draws) in _province_projection_draws(
@@ -1226,10 +1232,13 @@ function province_forecast_vs_truth(
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         horizon::Integer = 7,
+        breakpoint::Union{Missing, Real} = missing,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(
+        chn, fc, np, patch_labels; horizon, breakpoint
+    )
     cols = propertynames(proj)
     rows = NamedTuple[]
     function add!(stream, p, draws, truth)
