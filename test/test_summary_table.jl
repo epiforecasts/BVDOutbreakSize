@@ -151,3 +151,48 @@ end
     @test row["Lower 90%"] > row["Upper 90%"] > 0
     @test row["Lower 30%"] > row["Upper 30%"] > 0
 end
+
+@testitem "patch_headline gives each province its credible intervals" begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: patch_headline, PROVINCE_LABELS
+
+    rng = MersenneTwister(7)
+    nd = 400
+    np = 3
+    draws(centre, sd) = [centre .+ sd .* randn(rng, np) for _ in 1:nd]
+    base = (;
+        C_T_patch = draws([900.0, 300.0, 80.0], 20.0),
+        R_T_patch = draws([1.2, 0.9, 0.7], 0.05),
+    )
+    md = patch_headline(base, np)
+    lines = filter(startswith("- "), split(md, "\n"))
+    ## One bullet per province, in patch order.
+    @test length(lines) == np
+    for p in 1:np
+        @test startswith(lines[p], "- **$(PROVINCE_LABELS[p]):**")
+    end
+    ## Equal-tailed intervals at every level, not a point estimate.
+    @test count("30% ", md) == 2 * np
+    @test count("90% ", md) == 2 * np
+    @test !occursin("median", md)
+    ## Infections are whole numbers.
+    @test !occursin(r"\d\.\d+ infections", md)
+    @test !occursin("case-fatality", md)
+    @test !occursin("ascertainment", md)
+
+    ## The optional quantities appear only when the chain carries them.
+    full = (;
+        base...,
+        CFR_patch = draws([0.4, 0.3, 0.2], 0.01),
+        province_ascertainment = draws([1.4, 0.8, 0.6], 0.05),
+    )
+    fmd = patch_headline(full, np)
+    @test count("case-fatality ratio", fmd) == np
+    @test count("ascertainment", fmd) == np
+    @test count("30% ", fmd) == 4 * np
+    ## The case-fatality ratio is written as a percentage.
+    @test occursin(r"90% 3\d\.\d–\d\d\.\d%", fmd)
+
+    ## A chain without the per-patch deterministics says so.
+    @test_throws ErrorException patch_headline((; base.C_T_patch), np)
+end
