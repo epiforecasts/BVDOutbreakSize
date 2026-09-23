@@ -1945,7 +1945,8 @@ end
     using DataFrames: DataFrame
     using CairoMakie: Makie as Mk
     using Statistics: quantile
-    using BVDOutbreakSize: plot_province_forecast_detail, PROVINCE_LABELS
+    using BVDOutbreakSize: plot_province_forecast_detail, plot_forecast,
+        PROVINCE_LABELS
 
     nd = 200
     shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
@@ -1967,6 +1968,12 @@ end
     ## 90% band is 0.2 times the national band for the deaths.
     band = only(p for p in axes[2].scene.plots if p isa Mk.VSpan)
     @test band[1][][1] ≈ 0.2 * quantile(v ./ 5, 0.05)
+    ## Each panel takes the colour of the matching national panel.
+    national = [
+        x for x in plot_forecast(fc).content if x isa Mk.Axis
+    ]
+    hist_colour(ax) = only(p for p in ax.scene.plots if p isa Mk.Hist).color[]
+    @test hist_colour.(axes) == hist_colour.(national)
     ## No observed week, no reference rule.
     @test all(ax -> !any(p -> p isa Mk.VLines, ax.scene.plots), axes)
 
