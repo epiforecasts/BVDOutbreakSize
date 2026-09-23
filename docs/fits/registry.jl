@@ -157,11 +157,12 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
 ## Sampler settings for the headline and its spatial control.
 ##
-## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
-## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
+## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT`,
+## `BVD_JOINT_MAX_DEPTH` and `BVD_JOINT_TERM_BUFFER` override all five without
+## editing this file.
 joint_target_accept() = parse(
     Float64,
-    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.70")
 )
 joint_samples(default::Integer) = parse(
     Int,
@@ -179,14 +180,25 @@ joint_max_depth() = parse(
     get(ENV, "BVD_JOINT_MAX_DEPTH", "12")
 )
 
+## The terminal step-size adaptation window. An empty value leaves it at the
+## sampler default.
+function joint_term_buffer()
+    v = strip(get(ENV, "BVD_JOINT_TERM_BUFFER", "200"))
+    return isempty(v) ? nothing : parse(Int, v)
+end
+
 ## The fits that splat `joint_sampler_args()`.
 const JOINT_SAMPLER_FITS = ("joint", "sens_no_patches")
 
 ## The sampler budget both halves of the spatial sensitivity splat.
-joint_sampler_args() = (;
-    samples = joint_samples(1000), n_adapts = joint_warmup(500),
-    target_accept = joint_target_accept(), max_depth = joint_max_depth(),
-)
+function joint_sampler_args()
+    args = (;
+        samples = joint_samples(1000), n_adapts = joint_warmup(500),
+        target_accept = joint_target_accept(), max_depth = joint_max_depth(),
+    )
+    term_buffer = joint_term_buffer()
+    return term_buffer === nothing ? args : merge(args, (; term_buffer))
+end
 
 function build_fit_specs(
         obs;
