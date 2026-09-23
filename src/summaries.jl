@@ -551,9 +551,14 @@ function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
 end
 
 ## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
-## 90% e–f`, as the National page's headline writes them.
+## 90% e–f`, from draws or from a `posterior_summary`. The National page's
+## headline writes its intervals with it too.
 function _interval_text(draws; digits::Integer = 2, unit::AbstractString = "")
-    s = posterior_summary(draws)
+    return _interval_text(posterior_summary(draws); digits, unit)
+end
+function _interval_text(
+        s::NamedTuple; digits::Integer = 2, unit::AbstractString = ""
+    )
     fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
     return join(
         (
@@ -607,6 +612,24 @@ function _range_text(
         labels[lo], " to ", _interval90_text(draws[hi]; digits, unit),
         " in ", labels[hi]
     )
+end
+
+## Per-draw imports into the first `np` patches, summed over days. The
+## `importation_patch` deterministic is the `(n_patches x n)` matrix flattened
+## column-major, laid out against the chain's own patch count.
+function _imports_total(chn, np::Integer)
+    np_chain = length(first(_draw_vectors(chn, :C_T_patch)))
+    vs = _draw_vectors(chn, :importation_patch)
+    len = length(first(vs))
+    len % np_chain == 0 || error(
+        "`importation_patch` holds $(len) entries, which is not a whole " *
+            "number of days of $(np_chain) patches."
+    )
+    n = len ÷ np_chain
+    return [
+        sum(v[(t - 1) * np_chain + p] for t in 1:n for p in 1:np)
+            for v in vs
+    ]
 end
 
 """
@@ -678,7 +701,7 @@ function patch_headline(
             _range_text(d.asc, labels) * "."
     )
     if _has_key(chn, :importation_patch)
-        imports = [sum(v) for v in _draw_vectors(chn, :importation_patch)]
+        imports = _imports_total(chn, np)
         push!(
             bullets,
             "- **Importation:** infections imported from another province " *
@@ -698,6 +721,9 @@ case-fatality ratio (`CFR_patch`, as a percentage) and its case
 ascertainment relative to the national average (`province_ascertainment`).
 Every quantity is written as its equal-tailed 30%, 60% and 90% credible
 intervals, as the National page's headline writes them.
+The same intervals for the infections, reproduction number and ascertainment
+are tabulated by [`patch_summary_table`](@ref), and the case-fatality ratio's
+by [`province_cfr_table`](@ref) as a median and 90% interval.
 
 The reproduction number and the relative ascertainment are identified only
 as a product by the case composition, so the two are given together.
