@@ -27,6 +27,70 @@ Changes since v2.1.0.
 
 ### Report
 
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
+  Its summary gives the count-scale coverage overall and per province.
+- The offline `analysis.html` is gone (#839).
+  Each release's `site.zip` now unpacks to `BVDOutbreakSize/<base>/` and carries a `README.txt` on serving it locally.
+- Each province is projected a week ahead by its own renewal equation
+  rather than a fixed share of the national forecast, and only these
+  projections are archived and scored (#836).
+  Both forecast pages open with summary bullets.
+- Forecasts is split into a National and a Provinces page (#830).
+- The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
+  The Provinces page shows the province split's credible intervals and,
+  per province, a forecast histogram against its most recent observed week.
+- The report is six pages rather than two, grouped in the navigation as
+  Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
+  forecast) and Details (#782). Each renders as its own CI job from the same
+  cached fits.
+- The forecasts, the forecast evaluation and the sensitivity analyses each
+  open on a national section and carry a by-province one, so a health-zone
+  stratum has one place to go on each (#782). The forward forecast split by
+  province previously had no heading and sat inside the national results.
+- The in-sample checks are a page of their own: the posterior predictive
+  checks, the stream calibration, the exports, the posterior correlations and
+  the province composition checks (#782). The estimates pages keep the
+  estimates and the prior-versus-posterior plots that qualify them.
+- The McCabe comparison is a table in the methods, one row per component
+  linking to the section that specifies it, rather than bullets in the
+  framing (#782).
+- The summary dashboard is shorter (#782). The fit diagnostics are behind a
+  dropdown, and the per-province infections and parameter panels and the
+  per-stream reproduction number are linked rather than repeated.
+- The API reference is grouped into eleven pages following the order a fit
+  runs in, and says which names are public and which are internal (#782).
+  It was one undifferentiated `@autodocs` dump.
+- The aim and origins and the limitations are pages of their own rather than
+  dropdowns inside the analysis, and a new page carries the authors, the
+  funding and the citation (#782).
+- The methods are a page of their own under Details (#804).
+  The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
+  The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
+  The offline `analysis.html` carries both the methods and the national results.
+- The National page opens with its own title and summary rather than a copy of the README front matter.
+  It keeps the "Last updated" and "Data as of" dates at the top.
+- The Provinces page opens the same way as the National page, with the "Last updated" and "Data as of" dates, and its links no longer call the National page "analysis".
+  The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
+  The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
+- The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
+  It replaces a list of every other page, which still sent readers to the National page for the methods.
+  It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The Provinces page opens with bullets comparing the provinces (#832).
+- The Provinces estimate page shows maps of infections to date, the reproduction number at the cut-off and relative case ascertainment by province. The Provinces forecast page maps next week's projected confirmed cases (#841).
+  They give each province's share of infections, the range of the reproduction number and the probability each province is growing, the spread in case-fatality ratio and case ascertainment, and the share of infections imported between provinces, as 90% credible intervals.
+  A detail section follows with each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals.
+  The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.
+  Pair plots set the spatial hyperparameters and each province's parameters against a prior drawn from the patch model.
+- The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block shows the comparison bullets (#832).
+- The summary dashboard no longer shows the modelled against observed reported cases (#832).
+  The evaluation pages carry that check.
+- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
+  It links to the home page for installing, running and updating the data rather than repeating it.
+- Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).
+  Each page opens with a summary: overall bullets, then a short block per stream or per province.
+  The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
+  The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
+- The report is split into pages, grouped in the navigation as Summary, Estimates (National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
 - The province in-sample page scores each province's confirmed cases and deaths as counts, with coverage given overall and per province (#842).
 - The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
   About carries a new page on the authors, funding and citation.
