@@ -311,25 +311,27 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
-# They are correlated across patches, they revert toward zero, and they are centred at every knot so that no patch is privileged:
+# They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
+# A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
 #
 # ```math
-# \delta_{p,1} = \sigma_{\text{lvl}} (Lz)_p
-#     - \overline{\sigma_{\text{lvl}} (Lz)},
+# \boldsymbol\delta_{1} = \sigma_{\text{lvl}}\, Q L \mathbf{z},
 # \qquad
-# \delta_{p,k} = \phi\, \delta_{p,k-1}
-#   + \bigl(\sigma_{\delta,p} (Lz_k)_p
-#     - \overline{\sigma_{\delta}(Lz_k)}\bigr), \tag{6}
+# \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
+#   + Q\, \mathrm{diag}(\mathbf{s})\, L \mathbf{z}_k, \tag{6}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
-# \sigma_{\delta,p} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
+# s_j \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
-# \Omega \sim \mathrm{LKJ}(2), \tag{7}
+# LL^{\top} \sim \mathrm{LKJ}(2), \tag{7}
 # ```
 #
-# with $z, z_k \sim \mathrm{Normal}(0, 1)$ per patch, $\Omega = LL^{\top}$ the cross-patch correlation and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $s_j$ the scale of basis direction $j$, $L$ the Cholesky factor of the $(P - 1) \times (P - 1)$ correlation of the directions and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# Every sampled dimension reaches the likelihood, and the covariance of the innovations, $Q\, \mathrm{diag}(\mathbf{s})\, LL^{\top} \mathrm{diag}(\mathbf{s})\, Q^{\top}$, is a full covariance of a sum-to-zero vector.
+# We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
+# The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each is $-1/(P - 1)$.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
@@ -2043,8 +2045,7 @@ cfr_prior_fig #hide
 # We project each province seven days beyond the cut-off by continuing its renewal equation from the joint posterior, without refitting.
 # Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at the intensity fitted at the cut-off.
 # Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
-# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations at its fitted scale, centred so the deviations still sum to zero.
-# The fresh innovations do not carry the fitted cross-province correlation.
+# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations with the fitted cross-province covariance, so the deviations still sum to zero.
 # The confirmed cases and confirmed deaths start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage.
 # Each day then grows with the province's projected infections, with no delay between infection and report, as in the national forecast, and is replicated through the stream's fitted dispersion.
 # The provinces are projected separately, so they need not add up to the national forecast.

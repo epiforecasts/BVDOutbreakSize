@@ -32,6 +32,7 @@
     function projection_chain(
             I; delta = zeros(NP), drift_sd = zeros(NP),
             halflife = 42.0, sigma_rw = 0.0, eps = EPS,
+            drift_factor = nothing,
             conf_daily = nothing, shares = nothing,
             deaths_daily = nothing, death_shares = nothing
         )
@@ -47,6 +48,12 @@
         )
         eps === nothing ||
             (base = merge(base, (; importation_epsilon_patch = [copy(eps) for _ in 1:ND])))
+        drift_factor === nothing || (
+            base = merge(
+                base,
+                (; region_drift_factor = [vec(drift_factor) for _ in 1:ND])
+            )
+        )
         if conf_daily !== nothing
             ## A cumulative whose last increment is the cut-off daily rate.
             cum = collect(range(0.0, conf_daily * N; length = N))
@@ -159,6 +166,25 @@ end
                 for p in 1:NP
         ]
         @test abs(sum(change)) < 1.0e-10
+    end
+
+    ## A chain carrying the fitted loading matrix draws its innovations
+    ## through it. This one moves only the first two provinces, in opposite
+    ## directions, so the third keeps its reverted value.
+    F = [0.3 0.0; -0.3 0.0; 0.0 0.0]
+    fc = forecast_provinces(
+        projection_chain(
+            I; delta, halflife = 7.0, drift_sd = [0.25, 0.25, 0.0],
+            drift_factor = F
+        );
+        horizon = H, n_patches = NP
+    )
+    for d in 1:ND
+        rt(p) = only(fc[(fc.patch .== p) .& (fc.draw .== d), :rt_forecast])
+        change = [log(rt(p) / RT[p]) + 0.5 * delta[p] for p in 1:NP]
+        @test abs(change[3]) < 1.0e-12
+        @test change[1] ≈ -change[2]
+        @test abs(change[1]) > 1.0e-6
     end
 end
 

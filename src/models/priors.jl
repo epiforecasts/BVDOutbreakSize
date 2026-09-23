@@ -1181,15 +1181,14 @@ with a learned cross-patch correlation.
 ```
 
 ```math
-\\Delta\\boldsymbol{\\delta}(t_k) \\sim
-    \\mathrm{MVN}\\bigl(\\mathbf{0},\\, \\Sigma\\bigr), \\qquad
-\\Sigma = \\mathrm{diag}(\\sigma_\\delta)\\, \\Omega\\,
-          \\mathrm{diag}(\\sigma_\\delta), \\qquad
-\\Omega \\sim \\mathrm{LKJ}(2),
+\\boldsymbol{\\eta}_k = Q\\, \\mathrm{diag}(s)\\, L\\,
+    \\mathbf{z}_k, \\qquad
+\\mathbf{z}_k \\sim \\mathrm{N}(\\mathbf{0}, I_{n-1}), \\qquad
+L L^\\top \\sim \\mathrm{LKJ}(2),
 ```
 
-on the same weekly knots as the national walk, linearly interpolated to the
-daily grid.
+for the innovation `η_k` of the deviations at each of the same weekly knots
+as the national walk, linearly interpolated to the daily grid.
 
 ### A common trend, not independent walks
 
@@ -1204,12 +1203,32 @@ free, so the cross-patch correlation is learned rather than assumed.
 
 ### Sum-to-zero, not a reference patch
 
-The deviations are centred at every knot, so no province is privileged.
+The deviations sum to zero at every knot, so no province is privileged.
 Fixing `δ_1 ≡ 0` would also identify the model, but it forces the primary
-patch to have no idiosyncratic deviation at all. Centring introduces one
-redundant coordinate per knot (the mean of the raw innovations, which the
-likelihood never sees), drawn from its proper prior and well-conditioned,
-so it costs a few cheap sampled dimensions rather than a posterior ridge.
+patch to have no idiosyncratic deviation at all.
+
+A sum-to-zero vector over `n` patches has `n - 1` free directions, so the
+deviations are built on them directly. `Q` is the fixed orthonormal basis
+of that subspace ([`sum_to_zero_basis`](@ref)), `s` the `n - 1` scales of
+its directions (`σ_basis`) and `L` the Cholesky factor of their
+`(n - 1) × (n - 1)` correlation (`Ω_L`). The deviation covariance
+`Q diag(s) L Lᵀ diag(s) Qᵀ` is a full covariance of the sum-to-zero vector,
+with its `n (n - 1) / 2` free parameters and no more, so every sampled
+dimension reaches the likelihood. The level at the first knot is
+`σ_level Q L z_level`, sharing the correlation. With two patches there is
+one direction and no `Ω_L`.
+
+The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
+derived from `s` and `L` ([`sum_to_zero_moments`](@ref)). The correlations
+of a sum-to-zero vector are constrained: its entries cannot all be
+positively correlated, and with equal sds every correlation is
+`-1 / (n - 1)`. With three patches the three sds determine the three
+correlations exactly. With more they constrain them.
+
+The basis is not symmetric in the patches: the last patch loads on one
+direction and the first on all of them. With scales drawn independently,
+the implied prior on the last patch's sd puts more mass near zero and in
+the tail than the first patch's, at the same expected variance.
 
 ### What the data can and cannot identify here
 
@@ -1220,8 +1239,8 @@ largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation
 prior rather than by data, which is why `Σ` is given a proper shrinkage
 prior rather than a flat one.
 
-`σ_δ → 0` recovers a common `Rt` shape shared by every province, a fixed
-ratio between them. It is a special case of this model rather than an
+`s → 0` (and so `σ_δ → 0`) recovers a common `Rt` shape shared by every
+province, a fixed ratio between them. It is a special case of this model rather than an
 assumption baked into it. `σ_δ` is therefore the headline spatial
 diagnostic, and a posterior pushed away from zero is evidence that
 provincial `Rt` trajectories are separating, which is what a response
@@ -1242,14 +1261,16 @@ vintages stop well before the cut-off. The knots therefore follow
 ```
 
 with `h` the sampled half-life of a provincial divergence in days, so a
-province with persistent divergence can still show one. The innovations are
-centred at every knot and `φ` is one shared scalar, so the sum-to-zero
+province with persistent divergence can still show one. The innovations
+sum to zero at every knot and `φ` is one shared scalar, so the sum-to-zero
 constraint survives exactly. A half-life far longer than the window
 recovers the random walk.
 
 Returns the Rt matrix `(n_patches × n)`, the national trend, the full
-deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch deviation
-scales and the correlation matrix.
+deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch innovation
+sds `σ_δ`, their correlation matrix `Ω` and the loading matrix
+`drift_factor` `(n_patches × (n_patches - 1))` that maps standard-normal
+draws to one knot's innovations.
 """
 @model function patch_rt_model(
         n::Integer, n_patches::Integer,
@@ -1262,8 +1283,9 @@ scales and the correlation matrix.
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
-        lkj_prior = LKJCholesky(max(n_patches, 2), 2.0),
-        region_offset_prior = Normal(0, 1)
+        lkj_prior = n_patches > 2 ? LKJCholesky(n_patches - 1, 2.0) : nothing,
+        region_offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(n_patches)
     )
     ## Common national trend, the single-patch walk unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
@@ -1299,17 +1321,22 @@ scales and the correlation matrix.
             Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
             δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
             σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
-            Ω = ones(Tp1, 1, 1), δ_halflife = zero(Tp1),
+            Ω = ones(Tp1, 1, 1), drift_factor = zeros(Tp1, 1, 0),
+            δ_halflife = zero(Tp1),
             sigma_rw = rt_state.sigma_rw,
             log_R0 = rt_state.log_R0,
             intervention_effect = rt_state.intervention_effect,
         )
     end
-    ## Deviation scales (one per patch) and their cross-patch correlation.
-    ## `LKJCholesky` samples the Cholesky factor directly, so the
-    ## decomposition never lands on the AD tape.
+    ## Deviation scales and correlation, on the `n_patches - 1` directions a
+    ## sum-to-zero vector has. `σ_basis` scales each basis direction and
+    ## `Ω_L` correlates them. `LKJCholesky` samples the Cholesky factor
+    ## directly, so the decomposition never lands on the AD tape. With two
+    ## patches there is one direction and nothing to correlate.
     σ_level ~ region_sd_prior
-    σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
+    σ_basis ~ product_distribution(
+        fill(region_drift_sd_prior, n_patches - 1)
+    )
     ## Mean reversion. The deviations are an AR(1) toward zero on the knots,
     ## parameterised by the half-life of a provincial divergence in days,
     ## which is the elicitable quantity. The per-knot retention is
@@ -1317,48 +1344,44 @@ scales and the correlation matrix.
     ## window recovers the random walk and a short one pulls each province
     ## back to the national trend between knots. One half-life is shared
     ## across provinces, not one each: the retention multiplies the whole
-    ## deviation vector, and a centred vector scaled by a scalar is still
-    ## centred, so the sum-to-zero constraint survives exactly.
+    ## deviation vector, and a sum-to-zero vector scaled by a scalar still
+    ## sums to zero.
     δ_halflife ~ region_halflife_prior
     φ = exp2(-week / δ_halflife)
-    Ω_L ~ lkj_prior
-    L = Ω_L.L
-    ## Standard-normal draws for the level and for each knot's innovation.
-    z_level ~ product_distribution(fill(region_offset_prior, n_patches))
+    ## Standard-normal draws for the level and for each knot's innovation,
+    ## `n_patches - 1` per knot.
+    nd = n_patches - 1
+    z_level ~ product_distribution(fill(region_offset_prior, nd))
     z_drift ~ product_distribution(
-        fill(region_offset_prior, max(n_patches * (nb - 1), 1))
+        fill(region_offset_prior, max(nd * (nb - 1), 1))
     )
+    ## Loading matrices from the basis directions to the patches. The level
+    ## shares the drift's correlation and has one scale.
+    if n_patches > 2
+        Ω_L ~ lkj_prior
+        F_level = sum_to_zero_factor(basis, σ_level, Ω_L.L)
+        F_drift = sum_to_zero_factor(basis, σ_basis, Ω_L.L)
+    else
+        F_level = sum_to_zero_factor(basis, σ_level)
+        F_drift = sum_to_zero_factor(basis, σ_basis)
+    end
     Tp = promote_type(
-        eltype(Rt_national), typeof(float(σ_level)),
-        eltype(σ_δ), eltype(L), eltype(z_level), eltype(z_drift)
+        eltype(Rt_national), eltype(F_level), eltype(F_drift),
+        eltype(z_level), eltype(z_drift), typeof(φ)
     )
-    ## Correlated deviations, centred at every knot so the patches sum to
-    ## zero and no province is privileged.
     δ_knots = zeros(Tp, n_patches, nb)
-    lvl = zeros(Tp, n_patches)
+    lvl = sum_to_zero(F_level, z_level)
     @inbounds for i in 1:n_patches
-        acc = zero(Tp)
-        for j in 1:i
-            acc += L[i, j] * z_level[j]
-        end
-        lvl[i] = σ_level * acc
+        δ_knots[i, 1] = lvl[i]
     end
-    lvl_bar = sum(lvl) / n_patches
-    @inbounds for i in 1:n_patches
-        δ_knots[i, 1] = lvl[i] - lvl_bar
-    end
-    innov = zeros(Tp, n_patches)
     @inbounds for k in 2:nb
+        off = (k - 2) * nd
         for i in 1:n_patches
             acc = zero(Tp)
-            for j in 1:i
-                acc += L[i, j] * z_drift[(k - 2) * n_patches + j]
+            for j in 1:nd
+                acc += F_drift[i, j] * z_drift[off + j]
             end
-            innov[i] = σ_δ[i] * acc
-        end
-        innov_bar = sum(innov) / n_patches
-        for i in 1:n_patches
-            δ_knots[i, k] = φ * δ_knots[i, k - 1] + (innov[i] - innov_bar)
+            δ_knots[i, k] = φ * δ_knots[i, k - 1] + acc
         end
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
@@ -1373,21 +1396,15 @@ scales and the correlation matrix.
             Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
         end
     end
-    ## Cross-patch correlation matrix, reconstructed from its factor for
-    ## reporting (Ω = L Lᵀ).
-    Ω = zeros(Tp, n_patches, n_patches)
-    @inbounds for i in 1:n_patches, j in 1:n_patches
-
-        acc = zero(Tp)
-        for k in 1:min(i, j)
-            acc += L[i, k] * L[j, k]
-        end
-        Ω[i, j] = acc
-    end
+    ## Per-patch innovation sds and their correlation, implied by the basis
+    ## scales and correlation.
+    drift_moments = sum_to_zero_moments(F_drift)
+    σ_δ = drift_moments.sd
+    Ω = drift_moments.cor
     return (;
         Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
-        σ_level, σ_δ, Ω, δ_halflife, sigma_rw = rt_state.sigma_rw,
-        log_R0 = rt_state.log_R0,
+        σ_level, σ_δ, Ω, drift_factor = F_drift, δ_halflife,
+        sigma_rw = rt_state.sigma_rw, log_R0 = rt_state.log_R0,
         intervention_effect = rt_state.intervention_effect,
     )
 end
@@ -1644,6 +1661,7 @@ the others, which is what the imports figure on the analysis page draws.
         σ_δ = rt_state.σ_δ,
         δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
+        drift_factor = rt_state.drift_factor,
         infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,
         g, R0, r0 = r_clock, r, R_T,

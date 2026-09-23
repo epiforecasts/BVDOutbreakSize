@@ -258,6 +258,45 @@ end
     end
 end
 
+@testitem "patch_rt_model: samples only the n - 1 sum-to-zero directions" begin
+    using BVDOutbreakSize: patch_rt_model, knot_days, sum_to_zero_moments
+    using Turing: DynamicPPL, sample, Prior
+    using Turing.DynamicPPL: returned
+    using Random: Xoshiro
+    using Statistics: mean
+
+    ## A sum-to-zero vector over `np` patches has `np - 1` free directions,
+    ## so every deviation draw and scale lives on those and none is left
+    ## that the likelihood cannot see.
+    n = 120
+    nb = length(knot_days(n; week = 7, start = 20))
+    for np in (2, 3, 4)
+        m = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0)
+        draw = rand(Xoshiro(np), m)
+        len(k) = length(draw[DynamicPPL.VarName{k}()])
+        @test len(:σ_basis) == np - 1
+        @test len(:z_level) == np - 1
+        @test len(:z_drift) == (np - 1) * (nb - 1)
+        has_lkj = any(k -> occursin("Ω_L", string(k)), keys(draw))
+        @test has_lkj == (np > 2)
+        has_lkj &&
+            @test size(draw[DynamicPPL.VarName{:Ω_L}()].L) == (np - 1, np - 1)
+
+        ## The reported per-patch sds and correlation are those the loading
+        ## matrix implies.
+        rets = vec(returned(m, sample(Xoshiro(1), m, Prior(), 400; progress = false)))
+        for r in rets
+            mom = sum_to_zero_moments(r.drift_factor)
+            @test r.σ_δ ≈ mom.sd
+            @test r.Ω ≈ mom.cor
+            @test size(r.drift_factor) == (np, np - 1)
+            @test maximum(abs, sum(r.δ_knots; dims = 1)) < 1.0e-12
+        end
+        ## With two patches the deviations are mirror images.
+        np == 2 && @test all(r.Ω[1, 2] ≈ -1 for r in rets)
+    end
+end
+
 @testitem "patch_rt_model: Rt may vary across space and over time" begin
     using BVDOutbreakSize: patch_rt_model
     using Distributions: Normal, truncated
@@ -1237,6 +1276,7 @@ end
     @test !has("seed_fraction")            ## no secondary patch to seed
     @test !has("σ_δ")                      ## deviations are identically zero
     @test !has("σ_level")
+    @test !has("σ_basis")
     @test !has("Ω_L")                      ## no cross-patch correlation
     @test !has("z_drift")
     @test !has("z_level")

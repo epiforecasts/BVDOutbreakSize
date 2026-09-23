@@ -217,6 +217,7 @@ province_rt_fig #hide
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
 # The prior admits real divergence, with a 31% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
 # With four patches and the pooled one carrying almost no signal the cross-province correlation is not identified, and it tracks its prior.
+# It is the correlation of the provinces' deviation innovations, which sum to zero, so it leans negative: with equal spreads across four provinces it would be −1/3.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
