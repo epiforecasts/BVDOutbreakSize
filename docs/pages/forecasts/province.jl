@@ -1,20 +1,10 @@
 # # Province forecasts
 #
-# This page projects each province a week ahead from the joint model's fit.
-# Each province's renewal equation runs on past the cut-off, with the provinces still exchanging infections through importation.
-# Its reproduction number follows the national trend's walk, and its deviation from that trend reverts toward zero at the fitted half-life.
-# The confirmed counts start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage, and then grow with the province's own projected infections.
-# The provinces are projected separately, so they need not add up to the national forecast on the [forecasts](@ref "Forecasts") page.
+# This page gives the one-week-ahead forecast for each province from the joint model.
+# The projection is defined in the [province forecast](@ref "Province forecast") Methods section.
+# The national forecast is on the [forecasts](@ref "Forecasts") page.
+# How these forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
-# The [forecast by province](@ref "Forecast by province") evaluation scores this projection.
-#
-# The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
-# The symptom-onset curve is national only, so there is no province nowcast.
-#
-# This page is generated from
-# [`docs/pages/forecasts/province.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/forecasts/province.jl).
-# The model code it calls is in
-# [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -255,7 +245,7 @@ forecast_province_fig(4) #hide
 
 # ## Past forecasts against what was observed
 #
-# Only forecasts made by the per-province projection are shown, so the figure fills in as releases accumulate.
+# Only [province forecast](@ref "Province forecast") projections are shown, so the figure fills in as releases accumulate.
 # Each panel is one province stream at one horizon.
 # The x-axis is the cut-off each forecast was made from.
 # Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the province went on to report.

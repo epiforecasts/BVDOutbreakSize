@@ -31,8 +31,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # ## Forecast by province
 #
 # The frozen fit's one-week-ahead forecast of each province's confirmed cases and deaths, scored against what each province went on to report.
-# Each province's forecast is drawn from the joint chain one posterior draw at a time, so its interval carries the joint model's uncertainty rather than a province's alone.
-# How the province forecast is built is set out on the [province forecasts](@ref "Province forecasts") page.
+# The forecast is defined in the [province forecast](@ref "Province forecast") Methods section.
 # Every release's archived province forecast is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
 
 #md # ```@raw html
@@ -90,8 +89,8 @@ MarkdownTable(province_validation_table) #hide
 # ## Forecast by province across releases
 #
 # The archived province forecast of each release, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-# The scores cover the per-province renewal projection from the joint chain only.
-# They fill in as releases carrying that projection become old enough for their targets to have been observed.
+# Only [province forecast](@ref "Province forecast") projections are scored.
+# The scores fill in as releases carrying them become old enough for their targets to have been observed.
 # The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
 
 #md # ```@raw html

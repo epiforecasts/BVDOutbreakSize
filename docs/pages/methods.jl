@@ -2038,6 +2038,19 @@ cfr_prior_fig #hide
 # v1.0.0 to v1.2.0 reconstruct the reported case, suspected death and export streams, from each tag's own inline model code.
 # Reconstructed forecasts are published as a separate backfill release and scored alongside the stored ones by the [forecast scoring across releases](@ref "Forecast scoring across releases") section.
 #
+# #### Province forecast
+#
+# We project each province seven days beyond the cut-off by continuing its renewal equation from the joint posterior, without refitting.
+# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at the intensity fitted at the cut-off.
+# Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
+# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations at its fitted scale, centred so the deviations still sum to zero.
+# The fresh innovations do not carry the fitted cross-province correlation.
+# The confirmed cases and confirmed deaths start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage.
+# Each day then grows with the province's projected infections, with no delay between infection and report, as in the national forecast, and is replicated through the stream's fitted dispersion.
+# The provinces are projected separately, so they need not add up to the national forecast.
+# The symptom-onset curve is national only, so there is no province nowcast.
+# Each release archives the projection with its method recorded, and only projection forecasts are scored.
+#
 # ### Forecast-versus-frozen evaluation
 #
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and projecting one week ahead with the same forecast machinery.
