@@ -228,6 +228,11 @@ end
         chn; kw..., province_days = [5], national_days = [1, 2],
         national_replicates = [[1, 1] for _ in 1:nd]
     )
+    ## Every replicate must run over the whole national grid.
+    @test_throws ErrorException province_count_panels(
+        chn; kw..., province_days = [2], national_days = [1, 2],
+        national_replicates = [[1, 1, 1] for _ in 1:nd]
+    )
     ## The national replicates must pair one to one with the chain draws.
     @test_throws ErrorException province_count_panels(
         chn; kw..., province_days = [2], national_days = [1, 2],
