@@ -42,10 +42,11 @@ All intervals are equal-tailed 30%, 60% and 90% credible intervals from the join
 
 ### By province
 
-The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the provinces below.
+The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the provinces.
 Each range is an equal-tailed 90% credible interval.
 The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
-Modelled infections by province, the per-province parameter detail and the composition checks are on the [provinces](province.md) page.
+Each province's own estimates are in the [detail by province](province.md#Detail-by-province).
+Modelled infections by province, the per-province parameter detail and the composition checks are on the same page.
 
 ```@eval
 using Markdown, BVDOutbreakSize

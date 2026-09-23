@@ -32,12 +32,12 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
-# The numbers below are our estimate for each province from the joint posterior.
-# Each range is an equal-tailed 90% credible interval.
+# The bullets below compare the provinces, from the joint posterior.
+# Each range is an equal-tailed 90% credible interval, and the shares and probabilities are computed draw by draw.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 
 #md # ```@raw html
-#md # <details><summary>Compute the province headline ranges</summary>
+#md # <details><summary>Compute the province comparison</summary>
 #md # ```
 
 province_headline_md = patch_headline(chn_joint, N_PATCHES)
@@ -49,7 +49,25 @@ province_headline = Markdown.parse(province_headline_md);
 
 province_headline #hide
 
-# The table below gives the 30%, 60% and 90% credible intervals for each province, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
+# ### Detail by province
+#
+# Each province's own estimates are below, as equal-tailed 30%, 60% and 90% credible intervals.
+
+#md # ```@raw html
+#md # <details><summary>Compute the per-province ranges</summary>
+#md # ```
+
+province_detail_headline = Markdown.parse(
+    patch_detail_headline(chn_joint, N_PATCHES)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_detail_headline #hide
+
+# The table below gives the same intervals for each province, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
 
 #md # ```@raw html
 #md # <details><summary>Per-province summary table</summary>
@@ -313,7 +331,7 @@ province_pair_figs[4] #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province headline and the reproduction
+# The summary dashboard shows the province comparison and the reproduction
 # number by province, so they are written here rather than on the National
 # page.
 
