@@ -109,7 +109,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     delay_corrected_cfr, delay_corrected_confirmed_cfr,
     confirmed_cfr_table, plot_confirmed_cfr,
     # renewal helpers
-    renewal_infections, convolve_delay, convolve_survival, convolve_pmf,
+    renewal_infections, convolve_delay, convolve_pmf,
     discretise_censored,
     euler_lotka_r, r_to_R0, doubling_time, seed_infections,
     confirmed_break_correction,

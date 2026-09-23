@@ -2046,9 +2046,8 @@ S_\\text{clin}(d) = 1 - G(d) = \\Pr(\\text{still in a bed after day } d),
 so `S_clin[d+1]` is the probability the case has not yet been discharged by the
 end of day `d`. This is the per-cohort weight the running-balance BVD stock
 carries: with no absconds `O_bvd(t) = Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)`. The
-discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)` of
-[`convolve_survival`](@ref), keeps the two-clock confirmed sub-stock `≤ O_bvd`
-by construction. The two PMFs need not share a length. Each contributes zero
+discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)`,
+keeps the two-clock confirmed sub-stock `≤ O_bvd` by construction. The two PMFs need not share a length. Each contributes zero
 beyond its support, so the result takes the longer length.
 """
 function clinical_stay_survival(

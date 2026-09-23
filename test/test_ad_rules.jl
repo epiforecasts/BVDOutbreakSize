@@ -21,7 +21,7 @@
     using Random: seed!
     using FiniteDifferences: central_fdm, grad
     using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
-    using BVDOutbreakSize: convolve_delay, convolve_survival,
+    using BVDOutbreakSize: convolve_delay,
         convolve_pmf, interpolate_knots, renewal_infections,
         abscond_thinned, abscond_thinned_flows, patch_infections,
         nbinomial_loglik, studentt_loglik
@@ -51,18 +51,6 @@
         fx, fw = grad(fdm, (a, b) -> sum(ȳ .* convolve_delay(a, b)), x, w)
         @test x̄ ≈ fx rtol = 1.0e-7
         @test w̄ ≈ fw rtol = 1.0e-7
-    end
-
-    @testset "convolve_survival" begin
-        x = abs.(randn(40)) .+ 0.5
-        l = abs.(randn(12)) .+ 0.1
-        l ./= sum(l)
-        ȳ = randn(40)
-        y, (x̄, l̄), _ = run_rule(convolve_survival, x, l; cotangent = ȳ)
-        @test y == convolve_survival(x, l)
-        fx, fl = grad(fdm, (a, b) -> sum(ȳ .* convolve_survival(a, b)), x, l)
-        @test x̄ ≈ fx rtol = 1.0e-7
-        @test l̄ ≈ fl rtol = 1.0e-7
     end
 
     @testset "convolve_pmf" begin
@@ -271,7 +259,7 @@ end
     using Random: seed!
     using ForwardDiff: ForwardDiff
     using Mooncake: Mooncake
-    using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
+    using BVDOutbreakSize: convolve_delay, convolve_pmf,
         interpolate_knots, renewal_infections, abscond_thinned,
         abscond_thinned_flow, abscond_thinned_flows, patch_infections,
         nbinomial_loglik, studentt_loglik, censored_nbinomial_loglik,
@@ -316,14 +304,6 @@ end
         w ./= sum(w)
         ȳ = randn(40)
         check_grads((a, b) -> sum(ȳ .* convolve_delay(a, b)), x, w)
-    end
-
-    @testset "convolve_survival" begin
-        x = abs.(randn(40)) .+ 0.5
-        l = abs.(randn(12)) .+ 0.1
-        l ./= sum(l)
-        ȳ = randn(40)
-        check_grads((a, b) -> sum(ȳ .* convolve_survival(a, b)), x, l)
     end
 
     @testset "convolve_pmf" begin

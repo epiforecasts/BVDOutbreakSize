@@ -35,13 +35,6 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(convolve_survival), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
         typeof(convolve_pmf), Array{<:Mooncake.IEEEFloat},
         Array{<:Mooncake.IEEEFloat},
     },
@@ -75,9 +68,9 @@ Mooncake.@is_primitive(
     },
 )
 
-## Adjoint of the daily delay convolution, shared by `convolve_delay` and
-## `convolve_survival`. A convolution's pullback is the matching
-## correlation, one pass over the same `(t, d)` pairs:
+## Adjoint of the daily delay convolution `convolve_delay`. A convolution's
+## pullback is the matching correlation, one pass over the same `(t, d)`
+## pairs:
 ##
 ##     y[t]    = Σ_d x[t−d] · w[d+1]
 ##     x̄[s]   += Σ_d ȳ[s+d] · w[d+1]
@@ -118,34 +111,6 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), convolve_delay_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(convolve_survival)},
-        x::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        los::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    xp = primal(x)
-    lp = primal(los)
-    x̄ = tangent(x)
-    l̄ = tangent(los)
-    surv = survival_weights(lp)
-    y = convolve_delay(xp, surv)
-    ȳ = zero(y)
-    function convolve_survival_pullback!!(::NoRData)
-        Δx, s̄ = _convolve_delay_adjoint(ȳ, xp, surv)
-        x̄ .+= Δx
-        ## `surv[i] = Σ_{j ≥ i} los[j]`, so `los[j]` feeds every survival
-        ## weight at or below `j`: the adjoint is the forward cumulative
-        ## sum of the survival adjoint.
-        run = zero(eltype(s̄))
-        @inbounds for j in eachindex(s̄)
-            run += s̄[j]
-            l̄[j] += run
-        end
-        return NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), convolve_survival_pullback!!
 end
 
 function Mooncake.rrule!!(
