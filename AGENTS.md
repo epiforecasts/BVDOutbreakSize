@@ -42,3 +42,4 @@ Any change to the model, the priors or the data needs a refit before its results
 
 Upstream is `epiforecasts/BVDOutbreakSize`.
 Pull requests go there, not to the `seabbs` origin remote.
+Work through "Before asking for review" in [`docs/src/contributing.md`](docs/src/contributing.md) before requesting a review.
