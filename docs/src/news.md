@@ -148,6 +148,7 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - `convolve_survival` and `survival_weights` are removed, along with the export and the reverse-mode rule (#856).
   No model, page or script called them.
 - Every reverse-mode rule is tested through Mooncake's `test_rule`, over one table of cases with the argument types its call sites pass (#856).
