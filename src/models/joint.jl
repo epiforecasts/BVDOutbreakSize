@@ -32,6 +32,11 @@
     )
 end
 
+## Days the suspected-case background starts before the first reported
+## case: the support of the default report-to-receipt kernel, so the
+## convolution into the analysed volume is fully formed by that report.
+const BACKGROUND_ONSET_LEAD = cdf_nmax(lognormal_meansd(4.5, 4.0))
+
 ## Cumulative confirmed-case trajectory on the observed scale, shared by the
 ## joint and the confirmed-only composer. The first confirmed vintage is the
 ## initial condition and is not scored, so the reconstruction counts only the
@@ -829,9 +834,8 @@ reproduction number implied by the summed patch infections.
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
     bg_onset = isempty(reported_history.days) ? 1 :
-        clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
+        clamp(Int(reported_history.days[1]) - BACKGROUND_ONSET_LEAD, 1, n)
 
     ## `nothing` holds the non-BVD background at the constant rate the
     ## testing submodel samples. An injected pooling submodel gives it a
