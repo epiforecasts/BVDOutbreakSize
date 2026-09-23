@@ -3617,11 +3617,8 @@ the release archive [`province_forecast_archive`](@ref) carries the draws
 behind.
 
 `fc` is a [`forecast_provinces`](@ref) frame, each province projected by
-its own renewal, or a national [`forecast_reported`](@ref) result. From the
-national result each province's count is the national draw times that
-province's modelled share at the most recent spatial vintage, multiplied
-draw by draw and held over the horizon, which the bar widths do not express.
-The caption states which.
+its own renewal. A national [`forecast_reported`](@ref) result is replaced by
+the one-week projection from `chn`.
 
 Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
@@ -3668,13 +3665,8 @@ function plot_province_forecast(
     CairoMakie.Label(
         fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. " * (
-            :patch in propertynames(fc) ?
-                "Each province is projected by its own renewal equation." :
-                "Each province's count is the national forecast draw " *
-                "times its modelled share at the last spatial vintage, " *
-                "held over the horizon."
-        );
+            "the median as a dot. Each province is projected by its own " *
+            "renewal equation.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3688,8 +3680,8 @@ expected in patch `province` over the week to `T + 7`, one histogram panel
 per stream with its 90% predictive interval shaded.
 
 The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
-[`forecast_provinces`](@ref) frame or split from a national
-[`forecast_reported`](@ref) result.
+[`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
+result is replaced by the one-week projection from `chn`.
 
 `observed` optionally gives a recent observed week per stream, keyed by the
 forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from

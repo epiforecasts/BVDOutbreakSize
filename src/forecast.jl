@@ -811,7 +811,8 @@ was fitted uncoupled).
 The confirmed streams start from the national daily rate at the cut-off (the
 last increment of `cumulative_confirmed` or `cumulative_confirmed_deaths`)
 times the province's modelled share at the most recent spatial vintage
-(`province_shares`, `province_death_shares`). Each day then grows with the
+(`province_shares`, and `province_death_shares` for the deaths where the
+chain carries it). Each day then grows with the
 province's own projected infections, `I_{p,n+d} / I_{p,n}`, with no delay
 between infection and report, as the national forecast grows its streams.
 Each day is replicated through the stream's fitted dispersion and the days
@@ -846,9 +847,12 @@ function forecast_provinces(
     n = length(first(I_flat)) ÷ np
 
     ## A confirmed stream is projected when the chain carries its national
-    ## cut-off rate, its dispersion and its provincial shares.
-    function stream(cum_key, share_key, k_keys)
-        _has_key(chn, share_key) || return nothing
+    ## cut-off rate, its dispersion and its provincial shares. A chain with
+    ## no death composition splits the deaths by the case shares.
+    function stream(cum_key, share_keys, k_keys)
+        i = findfirst(k -> _has_key(chn, k), share_keys)
+        isnothing(i) && return nothing
+        share_key = share_keys[i]
         daily = _daily_at_cutoff(chn, cum_key)
         isnothing(daily) && return nothing
         k = _resolve_draws(chn, k_keys)
@@ -856,11 +860,12 @@ function forecast_provinces(
         return (; daily, k, share = _per_patch_last_share(chn, share_key, np))
     end
     conf = stream(
-        :cumulative_confirmed, :province_shares,
+        :cumulative_confirmed, (:province_shares,),
         _STREAM_SPEC[:confirmed_cases].dispersion
     )
     conf_deaths = stream(
-        :cumulative_confirmed_deaths, :province_death_shares,
+        :cumulative_confirmed_deaths,
+        (:province_death_shares, :province_shares),
         _STREAM_SPEC[:confirmed_deaths].dispersion
     )
 
@@ -940,12 +945,11 @@ key from [`PROVINCE_NAMES`](@ref), which [`PROVINCE_MEMBERS`](@ref) maps to
 the source provinces a patch pools, so a scorer can build each patch's truth
 from the per-province histories in the same release's `observations.toml`.
 
-Each `fc` is a [`forecast_provinces`](@ref) frame, archived as projected, or
-a national [`forecast_reported`](@ref) result. From the national result each
-province's value is the national draw times that province's modelled share
-at the most recent spatial vintage, multiplied draw by draw and held over the
-horizon. `thin` keeps every `thin`-th draw so the archive stays compact as
-a release asset.
+Each province's values are the [`forecast_provinces`](@ref) projection from
+`chn` at that horizon. An `fc` that is already a projection is archived as it
+is. A national [`forecast_reported`](@ref) result is replaced by the
+projection, so the archive records the method the report shows. `thin` keeps
+every `thin`-th draw so the archive stays compact as a release asset.
 """
 function province_forecast_archive(
         chn, fcs; made_date::Date,
@@ -963,7 +967,7 @@ function province_forecast_archive(
         h = Int(horizon)
         target = made_date + Day(h)
         for (label, province, vals) in _province_forecast_draws(
-                chn, fc, np, patch_labels
+                chn, fc, np, patch_labels; horizon = h
             )
             for (d, i) in enumerate(1:thin:length(vals))
                 push!(
