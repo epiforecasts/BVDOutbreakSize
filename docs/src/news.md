@@ -53,6 +53,8 @@ Changes since v2.1.0.
 - The documentation build fails when the headline joint fit has not converged, and comments the verdict on the pull request (#764).
 - A pull request builds the report, runs the tests and measures coverage only when it changes something they depend on (#776, #805).
 - The CI fit cache key matches the key the fits use, so a change to files no fit reads no longer triggers a refit (#739).
+- A scheduled workflow deletes superseded Julia depot caches so they no longer push the fit caches out of the 10 GB Actions cache budget (#852).
+  The documentation build's later jobs reuse the package image `list` compiled rather than compiling it again, about 15 minutes each.
 - One rule decides when a stream first and last reported, exported as `history_first_date`, `history_last_date` and the new `stream_first_date` (#817).
   Every date is unchanged.
 - `task fetch-fits` downloads the fits from the latest documentation run, and a local build refuses to fit inline unless `BVD_FIT_STRICT=false` is set (#782).
