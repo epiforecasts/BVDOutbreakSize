@@ -2250,11 +2250,12 @@ end
 
 """
 Per-patch latent bed demand for the province splits: the national demand
-`demand` shared out by each patch's approximate stock, its BVD reports
-through the admission delay at `p_iso_bvd · p_drc` and then the
-clinical-stay survival `S_clin`, plus its share `w[p]` of the national
-non-BVD admissions `A_bg` through the abscond-thinned rule-out stay
-`ruleout_pmf`. The national stock in [`treatment_flow_model`](@ref) carries
+`demand` shared out by each patch's approximate stock, its share of the
+national BVD admissions (each patch's reports through the admission delay
+at `p_iso_bvd · p_drc`, re-split by the relative ascertainment `asc`) and
+then the clinical-stay survival `S_clin`, plus its share `w[p]` of the
+national non-BVD admissions `A_bg` through the abscond-thinned rule-out
+stay `ruleout_pmf`. The national stock in [`treatment_flow_model`](@ref) carries
 the abscond and confirmation dynamics; those are shared across patches and
 cancel in the shares to first order, so the split needs the stays alone,
 one convolution per patch rather than a copy of the flow machinery, whose
@@ -2264,24 +2265,41 @@ halves.
 """
 function _patch_demand(
         reports_matrix::AbstractMatrix, A_bg::AbstractVector,
-        w::AbstractVector, p_iso_bvd::Real, p_drc::Real,
+        w::AbstractVector, asc::AbstractVector, p_iso_bvd::Real, p_drc::Real,
         adm_pmf::AbstractVector, S_clin::AbstractVector,
         ruleout_pmf::AbstractVector, demand::AbstractVector
     )
     np, n = size(reports_matrix)
     T = promote_type(
-        eltype(reports_matrix), eltype(A_bg), eltype(w), typeof(p_iso_bvd),
-        typeof(p_drc), eltype(adm_pmf), eltype(S_clin), eltype(ruleout_pmf),
-        eltype(demand)
+        eltype(reports_matrix), eltype(A_bg), eltype(w), eltype(asc),
+        typeof(p_iso_bvd), typeof(p_drc), eltype(adm_pmf), eltype(S_clin),
+        eltype(ruleout_pmf), eltype(demand)
     )
-    stock = Matrix{T}(undef, np, n)
     scale = p_iso_bvd * p_drc
+    ## Each patch's BVD admissions through the admission delay, then the
+    ## national BVD admissions (their sum) re-split by ascertainment-weighted
+    ## admissions, so the BVD-to-background proportion stays national.
+    A_raw = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        A_raw[p, :] = convolve_delay(scale .* reports_matrix[p, :], adm_pmf)
+    end
+    A_bvd = Matrix{T}(undef, np, n)
+    @inbounds for t in 1:n
+        total = zero(T)
+        weighted = zero(T)
+        for q in 1:np
+            total += A_raw[q, t]
+            weighted += asc[q] * A_raw[q, t]
+        end
+        for p in 1:np
+            A_bvd[p, t] = weighted > zero(T) ?
+                total * asc[p] * A_raw[p, t] / weighted : total / np
+        end
+    end
+    stock = Matrix{T}(undef, np, n)
     bg_stock = convolve_delay(A_bg, _tail_sums(ruleout_pmf))
     @inbounds for p in 1:np
-        A_bvd_p = convolve_delay(
-            scale .* reports_matrix[p, :], adm_pmf
-        )
-        O_bvd_p = convolve_delay(A_bvd_p, S_clin)
+        O_bvd_p = convolve_delay(A_bvd[p, :], S_clin)
         wp = w[p]
         for t in 1:n
             stock[p, t] = O_bvd_p[t] + wp * bg_stock[t]
@@ -2417,6 +2435,12 @@ series for forecasting and replication.
         ## Share of the non-BVD background in each patch, summing to one
         ## ([`background_split_model`](@ref)).
         background_split::AbstractVector{<:Real} = [1.0],
+        ## Relative case ascertainment by patch (the case composition's),
+        ## which splits the national BVD admissions by ascertainment-weighted
+        ## incidence. Ones leaves the split on incidence alone.
+        patch_ascertainment::AbstractVector{<:Real} = ones(
+            length(background_split)
+        ),
         ## Province occupancy and bed rows, `(; days, patches, counts)` from
         ## `province_care_observations`, or `nothing`. Scored as splits of
         ## the printed sum of the provinces present each day.
@@ -2606,8 +2630,8 @@ series for forecasting and replication.
     ## With one patch it is the national demand as one row.
     demand_patch = by_patch ?
         _patch_demand(
-            bvd_reports_matrix, A_bg, background_split, p_iso_bvd, p_drc,
-            adm_delay_state.pmf, S_clin,
+            bvd_reports_matrix, A_bg, background_split, patch_ascertainment,
+            p_iso_bvd, p_drc, adm_delay_state.pmf, S_clin,
             abscond_thinned(ruleout_los_state.pmf, κ), demand
         ) : reshape(demand, 1, :)
 

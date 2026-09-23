@@ -180,11 +180,15 @@ end
     w = [0.5, 0.5]
     days = [1, 2, 3]
     flat = _patch_analysed_increments(carried, 0.5, [1.0, 1.0], bg, w, days)
-    ## Doubling one patch's ascertainment doubles its BVD contribution and
-    ## leaves its background share and the other patch alone.
+    ## Ascertainment re-splits the national BVD volume between the patches
+    ## and leaves the column sums, BVD plus background, unchanged.
     up = _patch_analysed_increments(carried, 0.5, [2.0, 1.0], bg, w, days)
-    @test up[2, :] == flat[2, :]
-    @test up[1, :] ≈ flat[1, :] .+ 0.5 .* carried[1, :]
+    @test vec(sum(up; dims = 1)) ≈ vec(sum(flat; dims = 1))
+    @test all(up[1, :] .> flat[1, :])
+    @test all(up[2, :] .< flat[2, :])
+    ## Day 1: BVD 0.5 * 15 = 7.5 split 20:5 with ascertainment 2:1.
+    @test up[1, 1] ≈ 7.5 * 20 / 25 + 50
+    @test up[2, 1] ≈ 7.5 * 5 / 25 + 50
     ## Bins sum the printed days.
     binned = _patch_analysed_increments(carried, 0.5, [1.0, 1.0], bg, w, days, [1, 1, 2])
     @test binned[:, 1] ≈ flat[:, 1] .+ flat[:, 2]

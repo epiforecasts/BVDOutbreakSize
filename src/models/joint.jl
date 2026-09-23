@@ -887,9 +887,11 @@ Modelled per-patch analysed-specimen volume summed over the laboratory
 bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
 the national factors the composition normalises away. `carried` is each
 patch's onsets through the onset-to-confirmation kernel (report ⊕ receipt,
-[`_patch_carried`](@ref)), thinned by `p_drc` and the patch's relative
-ascertainment `asc[p]` (the case composition's), and joined by the patch's
-share `w[p]` of the non-BVD
+[`_patch_carried`](@ref)); the national BVD volume `p_drc` times the
+patch sum is split by ascertainment-weighted incidence (`asc`, the case
+composition's relative ascertainment), so the BVD-to-background proportion
+stays the national one, and joined by the patch's share `w[p]` of the
+non-BVD
 background carried to receipt (`bg_carried`). Summed over the patches this
 is the national suspect pipeline [`confirmed_cases_model`](@ref) scales
 into the analysed volume, so the shares are exact. `lab_days` are grid day
@@ -908,12 +910,21 @@ function _patch_analysed_increments(
         eltype(w)
     )
     out = zeros(T, np, nb)
-    @inbounds for p in 1:np
-        wp = w[p]
-        ap = asc[p] * p_drc
-        for (i, day) in enumerate(lab_days)
-            d = clamp(Int(day), 1, n)
-            out[p, lab_bins[i]] += ap * carried[p, d] + wp * bg_carried[d]
+    @inbounds for (i, day) in enumerate(lab_days)
+        d = clamp(Int(day), 1, n)
+        ## The national BVD volume that day, split by ascertainment-weighted
+        ## incidence, so the BVD-to-background proportion stays national.
+        total = zero(T)
+        weighted = zero(T)
+        for q in 1:np
+            total += carried[q, d]
+            weighted += asc[q] * carried[q, d]
+        end
+        bvd_nat = p_drc * total
+        for p in 1:np
+            share = weighted > zero(T) ? asc[p] * carried[p, d] / weighted :
+                one(T) / np
+            out[p, lab_bins[i]] += bvd_nat * share + w[p] * bg_carried[d]
         end
     end
     return out
@@ -1278,6 +1289,47 @@ density there, is the fitted model's.
         )
     )
 
+    ## The confirmed and laboratory compositions both carry the patch
+    ## onsets through the onset-to-confirmation kernel, once here.
+    if !isempty(province_days) || !isempty(province_lab_days)
+        confirmed_carried = _patch_carried(
+            patch_state.onsets_matrix,
+            convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+        )
+    end
+
+    if !isempty(province_days)
+        modelled_prov = _patch_confirmed_increments(
+            confirmed_carried, confirmed_state.s_test, province_days
+        )
+        composition_state ~ to_submodel(
+            composition(
+                province_increments, modelled_prov;
+                testing_covariate = province_testing_covariate
+            )
+        )
+        province_shares := composition_state.shares
+        province_composition_rho := composition_state.rho
+        ## Relative province case ascertainment, the probability an
+        ## infection there becomes a confirmed case, partially pooled and
+        ## sum-to-zero on the log scale. On its own the case composition
+        ## identifies only the product of ascertainment and incidence. The
+        ## death composition below separates them.
+        province_ascertainment := composition_state.province_ascertainment
+        province_ascertainment_sd := composition_state.ascertainment_sd
+        ## Elasticity of relative ascertainment on each patch's logged tests
+        ## per head, the covariate on its prior.
+        province_testing_coefficient := composition_state.testing_coefficient
+    end
+
+    ## Relative case ascertainment by patch, shared by every stream that is
+    ## driven by reported suspects: the laboratory composition and the
+    ## per-patch bed demand split the national BVD volume by
+    ## ascertainment-weighted incidence. Ones when the case composition is
+    ## not scored.
+    patch_asc = isempty(province_days) ? ones(n_patches) :
+        composition_state.province_ascertainment
+
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     ## Per-patch BVD reports for the province occupancy split, the rows
     ## summing to the national series the flows are built on.
@@ -1290,6 +1342,7 @@ density there, is the fitted model's.
             cases_state.bg_daily, p_drc, deaths_state.CFR;
             bvd_reports_matrix,
             background_split = bg_split_state.w,
+            patch_ascertainment = patch_asc,
             province_isolation, province_capacity,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
@@ -1342,48 +1395,10 @@ density there, is the fitted model's.
         )
     end
 
-    ## The confirmed and laboratory compositions both carry the patch
-    ## onsets through the onset-to-confirmation kernel, once here.
-    if !isempty(province_days) || !isempty(province_lab_days)
-        confirmed_carried = _patch_carried(
-            patch_state.onsets_matrix,
-            convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
-        )
-    end
-
-    if !isempty(province_days)
-        modelled_prov = _patch_confirmed_increments(
-            confirmed_carried, confirmed_state.s_test, province_days
-        )
-        composition_state ~ to_submodel(
-            composition(
-                province_increments, modelled_prov;
-                testing_covariate = province_testing_covariate
-            )
-        )
-        province_shares := composition_state.shares
-        province_composition_rho := composition_state.rho
-        ## Relative province case ascertainment, the probability an
-        ## infection there becomes a confirmed case, partially pooled and
-        ## sum-to-zero on the log scale. On its own the case composition
-        ## identifies only the product of ascertainment and incidence. The
-        ## death composition below separates them.
-        province_ascertainment := composition_state.province_ascertainment
-        province_ascertainment_sd := composition_state.ascertainment_sd
-        ## Elasticity of relative ascertainment on each patch's logged tests
-        ## per head, the covariate on its prior.
-        province_testing_coefficient := composition_state.testing_coefficient
-    end
 
     if !isempty(province_lab_days)
-        ## The same relative ascertainment the case composition scores, so a
-        ## patch's tested BVD suspects scale as its confirmed cases do and
-        ## the background shares carry only the non-BVD split. Without it
-        ## the shares absorb the ascertainment contrast instead.
-        lab_asc = isempty(province_days) ? ones(n_patches) :
-            composition_state.province_ascertainment
         modelled_lab = _patch_analysed_increments(
-            confirmed_carried, p_drc, lab_asc,
+            confirmed_carried, p_drc, patch_asc,
             convolve_delay(cases_state.bg_daily, confirmed_state.receipt_pmf),
             bg_split_state.w, province_lab_days, province_lab_bins
         )
