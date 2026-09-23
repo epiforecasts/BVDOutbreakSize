@@ -47,6 +47,8 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- The offline `analysis.html` is gone (#839).
+  Each release's `site.zip` now unpacks to `BVDOutbreakSize/<base>/` and carries a `README.txt` on serving it locally.
 - Each province is projected a week ahead by its own renewal equation
   rather than a fixed share of the national forecast, and only these
   projections are archived and scored (#836).
