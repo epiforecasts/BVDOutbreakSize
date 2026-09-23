@@ -384,3 +384,86 @@ end
         )
     end
 end
+
+@testitem "AD rules: accumulate_occupancy matches ForwardDiff" tags = [
+    :ad,
+] begin
+    using Random: seed!
+    using ForwardDiff: ForwardDiff
+    using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay,
+        _accumulate_occupancy_taped, _OCC_CONF_HI
+
+    ## Admissions, discharge schedules and a confirmation hazard shaped like
+    ## the treatment-flow model's. `dmult` above one discharges more than
+    ## was admitted, so the stocks hit their zero floors. No BVD admissions
+    ## on the last day under a high flat hazard `hflat` confirms more than
+    ## the stock holds, so the confirmed clamp takes its upper side there.
+    ## Only the last day, as the next day's `max(O_bvd − O_conf, 0)` would
+    ## sit on its tie, where ForwardDiff and Mooncake take different sides.
+    function occupancy_inputs(
+            n; dmult = 1.0, κ = 0.02, stop = n, hflat = nothing
+        )
+        days = 1:n
+        A_bvd = @. 20 * exp(-((days - n / 2) / 20)^2) + 0.5
+        A_bvd[(stop + 1):end] .= 0
+        A_bg = @. 30 * exp(-((days - n / 2) / 30)^2) + 2.0
+        w(L) = (p = abs.(randn(L)) .+ 0.1; p ./ sum(p))
+        deaths = dmult .* convolve_delay(0.4 .* A_bvd, w(15))
+        recover = dmult .* convolve_delay(0.6 .* A_bvd, w(20))
+        ruleout = dmult .* convolve_delay(A_bg, w(8))
+        h = isnothing(hflat) ? 0.1 .+ 0.3 .* abs.(sin.(days ./ 7)) :
+            fill(hflat, n)
+        return A_bvd, A_bg, deaths, recover, ruleout, κ, h
+    end
+
+    ## Mooncake with the rule against ForwardDiff on the kernel body, all
+    ## seven arguments at once with every output weighted.
+    function check_occupancy(args)
+        n = length(args[1])
+        W = [randn(n) for _ in 1:5]
+        loss = (a, b, c, d, e, k, h) -> begin
+            o = accumulate_occupancy(a, b, c, d, e, k, h)
+            sum(W[1] .* o.demand) + sum(W[2] .* o.O_bvd) +
+                sum(W[3] .* o.O_conf) + sum(W[4] .* o.O_susp) +
+                sum(W[5] .* o.abscond)
+        end
+        rule = Mooncake.build_rrule(loss, args...)
+        _, mg = Mooncake.value_and_gradient!!(rule, loss, args...)
+        lens = map(length, args)
+        x = reduce(vcat, map(a -> a isa Number ? [a] : a, args))
+        unpack(v) = let i = Ref(0)
+            map(args, lens) do a, L
+                seg = v[(i[] + 1):(i[] + L)]
+                i[] += L
+                a isa Number ? only(seg) : seg
+            end
+        end
+        fg = unpack(ForwardDiff.gradient(v -> loss(unpack(v)...), x))
+        for (mi, di) in zip(mg[2:end], fg)
+            @test mi ≈ di rtol = 1.0e-10
+        end
+        return nothing
+    end
+
+    seed!(20260923)
+    scenarios = (
+        (; dmult = 1.0, κ = 0.02), (; dmult = 1.6, κ = 0.08),
+        (; κ = 0.02, stop = 59, hflat = 0.9),
+    )
+    for kw in scenarios
+        args = occupancy_inputs(60; kw...)
+        ## The rule's forward pass is its own copy of the balance, so it
+        ## must reproduce the model's outputs bit for bit.
+        y = accumulate_occupancy(args...)
+        ỹ, _, flags = _accumulate_occupancy_taped(args...)
+        @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
+        haskey(kw, :hflat) && @test any(f -> f & _OCC_CONF_HI != 0, flags)
+        ## The rule fires: the output tangent is the rule's `NamedTuple`.
+        out, _ = Mooncake.rrule!!(
+            zero_fcodual(accumulate_occupancy), map(zero_fcodual, args)...
+        )
+        @test tangent(out) isa NamedTuple
+        check_occupancy(args)
+    end
+end

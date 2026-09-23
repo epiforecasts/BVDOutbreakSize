@@ -4,8 +4,9 @@
 # the tape; these replace that with a closed-form adjoint of the same shape
 # as the forward loop.
 #
-# Signatures are restricted to `Array{<:IEEEFloat}`, what every call site
-# passes. Anything else falls through to Mooncake's derived rule.
+# Signatures are restricted to `Array{<:IEEEFloat}` and `IEEEFloat`
+# scalars, what every call site passes. Anything else falls through to
+# Mooncake's derived rule.
 #
 # These earn their place only while the backend's own derivation is worse.
 # `task benchmark-rules` times both arms; if the gap has closed after a
@@ -469,4 +470,204 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), convert(typeof(c), c̄)
     end
     return CoDual(S, S̄), clinical_stay_survival_pullback!!
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(accumulate_occupancy), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat, Array{<:Mooncake.IEEEFloat},
+    },
+)
+
+## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
+## Ties go to the second argument of `max` and to the bound of `clamp`,
+## lower bound first, the sides Mooncake's own rules for them take.
+const _OCC_UNCONF = 0x01
+const _OCC_DENOM = 0x02
+const _OCC_BVD = 0x04
+const _OCC_BG = 0x08
+const _OCC_CONF_X = 0x10
+const _OCC_CONF_HI = 0x20
+const _OCC_SUSP = 0x40
+
+## The forward balance of `accumulate_occupancy`, also recording the
+## non-case stock and which side of each `max` and `clamp` was taken.
+function _accumulate_occupancy_taped(
+        A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
+    )
+    n = length(A_bvd)
+    T = promote_type(
+        eltype(A_bvd), eltype(A_bg), eltype(deaths),
+        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
+    )
+    demand = Vector{T}(undef, n)
+    O_bvd = Vector{T}(undef, n)
+    O_conf = Vector{T}(undef, n)
+    O_susp = Vector{T}(undef, n)
+    abscond = Vector{T}(undef, n)
+    O_bg = Vector{T}(undef, n)
+    flags = Vector{UInt8}(undef, n)
+    z = zero(T)
+    Obvd_prev = z
+    Obg_prev = z
+    Oconf_prev = z
+    Osusp_prev = z
+    ε = eps(T)
+    @inbounds for t in 1:n
+        bvd_out = deaths[t] + recover[t]
+        ab = κ * Osusp_prev
+        x_u = Obvd_prev - Oconf_prev
+        unconf = max(x_u, z)
+        denom = max(Osusp_prev, ε)
+        ab_bvd = ab * (unconf / denom)
+        ab_bg = ab * (Obg_prev / denom)
+        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
+        Obvd_t = max(x_bvd, z)
+        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
+        Obg_t = max(x_bg, z)
+        Dt = Obvd_t + Obg_t
+        conf_in = conf_hazard[t] * unconf
+        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
+        x_conf = Oconf_prev + conf_in - bvd_out * share
+        Oconf_t = clamp(x_conf, z, Obvd_t)
+        x_susp = Dt - Oconf_t
+        Osusp_t = max(x_susp, z)
+        f = 0x00
+        x_u > z && (f |= _OCC_UNCONF)
+        Osusp_prev > ε && (f |= _OCC_DENOM)
+        x_bvd > z && (f |= _OCC_BVD)
+        x_bg > z && (f |= _OCC_BG)
+        if x_conf > z
+            f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
+        end
+        x_susp > z && (f |= _OCC_SUSP)
+        demand[t] = Dt
+        O_bvd[t] = Obvd_t
+        O_conf[t] = Oconf_t
+        O_susp[t] = Osusp_t
+        abscond[t] = ab
+        O_bg[t] = Obg_t
+        flags[t] = f
+        Obvd_prev = Obvd_t
+        Obg_prev = Obg_t
+        Oconf_prev = Oconf_t
+        Osusp_prev = Osusp_t
+    end
+    return (; demand, O_bvd, O_conf, O_susp, abscond), O_bg, flags
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(accumulate_occupancy)},
+        A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        A_bg::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        deaths::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        recover::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        ruleout::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        κ::CoDual{<:Mooncake.IEEEFloat},
+        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    κp = primal(κ)
+    hp = primal(conf_hazard)
+    dp = primal(deaths)
+    rp = primal(recover)
+    Āb = tangent(A_bvd)
+    Āg = tangent(A_bg)
+    d̄ = tangent(deaths)
+    r̄ = tangent(recover)
+    ō = tangent(ruleout)
+    h̄ = tangent(conf_hazard)
+    y, O_bg, flags = _accumulate_occupancy_taped(
+        primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp, hp
+    )
+    ȳ = map(zero, y)
+    function accumulate_occupancy_pullback!!(::NoRData)
+        Tf = eltype(y.demand)
+        z = zero(Tf)
+        ε = eps(Tf)
+        κ̄ = zero(Tf)
+        ## Adjoints of the day-`t` stocks, carried back from day `t + 1`.
+        cb = z
+        cg = z
+        cc = z
+        cs = z
+        @inbounds for t in length(flags):-1:1
+            f = flags[t]
+            Pb = t > 1 ? y.O_bvd[t - 1] : z
+            Pg = t > 1 ? O_bg[t - 1] : z
+            Pc = t > 1 ? y.O_conf[t - 1] : z
+            Ps = t > 1 ? y.O_susp[t - 1] : z
+            bvd_out = dp[t] + rp[t]
+            ab = κp * Ps
+            unconf = f & _OCC_UNCONF != 0 ? Pb - Pc : z
+            denom = f & _OCC_DENOM != 0 ? Ps : ε
+            share = Pb > z ? Pc / Pb : z
+            gOb = ȳ.O_bvd[t] + cb
+            gOg = cg
+            gOc = ȳ.O_conf[t] + cc
+            gOs = ȳ.O_susp[t] + cs
+            gD = ȳ.demand[t]
+            gab = ȳ.abscond[t]
+            ## `O_susp = max(D − O_conf, 0)`
+            if f & _OCC_SUSP != 0
+                gD += gOs
+                gOc -= gOs
+            end
+            ## `O_conf = clamp(x_conf, 0, O_bvd)`
+            gx_c = z
+            if f & _OCC_CONF_X != 0
+                gx_c = gOc
+            elseif f & _OCC_CONF_HI != 0
+                gOb += gOc
+            end
+            nb = z
+            nc = gx_c
+            gbo = -gx_c * share
+            if Pb > z
+                gshare = -gx_c * bvd_out
+                nc += gshare / Pb
+                nb -= gshare * share / Pb
+            end
+            h̄[t] += gx_c * unconf
+            gu = gx_c * hp[t]
+            ## `D = O_bvd + O_bg`, each `max(x, 0)` of its balance
+            gOb += gD
+            gOg += gD
+            gx_b = f & _OCC_BVD != 0 ? gOb : z
+            gx_g = f & _OCC_BG != 0 ? gOg : z
+            nb += gx_b
+            Āb[t] += gx_b
+            gbo -= gx_b
+            ng = gx_g
+            Āg[t] += gx_g
+            ō[t] -= gx_g
+            ## Abscond split `ab · (unconf / denom)` and `ab · (O_bg / denom)`
+            qu = unconf / denom
+            qg = Pg / denom
+            gab -= gx_b * qu + gx_g * qg
+            gqu = -gx_b * ab
+            gqg = -gx_g * ab
+            gu += gqu / denom
+            ng += gqg / denom
+            gden = -(gqu * qu + gqg * qg) / denom
+            ns = f & _OCC_DENOM != 0 ? gden : z
+            if f & _OCC_UNCONF != 0
+                nb += gu
+                nc -= gu
+            end
+            κ̄ += gab * Ps
+            ns += gab * κp
+            d̄[t] += gbo
+            r̄[t] += gbo
+            cb = nb
+            cg = ng
+            cc = nc
+            cs = ns
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
+            NoRData(), convert(typeof(κp), κ̄), NoRData()
+    end
+    return CoDual(y, ȳ), accumulate_occupancy_pullback!!
 end
