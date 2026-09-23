@@ -8,10 +8,6 @@
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
 # The [forecast by province](@ref "Forecast by province") evaluation scores this projection.
 #
-# Releases before v2.2.0 archived a different province forecast, the national forecast split by each province's share at the last spatial vintage and held over the week.
-# Releases from v2.2.0 onwards archive this projection.
-# Scores of past province forecasts, and the past forecasts shown below, therefore mix the two methods.
-#
 # The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
 # The symptom-onset curve is national only, so there is no province nowcast.
 #
@@ -259,7 +255,7 @@ forecast_province_fig(4) #hide
 
 # ## Past forecasts against what was observed
 #
-# Each release since 15 September 2026 archives its province forecast, so this figure has few made dates so far.
+# Only forecasts made by the per-province projection are shown, so the figure fills in as releases accumulate.
 # Each panel is one province stream at one horizon.
 # The x-axis is the cut-off each forecast was made from.
 # Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the province went on to report.
@@ -282,7 +278,9 @@ province_overlay_df = _release_data(
     )
 )
 province_overlay_fig = plot_forecast_overlay(
-    scored_overlay(province_overlay_df)
+    scored_overlay(province_overlay_df);
+    empty_message = "No projection forecast has been scored yet. " *
+        "This fills in as releases accumulate."
 );
 
 #md # ```@raw html

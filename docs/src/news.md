@@ -52,8 +52,9 @@ This moves the non-BVD death background, so fitted values change.
   the national forecast (#836).
   The Provinces page, the release archive (`province_forecast.csv`) and the
   province forecast evaluation all use the projection.
-  Releases before v2.2.0 hold the share split, so the scores of past
-  province forecasts mix the two methods.
+  The archive records its method, and only projection forecasts are scored,
+  so the province scores and overlay start empty and fill in as releases
+  accumulate.
   Both forecast pages open with summary bullets giving next week's counts as
   credible intervals.
 - Forecasts is split into a National and a Provinces page (#830).
