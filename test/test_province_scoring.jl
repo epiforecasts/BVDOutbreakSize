@@ -229,9 +229,10 @@ end
         return path
     end
 
-    ## Only rows the current per-province projection made are scored.
+    ## Only rows the current per-province forecast made are scored.
     result = score_province_release(
-        "results-1", archive(; method = "projection-v2"), obs, grid_date
+        "results-1", archive(; method = PROVINCE_FORECAST_METHOD), obs,
+        grid_date
     )
     @test unique(r.stream for r in result.rows) == ["confirmed cases [ituri]"]
     @test unique(r.stream for r in result.overlay) ==

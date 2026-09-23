@@ -147,8 +147,8 @@ Ordered list of the report's fits as `(; id, kind, model, thunk)` named
 tuples. `kind` is `:chain` for the headline joint and single-stream fits or
 `:frozen` for the frozen/validation joints (whose thunk returns
 `(; cutoff, o, chn)`). `model` builds the model the thunk samples, which the
-forecasts run past the cut-off. The sensitivity re-fits, appended only when
-`run_sensitivity` is true, are not forecast and carry no `model`.
+forecasts run past the cut-off. The two re-fits appended only when
+`run_sensitivity` is true are not forecast and carry no `model`.
 """
 ## Sampler settings for the headline and its spatial control.
 ##

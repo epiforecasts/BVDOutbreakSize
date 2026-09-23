@@ -1270,68 +1270,52 @@ CSV.write(
 ## no single-stream fit, so the joint is the only fit that carries it.
 stream_thin = 5
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
-## Observed bed occupancy at the cut-off, the level the isolation forecast
-## anchors on.
-_iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
-    obs.isolation_history.counts[end]
-## The reporting triangle's own cumulative total at the cut-off. It anchors
-## the reported quantity rather than changing it: the onset forecast is the
-## INCREMENT this total should add over the horizon, not the level (see the
-## methods section on the nowcast and forecast).
-_onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
-## Cumulative recovered at the cut-off. The loader leaves it missing when the
-## manifest carries no recovered vintages, and the forecast returns the
-## increment rather than this base, so a zero stands in for that case.
-_recovered_at_cutoff = coalesce(obs.recovered_cases, 0)
 stream_fits = [
     (;
         fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
         streams = [
-            (:reported_cases, "reported cases", obs.reported_cases),
-            (:suspected_deaths, "suspected deaths", obs.total_deaths),
-            (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
-            (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
-            (:recovered, "recovered", _recovered_at_cutoff),
-            (:isolation_beds, "isolation beds", _iso_at_cutoff),
-            (:exports, "exports", obs.exported_cases),
-            (:onset_reports, "onset reports", _onset_at_cutoff),
+            (:reported_cases, "reported cases"),
+            (:suspected_deaths, "suspected deaths"),
+            (:confirmed_cases, "confirmed cases"),
+            (:confirmed_deaths, "confirmed deaths"),
+            (:recovered, "recovered"),
+            (:isolation_beds, "isolation beds"),
+            (:exports, "exports"),
+            (:onset_reports, "onset reports"),
         ],
     ),
     (;
         fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
-        streams = [(:reported_cases, "reported cases", obs.reported_cases)],
+        streams = [(:reported_cases, "reported cases")],
     ),
     (;
         fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
-        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)],
+        streams = [(:suspected_deaths, "suspected deaths")],
     ),
     (;
         fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
-        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)],
+        streams = [(:confirmed_cases, "confirmed cases")],
     ),
     (;
         fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
         rt_walk_start = 1,
         streams = [
-            (
-                :confirmed_deaths, "confirmed deaths",
-                obs.confirmed_deaths,
-            ),
+            (:confirmed_deaths, "confirmed deaths"),
         ],
     ),
     (;
         fit = "treatment", chn = chn_treatment, rt_start = 1,
         rt_walk_start = 1,
-        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)],
+        streams = [(:isolation_beds, "isolation beds")],
     ),
     (;
         fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
-        streams = [(:exports, "exports", obs.exported_cases)],
+        streams = [(:exports, "exports")],
     ),
     (;
         fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
-        streams = [(:onset_reports, "onset reports", _onset_at_cutoff)],
+        streams = [(:onset_reports, "onset reports")],
     ),
 ]
 
@@ -1409,7 +1393,7 @@ stream_forecasts = DataFrame(
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
     fit = String[]
 )
-for f in stream_fits, (stream, label, obs_value) in f.streams,
+for f in stream_fits, (stream, label) in f.streams,
         h in forecast_horizons
     _vals = forecast_stream(fit_forecast(f.fit), stream; horizon = h)
     for (d, i) in enumerate(1:stream_thin:length(_vals))

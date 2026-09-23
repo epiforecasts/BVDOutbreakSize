@@ -1,10 +1,7 @@
 # # Forecasts
 #
-# Every release forecasts each DRC stream a week ahead from the joint
-# posterior.
-# The forecast is drawn from the fitted model run past the cut-off, as the
-# [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section
-# describes.
+# Every release forecasts each DRC stream a week ahead from the joint posterior.
+# The forecast is drawn from the fitted model run past the cut-off, as the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section describes.
 # How these forecasts have scored against the data that arrived afterwards is
 # on the [evaluation](@ref "Forecast evaluation") page.
 # The split by province is on the [province forecasts](@ref "Province forecasts") page.

@@ -184,7 +184,8 @@ function forecast_reported(
 end
 
 """
-    forecast_onsets(pp; horizon = 7, obs_value = missing) -> DataFrame
+    forecast_onsets(pp; horizon = 7, obs_value = missing, strict = true)
+        -> DataFrame
 
 Nowcast and forecast of symptom onsets and of the reporting triangle that
 observes them, one row per draw, read from the posterior-predictive draws
@@ -474,9 +475,8 @@ cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column.
 `(province, stream, horizon, draw)` with columns `made_date`, `horizon`,
 `target_date`, `province`, `stream`, `draw`, `value` and `method`.
 `method` is [`PROVINCE_FORECAST_METHOD`](@ref), so scoring can tell these
-rows from earlier archives: the hand-written projections wrote
-`"projection"` and `"projection-v2"`, and the share split before them wrote
-no `method` column.
+rows from earlier archives: the hand-written projection wrote
+`"projection"`, and the share split before it wrote no `method` column.
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`

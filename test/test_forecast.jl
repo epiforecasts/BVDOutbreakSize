@@ -112,9 +112,20 @@ end
             Xoshiro(3), m, Prior(), 5;
             chain_type = FlexiChains.VNChain, progress = false
         )
-        v = forecast_stream(forecast_draws(m, c; horizon = 7), stream)
+        spp = forecast_draws(m, c; horizon = 7)
+        v = forecast_stream(spp, stream)
         @test length(v) == 5
         @test all(>=(0), v)
+        ## The stream's own future counts from the fit's draws, summed over
+        ## the week or read on its last day.
+        spec = BVDOutbreakSize._STREAM_FORECAST[stream]
+        if stream !== :onset_reports
+            got = [collect(x) for x in vec(collect(spp[Symbol(spec.key)]))]
+            @test v == (
+                spec.level ? [round(Int, x[7]) for x in got] :
+                    [sum(x[1:7]) for x in got]
+            )
+        end
         ## A single-stream fit forecasts only its own stream.
         stream === :reported_cases && @test_throws ArgumentError forecast_stream(
             forecast_draws(m, c; horizon = 7), :confirmed_cases
