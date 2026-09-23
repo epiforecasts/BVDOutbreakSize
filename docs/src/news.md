@@ -78,6 +78,10 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- Evaluation has one page per geography, National and Provinces, each with an in-sample section and a forecast-evaluation section (#833).
+  They replace the in-sample and forecast pages, and the old URLs redirect to the National page.
+  The Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
+  It adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
 
 ### Infrastructure
 
