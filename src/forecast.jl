@@ -766,12 +766,168 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
     return out
 end
 
+## Piecewise-linear interpolation of knot values `ks` (knot 0 at the
+## cut-off, knot `j` at `j * week` days on) to horizon day `d`.
+function _knot_interp(ks, d::Integer, week::Integer)
+    j = fld(d, week)
+    j >= length(ks) - 1 && return ks[end]
+    w = (d - j * week) / week
+    return (1 - w) * ks[j + 1] + w * ks[j + 2]
+end
+
+"""
+    forecast_provinces(chn; horizon = 7, n_patches, patch_labels, seed)
+        -> DataFrame
+
+Per-province forward projection from a fitted patch chain: each province's
+renewal equation continued `horizon` days past the cut-off, the patches still
+coupled by importation. It uses the fitted chain as it is and needs no refit.
+Returns one row per province and draw, with columns `patch` (the patch
+index), `province` (its label in `patch_labels`), `draw`,
+`infections_new` (new latent infections over the horizon) and `rt_forecast`
+(the province's reproduction number at the horizon), plus `confirmed_new`
+and `confirmed_deaths_new` when the chain carries what they need.
+
+For each draw the province reproduction number over the horizon is its
+cut-off value `R_T_patch` moved by two walks, continued as
+[`patch_rt_model`](@ref) defines them.
+
+- The national log-Rt walk takes fresh weekly innovations at its fitted step
+  size `rt_state.sigma_rw`, shared by every province, as
+  [`forecast_reported`](@ref) continues it.
+- Each province's deviation from it reverts toward zero with the fitted
+  half-life `region_halflife` and takes fresh weekly innovations at its own
+  scale `region_drift_sd`, centred across the provinces so they still sum to
+  zero. The innovations are drawn independently, without the fitted
+  cross-province correlation.
+
+The cut-off is treated as a knot. The last generation-interval's worth of
+each province's fitted daily infections (`infections_patch`) seeds
+[`patch_infections`](@ref), which renews the provinces over the horizon with
+the generation interval, the importation kernel and the importation
+intensity at the cut-off (`importation_epsilon_patch`, zero when the chain
+was fitted uncoupled).
+
+The confirmed streams start from the national daily rate at the cut-off (the
+last increment of `cumulative_confirmed` or `cumulative_confirmed_deaths`)
+times the province's modelled share at the most recent spatial vintage
+(`province_shares`, `province_death_shares`). Each day then grows with the
+province's own projected infections, `I_{p,n+d} / I_{p,n}`, with no delay
+between infection and report, as the national forecast grows its streams.
+Each day is replicated through the stream's fitted dispersion and the days
+are summed. The provinces are projected on their own, so they need not sum
+to the national forecast draw by draw.
+"""
+function forecast_provinces(
+        chn;
+        horizon::Integer = 7,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]
+        ),
+        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        week::Integer = 7,
+        seed::Integer = 20260521
+    )
+    np = min(n_patches, length(patch_labels))
+    h = Int(horizon)
+    R_T = _draw_vectors(chn, :R_T_patch)
+    δ_T = _draw_vectors(chn, :delta_patch)
+    σ_δ = _draw_vectors(chn, :region_drift_sd)
+    halflife = _draws(chn, :region_halflife)
+    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
+    α = _draws(chn, Symbol("gi_state.α"))
+    θ = _draws(chn, Symbol("gi_state.θ"))
+    I_flat = _draw_vectors(chn, :infections_patch)
+    ε = _has_key(chn, :importation_epsilon_patch) ?
+        _draw_vectors(chn, :importation_epsilon_patch) : nothing
+    nd = length(halflife)
+    n = length(first(I_flat)) ÷ np
+
+    ## A confirmed stream is projected when the chain carries its national
+    ## cut-off rate, its dispersion and its provincial shares.
+    function stream(cum_key, share_key, k_keys)
+        _has_key(chn, share_key) || return nothing
+        daily = _daily_at_cutoff(chn, cum_key)
+        isnothing(daily) && return nothing
+        k = _resolve_draws(chn, k_keys)
+        isnothing(k) && return nothing
+        return (; daily, k, share = _per_patch_last_share(chn, share_key, np))
+    end
+    conf = stream(
+        :cumulative_confirmed, :province_shares,
+        _STREAM_SPEC[:confirmed_cases].dispersion
+    )
+    conf_deaths = stream(
+        :cumulative_confirmed_deaths, :province_death_shares,
+        _STREAM_SPEC[:confirmed_deaths].dispersion
+    )
+
+    rng = MersenneTwister(seed)
+    nknots = cld(h, week)
+    out = DataFrame(
+        patch = Int[], province = String[], draw = Int[],
+        infections_new = Float64[], rt_forecast = Float64[]
+    )
+    conf_new = Int[]
+    conf_deaths_new = Int[]
+    for i in 1:nd
+        g = _gi_pmf(α[i], θ[i]; nmax = gi_nmax)
+        L = min(length(g), n)
+        ## National walk: one path shared by every province.
+        nat = vcat(0.0, cumsum(sigma[i] .* randn(rng, nknots)))
+        ## Provincial deviations: mean-reverting, centred at every knot.
+        φ = exp2(-week / halflife[i])
+        δ = zeros(np, nknots + 1)
+        δ[:, 1] = δ_T[i][1:np]
+        for kk in 2:(nknots + 1)
+            innov = σ_δ[i][1:np] .* randn(rng, np)
+            innov .-= sum(innov) / np
+            δ[:, kk] = φ .* δ[:, kk - 1] .+ innov
+        end
+        Rt = zeros(np, L + h)
+        for p in 1:np, d in 1:h
+
+            shift = _knot_interp(nat, d, week) +
+                _knot_interp(view(δ, p, :), d, week) - δ[p, 1]
+            Rt[p, L + d] = R_T[i][p] * exp(shift)
+        end
+        seeds = [I_flat[i][(t - 1) * np + p] for p in 1:np, t in (n - L + 1):n]
+        eps = isnothing(ε) ? zeros(np, L + h) :
+            repeat(ε[i][1:np], 1, L + h)
+        I = patch_infections(Rt, g, seeds, importation_kernel, eps).infections
+        for p in 1:np
+            I_T = I[p, L]
+            growth = [I_T > 0 ? I[p, L + d] / I_T : 0.0 for d in 1:h]
+            push!(
+                out, (
+                    p, String(patch_labels[p]), i,
+                    sum(@view I[p, (L + 1):(L + h)]), Rt[p, L + h],
+                )
+            )
+            for (s, dest) in ((conf, conf_new), (conf_deaths, conf_deaths_new))
+                isnothing(s) && continue
+                push!(
+                    dest,
+                    _nb_new(
+                        rng, s.k[i],
+                        s.daily[i] * s.share[p][i] .* growth
+                    )
+                )
+            end
+        end
+    end
+    isnothing(conf) || (out.confirmed_new = conf_new)
+    isnothing(conf_deaths) || (out.confirmed_deaths_new = conf_deaths_new)
+    return out
+end
+
 """
     province_forecast_archive(chn, fcs; made_date, thin = 1) -> DataFrame
 
-Long-format archive of the per-province split of one or more
-[`forecast_reported`](@ref) results made from a single cut-off, in the
-[`forecast_archive`](@ref) schema plus a `province` column. `chn` is the
+Long-format archive of one or more per-province forecasts made from a single
+cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column. `chn` is the
 patch chain the forecasts were made from, `fcs` an iterable of
 `(horizon, fc)` pairs and `made_date` the cut-off `Date`. Returns one row
 per `(province, stream, horizon, draw)` with columns `made_date`,
@@ -779,17 +935,17 @@ per `(province, stream, horizon, draw)` with columns `made_date`,
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`
-gives the national streams each row is a share of. `province` is the patch
+gives the national streams. `province` is the patch
 key from [`PROVINCE_NAMES`](@ref), which [`PROVINCE_MEMBERS`](@ref) maps to
 the source provinces a patch pools, so a scorer can build each patch's truth
 from the per-province histories in the same release's `observations.toml`.
 
-Each province's value is the national draw times that province's modelled
-share at the most recent spatial vintage, multiplied draw by draw so the
-archived draws carry the correlation between the two factors. The share is
-held over the horizon rather than projected forward, so a province whose
-share is moving is archived as though it were not. `thin` keeps every
-`thin`-th draw so the archive stays compact as a release asset.
+Each `fc` is a [`forecast_provinces`](@ref) frame, archived as projected, or
+a national [`forecast_reported`](@ref) result. From the national result each
+province's value is the national draw times that province's modelled share
+at the most recent spatial vintage, multiplied draw by draw and held over the
+horizon. `thin` keeps every `thin`-th draw so the archive stays compact as
+a release asset.
 """
 function province_forecast_archive(
         chn, fcs; made_date::Date,

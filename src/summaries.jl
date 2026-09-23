@@ -1049,10 +1049,12 @@ const _PROVINCE_FORECAST_STREAMS = (
     (:confirmed_deaths_new, "confirmed deaths"),
 )
 
-## Per-province forecast draws from one [`forecast_reported`](@ref) result:
-## the national draw times that province's modelled share at the most recent
-## spatial vintage, multiplied draw by draw so the split carries the
-## correlation between the two factors. Returns one
+## Per-province forecast draws. From a [`forecast_provinces`](@ref) frame
+## these are each province's own projected draws. From a
+## [`forecast_reported`](@ref) result they are the national draw times that
+## province's modelled share at the most recent spatial vintage, multiplied
+## draw by draw so the split carries the correlation between the two
+## factors. Returns one
 ## `(stream_label, province, draws)` entry per province and per stream the
 ## forecast carries, provinces outer. Shared by the province forecast table,
 ## figure and release archive, so all three read one split.
@@ -1060,6 +1062,10 @@ function _province_forecast_draws(
         chn, fc, np::Integer,
         patch_labels::AbstractVector
     )
+    ## A [`forecast_provinces`](@ref) frame carries each province's own
+    ## projected draws, keyed by patch, so no split is needed.
+    :patch in propertynames(fc) &&
+        return _province_projection_draws(fc, np, patch_labels)
     _has_key(chn, :province_shares) || error(
         "chain carries no `province_shares`; it was not sampled from " *
             "`bvd_joint` with the per-province compositions on."
@@ -1080,19 +1086,36 @@ function _province_forecast_draws(
     return out
 end
 
-"""
-Per-province split of the one-week-ahead national forecast `fc` from
-[`forecast_reported`](@ref): the new confirmed cases and confirmed deaths
-expected in each province over the week to `T + 7`, as the same 90/60/30%
-credible intervals [`forecast_table`](@ref) reports nationally. The same
-content is drawn by [`plot_province_forecast`](@ref) and archived for
-scoring by [`province_forecast_archive`](@ref).
+## The same `(stream_label, province, draws)` entries read straight off a
+## [`forecast_provinces`](@ref) frame, provinces outer.
+function _province_projection_draws(fc, np::Integer, patch_labels)
+    out = Tuple{String, String, Vector{Float64}}[]
+    cols = propertynames(fc)
+    for p in 1:np, (col, label) in _PROVINCE_FORECAST_STREAMS
 
-Each province's count is the national draw times that province's modelled
-share at the most recent spatial vintage. The split is held at its current
-value over the week rather than projected forward. The provincial
-compositions are fitted only where the spatial tables report, so a province
-whose share is moving is not tracked past the last vintage.
+        col in cols || continue
+        rows = fc.patch .== p
+        any(rows) || continue
+        push!(out, (label, patch_labels[p], float.(fc[rows, col])))
+    end
+    return out
+end
+
+"""
+One-week-ahead forecast by province: the new confirmed cases and confirmed
+deaths expected in each province over the week to `T + 7`, as the same
+90/60/30% credible intervals [`forecast_table`](@ref) reports nationally.
+The same content is drawn by [`plot_province_forecast`](@ref) and archived
+for scoring by [`province_forecast_archive`](@ref).
+
+`fc` is either of two forecasts.
+
+- A [`forecast_provinces`](@ref) frame, each province projected by its own
+  renewal. The table then adds each province's new latent infections and
+  its reproduction number at the horizon.
+- A national [`forecast_reported`](@ref) result, split by province. Each
+  province's count is then the national draw times that province's modelled
+  share at the most recent spatial vintage, held over the week.
 """
 function province_forecast_table(
         chn, fc;
@@ -1101,21 +1124,44 @@ function province_forecast_table(
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
+    entries = [
+        (province, "New $(label) by T+7", draws, digits)
+            for (label, province, draws) in _province_forecast_draws(
+                chn, fc, np, patch_labels
+            )
+    ]
+    ## A projection also carries each province's latent quantities, listed
+    ## after its observed streams.
+    if :patch in propertynames(fc)
+        for p in 1:np, (col, quantity, dg) in (
+                    (:infections_new, "New infections by T+7", digits),
+                    (:rt_forecast, "Reproduction number at T+7", 2),
+                )
+
+            col in propertynames(fc) || continue
+            rows = fc.patch .== p
+            any(rows) || continue
+            push!(
+                entries,
+                (patch_labels[p], quantity, float.(fc[rows, col]), dg)
+            )
+        end
+        order = Dict(l => i for (i, l) in enumerate(patch_labels[1:np]))
+        sort!(entries; by = e -> order[e[1]], alg = MergeSort)
+    end
     rows = NamedTuple[]
-    for (label, province, draws) in _province_forecast_draws(
-            chn, fc, np, patch_labels
-        )
+    for (province, quantity, draws, dg) in entries
         s = posterior_summary(draws)
         push!(
             rows,
             (
-                province = province, quantity = "New $(label) by T+7",
-                lower_90 = round(s.lo90; digits),
-                lower_60 = round(s.lo60; digits),
-                lower_30 = round(s.lo30; digits),
-                upper_30 = round(s.hi30; digits),
-                upper_60 = round(s.hi60; digits),
-                upper_90 = round(s.hi90; digits),
+                province = province, quantity = quantity,
+                lower_90 = round(s.lo90; digits = dg),
+                lower_60 = round(s.lo60; digits = dg),
+                lower_30 = round(s.lo30; digits = dg),
+                upper_30 = round(s.hi30; digits = dg),
+                upper_60 = round(s.hi60; digits = dg),
+                upper_90 = round(s.hi90; digits = dg),
             )
         )
     end
