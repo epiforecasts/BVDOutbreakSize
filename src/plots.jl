@@ -636,15 +636,22 @@ each marginal is visible.
 `labels` maps a raw chain symbol to a display name (e.g.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
 only. Symbols absent from the map keep their raw name.
+
+`patch` selects one entry of vector-valued deterministics such as
+`R_T_patch` or `province_ascertainment`, so the corner plot shows one
+province. Every parameter in `params` is then read as a per-patch vector.
 """
 function plot_pair(
         chn, params::AbstractVector{Symbol};
         thin::Integer = 2, prior = nothing,
-        labels::AbstractDict = Dict{Symbol, String}()
+        labels::AbstractDict = Dict{Symbol, String}(),
+        patch::Union{Nothing, Integer} = nothing
     )
     _name(p) = Symbol(get(labels, p, string(p)))
+    _col(c, p) = patch === nothing ? _draws(c, p) :
+        [v[patch] for v in _draw_vectors(c, p)]
     _table(c) = DataFrame(
-        NamedTuple(_name(p) => _draws(c, p) for p in params)
+        NamedTuple(_name(p) => _col(c, p) for p in params)
     )[1:thin:end, :]
     post = _table(chn)
     prior === nothing && return PairPlots.pairplot(post)

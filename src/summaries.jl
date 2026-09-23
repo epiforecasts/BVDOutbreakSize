@@ -543,6 +543,74 @@ function patch_overview_table(
     return df
 end
 
+## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
+## 90% e–f`. `digits = 0` writes whole numbers.
+function _interval_text(s; digits::Integer = 2, unit::AbstractString = "")
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return join(
+        (
+            string(
+                lvl, "% ",
+                fmt(getproperty(s, Symbol("lo", lvl))), "–",
+                fmt(getproperty(s, Symbol("hi", lvl))), unit
+            )
+                for lvl in (30, 60, 90)
+        ), ", "
+    )
+end
+
+"""
+Markdown bullets summarising each province of the patch model, one bullet per
+province. Each gives the cumulative infections and the reproduction number at
+the cut-off, and, when the chain carries them, the case-fatality ratio
+(`CFR_patch`, as a percentage) and the relative case ascertainment
+(`province_ascertainment`). Every quantity is written as its equal-tailed
+30%, 60% and 90% credible intervals.
+
+The reproduction number and the relative ascertainment are identified only
+as a product by the case composition, so the two are given together.
+"""
+function patch_headline(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    required = [:C_T_patch, :R_T_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+            "not sampled from `bvd_joint`."
+    )
+    np = min(n_patches, length(patch_labels))
+    per_patch(sym) = _has_key(chn, sym) ? _per_patch(chn, sym, np) : nothing
+    C_T = per_patch(:C_T_patch)
+    R_T = per_patch(:R_T_patch)
+    cfr = per_patch(:CFR_patch)
+    asc = per_patch(:province_ascertainment)
+    bullets = map(1:np) do p
+        lines = [
+            "- **$(patch_labels[p]):** " *
+                _interval_text(posterior_summary(C_T[p]); digits = 0) *
+                " infections to date.",
+            "  The reproduction number at the cut-off is " *
+                _interval_text(posterior_summary(R_T[p])) * ".",
+        ]
+        cfr === nothing || push!(
+            lines,
+            "  The case-fatality ratio is " *
+                _interval_text(
+                posterior_summary(100 .* cfr[p]); digits = 1, unit = "%"
+            ) * "."
+        )
+        asc === nothing || push!(
+            lines,
+            "  Case ascertainment relative to the national average is " *
+                _interval_text(posterior_summary(asc[p])) * "."
+        )
+        join(lines, "\n")
+    end
+    return join(bullets, "\n") * "\n"
+end
+
 """
 Per-patch outbreak summary for the patch model: one row per province, with
 the cut-off cumulative infections `C_T`, the cut-off reproduction number
