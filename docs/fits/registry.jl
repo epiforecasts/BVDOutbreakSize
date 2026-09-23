@@ -152,33 +152,8 @@ forecasts run past the cut-off. The sensitivity re-fits, appended only when
 """
 ## Sampler settings for the headline and its spatial control.
 ##
-## Both fits must use the same draw count, adaptation and acceptance target.
-## They are the two halves of the spatial sensitivity, so a difference
-## between their `C_T` posteriors reads as evidence about the spatial
-## structure only if nothing else differs.
-##
-## 1000 draws and 500 adaptation steps at a target acceptance of 0.80. The
-## effective sample size is limited by adaptation rather than by the draw
-## count, so the budget goes there: at 900 draws and 400 adaptation steps the
-## headline returned 48 bulk and 39 tail against the control's 256 and 203,
-## at a worst R-hat of 1.07 against 1.02.
-##
-## The binding constraint is the fit job's `timeout-minutes: 350`, under a
-## hard six-hour ceiling on a GitHub-hosted job. At 900 draws and 400
-## adaptation steps the headline took 320 minutes and the control 200. Total
-## iterations are held at or below that, so adaptation is bought with draws
-## rather than with wall-clock. At 800 draws and 500 adaptation steps the
-## headline took 216-265 minutes, about 0.16 minutes per iteration whether
-## adapting or drawing, so 1000 draws adds about 33 minutes.
-##
-## NUTS terminates at the tree-depth cap on every iteration of both fits, at
-## 1023 leapfrog steps, rather than at a U-turn. Raising `max_depth` is the
-## direct fix and each extra level doubles the leapfrog steps, which does not
-## fit the budget. A lower acceptance target lengthens the step and shortens
-## the trajectories instead.
-##
-## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
-## override all three without editing this file.
+## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
+## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
 joint_target_accept() = parse(
     Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
@@ -192,6 +167,17 @@ joint_samples(default::Integer) = parse(
 joint_warmup(default::Integer) = parse(
     Int,
     get(ENV, "BVD_JOINT_WARMUP", string(default))
+)
+
+joint_max_depth() = parse(
+    Int,
+    get(ENV, "BVD_JOINT_MAX_DEPTH", "12")
+)
+
+## The sampler budget both halves of the spatial sensitivity splat.
+joint_sampler_args() = (;
+    samples = joint_samples(1000), n_adapts = joint_warmup(500),
+    target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
 function build_fit_specs(
@@ -449,9 +435,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = joint_samples(1000), chains = chains,
-                n_adapts = joint_warmup(500),
-                target_accept = joint_target_accept(),
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("joint")
             )
         ),
@@ -477,9 +461,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = joint_samples(1000), chains = chains,
-                n_adapts = joint_warmup(500),
-                target_accept = joint_target_accept(),
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("sens_no_patches")
             )
         ),

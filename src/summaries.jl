@@ -541,6 +541,74 @@ function province_composition_panels(
     ]
 end
 
+"""
+Per-province posterior-predictive panels for one province stream on the
+count scale, in the shape [`stream_calibration`](@ref) takes. One panel per
+province, titled `"<stream>, <province>"`, holding the observed count at
+each spatial vintage and one replicate count vector per posterior draw.
+
+Unlike [`province_composition_panels`](@ref), the total being split is not
+held at its observed value. Each draw's national replicate increments
+(`national_replicates`, one vector per draw on the `national_days` grid,
+from `predict`) are summed over each province vintage, and that draw's
+expected shares (`share_key`) and overdispersion split the sum through the
+same stick-breaking allocation. The replicates therefore carry the national
+observation model's uncertainty as well as the split's.
+
+The first province vintage is the cumulative count to date, so it takes
+`baseline`, the national count before the first replicated increment, as
+well as every national increment up to it. Every province day must be on
+the national grid, and the national replicates must pair one to one with
+the chain draws, each with one increment per national day. Each panel is
+a daily panel (`cumulative = false`).
+"""
+function province_count_panels(
+        chn; share_key::Symbol, obs_increments::AbstractMatrix,
+        province_days::AbstractVector{<:Integer},
+        national_days::AbstractVector{<:Integer}, national_replicates,
+        stream::AbstractString, baseline::Integer = 0,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        rho_key::Union{Nothing, Symbol} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    ms = [collect(v) for v in vec(collect(chn[share_key]))]
+    reps = [collect(r) for r in vec(collect(national_replicates))]
+    length(reps) == length(ms) || error(
+        "province_count_panels: $(length(reps)) national replicates for " *
+            "$(length(ms)) chain draws."
+    )
+    all(r -> length(r) == length(national_days), reps) || error(
+        "province_count_panels: every national replicate must have one " *
+            "increment per national day ($(length(national_days)))."
+    )
+    idx = [findfirst(==(d), national_days) for d in province_days]
+    any(isnothing, idx) && error(
+        "province_count_panels: province days " *
+            "$(province_days[isnothing.(idx)]) are not on the national grid."
+    )
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, length(ms))
+    rho === nothing && error(
+        "province_count_panels: the chain carries no overdispersion for " *
+            "`$(share_key)` (looked for $(rho_keys))."
+    )
+    totals = map(reps) do r
+        cum = baseline .+ cumsum(r)[idx]
+        max.(diff(vcat(0, cum)), 0)
+    end
+    counts = _composition_counts(ms, rho, totals)
+    return [
+        (;
+            title = string(stream, ", ", patch_labels[p]),
+            observed = Int.(obs_increments[p, :]),
+            replicates = counts[p], cumulative = false,
+        )
+            for p in 1:np
+    ]
+end
+
 ## Whether a chain carries a given key. Chain types throw on a missing key
 ## rather than returning a sentinel, so presence has to be probed.
 function _has_key(chn, key::Symbol)
