@@ -216,15 +216,17 @@ evaluation_forecast_province_summary = let
     end
     with_scores = [p for p in 1:N_PATCHES if size(scored(p).rows, 1) > 0]
     all_rows = filter(r -> !ismissing(r.rel_to_baseline), overview)
-    overall = isempty(with_scores) ?
-        ["- **Forecasts:** no province forecast has been scored yet."] :
+    n_beat = count(
+        p -> all(<(1), scored(p).rows.rel_to_baseline), with_scores
+    )
+    overall = if isempty(with_scores)
+        ["- **Forecasts:** no province forecast has been scored yet."]
+    else
         [
             string(
-                "- **Provinces:** ", count(
-                    p -> all(<(1), scored(p).rows.rel_to_baseline), with_scores
-                ), " of ", length(with_scores),
-                " provinces with scored forecasts beat the baseline on every ",
-                "stream scored for them."
+                "- **Provinces:** ", n_beat, " of ", length(with_scores),
+                " provinces with scored forecasts beat the baseline on ",
+                "every stream scored for them."
             ),
             string(
                 "- **Province streams:** ",
@@ -232,18 +234,18 @@ evaluation_forecast_province_summary = let
                 size(all_rows, 1), " beat the baseline."
             ),
         ]
+    end
     function detail(p)
         sc = scored(p)
-        bullets = size(sc.rows, 1) == 0 ?
-            ["- No scored forecast yet."] :
-            [
-                string(
-                    "- ", replace(r.stream, sc.tag => ""), ": relative skill ",
-                    fmt(r.rel_to_baseline), ", 90% coverage ",
-                    fmt(r.coverage_90), " over ", r.n, " forecasts."
-                )
+        bullets = [
+            string(
+                "- ", replace(r.stream, sc.tag => ""), ": relative skill ",
+                fmt(r.rel_to_baseline), ", 90% coverage ",
+                fmt(r.coverage_90), " over ", r.n, " forecasts."
+            )
                 for r in eachrow(sc.rows)
-            ]
+        ]
+        isempty(bullets) && (bullets = ["- No scored forecast yet."])
         return join(
             vcat([string("**", PROVINCE_LABELS[p], "**"), ""], bullets), "\n"
         )
