@@ -464,8 +464,7 @@ end
 
 """
 Per-province posterior-predictive panels for one province composition, in
-the shape [`stream_calibration`](@ref) and
-[`plot_vintage_incidence_ppc`](@ref) take. One panel per province, titled
+the shape [`stream_calibration`](@ref) takes. One panel per province, titled
 `"<stream>, <province>"`, holding the observed count at each spatial vintage
 and one replicate count vector per posterior draw.
 

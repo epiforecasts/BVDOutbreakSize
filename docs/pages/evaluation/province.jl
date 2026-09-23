@@ -321,26 +321,8 @@ province_pairs_fig #hide
 
 ## The frozen fit's one-week-ahead national forecast, the same one the
 ## national page validates, which the province split multiplies draw by
-## draw. The onset grid is the one the frozen fit saw.
-_val_onset_days = frozen_lastweek.o.onset_curve_history.onset_days
-_val_grid_start = isempty(_val_onset_days) ? nothing :
-    minimum(_val_onset_days)
-_val_grid_end = isnothing(_val_grid_start) ? nothing :
-    max(
-        maximum(frozen_lastweek.o.onset_curve_history.report_days),
-        _val_grid_start
-    )
-validation_forecast = forecast_reported(
-    frozen_lastweek.chn;
-    horizon = 7,
-    obs_cases = frozen_lastweek.o.reported_cases,
-    obs_deaths = frozen_lastweek.o.total_deaths,
-    obs_confirmed = frozen_lastweek.o.confirmed_cases,
-    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-    obs_recovered = frozen_lastweek.o.recovered_cases,
-    grid_n = frozen_lastweek.o.n,
-    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end
-);
+## draw. `validation_forecast_from` is defined in the shared setup.
+validation_forecast = validation_forecast_from(frozen_lastweek);
 
 ## Per-province cumulative confirmed cases and deaths at the frozen cut-off
 ## and at the current one, so the truth for the week is their difference.
