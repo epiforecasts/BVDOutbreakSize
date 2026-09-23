@@ -22,15 +22,16 @@ The rendered report fills in the build date and the exact data cut-off automatic
 [by province](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/province) ·
 [forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
 [forecasts by province](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/province) ·
-[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast).
+[in-sample checks](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample/national) ·
+[forecast evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national).
 
 **Go deeper:**
 [methods](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Methods) ·
 [how this differs from McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Comparison-with-published-estimates) ·
 [reproduction number over time](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national#Reproduction-number-over-time) ·
-[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample#Posterior-predictive-checks) ·
-[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Forecast-scoring-across-releases) ·
-[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast#Frozen-fit-forecast-evaluation) ·
+[model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample/national#Posterior-predictive-checks) ·
+[forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national#Forecast-scoring-across-releases) ·
+[frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national#Frozen-fit-forecast-evaluation) ·
 [how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
 [estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
 [estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·

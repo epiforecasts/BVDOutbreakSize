@@ -196,6 +196,30 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_correlation_heatmap takes named draw vectors" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_correlation_heatmap
+
+    ## Per-province quantities are vector deterministics, so the page hands
+    ## the heatmap one draw vector per named quantity rather than a chain.
+    rng = MersenneTwister(3)
+    a = randn(rng, 300)
+    draws = (; a = a, b = a .+ 0.1 .* randn(rng, 300), c = randn(rng, 300))
+    fig = plot_correlation_heatmap(draws; labels = Dict(:a => "A"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_pair takes named draw vectors" setup = [HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    rng = MersenneTwister(4)
+    draws = (; a = randn(rng, 200), b = randn(rng, 200))
+    @test plot_pair(draws; thin = 2) !== nothing
+end
+
 @testitem "plot_stream_pairs returns a renderable object" setup = [
     HeadlessMakie,
 ] begin

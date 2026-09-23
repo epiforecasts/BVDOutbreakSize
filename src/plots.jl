@@ -640,6 +640,11 @@ only. Symbols absent from the map keep their raw name.
 `patch` selects one entry of vector-valued deterministics such as
 `R_T_patch` or `province_ascertainment`, so the corner plot shows one
 province. Every parameter in `params` is then read as a per-patch vector.
+
+`plot_pair(draws::NamedTuple; ...)` takes one draw vector per named quantity
+instead of a chain, for quantities a chain holds only inside a vector
+deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
+`NamedTuple` with the same names.
 """
 function plot_pair(
         chn, params::AbstractVector{Symbol};
@@ -647,13 +652,25 @@ function plot_pair(
         labels::AbstractDict = Dict{Symbol, String}(),
         patch::Union{Nothing, Integer} = nothing
     )
-    _name(p) = Symbol(get(labels, p, string(p)))
     _col(c, p) = patch === nothing ? _draws(c, p) :
         [v[patch] for v in _draw_vectors(c, p)]
-    _table(c) = DataFrame(
-        NamedTuple(_name(p) => _col(c, p) for p in params)
+    _named(c) = NamedTuple(p => _col(c, p) for p in params)
+    return plot_pair(
+        _named(chn); thin,
+        prior = prior === nothing ? nothing : _named(prior), labels
+    )
+end
+
+function plot_pair(
+        draws::NamedTuple;
+        thin::Integer = 2, prior::Union{Nothing, NamedTuple} = nothing,
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
+    _name(p) = Symbol(get(labels, p, string(p)))
+    _table(d) = DataFrame(
+        NamedTuple(_name(p) => v for (p, v) in pairs(d))
     )[1:thin:end, :]
-    post = _table(chn)
+    post = _table(draws)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
     return PairPlots.pairplot(
@@ -679,15 +696,29 @@ size–ascertainment seesaw (`C_T` vs `p_drc`), the weaker size–fatality tilt
 without the `\$` delimiters, so `"p_\\mathrm{drc}"` renders with a subscript.
 A parameter absent from `labels` falls back to its symbol name. Returns the
 `Figure`.
+
+`plot_correlation_heatmap(draws::NamedTuple; labels)` takes one draw vector
+per named quantity instead of a chain, for quantities a chain holds only
+inside a vector deterministic, such as one province's entry of `C_T_patch`.
 """
 function plot_correlation_heatmap(
         chn, params::AbstractVector{Symbol};
         labels::AbstractDict = Dict{Symbol, String}()
     )
+    return plot_correlation_heatmap(
+        NamedTuple(p => _draws(chn, p) for p in params); labels
+    )
+end
+
+function plot_correlation_heatmap(
+        draws::NamedTuple;
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
     ## properly. Callers pass plain LaTeX math strings.
     name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
-    mat = reduce(hcat, (_draws(chn, p) for p in params))
+    params = collect(keys(draws))
+    mat = reduce(hcat, (float.(v) for v in values(draws)))
     R = cor(mat)
     n = length(params)
     labs = [name(p) for p in params]
