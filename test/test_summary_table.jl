@@ -151,3 +151,136 @@ end
     @test row["Lower 90%"] > row["Upper 90%"] > 0
     @test row["Lower 30%"] > row["Upper 30%"] > 0
 end
+
+@testsnippet PatchHeadlineDraws begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: PROVINCE_LABELS
+
+    rng = MersenneTwister(7)
+    nd = 400
+    np = 3
+    ndays = 10
+    draws(centre, sd) = [centre .+ sd .* randn(rng, np) for _ in 1:nd]
+    base = (;
+        C_T_patch = draws([900.0, 300.0, 80.0], 20.0),
+        R_T_patch = draws([1.2, 0.9, 0.7], 0.05),
+    )
+    full = (;
+        base...,
+        CFR_patch = draws([0.4, 0.3, 0.2], 0.01),
+        province_ascertainment = draws([1.4, 0.8, 0.6], 0.05),
+        ## One import a day into every patch, flattened patch-fastest.
+        importation_patch = [ones(np * ndays) for _ in 1:nd],
+    )
+end
+
+@testitem "patch_headline compares the provinces" setup = [
+    PatchHeadlineDraws,
+] begin
+    using BVDOutbreakSize: patch_headline
+
+    md = patch_headline(base, np)
+    bullets = filter(startswith("- **"), split(md, "\n"))
+    ## Shares of infections and the reproduction number only.
+    @test length(bullets) == 2
+    @test !occursin("median", md)
+    ## Every province's share is given, and Ituri, the largest in every
+    ## draw, is named as carrying the most.
+    for p in 1:np
+        @test occursin(Regex("$(PROVINCE_LABELS[p]) \\d+–\\d+%"), md)
+    end
+    @test occursin("Ituri has the most infections", md)
+    @test occursin("over 99%", md)
+    ## The reproduction number runs from the lowest to the highest province,
+    ## with the probability each is above one read from the draws.
+    @test occursin(
+        r"from [\d.]+–[\d.]+ in Haut-Uele to [\d.]+–[\d.]+ in Ituri", md
+    )
+    @test occursin("under 1% in Haut-Uele", md)
+    @test occursin("1 of 3 provinces", md)
+
+    ## The optional comparisons appear only when the chain carries them.
+    fmd = patch_headline(full, np)
+    @test length(filter(startswith("- **"), split(fmd, "\n"))) == 5
+    @test occursin(
+        r"from 1\d\.\d–2\d\.\d% in Haut-Uele to 3\d\.\d–4\d\.\d% in Ituri",
+        fmd
+    )
+    @test occursin(
+        r"national average:\*\* from [\d.]+–[\d.]+ in Haut-Uele to " *
+            r"[\d.]+–[\d.]+ in Ituri",
+        fmd
+    )
+    ## Thirty imports against about 1 280 infections.
+    @test occursin(r"another province make up 2\.\d–2\.\d%", fmd)
+
+    @test_throws ErrorException patch_headline((; base.C_T_patch), np)
+end
+
+@testitem "patch_headline reads importation for the requested patches only" setup = [
+    PatchHeadlineDraws,
+] begin
+    using BVDOutbreakSize: patch_headline
+
+    ## One import a day into the first two patches and a hundred into the
+    ## third, flattened patch-fastest.
+    skewed = (;
+        base...,
+        importation_patch = [
+            repeat([1.0, 1.0, 100.0], ndays) for _ in 1:nd
+        ],
+    )
+    ## Twenty imports against about 1 200 infections in the first two
+    ## patches. Summing the third patch's imports would give over 80%.
+    md = patch_headline(skewed, 2)
+    @test occursin(r"another province make up 1\.\d–1\.\d%", md)
+    ## An importation vector that is not a whole number of days of the
+    ## chain's patches is an error rather than a silent misread.
+    bad = (; base..., importation_patch = [ones(3 * ndays + 1) for _ in 1:nd])
+    @test_throws ErrorException patch_headline(bad, np)
+end
+
+@testitem "patch_detail_headline gives each province its intervals" setup = [
+    PatchHeadlineDraws,
+] begin
+    using BVDOutbreakSize: patch_detail_headline
+
+    md = patch_detail_headline(base, np)
+    ## A bold lead per province, in patch order, each with its own bullets.
+    leads = filter(startswith("**"), split(md, "\n"))
+    @test leads == ["**$(l)**" for l in PROVINCE_LABELS[1:np]]
+    @test count(startswith("- **"), split(md, "\n")) == 2 * np
+    ## Equal-tailed intervals at every level, as on the National page.
+    @test count("30% ", md) == 2 * np
+    @test count("60% ", md) == 2 * np
+    @test count("90% ", md) == 2 * np
+    @test !occursin("median", md)
+    @test !occursin(r"\d\.\d+ infections", md)
+    @test !occursin("Case-fatality", md)
+
+    fmd = patch_detail_headline(full, np)
+    @test count(startswith("- **"), split(fmd, "\n")) == 4 * np
+    @test count("30% ", fmd) == 4 * np
+    ## The case-fatality ratio is written as a percentage.
+    @test occursin(r"90% 3\d\.\d–4\d\.\d%", fmd)
+
+    @test_throws ErrorException patch_detail_headline(
+        (; base.C_T_patch), np
+    )
+end
+
+@testitem "median_interval_text reads as plain words" begin
+    using BVDOutbreakSize: median_interval_text
+
+    draws = collect(0.0:100.0)
+    @test median_interval_text(draws) ==
+        "about 50 (90% credible interval 5 to 95)"
+    @test median_interval_text(draws ./ 100; digits = 2) ==
+        "about 0.50 (90% credible interval 0.05 to 0.95)"
+    ## Decimals are padded, so a reproduction number reads 0.80, not 0.8.
+    @test median_interval_text(fill(0.8, 10); digits = 2) ==
+        "about 0.80 (90% credible interval 0.80 to 0.80)"
+    ## A share reads as a percentage through the same phrase.
+    @test median_interval_text(draws ./ 100; scale = 100, suffix = "%") ==
+        "about 50% (90% credible interval 5% to 95%)"
+end

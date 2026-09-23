@@ -129,8 +129,8 @@ function combine()
         plugins = [bib],
         pages = [
             "Home" => "index.md",
+            "Summary" => "estimates/summary.md",
             "Estimates" => [
-                "Summary" => "estimates/summary.md",
                 "National" => "estimates/national.md",
                 "Provinces" => "estimates/province.md",
             ],

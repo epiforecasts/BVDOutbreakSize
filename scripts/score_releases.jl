@@ -1048,19 +1048,35 @@ function score_release(
     )
 end
 
-## Score one release's per-province forecast archive, or `nothing` when the
-## release does not carry one.
+## The method whose province forecasts are scored. Archives written before
+## the per-province projection split the national forecast by share and
+## carry no `method` column, and are not scored.
+const PROVINCE_FORECAST_METHOD = "projection"
+
+## Score one release's per-province forecast archive: `nothing` when the
+## release does not carry one, and `:no_projection` when its archive holds
+## no `method` column.
 ##
 ## Every release published before the archive existed carries no
 ## `province_forecast.csv`, so an absent asset is the ordinary case and a
 ## quiet skip, the same way the frozen archive's absence is. `forecast_path`
-## is `nothing` exactly when `fetch_asset` found nothing to download.
+## is `nothing` exactly when `fetch_asset` found nothing to download. Of an
+## archive that does record its method, only the rows of
+## `PROVINCE_FORECAST_METHOD` are scored.
 function score_province_release(
         tag, forecast_path, obs, grid_date;
         vintage_obs_path = nothing
     )
     isnothing(forecast_path) && return nothing
-    return score_release(tag, forecast_path, obs, grid_date; vintage_obs_path)
+    header, rows = read_simple_csv(forecast_path)
+    method_i = findfirst(==("method"), header)
+    isnothing(method_i) && return :no_projection
+    kept_rows = filter(r -> r[method_i] == PROVINCE_FORECAST_METHOD, rows)
+    kept = joinpath(mktempdir(), basename(forecast_path))
+    write_simple_csv(
+        kept, [h => [r[i] for r in kept_rows] for (i, h) in enumerate(header)]
+    )
+    return score_release(tag, kept, obs, grid_date; vintage_obs_path)
 end
 
 # ----------------------------------------------------------------------
@@ -1273,6 +1289,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_failed_reconstruction = 0
     n_province_scored = 0
     n_province_no_asset = 0
+    n_province_no_projection = 0
     n_province_breaks = 0
     n_province_no_baseline = 0
 
@@ -1337,7 +1354,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
             n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction,
             n_province_scored, n_province_no_asset, n_province_breaks,
-            n_province_no_baseline
+            n_province_no_baseline, n_province_no_projection
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -1501,7 +1518,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
             @warn "skipping $tag province forecast scoring" exception = e
             nothing
         end
-        if !isnothing(presult)
+        presult === :no_projection && (n_province_no_projection += 1)
+        if presult isa NamedTuple
             append!(province_score_rows, presult.rows)
             append!(province_overlay_rows, presult.overlay)
             n_province_scored += 1
@@ -1594,7 +1612,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println(
         "Scored per-province forecasts for $n_province_scored/" *
             "$(length(tags)) releases ($n_province_no_asset without the " *
-            "asset), dropping $n_province_breaks group(s) whose window " *
+            "asset, $n_province_no_projection archived before the " *
+            "per-province projection), dropping $n_province_breaks group(s) whose window " *
             "holds a harmonisation-break day and drawing no baseline for " *
             "$n_province_no_baseline."
     )
@@ -1774,8 +1793,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## `data/province_forecast_scores.csv`: the per-province forecasts scored
     ## the same way, in the same schema as the national table, with each
     ## row's `stream` the composed `"<stream> [<patch>]"` label. Kept apart
-    ## from the national table so a province's share never pools with the
-    ## national total it is a share of. Written even when empty (header
+    ## from the national table so a province never pools with the national
+    ## total. Only projection forecasts are scored (see
+    ## `score_province_release`). Written even when empty (header
     ## only), since the docs build reads it.
     province_scores = _score_frame(province_score_rows)
     province_base = rel_to_baseline_columns(province_scores)

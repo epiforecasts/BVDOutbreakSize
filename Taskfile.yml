@@ -123,8 +123,8 @@ tasks:
 
   docs:
     desc: >
-      Build the full docs site locally: render both literate pages (analysis
-      and sensitivity) from the cached fits and assemble the Vitepress site.
+      Build the full docs site locally: render every literate page from the
+      cached fits and assemble the Vitepress site.
       The render never fits: a missing fit fails naming its key, so run
       `task fetch-fits` or `task fit-all` first. Set BVD_FIT_STRICT=false to
       fit inline instead, or BVD_REFIT=all to refit. deploydocs is a no-op
@@ -134,11 +134,12 @@ tasks:
 
   docs-main:
     desc: >
-      Render just the main analysis page (docs/src/analysis.md) from the
-      cached fits, without assembling the site. Fast iteration on the main
-      page.
+      Render just the national estimates page
+      (docs/src/estimates/national.md) from the cached fits, without
+      assembling the site. Fast iteration on the main page.
     cmds:
-      - BVD_DOC_PAGE=analysis julia --project=docs docs/execute.jl {{.CLI_ARGS}}
+      - BVD_DOC_PAGE=estimates/national julia --project=docs docs/execute.jl
+        {{.CLI_ARGS}}
 
   docs-sensitivity:
     desc: >

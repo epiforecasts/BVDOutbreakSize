@@ -9,17 +9,38 @@
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
 # See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
 #
-# **Offline copy.** A self-contained single-file HTML version of this report, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
-# It carries the front matter, the methods and the national results, and links to the other pages resolve against the hosted site.
+# **Offline copy.** Each results release attaches the rendered site built from the same run: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/site.zip).
+# The `README.txt` inside says how to view it.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
+## Shared setup: packages, observations and the fit registry. See
+## `docs/pages/_setup.jl`.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
+#-
+## The fits and prior draws this page reads, loaded from the cache here.
+chn_joint = load_fit("joint")
+chn_no_patches = load_fit("sens_no_patches")
+chn_exports = load_fit("exports")
+chn_deaths = load_fit("deaths")
+chn_cases = load_fit("cases")
+chn_confirmed = load_fit("confirmed")
+chn_confirmed_deaths = load_fit("confirmed_deaths")
+chn_treatment = load_fit("treatment")
+chn_onsets = load_fit("onsets")
+frozen_lastweek = load_fit("frozen_validation")
+frozen_lastweek_streams = frozen_validation_stream_fits()
+frozen_by_cutoff = frozen_fits_by_cutoff()
+frozen_results = [frozen_by_cutoff[c] for c in frozen_cutoffs]
+if RUN_SENSITIVITY
+    chn_joint_community_delay = load_fit("sens_community_delay")
+    chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
+end
+posterior_C_joint = vec(Array(chn_joint[:C_T]))
+prior_chn = joint_prior_draws();
 
 #md # ```@raw html
 #md # </details>
@@ -34,6 +55,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 #
 # The numbers below are our estimate of the underlying infections to date, reported and unreported, from the joint posterior.
 # Each is given as equal-tailed 30%, 60% and 90% credible intervals.
+# The estimates for each province are on the [province estimates](@ref "Province estimates") page.
 
 #md # ```@raw html
 #md # <details><summary>Compute the headline ranges</summary>
@@ -70,65 +92,13 @@ summary_ranges = let
     sRT = posterior_summary(RTd)
     scfr = posterior_summary(cfrd)
 
-    ints_i(s) = string(
-        "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
-        ", 60% ", round(Int, s.lo60), "–", round(Int, s.hi60),
-        ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90)
-    )
-    ## Per-province cumulative infections, read off the patch deterministic
-    ## one draw at a time so the provinces stay coupled draw for draw.
-    C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
-    sprov = [
-        posterior_summary([v[p] for v in C_patch])
-            for p in 1:N_PATCHES
-    ]
-    ## The same draws give each province's reproduction number at the cut-off
-    ## and its case-fatality ratio, so the three read coupled draw for draw.
-    Rt_patch_draws = [collect(v) for v in vec(collect(chn_joint[:R_T_patch]))]
-    sprov_rt = [
-        posterior_summary([v[p] for v in Rt_patch_draws])
-            for p in 1:N_PATCHES
-    ]
-    cfr_patch_draws = [
-        collect(v)
-            for v in vec(collect(chn_joint[:CFR_patch]))
-    ]
-    sprov_cfr = [
-        posterior_summary([100 * v[p] for v in cfr_patch_draws])
-            for p in 1:N_PATCHES
-    ]
-    ints_f(
-        s,
-        d
-    ) = string(
-        "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
-        ", 60% ", round(s.lo60; digits = d), "–", round(s.hi60; digits = d),
-        ", 90% ", round(s.lo90; digits = d), "–", round(s.hi90; digits = d)
-    )
+    ## The 30/60/90% phrase the province headlines write too.
+    ints(s, d) = BVDOutbreakSize._interval_text(s; digits = d)
     start_from(t) = obs.cutoff - Day(round(Int, t))
     ints_d(s) = string(
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90)
-    )
-    ## One interval as a bare `lo–hi`, for a table cell that takes its level
-    ## from the column header rather than repeating it in every cell.
-    bound(s, lvl, d) = string(
-        round(getproperty(s, Symbol("lo", lvl)); digits = d), "–",
-        round(getproperty(s, Symbol("hi", lvl)); digits = d)
-    )
-    bound_i(s, lvl) = string(
-        round(Int, getproperty(s, Symbol("lo", lvl))), "–",
-        round(Int, getproperty(s, Symbol("hi", lvl)))
-    )
-    ## One province block of the per-province table: a row per province, a
-    ## column per interval level. Three of these stacked read down each
-    ## province in one pass.
-    prov_rows(cell) = join(
-        [
-            "| $(PROVINCE_LABELS[p]) | $(cell(p, 30)) | $(cell(p, 60)) | " *
-                "$(cell(p, 90)) |" for p in 1:N_PATCHES
-        ], "\n"
     )
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
@@ -145,23 +115,23 @@ summary_ranges = let
     Markdown.parse(
         """
         - **Cumulative infections:** the outbreak is estimated to have caused
-          $(ints_i(sC)) infections to date, reported and unreported.
+          $(ints(sC, 0)) infections to date, reported and unreported.
         - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
           cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
           confirmed cases are estimated to capture only a small share of the
           outbreak.
         - **Outbreak start and age:** the outbreak is estimated to have begun on
           a start date of $(ints_d(sT)), an elapsed age to the cut-off of
-          $(ints_i(sT)) days.
+          $(ints(sT, 0)) days.
         - **Growth rate and doubling time:** the initial growth rate is
-          estimated to have been $(ints_f(sr0, 3)) per day, an initial doubling
-          time of $(ints_f(sdt0, 1)) days.
-          The latest growth rate is estimated to be $(ints_f(sr, 3)) per day, a
-          latest doubling time of $(ints_f(sdt, 1)) days.
+          estimated to have been $(ints(sr0, 3)) per day, an initial doubling
+          time of $(ints(sdt0, 1)) days.
+          The latest growth rate is estimated to be $(ints(sr, 3)) per day, a
+          latest doubling time of $(ints(sdt, 1)) days.
         - **Reproduction number:** the initial reproduction number is estimated
-          to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
+          to have been $(ints(sR0, 2)) and the latest to be $(ints(sRT, 2)).
         - **Case-fatality ratio:** the case-fatality ratio is estimated to be
-          $(ints_f(scfr, 2)).
+          $(ints(scfr, 2)).
         - **Shift from priors:** how far the data has moved each estimate from
           its prior, in prior interquartile ranges, where a value of one means
           the posterior median sits one prior interquartile range from the prior
@@ -169,26 +139,6 @@ summary_ranges = let
           The fit moves the cumulative infection count by $(moves[1].second),
           the outbreak age by $(moves[2].second) and the doubling time by
           $(moves[3].second); the largest move is in the $(biggest.first).
-
-        **By province.** Equal-tailed credible intervals at the cut-off.
-
-        Infections to date:
-
-        | Province | 30% | 60% | 90% |
-        |---|---|---|---|
-        $(prov_rows((p, l) -> bound_i(sprov[p], l)))
-
-        Reproduction number:
-
-        | Province | 30% | 60% | 90% |
-        |---|---|---|---|
-        $(prov_rows((p, l) -> bound(sprov_rt[p], l, 2)))
-
-        Case-fatality ratio (%):
-
-        | Province | 30% | 60% | 90% |
-        |---|---|---|---|
-        $(prov_rows((p, l) -> bound(sprov_cfr[p], l, 1)))
         """
     )
 end;
@@ -1333,9 +1283,9 @@ CSV.write(
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5)
 );
 
-## The per-province split of the same forecasts, in the `forecast.csv`
-## schema plus the province each row is a share of, so a release records the
-## provincial forecast it made alongside the national one.
+## The province forecast archive, in the `forecast.csv` schema plus the
+## province each row belongs to, so a release records the provincial forecast
+## it made alongside the national one.
 CSV.write(
     joinpath(output_dir, "province_forecast.csv"),
     province_forecast_archive(

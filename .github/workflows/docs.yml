@@ -1,11 +1,11 @@
 name: Documenter
 
 # The report is fanned out across CI runners instead of built in one ~5h job
-# that hit GitHub's 6h cap. `list` enumerates the fits, `fit` runs them one per
-# matrix job (content-addressed, so unchanged fits are cache hits), `render`
-# executes the two literate pages (analysis, sensitivity) from the cached
-# chains in parallel, and `combine` assembles and deploys the Vitepress site
-# and publishes the results release. Everything the jobs run lives in Julia
+# that hit GitHub's 6h cap. `list` enumerates the fits by group, the `fit_*`
+# jobs run them one per matrix job (content-addressed, so unchanged fits are
+# cache hits), the `render_*` jobs execute each literate page from the cached
+# chains as soon as the fit groups it reads are done, and `combine` assembles
+# and deploys the Vitepress site and publishes the results release. Everything the jobs run lives in Julia
 # entry points (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
 # same build runs locally with `task docs`.
 
@@ -73,23 +73,26 @@ jobs:
           label: 'the report'
           # `ext/` and `scripts/` are named file by file rather than as
           # directories. The Enzyme extension is never loaded here (Enzyme is
-          # not in the docs environment), and of the scripts only these three
+          # not in the docs environment), and of the scripts only these two
           # run in this workflow, so a change to the SitRep downloader, the
           # scanners or the backfill driver used to rebuild the whole report
           # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|standalone_report)\.jl|\.github/(workflows/docs\.yml|actions/changed-paths/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
   # Resolve and precompile the single shared environment once, list the fit
-  # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
-  # included; on main/PR builds they are skipped.
+  # ids by group, and pin the manifest. On main and tag builds the two
+  # sensitivity re-fits are included; on PR builds that group is empty.
   list:
     name: Resolve env and list fits
     needs: changes
     if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     outputs:
-      ids: ${{ steps.ids.outputs.ids }}
+      joint_ids: ${{ steps.ids.outputs.joint_ids }}
+      streams_ids: ${{ steps.ids.outputs.streams_ids }}
+      frozen_ids: ${{ steps.ids.outputs.frozen_ids }}
+      sensitivity_ids: ${{ steps.ids.outputs.sensitivity_ids }}
       fit_hash: ${{ steps.fit_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
@@ -115,20 +118,17 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
             Pkg.precompile()'
-      # Temporary, and duplicated in the other job on purpose rather than
-      # pulled into a composite action: it exists to confirm the diagnosis
-      # behind JULIA_CPU_TARGET above and comes out once a run shows the
-      # render reusing the depot. Until then it tells a job that recompiled
-      # from a restored depot apart from one that simply landed on a
-      # different machine, which the timings alone cannot do.
-      - name: Record the runner's CPU
-        run: |
-          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
-            >> "$GITHUB_STEP_SUMMARY"
+      # The later jobs restore this image rather than compiling their own.
+      # A failed upload only costs them that compile.
+      - name: Hand the compiled package to the later jobs
+        continue-on-error: true
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: save
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
-        run: echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
+        run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
       # themselves are keyed on, so the Actions cache and the Julia cache
       # cannot disagree about what invalidates a fit.
@@ -180,7 +180,13 @@ jobs:
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
   # historical fits stay cache hits across data-only updates.
-  fit:
+  #
+  # The fits are split into one job per group (`docs/fits/list.jl --groups`)
+  # because `needs` can only wait on a whole job, not on one matrix leg. Each
+  # render job then waits on the groups its page reads rather than on every
+  # fit. The groups share these steps through the `fit-steps` anchor, so
+  # cache keys and artifact names (`fit-<id>`) are the same as one matrix.
+  fit_joint:
     name: Fit ${{ matrix.id }}
     needs: list
     runs-on: ubuntu-latest
@@ -191,8 +197,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        id: ${{ fromJSON(needs.list.outputs.ids) }}
-    steps:
+        id: ${{ fromJSON(needs.list.outputs.joint_ids) }}
+    steps: &fit-steps
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
@@ -225,6 +231,11 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       # The fleet is mixed and the joint fit's wall clock varies by half
       # again between runs of the same commit, so the summary names the CPU
       # a refit ran on. Read it next to the fit's timing when a job runs long.
@@ -292,6 +303,41 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  fit_streams:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.streams_ids) }}
+    steps: *fit-steps
+
+  fit_frozen:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.frozen_ids) }}
+    steps: *fit-steps
+
+  # Empty on pull requests, where a matrix over no ids would fail the run.
+  fit_sensitivity:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    if: needs.list.outputs.sensitivity_ids != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.sensitivity_ids) }}
+    steps: *fit-steps
+
   # Rescore the published releases and refresh the release overlays, once, in
   # parallel with the fits. Nothing here reads this run's fits: the scoring
   # compares past releases' saved forecasts against the current data, so it
@@ -317,6 +363,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       # Refresh the released-estimate overlay so the sensitivity page's
       # "Estimate evolution across releases" figure picks up the newest
       # results-v* release. Best-effort: on any failure it uses the committed
@@ -369,7 +419,7 @@ jobs:
   # something a reader has to go looking for.
   convergence:
     name: Check joint convergence
-    needs: fit
+    needs: fit_joint
     # Not the default `success()`. The verdict is one comment edited in
     # place, so a build where this job never ran leaves the previous build's
     # verdict on the thread reading as current: "no new comment" and "still
@@ -378,7 +428,7 @@ jobs:
     # reaches the steps below, which find no fit and say the check could not
     # be made.
     #
-    # A cancelled run has nothing to report. A `fit` that was skipped means
+    # A cancelled run has nothing to report. A `fit_joint` that was skipped means
     # no fit was attempted, either because this change does not reach the
     # report and the whole build was gated off, or because `list` failed and
     # the build is already red for a reason that has nothing to do with
@@ -391,7 +441,7 @@ jobs:
     # The `${{ }}` is required, not decoration: an `if` whose expression
     # starts with `!` has to be wrapped or quoted.
     if: >-
-      ${{ !cancelled() && needs.fit.result != 'skipped' &&
+      ${{ !cancelled() && needs.fit_joint.result != 'skipped' &&
       github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -413,6 +463,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
@@ -537,42 +591,32 @@ jobs:
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
   # and its half of the shared output/ and summary_assets/.
-  render:
+  #
+  # The pages are split into one job per set of fit groups they read (the
+  # `load_fit` calls at the top of each page), so each starts as soon as its
+  # own fits finish rather than after the whole fit matrix. A page that reads
+  # a fit its job does not wait on fails on the strict cache miss, naming the
+  # key. The jobs share these steps through the `render-steps` anchor. In each
+  # matrix, `id` is the page path under docs/pages, `slug` is the same with
+  # the separator flattened (an artifact name cannot carry a slash), `fits` is
+  # the glob of fit artifacts the page reads, and `overlays` says whether it
+  # reads the rescored release overlays.
+  render_methods:
     name: Render ${{ matrix.id }}
-    needs: [fit, overlays]
+    needs: list
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
-    # `list` did that once), the render is plots/PPCs only. Split across three
-    # pages, so each does a share.
+    # `list` did that once), the render is plots/PPCs only.
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        # `id` is the page path under docs/pages; `slug` is the same with
-        # the separator flattened, because an artifact name cannot carry a
-        # slash.
         include:
           - id: methods
             slug: methods
-          - id: estimates/national
-            slug: estimates-national
-          - id: estimates/province
-            slug: estimates-province
-          - id: forecasts/national
-            slug: forecasts-national
-          - id: forecasts/province
-            slug: forecasts-province
-          - id: evaluation/insample/national
-            slug: evaluation-insample-national
-          - id: evaluation/insample/province
-            slug: evaluation-insample-province
-          - id: evaluation/forecast/national
-            slug: evaluation-forecast-national
-          - id: evaluation/forecast/province
-            slug: evaluation-forecast-province
-          - id: sensitivity
-            slug: sensitivity
-    steps:
+            fits: ''
+            overlays: false
+    steps: &render-steps
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
@@ -587,36 +631,34 @@ jobs:
           # enters the cache key, so each render misses the shared depot and
           # re-precompiles the whole stack (~530 deps) before rendering.
           include-matrix: false
-      # Temporary, and duplicated in the other job on purpose rather than
-      # pulled into a composite action: it exists to confirm the diagnosis
-      # behind JULIA_CPU_TARGET above and comes out once a run shows the
-      # render reusing the depot. Until then it tells a job that recompiled
-      # from a restored depot apart from one that simply landed on a
-      # different machine, which the timings alone cannot do.
-      - name: Record the runner's CPU
-        run: |
-          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
-            >> "$GITHUB_STEP_SUMMARY"
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
+      # Only the fits this page reads (`fits`, an artifact-name glob), which
+      # the job's `needs` has waited for.
       - name: Collect cached fits
+        if: matrix.fits != ''
         uses: actions/download-artifact@v8
         with:
-          pattern: fit-*
+          pattern: ${{ matrix.fits }}
           path: logs/fit_cache
           merge-multiple: true
       # The release overlays the `overlays` job rescored, over this job's own
-      # checkout of data/.
+      # checkout of data/, for the pages that read them.
       - name: Collect the refreshed release overlays
+        if: matrix.overlays
         uses: actions/download-artifact@v8
         with:
           name: overlays
@@ -645,12 +687,107 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  render_joint:
+    name: Render ${{ matrix.id }}
+    needs: fit_joint
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: estimates/province
+            slug: estimates-province
+            fits: fit-joint
+            overlays: false
+          - id: forecasts/national
+            slug: forecasts-national
+            fits: fit-joint
+            overlays: false
+          - id: evaluation/insample/national
+            slug: evaluation-insample-national
+            fits: fit-joint
+            overlays: false
+          - id: evaluation/insample/province
+            slug: evaluation-insample-province
+            fits: fit-joint
+            overlays: false
+    steps: *render-steps
+
+  render_joint_overlays:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, overlays]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: forecasts/province
+            slug: forecasts-province
+            fits: fit-joint
+            overlays: true
+    steps: *render-steps
+
+  render_validation:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_frozen, overlays]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: evaluation/forecast/national
+            slug: evaluation-forecast-national
+            fits: fit-{joint,frozen_validation*}
+            overlays: true
+          - id: evaluation/forecast/province
+            slug: evaluation-forecast-province
+            fits: fit-frozen_validation
+            overlays: true
+    steps: *render-steps
+
+  # These two pages read every group. The sensitivity group is skipped on
+  # pull requests, which would skip this job too under the default
+  # `success()`, so the condition is spelled out.
+  render_all:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_streams, fit_frozen, fit_sensitivity, overlays]
+    if: >-
+      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
+      needs.fit_streams.result == 'success' &&
+      needs.fit_frozen.result == 'success' &&
+      needs.overlays.result == 'success' &&
+      (needs.fit_sensitivity.result == 'success' ||
+      needs.fit_sensitivity.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: estimates/national
+            slug: estimates-national
+            fits: fit-*
+            overlays: false
+          - id: sensitivity
+            slug: sensitivity
+            fits: fit-*
+            overlays: true
+    steps: *render-steps
+
   # Assemble the Vitepress site from both pre-rendered pages (a single
   # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
   # combined outputs as a results release.
   combine:
     name: Combine and deploy
-    needs: render
+    needs:
+      - render_methods
+      - render_joint
+      - render_joint_overlays
+      - render_validation
+      - render_all
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Every branch's preview lands on the one gh-pages ref, so two PRs
@@ -685,6 +822,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
@@ -770,27 +911,39 @@ jobs:
             exit 1
           fi
           ls -l output
-      # Lift the rendered analysis page out of the multi-file Vitepress
-      # site into one self-contained HTML file (CSS and fonts inlined,
-      # SPA JavaScript dropped) for sharing and download.
-      - name: Build self-contained report
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          julia --project=docs scripts/standalone_report.jl \
-            docs/build output/analysis.html
-          ls -l output/analysis.html
       # Bundle the rendered site produced by the combine build
       # (docs/build/) so each release is a self-contained snapshot.
+      # DocumenterVitepress builds base i of `bases.txt` into `docs/build/i/`
+      # with absolute asset paths under `/BVDOutbreakSize/<base>/`. The zip
+      # holds the first base at that path so it can be served as is.
       - name: Zip rendered site into release bundle
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
           set -euo pipefail
-          if [ ! -d docs/build ]; then
+          if [ ! -f docs/build/bases.txt ] || [ ! -d docs/build/1 ]; then
             echo "::error::docs/build/ missing; expected the rendered site"
             exit 1
           fi
-          (cd docs/build && zip -r "$GITHUB_WORKSPACE/output/site.zip" .)
+          base=$(head -n 1 docs/build/bases.txt)
+          if [ -z "$base" ]; then
+            echo "::error::docs/build/bases.txt names no base"
+            exit 1
+          fi
+          if ! grep -q "\"/BVDOutbreakSize/$base/assets/" docs/build/1/index.html; then
+            echo "::error::docs/build/1 is not built for base $base"
+            exit 1
+          fi
+          stage="$RUNNER_TEMP/site"
+          rm -rf "$stage"
+          mkdir -p "$stage/BVDOutbreakSize/$(dirname "$base")"
+          cp -r docs/build/1 "$stage/BVDOutbreakSize/$base"
+          printf '%s\n' \
+            "Run \`python3 -m http.server\` in this folder and open" \
+            "http://localhost:8000/BVDOutbreakSize/$base/" \
+            "To load another page directly, add .html to its address." \
+            > "$stage/README.txt"
+          (cd "$stage" && zip -qr "$GITHUB_WORKSPACE/output/site.zip" \
+            README.txt BVDOutbreakSize)
           ls -l output/site.zip
       # On a version tag (e.g. v1.2.0) the output bundle is named after
       # the tag, so a major code release has a matching, permanent
@@ -813,15 +966,14 @@ jobs:
             four-week-ahead forecasts of the observed streams
             (`forecast.csv`, with the one-week-back validation forecast in
             `forecast_validation.csv`) for later scoring, a copy of the
-            input `observations.toml`, a
-            `site.zip` snapshot of the rendered report site, and
-            `analysis.html` — a self-contained single-file copy of the
-            report that opens offline.
+            input `observations.toml`, and a `site.zip` snapshot of the
+            rendered report site. See `README.txt` in `site.zip` for how
+            to view it offline.
 
             Rendered analysis:
             https://epiforecasts.io/BVDOutbreakSize/dev/analysis
 
-            Self-contained report (always latest build):
-            https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html
+            Rendered site to download (always latest build):
+            https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/site.zip
           files: output/*
           make_latest: 'true'

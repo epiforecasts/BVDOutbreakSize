@@ -637,6 +637,10 @@ each marginal is visible.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
 only. Symbols absent from the map keep their raw name.
 
+`patch` selects one entry of vector-valued deterministics such as
+`R_T_patch` or `province_ascertainment`, so the corner plot shows one
+province. Every parameter in `params` is then read as a per-patch vector.
+
 `plot_pair(draws::NamedTuple; ...)` takes one draw vector per named quantity
 instead of a chain, for quantities a chain holds only inside a vector
 deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
@@ -645,9 +649,12 @@ deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
 function plot_pair(
         chn, params::AbstractVector{Symbol};
         thin::Integer = 2, prior = nothing,
-        labels::AbstractDict = Dict{Symbol, String}()
+        labels::AbstractDict = Dict{Symbol, String}(),
+        patch::Union{Nothing, Integer} = nothing
     )
-    _named(c) = NamedTuple(p => _draws(c, p) for p in params)
+    _col(c, p) = patch === nothing ? _draws(c, p) :
+        [v[patch] for v in _draw_vectors(c, p)]
+    _named(c) = NamedTuple(p => _col(c, p) for p in params)
     return plot_pair(
         _named(chn); thin,
         prior = prior === nothing ? nothing : _named(prior), labels
@@ -1180,18 +1187,21 @@ interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
 about a dozen for a busier release history.
 
-Returns a figure carrying a short note in place of the panels when no
+Returns a figure carrying `empty_message` in place of the panels when no
 forecasts have been scored yet.
 """
-function plot_forecast_overlay(overlay::DataFrame)
+function plot_forecast_overlay(
+        overlay::DataFrame;
+        empty_message::AbstractString =
+            "No forecasts scored yet. No release carries a stored forecast."
+    )
     streams = unique(overlay.stream)
     ## An empty table is the expected early state, so say so rather than
     ## returning a blank panel.
     if isempty(streams)
         fig = Figure(; size = (860, 160))
         CairoMakie.Label(
-            fig[1, 1],
-            "No forecasts scored yet. No release carries a stored forecast.";
+            fig[1, 1], empty_message;
             tellwidth = false, tellheight = false, color = (:black, 0.55)
         )
         return fig
@@ -3545,50 +3555,59 @@ end
 ## Predictive shares for every patch at every vintage, one trajectory per
 ## posterior draw. Each draw's expected shares `m` and overdispersion
 ## `rho[d]` are pushed back through the stick-breaking allocation
-## [`province_composition_model`](@ref) scores: patch `p` takes a
-## `BetaBinomial` count out of what patches `1 ... p-1` left of the vintage's
-## observed total, at that patch's conditional share, and the last patch
-## takes the remainder. The returned shares carry the composition's
-## extra-Multinomial scatter as well as the posterior width of the expected
-## share.
+## [`province_composition_model`](@ref) scores (see `_composition_counts`).
+## The returned shares carry the composition's extra-Multinomial scatter as
+## well as the posterior width of the expected share.
 ##
 ## The vintage's observed total is the trial count, matching the fitted
 ## likelihood, so the check is on the split alone. A vintage with no observed
 ## cases has no split to predict and stays NaN.
-##
-## The seed is fixed so a rebuilt report redraws the same band rather than
-## moving it by the Monte Carlo error of the simulation.
 function _composition_predictive(
         ms, rho, totals, nv::Integer;
         seed::Integer = 20_240
     )
+    counts = _composition_counts(ms, rho, fill(totals, length(ms)); seed)
+    return [
+        [
+            [totals[i] > 0 ? c[i] / totals[i] : NaN for i in 1:nv]
+                for c in cp
+        ]
+            for cp in counts
+    ]
+end
+
+## Predictive counts for every patch at every vintage, one trajectory per
+## posterior draw, allocating `totals[d][i]` for draw `d` at vintage `i`.
+## Patch `p` takes a `BetaBinomial` count out of what patches `1 ... p-1`
+## left of the total, at that patch's conditional share, and the last patch
+## takes the remainder. A vintage with a total of zero allocates zero to
+## every patch.
+##
+## The seed is fixed so a rebuilt report redraws the same band rather than
+## moving it by the Monte Carlo error of the simulation.
+function _composition_counts(ms, rho, totals; seed::Integer = 20_240)
     rng = MersenneTwister(seed)
-    np = size(first(ms), 1)
-    nd = length(ms)
-    preds = [[fill(NaN, nv) for _ in 1:nd] for _ in 1:np]
-    counts = zeros(Int, np)
+    np, nv = size(first(ms))
+    out = [[zeros(Int, nv) for _ in ms] for _ in 1:np]
     for (d, m) in enumerate(ms)
         for i in 1:nv
-            total = totals[i]
+            total = totals[d][i]
             total > 0 || continue
             remaining = total
             tail = 1.0
             for p in 1:(np - 1)
                 p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
-                counts[p] = rand(
+                out[p][d][i] = rand(
                     rng,
                     safe_betabinomial(max(remaining, 0), p_cond, rho[d])
                 )
-                remaining -= counts[p]
+                remaining -= out[p][d][i]
                 tail = max(tail - m[p, i], 1.0e-10)
             end
-            counts[np] = max(remaining, 0)
-            for p in 1:np
-                preds[p][d][i] = counts[p] / total
-            end
+            out[np][d][i] = max(remaining, 0)
         end
     end
-    return preds
+    return out
 end
 
 """
@@ -3892,11 +3911,9 @@ This is the figure form of [`province_forecast_table`](@ref), and the figure
 the release archive [`province_forecast_archive`](@ref) carries the draws
 behind.
 
-Each province's count is the national draw times that province's modelled
-share at the most recent spatial vintage, multiplied draw by draw, so the
-interval carries the correlation between the two factors. The split is held
-at its current value over the horizon rather than projected forward, which
-the bar widths do not express.
+`fc` is a [`forecast_provinces`](@ref) frame, each province projected by
+its own renewal. A national [`forecast_reported`](@ref) result is replaced by
+the one-week projection from `chn`.
 
 Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
@@ -3943,9 +3960,8 @@ function plot_province_forecast(
     CairoMakie.Label(
         fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province's count is the national " *
-            "forecast draw times its modelled share at the last spatial " *
-            "vintage, held over the horizon.";
+            "the median as a dot. Each province is projected by its own " *
+            "renewal equation.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3958,9 +3974,9 @@ of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
 expected in patch `province` over the week to `T + 7`, one histogram panel
 per stream with its 90% predictive interval shaded.
 
-The draws are the ones [`plot_province_forecast`](@ref) summarises: the
-national draw times the province's modelled share at the most recent spatial
-vintage, held over the horizon.
+The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
+[`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
+result is replaced by the one-week projection from `chn`.
 
 `observed` optionally gives a recent observed week per stream, keyed by the
 forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from

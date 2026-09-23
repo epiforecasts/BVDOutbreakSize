@@ -142,6 +142,35 @@ end
     @test obj !== nothing
 end
 
+@testitem "plot_pair reads one province from vector deterministics" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    rng = MersenneTwister(3)
+    np = 3
+    draws(nd, centre) = [centre .+ 0.1 .* randn(rng, np) for _ in 1:nd]
+    post = (;
+        R_T_patch = draws(200, [1.2, 0.9, 0.7]),
+        province_ascertainment = draws(200, [1.4, 0.8, 0.6]),
+    )
+    prior = (;
+        R_T_patch = draws(300, [1.0, 1.0, 1.0]),
+        province_ascertainment = draws(300, [1.0, 1.0, 1.0]),
+    )
+    obj = plot_pair(
+        post, [:R_T_patch, :province_ascertainment];
+        patch = 2, prior,
+        labels = Dict(:R_T_patch => "Reproduction number")
+    )
+    @test obj !== nothing
+    ## A patch outside the chain is an error rather than a silent empty plot.
+    @test_throws BoundsError plot_pair(
+        post, [:R_T_patch, :province_ascertainment]; patch = 5
+    )
+end
+
 @testitem "plot_correlation_heatmap returns a Makie figure" setup = [
     HeadlessMakie,
 ] begin
@@ -402,6 +431,11 @@ end
         median = Float64[], lo90 = Float64[], hi90 = Float64[]
     )
     @test plot_forecast_overlay(empty) isa CairoMakie.Makie.Figure
+    ## A caller can say why its table is empty.
+    note = plot_forecast_overlay(empty; empty_message = "Nothing yet.")
+    @test only(
+        x.text[] for x in note.content if x isa CairoMakie.Makie.Label
+    ) == "Nothing yet."
     ## Filled with the fit roles: confirmed_cases carries baseline, its
     ## individual fit and the joint; recovered carries only baseline and the
     ## joint, so its individual role is simply absent.
@@ -2087,16 +2121,21 @@ end
     using CairoMakie: Makie as Mk
     using BVDOutbreakSize: plot_province_forecast, PROVINCE_LABELS
 
-    ## Deterministic shares against a spread national forecast, so each
-    ## province's interval is a known fraction of the national one.
+    ## A projection frame whose provinces are known fractions of one spread
+    ## series, so each province's interval is known.
     nd = 200
-    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
-    chn = (;
-        province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd],
-    )
+    frac = [0.75, 0.2, 0.05]
     v = collect(range(50.0, 150.0; length = nd))
-    fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
+    proj(; cols...) = DataFrame(
+        patch = repeat(1:3; inner = nd),
+        province = repeat(PROVINCE_LABELS[1:3]; inner = nd),
+        draw = repeat(1:nd; outer = 3); cols...
+    )
+    fc = proj(;
+        confirmed_new = reduce(vcat, [f .* v for f in frac]),
+        confirmed_deaths_new = reduce(vcat, [f .* v ./ 5 for f in frac])
+    )
+    chn = (;)
     fig = plot_province_forecast(chn, fc; n_patches = 3)
     @test fig isa Mk.Figure
 
@@ -2119,13 +2158,11 @@ end
     ## A forecast carrying one stream draws that panel alone, and one
     ## carrying neither returns an empty figure rather than erroring.
     one = plot_province_forecast(
-        chn,
-        DataFrame(confirmed_new = v); n_patches = 3
+        chn, proj(; confirmed_new = repeat(v, 3)); n_patches = 3
     )
     @test length([x for x in one.content if x isa Mk.Axis]) == 1
     none = plot_province_forecast(
-        chn, DataFrame(cases_new = v);
-        n_patches = 3
+        chn, proj(; infections_new = repeat(v, 3)); n_patches = 3
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
 end
@@ -2140,13 +2177,18 @@ end
         PROVINCE_LABELS
 
     nd = 200
-    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
-    chn = (;
-        province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd],
-    )
+    frac = [0.75, 0.2, 0.05]
     v = collect(range(50.0, 150.0; length = nd))
-    fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
+    proj(; cols...) = DataFrame(
+        patch = repeat(1:3; inner = nd),
+        province = repeat(PROVINCE_LABELS[1:3]; inner = nd),
+        draw = repeat(1:nd; outer = 3); cols...
+    )
+    fc = proj(;
+        confirmed_new = reduce(vcat, [f .* v for f in frac]),
+        confirmed_deaths_new = reduce(vcat, [f .* v ./ 5 for f in frac])
+    )
+    chn = (;)
 
     fig = plot_province_forecast_detail(chn, fc; province = 2, n_patches = 3)
     @test fig isa Mk.Figure
@@ -2155,13 +2197,14 @@ end
     ## Each panel names the stream and the province it is a split for.
     @test axes[1].xlabel[] == "New confirmed cases ($(PROVINCE_LABELS[2]))"
     @test axes[2].xlabel[] == "New confirmed deaths ($(PROVINCE_LABELS[2]))"
-    ## The histogram is that province's share of the national draws, so its
-    ## 90% band is 0.2 times the national band for the deaths.
+    ## The histogram is that province's draws, so its 90% band is 0.2 times
+    ## the underlying series' band for the deaths.
     band = only(p for p in axes[2].scene.plots if p isa Mk.VSpan)
     @test band[1][][1] ≈ 0.2 * quantile(v ./ 5, 0.05)
     ## Each panel takes the colour of the matching national panel.
+    national_fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
     national = [
-        x for x in plot_forecast(fc).content if x isa Mk.Axis
+        x for x in plot_forecast(national_fc).content if x isa Mk.Axis
     ]
     hist_colour(ax) = only(p for p in ax.scene.plots if p isa Mk.Hist).color[]
     @test hist_colour.(axes) == hist_colour.(national)
@@ -2182,7 +2225,8 @@ end
 
     ## A forecast without the deaths column draws the cases panel alone.
     one = plot_province_forecast_detail(
-        chn, DataFrame(confirmed_new = v); province = 1, n_patches = 3
+        chn, proj(; confirmed_new = repeat(v, 3)); province = 1,
+        n_patches = 3
     )
     @test length([x for x in one.content if x isa Mk.Axis]) == 1
 

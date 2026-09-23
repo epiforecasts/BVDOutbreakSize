@@ -1,10 +1,7 @@
 # News
 
 Release notes for BVDOutbreakSize.
-Major versions of the report are kept as
-[GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases);
-each push to `main` also republishes the rendered analysis and the
-`output/` artifacts.
+Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
 ## v2.2.0
 
@@ -23,41 +20,44 @@ Changes since v2.1.0.
   `Mooncake.rrule!!` method on a declared primitive signature. Values are
   unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
+- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
+  The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
+  Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
+- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
+  A `missing` vector still samples under the same per-entry keys.
+  The two submodels' gradients run 1.2 to 1.9 times faster.
+- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
+  A change to the rules therefore forces a refit.
+- Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
+  Values are unchanged.
+- The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
 
 ### Model
 
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
-`tau_death` becomes an intensity, specimens per suspected death, and may exceed one.
-A suspect yields more than one specimen through repeat exclusion testing, and swabbed community deaths enter the laboratory denominator without being counted as suspects, which is why the case side was never capped either.
-The death-only composer still draws a bounded fraction, since it has no case volume to scale from.
-Fitted values change.
-
-- The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
-It could never have run.
-`confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
-Every fit used the composition link.
-- The pooled background takes a submodel rather than a flag.
-`background_re = true` becomes `background_pooling = background_pooling_model`.
-The option and the gradients are unchanged.
-A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
-- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)` (#800).
-Mean 0.10 rather than 0.25, keeping 99% of its mass below the BVD CFR mean of 0.33.
-The previous prior sat close to the BVD CFR itself, against the submodel's own reasoning that non-BVD suspect illness is less lethal.
-This moves the non-BVD death background, so fitted values change.
-- The onset reporting-triangle likelihood scores between-vintage
-  increments inside a nowcast window of two delay supports, and beyond it
-  the latest snapshot's complete printed curve as levels, right-truncated
-  at its own report day (#793).
-  Digitisation noise is a per-snapshot scale on a weekly random walk over
-  the report-date span, replacing the fixed pixel-noise term and
-  multiplicative slack, and the per-scan level error is sampled centred
-  with an unbounded prior.
-  The onset-to-admission delay's shape prior is lognormal about the
-  line-list value, so a near-zero shape is out of reach.
+  `tau_death` is now specimens per suspected death and may exceed one.
+  Fitted values change.
+- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)`, with mean 0.10 rather than 0.25 (#800).
+  Fitted values change.
+- The `:free` confirmed-positivity link and the `positivity_link` keyword are removed (#791).
+  The link could not run, so every fit already used the composition link.
+- The pooled background is set with `background_pooling = background_pooling_model` rather than `background_re = true` (#791).
+  Results are unchanged.
+- The onset reporting-triangle likelihood scores between-vintage increments inside a nowcast window of two delay supports, and beyond it the latest snapshot's complete printed curve as levels, right-truncated at its own report day (#793).
+  Digitisation noise is a per-snapshot scale on a weekly random walk over the report-date span, and the per-scan level error is sampled centred with an unbounded prior.
+  The onset-to-admission delay's shape prior is lognormal about the line-list value, so a near-zero shape is out of reach.
   Every fit-cache key changes, so the next build refits.
 
 ### Report
 
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
+  Its summary gives the count-scale coverage overall and per province.
+- The offline `analysis.html` is gone (#839).
+  Each release's `site.zip` now unpacks to `BVDOutbreakSize/<base>/` and carries a `README.txt` on serving it locally.
+- Each province is projected a week ahead by its own renewal equation
+  rather than a fixed share of the national forecast, and only these
+  projections are archived and scored (#836).
+  Both forecast pages open with summary bullets.
 - Forecasts is split into a National and a Provinces page (#830).
 - The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
   The Provinces page shows the province split's credible intervals and,
@@ -79,8 +79,7 @@ This moves the non-BVD death background, so fitted values change.
   framing (#782).
 - The summary dashboard is shorter (#782). The fit diagnostics are behind a
   dropdown, and the per-province infections and parameter panels and the
-  per-stream reproduction number are linked rather than repeated. The
-  by-province headline table stays.
+  per-stream reproduction number are linked rather than repeated.
 - The API reference is grouped into eleven pages following the order a fit
   runs in, and says which names are public and which are internal (#782).
   It was one undifferentiated `@autodocs` dump.
@@ -99,503 +98,309 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The Provinces page opens with bullets comparing the provinces (#832).
+- The Provinces estimate page shows maps of infections to date, the reproduction number at the cut-off and relative case ascertainment by province. The Provinces forecast page maps next week's projected confirmed cases (#841).
+  They give each province's share of infections, the range of the reproduction number and the probability each province is growing, the spread in case-fatality ratio and case ascertainment, and the share of infections imported between provinces, as 90% credible intervals.
+  A detail section follows with each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals.
+  The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.
+  Pair plots set the spatial hyperparameters and each province's parameters against a prior drawn from the patch model.
+- The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block shows the comparison bullets (#832).
+- The summary dashboard no longer shows the modelled against observed reported cases (#832).
+  The evaluation pages carry that check.
 - The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
   It links to the home page for installing, running and updating the data rather than repeating it.
 - Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).
   Each page opens with a summary: overall bullets, then a short block per stream or per province.
   The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
   The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
+- The report is split into pages, grouped in the navigation as Summary, Estimates (National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with coverage given overall and per province (#842).
+- The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+  About carries a new page on the authors, funding and citation.
+- The summary dashboard, National and Provinces pages open with their own summary and the "Last updated" and "Data as of" dates (#782, #822, #832).
+  The summary dashboard is shorter, with the fit diagnostics behind a dropdown.
+- The Provinces estimates page compares the provinces, maps infections, the reproduction number and case ascertainment, and gives each province's estimates as 30%, 60% and 90% credible intervals (#832, #841).
+  Pair plots set each province's parameters against the prior.
+- Each province is forecast a week ahead by its own renewal equation rather than as a share of the national forecast (#835, #836, #841).
+  The Provinces forecast page maps next week's projected confirmed cases and plots past forecasts against what each province went on to report.
+- The province evaluation pages add a prior predictive check, calibration of the case and death compositions, a posterior correlation heatmap, and forecast skill by horizon and by release (#833).
+- The McCabe comparison is a table in the methods (#782).
+- The API reference is grouped into eleven pages in the order a fit runs, and says which names are public (#782).
+- Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
+- The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 
 ### Infrastructure
 
-- One rule decides when a stream first and last reported (#817).
-`stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
-They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
-Every date is unchanged, checked against the previous bodies over 18 weekly vintages.
-
-- `ChainRulesCore` is no longer a direct dependency (#808).
-It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
-Nothing has referenced it since, and Aqua's stale-dependency check missed it because the self-named import counted as a use.
-It stays in the resolved manifest through DynamicPPL and Mooncake, so nothing changes at runtime.
-
-- A release is cut by commenting `@release` on any issue or pull request (#767).
-The notes are the newest `news.md` section, which is what they have always been, copied across by hand.
-The comment tags `main`, publishes the release, and opens a pull request bumping the version and starting the next section.
-`@release minor` and `@release major` set the size of that bump.
-`task release-notes` prints the notes before anything is published.
-- The documentation build fails when the headline joint fit has not converged (#764).
-The verdict is a comment on the pull request, edited in place on each build, naming the thresholds breached and the worst-mixing parameters.
-It is a leaf job, so the preview still builds and still comments.
-- A pull request builds the report, runs the tests and measures coverage only when it changes something they are built from (#776).
-Each workflow decides in a job of its own, so a skipped build says so rather than leaving no check at all.
-A push, a tag and a manual run are never gated.
-- The fit cache key CI restores is the one the fits are keyed on (#739).
-The Actions key hashed all of `data/`, including the generated tables that `FIT_DATA_EXCLUDE` drops, so a rescore commit refit every model for inputs no fit reads.
-It also left out `docs/fits/cache.jl`.
-The key now comes from `fit_content_hash`, so there is one list.
-- The automatic version increment is gone (#607).
-`@release` bumps the version as part of cutting a release.
-The automatic one moved it without opening a news section, and could open a second pull request racing the one `@release` opens.
-It had not run since v1.14.0 in any case.
-`/version major|minor|patch` on a pull request is unaffected.
-- A version tag's documentation build waits for the `main` build of the same commit and reuses its cached fits (#765).
-The two used to run together and each refit every model.
-For v2.1.0 the tag build passed the job's time limit, so no `results-v2.1.0` release was published.
-Each fit job's summary now names the runner's CPU, because the same fit runs up to half again as long on some runners.
-- The precompile workload compiles the fit the report runs, rather than a model shaped like it.
-The two had drifted, so the most expensive stream in the model cached nothing.
-Both now build their keywords from `joint_fit_args`, and a test asserts the two models are the same type.
-The headline joint's cold build drops from 1095 s to 292 s.
-- `task benchmark-compile` reports the cold AD-compile cost per component.
-The existing suite times steady-state gradients only, which is why an 18 minute cold compile went untracked.
-- The release helper reads a Windows checkout.
-Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
-- The Literate report pages move from `docs/examples/` to `docs/pages/`, and
-  `scripts/run.jl` runs all of them rather than the two it named (#782).
-- The offline `analysis.html` resolves its pages by path rather than by
-  basename (#807). Two pages render to `national.html`, the national
-  estimates and the forecasts, and directory order decided which one the
-  release asset carried.
-- The documentation build no longer runs for changes it cannot see (#805).
-  The gate named `ext/` and `scripts/` as whole directories; it now names the one
-  extension the build loads and the three scripts it runs, so a change to the
-  Enzyme extension, the SitRep downloader, a scanner or the backfill driver no
-  longer rebuilds the report.
-  A prose-only change under `benchmark/` no longer starts a two-arm benchmark
-  run, and the benchmark comment buckets the memory column on its own terms
-  rather than on the band measured from timing spread.
-- A local documentation build loads its fits the way CI does (#782).
-  `task fetch-fits` downloads them from the latest successful documentation
-  run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set,
-  and `task fit-all` takes every available thread instead of fitting the
-  registry one model at a time.
+- The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
+- Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
+- The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
+  This adds about 33 minutes to the joint fit job.
+- The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
+  `BVD_JOINT_MAX_DEPTH` overrides it.
+- The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
+- The joint fit's NUTS tree depth cap rises from 10 to 12, and `BVD_JOINT_MAX_DEPTH` overrides it (#846).
+- A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
+  The automatic version increment is gone.
+- A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
+- The documentation build fails when the headline joint fit has not converged, and comments the verdict on the pull request (#764).
+- A pull request builds the report, runs the tests and measures coverage only when it changes something they depend on (#776, #805).
+- The CI fit cache key matches the key the fits use, so a change to files no fit reads no longer triggers a refit (#739).
+- A scheduled workflow deletes superseded Julia depot caches, so they take less of the 10 GB Actions cache budget the fit caches share (#852).
+  The documentation build's later jobs reuse the package image `list` compiled, rather than spending 13 to 16 minutes each compiling it again when their own depot cache has gone.
+  The benchmark workflow's two arms share one depot cache, so a run no longer starts from an empty depot.
+- One rule decides when a stream first and last reported, exported as `history_first_date`, `history_last_date` and the new `stream_first_date` (#817).
+  Every date is unchanged.
+- `task fetch-fits` downloads the fits from the latest documentation run, and a local build refuses to fit inline unless `BVD_FIT_STRICT=false` is set (#782).
+  `task fit-all` uses every available thread.
+- `task benchmark-compile` reports the cold AD compile cost per component (#791).
+- The opt-in Enzyme backend differentiates every observation submodel and single-stream composer (#789).
+  `bvd_joint` and `patch_infection_model` still fail under Enzyme.
+- The report pages move from `docs/examples/` to `docs/pages/`, and `scripts/run.jl` runs all of them (#782).
+- The release helper reads a Windows checkout with CRLF line endings (#792).
 - `M_PRIOR_BASE`, `M_PRIOR_BASE_DATE` and `m_prior_centre` are removed (#800).
-  They served the integral model, which the renewal model replaced. The
-  v1.3.0 integral backfill runs inside that release's own worktree and
-  resolves them against its own constants, so nothing here read them. No
-  fitted values change.
-
-  The existing suite times steady-state gradients only, which is why an
-  18 minute cold compile went untracked.
-
-- The fit cache key CI restores is the one the fits are keyed on (#739). The
-  Actions key hashed all of `data/`, including the generated scoring tables
-  and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a
-  rescore commit or a README edit missed the cache and refit every model for
-  inputs no fit reads. It also left out `docs/fits/cache.jl`, so a change to
-  the hashing rule itself would not have invalidated anything. The key is now
-  taken from `fit_content_hash` rather than restated, so there is one list.
-
-- The opt-in Enzyme backend now differentiates every observation submodel
-  and single-stream composer, and the AD check sweeps them all rather than
-  one composer and the joint (#789). The scenarios had passed `missing`
-  for their cut-off totals, which scores nothing and puts the stream on the
-  predictive-generator path, so what was benchmarked and asserted was a
-  surface no fit differentiates. Mooncake, the default, differentiates
-  either, so this was invisible until Enzyme rejected the union element
-  type that path allocates. `bvd_joint` and `patch_infection_model` are
-  still broken under Enzyme, and the bed-occupancy stream is too slow to
-  compile to run at all; all three are declared in the fixtures rather
-  than left out of the sweep.
-
-- The automatic version increment is gone (#607). It opened a patch-bump pull
-  request on every push to `main` where the version had not changed, which is
-  now both redundant and harmful: `@release` bumps the version as part of
-  cutting a release, and the automatic one moved it without opening a news
-  section, which is what left a merged change with no heading to write under.
-  It could also open a second pull request racing the one `@release` opens,
-  bumping the same field by a different route. It had not run since v1.14.0
-  in any case, wedged behind a stale branch its own guard would not clear.
-  `/version major|minor|patch` on a pull request is unaffected.
-
-- A pull request only builds the report, runs the tests and measures coverage
-  when it changes something they are built from (#776). The fits alone cost
-  hours, and a change to the test suite, the benchmarks or an unrelated
-  workflow produced a site identical to the one on `main`; a change to the
-  analysis pages or the README ran the whole test suite to no purpose. Each
-  workflow decides in a job of its own, so a skipped build says so in its
-  summary rather than leaving no check at all. A push, a tag and a manual run
-  are never gated.
-- A release is cut by commenting `@release` on any issue or pull request
-  (#767). The notes are the newest `docs/src/news.md` section, which is what
-  they have always been, copied across by hand. The comment tags `main`,
-  publishes the release and opens a pull request bumping the version and
-  starting the next section, so the following change has a heading to write
-  under. `@release minor` and `@release major` choose the size of that bump.
-- `scripts/release_notes.jl` holds the text handling behind it and runs
-  locally through `task release-notes`, so the notes can be read before
-  anything is published.
-- Pushing a version tag starts a second documentation build of the commit
-  that was just pushed to `main`. The two builds used to run at the same
-  time and each refit every model; for v2.1.0 the tag build's joint fit ran
-  past the job's time limit, so no `results-v2.1.0` release was published.
-  The tag build now waits for the `main` build to finish and reuses its
-  cached fits (#765). Each fit job's summary also names the runner's CPU,
-  because the same fit runs up to half again as long on some runners.
-
+  Nothing used them once the renewal model replaced the integral model, and no fitted values change.
+- `ChainRulesCore` is no longer a direct dependency (#808).
 
 ## v2.1.0
 
 Changes since v2.0.0.
 
-> **A note on the v2.0.0 fits.** Adding the daily new-suspect series back into
-the fit (#713) left the headline joint fit published with v2.0.0 failing to
-converge: the non-centred background walks funnel once the series runs to the
-cut-off. This release resolves it — the background and bed-capacity walks are
-sampled centred (#745, #743) and the `σ_bg` prior is widened (#740) — and every
-fit is refit from scratch. Raising the joint fit's effective sample size beyond
-that is still open work. Read the v2.0.0 fits, and the skill and interval
-quality measured on them, with that convergence failure in mind.
+> **A note on the v2.0.0 fits.** Adding the daily new-suspect series back into the fit (#713) left the headline joint fit published with v2.0.0 failing to converge: the non-centred background walks funnel once the series runs to the cut-off.
+> This release resolves it — the background and bed-capacity walks are sampled centred (#745, #743) and the `σ_bg` prior is widened (#740) — and every fit is refit from scratch.
+> Raising the joint fit's effective sample size beyond that is still open work.
+> Read the v2.0.0 fits, and the skill and interval quality measured on them, with that convergence failure in mind.
 
 ### Model
 
-- The per-province confirmed composition pays the full onset-to-confirmation
-  delay, the report and receipt pmfs convolved, as the national stream already
-  did (#756). It previously stopped at the receipt leg, biasing the provincial
-  split toward earlier days than the national total it conditions on.
-- Provincial case-ascertainment priors carry per-head laboratory throughput,
-  logged and centred across patches, with a sampled coefficient (#410). Ituri's
-  372 samples per 100k against Nord-Kivu's 104 was otherwise free to land in
-  the provincial reproduction number. The per-province positives are not
-  fitted; they are the differencing of the confirmed counts already scored.
-- The suspected-case background walk is sampled in centred form (#745): the
-  resumed daily new-suspect series makes the walk strongly informed and the
-  non-centred form funnel, which is what stopped the joint fit mixing (#713).
-- The shared background-walk innovation SD `σ_bg` has a half-normal prior of
-  scale 0.3 rather than 0.1 (#740); the resumed series pulls the posterior to
-  0.17 to 0.22, about twice the old scale.
-- The bed-capacity walk is sampled centred (#743). The two forms are the same
-  distribution, so the estimates are unchanged and only the sampler geometry
-  differs. Every fit-cache key changes, so the next build refits.
-- Four configuration switches that no fit selected and four submodels that no
-  fit can reach are removed (#754). Results are unchanged; the methods page
-  drops the seeding dropdown.
+- The per-province confirmed composition pays the full onset-to-confirmation delay, the report and receipt pmfs convolved, as the national stream already did (#756).
+  It previously stopped at the receipt leg, biasing the provincial split toward earlier days than the national total it conditions on.
+- Provincial case-ascertainment priors carry per-head laboratory throughput, logged and centred across patches, with a sampled coefficient (#410).
+  Ituri's 372 samples per 100k against Nord-Kivu's 104 was otherwise free to land in the provincial reproduction number.
+  The per-province positives are not fitted; they are the differencing of the confirmed counts already scored.
+- The suspected-case background walk is sampled in centred form (#745): the resumed daily new-suspect series makes the walk strongly informed and the non-centred form funnel, which is what stopped the joint fit mixing (#713).
+- The shared background-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740); the resumed series pulls the posterior to 0.17 to 0.22, about twice the old scale.
+- The bed-capacity walk is sampled centred (#743).
+  The two forms are the same distribution, so the estimates are unchanged and only the sampler geometry differs.
+  Every fit-cache key changes, so the next build refits.
+- Four configuration switches that no fit selected and four submodels that no fit can reach are removed (#754).
+  Results are unchanged; the methods page drops the seeding dropdown.
 
 ### Report
 
-- The fit diagnostics sit under the headline results and in the summary
-  dashboard rather than in the methods section (#747).
-- The sensitivity report gains a per-parameter fit-diagnostics section (#747):
-  counts of parameters past an R-hat threshold, ranked worst-mixing parameters,
-  mixing along the worst walks, divergences by chain, and the joint fit against
-  each single-stream fit and the same fit a week earlier.
-- The reduced-data-streams banner is gone from the README and the summary
-  dashboard; the inclusion rules in `data/README.md` record the streams (#723).
-- The per-province headline is a table per quantity rather than nested bullet
-  lists (#724).
-- Recovered is labelled recovered among confirmed, and the forecasts-versus-now
-  overlay draws only the streams that carry a persistence baseline (#737).
-- The frozen-fit evaluation reports skill by release as well as pooled, and
-  scores each stream's own frozen fit alongside the joint (#742).
-- The frozen-fit score tables carry the frozen joint alone, as the
-  cross-release tables carry the joint alone, so a row is one model at one
-  cut-off. The single-stream frozen fits stay in the figures, which compare
-  the fits against each other.
-- The by-horizon and by-cut-off score tables gain figures: the mean CRPS
-  split into its width, its overprediction and its underprediction by
-  horizon, and relative skill against the baseline cut-off by cut-off. Both
-  tables run to hundreds of rows and were unreadable as numbers alone.
-- The frozen forecasts-versus-now overlay draws the frozen joint and the
-  baseline alone. A single-stream frozen fit exists at one cut-off only, so
-  its series landed on top of the joint point beside it.
-- The per-stream projected-trajectory figure crops to twice the joint fit's
-  90% upper bound, the crop the cut-off density figure beside it already
-  used. The exports-only fit's band reaches the source population, which put
-  every other stream on the baseline.
-- The reproduction-number-by-release figures share a fixed axis at three,
-  with intervals past it clamped and marked. The basic reproduction number
-  keeps its own axis, its estimates sitting where that crop would cut them.
-- The frozen evaluation drops the confirmed-death rows of the fourteen
-  reconstructions cut between 16 July and 15 August 2026. The forecaster
-  that built them predated projecting each stream from its own trajectory
-  (#613, #706) and floored the stream at zero, so each carried a one-week median of exactly zero
-  against an observed 250 to 370. The section now lists every scoring
-  exclusion in one place, and the archive keeps the rows.
-- An onset forecast window containing a vintage whose reread total falls is
-  left unscored, the rule province windows holding a harmonisation-break day
-  already follow. The digitised total falls on fourteen vintages, which a
-  cumulative onset curve cannot do, and the scored truth is an increment
-  between two vintages, so such a window charges the forecast for a reread.
-  It bites hardest at the longer horizons: the frozen onset row keeps three
-  of its twenty-nine windows and the cross-release row six of thirty-eight.
-- A single-stream fit's forecast is overlaid on the validation and bed
-  panels as a step outline over the joint's own histogram bins, reweighted
-  to the joint's draw count. It was a kernel density on the density scale
-  against an axis counting draws, which drew it flat along the floor of
-  every panel whatever it said.
+- The fit diagnostics sit under the headline results and in the summary dashboard rather than in the methods section (#747).
+- The sensitivity report gains a per-parameter fit-diagnostics section (#747): counts of parameters past an R-hat threshold, ranked worst-mixing parameters, mixing along the worst walks, divergences by chain, and the joint fit against each single-stream fit and the same fit a week earlier.
+- The reduced-data-streams banner is gone from the README and the summary dashboard; the inclusion rules in `data/README.md` record the streams (#723).
+- The per-province headline is a table per quantity rather than nested bullet lists (#724).
+- Recovered is labelled recovered among confirmed, and the forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
+- The frozen-fit evaluation reports skill by release as well as pooled, and scores each stream's own frozen fit alongside the joint (#742).
+- The frozen-fit score tables carry the frozen joint alone, as the cross-release tables carry the joint alone, so a row is one model at one cut-off.
+  The single-stream frozen fits stay in the figures, which compare the fits against each other.
+- The by-horizon and by-cut-off score tables gain figures: the mean CRPS split into its width, its overprediction and its underprediction by horizon, and relative skill against the baseline cut-off by cut-off.
+  Both tables run to hundreds of rows and were unreadable as numbers alone.
+- The frozen forecasts-versus-now overlay draws the frozen joint and the baseline alone.
+  A single-stream frozen fit exists at one cut-off only, so its series landed on top of the joint point beside it.
+- The per-stream projected-trajectory figure crops to twice the joint fit's 90% upper bound, the crop the cut-off density figure beside it already used.
+  The exports-only fit's band reaches the source population, which put every other stream on the baseline.
+- The reproduction-number-by-release figures share a fixed axis at three, with intervals past it clamped and marked.
+  The basic reproduction number keeps its own axis, its estimates sitting where that crop would cut them.
+- The frozen evaluation drops the confirmed-death rows of the fourteen reconstructions cut between 16 July and 15 August 2026.
+  The forecaster that built them predated projecting each stream from its own trajectory (#613, #706) and floored the stream at zero, so each carried a one-week median of exactly zero against an observed 250 to 370.
+  The section now lists every scoring exclusion in one place, and the archive keeps the rows.
+- An onset forecast window containing a vintage whose reread total falls is left unscored, the rule province windows holding a harmonisation-break day already follow.
+  The digitised total falls on fourteen vintages, which a cumulative onset curve cannot do, and the scored truth is an increment between two vintages, so such a window charges the forecast for a reread.
+  It bites hardest at the longer horizons: the frozen onset row keeps three of its twenty-nine windows and the cross-release row six of thirty-eight.
+- A single-stream fit's forecast is overlaid on the validation and bed panels as a step outline over the joint's own histogram bins, reweighted to the joint's draw count.
+  It was a kernel density on the density scale against an axis counting draws, which drew it flat along the floor of every panel whatever it said.
 
 ### Fixed
 
-- The occupancy-offset forecast test scores both offsets on one set of prior
-  draws rather than two independent samples (#725).
-- The sensitivity page's stopped-streams chunk no longer renders an empty code
-  block, and the province forecast test again catches the share column it
-  guards (#736).
-- Matched scoring keys on the made date as well as the release and horizon
-  (#742). Frozen confirmed-death skill against the baseline moves from 3.18 to
-  1.76 and confirmed cases from 1.76 to 1.91; the cross-release tables do not
-  move.
-- The fit-cache digest covers every file under `data/` rather than `*.csv`
-  only, so a data update that touched the manifest alone can no longer serve
-  every fit from cache against the previous data (#738).
-- Recovered is forecast, archived and scored again (#737), and the
-  confirmed-deaths panel of the reproduction-number by-dataset figures draws
-  its current-model reference band (#737).
+- The occupancy-offset forecast test scores both offsets on one set of prior draws rather than two independent samples (#725).
+- The sensitivity page's stopped-streams chunk no longer renders an empty code block, and the province forecast test again catches the share column it guards (#736).
+- Matched scoring keys on the made date as well as the release and horizon (#742).
+  Frozen confirmed-death skill against the baseline moves from 3.18 to 1.76 and confirmed cases from 1.76 to 1.91; the cross-release tables do not move.
+- The fit-cache digest covers every file under `data/` rather than `*.csv` only, so a data update that touched the manifest alone can no longer serve every fit from cache against the previous data (#738).
+- Recovered is forecast, archived and scored again (#737), and the confirmed-deaths panel of the reproduction-number by-dataset figures draws its current-model reference band (#737).
 
 ### Infrastructure
 
 - The AD benchmark times both revisions in one job on one machine (#763).
-Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
-Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
-AirspeedVelocity runs the two arms and `benchmark/ci/comment.jl` reports them, replacing `benchmark/compare.jl`.
-The workflow materialises both revisions as git worktrees and benchmarks them from those paths, because this repository declares a submodule and Pkg cannot check out a tree that does.
-Each arm runs its own suite, fixtures and benchmark environment, so a pull request's changes to the suite are exercised by that pull request.
-`task benchmark-pair` runs the same comparison locally.
+  Each revision used to get its own CI job, so every reported ratio divided one hosted runner's speed by another's, and that pool is heterogeneous by about a factor of two.
+  Four pull requests that touched no differentiated source reported all sixteen log-density benchmarks moving together, by 1.37x, 0.61x, 0.78x and 0.98x, and `province_composition_model` ranged from 971 ns to 1.90 us across nine runs of equivalent code.
+  AirspeedVelocity runs the two arms and `benchmark/ci/comment.jl` reports them, replacing `benchmark/compare.jl`.
+  The workflow materialises both revisions as git worktrees and benchmarks them from those paths, because this repository declares a submodule and Pkg cannot check out a tree that does.
+  Each arm runs its own suite, fixtures and benchmark environment, so a pull request's changes to the suite are exercised by that pull request.
+  `task benchmark-pair` runs the same comparison locally.
 - The benchmark comment measures its neutral band from the run rather than fixing it at 5% (#763).
-The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
-It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
-That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
+  The band is the 90th percentile of the per-benchmark sample spread, floored at 2% and capped at 20%, and the comment states the number it measured.
+  It also reports each benchmark's own spread and warns when every benchmark moves by one factor, which points at the environment rather than at the diff.
+  That band is a lower bound: each revision is timed once, so the spread is dispersion within a revision's own samples rather than drift between the two.
 - The benchmark comment drops AirspeedVelocity's package-load row (#763).
-BenchmarkTools runs a warmup evaluation before it samples and that warmup performs the load, so the in-process sample times a warm re-import.
-Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
+  BenchmarkTools runs a warmup evaluation before it samples and that warmup performs the load, so the in-process sample times a warm re-import.
+  Further samples relaunch Julia and do measure a load, and the comment reports a minimum, so the warm sample always won: the row read 358 us at a spread of 103% for a package that depends on Turing.
 - The benchmark workflow passes `cache-name` to `julia-actions/cache` rather than `key-prefix` (#763).
-`key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
-- A push to `main` no longer cancels the run before it in the documentation,
-  test and coverage workflows; only pull-request runs are superseded (#749).
-  This is why the published site and results release went stale on 17
-  September.
-- Closing or merging a pull request cancels the runs queued or in flight on its
-  head branch (#751).
+  `key-prefix` is not an input of that action, which warns and carries on, so the depot snapshot it was meant to pin never was.
+- A push to `main` no longer cancels the run before it in the documentation, test and coverage workflows; only pull-request runs are superseded (#749).
+  This is why the published site and results release went stale on 17 September.
+- Closing or merging a pull request cancels the runs queued or in flight on its head branch (#751).
 - One-off harnesses written at the repository root are ignored (#726).
-- Julia code is formatted with Runic rather than JuliaFormatter (#744). The old
-  compat string `"=2.12.0, 2.12"` was a union that pinned nothing; a quality
-  test now checks the pin, and 121 files were reformatted.
+- Julia code is formatted with Runic rather than JuliaFormatter (#744).
+  The old compat string `"=2.12.0, 2.12"` was a union that pinned nothing; a quality test now checks the pin, and 121 files were reformatted.
 
 ### Dependencies
 
-- The docs, test and scripts environments no longer carry compat entries for
-  Julia standard libraries, and Dependabot no longer opens pull requests for
-  them (#728).
+- The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).
 
 ## v2.0.0
 
 Changes since v1.18.0
 
-A major version: the headline model becomes spatial, so its parameter set is
-not the one v1 published.
+A major version: the headline model becomes spatial, so its parameter set is not the one v1 published.
 
-> **Convergence warning.** The headline fits published with v2.0.0 failed to
-converge once the daily new-suspect series was added back to the fit (#713).
-This is resolved in v2.1.0; see the note there.
+> **Convergence warning.** The headline fits published with v2.0.0 failed to converge once the daily new-suspect series was added back to the fit (#713).
+> This is resolved in v2.1.0; see the note there.
 
 ### Model
 
-- The headline joint model is a meta-population over four patches: Ituri,
-Nord-Kivu, Haut-Uele, and one pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi
-(#412, #664).
-One renewal equation per patch, coupled by importation, with every national
-stream fitted against the summed patches.
-`n_patches = 1` collapses it onto the single-population model, which is fitted
-as the `sens_no_patches` control.
-- Provincial reproduction numbers are the national weekly-knot walk plus
-deviations that sum to zero, correlated across provinces and mean-reverting on
-a sampled half-life (#665).
-The national reproduction number is read back off the summed infections, so it
-is the force-weighted mean of the provincial values rather than the trend they
-pool toward.
+- The headline joint model is a meta-population over four patches: Ituri, Nord-Kivu, Haut-Uele, and one pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi (#412, #664).
+  One renewal equation per patch, coupled by importation, with every national stream fitted against the summed patches.
+  `n_patches = 1` collapses it onto the single-population model, which is fitted as the `sens_no_patches` control.
+- Provincial reproduction numbers are the national weekly-knot walk plus deviations that sum to zero, correlated across provinces and mean-reverting on a sampled half-life (#665).
+  The national reproduction number is read back off the summed infections, so it is the force-weighted mean of the provincial values rather than the trend they pool toward.
 - The split is identified by the confirmed deaths.
-Only the product of a province's incidence and its case-finding is observed,
-and the case-fatality ratio and death confirmation are national, so the death
-shares identify incidence and the case shares leave ascertainment as the
-residual.
-Both are scored as compositions conditional on the national total.
-- Each province has its own case-fatality ratio, partially pooled, alongside a
-death confirmation pooled far more tightly, so a provincial excess of deaths
-over cases reads first as lethality (#667).
-- Provinces are coupled by a gravity kernel: destination population over
-distance between provincial capitals, with each origin's total outflow held at
-the population-only value (#666).
-- The importation intensity is per origin, partially pooled, and changes at
-detection on the ramp the reproduction number already uses.
-- Ituri carries the whole cryptic seed and the other provinces are seeded by
-importation from it, so when a province first carries infections follows from
-the kernel rather than from a fitted fraction.
-- The headline and its control run at 750 draws with 500 adaptation steps and a
-target acceptance of 0.80, measured against the fit job's 350-minute budget.
+  Only the product of a province's incidence and its case-finding is observed, and the case-fatality ratio and death confirmation are national, so the death shares identify incidence and the case shares leave ascertainment as the residual.
+  Both are scored as compositions conditional on the national total.
+- Each province has its own case-fatality ratio, partially pooled, alongside a death confirmation pooled far more tightly, so a provincial excess of deaths over cases reads first as lethality (#667).
+- Provinces are coupled by a gravity kernel: destination population over distance between provincial capitals, with each origin's total outflow held at the population-only value (#666).
+- The importation intensity is per origin, partially pooled, and changes at detection on the ramp the reproduction number already uses.
+- Ituri carries the whole cryptic seed and the other provinces are seeded by importation from it, so when a province first carries infections follows from the kernel rather than from a fitted fraction.
+- The headline and its control run at 750 draws with 500 adaptation steps and a target acceptance of 0.80, measured against the fit job's 350-minute budget.
 - `m` counts transmission generations rather than doublings (#672).
-`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
-Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
-Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
-The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
-`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
-The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
-The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
-`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
-The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
-It does not fix initialisation, so `ViablePrior` is retained.
+  `m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
+  Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+  Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+  The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+  `exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+  The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
+  The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
+  `r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+  The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
+  It does not fix initialisation, so `ViablePrior` is retained.
 
 ### Data
 
-- The province scans reach the current situation report: confirmed cases and
-deaths over 75 vintages ending 9 September, against 21 ending 9 July, and the
-laboratory series over 72 (#664).
-The scans are gated on the province rows summing exactly to the national totals
-on every date.
-- Added per-province confirmed cases and deaths from Tableau 1, and per-province
-laboratory throughput from section 4.3, as `[province_confirmed_history]`,
-`[province_death_history]` and `[province_lab_daily_history]` (#412).
-- The longer series narrows the signal that identifies provincial
-ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
-scans stopped in July, and provincial test positivity has converged.
-- The daily new-suspect series resumes from 7 August, adding 38 days to 13
-September after a freeze at 5 August (#708).
-The situation reports' alert-validation table is the pre-084 Tableau 3
-transposed, and its validated-suspect columns reproduce the old table's own
-daily suspect total exactly on all 20 vintages that print both.
-SitRep 084 stays out: its Nord-Kivu row both validates and invalidates more
-alerts than the province received.
+- The province scans reach the current situation report: confirmed cases and deaths over 75 vintages ending 9 September, against 21 ending 9 July, and the laboratory series over 72 (#664).
+  The scans are gated on the province rows summing exactly to the national totals on every date.
+- Added per-province confirmed cases and deaths from Tableau 1, and per-province laboratory throughput from section 4.3, as `[province_confirmed_history]`, `[province_death_history]` and `[province_lab_daily_history]` (#412).
+- The longer series narrows the signal that identifies provincial ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the scans stopped in July, and provincial test positivity has converged.
+- The daily new-suspect series resumes from 7 August, adding 38 days to 13 September after a freeze at 5 August (#708).
+  The situation reports' alert-validation table is the pre-084 Tableau 3 transposed, and its validated-suspect columns reproduce the old table's own daily suspect total exactly on all 20 vintages that print both.
+  SitRep 084 stays out: its Nord-Kivu row both validates and invalidates more alerts than the province received.
 - The model cut-off advances to SitRep 122, 13 September (#709).
-Confirmed cases reach 7258 and confirmed deaths 3510.
-Every fitted stream's net change matches that report's own printed 24-hour
-figure, with no harmonisation anywhere in the run.
+  Confirmed cases reach 7258 and confirmed deaths 3510.
+  Every fitted stream's net change matches that report's own printed 24-hour figure, with no harmonisation anywhere in the run.
 
 ### Report
 
-- Province-level results sit alongside the national ones rather than in a
-section of their own (#412).
-- Added the reproduction number, modelled infections and imported infections by
-province over time, posterior predictive checks on both compositions, and a
-per-province summary figure.
-- The summary reports each province's infections, reproduction number and
-case-fatality ratio, and the diagnostics table carries the no-patch control.
-- The methods section carries the model's maths: the seeding, the renewal with
-importation, the national read-back, the gravity kernel and the per-origin
-intensity.
-- The provincial forecast is a figure alongside the national ones, and each
-run writes `output/province_forecast.csv` so a release records the split it
-forecast.
-The sensitivity page scores the one-week-ahead forecast by province (#668).
-`scripts/score_releases.jl` scores that archive across releases against a
-persistence baseline, into `data/province_forecast_scores.csv`, and the
-sensitivity page tabulates it.
-- The summary dashboard carries modelled infections by province and the
-per-province summary alongside the national figures.
+- Province-level results sit alongside the national ones rather than in a section of their own (#412).
+- Added the reproduction number, modelled infections and imported infections by province over time, posterior predictive checks on both compositions, and a per-province summary figure.
+- The summary reports each province's infections, reproduction number and case-fatality ratio, and the diagnostics table carries the no-patch control.
+- The methods section carries the model's maths: the seeding, the renewal with importation, the national read-back, the gravity kernel and the per-origin intensity.
+- The provincial forecast is a figure alongside the national ones, and each run writes `output/province_forecast.csv` so a release records the split it forecast.
+  The sensitivity page scores the one-week-ahead forecast by province (#668).
+  `scripts/score_releases.jl` scores that archive across releases against a persistence baseline, into `data/province_forecast_scores.csv`, and the sensitivity page tabulates it.
+- The summary dashboard carries modelled infections by province and the per-province summary alongside the national figures.
 - Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
-A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
-`docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
-It goes to the job summary and to the job log.
-A cache hit records that the fit was reused rather than refitted.
-`fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
+  A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
+  `docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
+  It goes to the job summary and to the job log.
+  A cache hit records that the fit was reused rather than refitted.
+  `fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
 
 ### Performance
 
-- The province composition no longer boxes the locals its likelihood closure
-captures (#412).
+- The province composition no longer boxes the locals its likelihood closure captures (#412).
 - The joint gradient costs about 30% less.
-The onset reporting delay evaluated its hazard about 87,000 times per
-gradient and now evaluates it about 8,500, by walking the survival product
-once for both halves of the ratio and sharing one delay-CDF table across the
-anchor series and the moments.
-The treatment-centre cohort walk stops where the clinical-stay survival
-reaches zero rather than running to the start of the grid, and the two
-abscond flows share one recurrence.
+  The onset reporting delay evaluated its hazard about 87,000 times per gradient and now evaluates it about 8,500, by walking the survival product once for both halves of the ratio and sharing one delay-CDF table across the anchor series and the moments.
+  The treatment-centre cohort walk stops where the clinical-stay survival reaches zero rather than running to the start of the grid, and the two abscond flows share one recurrence.
 - The draws move, the target does not.
-The log density is unchanged bit for bit, but reverse mode accumulates in a
-different order, so a fixed-seed chain no longer reproduces an earlier
-vintage draw for draw.
-Summaries agree within Monte Carlo error rather than exactly.
+  The log density is unchanged bit for bit, but reverse mode accumulates in a different order, so a fixed-seed chain no longer reproduces an earlier vintage draw for draw.
+  Summaries agree within Monte Carlo error rather than exactly.
 - The sampler budget sits in adaptation rather than in draws (#716).
-The headline patch fit returned 48 bulk and 39 tail effective samples at a
-worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population
-control on the same data through the same pipeline.
-Five times the effective sample from the same draw count places the limit at
-adaptation rather than at the draw count.
-The 500 adaptation steps and 750 draws are 1250 iterations, which the fit
-job's 350-minute budget covers.
-- The onset digitisers reuse the vintages the scanned file already holds
-(#707).
-Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run,
-walking the embedded figure pixel by pixel across all 55 vintages, though a
-data update adds one.
-Each run now opens a PDF only for the vintages the file is missing, and an
-incremental run and a full one write the same file.
-`--rebuild` still re-reads every vintage.
+  The headline patch fit returned 48 bulk and 39 tail effective samples at a worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population control on the same data through the same pipeline.
+  Five times the effective sample from the same draw count places the limit at adaptation rather than at the draw count.
+  The 500 adaptation steps and 750 draws are 1250 iterations, which the fit job's 350-minute budget covers.
+- The onset digitisers reuse the vintages the scanned file already holds (#707).
+  Both twins rebuilt `data/onset_curve_scanned.csv` from scratch on every run, walking the embedded figure pixel by pixel across all 55 vintages, though a data update adds one.
+  Each run now opens a PDF only for the vintages the file is missing, and an incremental run and a full one write the same file.
+  `--rebuild` still re-reads every vintage.
 
 ### Fixed
 
 - The posterior predictive is generated from the model that was fitted (#412).
-`pp_joint` built `bvd_joint` without the patch arguments, so `n_patches` took
-its default of one and every stream's predictive replayed a four-patch chain
-through a single well-mixed population.
-Every stream driven by BVD cases came out short by the difference, while the
-background-driven ones were unaffected.
+  `pp_joint` built `bvd_joint` without the patch arguments, so `n_patches` took its default of one and every stream's predictive replayed a four-patch chain through a single well-mixed population.
+  Every stream driven by BVD cases came out short by the difference, while the background-driven ones were unaffected.
 - NUTS chains no longer start on a prior tail they cannot recover from (#671).
-Each chain screens eight prior draws and starts at the first at or above that
-batch's median log joint density.
-A chain starting far into the tail never arrives, and nothing diverges, so the
-failure was silent.
-Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
+  Each chain screens eight prior draws and starts at the first at or above that batch's median log joint density.
+  A chain starting far into the tail never arrives, and nothing diverges, so the failure was silent.
+  Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 - The quality items run once in their own job rather than on every matrix cell.
-They do not vary by platform or Julia version, and carrying them on top of the
-whole suite took the Linux cell past its 150-minute ceiling.
-- The documentation build pins the pkgimage targets, and rescores the
-released-estimate and forecast-scoring overlays once (#712).
-Of the 30 minutes the render step took, 23 went on installing dependencies and
-refreshing overlays rather than on rendering.
+  They do not vary by platform or Julia version, and carrying them on top of the whole suite took the Linux cell past its 150-minute ceiling.
+- The documentation build pins the pkgimage targets, and rescores the released-estimate and forecast-scoring overlays once (#712).
+  Of the 30 minutes the render step took, 23 went on installing dependencies and refreshing overlays rather than on rendering.
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
-The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
-It now states the thinned discharge flow and the confirmation-dependent abscond survival.
-`seed_at_renewal_start`, `abscond_thinned` and `abscond_thinned_flow` carried docstrings several times the length of their bodies, much of it arguing against the alternatives rather than describing the contract.
+  The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
+  It now states the thinned discharge flow and the confirmation-dependent abscond survival.
+  `seed_at_renewal_start`, `abscond_thinned` and `abscond_thinned_flow` carried docstrings several times the length of their bodies, much of it arguing against the alternatives rather than describing the contract.
 - Citations read as prose rather than as a numeric-style reference list.
-Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)".
-They use `@citet`, which renders the name once, as does one site that cited without naming the author.
-The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
-`docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
+  Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)".
+  They use `@citet`, which renders the name once, as does one site that cited without naming the author.
+  The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
+  `docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
 - The analysed volume is no longer capped below the modelled suspect inflow (#677).
-`confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
-`τ_test` is a probability and the receipt kernel conserves mass, so that product could not exceed the suspect inflow.
-A sampled specimens-per-suspect factor `κ ~ LogNormal(0, 0.25)` now scales it, tracked as `specimens_per_suspect`.
-Repeat exclusion testing and swabbed community deaths put more specimens through the laboratory than suspects reported.
+  `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
+  `τ_test` is a probability and the receipt kernel conserves mass, so that product could not exceed the suspect inflow.
+  A sampled specimens-per-suspect factor `κ ~ LogNormal(0, 0.25)` now scales it, tracked as `specimens_per_suspect`.
+  Repeat exclusion testing and swabbed community deaths put more specimens through the laboratory than suspects reported.
 - Absconding no longer discharges patients the clinical exits have already discharged.
-`accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
+  `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 - The seeding docstrings now describe the model they document.
-`seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
+  `seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 - The Windows test cell no longer restores a depot it cannot load from.
-`cancel-in-progress` killed a `main` Windows cell part way through `Pkg`'s package installs, and `julia-actions/cache`'s `save-always` default saved that depot as the newest cache for the Windows restore key.
-`ColorVectorSpace` came back from it as a directory without its source, and `Pkg` skips downloading any package whose source path merely exists, so every later Windows job failed to precompile and saved the same depot again.
-The depot cache is now written only by jobs that finished, and the test workflow's cache key is bumped once to drop the depots saved before that.
+  `cancel-in-progress` killed a `main` Windows cell part way through `Pkg`'s package installs, and `julia-actions/cache`'s `save-always` default saved that depot as the newest cache for the Windows restore key.
+  `ColorVectorSpace` came back from it as a directory without its source, and `Pkg` skips downloading any package whose source path merely exists, so every later Windows job failed to precompile and saved the same depot again.
+  The depot cache is now written only by jobs that finished, and the test workflow's cache key is bumped once to drop the depots saved before that.
 - Citations render as author-year links again.
-DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
-Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.
-The docs environment now caps `DocumenterCitations` below 1.5, and dependabot skips that bump until the Vitepress writer handles the node.
+  DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
+  Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.
+  The docs environment now caps `DocumenterCitations` below 1.5, and dependabot skips that bump until the Vitepress writer handles the node.
 - The non-BVD background anchor prior no longer truncates the level the data support.
-`background_walk_model`'s `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 per day.
-Under that prior the joint posterior for `λ_mu` ran about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
-The registry fits on this change are what say where the anchor settles once the ceiling is lifted.
-The SD is now 20, which puts the same posterior interval between the 58th and 87th percentiles.
-It stays a half-normal shrinking toward zero, so the background still cannot out-explain the outbreak signal on its own, and the pooling SD on the walk is unchanged.
-`λ_mu` anchors the start of the window rather than the level over it: the log-deviation is pinned to zero on the first knot, so the innovations carry the series from there.
-It is the post-ramp level exactly only at `σ_rw = 0`, since by the day the onset ramp completes the walk already carries part of its first innovation.
-The fitted background is far above it well before the cut-off, so this scale is not comparable to a mid-window level.
-The suspected-death background is the case background carried through the onset-to-death delay and scaled by a background CFR, so it widens by the same factor.
-The anchor is one of three prior-posterior conflicts the fitted background shows, alongside `σ_bg` near the top of its own prior and every innovation sharing a sign.
-Those together are the signature of a zero-mean walk carrying a systematic trend, which a wider anchor does not address.
+  `background_walk_model`'s `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 per day.
+  Under that prior the joint posterior for `λ_mu` ran about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
+  The registry fits on this change are what say where the anchor settles once the ceiling is lifted.
+  The SD is now 20, which puts the same posterior interval between the 58th and 87th percentiles.
+  It stays a half-normal shrinking toward zero, so the background still cannot out-explain the outbreak signal on its own, and the pooling SD on the walk is unchanged.
+  `λ_mu` anchors the start of the window rather than the level over it: the log-deviation is pinned to zero on the first knot, so the innovations carry the series from there.
+  It is the post-ramp level exactly only at `σ_rw = 0`, since by the day the onset ramp completes the walk already carries part of its first innovation.
+  The fitted background is far above it well before the cut-off, so this scale is not comparable to a mid-window level.
+  The suspected-death background is the case background carried through the onset-to-death delay and scaled by a background CFR, so it widens by the same factor.
+  The anchor is one of three prior-posterior conflicts the fitted background shows, alongside `σ_bg` near the top of its own prior and every innovation sharing a sign.
+  Those together are the signature of a zero-mean walk carrying a systematic trend, which a wider anchor does not address.
 - The docs and test environments no longer warn about the SHA compat entry on every resolve.
-`SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
-Both environments now read `SHA = "0.7.0, 1"`.
+  `SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
+  Both environments now read `SHA = "0.7.0, 1"`.
 - Each single-stream fit is forecast from its own fitted trajectory (#706).
-The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
-That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
+  The single-stream fits were forecast by inverting their cumulative total under exponential growth, while the joint was forecast from its trajectory.
+  That inversion collapses towards zero once the fitted growth rate is at or below zero, which is not what a stream still reporting daily is doing.
 - Four comment-level claims that did not match the code are corrected (#710).
-The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
-The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
-`forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
+  The confirmed-positivity window contract is now stated rather than left to be inferred from the one path that happens to be safe.
+  The confirmed-deaths assay sensitivity is named `s_test`, as the case model already names the same quantity.
+  `forecast_stream`'s cumulative branch no longer adds the cut-off cumulative and takes it straight back off.
 - The duplicated comments in `score_releases.jl` are trimmed (#714).
 
 ### Dependencies
 
 - Compat bounds were updated across the package and the script environment (#696, #697, #698, #699, #700, #701).
-Several carried a meaningless `< 0.0.1` bound on a standard library.
+  Several carried a meaningless `< 0.0.1` bound on a standard library.
 
 ## v1.18.0
 
@@ -604,36 +409,36 @@ Changes since v1.17.0
 ### Performance
 
 - The observation models no longer box the locals their closures capture (#656).
-Four model bodies assigned a variable inside a branch or a loop and then captured it in a comprehension, which makes Julia hold it in a `Core.Box`.
-A boxed local is type-unstable at every use, and Mooncake answers type instability with a dictionary lookup per call site on every gradient evaluation.
-Assigning each name once leaves the log-density bit-identical and roughly halves the gradient on the joint fit, from about 21 ms to about 10 ms.
-`test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
-Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern, and are left alone because nothing there runs on the gradient path.
+  Four model bodies assigned a variable inside a branch or a loop and then captured it in a comprehension, which makes Julia hold it in a `Core.Box`.
+  A boxed local is type-unstable at every use, and Mooncake answers type instability with a dictionary lookup per call site on every gradient evaluation.
+  Assigning each name once leaves the log-density bit-identical and roughly halves the gradient on the joint fit, from about 21 ms to about 10 ms.
+  `test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
+  Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern, and are left alone because nothing there runs on the gradient path.
 
 ### Report
 
 - The symptom-onset reporting-triangle panels are nowcasts rather than fits (#648).
-Each panel drew the expected count for the bar it was compared against, which does not condition on what that snapshot had already printed, so its interval was set by uncertainty in the onsets rather than by how much of the reporting delay had elapsed.
-Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
-It is read against that latest reading, so the band and the point it is scored on are the same quantity.
-The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
+  Each panel drew the expected count for the bar it was compared against, which does not condition on what that snapshot had already printed, so its interval was set by uncertainty in the onsets rather than by how much of the reporting delay had elapsed.
+  Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
+  It is read against that latest reading, so the band and the point it is scored on are the same quantity.
+  The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
 - Seven references the text quoted by hand are now citations, so they reach the References page (#627).
-The onset-to-sample cohort, the `epidist` model behind it, the Wilson-Hilferty median, the RealStar assay and the three GeneXpert sources were all named in prose or given as a bare DOI, which left the assay sensitivities and the delay prior unsourced on the page.
+  The onset-to-sample cohort, the `epidist` model behind it, the Wilson-Hilferty median, the RealStar assay and the three GeneXpert sources were all named in prose or given as a bare DOI, which left the assay sensitivities and the delay prior unsourced on the page.
 
 ### Data
 
 - Advanced the model cut-off from SitRep 110 (1 September) to SitRep 115 (6 September) (#655).
-Confirmed cases reach 6686 and confirmed deaths 3226, with 1563 recovered and 819 in isolation.
-Every day's net confirmed-case and confirmed-death change matches that report's own printed 24h figure, with no harmonisation anywhere in the run.
-The treatment-centre flows and the daily suspected case and death series stay frozen, as they have since the reports dropped the tables that carried them.
+  Confirmed cases reach 6686 and confirmed deaths 3226, with 1563 recovered and 819 in isolation.
+  Every day's net confirmed-case and confirmed-death change matches that report's own printed 24h figure, with no harmonisation anywhere in the run.
+  The treatment-centre flows and the daily suspected case and death series stay frozen, as they have since the reports dropped the tables that carried them.
 - The ERVEBO ring and front-line-worker vaccination campaign is now tracked as a candidate signal (#651, #650).
-Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
-The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
+  Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
+  The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
 
 ### Infrastructure
 
 - Removed `forecast_vs_truth_trajectory`, which no code called.
-It scored a cumulative trajectory from the exponential-growth model's `r`, `expected_reports_T` and `k`, none of which the renewal model carries.
+  It scored a cumulative trajectory from the exponential-growth model's `r`, `expected_reports_T` and `k`, none of which the renewal model carries.
 
 ### Dependencies
 
@@ -646,66 +451,66 @@ Changes since v1.16.0
 ### Fixes
 
 - The Python onset-curve digitiser no longer disagrees with the Julia reference (#594).
-Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
-Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
-Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
+  Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
+  Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
+  Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
 - The symptom-onset reporting triangle now carries a per-scan level error (#507).
-A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute part of the digitisation error belongs to the bar and the multiplicative part is one number for the whole figure.
-Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
-The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
-On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
-The outbreak size and the recent reproduction number are unchanged by the term.
-`C_T` moves from 13022 to 12566 against a 95% interval about 12000 wide, and `R_T` from 1.009 to 0.976 against an interval width of 0.85.
-On the joint fit itself, per-snapshot central coverage moves from 8 of 30 to 17 of 30 against a nominal half.
-The reporting delay's calendar walk narrows from 0.49 to 0.11, so it had been absorbing per-scan level movement as reporting drift.
-The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
+  A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute part of the digitisation error belongs to the bar and the multiplicative part is one number for the whole figure.
+  Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
+  The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
+  On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
+  The outbreak size and the recent reproduction number are unchanged by the term.
+  `C_T` moves from 13022 to 12566 against a 95% interval about 12000 wide, and `R_T` from 1.009 to 0.976 against an interval width of 0.85.
+  On the joint fit itself, per-snapshot central coverage moves from 8 of 30 to 17 of 30 against a nominal half.
+  The reporting delay's calendar walk narrows from 0.49 to 0.11, so it had been absorbing per-scan level movement as reporting drift.
+  The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
 - Bed forecasts are now scored against the occupancy the situation reports print.
-The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
-The persistence baseline drops a window spanning one of those basis changes, and the symptom-onset stream has a baseline for the first time.
-For an incident stream the baseline's step pool holds changes in the window total rather than the window's own count (#623, #612).
+  The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
+  The persistence baseline drops a window spanning one of those basis changes, and the symptom-onset stream has a baseline for the first time.
+  For an incident stream the baseline's step pool holds changes in the window total rather than the window's own count (#623, #612).
 
 ### Report
 
 - The bed-occupancy panels read as occupancy rather than as counts of new events (#628).
-All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
-A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
+  All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
+  A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
 - The symptom-onset methods section now derives the digitisation error from how a bar is read rather than quoting a single per-scan percentage, and the reporting-delay summary table and pair plot carry the sampled per-scan level (#507).
-The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
+  The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
 - The frozen validation fits no longer include the streams the situation reports have stopped updating (#611).
-Suspected cases and suspected deaths stopped reporting early, so their frozen fits scored a validation panel that had already gone quiet, 16 fits a build down from 18.
-The release-fit registry is hashed into every fit's cache key, so the next docs build refits the whole set once.
+  Suspected cases and suspected deaths stopped reporting early, so their frozen fits scored a validation panel that had already gone quiet, 16 fits a build down from 18.
+  The release-fit registry is hashed into every fit's cache key, so the next docs build refits the whole set once.
 
 ### Data
 
 - Advanced the model cut-off from SitRep 108 (30 August) to SitRep 109 (31 August).
-Confirmed cases reach 6186 and confirmed deaths 3007.
-Sud-Kivu prints its first bed-capacity figure, 25 beds.
-The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+  Confirmed cases reach 6186 and confirmed deaths 3007.
+  Sud-Kivu prints its first bed-capacity figure, 25 beds.
+  The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
 - Three scan-versus-mirror disagreements in the confirmed case and death history are settled against the situation-report PDFs (#624).
-The committed values are right in all three, so no fitted number changes.
-2026-08-08 is the mirror filing SitRep 085 under its publication date rather than its reporting date.
-2026-08-11 is SitRep 089's printed total of 4566 against its own province rows summing to 4567.
-2026-08-25 is a mirror transcription error, 2755 for a figure that reads 2744 in the headline, the total row and the province sum alike.
-The cross-check script now records each with both values, and fails on any disagreement it does not document or on an entry that stops reproducing.
-It no longer prints TOML regenerated from the mirror, which covers 86 of the 102 report dates the manifest holds.
+  The committed values are right in all three, so no fitted number changes.
+  2026-08-08 is the mirror filing SitRep 085 under its publication date rather than its reporting date.
+  2026-08-11 is SitRep 089's printed total of 4566 against its own province rows summing to 4567.
+  2026-08-25 is a mirror transcription error, 2755 for a figure that reads 2744 in the headline, the total row and the province sum alike.
+  The cross-check script now records each with both values, and fails on any disagreement it does not document or on an entry that stops reproducing.
+  It no longer prints TOML regenerated from the mirror, which covers 86 of the 102 report dates the manifest holds.
 - SitRep 090's mixed-direction harmonisation gets no break-date entry (#569).
-The gap is 2 cases and 3 deaths, smaller than the SitRep 065 precedent already left off that list.
+  The gap is 2 cases and 3 deaths, smaller than the SitRep 065 precedent already left off that list.
 - SitRep 098 stays out of the digitised onset curve, and the reason is now the measured one (#594).
-The render size is not what makes it read high.
-It is the only vintage embedded losslessly, and the fixed colour masks lose a bar-edge fringe to JPEG blur on every other one.
+  The render size is not what makes it read high.
+  It is the only vintage embedded losslessly, and the fixed colour masks lose a bar-edge fringe to JPEG blur on every other one.
 - The SitRep 102 to 103 date-alignment failure is not a misread axis tick on either vintage (#617).
-Both neighbouring pairs land cleanly on shift 0.
+  Both neighbouring pairs land cleanly on shift 0.
 - The per-scan digitisation error on the onset curve is a per-vintage level, not a stationary error (#636).
-The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller render blurs more.
-Edge softness roughly doubles between SitRep 105 and 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
-The shift does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
+  The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller render blurs more.
+  Edge softness roughly doubles between SitRep 105 and 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
+  The shift does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
 
 ### Infrastructure
 
 - The onset-curve digitiser and the file it writes now have tests, including the date-alignment sweep and a parity check holding the Python port to the committed file (#629).
 - The release rescore's hard failure is now permanent rather than a stopgap (#588).
-It used to fall back to the committed scoring tables when the rescore step failed, but that fallback would publish skill scores and validation figures against whatever truth series those tables were last written from, with nothing on the rendered page saying so.
-A failed rescore now fails the build outright, which a re-run of the job recovers from; a silent substitution was not detectable from the page at all.
+  It used to fall back to the committed scoring tables when the rescore step failed, but that fallback would publish skill scores and validation figures against whatever truth series those tables were last written from, with nothing on the rendered page saying so.
+  A failed rescore now fails the build outright, which a re-run of the job recovers from; a silent substitution was not detectable from the page at all.
 
 ## v1.16.0
 
@@ -714,25 +519,25 @@ Changes since v1.15.0
 ### Report
 
 - The cross-release forecast scores, the forecast-versus-observed validation tables and the situation-report data tables stay tables on the page.
-A `DataFrame` is html-showable, so each one went into the page as a raw HTML block, and Documenter compiles a regex from every raw block's own text, which fails once a block passes PCRE's compiled-pattern limit.
-The scoring tables grow with every release and crossed it after v1.15.0, taking the docs build down with them.
-The stop-gap printed each table as a fixed-width block of text instead, which built but is not a table.
-They now go out as markdown tables, which carry no such limit.
-Float columns are rounded rather than printed to their full binary expansion, and numeric columns are right-aligned.
+  A `DataFrame` is html-showable, so each one went into the page as a raw HTML block, and Documenter compiles a regex from every raw block's own text, which fails once a block passes PCRE's compiled-pattern limit.
+  The scoring tables grow with every release and crossed it after v1.15.0, taking the docs build down with them.
+  The stop-gap printed each table as a fixed-width block of text instead, which built but is not a table.
+  They now go out as markdown tables, which carry no such limit.
+  Float columns are rounded rather than printed to their full binary expansion, and numeric columns are right-aligned.
 
 ### Data
 
 - Advanced the model cut-off from SitRep 102 (24 August) to SitRep 108 (30 August), six vintages.
-Confirmed cases reach 6100 and confirmed deaths 2950.
-Two health zones enter the case table at SitRep 104, Biena and Manguredjipa in Nord-Kivu, taking the affected count from 58 to 60 of 151.
-Bas-Uélé prints its first bed-capacity figure at SitRep 106.
-The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+  Confirmed cases reach 6100 and confirmed deaths 2950.
+  Two health zones enter the case table at SitRep 104, Biena and Manguredjipa in Nord-Kivu, taking the affected count from 58 to 60 of 151.
+  Bas-Uélé prints its first bed-capacity figure at SitRep 106.
+  The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
 - SitRep 107's isolation occupancy is excluded rather than recorded.
-Its page-1 tile reconciles exactly to the province prose, but only because Nord-Kivu is absent from that section altogether, having carried 236 the day before and 282 the day after.
-Bed capacity for the same date is kept, on the split already established at SitRep 085.
+  Its page-1 tile reconciles exactly to the province prose, but only because Nord-Kivu is absent from that section altogether, having carried 236 the day before and 282 the day after.
+  Bed capacity for the same date is kept, on the split already established at SitRep 085.
 - The onset-curve digitiser reads SitRep 108.
-That vintage embeds its chart at a size no neighbour uses, which anti-aliased the axis border and the weekly ticks too light for the mask the digitiser reads dark pixels with.
-A looser mask now runs only where the strict one finds nothing, so every earlier vintage still digitises to the committed values.
+  That vintage embeds its chart at a size no neighbour uses, which anti-aliased the axis border and the weekly ticks too light for the mask the digitiser reads dark pixels with.
+  A looser mask now runs only where the strict one finds nothing, so every earlier vintage still digitises to the committed values.
 
 ### Dependencies
 
@@ -749,51 +554,51 @@ All five affected the headline forecast in the published report, not only the ev
 That is why 90% coverage sat at 1.00 at nearly every stream and horizon against a nominal 0.90.
 
 - Each observed count stream now projects from its own cumulative trajectory.
-`cumulative_reports` and `cumulative_deaths_total` were named by the forecast and by the stream registry but defined in no model, so reported cases, suspected deaths and confirmed deaths all fell back to inverting the cumulative total under exponential growth.
-That inversion collapses towards zero once the fitted growth rate is at or below zero, and on one cached fit gave a median 0.55 confirmed deaths per day against an observed 17.
+  `cumulative_reports` and `cumulative_deaths_total` were named by the forecast and by the stream registry but defined in no model, so reported cases, suspected deaths and confirmed deaths all fell back to inverting the cumulative total under exponential growth.
+  That inversion collapses towards zero once the fitted growth rate is at or below zero, and on one cached fit gave a median 0.55 confirmed deaths per day against an observed 17.
 - The confirmed-death forecast is no longer capped at the cumulative suspected deaths.
-The model does impose a thinning, but per day and on the latent pool, before positivity scales it down.
-The forecast capped a different quantity against a reported headline that froze at 246 on 26 May while confirmed deaths passed 246 on 19 June, clamping the forecast below its own origin and flooring the new count at zero in most draws.
+  The model does impose a thinning, but per day and on the latent pool, before positivity scales it down.
+  The forecast capped a different quantity against a reported headline that froze at 246 on 26 May while confirmed deaths passed 246 on 19 June, clamping the forecast below its own origin and flooring the new count at zero in most draws.
 - Each stream is replicated through its own dispersion rather than the population mean.
-The per-stream forecaster already used the right one, so the two disagreed for the same model on the same stream.
+  The per-stream forecaster already used the right one, so the two disagreed for the same model on the same stream.
 - The observation replicate accumulates day by day rather than in one draw on the horizon total.
-The dispersion is fitted against single-day counts and short vintage increments, so carrying it on the summed mean inflated the overdispersion term by roughly the length of the horizon.
+  The dispersion is fitted against single-day counts and short vintage increments, so carrying it on the summed mean inflated the overdispersion term by roughly the length of the horizon.
 - The reproduction number continues its fitted walk past the cut-off.
-The forecast repeated the last sampled innovation as a fixed daily slope for the whole horizon, so the spread in log-`R_t` grew with the horizon rather than with its square root, putting the four-week reproduction number between 0.245 and 14.9.
-It now draws fresh weekly innovations at the fitted step scale and interpolates between them, as the walk is built in the first place.
+  The forecast repeated the last sampled innovation as a fixed daily slope for the whole horizon, so the spread in log-`R_t` grew with the horizon rather than with its square root, putting the four-week reproduction number between 0.245 and 14.9.
+  It now draws fresh weekly innovations at the fitted step scale and interpolates between them, as the walk is built in the first place.
 
 The forecast validation is corrected with them.
 
 - A retrospective harmonisation now comes out of the cumulative truth as well as the new-count truth.
-A projection cannot contain an administrative reattachment, so leaving it in the truth scored the forecast against something it could not produce.
-This is a no-op at the current cut-off and bites whenever a break day falls inside a validation week.
+  A projection cannot contain an administrative reattachment, so leaving it in the truth scored the forecast against something it could not produce.
+  This is a no-op at the current cut-off and bites whenever a break day falls inside a validation week.
 
 ### Report
 
 - The joint posterior predictive checks are split by whether a stream is still reported, cumulative then per-vintage within each group, and the vintage axes tick weekly rather than crowding as the outbreak runs on.
 - The forecast is validated only against streams the situation reports still update.
-Reported cases and suspected deaths stopped on 26 May, so their new-count truth was a guaranteed zero and the figure was scoring a forecast against an unmoving series, which the release scoring already withheld.
-They are still drawn, in their own figure, as a projection rather than a validation.
+  Reported cases and suspected deaths stopped on 26 May, so their new-count truth was a guaranteed zero and the figure was scoring a forecast against an unmoving series, which the release scoring already withheld.
+  They are still drawn, in their own figure, as a projection rather than a validation.
 - The sensitivity page said the confirmed new-count rows keep any retrospective harmonisation step.
-The code has subtracted it since the break-day correction was consolidated.
+  The code has subtracted it since the break-day correction was consolidated.
 
 ### Data
 
 - Advanced the model cut-off from SitRep 100 (22 August) to SitRep 102 (24 August).
-Both are clean days, with the cumulative case and death increments equal to the printed 24h gross.
-Bas-Uélé prints its first traveller count at SitRep 102.
+  Both are clean days, with the cumulative case and death increments equal to the printed 24h gross.
+  Bas-Uélé prints its first traveller count at SitRep 102.
 
 ### Infrastructure
 
 - The docs-preview cleanup collects previews that land after the pull request closes.
-The close-triggered job assumed the preview existed by then, but the docs build is fanned across runners and publishes hours later, so it found nothing and exited green every time, leaving two hundred preview directories against three open pull requests.
-A nightly sweep now drops every preview directory with no open pull request behind it, and refuses to run when the pull-request listing fails.
+  The close-triggered job assumed the preview existed by then, but the docs build is fanned across runners and publishes hours later, so it found nothing and exited green every time, leaving two hundred preview directories against three open pull requests.
+  A nightly sweep now drops every preview directory with no open pull request behind it, and refuses to run when the pull-request listing fails.
 
 ### Known issues
 
 - The release comparison mixes two forecast constructions.
-Every row in it is reconstructed by running each release tag's own code, so the historical rows keep the defects corrected above and cannot be regenerated without rewriting what those tags would have produced.
-Read a change in forecast width across this release as a change in the code rather than in the outbreak.
+  Every row in it is reconstructed by running each release tag's own code, so the historical rows keep the defects corrected above and cannot be regenerated without rewriting what those tags would have produced.
+  Read a change in forecast width across this release as a change in the code rather than in the outbreak.
 - The automatic version increment is wedged by a stale branch and skips silently on every push, so `Project.toml` does not advance on its own (#607).
 
 ## v1.14.0
@@ -802,128 +607,71 @@ Changes since v1.13.2
 
 ### Data
 
-- Advanced the model cut-off from SitRep 089 (11 August) to SitRep 100
-  (22 August). The reports returned to their full-length format at SitRep
-  090 after five vintages of the shorter "MVEBDB" brief, restoring the
-  laboratory, point-of-entry and continuity-of-care sections. The
-  confirmed-case and confirmed-death series, recoveries, isolation
-  occupancy, bed capacity and the 24h analysed volume all advance with
-  them, and the symptom-onset curve is digitised for each new vintage that
-  carries a fresh figure. The daily new-suspected-case count stays frozen
-  at 5 August and the treatment-centre patient-movement series at 2 August.
-- A sixth province, Bas-Uélé, records its first confirmed case at SitRep
-  090 (ZS Buta). No isolation, occupancy or laboratory figures are printed
-  for it in any vintage, so it contributes zero to every per-province
-  stream, following the convention already in place for a non-reporting
-  province.
-- The 17 August point was recorded from the INRB-UMIE mirror alone while
-  INSP had published nothing beyond SitRep 093, verified against its posts
-  and media endpoints rather than inferred from a failed fetch. Publication
-  has since resumed and every stream is scanned from the reports again.
-  `scripts/check_new_sitreps.jl` reports how far the mirror leads insp.cd,
-  so a mirror-only point stays visible rather than silently absorbed.
-- `candidate_signals.csv` gains a `province` column and holds one row per
-  signal per vintage per province, replacing the national figure that was
-  a hand-made sum over whichever provinces happened to print a count. A
-  province the report is silent on now gets no row, which distinguishes it
-  from a printed zero. `province = Ensemble` marks a national figure the
-  report prints itself. Coverage changes are now readable from the data
-  rather than only from the prose in `source_note`: SitRep 069, for
-  example, gives Ituri and Nord-Kivu for `eds_death_alerts` but Ituri
-  alone for `eds_investigations_performed`.
-- Corrected SitRep 089's `eds_investigations_performed`, whose national
-  value of 107 included the 15 CTE EDS its own note recorded as excluded.
+- Advanced the model cut-off from SitRep 089 (11 August) to SitRep 100 (22 August).
+  The reports returned to their full-length format at SitRep 090 after five vintages of the shorter "MVEBDB" brief, restoring the laboratory, point-of-entry and continuity-of-care sections.
+  The confirmed-case and confirmed-death series, recoveries, isolation occupancy, bed capacity and the 24h analysed volume all advance with them, and the symptom-onset curve is digitised for each new vintage that carries a fresh figure.
+  The daily new-suspected-case count stays frozen at 5 August and the treatment-centre patient-movement series at 2 August.
+- A sixth province, Bas-Uélé, records its first confirmed case at SitRep 090 (ZS Buta).
+  No isolation, occupancy or laboratory figures are printed for it in any vintage, so it contributes zero to every per-province stream, following the convention already in place for a non-reporting province.
+- The 17 August point was recorded from the INRB-UMIE mirror alone while INSP had published nothing beyond SitRep 093, verified against its posts and media endpoints rather than inferred from a failed fetch.
+  Publication has since resumed and every stream is scanned from the reports again.
+  `scripts/check_new_sitreps.jl` reports how far the mirror leads insp.cd, so a mirror-only point stays visible rather than silently absorbed.
+- `candidate_signals.csv` gains a `province` column and holds one row per signal per vintage per province, replacing the national figure that was a hand-made sum over whichever provinces happened to print a count.
+  A province the report is silent on now gets no row, which distinguishes it from a printed zero.
+  `province = Ensemble` marks a national figure the report prints itself.
+  Coverage changes are now readable from the data rather than only from the prose in `source_note`: SitRep 069, for example, gives Ituri and Nord-Kivu for `eds_death_alerts` but Ituri alone for `eds_investigations_performed`.
+- Corrected SitRep 089's `eds_investigations_performed`, whose national value of 107 included the 15 CTE EDS its own note recorded as excluded.
   The per-province rows carry community-alert EDS only and sum to 92.
 
 ### Fixes
 
-- The still-expected-deaths density no longer extends below zero. The draws
-  were never negative; the kernel density spread mass past the smallest
-  draw, putting a tail on the impossible side of the bound. The axis now
-  stops at the bound, as the count and CFR panels already did. The same
-  applies to the projected-total panel, which had been drawn crossing left
-  of the observed-deaths rule.
-- The forecast reproduction-number density stops at zero, the same bound
-  already applied to the still-expected-deaths and projected-total
-  densities. A posterior sitting close to zero picks up a tail on the
-  impossible side from the kernel.
-- The posterior outbreak age on the tree-prior sensitivity figure stops at
-  zero for the same reason. An age in days cannot be negative, and that
-  figure renders in every published build.
-- The doubling-time interval is the image of the growth rate's interval
-  rather than the quantiles of its own draws, which bounded nothing once
-  the posterior for the growth rate spanned zero and reported a range of
-  -306 to 301 days. The row now runs from the fastest decline, through the
-  zero-growth pole, to the fastest growth, and is ordered by growth rate
-  rather than by value. The narrative summary carried the same fault and is
-  fixed with it.
-- The joint model's score tables show the joint model alone. Every fit was
-  rendered as a row, so each stream's individual fit appeared twice, once
-  in the headline table and again in the section built for it. A frozen
-  fit, which is the joint model refit at an earlier cut-off, was also read
-  as an individual fit rather than a joint one.
-- The persistence baseline is withheld where its own window is not covered
-  by the vintage's reporting, rather than scored from a degenerate centre.
-  An uncovered window let the centre saturate at the whole cumulative to
-  the made date, or collapse to a point mass at zero, and either flattered
-  the fits it was compared against. A test now pins that the baseline sees
-  nothing after the date it is made on, and fails under three deliberate
-  leaks.
-- The in-report forecast validation subtracts a retrospective harmonisation
-  from its new-count truth, as the release scoring already did. A frozen
-  cut-off sitting before a listed break day and a current cut-off after it
-  put records into the confirmed truth that were never notified that week.
-  The cumulative rows are unchanged, the harmonisation being genuinely part
-  of the reported total.
+- The still-expected-deaths density no longer extends below zero.
+  The draws were never negative; the kernel density spread mass past the smallest draw, putting a tail on the impossible side of the bound.
+  The axis now stops at the bound, as the count and CFR panels already did.
+  The same applies to the projected-total panel, which had been drawn crossing left of the observed-deaths rule.
+- The forecast reproduction-number density stops at zero, the same bound already applied to the still-expected-deaths and projected-total densities.
+  A posterior sitting close to zero picks up a tail on the impossible side from the kernel.
+- The posterior outbreak age on the tree-prior sensitivity figure stops at zero for the same reason.
+  An age in days cannot be negative, and that figure renders in every published build.
+- The doubling-time interval is the image of the growth rate's interval rather than the quantiles of its own draws, which bounded nothing once the posterior for the growth rate spanned zero and reported a range of -306 to 301 days.
+  The row now runs from the fastest decline, through the zero-growth pole, to the fastest growth, and is ordered by growth rate rather than by value.
+  The narrative summary carried the same fault and is fixed with it.
+- The joint model's score tables show the joint model alone.
+  Every fit was rendered as a row, so each stream's individual fit appeared twice, once in the headline table and again in the section built for it.
+  A frozen fit, which is the joint model refit at an earlier cut-off, was also read as an individual fit rather than a joint one.
+- The persistence baseline is withheld where its own window is not covered by the vintage's reporting, rather than scored from a degenerate centre.
+  An uncovered window let the centre saturate at the whole cumulative to the made date, or collapse to a point mass at zero, and either flattered the fits it was compared against.
+  A test now pins that the baseline sees nothing after the date it is made on, and fails under three deliberate leaks.
+- The in-report forecast validation subtracts a retrospective harmonisation from its new-count truth, as the release scoring already did.
+  A frozen cut-off sitting before a listed break day and a current cut-off after it put records into the confirmed truth that were never notified that week.
+  The cumulative rows are unchanged, the harmonisation being genuinely part of the reported total.
 
 ### Infrastructure
 
-- The macOS test cell runs the platform-sensitive items only. It was the
-  one cell skipping nothing, so it re-ran the sampling fits and the quality
-  checks on the slowest runner, never finished, and was cancelled at
-  GitHub's six-hour ceiling on every run. It now completes in about twelve
-  minutes. The job also carries a timeout below that ceiling, so a stall
-  reports as a failure rather than as a cancellation hours later.
-- The automatic version increment deletes its branch and warns when GitHub
-  refuses the pull request it opens, rather than leaving the branch behind.
-  A leftover branch tripped the increment's own already-exists guard on
-  every later push, so the first failure was loud and the rest were silent.
+- The macOS test cell runs the platform-sensitive items only.
+  It was the one cell skipping nothing, so it re-ran the sampling fits and the quality checks on the slowest runner, never finished, and was cancelled at GitHub's six-hour ceiling on every run.
+  It now completes in about twelve minutes.
+  The job also carries a timeout below that ceiling, so a stall reports as a failure rather than as a cancellation hours later.
+- The automatic version increment deletes its branch and warns when GitHub refuses the pull request it opens, rather than leaving the branch behind.
+  A leftover branch tripped the increment's own already-exists guard on every later push, so the first failure was loud and the rest were silent.
 - Turing's compat bound admits 0.46.
 
 ### Documentation
 
-- Rewrote the reduced-data-streams warning in the README and the summary
-  page. The situation reports returned to their full format on 12 August,
-  so the note now covers only what stayed frozen: the daily
-  new-suspected-case count and the treatment-centre patient-movement
-  series.
-- Rewrote the abstract around the situation reports and the data they
-  publish rather than a list of streams, in the wording the analysis
-  report itself uses. It now covers the digitised symptom-onset curve and
-  the recoveries, which the earlier text left out, and says that each
-  release projects each DRC stream a week ahead and scores those
-  forecasts against later data and a persistence baseline.
-- A newly spotted surveillance signal now goes to an issue rather than a
-  row in `data/README.md`'s scan table. The table is a short index, and
-  rows added to it on a data update had to be reverted; the values still
-  accumulate in `candidate_signals.csv` on the same pull request either
-  way.
-- The docs deploy job serialises on the `gh-pages` ref it writes to. The
-  workflow's own concurrency group is keyed on the source branch, so two
-  pull requests publishing previews at once raced and the loser's push was
-  rejected.
-- Gave one display block each to the tested BVD share and the positivity,
-  the cumulative infections and the completed-detection-delay term, and the
-  daily export intensity and its running sum, finishing the
-  one-quantity-per-block pass. The export-death prevalence gets its own
-  block rather than an inline definition.
-- Split the death-pool BVD share and the assay positivity built on it into
-  a display block each, matching the confirmed-case pipeline.
-- Cut the symptom-onset reporting-delay methods section and its results
-  text to the length and shape the other observation modules carry. The
-  model definition, the priors and the limitations all remain. The
-  identifiability discussion is condensed, and the prose runs one sentence
-  per line like the rest of the document.
+- Rewrote the reduced-data-streams warning in the README and the summary page.
+  The situation reports returned to their full format on 12 August, so the note now covers only what stayed frozen: the daily new-suspected-case count and the treatment-centre patient-movement series.
+- Rewrote the abstract around the situation reports and the data they publish rather than a list of streams, in the wording the analysis report itself uses.
+  It now covers the digitised symptom-onset curve and the recoveries, which the earlier text left out, and says that each release projects each DRC stream a week ahead and scores those forecasts against later data and a persistence baseline.
+- A newly spotted surveillance signal now goes to an issue rather than a row in `data/README.md`'s scan table.
+  The table is a short index, and rows added to it on a data update had to be reverted; the values still accumulate in `candidate_signals.csv` on the same pull request either way.
+- The docs deploy job serialises on the `gh-pages` ref it writes to.
+  The workflow's own concurrency group is keyed on the source branch, so two pull requests publishing previews at once raced and the loser's push was rejected.
+- Gave one display block each to the tested BVD share and the positivity, the cumulative infections and the completed-detection-delay term, and the daily export intensity and its running sum, finishing the one-quantity-per-block pass.
+  The export-death prevalence gets its own block rather than an inline definition.
+- Split the death-pool BVD share and the assay positivity built on it into a display block each, matching the confirmed-case pipeline.
+- Cut the symptom-onset reporting-delay methods section and its results text to the length and shape the other observation modules carry.
+  The model definition, the priors and the limitations all remain.
+  The identifiability discussion is condensed, and the prose runs one sentence per line like the rest of the document.
 
 ## v1.13.2
 
@@ -931,21 +679,9 @@ Changes since v1.13.1
 
 ### Data
 
-- Advanced the model cut-off from SitRep 082 (4 August) to SitRep 089
-  (11 August): added SitReps 083-089, advancing the confirmed-case and
-  confirmed-death series and the recovered, isolation-occupancy and 24h
-  laboratory-analysed streams, and digitising the symptom-onset curve
-  vintages restored from SitRep 087 (the 084-086 brief-format reports carry
-  a different, notification-week chart and so contribute no onset
-  snapshot).
-- From SitRep 084 (6 August) the INSP switched to a shorter "MVEBDB" brief
-  format that no longer publishes the daily new-suspected-case stream
-  (`suspected_daily_history` freezes at SitRep 083) or the treatment-centre
-  patient-movement streams (frozen at SitRep 080), so the fit now depends
-  on just the confirmed-case, confirmed-death, recovered and isolation
-  streams rather than the full surveillance suite. The README and report
-  carry a warning to this effect; see the inclusion rules in
-  `data/README.md`.
+- Advanced the model cut-off from SitRep 082 (4 August) to SitRep 089 (11 August): added SitReps 083-089, advancing the confirmed-case and confirmed-death series and the recovered, isolation-occupancy and 24h laboratory-analysed streams, and digitising the symptom-onset curve vintages restored from SitRep 087 (the 084-086 brief-format reports carry a different, notification-week chart and so contribute no onset snapshot).
+- From SitRep 084 (6 August) the INSP switched to a shorter "MVEBDB" brief format that no longer publishes the daily new-suspected-case stream (`suspected_daily_history` freezes at SitRep 083) or the treatment-centre patient-movement streams (frozen at SitRep 080), so the fit now depends on just the confirmed-case, confirmed-death, recovered and isolation streams rather than the full surveillance suite.
+  The README and report carry a warning to this effect; see the inclusion rules in `data/README.md`.
 
 ## v1.13.1
 
@@ -953,13 +689,7 @@ Changes since v1.13.0
 
 ### Data
 
-- Advanced the model cut-off from SitRep 081 (3 August) to SitRep 082
-  (4 August): added SitRep 082 and the missing 3 August (SitRep 081)
-  confirmed-case / confirmed-death cumulative points that the previous
-  data update left at 2 August, and fixed the SitRep 081 onset-curve
-  digitisation (the x-axis tick detection had undercounted that figure
-  to −54%; the fix brings it inside the noise band) so both the 3 and
-  4 August onset snapshots are now included.
+- Advanced the model cut-off from SitRep 081 (3 August) to SitRep 082 (4 August): added SitRep 082 and the missing 3 August (SitRep 081) confirmed-case / confirmed-death cumulative points that the previous data update left at 2 August, and fixed the SitRep 081 onset-curve digitisation (the x-axis tick detection had undercounted that figure to −54%; the fix brings it inside the noise band) so both the 3 and 4 August onset snapshots are now included.
 
 ## v1.13.0
 
@@ -967,101 +697,55 @@ Changes since v1.12.0
 
 ### Data
 
-- Advanced the model cut-off from SitRep 079 (1 August) to SitRep 081
-  (3 August): added SitRep 080 (2 August) and SitRep 081 (3 August) (#557).
+- Advanced the model cut-off from SitRep 079 (1 August) to SitRep 081 (3 August): added SitRep 080 (2 August) and SitRep 081 (3 August) (#557).
 
 ### Model
 
-- Widened the growth-rate `r` prior (eq 9) to
-  `LogNormal(log(log 2 / 11.7), 0.40)`, a doubling time of 5.3--25.6 d at
-  95%. The centre still matches the BEAST X reanalysis of 139 BDBV
-  genomes [mbalaplacide2026](@cite), which reports an Exponential-growth
-  doubling time of 11.7 d (95% HPD 6.8--17.5). That HPD is conditional on
-  a single-rate coalescent. This is the assumption the Mongbwalu field
-  epidemiology contradicts [kupferschmidt2026](@cite), the same evidence
-  behind the `m` change in v1.12.0. An independent reanalysis of the
-  earlier genomes puts the doubling time at 15.2--24.5 d
-  [cuomodannenburg2026](@cite), which the old spread largely excluded.
-- Corrected the growth-rate citation in the `rt_walk_model` docstring,
-  which still named a generic 20 d molecular-clock estimate the model no
-  longer uses.
-- Fitted the digitised symptom-onset reporting triangle as a stream
-  (`onset_reporting_model`), scored on its between-vintage increments
-  through a discrete reporting-delay hazard that is nonparametric over the
-  delay and drifts over calendar time. The loader collapses reprinted
-  vintage figures by exact value equality, filters to the manifest cut-off,
-  and builds between-vintage increment cells over a trailing 28-day window.
-  Fitted by `bvd_joint` alongside every other stream and by a new
-  `onsets_only_model` single-stream composer.
-- Gave the onset stream an explicit ascertainment. The reporting hazard is
-  normalised to reach one, so it carries the delay shape alone, and
-  ascertainment is a separate level anchored on the confirmed pipeline's
-  `p_drc · τ_test · positivity` averaged over the delay PMF, with a
-  logit-scale offset and a slow walk over onset date. `onsets_only_model`
-  falls back to a constant 0.15 anchor.
-- Added a symptom-onset nowcast and forecast (`forecast_onsets`), splitting
-  the coming week's new onset reports into the part arising from onsets that
-  have already happened but are not yet reported (`onset_reports_backfill`)
-  and the part from onsets that have not yet happened
-  (`onset_reports_future`). `cumulative_onsets` moved from `bvd_joint` to
-  the shared `_latent` submodel so every composer carries it. The reported
-  increment is scored across releases as the `onset reports` stream.
+- Widened the growth-rate `r` prior (eq 9) to `LogNormal(log(log 2 / 11.7), 0.40)`, a doubling time of 5.3--25.6 d at 95%.
+  The centre still matches the BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite), which reports an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5).
+  That HPD is conditional on a single-rate coalescent.
+  This is the assumption the Mongbwalu field epidemiology contradicts [kupferschmidt2026](@cite), the same evidence behind the `m` change in v1.12.0.
+  An independent reanalysis of the earlier genomes puts the doubling time at 15.2--24.5 d [cuomodannenburg2026](@cite), which the old spread largely excluded.
+- Corrected the growth-rate citation in the `rt_walk_model` docstring, which still named a generic 20 d molecular-clock estimate the model no longer uses.
+- Fitted the digitised symptom-onset reporting triangle as a stream (`onset_reporting_model`), scored on its between-vintage increments through a discrete reporting-delay hazard that is nonparametric over the delay and drifts over calendar time.
+  The loader collapses reprinted vintage figures by exact value equality, filters to the manifest cut-off, and builds between-vintage increment cells over a trailing 28-day window.
+  Fitted by `bvd_joint` alongside every other stream and by a new `onsets_only_model` single-stream composer.
+- Gave the onset stream an explicit ascertainment.
+  The reporting hazard is normalised to reach one, so it carries the delay shape alone, and ascertainment is a separate level anchored on the confirmed pipeline's `p_drc · τ_test · positivity` averaged over the delay PMF, with a logit-scale offset and a slow walk over onset date.
+  `onsets_only_model` falls back to a constant 0.15 anchor.
+- Added a symptom-onset nowcast and forecast (`forecast_onsets`), splitting the coming week's new onset reports into the part arising from onsets that have already happened but are not yet reported (`onset_reports_backfill`) and the part from onsets that have not yet happened (`onset_reports_future`).
+  `cumulative_onsets` moved from `bvd_joint` to the shared `_latent` submodel so every composer carries it.
+  The reported increment is scored across releases as the `onset reports` stream.
 
 ### Fixes
 
-- Widened the onset calendar-walk prior so it can follow reporting drift
-  (#530).
-- Bound the observation-scale slack below at one, preventing a fitted scale
-  below the measurement floor from outvoting other streams in the joint fit.
-- Fall back to four degrees of freedom on a degenerate Student-t nu argument
-  instead of producing a Cauchy likelihood with no mean or variance.
+- Widened the onset calendar-walk prior so it can follow reporting drift (#530).
+- Bound the observation-scale slack below at one, preventing a fitted scale below the measurement floor from outvoting other streams in the joint fit.
+- Fall back to four degrees of freedom on a degenerate Student-t nu argument instead of producing a Cauchy likelihood with no mean or variance.
 
 ### Documentation and infrastructure
 
-- The analysis prose stated the confirmation-process sensitivity prior as
-  `Beta(10, 1.76)` where `test_sensitivity_model` samples `Beta(38, 2)`, and
-  gave the wrong rationale for it. Both the number and the rationale are
-  corrected (#548).
-- The analysis prose stated a 15-day TMRCA censoring SD where the model
-  uses 16. Corrected to match the code (#548).
-- `plot_rt`, `plot_cumulative_trajectories` and the single-stream overlay
-  (`plot_stream_trajectories`) each drew a 50%-width credible band while an
-  inline comment and docstring described it as part of a 30/60/90% ribbon
-  trio. All three now compute a genuine 30/60/90% ribbon and drop the
-  unused median-line description, so the figure and its documentation
-  agree.
-- `docs/src/contributing.md` documented an abstract-marker mechanism
-  (`<!-- ABSTRACT:START/END -->`) that does not exist in `README.md` (the
-  real marker is `<!-- SHARED:END -->`), eleven integrator, submodel and
-  composer function names that do not exist in `src/`, two integration
-  constants that do not exist either, and a surveillance dispersion prior of
-  `truncated(Normal(0, 1); lower = 0)` where the code uses
-  `truncated(Normal(0.6, 0.2); lower = 0)`. Rewrote the repository layout,
-  running-and-testing and model-architecture sections against the current
-  code and `Taskfile.yml`.
-- Reflowed every write-up page, comment and docstring to the repository's
-  prose rules: one sentence per line, shorter sentences, no run-ons, no
-  restated points, no development history, and no code identifiers inside
-  narrative prose.
-- Removed emphasis-caps and issue and pull request references from `src/`,
-  `test/`, `scripts/` and the report pages. That history now lives here
-  instead.
-- Added a carve-out to the no-issue-numbers rule in `contributing.md`. An
-  issue number may stay where it is the provenance record for a still-open
-  decision, rather than an account of what changed.
-- Removed `predict_committed` and its three helpers from
-  `src/counterfactual.jl`. They called `delay_convolution` and
-  `DEATH_INTEGRAL_ALG`, neither of which is defined anywhere in `src/`,
-  left behind by the rename to `convolve_delay` in `renewal.jl`. Nothing
-  referenced them, so removing them changes nothing (#545).
-- Removed eight unused one-off scripts. `scripts/Project.toml` gained a
-  missing `Base64` dependency, and `scripts/README.md` now documents which
-  Julia project each script needs.
-- Removed the `notes/` folder, including the prose style guide the rules
-  were derived from, which now lives in `contributing.md`. Its remaining
-  open items are filed as issues #544 to #549.
-- Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
-  `scripts/README.md`, so a session starts with the rules in context.
+- The analysis prose stated the confirmation-process sensitivity prior as `Beta(10, 1.76)` where `test_sensitivity_model` samples `Beta(38, 2)`, and gave the wrong rationale for it.
+  Both the number and the rationale are corrected (#548).
+- The analysis prose stated a 15-day TMRCA censoring SD where the model uses 16.
+  Corrected to match the code (#548).
+- `plot_rt`, `plot_cumulative_trajectories` and the single-stream overlay (`plot_stream_trajectories`) each drew a 50%-width credible band while an inline comment and docstring described it as part of a 30/60/90% ribbon trio.
+  All three now compute a genuine 30/60/90% ribbon and drop the unused median-line description, so the figure and its documentation agree.
+- `docs/src/contributing.md` documented an abstract-marker mechanism (`<!-- ABSTRACT:START/END -->`) that does not exist in `README.md` (the real marker is `<!-- SHARED:END -->`), eleven integrator, submodel and composer function names that do not exist in `src/`, two integration constants that do not exist either, and a surveillance dispersion prior of `truncated(Normal(0, 1); lower = 0)` where the code uses `truncated(Normal(0.6, 0.2); lower = 0)`.
+  Rewrote the repository layout, running-and-testing and model-architecture sections against the current code and `Taskfile.yml`.
+- Reflowed every write-up page, comment and docstring to the repository's prose rules: one sentence per line, shorter sentences, no run-ons, no restated points, no development history, and no code identifiers inside narrative prose.
+- Removed emphasis-caps and issue and pull request references from `src/`, `test/`, `scripts/` and the report pages.
+  That history now lives here instead.
+- Added a carve-out to the no-issue-numbers rule in `contributing.md`.
+  An issue number may stay where it is the provenance record for a still-open decision, rather than an account of what changed.
+- Removed `predict_committed` and its three helpers from `src/counterfactual.jl`.
+  They called `delay_convolution` and `DEATH_INTEGRAL_ALG`, neither of which is defined anywhere in `src/`, left behind by the rename to `convolve_delay` in `renewal.jl`.
+  Nothing referenced them, so removing them changes nothing (#545).
+- Removed eight unused one-off scripts.
+  `scripts/Project.toml` gained a missing `Base64` dependency, and `scripts/README.md` now documents which Julia project each script needs.
+- Removed the `notes/` folder, including the prose style guide the rules were derived from, which now lives in `contributing.md`.
+  Its remaining open items are filed as issues #544 to #549.
+- Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and `scripts/README.md`, so a session starts with the rules in context.
 
 ## v1.12.0
 
@@ -1069,27 +753,12 @@ Changes since v1.11.0
 
 ### Model
 
-- Widened and shifted the prior on the cryptic-phase doubling count `m`,
-  from `truncated(Normal(3, 3); lower = 0)` to
-  `truncated(Normal(5, 4); lower = 0)`. Field epidemiology in Mongbwalu
-  traced a sustained transmission chain to a death on 25 January 2026,
-  with 500+ suspected cases between mid-January and mid-May
-  [kupferschmidt2026](@cite), and the genetic TMRCA
-  [mbalaplacide2026](@cite) is a lower bound on the outbreak age
-  consistent with an origin that early. The new centre places the implied
-  prior on the outbreak origin at the end of January (at the central
-  11.7-day doubling, `m = 5` gives a cryptic duration of ~58.5 d, i.e. an
-  origin around 30 January), with the wider SD letting the data and the
-  genetic seeding bound pull it earlier or later (#533). The main fit's `m`
-  prior is now set directly in `exponential_growth_model`; the backfill's
-  advancing centre (`m_prior_centre`) is unchanged and tracked separately
-  by #534.
-- Corrected the growth-rate `r` prior prose (eq 9) to match the code and
-  its actual source: the BEAST X reanalysis of 139 BDBV genomes
-  [mbalaplacide2026](@cite) reports an Exponential-growth doubling time
-  of 11.7 d (95% HPD 6.8--17.5), so the prior is
-  `LogNormal(log(log 2 / 11.7), 0.28)`. The text had previously described
-  an older, generic 20 d estimate that the model no longer uses.
+- Widened and shifted the prior on the cryptic-phase doubling count `m`, from `truncated(Normal(3, 3); lower = 0)` to `truncated(Normal(5, 4); lower = 0)`.
+  Field epidemiology in Mongbwalu traced a sustained transmission chain to a death on 25 January 2026, with 500+ suspected cases between mid-January and mid-May [kupferschmidt2026](@cite), and the genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age consistent with an origin that early.
+  The new centre places the implied prior on the outbreak origin at the end of January (at the central 11.7-day doubling, `m = 5` gives a cryptic duration of ~58.5 d, i.e. an origin around 30 January), with the wider SD letting the data and the genetic seeding bound pull it earlier or later (#533).
+  The main fit's `m` prior is now set directly in `exponential_growth_model`; the backfill's advancing centre (`m_prior_centre`) is unchanged and tracked separately by #534.
+- Corrected the growth-rate `r` prior prose (eq 9) to match the code and its actual source: the BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite) reports an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5), so the prior is `LogNormal(log(log 2 / 11.7), 0.28)`.
+  The text had previously described an older, generic 20 d estimate that the model no longer uses.
 
 ## v1.11.0
 
@@ -1105,98 +774,52 @@ Changes since v1.9.0.
 
 ### Data
 
-- Advanced the model cut-off from SitRep 055 (8 July) to **SitRep 064
-  (17 July 2026)** across four batches: SitReps 056–057 (9–10 July),
-  SitRep 058 (11 July), SitReps 059–061 (12–14 July, from the INSP source),
-  and SitReps 062–064 (15–17 July, stepping over the unpublished 063).
-  `as_of_date` → `2026-07-17`. Every fitted stream (confirmed cases/deaths,
-  daily new-suspects, occupancy, bed capacity, recovered, 24h analysed,
-  Tableau 6 treatment flows) is extended through each batch.
-- Captured symptom-onset epidemic curves from the DHIS2 line list published
-  in the analytique SitRep figures (059–062, 064). Digitised via
-  `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port,
-  and recorded as `data/onset_curve_scanned.csv`. Fitted as a stream, see
-  Model below.
-- Re-ran the confirmed/suspect in-care occupancy split on the resumed
-  Tableau 7 data (SitReps 052–055), extending
-  `treatment_confirmed_incare_history` and
-  `treatment_suspect_incare_history` through 8 July (#413, revisits #373).
-- Added `scripts/check_new_sitreps.jl` to detect stale manifests by
-  comparing published INSP SitReps against the latest recorded vintage.
+- Advanced the model cut-off from SitRep 055 (8 July) to **SitRep 064 (17 July 2026)** across four batches: SitReps 056–057 (9–10 July), SitRep 058 (11 July), SitReps 059–061 (12–14 July, from the INSP source), and SitReps 062–064 (15–17 July, stepping over the unpublished 063).
+  `as_of_date` → `2026-07-17`.
+  Every fitted stream (confirmed cases/deaths, daily new-suspects, occupancy, bed capacity, recovered, 24h analysed, Tableau 6 treatment flows) is extended through each batch.
+- Captured symptom-onset epidemic curves from the DHIS2 line list published in the analytique SitRep figures (059–062, 064).
+  Digitised via `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port, and recorded as `data/onset_curve_scanned.csv`.
+  Fitted as a stream, see Model below.
+- Re-ran the confirmed/suspect in-care occupancy split on the resumed Tableau 7 data (SitReps 052–055), extending `treatment_confirmed_incare_history` and `treatment_suspect_incare_history` through 8 July (#413, revisits #373).
+- Added `scripts/check_new_sitreps.jl` to detect stale manifests by comparing published INSP SitReps against the latest recorded vintage.
 
 ### Model
 
-- Made the digitised symptom-onset reporting triangle a fitted stream
-  (`onset_reporting_model`), scored on its between-vintage increments
-  through a discrete reporting-delay hazard that is nonparametric over the
-  delay and drifts over calendar time. Fitted by `bvd_joint` alongside
-  every other stream and by a new `onsets_only_model` single-stream
-  composer. The snapshot figure is a posterior predictive, so its band
-  carries the measurement error the likelihood gives a digitised bar.
+- Made the digitised symptom-onset reporting triangle a fitted stream (`onset_reporting_model`), scored on its between-vintage increments through a discrete reporting-delay hazard that is nonparametric over the delay and drifts over calendar time.
+  Fitted by `bvd_joint` alongside every other stream and by a new `onsets_only_model` single-stream composer.
+  The snapshot figure is a posterior predictive, so its band carries the measurement error the likelihood gives a digitised bar.
 
-- Gave that stream an explicit ascertainment. The reporting hazard is
-  normalised to reach one, so it carries the delay shape alone, and
-  ascertainment is a separate level. It is anchored on the confirmed
-  pipeline's own `p_drc · τ_test · positivity` averaged over the delay
-  distribution, with a logit-scale offset and a slow walk over onset date.
-  Not yet validated. The ascertainment walk and the reproduction-number
-  walk share the onset axis and are both least constrained late, so $R_t$
-  over the final fortnight and $C_T$ need reporting either side of this
-  change.
-- Added a symptom-onset nowcast and forecast (`forecast_onsets`),
-  splitting the coming week's new onset reports into the part arising from
-  onsets that have already happened but are not yet reported and the part
-  from onsets that have not yet happened. The latent onset trajectory
-  `cumulative_onsets` moved from `bvd_joint` to the shared `_latent`
-  submodel so every composer carries it. The reported increment is scored
-  across releases as the `onset reports` stream; the triangle's cumulative
-  level is deliberately not scored, since every vintage rereads the whole
-  figure and its ≈4% per-scan level error revises the total both ways.
+- Gave that stream an explicit ascertainment.
+  The reporting hazard is normalised to reach one, so it carries the delay shape alone, and ascertainment is a separate level.
+  It is anchored on the confirmed pipeline's own `p_drc · τ_test · positivity` averaged over the delay distribution, with a logit-scale offset and a slow walk over onset date.
+  Not yet validated.
+  The ascertainment walk and the reproduction-number walk share the onset axis and are both least constrained late, so $R_t$ over the final fortnight and $C_T$ need reporting either side of this change.
+- Added a symptom-onset nowcast and forecast (`forecast_onsets`), splitting the coming week's new onset reports into the part arising from onsets that have already happened but are not yet reported and the part from onsets that have not yet happened.
+  The latent onset trajectory `cumulative_onsets` moved from `bvd_joint` to the shared `_latent` submodel so every composer carries it.
+  The reported increment is scored across releases as the `onset reports` stream; the triangle's cumulative level is deliberately not scored, since every vintage rereads the whole figure and its ≈4% per-scan level error revises the total both ways.
 
-- Added a results figure reading the triangle along the onset date: the
-  latest digitised bar for each onset date against the posterior predictive
-  for that bar and against the modelled onsets. The nowcast and forecast
-  figure separates the latent components from the replicate the next
-  vintage will print, since only the replicate is scored.
+- Added a results figure reading the triangle along the onset date: the latest digitised bar for each onset date against the posterior predictive for that bar and against the modelled onsets.
+  The nowcast and forecast figure separates the latent components from the replicate the next vintage will print, since only the replicate is scored.
 
-- De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
-  log-density path (`confirmed_positivity_link = :composition`): extracted
-  the composition-positivity loop to a plain `composition_positivity()`
-  function and replaced three occupancy/split `map(1:n) do t …` blocks with
-  elementwise broadcasts. Pure type-stability tidy-up; Mooncake gradient
-  is bit-identical (same `hash(g)`). Clears the **layer-1 prerequisite**
-  for the opt-in Enzyme reverse-mode backend — Enzyme cannot construct a
-  shadow for anonymous closures that capture conditionally-scoped variables
-  (they get boxed in `Base.RefValue`), and after this fix reaches LLVM's
-  `nodecayed_phis!` pass (next blocker tracked in #445; #446).
+- De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default log-density path (`confirmed_positivity_link = :composition`): extracted the composition-positivity loop to a plain `composition_positivity()` function and replaced three occupancy/split `map(1:n) do t …` blocks with elementwise broadcasts.
+  Pure type-stability tidy-up; Mooncake gradient is bit-identical (same `hash(g)`).
+  Clears the **layer-1 prerequisite** for the opt-in Enzyme reverse-mode backend — Enzyme cannot construct a shadow for anonymous closures that capture conditionally-scoped variables (they get boxed in `Base.RefValue`), and after this fix reaches LLVM's `nodecayed_phis!` pass (next blocker tracked in #445; #446).
 
 ### Fixes
 
-- Restored the renamed clock-sensitivity chain reference (`chn_joint_fast_clock`
-  → `chn_joint_exp_growth_clock`) in analysis diagnostics after a merge
-  inadvertently reverted it to the old, undefined variable. This had broken the
-  `Documenter → Render analysis` step on `main` when `BVD_RUN_SENSITIVITY=true`
-  (#418).
+- Restored the renamed clock-sensitivity chain reference (`chn_joint_fast_clock` → `chn_joint_exp_growth_clock`) in analysis diagnostics after a merge inadvertently reverted it to the old, undefined variable.
+  This had broken the `Documenter → Render analysis` step on `main` when `BVD_RUN_SENSITIVITY=true` (#418).
 
 ### Documentation and infrastructure
 
-- Added `data/README.md` documenting the two data sources, the direct-INSP
-  fetch workflow via the WordPress REST API, the per-SitRep field checklist,
-  and the drift-check protocol.
-- Added Julia (`scripts/digitize_onset_curve.jl`) and Python
-  (`scripts/digitize_onset_curve.py`) digitisation scripts for the symptom-onset
-  epidemic curves, producing byte-identical CSVs. Python deps managed via `uv`
-  (PEP 723).
+- Added `data/README.md` documenting the two data sources, the direct-INSP fetch workflow via the WordPress REST API, the per-SitRep field checklist, and the drift-check protocol.
+- Added Julia (`scripts/digitize_onset_curve.jl`) and Python (`scripts/digitize_onset_curve.py`) digitisation scripts for the symptom-onset epidemic curves, producing byte-identical CSVs.
+  Python deps managed via `uv` (PEP 723).
 
 ### Dependencies
 
-- Widened the Turing compat from `0.45` to `0.45, 0.46`, allowing the
-  upstream package evolution while keeping 0.45 pinned as the working default
-  (#415, #416).
-- Updated compat bounds for ADTypes (1.22.2), CairoMakie (0.15.13),
-  Distributions (0.25.129), LogDensityProblems (2.2.0), Integrals (4, 5.4),
-  StatsFuns (2.2.0), SHA (0.7.0), Aqua (0.8.16), TestItemRunner (1.1.5),
-  CensoredDistributions (0.2.22), and TestItems (1.0.0).
+- Widened the Turing compat from `0.45` to `0.45, 0.46`, allowing the upstream package evolution while keeping 0.45 pinned as the working default (#415, #416).
+- Updated compat bounds for ADTypes (1.22.2), CairoMakie (0.15.13), Distributions (0.25.129), LogDensityProblems (2.2.0), Integrals (4, 5.4), StatsFuns (2.2.0), SHA (0.7.0), Aqua (0.8.16), TestItemRunner (1.1.5), CensoredDistributions (0.2.22), and TestItems (1.0.0).
 
 ## v1.9.0
 
@@ -1208,50 +831,29 @@ Changes since v1.8.0.
 
 ### Model
 
-- Updated the molecular-clock time estimate to use the outbreak-specific
-  BEAST X analysis (mbalaplacide2026, 139 BDBV genomes from 16 health
-  zones, ~1.1E-3 subs/site/year). The genetic TMRCA baseline moves from
-  2026-03-25 (SD 15, fixed 1.2E-3 EBOV rate) to **2026-03-15** (SD 16,
-  95 HPD 09 Feb--12 Apr) under the Skygrid coalescent prior. Added a
-  tree-prior sensitivity comparing the Exponential growth estimate
-  (2026-03-08, SD 16, 95 HPD 01 Feb--05 Apr).
-- Updated the growth-rate prior to the outbreak-specific doubling time
-  from the same analysis: centre moves from 20 d (Cuomo-Dannenburg &
-  Ghafari) to **11.7 d** (95 HPD 6.8--17.5, mbalaplacide2026), with the
-  log-SD widened from 0.15 to 0.3 to match the wider credible interval.
+- Updated the molecular-clock time estimate to use the outbreak-specific BEAST X analysis (mbalaplacide2026, 139 BDBV genomes from 16 health zones, ~1.1E-3 subs/site/year).
+  The genetic TMRCA baseline moves from 2026-03-25 (SD 15, fixed 1.2E-3 EBOV rate) to **2026-03-15** (SD 16, 95 HPD 09 Feb--12 Apr) under the Skygrid coalescent prior.
+  Added a tree-prior sensitivity comparing the Exponential growth estimate (2026-03-08, SD 16, 95 HPD 01 Feb--05 Apr).
+- Updated the growth-rate prior to the outbreak-specific doubling time from the same analysis: centre moves from 20 d (Cuomo-Dannenburg & Ghafari) to **11.7 d** (95 HPD 6.8--17.5, mbalaplacide2026), with the log-SD widened from 0.15 to 0.3 to match the wider credible interval.
 
 ### Report and forecasts
 
-- Saved the one- to four-week-ahead forecasts as a release asset
-  (`forecast.csv`), plus the one-week-back validation forecast
-  (`forecast_validation.csv`), at each results release. Past forecasts were
-  shown in the report but never stored, so they had to be reconstructed by
-  re-running each past release's own code on that release's data; these are
-  published separately as a backfill release. Each release now records the
-  forecast it made, so it can later be scored against what is observed. This
-  underpins the new cross-release forecast scoring (CRPS, log-scale CRPS,
-  coverage, bias, and relative skill against a persistence baseline) shown
-  on the sensitivity page.
+- Saved the one- to four-week-ahead forecasts as a release asset (`forecast.csv`), plus the one-week-back validation forecast (`forecast_validation.csv`), at each results release.
+  Past forecasts were shown in the report but never stored, so they had to be reconstructed by re-running each past release's own code on that release's data; these are published separately as a backfill release.
+  Each release now records the forecast it made, so it can later be scored against what is observed.
+  This underpins the new cross-release forecast scoring (CRPS, log-scale CRPS, coverage, bias, and relative skill against a persistence baseline) shown on the sensitivity page.
 
 ### Documentation
 
-- Updated all prose references to the genetic bound and growth-rate prior
-  to cite the new virological.org report (v1045, mbalaplacide2026) and
-  the outbreak-specific rate and doubling time.
-- Added a tree-prior sensitivity section comparing the Skygrid and
-  Exponential growth TMRCA estimates.
+- Updated all prose references to the genetic bound and growth-rate prior to cite the new virological.org report (v1045, mbalaplacide2026) and the outbreak-specific rate and doubling time.
+- Added a tree-prior sensitivity section comparing the Skygrid and Exponential growth TMRCA estimates.
 
 ### Performance
 
-- Halved the default post-warmup draws in `nuts_sample` from 2000
-  (2 chains x 1000) to 1000 total (2 chains x 500), and moved the docs
-  fit registry (`build_fit_specs`, `fit_key`, `fit_content_hash`) to the
-  same 500 x 2 setting. This roughly halves the sampling wall-clock at the
-  cost of some effective sample size.
-- Trimmed the default NUTS warmup cap in `nuts_sample` from
-  `min(250, samples ÷ 2)` to `min(200, samples ÷ 2)`, so at the new
-  `samples = 500` default each fit runs 200 adaptation steps rather than
-  250. Shortens warmup by a further ~20% per fit.
+- Halved the default post-warmup draws in `nuts_sample` from 2000 (2 chains x 1000) to 1000 total (2 chains x 500), and moved the docs fit registry (`build_fit_specs`, `fit_key`, `fit_content_hash`) to the same 500 x 2 setting.
+  This roughly halves the sampling wall-clock at the cost of some effective sample size.
+- Trimmed the default NUTS warmup cap in `nuts_sample` from `min(250, samples ÷ 2)` to `min(200, samples ÷ 2)`, so at the new `samples = 500` default each fit runs 200 adaptation steps rather than 250.
+  Shortens warmup by a further ~20% per fit.
 
 ## v1.8.0
 
@@ -1259,50 +861,26 @@ Changes since v1.7.0.
 
 ### Model
 
-- Credited the repeat-control confirmation process in the confirmation
-  sensitivity prior. Rule-out is investigative rather than a single negative
-  PCR, so the effective sensitivity is higher than one assay draw (two controls
-  give about 0.98). The headline `test_sensitivity_model` prior moves from the
-  single-assay `Beta(10, 1.76)` (mean 0.85) to `Beta(38, 2)` (mean 0.95) on the
-  confirmed and confirmed-deaths streams. The outbreak-size estimate is robust
-  because the sensitivity enters the multiplicative ascertainment ridge
-  (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves
-  the retesting/rule-out part of #374).
-- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
-  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
-  and report-to-receipt legs already convolve to onset-to-sample for confirmed
-  cases. The convolution's mean (the sum of the report and receipt leg means)
-  and median (Wilson-Hilferty of the summed leg variances) are fitted to the
-  reported 7.4 d and 4.8 d as soft Normal observations, with the reported 95%
-  credible intervals as their SDs. This grounds the otherwise-unidentified
-  laboratory-turnaround delay directly from the cohort's own uncertainty and
-  adds no latent parameter. On by default in the joint fit; the single-stream
-  and isolation fits lack the laboratory receipt leg and so do not carry it
-  (resolves #359).
+- Credited the repeat-control confirmation process in the confirmation sensitivity prior.
+  Rule-out is investigative rather than a single negative PCR, so the effective sensitivity is higher than one assay draw (two controls give about 0.98).
+  The headline `test_sensitivity_model` prior moves from the single-assay `Beta(10, 1.76)` (mean 0.85) to `Beta(38, 2)` (mean 0.95) on the confirmed and confirmed-deaths streams.
+  The outbreak-size estimate is robust because the sensitivity enters the multiplicative ascertainment ridge (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves the retesting/rule-out part of #374).
+- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort (Akilimali et al.) as a standard part of the joint model.
+  The onset-to-report and report-to-receipt legs already convolve to onset-to-sample for confirmed cases.
+  The convolution's mean (the sum of the report and receipt leg means) and median (Wilson-Hilferty of the summed leg variances) are fitted to the reported 7.4 d and 4.8 d as soft Normal observations, with the reported 95% credible intervals as their SDs.
+  This grounds the otherwise-unidentified laboratory-turnaround delay directly from the cohort's own uncertainty and adds no latent parameter.
+  On by default in the joint fit; the single-stream and isolation fits lack the laboratory receipt leg and so do not carry it (resolves #359).
 
-- Scored the confirmed-case laboratory positives as an overdispersed
-  `BetaBinomial` of the observed analysed denominator instead of a plain
-  `Binomial`. A plain `Binomial` on denominators of several hundred
-  specimens gave posterior-predictive intervals far too tight, so the
-  confirmed stream was systematically under-covered: the smooth pooled /
-  composition-linked per-window positivity does not capture the day-to-day
-  laboratory batching and within-window positivity heterogeneity the
-  confirmed counts carry. A single intra-window overdispersion `ρ`
-  (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`)
-  inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`,
-  identified across the laboratory windows, and recovers the `Binomial` as
-  `ρ → 0`. The mean structure and the composition link that identifies the
-  background `λ_bg` are unchanged.
+- Scored the confirmed-case laboratory positives as an overdispersed `BetaBinomial` of the observed analysed denominator instead of a plain `Binomial`.
+  A plain `Binomial` on denominators of several hundred specimens gave posterior-predictive intervals far too tight, so the confirmed stream was systematically under-covered: the smooth pooled / composition-linked per-window positivity does not capture the day-to-day laboratory batching and within-window positivity heterogeneity the confirmed counts carry.
+  A single intra-window overdispersion `ρ` (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`) inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`, identified across the laboratory windows, and recovers the `Binomial` as `ρ → 0`.
+  The mean structure and the composition link that identifies the background `λ_bg` are unchanged.
 
 ### Documentation and infrastructure
 
-- Excluded the published `released_estimates.csv` overlay from the fit
-  content hash, so the render jobs reuse the matrix fits instead of
-  refitting every model. The render step rewrites that overlay before
-  rendering, which changed the data-tree digest and busted every fit
-  cache key; the overlay feeds only the estimate-evolution figure and is
-  not a fit input. `tree_sha256` and `content_hash` gained an exclude for
-  non-input data files, and genuine data changes still refit.
+- Excluded the published `released_estimates.csv` overlay from the fit content hash, so the render jobs reuse the matrix fits instead of refitting every model.
+  The render step rewrites that overlay before rendering, which changed the data-tree digest and busted every fit cache key; the overlay feeds only the estimate-evolution figure and is not a fit input.
+  `tree_sha256` and `content_hash` gained an exclude for non-input data files, and genuine data changes still refit.
 
 ## v1.7.0
 
@@ -1310,118 +888,54 @@ Changes since v1.6.0.
 
 ### Data
 
-- Added the situation-report `Tableau 6` treatment-centre patient-movement
-  flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
-  rule-outs and absconded patients (13–23 June). Each stream is resilient: an
-  empty history is a no-op, so the model degrades to the occupancy backbone
-  where a flow is not reported. Advanced the data through situation report
-  046 (29 June).
+- Added the situation-report `Tableau 6` treatment-centre patient-movement flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths, rule-outs and absconded patients (13–23 June).
+  Each stream is resilient: an empty history is a no-op, so the model degrades to the occupancy backbone where a flow is not reported.
+  Advanced the data through situation report 046 (29 June).
 
 ### Model
 
-- Reworked the isolation submodel into a treatment-centre flow model that
-  fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
-  outcome mixture, with the death and recovery branches weighted by an in-care
-  case-fatality `CFR_iso = logistic(logit(CFR) + β_iso)` — a reported modifier
-  on the infection case-fatality, identified by the in-care death flow rather
-  than estimated independently. The daily discharge flows are scored as
-  optional negative-binomial streams (resolves #338).
-- Added a manual, opt-in occupancy reclassification-break offset. Break days
-  are listed explicitly in `[occupancy_break_dates]`, replacing the removed
-  threshold detector that flagged too many days. A level step is fitted into
-  the modelled occupancy mean at each listed day, so the fit tracks a known
-  between-report measurement-basis discontinuity without bending Rt to chase
-  it. Each step is centred on zero, so the fit partitions it into reporting
-  artifact vs real demand. The 19 June DHIS2 reclassification (occupancy 416 →
-  361, confirmed by the au-lit start-of-day stock) is listed; the joint fit
-  with the isolation stream had been bending Rt up and down to chase this and
-  the later missing-SitRep steps, which no single-stream fit shows.
+- Reworked the isolation submodel into a treatment-centre flow model that fits the Tableau 6 flows alongside occupancy.
+  The bed length-of-stay is an outcome mixture, with the death and recovery branches weighted by an in-care case-fatality `CFR_iso = logistic(logit(CFR) + β_iso)` — a reported modifier on the infection case-fatality, identified by the in-care death flow rather than estimated independently.
+  The daily discharge flows are scored as optional negative-binomial streams (resolves #338).
+- Added a manual, opt-in occupancy reclassification-break offset.
+  Break days are listed explicitly in `[occupancy_break_dates]`, replacing the removed threshold detector that flagged too many days.
+  A level step is fitted into the modelled occupancy mean at each listed day, so the fit tracks a known between-report measurement-basis discontinuity without bending Rt to chase it.
+  Each step is centred on zero, so the fit partitions it into reporting artifact vs real demand.
+  The 19 June DHIS2 reclassification (occupancy 416 → 361, confirmed by the au-lit start-of-day stock) is listed; the joint fit with the isolation stream had been bending Rt up and down to chase this and the later missing-SitRep steps, which no single-stream fit shows.
 
 ### Report and forecasts
 
-- Added one-week-ahead forecasts for the treatment-centre admissions, in-care
-  deaths and rule-outs.
-- Added a per-stream calibration plot (with the calibration table kept in a
-  collapsible block), and posterior-predictive panels for the four flow
-  streams. The treatment-centre flow methods section was rewritten, and the
-  flow streams added to the data-overview table.
-- Added a comparison of the confirmed-case projection against Chamla et al.
-  as a second external comparator, forward-projected from a dedicated frozen
-  fit at their 8 June confirmed-case calibration anchor. This carries the
-  confirmed-case testing history, replacing the poorly-identified 27 May proxy
-  that had effectively no testing data. The 8 June fit also shows as a vintage
-  in the estimate-evolution overlay (resolves #340, #349).
-- Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
-  automatically in continuous integration before each documentation deploy.
-  Dropped the per-release current-model re-fits from the estimate-evolution
-  plot, keeping the matched-McCabe cut-offs and the one-week-back validation
-  fit (resolves #341).
-- Tightened the reproduction-number plot y-axis to 1.2 times the 90% upper
-  bound so the credible band is legible (resolves #342).
-- Added a posterior correlation heatmap across the key estimates (outbreak
-  size, reproduction number, outbreak age, CFR, ascertainment, background,
-  fraction tested and each stream's expected total) and a pairs plot of the
-  per-stream modelled totals against each other and the observed value, so
-  the size-versus-ascertainment trade-off and per-stream over/undershoot are
-  visible in one place (resolves #346).
+- Added one-week-ahead forecasts for the treatment-centre admissions, in-care deaths and rule-outs.
+- Added a per-stream calibration plot (with the calibration table kept in a collapsible block), and posterior-predictive panels for the four flow streams.
+  The treatment-centre flow methods section was rewritten, and the flow streams added to the data-overview table.
+- Added a comparison of the confirmed-case projection against Chamla et al. as a second external comparator, forward-projected from a dedicated frozen fit at their 8 June confirmed-case calibration anchor.
+  This carries the confirmed-case testing history, replacing the poorly-identified 27 May proxy that had effectively no testing data.
+  The 8 June fit also shows as a vintage in the estimate-evolution overlay (resolves #340, #349).
+- Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it automatically in continuous integration before each documentation deploy.
+  Dropped the per-release current-model re-fits from the estimate-evolution plot, keeping the matched-McCabe cut-offs and the one-week-back validation fit (resolves #341).
+- Tightened the reproduction-number plot y-axis to 1.2 times the 90% upper bound so the credible band is legible (resolves #342).
+- Added a posterior correlation heatmap across the key estimates (outbreak size, reproduction number, outbreak age, CFR, ascertainment, background, fraction tested and each stream's expected total) and a pairs plot of the per-stream modelled totals against each other and the observed value, so the size-versus-ascertainment trade-off and per-stream over/undershoot are visible in one place (resolves #346).
 
 ### Performance
 
-- Halved the NUTS warmup: `nuts_sample` now defaults `n_adapts` to
-  `min(250, samples ÷ 2)` (250 adaptation steps at the standard 1000
-  draws) instead of Turing's `min(1000, samples ÷ 2)` (500), cutting the
-  discarded warmup iterations on every report fit. Pass `n_adapts`
-  explicitly to override.
-- Centred the per-stream pooled negative-binomial dispersion
-  (`pooled_dispersion_model`) instead of drawing it non-centred, and made
-  centred the default. The surveillance streams are data-rich, so the
-  non-centred pooling funnelled as `τ → 0`; the centred form is an exact
-  reparameterisation that removes the funnel (resolves #352).
-- Put the bed-capacity baseline `C0` on the log scale (`LogNormal(log 450,
-  0.42)` in `bed_capacity_model` and `bed_capacity_walk_model`) instead of a
-  truncated normal, so the whole capacity `C(t) = C0·exp(walk)` is
-  log-consistent with no hard boundary, improving the worst-mixing capacity
-  block (resolves #358).
+- Halved the NUTS warmup: `nuts_sample` now defaults `n_adapts` to `min(250, samples ÷ 2)` (250 adaptation steps at the standard 1000 draws) instead of Turing's `min(1000, samples ÷ 2)` (500), cutting the discarded warmup iterations on every report fit.
+  Pass `n_adapts` explicitly to override.
+- Centred the per-stream pooled negative-binomial dispersion (`pooled_dispersion_model`) instead of drawing it non-centred, and made centred the default.
+  The surveillance streams are data-rich, so the non-centred pooling funnelled as `τ → 0`; the centred form is an exact reparameterisation that removes the funnel (resolves #352).
+- Put the bed-capacity baseline `C0` on the log scale (`LogNormal(log 450, 0.42)` in `bed_capacity_model` and `bed_capacity_walk_model`) instead of a truncated normal, so the whole capacity `C(t) = C0·exp(walk)` is log-consistent with no hard boundary, improving the worst-mixing capacity block (resolves #358).
 
 ### Fixes
 
-- Relaxed the `tau_death` test assertion to non-negativity: the joint exposes
-  the realised cut-off death-testing intensity (analysed over suspected, a
-  diagnostic computed independently of the death volume), which is not a
-  probability and can exceed one in a backlog regime.
-- Widened the per-stream dispersion pooling-SD prior `τ` in
-  `pooled_dispersion_model` from `HalfNormal(0.3)` to `HalfNormal(0.6)`,
-  resolving a prior-data conflict where the posterior `τ` sat entirely above
-  the old prior's tail because the stream dispersions genuinely span ~9×
-  (resolves #336).
-- Fixed the one-week-ahead forecast to project new counts over the horizon
-  and add them to the cut-off cumulative, instead of scaling the cumulative
-  stock by `exp(r·horizon)`, which made a below-one reproduction number
-  imply an impossible shrinking cumulative in the Chamla comparison
-  (`cases_cum`, `deaths_cum`, `confirmed_cum`, `confirmed_deaths_cum` and
-  `recovered_cum`; resolves #351).
+- Relaxed the `tau_death` test assertion to non-negativity: the joint exposes the realised cut-off death-testing intensity (analysed over suspected, a diagnostic computed independently of the death volume), which is not a probability and can exceed one in a backlog regime.
+- Widened the per-stream dispersion pooling-SD prior `τ` in `pooled_dispersion_model` from `HalfNormal(0.3)` to `HalfNormal(0.6)`, resolving a prior-data conflict where the posterior `τ` sat entirely above the old prior's tail because the stream dispersions genuinely span ~9× (resolves #336).
+- Fixed the one-week-ahead forecast to project new counts over the horizon and add them to the cut-off cumulative, instead of scaling the cumulative stock by `exp(r·horizon)`, which made a below-one reproduction number imply an impossible shrinking cumulative in the Chamla comparison (`cases_cum`, `deaths_cum`, `confirmed_cum`, `confirmed_deaths_cum` and `recovered_cum`; resolves #351).
 
 ### Documentation and infrastructure
 
-- Split the report into two literate pages rendered from a shared setup: an
-  analysis page (methods, results, one-week-ahead forecast) and a sensitivity
-  page (forecast validation, per-stream outbreak size, estimate evolution,
-  McCabe and Chamla comparisons, delay and clock sensitivity), so the deploy
-  no longer renders one 4.3k-line file in a single job (resolves #364).
-- Fanned the documentation build into a `list → fit → render → combine` CI
-  grid: one content-addressed, cached NUTS fit per matrix job, the two pages
-  rendered in parallel from the cached chains, and a combine job that deploys
-  and publishes, dropping the critical path from all fits serialised behind
-  one runner to roughly the slowest single fit.
-- Pinned the shared workspace-root `Manifest.toml` as the artifact the docs
-  grid uploads and restores, since `docs/Project.toml` is a workspace member
-  and resolves the root manifest rather than `docs/Manifest.toml`, so the
-  `fit`, `render` and `combine` jobs resolve the same package set (resolves
-  #368).
-- Set `include-matrix: false` on the `render` job's env-cache step so the two
-  render jobs restore the precompiled depot shared by `list` and `fit` instead
-  of keying on the matrix `page`, which missed the shared cache and made each
-  render re-precompile the whole stack (~530 deps) before rendering.
+- Split the report into two literate pages rendered from a shared setup: an analysis page (methods, results, one-week-ahead forecast) and a sensitivity page (forecast validation, per-stream outbreak size, estimate evolution, McCabe and Chamla comparisons, delay and clock sensitivity), so the deploy no longer renders one 4.3k-line file in a single job (resolves #364).
+- Fanned the documentation build into a `list → fit → render → combine` CI grid: one content-addressed, cached NUTS fit per matrix job, the two pages rendered in parallel from the cached chains, and a combine job that deploys and publishes, dropping the critical path from all fits serialised behind one runner to roughly the slowest single fit.
+- Pinned the shared workspace-root `Manifest.toml` as the artifact the docs grid uploads and restores, since `docs/Project.toml` is a workspace member and resolves the root manifest rather than `docs/Manifest.toml`, so the `fit`, `render` and `combine` jobs resolve the same package set (resolves #368).
+- Set `include-matrix: false` on the `render` job's env-cache step so the two render jobs restore the precompiled depot shared by `list` and `fit` instead of keying on the matrix `page`, which missed the shared cache and made each render re-precompile the whole stack (~530 deps) before rendering.
 
 ## v1.6.0
 
@@ -1429,175 +943,71 @@ Changes since v1.5.0.
 
 ### Model
 
-- The isolation BVD treatment length-of-stay uses the BDBV line-list
-  admission-to-death delay as its prior.
-- The reproduction-number random walk starts a month before the first
-  situation report (`RT_WALK_LEAD = 28`, exposed as the `bvd_joint` keyword
-  `rt_walk_lead`), so `R_t` can move over the weeks of transmission
-  leading up to that report. The walk start is floored at the renewal start,
-  and the `plot_rt` reconstruction uses the same knot grid.
-- Added a supply-limited isolation/treatment-bed stream ("Patients en
-  isolement"), the renewal analogue of the convolution secondary-observation
-  model of EpiNow2.
-  Bed occupancy may be supply-driven (demand can outstrip supply), so the model
-  fits a latent bed demand, the suspect inflow carried through a length-of-stay
-  survival (BVD cases with a sampled treatment stay, non-BVD suspects leaving
-  after a sampled rule-out stay), right-censored at an effective bed capacity
-  `ρ·C(t)` (a censored negative binomial). The capacity `C(t)` is a random walk
-  (`bed_capacity_walk_model`) that tracks the beds being added and can be
-  projected forward, pinned by the implied bed count (reported occupancy /
-  "Taux d'occupation" rate) on the days a rate is published.
-  The stream exposes the bed demand, occupancy, capacity, shortfall and
-  utilisation, and carries its own observation dispersion. Added
-  `convolve_survival`, the `treatment_admission_model` observation submodel,
-  the `isolation_admission_model`, `bed_capacity_model` and
-  `bed_capacity_walk_model` priors and the `treatment_only_model`
-  single-stream composer (resolves #265).
-  This is a single national model, so it cannot represent local bed saturation
-  (Ituri at 93.9% occupancy on 13 June against Sud-Kivu 21.9%); the national
-  shortfall understates the local unmet need.
-- Gave the non-BVD isolation rule-out stay its own sampled length-of-stay
-  (`ruleout_los`) in `treatment_admission_model`, separate from the
-  report-to-receipt laboratory delay, so the occupancy identifies the rule-out
-  stay on its own clock and the lab-turnaround delay is set by the testing,
-  composition and confirmed-death streams. Exposes
-  `isolation_ruleout_los_mean`.
-- Added a recovered-among-confirmed stream ("cumul guéris"), the
-  secondary-observation incidence analogue: survivors among the modelled
-  daily confirmed cases, scaled by a recovery proportion and convolved with a
-  confirmation-to-recovery delay, with its own observation dispersion. The
-  recovery proportion is grounded on the case-fatality ratio (a recovered
-  case is one that did not die) with a log-odds adjustment for the confirmed
-  population, rather than estimated independently.
-  The confirmed model exposes one daily confirmed-case series
-  (`confirmed_daily`) that both the recovered stream and the cumulative-
-  confirmed trajectory reuse. Added the `recovered_model` submodel and the
-  `recovery_probability_model` prior.
-- Added the `exports_joint_only_model` composer, which fits the Uganda export
-  cases and deaths together over the one travel-gated at-risk prevalence. The
-  single-stream comparison in the walkthrough now shows one joint "exports"
-  fit instead of separate export-case and export-death fits.
-- The one-week-ahead forecast also projects the isolation/treatment beds: the
-  bed demand a week ahead (need under unconstrained supply) and the
-  supply-limited occupancy it produces, whose gap is the projected bed
-  shortfall, and the cumulative recovered total, each replicated with its
-  own dispersion. Added `plot_forecast_beds`, which shows the projected bed
-  need against the supply-limited occupancy and the shortfall in the
-  walkthrough's forecast section.
-- The forecast-versus-frozen validation now also scores the isolation beds:
-  the frozen one-week-back fit conditions on the isolation occupancy, and the
-  projected bed occupancy is compared against the beds actually held a week
-  later (`forecast_vs_truth` gains an `isolation` argument, and
-  `plot_forecast_beds_vs_truth` plots the projected occupancy against the
-  observed beds). The bed check is weak at a one-week-back freeze because the
-  reported occupancy rate starts only on 9 June, so the capacity rides its
-  random walk back to the freeze date.
-- Replaced the per-vintage step background random effect with a smooth daily
-  lognormal random walk (`background_walk_model`): a per-day background with no
-  reporting-vintage steps, gated to begin a report-to-receipt lead before the
-  first suspected-case report, shared across the suspected-case and
-  suspected-death streams, with a half-normal baseline and a tight random-walk
-  innovation SD.
-  This also removes the per-vintage step in the modelled cumulative-death
-  trajectory.
-- Widened the non-BVD background level prior so the laboratory positivity
-  (210/755 ≈ 0.28 positive) identifies it.
-  The suspect pool is inferred to be a minority BVD, which lowers the
-  cumulative-infection estimate (`C_T`) with a wider credible interval.
-- Gated the laboratory analysed-specimen capacity to the testing onset, so no
-  specimens are modelled as analysed before testing existed.
+- The isolation BVD treatment length-of-stay uses the BDBV line-list admission-to-death delay as its prior.
+- The reproduction-number random walk starts a month before the first situation report (`RT_WALK_LEAD = 28`, exposed as the `bvd_joint` keyword `rt_walk_lead`), so `R_t` can move over the weeks of transmission leading up to that report.
+  The walk start is floored at the renewal start, and the `plot_rt` reconstruction uses the same knot grid.
+- Added a supply-limited isolation/treatment-bed stream ("Patients en isolement"), the renewal analogue of the convolution secondary-observation model of EpiNow2.
+  Bed occupancy may be supply-driven (demand can outstrip supply), so the model fits a latent bed demand, the suspect inflow carried through a length-of-stay survival (BVD cases with a sampled treatment stay, non-BVD suspects leaving after a sampled rule-out stay), right-censored at an effective bed capacity `ρ·C(t)` (a censored negative binomial).
+  The capacity `C(t)` is a random walk (`bed_capacity_walk_model`) that tracks the beds being added and can be projected forward, pinned by the implied bed count (reported occupancy / "Taux d'occupation" rate) on the days a rate is published.
+  The stream exposes the bed demand, occupancy, capacity, shortfall and utilisation, and carries its own observation dispersion.
+  Added `convolve_survival`, the `treatment_admission_model` observation submodel, the `isolation_admission_model`, `bed_capacity_model` and `bed_capacity_walk_model` priors and the `treatment_only_model` single-stream composer (resolves #265).
+  This is a single national model, so it cannot represent local bed saturation (Ituri at 93.9% occupancy on 13 June against Sud-Kivu 21.9%); the national shortfall understates the local unmet need.
+- Gave the non-BVD isolation rule-out stay its own sampled length-of-stay (`ruleout_los`) in `treatment_admission_model`, separate from the report-to-receipt laboratory delay, so the occupancy identifies the rule-out stay on its own clock and the lab-turnaround delay is set by the testing, composition and confirmed-death streams.
+  Exposes `isolation_ruleout_los_mean`.
+- Added a recovered-among-confirmed stream ("cumul guéris"), the secondary-observation incidence analogue: survivors among the modelled daily confirmed cases, scaled by a recovery proportion and convolved with a confirmation-to-recovery delay, with its own observation dispersion.
+  The recovery proportion is grounded on the case-fatality ratio (a recovered case is one that did not die) with a log-odds adjustment for the confirmed population, rather than estimated independently.
+  The confirmed model exposes one daily confirmed-case series (`confirmed_daily`) that both the recovered stream and the cumulative- confirmed trajectory reuse.
+  Added the `recovered_model` submodel and the `recovery_probability_model` prior.
+- Added the `exports_joint_only_model` composer, which fits the Uganda export cases and deaths together over the one travel-gated at-risk prevalence.
+  The single-stream comparison in the walkthrough now shows one joint "exports" fit instead of separate export-case and export-death fits.
+- The one-week-ahead forecast also projects the isolation/treatment beds: the bed demand a week ahead (need under unconstrained supply) and the supply-limited occupancy it produces, whose gap is the projected bed shortfall, and the cumulative recovered total, each replicated with its own dispersion.
+  Added `plot_forecast_beds`, which shows the projected bed need against the supply-limited occupancy and the shortfall in the walkthrough's forecast section.
+- The forecast-versus-frozen validation now also scores the isolation beds: the frozen one-week-back fit conditions on the isolation occupancy, and the projected bed occupancy is compared against the beds actually held a week later (`forecast_vs_truth` gains an `isolation` argument, and `plot_forecast_beds_vs_truth` plots the projected occupancy against the observed beds).
+  The bed check is weak at a one-week-back freeze because the reported occupancy rate starts only on 9 June, so the capacity rides its random walk back to the freeze date.
+- Replaced the per-vintage step background random effect with a smooth daily lognormal random walk (`background_walk_model`): a per-day background with no reporting-vintage steps, gated to begin a report-to-receipt lead before the first suspected-case report, shared across the suspected-case and suspected-death streams, with a half-normal baseline and a tight random-walk innovation SD.
+  This also removes the per-vintage step in the modelled cumulative-death trajectory.
+- Widened the non-BVD background level prior so the laboratory positivity (210/755 ≈ 0.28 positive) identifies it.
+  The suspect pool is inferred to be a minority BVD, which lowers the cumulative-infection estimate (`C_T`) with a wider credible interval.
+- Gated the laboratory analysed-specimen capacity to the testing onset, so no specimens are modelled as analysed before testing existed.
 - Redesigned the death pathway.
-  Suspected deaths carry a death ascertainment `p_death` (the death analogue
-  of the case ascertainment, with an informative prior centred high) and a
-  non-BVD death background that applies a background CFR (`cfr_bg`) to the
-  suspected-case background and lags it by the onset-to-death delay, so a
-  background death follows its background case. The death background tracks the
-  identified case background rather than a second free, outbreak-size-
-  degenerate rate, and inherits the case background's smooth gated daily shape,
-  so the modelled cumulative-death trajectory is smooth.
+  Suspected deaths carry a death ascertainment `p_death` (the death analogue of the case ascertainment, with an informative prior centred high) and a non-BVD death background that applies a background CFR (`cfr_bg`) to the suspected-case background and lags it by the onset-to-death delay, so a background death follows its background case.
+  The death background tracks the identified case background rather than a second free, outbreak-size- degenerate rate, and inherits the case background's smooth gated daily shape, so the modelled cumulative-death trajectory is smooth.
   Added the `death_ascertainment_model` and `background_cfr_model` priors.
-- Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the
-  confirmed cases.
-  The death analysed volume scales the modelled case analysed volume at the
-  per-day suspected death-to-case ratio, times a testing-intensity scaling
-  (`LogNormal(0, 0.25)`, centred on one), so death testing follows the
-  laboratory's realised throughput; the death-to-case ratio carries the
-  suspect-pool severity and the suspected-death level. The volume is scored
-  through a death-pool composition positivity
-  `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
-  suspected deaths from the death series' own components. The case volume
-  carries the laboratory capacity onset, so the death volume inherits it and no
-  deaths are confirmed before testing began.
-  The joint exposes the `death_ascertainment`, `background_cfr`,
-  `death_testing_scaling`, `tau_death` and `death_composition` deterministics
-  and drops `m_death`.
+- Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the confirmed cases.
+  The death analysed volume scales the modelled case analysed volume at the per-day suspected death-to-case ratio, times a testing-intensity scaling (`LogNormal(0, 0.25)`, centred on one), so death testing follows the laboratory's realised throughput; the death-to-case ratio carries the suspect-pool severity and the suspected-death level.
+  The volume is scored through a death-pool composition positivity `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the suspected deaths from the death series' own components.
+  The case volume carries the laboratory capacity onset, so the death volume inherits it and no deaths are confirmed before testing began.
+  The joint exposes the `death_ascertainment`, `background_cfr`, `death_testing_scaling`, `tau_death` and `death_composition` deterministics and drops `m_death`.
 
 ### Data
 
-- Added the daily "Patients en isolement" occupancy for 1-11 June (SitReps
-  018-028) as a structured `patients_isolated` column and the
-  `[isolation_history]` manifest block.
-  The fitted series begins 1 June where the all-patients column definition
-  is stable; the narrower suspects-only count in SitReps 016-017 is a
-  different quantity and is excluded.
-  Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the
-  173 the note claimed).
-- Added the implied bed-capacity series (occupancy / reported "Taux
-  d'occupation" rate ≈ 400-452 beds, 9-13 June) as the `[bed_capacity_history]`
-  manifest block, which pins the bed capacity in the supply-limited isolation
-  model.
-- Added the cumulative "cumul guéris" recovered-among-confirmed total for
-  6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
-  the `[recovered_history]` manifest block.
-- Added the peer-reviewed McCabe et al. Lancet Infectious Diseases publication
-  (online first 9 June 2026, DOI 10.1016/S1473-3099(26)00299-9) as a third
-  scenario vintage in `REPORT_SCENARIOS_CI`, with inputs as of 27 May 2026
-  (1031 DRC cases, 240 deaths, three Uganda imports).
-  Both methods now vary the epidemic doubling time (7/10/14 d); the
-  back-calculation assumes 30% of deaths are attributable to Ebola.
-  The published paper swaps the method numbers relative to the Imperial
-  reports, which the noted convention reconciles.
-  Recorded the matching frozen-data snapshot in
-  `data/report-snapshot-27may.toml`.
+- Added the daily "Patients en isolement" occupancy for 1-11 June (SitReps 018-028) as a structured `patients_isolated` column and the `[isolation_history]` manifest block.
+  The fitted series begins 1 June where the all-patients column definition is stable; the narrower suspects-only count in SitReps 016-017 is a different quantity and is excluded.
+  Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the 173 the note claimed).
+- Added the implied bed-capacity series (occupancy / reported "Taux d'occupation" rate ≈ 400-452 beds, 9-13 June) as the `[bed_capacity_history]` manifest block, which pins the bed capacity in the supply-limited isolation model.
+- Added the cumulative "cumul guéris" recovered-among-confirmed total for 6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and the `[recovered_history]` manifest block.
+- Added the peer-reviewed McCabe et al. Lancet Infectious Diseases publication (online first 9 June 2026, DOI 10.1016/S1473-3099(26)00299-9) as a third scenario vintage in `REPORT_SCENARIOS_CI`, with inputs as of 27 May 2026 (1031 DRC cases, 240 deaths, three Uganda imports).
+  Both methods now vary the epidemic doubling time (7/10/14 d); the back-calculation assumes 30% of deaths are attributable to Ebola.
+  The published paper swaps the method numbers relative to the Imperial reports, which the noted convention reconciles.
+  Recorded the matching frozen-data snapshot in `data/report-snapshot-27may.toml`.
 
 ### Analysis
 
-- The walkthrough adds posterior-predictive panels for the isolation
-  occupancy and recovered streams, a single-stream "in isolation" fit for the
-  isolation occupancy, and surfaces the isolation length-of-stay and
-  confirmation-to-recovery delays in the observation-delay table and pair
-  plot, and the admission proportion, recovery probability and the two new
-  per-stream dispersions in the surveillance-parameter table.
-- Cite EpiNow2 [epinow2](@cite) for the convolution-and-scaling
-  secondary-observation analogy, and fix the `epinow2` bibliography entry so
-  the documentation build no longer warns about a missing field.
-- The McCabe et al. scenario comparison now carries a third vintage, the
-  27 May 2026 Lancet publication, plotted beside our renewal estimate on
-  27 May, with a frozen re-fit at the 27 May cut-off added to the
-  frozen-fit outbreak-size table.
-- Quantified the per-vintage posterior-predictive checks with a per-stream
-  calibration table (`stream_calibration`): the mean forecast bias and the
-  empirical 50%/90% interval coverage of each stream's one-step-ahead
-  conditional predictive, so the streams the joint fit reproduces less well
-  can be read off rather than eyeballed. Added the `bias_sample` scoring
-  helper (resolves #269).
+- The walkthrough adds posterior-predictive panels for the isolation occupancy and recovered streams, a single-stream "in isolation" fit for the isolation occupancy, and surfaces the isolation length-of-stay and confirmation-to-recovery delays in the observation-delay table and pair plot, and the admission proportion, recovery probability and the two new per-stream dispersions in the surveillance-parameter table.
+- Cite EpiNow2 [epinow2](@cite) for the convolution-and-scaling secondary-observation analogy, and fix the `epinow2` bibliography entry so the documentation build no longer warns about a missing field.
+- The McCabe et al. scenario comparison now carries a third vintage, the 27 May 2026 Lancet publication, plotted beside our renewal estimate on 27 May, with a frozen re-fit at the 27 May cut-off added to the frozen-fit outbreak-size table.
+- Quantified the per-vintage posterior-predictive checks with a per-stream calibration table (`stream_calibration`): the mean forecast bias and the empirical 50%/90% interval coverage of each stream's one-step-ahead conditional predictive, so the streams the joint fit reproduces less well can be read off rather than eyeballed.
+  Added the `bias_sample` scoring helper (resolves #269).
 
 ### Documentation
 
-- Added a one-page [Summary dashboard](@ref) for readers with limited time:
-  the headline estimates as prose and tables alongside the reproduction
-  number, infections-over-time and modelled-versus-observed reported-case
-  figures. It reuses the artifacts written by the analysis build rather than
-  re-fitting, so it refreshes whenever the data updates.
+- Added a one-page [Summary dashboard](@ref) for readers with limited time: the headline estimates as prose and tables alongside the reproduction number, infections-over-time and modelled-versus-observed reported-case figures.
+  It reuses the artifacts written by the analysis build rather than re-fitting, so it refreshes whenever the data updates.
 
 ### Outputs
 
-- Added the latent symptom onsets (the "symptomatic cases" outcome) to the
-  shared posterior outputs.
-  `posterior_draws.csv` gains a `cumulative_onsets_T` column, the cumulative
-  symptom onsets by the cut-off per draw (the onset analogue of `C_T`), and a
-  new `onsets_over_time.csv` records the daily new and cumulative onset
-  trajectory over time with 30/60/90% credible intervals.
+- Added the latent symptom onsets (the "symptomatic cases" outcome) to the shared posterior outputs.
+  `posterior_draws.csv` gains a `cumulative_onsets_T` column, the cumulative symptom onsets by the cut-off per draw (the onset analogue of `C_T`), and a new `onsets_over_time.csv` records the daily new and cumulative onset trajectory over time with 30/60/90% credible intervals.
   Exposed through `onsets_over_time`.
 
 ## v1.5.0
@@ -1606,255 +1016,136 @@ Changes since v1.4.0.
 
 ### Model
 
-- Confirmed deaths now carry the report-to-receipt laboratory delay, so the
-  laboratory-confirmed-death series lags the death event rather than tracking
-  it instantaneously and the confirmed case and death streams pay a consistent
-  laboratory delay.
-- Added an optional daily new-suspect inflow stream ("nouveaux cas suspects
-  du jour") to the suspected-case likelihood.
-  The post-26 May per-day counts are scored against the modelled daily
-  suspected series at each report day, continuing the suspected signal where
-  the frozen cumulative series stops, on days disjoint from it (#222).
-- Added the deaths analogue, an optional daily new suspected-death inflow
-  stream ("cas suspects du jour N (M deces)") to the suspected-death
-  likelihood.
-  The post-26 May per-day counts are scored against the modelled daily
-  suspected-death series at each report day, continuing the suspected-death
-  signal where the frozen cumulative series stops, on days disjoint from it,
-  and a matching "New suspected deaths/day" posterior-predictive panel is
-  added alongside the new-suspects-per-day panel.
-- Collapsed the laboratory pipeline onto a single suspected-to-analysed
-  volume, fit to the specimens-analysed series through one report-to-analysed
-  delay.
-  The received stream is still recorded but no longer fitted, and the
-  post-cut-off 24-hour analysed volume is now fit directly.
-- Late reporting windows, where the cumulative national analysed denominator
-  stops, are scored in one submodel.
-  A day with a published 24-hour analysed count anchors its positivity as a
-  binomial on that count, and the remaining days are scored against the
-  modelled laboratory volume.
-  These are a reporting-format change rather than data blackouts, so the
-  earlier "dark window" framing is dropped.
-- Added the delay-corrected confirmed case-fatality ratio, the Nishiura et al.
-  (2009) real-time correction computed per posterior draw on the modelled
-  confirmed trajectory and sampled confirmation-to-death delay.
-  The denominator shrinks from all confirmed cases to those expected to have
-  had a fatal outcome resolve by the cut-off, debiasing the naive confirmed
-  ratio.
+- Confirmed deaths now carry the report-to-receipt laboratory delay, so the laboratory-confirmed-death series lags the death event rather than tracking it instantaneously and the confirmed case and death streams pay a consistent laboratory delay.
+- Added an optional daily new-suspect inflow stream ("nouveaux cas suspects du jour") to the suspected-case likelihood.
+  The post-26 May per-day counts are scored against the modelled daily suspected series at each report day, continuing the suspected signal where the frozen cumulative series stops, on days disjoint from it (#222).
+- Added the deaths analogue, an optional daily new suspected-death inflow stream ("cas suspects du jour N (M deces)") to the suspected-death likelihood.
+  The post-26 May per-day counts are scored against the modelled daily suspected-death series at each report day, continuing the suspected-death signal where the frozen cumulative series stops, on days disjoint from it, and a matching "New suspected deaths/day" posterior-predictive panel is added alongside the new-suspects-per-day panel.
+- Collapsed the laboratory pipeline onto a single suspected-to-analysed volume, fit to the specimens-analysed series through one report-to-analysed delay.
+  The received stream is still recorded but no longer fitted, and the post-cut-off 24-hour analysed volume is now fit directly.
+- Late reporting windows, where the cumulative national analysed denominator stops, are scored in one submodel.
+  A day with a published 24-hour analysed count anchors its positivity as a binomial on that count, and the remaining days are scored against the modelled laboratory volume.
+  These are a reporting-format change rather than data blackouts, so the earlier "dark window" framing is dropped.
+- Added the delay-corrected confirmed case-fatality ratio, the Nishiura et al. (2009) real-time correction computed per posterior draw on the modelled confirmed trajectory and sampled confirmation-to-death delay.
+  The denominator shrinks from all confirmed cases to those expected to have had a fatal outcome resolve by the cut-off, debiasing the naive confirmed ratio.
 
 ### Forecast
 
-- The one-week-ahead forecast and its validation now target the
-  laboratory-confirmed case and confirmed death streams.
-  The suspected reported cases and deaths are no longer published, so they no
-  longer serve as forecast targets or as the last-week-versus-now comparison.
+- The one-week-ahead forecast and its validation now target the laboratory-confirmed case and confirmed death streams.
+  The suspected reported cases and deaths are no longer published, so they no longer serve as forecast targets or as the last-week-versus-now comparison.
 
 ### Report
 
-- Added a confirmed case-fatality ratio section, setting the delay-corrected
-  confirmed CFR against the structural infection-based CFR and the naive
-  confirmed ratio, with a comparison table and posterior-density plot.
-- The estimate-evolution figure now draws each release as a discrete per-fit
-  estimate with nested 30/60/90% intervals, read from
-  `data/released_estimates.csv` rather than a hand-maintained literal.
-  Frozen renewal re-fits are restricted to the integral-era release cut-offs,
-  since renewal-era releases already are renewal fits.
-  A new `scripts/refresh_releases.jl` pulls the per-release estimates from the
-  tagged results releases.
+- Added a confirmed case-fatality ratio section, setting the delay-corrected confirmed CFR against the structural infection-based CFR and the naive confirmed ratio, with a comparison table and posterior-density plot.
+- The estimate-evolution figure now draws each release as a discrete per-fit estimate with nested 30/60/90% intervals, read from `data/released_estimates.csv` rather than a hand-maintained literal.
+  Frozen renewal re-fits are restricted to the integral-era release cut-offs, since renewal-era releases already are renewal fits.
+  A new `scripts/refresh_releases.jl` pulls the per-release estimates from the tagged results releases.
 
 ### Data
 
-- Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
-  structured `new_daily_suspects` column in the scanned situation-report CSV
-  and a `suspected_daily_history` block in the observation manifest.
-- Captured the daily new suspected-death counts ("cas suspects du jour N (M
-  deces)", SitReps 024-032, 7-15 June) as a structured
-  `new_daily_suspected_deaths` column in the scanned situation-report CSV and a
-  `suspected_daily_deaths_history` block in the observation manifest, the
-  deaths analogue of the daily new-suspect inflow.
+- Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a structured `new_daily_suspects` column in the scanned situation-report CSV and a `suspected_daily_history` block in the observation manifest.
+- Captured the daily new suspected-death counts ("cas suspects du jour N (M deces)", SitReps 024-032, 7-15 June) as a structured `new_daily_suspected_deaths` column in the scanned situation-report CSV and a `suspected_daily_deaths_history` block in the observation manifest, the deaths analogue of the daily new-suspect inflow.
 - Extended the confirmed case and death series to SitRep 025 (8 June).
-- Added the trusted-day 24-hour analysed laboratory counts (1, 4-7 June) as a
-  `tests_analysed_daily_history` block to anchor late-window positivity.
+- Added the trusted-day 24-hour analysed laboratory counts (1, 4-7 June) as a `tests_analysed_daily_history` block to anchor late-window positivity.
 
 ## v1.4.0
 
-The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate
-model is replaced by a discrete-time renewal model that is simpler and avoids
-the single-stream-versus-joint size tension of issue #212.
+The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate model is replaced by a discrete-time renewal model that is simpler and avoids the single-stream-versus-joint size tension of issue #212.
 This is a substantial revision; the changes below are relative to v1.3.0.
 
 ### Model
 
-- Replaced the integral exponential-growth model with a discrete-time renewal
-  process on a daily grid.
-  Infections follow the renewal equation under a time-varying reproduction
-  number (a weekly log-scale random walk with an intervention ramp), and every
-  observed stream sits downstream of latent onsets through its own sampled,
-  discretised delay.
-- The prior is placed on the growth rate (the molecular-clock doubling time)
-  and the first reproduction number is derived forward through Euler–Lotka.
-  The generation interval is a Gamma with shape and scale taken from the cited
-  source and its reported uncertainty.
-- The onset-to-event delays are taken from a Bayesian reanalysis of the 2012
-  Isiro line list on their natural Gamma parameters, with one onset-to-
-  admission delay serving both suspected-case reporting and export detection
-  and onset-to-death the convolution of two atomic components.
-- Two-phase seeding: a single import grows through an unobserved cryptic
-  exponential phase to the renewal start, with the outbreak age bounded by the
-  genetic time to the most recent common ancestor.
-- Confirmed positivity is tied to the suspect-pool composition through an assay
-  sensitivity and specificity, and exports are travel-gated from infection and
-  scored on their dated detection days.
-- The DRC streams are fitted on the incidence scale, as the between-vintage
-  increments across successive situation reports (the first vintage being the
-  cumulative count to that date).
+- Replaced the integral exponential-growth model with a discrete-time renewal process on a daily grid.
+  Infections follow the renewal equation under a time-varying reproduction number (a weekly log-scale random walk with an intervention ramp), and every observed stream sits downstream of latent onsets through its own sampled, discretised delay.
+- The prior is placed on the growth rate (the molecular-clock doubling time) and the first reproduction number is derived forward through Euler–Lotka.
+  The generation interval is a Gamma with shape and scale taken from the cited source and its reported uncertainty.
+- The onset-to-event delays are taken from a Bayesian reanalysis of the 2012 Isiro line list on their natural Gamma parameters, with one onset-to- admission delay serving both suspected-case reporting and export detection and onset-to-death the convolution of two atomic components.
+- Two-phase seeding: a single import grows through an unobserved cryptic exponential phase to the renewal start, with the outbreak age bounded by the genetic time to the most recent common ancestor.
+- Confirmed positivity is tied to the suspect-pool composition through an assay sensitivity and specificity, and exports are travel-gated from infection and scored on their dated detection days.
+- The DRC streams are fitted on the incidence scale, as the between-vintage increments across successive situation reports (the first vintage being the cumulative count to that date).
 
 ### Report
 
-The report was rebuilt around the renewal model; the analyses carried over
-from v1.3.0 (the one-week-ahead forecast and its validation, the
-no-onward-transmission counterfactual, the delay and clock-rate sensitivity
-analyses, and the McCabe et al. comparison) were re-implemented for the new
-model rather than added here.
+The report was rebuilt around the renewal model; the analyses carried over from v1.3.0 (the one-week-ahead forecast and its validation, the no-onward-transmission counterfactual, the delay and clock-rate sensitivity analyses, and the McCabe et al. comparison) were re-implemented for the new model rather than added here.
 
-- Restructured the methods in generative order (infections, epidemiological
-  processes, observation models, the joint model) with the model maths given
-  explicitly.
-- Reworked the figures (reproduction number with credible ribbons and sampled
-  trajectories, cumulative infections, onsets and deaths, outbreak size by data
-  stream, and estimate evolution across releases).
-- The McCabe et al. scenario comparison now carries their reported 95%
-  confidence intervals.
-- The one-week-ahead forecast and its last-week-versus-now validation now
-  target the laboratory-confirmed cases and confirmed deaths. The suspected
-  reported cases and deaths are no longer reported, so they are dropped as
-  forecast targets.
+- Restructured the methods in generative order (infections, epidemiological processes, observation models, the joint model) with the model maths given explicitly.
+- Reworked the figures (reproduction number with credible ribbons and sampled trajectories, cumulative infections, onsets and deaths, outbreak size by data stream, and estimate evolution across releases).
+- The McCabe et al. scenario comparison now carries their reported 95% confidence intervals.
+- The one-week-ahead forecast and its last-week-versus-now validation now target the laboratory-confirmed cases and confirmed deaths.
+  The suspected reported cases and deaths are no longer reported, so they are dropped as forecast targets.
 
 ### Data
 
 - Advanced the cut-off to 7 June 2026 (SitRep 024).
-  The laboratory-confirmed streams run to the cut-off while the suspected
-  streams stay frozen at their 26 May values.
+  The laboratory-confirmed streams run to the cut-off while the suspected streams stay frozen at their 26 May values.
 
 ## v1.3.0
 
 !!! warning "Final release of this model formulation"
 
-    This is the last planned release of the continuous-time,
-    fixed-growth-rate model. The laboratory and testing observation
-    model has outgrown the available data, and the joint fit now implies
-    a larger outbreak than any single data stream does on its own
-    (issue #212). We are replacing this model with a discrete-time
-    renewal model, which is simpler and avoids these problems, in a
-    follow-up release that will note the methods switch. Treat the
-    estimates here as provisional.
+    This is the last planned release of the continuous-time, fixed-growth-rate model.
+    The laboratory and testing observation model has outgrown the available data, and the joint fit now implies a larger outbreak than any single data stream does on its own (issue #212).
+    We are replacing this model with a discrete-time renewal model, which is simpler and avoids these problems, in a follow-up release that will note the methods switch.
+    Treat the estimates here as provisional.
 
 Changes since v1.2.0.
 
 ### Data
 
-- Advanced the model cut-off to 28 May 2026 and switched the DRC streams
-  to the INSP national cumulative totals read from the situation-report
-  PDFs, rather than the per-zone CSVs whose zone sums drop cases not yet
-  attributed to a zone. The suspected streams are frozen at their 26 May
-  values, after which INSP stopped publishing a national suspected total;
-  the confirmed and laboratory streams run to 28 May.
-- Added per-sitrep-vintage confirmed cases, confirmed deaths and
-  laboratory throughput (samples received and analysed) to
-  `data/observations.toml`, alongside the suspected cases and deaths.
-- Extended the observed series through 5 June 2026 to validate the
-  forecast out of sample.
+- Advanced the model cut-off to 28 May 2026 and switched the DRC streams to the INSP national cumulative totals read from the situation-report PDFs, rather than the per-zone CSVs whose zone sums drop cases not yet attributed to a zone.
+  The suspected streams are frozen at their 26 May values, after which INSP stopped publishing a national suspected total; the confirmed and laboratory streams run to 28 May.
+- Added per-sitrep-vintage confirmed cases, confirmed deaths and laboratory throughput (samples received and analysed) to `data/observations.toml`, alongside the suspected cases and deaths.
+- Extended the observed series through 5 June 2026 to validate the forecast out of sample.
 
 ### Modelling
 
-- The joint model now fits four DRC streams per sitrep vintage (suspected
-  cases, suspected deaths, laboratory-confirmed cases and
-  laboratory-confirmed deaths) by conditioning on the between-vintage
-  increments, alongside the Uganda exports and export deaths. A
-  single-vintage stream reduces to the cumulative likelihood.
-- Confirmed cases are fitted through a laboratory-throughput queue:
-  suspects enter a received backlog after a report-to-receipt delay, a
-  capacity-limited drain sets the samples analysed, and the new positives
-  in each window are a Binomial on the samples newly analysed. Windows
-  with no published analysed count fall back to the queue's expected
-  throughput, so no free per-window denominator is introduced.
-- Test positivity is severity-first: early specimens skew toward severe
-  presentations and relax toward the latent case composition as analysed
-  volume accrues.
-- Suspected cases and deaths are BVD onset-to-report convolutions plus
-  additive non-BVD background rates; confirmed deaths share the case-lab
-  PCR sensitivity and specificity.
-- Split ascertainment into independent DRC and Uganda reporting fractions
-  (DRC centre 0.75), and recentred the growth prior on the molecular-clock
-  20-day doubling time ([cuomodannenburg2026](@cite)).
-- Exports and export deaths are timed from infection via an
-  infection→detection delay convolution rather than a rectangular
-  detection window, reducing to the McCabe et al. window as the delay
-  collapses to a point mass.
-- The headline estimand is cumulative infections (`2^m`), with the
-  under-ascertainment multiplier anchored on the laboratory-confirmed
-  cases.
+- The joint model now fits four DRC streams per sitrep vintage (suspected cases, suspected deaths, laboratory-confirmed cases and laboratory-confirmed deaths) by conditioning on the between-vintage increments, alongside the Uganda exports and export deaths.
+  A single-vintage stream reduces to the cumulative likelihood.
+- Confirmed cases are fitted through a laboratory-throughput queue: suspects enter a received backlog after a report-to-receipt delay, a capacity-limited drain sets the samples analysed, and the new positives in each window are a Binomial on the samples newly analysed.
+  Windows with no published analysed count fall back to the queue's expected throughput, so no free per-window denominator is introduced.
+- Test positivity is severity-first: early specimens skew toward severe presentations and relax toward the latent case composition as analysed volume accrues.
+- Suspected cases and deaths are BVD onset-to-report convolutions plus additive non-BVD background rates; confirmed deaths share the case-lab PCR sensitivity and specificity.
+- Split ascertainment into independent DRC and Uganda reporting fractions (DRC centre 0.75), and recentred the growth prior on the molecular-clock 20-day doubling time ([cuomodannenburg2026](@cite)).
+- Exports and export deaths are timed from infection via an infection→detection delay convolution rather than a rectangular detection window, reducing to the McCabe et al. window as the delay collapses to a point mass.
+- The headline estimand is cumulative infections (`2^m`), with the under-ascertainment multiplier anchored on the laboratory-confirmed cases.
 
 ### Outputs
 
-- Posterior summary table, a laboratory-pipeline pair plot, and
-  posterior-predictive panels for the confirmed-case and confirmed-death
-  streams in the per-stream-versus-joint grid.
-- Recast the forecast around the four trusted quantities (infections,
-  true BVD deaths, confirmed cases, confirmed deaths) over a
-  one-week-ahead and a counterfactual-year horizon, dropping the
-  untrusted suspected and tests-analysed streams.
-- Restored the forecast validation as a last-week-vs-now out-of-sample
-  check: fit the joint through 28 May, forecast forward, and score the
-  predicted confirmed cases and deaths against the observed counts.
-- Added a conditional one-step-ahead predictive across the sitrep series,
-  each vintage predicting only its new increment.
+- Posterior summary table, a laboratory-pipeline pair plot, and posterior-predictive panels for the confirmed-case and confirmed-death streams in the per-stream-versus-joint grid.
+- Recast the forecast around the four trusted quantities (infections, true BVD deaths, confirmed cases, confirmed deaths) over a one-week-ahead and a counterfactual-year horizon, dropping the untrusted suspected and tests-analysed streams.
+- Restored the forecast validation as a last-week-vs-now out-of-sample check: fit the joint through 28 May, forecast forward, and score the predicted confirmed cases and deaths against the observed counts.
+- Added a conditional one-step-ahead predictive across the sitrep series, each vintage predicting only its new increment.
 
 ### Documentation
 
-- Surfaced the delay priors as equations, clarified that the latent pool
-  is the true-case count rather than the tested or confirmed count, and
-  added limitations on the constant-growth assumption and on per-sitrep
-  increments mixing incidence with backfill.
+- Surfaced the delay priors as equations, clarified that the latent pool is the true-case count rather than the tested or confirmed count, and added limitations on the constant-growth assumption and on per-sitrep increments mixing incidence with backfill.
 
 ### Infrastructure
 
-- Added streaming progress to `nuts_sample` via an optional callback
-  (a dependency-free file stream or TensorBoard), and optional Enzyme
-  reverse-mode AD alongside the default Mooncake backend.
+- Added streaming progress to `nuts_sample` via an optional callback (a dependency-free file stream or TensorBoard), and optional Enzyme reverse-mode AD alongside the default Mooncake backend.
 
 ## v1.2.0
 
 ### Modelling
 
 - Improved the comparison to the McCabe et al. report by making sure that 95% credible intervals are being compared and reordering it.
-- Added a custom chain rule for `SpecialFunctions.gamma_inc`. This allows us to differentiate through the analytical solution to the gamma convolution integral.
+- Added a custom chain rule for `SpecialFunctions.gamma_inc`.
+  This allows us to differentiate through the analytical solution to the gamma convolution integral.
 
 ### Data
 
-- Moved the cut-off to 23 May 2026 and switched the DRC source from
-  the WHO AFRO joint sitrep to the situation reports of the Institut
-  National de Santé Publique (INSP), transcribed by
-  [INRB-UMIE/Ebola_DRC_2026](https://github.com/INRB-UMIE/Ebola_DRC_2026).
-  The INSP series gives a per-zone, per-sitrep daily vintage trajectory
-  (suspected and confirmed; this analysis uses suspected). Cumulative
-  counts at 23 May: 905 suspected DRC cases, 220 suspected DRC deaths,
-  across the 12 reporting health zones. The 18 May INSP vintage (516
-  cases, 131 deaths) matches the WHO joint sitrep 01 total exactly.
-- Updated Uganda to three travel-related imports with one death,
-  reflecting the third import announced on 23 May 2026 (woman from DRC
-  who travelled Arua to Entebbe to Kampala; tested positive on
-  follow-up). Two further Uganda-confirmed cases announced the same
-  day (a driver and a healthcare worker) are domestic contacts of the
-  first import and are excluded from `exported_cases` because the
-  model treats Uganda as imports only.
-- Added a `reported_case_history` block in `data/observations.toml`
-  with eight INSP sitrep vintages (14 May to 23 May 2026), ready for
-  the cumulative-trajectory likelihood once it merges.
+- Moved the cut-off to 23 May 2026 and switched the DRC source from the WHO AFRO joint sitrep to the situation reports of the Institut National de Santé Publique (INSP), transcribed by [INRB-UMIE/Ebola_DRC_2026](https://github.com/INRB-UMIE/Ebola_DRC_2026).
+  The INSP series gives a per-zone, per-sitrep daily vintage trajectory (suspected and confirmed; this analysis uses suspected).
+  Cumulative counts at 23 May: 905 suspected DRC cases, 220 suspected DRC deaths, across the 12 reporting health zones.
+  The 18 May INSP vintage (516 cases, 131 deaths) matches the WHO joint sitrep 01 total exactly.
+- Updated Uganda to three travel-related imports with one death, reflecting the third import announced on 23 May 2026 (woman from DRC who travelled Arua to Entebbe to Kampala; tested positive on follow-up).
+  Two further Uganda-confirmed cases announced the same day (a driver and a healthcare worker) are domestic contacts of the first import and are excluded from `exported_cases` because the model treats Uganda as imports only.
+- Added a `reported_case_history` block in `data/observations.toml` with eight INSP sitrep vintages (14 May to 23 May 2026), ready for the cumulative-trajectory likelihood once it merges.
 
 ### Infrastructure
 
-- Moved the submodels out of the analysis file and into the supporting package. Instead we now print these in the analysis.
+- Moved the submodels out of the analysis file and into the supporting package.
+  Instead we now print these in the analysis.
 - Added additional package infrastructure including `Aqua.jl` and `Jet.jl`.
 - Streamlined the package unit tests.
 
@@ -1862,84 +1153,42 @@ Changes since v1.2.0.
 
 ### Modelling
 
-- Bound the seeding time `T` from below with a soft prior on the
-  genetic time to the most recent common ancestor (TMRCA), following a
-  suggestion from Neil Ferguson to combine the genetic signal with the
-  other data streams as a seeding bound.
-- Switched the export deaths to a daily (time-resolved binned) Poisson
-  process: a continuous survival weight for the no-death stretch before
-  the first dated death, then a per-day Poisson from that day to the
-  cut-off.
-- Bound `T` with export-death timing through that survival weight, and
-  with case-export detection timing through a first-export-detection
-  survival term on the Uganda admission date. Dates supplied in
-  `data/observations.toml`.
+- Bound the seeding time `T` from below with a soft prior on the genetic time to the most recent common ancestor (TMRCA), following a suggestion from Neil Ferguson to combine the genetic signal with the other data streams as a seeding bound.
+- Switched the export deaths to a daily (time-resolved binned) Poisson process: a continuous survival weight for the no-death stretch before the first dated death, then a per-day Poisson from that day to the cut-off.
+- Bound `T` with export-death timing through that survival weight, and with case-export detection timing through a first-export-detection survival term on the Uganda admission date.
+  Dates supplied in `data/observations.toml`.
 - Death-convolution quadrature adapted to the sampled delay scale.
-- Added a clock-rate sensitivity: refit the joint model under the
-  faster 1.9e-3 early-epidemic TMRCA estimate and compare the impact on
-  outbreak size, seeding time and growth rate against the 1.2e-3
-  baseline.
-- Sped up the deaths-among-exports likelihood: precompute the
-  onset-to-death CDF once and reuse it across bin edges
-  (`ExportDeathDelay`), replacing the per-node nested quadrature.
-- Removed hardcoded death and case constants that diverged from the
-  observations in `data/observations.toml`.
-- Added a forecast validation: fit the joint model to the original
-  report's data, project it forward to the current cut-off, and compare
-  the predicted cumulative and new counts per stream against the counts
-  observed since, as a table and a 2×3 coverage plot.
+- Added a clock-rate sensitivity: refit the joint model under the faster 1.9e-3 early-epidemic TMRCA estimate and compare the impact on outbreak size, seeding time and growth rate against the 1.2e-3 baseline.
+- Sped up the deaths-among-exports likelihood: precompute the onset-to-death CDF once and reuse it across bin edges (`ExportDeathDelay`), replacing the per-node nested quadrature.
+- Removed hardcoded death and case constants that diverged from the observations in `data/observations.toml`.
+- Added a forecast validation: fit the joint model to the original report's data, project it forward to the current cut-off, and compare the predicted cumulative and new counts per stream against the counts observed since, as a table and a 2×3 coverage plot.
 
 ### Data
 
-- Updated to the McCabe et al. 20 May 2026 report, comparing both
-  report versions.
-- Sourced the genetic TMRCA seeding bound from the BEAST temporal-tree
-  estimate in the 2026-05-21
-  [virological.org](https://virological.org/t/initial-genomes-from-may-2026-bundibugyo-virus-disease-outbreak-in-the-democratic-republic-of-the-congo-and-uganda/1032)
-  update (mean 2026-03-25, 95% HPD 2026-02-20 to 2026-04-20, at the
-  1.2e-3 EBOV clock rate this analysis assumes).
+- Updated to the McCabe et al. 20 May 2026 report, comparing both report versions.
+- Sourced the genetic TMRCA seeding bound from the BEAST temporal-tree estimate in the 2026-05-21 [virological.org](https://virological.org/t/initial-genomes-from-may-2026-bundibugyo-virus-disease-outbreak-in-the-democratic-republic-of-the-congo-and-uganda/1032) update (mean 2026-03-25, 95% HPD 2026-02-20 to 2026-04-20, at the 1.2e-3 EBOV clock rate this analysis assumes).
 
 ### Infrastructure
 
-- Dropped MCMCChains for FlexiChains and prepared for registry
-  release.
+- Dropped MCMCChains for FlexiChains and prepared for registry release.
 - CI docs preview PR comments and version-bump automation.
 
 ### Docs
 
-- Added a scope note to the README and analysis report framing the
-  work as an external view built on our understanding of real-time
-  infectious disease dynamics, and inviting feedback, reuse and
-  adaptation.
-- Surfaced results from the README and analysis landing page, added
-  stable and dev docs badges.
-- Plotting and labelling fixes: surveillance dispersion on the 1/√k
-  scale, predictive histograms labelled as frequency, and coarser
-  (four-weekly) start-date axis ticks so the labels stay readable.
-- Reworked the headline summary to report the credible intervals as
-  sentences rather than leading with a median, defined the prior-IQR
-  shift, and explained the reported-case scaling in terms of the DRC
-  reporting fraction with a link to the pair plot.
-- Replaced the model-structure diagram with a parameter-to-observation
-  table.
+- Added a scope note to the README and analysis report framing the work as an external view built on our understanding of real-time infectious disease dynamics, and inviting feedback, reuse and adaptation.
+- Surfaced results from the README and analysis landing page, added stable and dev docs badges.
+- Plotting and labelling fixes: surveillance dispersion on the 1/√k scale, predictive histograms labelled as frequency, and coarser (four-weekly) start-date axis ticks so the labels stay readable.
+- Reworked the headline summary to report the credible intervals as sentences rather than leading with a median, defined the prior-IQR shift, and explained the reported-case scaling in terms of the DRC reporting fraction with a link to the pair plot.
+- Replaced the model-structure diagram with a parameter-to-observation table.
 - Culled promotional register in the analysis report.
 
 ## v1.0.0
 
 First release.
-A joint Bayesian re-analysis of the McCabe et al. report that fits all
-data streams together in a single Turing model over the latent
-cumulative case count.
+A joint Bayesian re-analysis of the McCabe et al. report that fits all data streams together in a single Turing model over the latent cumulative case count.
 
-- Conditions on the exported cases and DRC deaths the report uses,
-  plus reported DRC cases (with an ascertainment component) and deaths
-  among exported cases.
-- Adds a no-onward-transmission projected-deaths counterfactual, a
-  one-week-ahead forecast of newly reported cases, deaths and exports,
-  and an onset-to-death delay sensitivity analysis.
-- Replaces the deaths-convolution and small-growth-rate exports
-  closed-form approximations with their exact forms.
-- Maths-first analysis page with code folded behind dropdowns and a
-  diagram of the model build-up.
-- Compares against a joint reimplementation of the report's approach
-  and its original published estimates.
+- Conditions on the exported cases and DRC deaths the report uses, plus reported DRC cases (with an ascertainment component) and deaths among exported cases.
+- Adds a no-onward-transmission projected-deaths counterfactual, a one-week-ahead forecast of newly reported cases, deaths and exports, and an onset-to-death delay sensitivity analysis.
+- Replaces the deaths-convolution and small-growth-rate exports closed-form approximations with their exact forms.
+- Maths-first analysis page with code folded behind dropdowns and a diagram of the model build-up.
+- Compares against a joint reimplementation of the report's approach and its original published estimates.

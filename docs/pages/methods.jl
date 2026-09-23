@@ -13,8 +13,8 @@
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
+## Shared setup: packages, observations and the fit registry. See
+## `docs/pages/_setup.jl`.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
@@ -1729,7 +1729,7 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# #### Province compositions
+# #### [Province compositions](@id methods-province-compositions)
 #
 # The situation reports' spatial tables give per-province confirmed cases and confirmed deaths at shared vintages.
 # At every vintage the provinces sum exactly to the national total the matching stream above already scores.
@@ -2037,6 +2037,19 @@ cfr_prior_fig #hide
 # v1.3.0 reconstructs the confirmed case and death streams.
 # v1.0.0 to v1.2.0 reconstruct the reported case, suspected death and export streams, from each tag's own inline model code.
 # Reconstructed forecasts are published as a separate backfill release and scored alongside the stored ones by the [forecast scoring across releases](@ref "Forecast scoring across releases") section.
+#
+# #### Province forecast
+#
+# We project each province seven days beyond the cut-off by continuing its renewal equation from the joint posterior, without refitting.
+# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at the intensity fitted at the cut-off.
+# Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
+# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations at its fitted scale, centred so the deviations still sum to zero.
+# The fresh innovations do not carry the fitted cross-province correlation.
+# The confirmed cases and confirmed deaths start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage.
+# Each day then grows with the province's projected infections, with no delay between infection and report, as in the national forecast, and is replicated through the stream's fitted dispersion.
+# The provinces are projected separately, so they need not add up to the national forecast.
+# The symptom-onset curve is national only, so there is no province nowcast.
+# Each release archives the projection with its method recorded, and only projection forecasts are scored.
 #
 # ### Forecast-versus-frozen evaluation
 #

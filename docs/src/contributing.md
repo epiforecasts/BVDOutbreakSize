@@ -147,7 +147,7 @@ The bare result object follows with `#hide`, so only the output renders.
 The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
 Edit it in `README.md` only.
 `docs/front_matter.jl` reads it at build time and fills in the dates.
-`docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
+`docs/make.jl` copies the whole README to the home page, so do not duplicate it into a report page.
 
 ## Fits and the fit cache
 
@@ -156,7 +156,7 @@ Fits are cached under `logs/fit_cache`, keyed on a content hash.
 
 - The bytes of each file in `FIT_SOURCE_FILES`: the files under `src/models/`, `renewal.jl`, `sampling.jl`, `constants.jl`, `data.jl` and `onset_curve.jl` in `src/`, and the cache code itself.
 - Every file under `data/` except those named in `FIT_DATA_EXCLUDE`.
-- The cache schema version and the sampler settings.
+- The cache schema version and the sampler settings, including `joint_sampler_args()` for the headline joint and its spatial control.
 
 Any edit to one of those files, a comment included, changes the key for every fit.
 In CI that is a cold refit of every model, which takes hours.
@@ -294,6 +294,23 @@ A push to `main`, a tag and a manual run are never gated.
 
 The lists live in each workflow's `changes` job and are checked by `.github/actions/changed-paths/patterns_test.sh`, which pre-commit runs whenever one of them is edited.
 Widen the list when something new feeds a build: a pattern that is too narrow skips the job that would have caught the change, and nothing reports that as a failure.
+
+### Before asking for review
+
+These are the issues most often flagged in review.
+Check the whole diff against `main` for them before asking for one.
+
+- Comments, docstrings and test names state what the code does now, briefly.
+  History belongs in [News](news.md).
+- Every claim in a comment, docstring, news entry or pull request description is true of the code in the diff.
+  That includes cross-references, and any unchanged text next to the change that the change makes stale.
+- A number in the news or a pull request description names its source: a benchmark comment, a job log or a committed script.
+- Nothing is duplicated.
+  Reuse an existing helper, and write a test's reference implementation from the formula rather than copying the code under test.
+- Nothing is added or exported without a consumer outside its own tests, and code the change leaves unused is removed.
+- A new function matches its siblings in keywords, index ranges, missing-value checks and error messages.
+- Report pages follow "Analysis report prose" above.
+- New behaviour has a test that fails if the change is reverted.
 
 ## Releases
 

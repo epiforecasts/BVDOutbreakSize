@@ -562,12 +562,13 @@ end
     using DataFrames: nrow
 
     ## A patch chain must drop into the existing summary machinery, which
-    ## keys off these names. Missing any of them silently breaks analysis.jl,
-    ## so assert on a real chain rather than on the model's return value.
+    ## keys off these names. Missing any of them silently breaks the report
+    ## pages, so assert on a real chain rather than on the model's return
+    ## value.
     chn = patch_chain
 
-    ## The headline quantities analysis.jl summarises, under the same names
-    ## bvd_joint uses.
+    ## The headline quantities the report pages summarise, under the same
+    ## names bvd_joint uses.
     for q in (:C_T, :R_T, :r, :r0, :T, :CFR, :R0, :doubling_time)
         draws = vec(Array(chn[q]))
         @test length(draws) == PATCH_DRAWS
@@ -1087,10 +1088,10 @@ end
     import FlexiChains
 
     ## The patch model is the headline joint, not a side analysis. So a patch
-    ## chain must carry every quantity a single-patch chain does: analysis.jl,
-    ## the forecast machinery and the plots all key off these names, and a
-    ## missing one is a silent failure at report-render time rather than a
-    ## test failure here.
+    ## chain must carry every quantity a single-patch chain does: the report
+    ## pages, the forecast machinery and the plots all key off these names,
+    ## and a missing one is a silent failure at report-render time rather
+    ## than a test failure here.
     ##
     ## `forecast_reported` in particular reads a long list of `expected_*_T`
     ## deterministics off the chain; if any is absent the one-week-ahead
@@ -1363,33 +1364,6 @@ end
     @test length(unique(df[!, "Structural (infection-based) CFR"])) == 1
     ## The naive column is the observed counts, not a modelled quantity.
     @test df[1, "Naive observed confirmed ratio"] == "33.3%"
-end
-
-@testitem "province_forecast_table: provinces sum to the national" begin
-    using BVDOutbreakSize: province_forecast_table
-    using DataFrames: DataFrame
-
-    ## Each province's forecast is the national draw times its modelled share
-    ## at the last vintage, so the provinces partition the national count
-    ## exactly. A split that does not add up would double-count or lose cases.
-    nd = 200
-    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
-    chn = (;
-        province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd],
-    )
-    fc = DataFrame(
-        confirmed_new = fill(100.0, nd),
-        confirmed_deaths_new = fill(40.0, nd)
-    )
-    df = province_forecast_table(chn, fc; n_patches = 3)
-    @test size(df, 1) == 6
-    cases = df[df[!, "Quantity"] .== "New confirmed cases by T+7", :]
-    ## The last vintage is column 2, so the shares used are 0.75/0.20/0.05.
-    @test sum(cases[!, "Lower 90%"]) ≈ 100.0
-    @test cases[1, "Lower 90%"] ≈ 75.0
-    deaths = df[df[!, "Quantity"] .== "New confirmed deaths by T+7", :]
-    @test sum(deaths[!, "Upper 90%"]) ≈ 40.0
 end
 
 @testitem "province kernel: distance should redistribute, not change volume" begin
@@ -1884,62 +1858,6 @@ end
     ## member they would have been 6, 5, and (-2 + 4 + 1) clamped to 5.
     @test m.increments[other, :] == [6, 5, 3]
     @test all(>=(0), m.increments)
-end
-
-@testitem "province_forecast_vs_truth: the split should be scored per draw" begin
-    using BVDOutbreakSize: province_forecast_vs_truth
-    using DataFrames: DataFrame, names
-
-    ## The province forecast is the national draw times that province's
-    ## share, multiplied draw by draw. A share that moves with the national
-    ## total must therefore widen the province interval, where treating the
-    ## two as independent would not.
-    nd = 400
-    shares = hcat(fill(0.6, nd), range(0.5, 0.9; length = nd))
-    chn = (;
-        province_shares = [
-            [
-                shares[i, 1] 1 - shares[i, 2];
-                1 - shares[i, 1] shares[i, 2]
-            ] for i in 1:nd
-        ],
-        province_death_shares = [[0.5 0.5; 0.5 0.5] for _ in 1:nd],
-    )
-    fc = DataFrame(
-        confirmed_new = collect(range(50.0, 150.0; length = nd)),
-        confirmed_deaths_new = fill(40.0, nd)
-    )
-    df = province_forecast_vs_truth(
-        chn, fc;
-        observed = [900, 100], baseline = [800, 60],
-        death_observed = [40, 20], death_baseline = [20, 10],
-        n_patches = 2, patch_labels = ["A", "B"]
-    )
-    @test size(df, 1) == 4
-    ## Truth is the difference of the two cumulatives, per province.
-    cases = df[df[!, "Stream"] .== "Confirmed cases", :]
-    @test cases[!, "Observed"] == [100, 40]
-    deaths = df[df[!, "Stream"] .== "Confirmed deaths", :]
-    @test deaths[!, "Observed"] == [20, 10]
-    ## The shares used are the last vintage's, so province A takes the
-    ## complement of the second column rather than the first. The whole
-    ## interval must sit inside the band, not merely overlap it. Taking the
-    ## first column instead puts province A above 0.6 and would pass an
-    ## overlap check.
-    @test cases[1, "Lower 90%"] / 100 > 0.05
-    @test cases[1, "Upper 90%"] / 100 < 0.6
-    ## Coverage is reported, and the interval is ordered.
-    @test all(df[!, "Lower 90%"] .<= df[!, "Upper 90%"])
-    ## No central estimate is reported anywhere in the table.
-    @test !("Central estimate" in names(df))
-    @test eltype(df[!, "Within 90% PI"]) == Bool
-
-    ## A chain with no compositions cannot be scored by province.
-    @test_throws ErrorException province_forecast_vs_truth(
-        (; a = 1), fc;
-        observed = [1, 2], baseline = [0, 0], n_patches = 2,
-        patch_labels = ["A", "B"]
-    )
 end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin

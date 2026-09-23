@@ -8,10 +8,13 @@
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
+## Shared setup: packages, observations and the fit registry. See
+## `docs/pages/_setup.jl`.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
+#-
+## The fits this page reads, loaded from the cache here.
+frozen_lastweek = load_fit("frozen_validation");
 
 #md # ```@raw html
 #md # </details>
@@ -31,8 +34,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # ## Forecast by province
 #
 # The frozen fit's one-week-ahead forecast of each province's confirmed cases and deaths, scored against what each province went on to report.
-# Each province's forecast is drawn from the joint chain one posterior draw at a time, so its interval carries the joint model's uncertainty rather than a province's alone.
-# How the province forecast is built is set out on the [province forecasts](@ref "Province forecasts") page.
+# The forecast is defined in the [province forecast](@ref "Province forecast") Methods section.
 # Every release's archived province forecast is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
 
 #md # ```@raw html
@@ -90,8 +92,8 @@ MarkdownTable(province_validation_table) #hide
 # ## Forecast by province across releases
 #
 # The archived province forecast of each release, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-# The scores cover the per-province renewal projection from the joint chain only.
-# They fill in as releases carrying that projection become old enough for their targets to have been observed.
+# Only [province forecast](@ref "Province forecast") projections are scored.
+# The scores fill in as releases carrying them become old enough for their targets to have been observed.
 # The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
 
 #md # ```@raw html
@@ -201,6 +203,37 @@ MarkdownTable(province_score_by_release_display) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# Each release's province forecasts against what each province went on to report, one panel per province stream and horizon.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the observed count.
+
+#md # ```@raw html
+#md # <details><summary>Load the archived province forecasts and their outcomes</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `province_forecast.csv`, projection rows only, in the national overlay's
+## schema. A missing file reads as an empty table.
+evaluation_province_overlay_df = _release_data(
+    joinpath("province", "forecast_overlay.csv"),
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
+evaluation_province_overlay_fig = plot_forecast_overlay(
+    scored_overlay(evaluation_province_overlay_df);
+    empty_message = _province_empty
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evaluation_province_overlay_fig #hide
 
 # ## Saving province forecast outputs
 

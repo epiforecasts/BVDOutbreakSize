@@ -25,6 +25,42 @@ function safe_nbinomial(k, μ)
 end
 
 """
+Summed log-likelihood of the counts `obs` under one
+[`safe_nbinomial`](@ref) per entry, about the [`safe_rate`](@ref) of the
+matching mean in `modelled` with the shared dispersion `k`. Equal to what
+one `~` per count accumulates, as a single term. `src/ad_rules.jl` gives it
+a closed-form Mooncake rule, so the backend does not tape each `logpdf`.
+"""
+function nbinomial_loglik(k, modelled::AbstractVector, obs::AbstractVector)
+    s = zero(float(promote_type(typeof(k), eltype(modelled))))
+    @inbounds for i in eachindex(modelled, obs)
+        s += logpdf(safe_nbinomial(k, safe_rate(modelled[i])), obs[i])
+    end
+    return s
+end
+
+"""
+Summed right-censored NegativeBinomial log-likelihood of the counts `obs`
+about the means `means`, each censored at the matching `ceilings`. A count
+below its ceiling scores the uncensored `logpdf`, so those go through
+[`nbinomial_loglik`](@ref) together. Only the counts at the ceiling take
+the censored tail. Equal to one `~ censored(...)` per count.
+"""
+function censored_nbinomial_loglik(k, means, ceilings, obs)
+    below = obs .< safe_rate.(ceilings)
+    s = nbinomial_loglik(k, means[below], obs[below])
+    @inbounds for i in findall(!, below)
+        s += logpdf(
+            censored(
+                safe_nbinomial(k, safe_rate(means[i]));
+                upper = safe_rate(ceilings[i])
+            ), obs[i]
+        )
+    end
+    return s
+end
+
+"""
 NaN / Inf-safe overdispersed `Binomial` (`BetaBinomial`) constructor
 parameterised by the trial count `n`, the mean positive probability `p`
 and an intra-window overdispersion `ρ ∈ (0, 1)`. With concentration
@@ -218,11 +254,12 @@ per-vintage increments `modelled` (see [`bin_increments`](@ref)) against
 the observed `increments` with one NegativeBinomial per vintage, sharing
 the dispersion `k`.
 
-`increments` is a model argument on the left of `~`, so a supplied vector
-is observed data DynamicPPL conditions on and a `missing` argument is
-sampled (the predictive-generator path). The indexed `increments[i]` keeps
-the predict keys (`<prefix>.increments[i]`) replicable. An empty vector
-(zero vintages) is a no-op.
+`increments` is a model argument on the left of `~`, so a `missing`
+argument is sampled (the predictive-generator path). The indexed
+`increments[i]` keeps the predict keys (`<prefix>.increments[i]`)
+replicable. A supplied vector is scored as one summed term
+([`nbinomial_loglik`](@ref)) rather than a `~` per vintage. An empty
+vector (zero vintages) is a no-op.
 """
 @model function vintage_increments_model(
         modelled::AbstractVector,
@@ -232,9 +269,13 @@ the predict keys (`<prefix>.increments[i]`) replicable. An empty vector
     n = length(modelled)
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
-    end
-    for i in 1:n
-        increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+        for i in 1:n
+            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+        end
+    elseif n > 0
+        @addlogprob! (;
+            loglikelihood = nbinomial_loglik(k, modelled, increments),
+        )
     end
     return (; modelled, increments)
 end
@@ -245,7 +286,10 @@ is a NegBinomial around the latent bed demand `means[i]`, right-censored at
 the effective capacity `ceilings[i]`. The censored tail probability still
 depends on the demand above the ceiling, so demand stays identified when
 beds are full rather than the occupancy going flat in demand. A `missing`
-`obs` samples (the predictive path). Shares the surveillance dispersion `k`.
+`obs` samples (the predictive path) under the `<prefix>.obs[i]` keys. A
+supplied vector is scored as one summed term
+([`censored_nbinomial_loglik`](@ref)). Shares the surveillance dispersion
+`k`.
 """
 @model function censored_occupancy_model(
         means::AbstractVector,
@@ -255,11 +299,15 @@ beds are full rather than the occupancy going flat in demand. A `missing`
     n = length(means)
     if ismissing(obs)
         obs = Vector{Union{Missing, Int}}(missing, n)
-    end
-    for i in 1:n
-        obs[i] ~ censored(
-            safe_nbinomial(k, safe_rate(means[i]));
-            upper = safe_rate(ceilings[i])
+        for i in 1:n
+            obs[i] ~ censored(
+                safe_nbinomial(k, safe_rate(means[i]));
+                upper = safe_rate(ceilings[i])
+            )
+        end
+    elseif n > 0
+        @addlogprob! (;
+            loglikelihood = censored_nbinomial_loglik(k, means, ceilings, obs),
         )
     end
     return (; means, ceilings, obs)

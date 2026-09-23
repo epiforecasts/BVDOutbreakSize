@@ -5,6 +5,33 @@
 _draws(chn, name::Symbol) = vec(Array(chn[name]))
 
 """
+    median_interval_text(draws; digits = 0, scale = 1, suffix = "")
+        -> String
+
+A posterior as a phrase for a summary bullet: the median and the
+equal-tailed 90% credible interval, `"about m (90% credible interval lo to
+hi)"`. Counts round to whole numbers by default. Otherwise each value is
+shown to `digits` decimals, so 0.8 reads 0.80. Each value is multiplied by
+`scale` and followed by `suffix`, so `scale = 100, suffix = "%"` reads a
+share as a percentage.
+"""
+function median_interval_text(
+        draws; digits::Integer = 0, scale::Real = 1,
+        suffix::AbstractString = ""
+    )
+    function fmt(x)
+        v = scale * x
+        s = digits <= 0 ? string(round(Int, v)) :
+            Printf.format(Printf.Format("%.$(digits)f"), v)
+        return s * suffix
+    end
+    return string(
+        "about ", fmt(quantile(draws, 0.5)), " (90% credible interval ",
+        fmt(quantile(draws, 0.05)), " to ", fmt(quantile(draws, 0.95)), ")"
+    )
+end
+
+"""
 Return `(lo90, lo60, lo30, hi30, hi60, hi90)` equal-tailed credible
 interval endpoints from a vector of draws.
 """
@@ -514,6 +541,74 @@ function province_composition_panels(
     ]
 end
 
+"""
+Per-province posterior-predictive panels for one province stream on the
+count scale, in the shape [`stream_calibration`](@ref) takes. One panel per
+province, titled `"<stream>, <province>"`, holding the observed count at
+each spatial vintage and one replicate count vector per posterior draw.
+
+Unlike [`province_composition_panels`](@ref), the total being split is not
+held at its observed value. Each draw's national replicate increments
+(`national_replicates`, one vector per draw on the `national_days` grid,
+from `predict`) are summed over each province vintage, and that draw's
+expected shares (`share_key`) and overdispersion split the sum through the
+same stick-breaking allocation. The replicates therefore carry the national
+observation model's uncertainty as well as the split's.
+
+The first province vintage is the cumulative count to date, so it takes
+`baseline`, the national count before the first replicated increment, as
+well as every national increment up to it. Every province day must be on
+the national grid, and the national replicates must pair one to one with
+the chain draws, each with one increment per national day. Each panel is
+a daily panel (`cumulative = false`).
+"""
+function province_count_panels(
+        chn; share_key::Symbol, obs_increments::AbstractMatrix,
+        province_days::AbstractVector{<:Integer},
+        national_days::AbstractVector{<:Integer}, national_replicates,
+        stream::AbstractString, baseline::Integer = 0,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        rho_key::Union{Nothing, Symbol} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    ms = [collect(v) for v in vec(collect(chn[share_key]))]
+    reps = [collect(r) for r in vec(collect(national_replicates))]
+    length(reps) == length(ms) || error(
+        "province_count_panels: $(length(reps)) national replicates for " *
+            "$(length(ms)) chain draws."
+    )
+    all(r -> length(r) == length(national_days), reps) || error(
+        "province_count_panels: every national replicate must have one " *
+            "increment per national day ($(length(national_days)))."
+    )
+    idx = [findfirst(==(d), national_days) for d in province_days]
+    any(isnothing, idx) && error(
+        "province_count_panels: province days " *
+            "$(province_days[isnothing.(idx)]) are not on the national grid."
+    )
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, length(ms))
+    rho === nothing && error(
+        "province_count_panels: the chain carries no overdispersion for " *
+            "`$(share_key)` (looked for $(rho_keys))."
+    )
+    totals = map(reps) do r
+        cum = baseline .+ cumsum(r)[idx]
+        max.(diff(vcat(0, cum)), 0)
+    end
+    counts = _composition_counts(ms, rho, totals)
+    return [
+        (;
+            title = string(stream, ", ", patch_labels[p]),
+            observed = Int.(obs_increments[p, :]),
+            replicates = counts[p], cumulative = false,
+        )
+            for p in 1:np
+    ]
+end
+
 ## Whether a chain carries a given key. Chain types throw on a missing key
 ## rather than returning a sentinel, so presence has to be probed.
 function _has_key(chn, key::Symbol)
@@ -593,6 +688,222 @@ function patch_overview_table(
         push!(df, row)
     end
     return df
+end
+
+## Equal-tailed 90% interval as `lo–hi`. `digits = 0` writes whole numbers.
+function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
+    s = posterior_summary(draws)
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return string(fmt(s.lo90), "–", fmt(s.hi90), unit)
+end
+
+## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
+## 90% e–f`, from draws or from a `posterior_summary`. The National page's
+## headline writes its intervals with it too.
+function _interval_text(draws; digits::Integer = 2, unit::AbstractString = "")
+    return _interval_text(posterior_summary(draws); digits, unit)
+end
+function _interval_text(
+        s::NamedTuple; digits::Integer = 2, unit::AbstractString = ""
+    )
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return join(
+        (
+            string(
+                lvl, "% ",
+                fmt(getproperty(s, Symbol("lo", lvl))), "–",
+                fmt(getproperty(s, Symbol("hi", lvl))), unit
+            )
+                for lvl in (30, 60, 90)
+        ), ", "
+    )
+end
+
+## A probability as a whole percentage, kept off 0% and 100%.
+function _probability_text(p::Real)
+    p > 0.995 && return "over 99%"
+    p < 0.005 && return "under 1%"
+    return string(round(Int, 100 * p), "%")
+end
+
+## `a, b and c`.
+_and_join(xs) = length(xs) == 1 ? only(xs) :
+    join(xs[1:(end - 1)], ", ") * " and " * last(xs)
+
+## The province draws a headline reads, checked for the required ones.
+function _headline_draws(chn, np::Integer)
+    required = [:C_T_patch, :R_T_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+            "not sampled from `bvd_joint`."
+    )
+    per_patch(sym) = _has_key(chn, sym) ? _per_patch(chn, sym, np) : nothing
+    return (;
+        C_T = per_patch(:C_T_patch),
+        R_T = per_patch(:R_T_patch),
+        cfr = per_patch(:CFR_patch),
+        asc = per_patch(:province_ascertainment),
+    )
+end
+
+## `from a–b in <lowest> to c–d in <highest>`, the provinces ranked by their
+## posterior medians.
+function _range_text(
+        draws, labels; digits::Integer = 2, unit::AbstractString = ""
+    )
+    meds = median.(draws)
+    lo, hi = argmin(meds), argmax(meds)
+    return string(
+        "from ", _interval90_text(draws[lo]; digits, unit), " in ",
+        labels[lo], " to ", _interval90_text(draws[hi]; digits, unit),
+        " in ", labels[hi]
+    )
+end
+
+## Per-draw imports into the first `np` patches, summed over days. The
+## `importation_patch` deterministic is the `(n_patches x n)` matrix flattened
+## column-major, laid out against the chain's own patch count.
+function _imports_total(chn, np::Integer)
+    np_chain = length(first(_draw_vectors(chn, :C_T_patch)))
+    vs = _draw_vectors(chn, :importation_patch)
+    len = length(first(vs))
+    len % np_chain == 0 || error(
+        "`importation_patch` holds $(len) entries, which is not a whole " *
+            "number of days of $(np_chain) patches."
+    )
+    n = len ÷ np_chain
+    return [
+        sum(v[(t - 1) * np_chain + p] for t in 1:n for p in 1:np)
+            for v in vs
+    ]
+end
+
+"""
+Markdown bullets comparing the provinces of the patch model, each quantity
+as an equal-tailed 90% credible interval. Every comparison is computed draw
+by draw, so it carries the correlation between provinces.
+
+- Each province's share of infections to date, and the posterior
+  probability that the largest province has the most infections.
+- The range of the reproduction number at the cut-off across provinces, the
+  probability it is above one in each, and how many provinces are more
+  likely than not to be growing.
+- The range of the case-fatality ratio (`CFR_patch`) and of the case
+  ascertainment relative to the national average
+  (`province_ascertainment`), when the chain carries them.
+- The share of infections to date imported from another province
+  (`importation_patch`), when the chain carries it.
+
+The ranges name the provinces with the lowest and highest posterior medians.
+[`patch_detail_headline`](@ref) gives each province's own intervals.
+"""
+function patch_headline(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    labels = patch_labels[1:np]
+    nd = length(first(d.C_T))
+    totals = [sum(d.C_T[p][i] for p in 1:np) for i in 1:nd]
+    share = [100 .* d.C_T[p] ./ totals for p in 1:np]
+    top = argmax(median.(d.C_T))
+    p_top = count(
+        i -> argmax([d.C_T[p][i] for p in 1:np]) == top, 1:nd
+    ) / nd
+    bullets = String[
+        "- **Share of infections:** " * _and_join(
+            [
+                string(labels[p], " ", _interval90_text(share[p]; digits = 0), "%")
+                    for p in 1:np
+            ]
+        ) * " of infections to date. $(labels[top]) has the most " *
+            "infections with probability $(_probability_text(p_top)).",
+    ]
+    p_growing = [mean(>(1), d.R_T[p]) for p in 1:np]
+    n_growing = count(>(0.5), p_growing)
+    push!(
+        bullets,
+        "- **Reproduction number:** at the cut-off it runs " *
+            _range_text(d.R_T, labels) * ". The probability it is above " *
+            "one is " * _and_join(
+            [
+                "$(_probability_text(p_growing[p])) in $(labels[p])"
+                    for p in 1:np
+            ]
+        ) * ", so $(n_growing) of $(np) provinces " *
+            (n_growing == 1 ? "is" : "are") *
+            " more likely than not to be growing."
+    )
+    d.cfr === nothing || push!(
+        bullets,
+        "- **Case-fatality ratio:** " * _range_text(
+            [100 .* c for c in d.cfr], labels; digits = 1, unit = "%"
+        ) * "."
+    )
+    d.asc === nothing || push!(
+        bullets,
+        "- **Case ascertainment relative to the national average:** " *
+            _range_text(d.asc, labels) * "."
+    )
+    if _has_key(chn, :importation_patch)
+        imports = _imports_total(chn, np)
+        push!(
+            bullets,
+            "- **Importation:** infections imported from another province " *
+                "make up " *
+                _interval90_text(100 .* imports ./ totals; digits = 1, unit = "%") *
+                " of infections to date."
+        )
+    end
+    return join(bullets, "\n") * "\n"
+end
+
+"""
+Markdown summary of each province of the patch model: a bold lead per
+province, then a bullet each for its cumulative infections to date and its
+reproduction number at the cut-off and, when the chain carries them, its
+case-fatality ratio (`CFR_patch`, as a percentage) and its case
+ascertainment relative to the national average (`province_ascertainment`).
+Every quantity is written as its equal-tailed 30%, 60% and 90% credible
+intervals, as the National page's headline writes them.
+The same intervals for the infections, reproduction number and ascertainment
+are tabulated by [`patch_summary_table`](@ref), and the case-fatality ratio's
+by [`province_cfr_table`](@ref) as a median and 90% interval.
+
+The reproduction number and the relative ascertainment are identified only
+as a product by the case composition, so the two are given together.
+[`patch_headline`](@ref) compares the provinces.
+"""
+function patch_detail_headline(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    blocks = map(1:np) do p
+        lines = [
+            "**$(patch_labels[p])**",
+            "",
+            "- **Infections to date:** " *
+                _interval_text(d.C_T[p]; digits = 0) * ".",
+            "- **Reproduction number at the cut-off:** " *
+                _interval_text(d.R_T[p]) * ".",
+        ]
+        d.cfr === nothing || push!(
+            lines,
+            "- **Case-fatality ratio:** " *
+                _interval_text(100 .* d.cfr[p]; digits = 1, unit = "%") * "."
+        )
+        d.asc === nothing || push!(
+            lines,
+            "- **Case ascertainment relative to the national average:** " *
+                _interval_text(d.asc[p]) * "."
+        )
+        join(lines, "\n")
+    end
+    return join(blocks, "\n\n") * "\n"
 end
 
 """
@@ -833,73 +1144,128 @@ const _PROVINCE_FORECAST_STREAMS = (
     (:confirmed_deaths_new, "confirmed deaths"),
 )
 
-## Per-province forecast draws from one [`forecast_reported`](@ref) result:
-## the national draw times that province's modelled share at the most recent
-## spatial vintage, multiplied draw by draw so the split carries the
-## correlation between the two factors. Returns one
-## `(stream_label, province, draws)` entry per province and per stream the
-## forecast carries, provinces outer. Shared by the province forecast table,
-## figure and release archive, so all three read one split.
+## A [`forecast_provinces`](@ref) frame for the province summaries. A frame
+## that already is one passes through. Anything else, such as a national
+## [`forecast_reported`](@ref) result from an older call site, is replaced by
+## the projection from `chn` at `horizon`, so every province summary reads
+## one method.
+function _as_province_projection(
+        chn, fc, np::Integer, patch_labels::AbstractVector;
+        horizon::Integer = 7
+    )
+    :patch in propertynames(fc) && return fc
+    _has_key(chn, :R_T_patch) || error(
+        "chain carries no `R_T_patch`; it was not sampled from `bvd_joint` " *
+            "with more than one patch, so it cannot be projected by province."
+    )
+    return forecast_provinces(chn; horizon, n_patches = np, patch_labels)
+end
+
+## Per-province forecast draws: one `(stream_label, province, draws)` entry
+## per province and per confirmed stream the projection carries, provinces
+## outer. Shared by the province forecast table, figures and release archive,
+## so all of them read one projection.
 function _province_forecast_draws(
         chn, fc, np::Integer,
-        patch_labels::AbstractVector
+        patch_labels::AbstractVector;
+        horizon::Integer = 7
     )
-    _has_key(chn, :province_shares) || error(
-        "chain carries no `province_shares`; it was not sampled from " *
-            "`bvd_joint` with the per-province compositions on."
-    )
-    case_share = _per_patch_last_share(chn, :province_shares, np)
-    death_share = _has_key(chn, :province_death_shares) ?
-        _per_patch_last_share(chn, :province_death_shares, np) :
-        case_share
-    cols = propertynames(fc)
+    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    return _province_projection_draws(proj, np, patch_labels)
+end
+
+## The `(stream_label, province, draws)` entries of a
+## [`forecast_provinces`](@ref) frame, provinces outer.
+function _province_projection_draws(fc, np::Integer, patch_labels)
     out = Tuple{String, String, Vector{Float64}}[]
+    cols = propertynames(fc)
     for p in 1:np, (col, label) in _PROVINCE_FORECAST_STREAMS
 
         col in cols || continue
-        v = float.(fc[!, col])
-        share = col === :confirmed_new ? case_share : death_share
-        push!(out, (label, patch_labels[p], v .* share[p][1:length(v)]))
+        rows = fc.patch .== p
+        any(rows) || continue
+        push!(out, (label, patch_labels[p], float.(fc[rows, col])))
     end
     return out
 end
 
 """
-Per-province split of the one-week-ahead national forecast `fc` from
-[`forecast_reported`](@ref): the new confirmed cases and confirmed deaths
-expected in each province over the week to `T + 7`, as the same 90/60/30%
-credible intervals [`forecast_table`](@ref) reports nationally. The same
-content is drawn by [`plot_province_forecast`](@ref) and archived for
-scoring by [`province_forecast_archive`](@ref).
+    province_share_draws(fc, col; n_patches) -> Vector{Vector{Float64}}
 
-Each province's count is the national draw times that province's modelled
-share at the most recent spatial vintage. The split is held at its current
-value over the week rather than projected forward. The provincial
-compositions are fitted only where the spatial tables report, so a province
-whose share is moving is not tracked past the last vintage.
+Each province's share of the provinces' combined projection of `col`, draw
+by draw, from a [`forecast_provinces`](@ref) frame. Returns one vector of
+share draws per patch. A draw in which no province projects anything has no
+share and is left out.
+"""
+function province_share_draws(
+        fc, col::Symbol; n_patches::Integer = length(PROVINCE_NAMES)
+    )
+    draws = sort(unique(fc.draw))
+    at = Dict(
+        (p, d) => float(v) for (p, d, v) in zip(fc.patch, fc.draw, fc[!, col])
+    )
+    vals = [[at[(p, d)] for d in draws] for p in 1:n_patches]
+    total = reduce(.+, vals)
+    keep = total .> 0
+    return [v[keep] ./ total[keep] for v in vals]
+end
+
+"""
+One-week-ahead forecast by province: the new confirmed cases and confirmed
+deaths expected in each province over the week to `T + 7`, as the same
+90/60/30% credible intervals [`forecast_table`](@ref) reports nationally.
+The same content is drawn by [`plot_province_forecast`](@ref) and archived
+for scoring by [`province_forecast_archive`](@ref).
+
+`fc` is a [`forecast_provinces`](@ref) frame, each province projected by its
+own renewal. A national [`forecast_reported`](@ref) result is replaced by the
+projection from `chn` at `horizon` days, which also labels the rows. The table adds each province's new latent
+infections and its reproduction number at the horizon.
 """
 function province_forecast_table(
         chn, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
+        horizon::Integer = 7,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    rows = NamedTuple[]
-    for (label, province, draws) in _province_forecast_draws(
-            chn, fc, np, patch_labels
+    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    entries = [
+        (province, "New $(label) by T+$(horizon)", draws, digits)
+            for (label, province, draws) in _province_projection_draws(
+                proj, np, patch_labels
+            )
+    ]
+    ## Each province's latent quantities follow its observed streams.
+    for p in 1:np, (col, quantity, dg) in (
+                (:infections_new, "New infections by T+$(horizon)", digits),
+                (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
+            )
+
+        col in propertynames(proj) || continue
+        rows = proj.patch .== p
+        any(rows) || continue
+        push!(
+            entries,
+            (patch_labels[p], quantity, float.(proj[rows, col]), dg)
         )
+    end
+    order = Dict(l => i for (i, l) in enumerate(patch_labels[1:np]))
+    sort!(entries; by = e -> order[e[1]], alg = MergeSort)
+    rows = NamedTuple[]
+    for (province, quantity, draws, dg) in entries
         s = posterior_summary(draws)
         push!(
             rows,
             (
-                province = province, quantity = "New $(label) by T+7",
-                lower_90 = round(s.lo90; digits),
-                lower_60 = round(s.lo60; digits),
-                lower_30 = round(s.lo30; digits),
-                upper_30 = round(s.hi30; digits),
-                upper_60 = round(s.hi60; digits),
-                upper_90 = round(s.hi90; digits),
+                province = province, quantity = quantity,
+                lower_90 = round(s.lo90; digits = dg),
+                lower_60 = round(s.lo60; digits = dg),
+                lower_30 = round(s.lo30; digits = dg),
+                upper_30 = round(s.hi30; digits = dg),
+                upper_60 = round(s.hi60; digits = dg),
+                upper_90 = round(s.hi90; digits = dg),
             )
         )
     end
@@ -907,16 +1273,14 @@ function province_forecast_table(
 end
 
 """
-Per-province forecast against what was observed. `fc` is a
-[`forecast_reported`](@ref) result from a frozen patch fit, `chn` that same
-chain, and `observed` and `baseline` the per-province cumulative counts at
-the target date and at the forecast origin, so the truth is their difference.
+Per-province forecast against what was observed. `chn` is a frozen patch
+fit, and `observed` and `baseline` the per-province cumulative counts at the
+target date and at the forecast origin, so the truth is their difference.
 
-Each province's forecast is the national draw times that province's modelled
-share at the frozen fit's most recent spatial vintage. The two factors are
-multiplied draw by draw, so the interval carries their correlation. The share
-itself is held over the horizon, which the width does not express. A province
-whose share is moving is scored as though it were not.
+Each province's forecast is the [`forecast_provinces`](@ref) projection from
+`chn` over `horizon` days. `fc` is either that projection or a national
+[`forecast_reported`](@ref) result, which is replaced by the projection so
+the scores read the same method as the report.
 
 Reports the 90% predictive interval, the observed count, and whether the
 observation fell inside the interval, one row per province and stream. No
@@ -929,18 +1293,12 @@ function province_forecast_vs_truth(
         death_baseline::Union{Nothing, AbstractVector} = nothing,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
+        horizon::Integer = 7,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    _has_key(chn, :province_shares) || error(
-        "chain carries no `province_shares`; the frozen fit was not run " *
-            "with the per-province compositions on."
-    )
-    case_share = _per_patch_last_share(chn, :province_shares, np)
-    death_share = _has_key(chn, :province_death_shares) ?
-        _per_patch_last_share(chn, :province_death_shares, np) :
-        case_share
-    cols = propertynames(fc)
+    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    cols = propertynames(proj)
     rows = NamedTuple[]
     function add!(stream, p, draws, truth)
         s = posterior_summary(draws)
@@ -956,17 +1314,15 @@ function province_forecast_vs_truth(
         )
     end
     for p in 1:np
-        if :confirmed_new in cols
-            v = fc[!, :confirmed_new]
-            add!(
-                "Confirmed cases", p, v .* case_share[p][1:length(v)],
-                observed[p] - baseline[p]
-            )
-        end
+        sel = proj.patch .== p
+        :confirmed_new in cols && add!(
+            "Confirmed cases", p, float.(proj[sel, :confirmed_new]),
+            observed[p] - baseline[p]
+        )
         if :confirmed_deaths_new in cols && death_observed !== nothing
-            v = fc[!, :confirmed_deaths_new]
             add!(
-                "Confirmed deaths", p, v .* death_share[p][1:length(v)],
+                "Confirmed deaths", p,
+                float.(proj[sel, :confirmed_deaths_new]),
                 death_observed[p] - death_baseline[p]
             )
         end
