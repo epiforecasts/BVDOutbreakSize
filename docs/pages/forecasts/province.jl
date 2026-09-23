@@ -110,13 +110,24 @@ forecast_province_fig(p) = plot_province_forecast_detail(
 ## The province blocks below are written out one per patch.
 @assert N_PATCHES == 4 && PROVINCE_LABELS[1:4] ==
     ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
-recent_note = recent_cases === nothing ?
-    "The spatial tables carry no recent week to compare against." :
-    string(
-        "The observed week runs from ", grid_date(recent_cases.start_day),
-        " to ", grid_date(recent_cases.last_day),
-        ", the last spatial vintage, which can be earlier than the cut-off."
-    );
+## Cases and deaths come from separate tables, so each stream's observed
+## week is stated on its own.
+function forecast_province_recent_week(r, stream)
+    r === nothing &&
+        return "The spatial tables carry no recent week of $(stream)."
+    return string(
+        "The observed week of $(stream) runs from ",
+        grid_date(r.start_day), " to ", grid_date(r.last_day), "."
+    )
+end
+recent_note = join(
+    [
+        forecast_province_recent_week(recent_cases, "confirmed cases"),
+        forecast_province_recent_week(recent_deaths, "confirmed deaths"),
+        "Each ends at its last spatial vintage, which can be earlier than " *
+            "the cut-off.",
+    ], " "
+);
 
 #md # ```@raw html
 #md # </details>
