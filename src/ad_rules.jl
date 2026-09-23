@@ -5,8 +5,9 @@
 # as the forward loop.
 #
 # Signatures are restricted to `Array{<:IEEEFloat}` and `IEEEFloat`
-# scalars, what every call site passes. Anything else falls through to
-# Mooncake's derived rule.
+# scalars, plus a view of one into such an array where a call site passes a
+# row of a per-patch matrix. Anything else falls through to Mooncake's
+# derived rule.
 #
 # These earn their place only while the backend's own derivation is worse.
 # `task benchmark-rules` times both arms; if the gap has closed after a
@@ -14,12 +15,21 @@
 
 using Mooncake: CoDual, NoFData, NoRData, primal, tangent
 
+## An array argument a rule accepts: a float array, or a view into one (a
+## row of a per-patch matrix). A view's tangent is its parent's tangent, so
+## `_tangent_array` views that the same way to accumulate into it.
+const _FloatArray = Array{<:Mooncake.IEEEFloat}
+const _FloatView = SubArray{<:Mooncake.IEEEFloat, 1, <:_FloatArray}
+const _FloatVec = Union{_FloatArray, _FloatView}
+
+_tangent_array(x::CoDual{<:_FloatArray}) = tangent(x)
+function _tangent_array(x::CoDual{<:_FloatView})
+    return view(tangent(x).data.parent, primal(x).indices...)
+end
+
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
-    Tuple{
-        typeof(convolve_delay), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
+    Tuple{typeof(convolve_delay), _FloatVec, _FloatVec},
 )
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
@@ -38,8 +48,7 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(interpolate_knots), Array{<:Mooncake.IEEEFloat},
-        Array{<:Integer}, Integer,
+        typeof(interpolate_knots), _FloatVec, Array{<:Integer}, Integer,
     },
 )
 Mooncake.@is_primitive(
@@ -47,6 +56,14 @@ Mooncake.@is_primitive(
     Tuple{
         typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
         Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
     },
 )
 
@@ -78,13 +95,12 @@ end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(convolve_delay)},
-        x::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        delay::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+        x::CoDual{<:_FloatVec}, delay::CoDual{<:_FloatVec}
     )
     xp = primal(x)
     dp = primal(delay)
-    x̄ = tangent(x)
-    d̄ = tangent(delay)
+    x̄ = _tangent_array(x)
+    d̄ = _tangent_array(delay)
     y = convolve_delay(xp, dp)
     ȳ = zero(y)
     function convolve_delay_pullback!!(::NoRData)
@@ -151,13 +167,13 @@ end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(interpolate_knots)},
-        knot_vals::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        knot_vals::CoDual{<:_FloatVec},
         days::CoDual{<:Array{<:Integer}}, n::CoDual{<:Integer}
     )
     kp = primal(knot_vals)
     dayp = primal(days)
     np = primal(n)
-    k̄ = tangent(knot_vals)
+    k̄ = _tangent_array(knot_vals)
     out = interpolate_knots(kp, dayp, np)
     ō = zero(out)
     function interpolate_knots_pullback!!(::NoRData)
@@ -967,4 +983,91 @@ function Mooncake.rrule!!(
         return ntuple(_ -> NoRData(), 7)
     end
     return CoDual(total, NoFData()), onset_report_expected_total_pullback!!
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(patch_infections)},
+        Rt::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        g::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        seeds::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        K::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}}
+    )
+    Rp = primal(Rt)
+    gp = primal(g)
+    Kp = primal(K)
+    εp = primal(ε)
+    R̄ = tangent(Rt)
+    ḡ = tangent(g)
+    s̄ = tangent(seeds)
+    K̄ = tangent(K)
+    ε̄ = tangent(ε)
+    np, n = size(Rp)
+    L = size(primal(seeds), 2)
+    y = patch_infections(Rp, gp, primal(seeds), Kp, εp)
+    out = Mooncake.zero_fcodual(y)
+    Ī = tangent(out).infections
+    Ā = tangent(out).importation
+    I = y.infections
+    function patch_infections_pullback!!(::NoRData)
+        Tf = eltype(I)
+        outflow = zeros(Tf, np)
+        @inbounds for q in 1:np, r in 1:np
+            r == q && continue
+            outflow[q] += Kp[r, q]
+        end
+        ## Each day's force and generated infections are rebuilt from the
+        ## forward infections rather than stored. The walk runs backwards so
+        ## a day's adjoint is complete before it is pushed onto earlier days,
+        ## and it accumulates into a copy since `Ī` is Mooncake's buffer.
+        acc = copy(Ī)
+        force = zeros(Tf, np)
+        gen = zeros(Tf, np)
+        ḡen = zeros(Tf, np)
+        ōut = zeros(Tf, np)
+        @inbounds for t in n:-1:(L + 1)
+            kmax = min(t - 1, length(gp))
+            for p in 1:np
+                f = zero(Tf)
+                for s in 1:kmax
+                    f += I[p, t - s] * gp[s]
+                end
+                force[p] = f
+                gen[p] = Rp[p, t] * f
+                ḡen[p] = zero(Tf)
+            end
+            ## I[p, t] = (1 - ε[p, t] outflow[p]) gen[p] + arrivals[p], and
+            ## the importation output is arrivals[p] alone.
+            for p in 1:np
+                a = acc[p, t]
+                ā = a + Ā[p, t]
+                ḡen[p] += a * (one(Tf) - εp[p, t] * outflow[p])
+                ε̄[p, t] -= a * outflow[p] * gen[p]
+                ōut[p] -= a * εp[p, t] * gen[p]
+                for q in 1:np
+                    q == p && continue
+                    ε̄[q, t] += ā * Kp[p, q] * gen[q]
+                    K̄[p, q] += ā * εp[q, t] * gen[q]
+                    ḡen[q] += ā * εp[q, t] * Kp[p, q]
+                end
+            end
+            for p in 1:np
+                R̄[p, t] += ḡen[p] * force[p]
+                f̄ = ḡen[p] * Rp[p, t]
+                for s in 1:kmax
+                    acc[p, t - s] += f̄ * gp[s]
+                    ḡ[s] += f̄ * I[p, t - s]
+                end
+            end
+        end
+        @inbounds for q in 1:np, r in 1:np
+            r == q && continue
+            K̄[r, q] += ōut[q]
+        end
+        @inbounds for p in 1:np, j in 1:min(L, n)
+            s̄[p, j] += acc[p, j]
+        end
+        return ntuple(_ -> NoRData(), 6)
+    end
+    return out, patch_infections_pullback!!
 end

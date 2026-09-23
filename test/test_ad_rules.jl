@@ -23,7 +23,7 @@
     using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
     using BVDOutbreakSize: convolve_delay, convolve_survival,
         convolve_pmf, interpolate_knots, renewal_infections,
-        abscond_thinned, abscond_thinned_flows
+        abscond_thinned, abscond_thinned_flows, patch_infections
 
     ## Drive one native rule: build zero-tangent coduals for the arguments,
     ## seed the output tangent with the cotangent, run the pullback, and
@@ -173,6 +173,39 @@
         @test rdata[6] ≈ fgs[5] rtol = 1.0e-7
         @test all(i -> rdata[i] isa NoRData, (1, 2, 3, 4, 5, 7))
     end
+
+    @testset "patch_infections" begin
+        ## Three patches, a daily importation intensity per origin, and both
+        ## outputs carrying a cotangent.
+        np, n, L = 3, 40, 7
+        Rt = abs.(randn(np, n)) .* 0.3 .+ 1.0
+        g = abs.(randn(12)) .+ 0.1
+        g ./= sum(g)
+        seeds = abs.(randn(np, L)) .+ 1.0
+        K = rand(np, np) .* 0.2
+        K[[1, 5, 9]] .= 0.0
+        ε = rand(np, n) .* 0.5
+        Ī = randn(np, n)
+        Ā = randn(np, n)
+        args = (Rt, g, seeds, K, ε)
+        codual_args = map(zero_fcodual, args)
+        out, pb = Mooncake.rrule!!(
+            zero_fcodual(patch_infections), codual_args...
+        )
+        tangent(out).infections .= Ī
+        tangent(out).importation .= Ā
+        rdata = pb(NoRData())
+        @test primal(out) == patch_infections(args...)
+        @test all(r -> r isa NoRData, rdata)
+        objective(a...) = let r = patch_infections(a...)
+            sum(Ī .* r.infections) + sum(Ā .* r.importation)
+        end
+        fd = grad(fdm, objective, args...)
+        for (t, f) in zip(map(tangent, codual_args), fd)
+            @test t ≈ f rtol = 1.0e-6
+        end
+        @test tangent(out).infections == Ī
+    end
 end
 
 @testitem "AD rules: Mooncake with the rule matches ForwardDiff" tags = [
@@ -183,7 +216,7 @@ end
     using Mooncake: Mooncake
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
         interpolate_knots, renewal_infections, abscond_thinned,
-        abscond_thinned_flow, abscond_thinned_flows
+        abscond_thinned_flow, abscond_thinned_flows, patch_infections
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -299,6 +332,68 @@ end
         check_grads(
             (a, p, k, c) -> sum(ȳ1 .* abscond_thinned_flow(a, p, k, c)),
             adm1, pmf, 0.07, h
+        )
+    end
+
+    ## The per-patch models pass a row of a matrix, a view rather than an
+    ## `Array`. The rule must fire on it, not only agree with it.
+    fires(sig) = Mooncake.is_primitive(
+        Mooncake.MinimalCtx, Mooncake.ReverseMode, sig,
+        Base.get_world_counter()
+    )
+
+    @testset "convolve_delay on a matrix row" begin
+        M = abs.(randn(3, 40)) .+ 0.5
+        w = abs.(randn(15)) .+ 0.1
+        w ./= sum(w)
+        Ȳ = randn(3, 40)
+        @test fires(
+            Tuple{typeof(convolve_delay), typeof(view(M, 1, :)), typeof(w)}
+        )
+        check_grads(
+            (A, b) -> sum(
+                p -> sum(Ȳ[p, :] .* convolve_delay(view(A, p, :), b)), 1:3
+            ),
+            M, w
+        )
+    end
+
+    @testset "interpolate_knots on a matrix row" begin
+        days = collect(1:7:40)
+        n = 40
+        δ = randn(3, length(days))
+        Ō = randn(3, n)
+        @test fires(
+            Tuple{
+                typeof(interpolate_knots), typeof(view(δ, 1, :)),
+                typeof(days), typeof(n),
+            }
+        )
+        check_grads(
+            A -> sum(
+                p -> sum(Ō[p, :] .* interpolate_knots(view(A, p, :), days, n)),
+                1:3
+            ),
+            δ
+        )
+    end
+
+    @testset "patch_infections" begin
+        np, n, L = 3, 40, 7
+        Rt = abs.(randn(np, n)) .* 0.3 .+ 1.0
+        g = abs.(randn(12)) .+ 0.1
+        g ./= sum(g)
+        seeds = abs.(randn(np, L)) .+ 1.0
+        K = rand(np, np) .* 0.2
+        K[[1, 5, 9]] .= 0.0
+        ε = rand(np, n) .* 0.5
+        Ī = randn(np, n)
+        Ā = randn(np, n)
+        check_grads(
+            (a...) -> let r = patch_infections(a...)
+                sum(Ī .* r.infections) + sum(Ā .* r.importation)
+            end,
+            Rt, g, seeds, K, ε
         )
     end
 end
