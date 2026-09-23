@@ -6,7 +6,11 @@
 # The confirmed counts start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage, and then grow with the province's own projected infections.
 # The provinces are projected separately, so they need not add up to the national forecast on the [forecasts](@ref "Forecasts") page.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
-# The [forecast by province](@ref "Forecast by province") evaluation scores a different forecast, the national forecast split by each province's share and held over the week.
+# The [forecast by province](@ref "Forecast by province") evaluation scores this projection.
+#
+# Releases before 24 September 2026 archived a different province forecast, the national forecast split by each province's share at the last spatial vintage and held over the week.
+# Releases from that date archive this projection.
+# Scores of past province forecasts, and the past forecasts shown below, therefore mix the two methods.
 #
 # The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
 # The symptom-onset curve is national only, so there is no province nowcast.
@@ -31,7 +35,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 # ## Province forecast summary
 #
-# The expected confirmed counts in each province for the week after the cut-off.
+# The overall bullets compare the provinces.
+# The detail under each province gives its own projection.
 
 #md # ```@raw html
 #md # <details><summary>Project each province a week ahead</summary>
@@ -50,22 +55,68 @@ province_forecast_fig = plot_province_forecast(
     n_patches = N_PATCHES
 );
 province_week_end = obs.cutoff + Day(7);
-province_forecast_bullets = join(
-    [
-        let rows = province_projection.patch .== p
-            "- **$(PROVINCE_LABELS[p]):** " *
-                "$(median_interval_text(province_projection[rows, :confirmed_new])) new confirmed cases and " *
-                "$(median_interval_text(province_projection[rows, :confirmed_deaths_new])) new confirmed deaths in the week to $(province_week_end)."
-        end
-            for p in 1:N_PATCHES
-    ], "\n"
-);
+province_summary_markdown = let proj = province_projection
+    draws(p, col) = float.(proj[proj.patch .== p, col])
+    pct(x) = string(round(Int, 100 * x), "%")
+    share_text(v) = string(
+        "about ", pct(quantile(v, 0.5)), " (90% credible interval ",
+        pct(quantile(v, 0.05)), " to ", pct(quantile(v, 0.95)), ")"
+    )
+    ## Overall: the provinces ranked by their median projection, each with
+    ## its share of the provinces' combined projection and how often it
+    ## projects the most.
+    function overall(col, stream)
+        shares = province_share_draws(proj, col; n_patches = N_PATCHES)
+        top = [argmax([s[k] for s in shares]) for k in eachindex(shares[1])]
+        order = sortperm(
+            [quantile(draws(p, col), 0.5) for p in 1:N_PATCHES]; rev = true
+        )
+        lead = first(order)
+        ranked = join(PROVINCE_LABELS[order], ", then ")
+        split_text = join(
+            [
+                "$(PROVINCE_LABELS[p]) $(share_text(shares[p]))"
+                    for p in order
+            ], "; "
+        )
+        return [
+            "- **Most $(stream):** $(ranked). " *
+                "$(PROVINCE_LABELS[lead]) projects the most in " *
+                "$(pct(count(==(lead), top) / length(top))) of draws.",
+            "- **Share of $(stream):** $(split_text), of the provinces' " *
+                "combined projection.",
+        ]
+    end
+    function detail(p)
+        return join(
+            [
+                "**$(PROVINCE_LABELS[p])**", "",
+                "- New confirmed cases: " *
+                    "$(median_interval_text(draws(p, :confirmed_new))).",
+                "- New confirmed deaths: " *
+                    "$(median_interval_text(draws(p, :confirmed_deaths_new))).",
+                "- New infections, reported and unreported: " *
+                    "$(median_interval_text(draws(p, :infections_new))).",
+                "- Reproduction number on $(province_week_end): " *
+                    "$(median_interval_text(draws(p, :rt_forecast); digits = 2)).",
+            ], "\n"
+        )
+    end
+    join(
+        [
+            "Projected counts are for the week to $(province_week_end).", "",
+            overall(:confirmed_new, "new confirmed cases")...,
+            overall(:confirmed_deaths_new, "new confirmed deaths")..., "",
+            (detail(p) * "\n" for p in 1:N_PATCHES)...,
+        ], "\n"
+    )
+end;
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-Markdown.parse(province_forecast_bullets) #hide
+Markdown.parse(province_summary_markdown) #hide
 
 # ## One-week-ahead forecast by province
 #
