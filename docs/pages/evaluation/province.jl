@@ -17,6 +17,19 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
+# ## Summary
+#
+# One bullet per province, from the checks further down this page.
+# Each gives how well the case and death compositions reproduce that province's counts, as bias and 90% coverage, and how its forecasts scored against the persistence baseline across releases.
+# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
+# Coverage is nominally 0.9, and relative skill below one beats the baseline.
+
+#md # ```@eval
+#md # using Markdown, BVDOutbreakSize
+#md # dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+#md # Markdown.parse(read(joinpath(dir, "evaluation_province.md"), String))
+#md # ```
+
 # ## Province in-sample checks
 #
 # ### Province prior predictive check
@@ -466,6 +479,71 @@ province_skill_by_cutoff_fig #hide
 #md # ```
 
 MarkdownTable(province_score_by_release_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Saving province evaluation outputs
+
+#md # ```@raw html
+#md # <details><summary>Write the summary bullets</summary>
+#md # ```
+
+## The bullets under the summary heading at the top of the page. They read
+## tables built further down, so they are written here and read back when
+## the site is assembled.
+evaluation_province_summary = let
+    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
+        string(round(x; digits = 2))
+    cal = Dict(r["Stream"] => r for r in eachrow(province_calibration_table))
+    overview = forecast_score_overview(province_scores_df)
+    function calibration(kind, p)
+        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
+        r === nothing && return string(lowercase(kind), " not scored")
+        return string(
+            lowercase(kind), " bias ", fmt(r["Bias"]), " and 90% coverage ",
+            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages"
+        )
+    end
+    ## The archive labels each province stream `<stream> [<province name>]`.
+    function skill(p)
+        tag = string(" [", PROVINCE_NAMES[p], "]")
+        rows = filter(
+            r -> endswith(r.stream, tag) && !ismissing(r.rel_to_baseline),
+            overview
+        )
+        size(rows, 1) == 0 && return "no scored forecast yet"
+        return join(
+            [
+                string(
+                    replace(r.stream, tag => ""), " ",
+                    fmt(r.rel_to_baseline), " over ", r.n, " forecasts"
+                )
+                    for r in eachrow(rows)
+            ], ", "
+        )
+    end
+    join(
+        [
+            string(
+                "- **", PROVINCE_LABELS[p], ":** ",
+                calibration("Confirmed cases", p), "; ",
+                calibration("Confirmed deaths", p),
+                "; relative skill against the baseline ", skill(p), "."
+            )
+                for p in 1:N_PATCHES
+        ], "\n"
+    )
+end
+dashboard_dir = joinpath(
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
+)
+mkpath(dashboard_dir)
+write(
+    joinpath(dashboard_dir, "evaluation_province.md"),
+    evaluation_province_summary
+);
 
 #md # ```@raw html
 #md # </details>

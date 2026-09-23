@@ -16,6 +16,19 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
+# ## Summary
+#
+# Headline numbers from the checks further down this page.
+# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
+# Coverage is the fraction of vintages whose observed count falls inside the predictive interval, nominally 0.9 for the 90% interval.
+# Relative skill is the joint model's CRPS over the persistence baseline's, so a value below one beats the baseline.
+
+#md # ```@eval
+#md # using Markdown, BVDOutbreakSize
+#md # dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+#md # Markdown.parse(read(joinpath(dir, "evaluation_national.md"), String))
+#md # ```
+
 # ## In-sample checks
 #
 # Whether the fitted model reproduces the national data it was fitted to.
@@ -1477,6 +1490,83 @@ CSV.write(
         made_date = frozen_lastweek.o.cutoff, thin = 5
     )
 )
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Write the summary bullets</summary>
+#md # ```
+
+## The bullets under the summary heading at the top of the page. They read
+## tables built further down, so they are written here and read back when
+## the site is assembled.
+evaluation_national_summary = let
+    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
+        string(round(x; digits = 2))
+    cal = filter(r -> isfinite(r["90% coverage"]), stream_calibration_table)
+    n_cov = count(>=(0.8), cal[!, "90% coverage"])
+    worst = first(
+        sort(cal, "Bias"; by = abs, rev = true), min(3, size(cal, 1))
+    )
+    worst_txt = join(
+        [
+            string(
+                r["Stream"], " (bias ", fmt(r["Bias"]),
+                ", 90% coverage ", fmt(r["90% coverage"]), ")"
+            )
+                for r in eachrow(worst)
+        ], "; "
+    )
+    pred(x, observed) = string(
+        "observed ", observed, " against a predictive median of ",
+        round(Int, quantile(x, 0.5)), " (90% interval ",
+        round(Int, quantile(x, 0.05)), "–",
+        round(Int, quantile(x, 0.95)), ")"
+    )
+    function skill(tbl)
+        rows = filter(r -> !ismissing(r.rel_to_baseline), tbl)
+        size(rows, 1) == 0 && return "no scored forecasts yet"
+        return string(
+            "beat the baseline on ", count(<(1), rows.rel_to_baseline),
+            " of ", size(rows, 1), " streams: ",
+            join(
+                [
+                    string(r.stream, " ", fmt(r.rel_to_baseline))
+                        for r in eachrow(rows)
+                ], ", "
+            )
+        )
+    end
+    join(
+        [
+            string(
+                "- **Streams:** ", n_cov, " of ", size(cal, 1),
+                " fitted streams have 90% coverage of at least 0.8."
+            ),
+            string("- **Least well reproduced:** ", worst_txt, "."),
+            string(
+                "- **Exports:** Uganda exports ",
+                pred(pp_exports, obs.exported_cases), ", and export deaths ",
+                pred(pp_exports_deaths, obs.exports_deaths), "."
+            ),
+            string(
+                "- **Forecasts across releases:** the joint model's ",
+                "forecasts ", skill(joint_score_overview_table), "."
+            ),
+            string(
+                "- **Frozen fits:** the frozen joint model's forecasts ",
+                skill(select_fit_role(frozen_score_overview_table, "joint")),
+                "."
+            ),
+        ], "\n"
+    )
+end
+write(
+    joinpath(dashboard_dir, "evaluation_national.md"),
+    evaluation_national_summary
+);
 
 #md # ```@raw html
 #md # </details>
