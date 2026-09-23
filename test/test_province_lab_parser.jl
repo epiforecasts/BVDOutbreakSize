@@ -94,6 +94,15 @@
             "nord_kivu", (160, 21),
         ),
 
+        ## SitRep 130's Tshopo bullet drops "resultats positifs" and names
+        ## no samples before its parenthetical. Admitted by the printed
+        ## positivity in the same way: 3/4 = 75%.
+        (
+            "3 nouveaux (2 vivants et 1 deces) sur 4 echantillons recus et " *
+                "analyses au laboratoire d'isiro (positivite : 75%).",
+            "tshopo", (4, 3),
+        ),
+
         ## No completed analysis: no denominator, so no numerator either.
         (
             "3 echantillons collectes dont 2 sont expedies a kinshasa (inrb).",
@@ -127,6 +136,11 @@ end
     wrong = "21 echantillons recus et testes (14 vivants et 7 deces) sur " *
         "160 echantillons analyses (positivite de 44,0%)."
     @test parse_province_entry(wrong, "nord_kivu") == :unparsed
+
+    ## The same holds for SitRep 130's "N nouveaux (" lead.
+    norate_nouveaux = "3 nouveaux (2 vivants et 1 deces) sur 4 " *
+        "echantillons recus et analyses au laboratoire d'isiro."
+    @test parse_province_entry(norate_nouveaux, "tshopo") == :unparsed
 end
 
 @testitem "committed province lab block partitions the national totals" begin
