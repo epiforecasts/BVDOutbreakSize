@@ -150,8 +150,21 @@ end
     )
     sb = returned(base, rand(MersenneTwister(seed), base))
     @test sb.scaling > 0
-    @test 0 < sb.τ_death < 1
+    ## The realised intensity is the scaling times the analysed-to-suspect
+    ## case ratio, exactly, and is not capped at one.
+    @test sb.τ_death ≈ sb.scaling * 6.0 / 20.0
     @test sb.expected_confirmed_deaths >= 0
+    ## And it is genuinely uncapped: a laboratory analysing four specimens
+    ## per suspected case puts the death intensity above one, where the
+    ## previous cap would have pinned it at exactly one.
+    wide = confirmed_deaths_model(
+        17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_analysed_daily = fill(80.0, 40),
+        case_suspected_daily = susp_case
+    )
+    sw = returned(wide, rand(MersenneTwister(seed), wide))
+    @test sw.τ_death ≈ sw.scaling * 80.0 / 20.0
+    @test sw.τ_death > 1
     twice = confirmed_deaths_model(
         17, 246, deaths_daily, bvd_deaths, bg_death,
         5.0; case_analysed_daily = 2 .* analysed_case,

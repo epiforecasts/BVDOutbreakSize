@@ -840,7 +840,7 @@ end
     @test median(fc.confirmed_deaths_new) > 0
     @test all(fc.confirmed_deaths_cum .>= 2642)
 
-    ## While the suspected total still leads, the thinning cap holds.
+    ## The suspected total still leads here, but nothing enforces that.
     capped = forecast_reported(
         chn; horizon = 7,
         obs_cases = 905, obs_deaths = 300,

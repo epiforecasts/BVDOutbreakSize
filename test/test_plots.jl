@@ -167,6 +167,30 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_correlation_heatmap takes named draw vectors" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_correlation_heatmap
+
+    ## Per-province quantities are vector deterministics, so the page hands
+    ## the heatmap one draw vector per named quantity rather than a chain.
+    rng = MersenneTwister(3)
+    a = randn(rng, 300)
+    draws = (; a = a, b = a .+ 0.1 .* randn(rng, 300), c = randn(rng, 300))
+    fig = plot_correlation_heatmap(draws; labels = Dict(:a => "A"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_pair takes named draw vectors" setup = [HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    rng = MersenneTwister(4)
+    draws = (; a = randn(rng, 200), b = randn(rng, 200))
+    @test plot_pair(draws; thin = 2) !== nothing
+end
+
 @testitem "plot_stream_pairs returns a renderable object" setup = [
     HeadlessMakie,
 ] begin
@@ -2104,6 +2128,68 @@ end
         n_patches = 3
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
+end
+
+@testitem "plot_province_forecast_detail draws one province's streams" setup = [
+    HeadlessMakie,
+] begin
+    using DataFrames: DataFrame
+    using CairoMakie: Makie as Mk
+    using Statistics: quantile
+    using BVDOutbreakSize: plot_province_forecast_detail, plot_forecast,
+        PROVINCE_LABELS
+
+    nd = 200
+    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_death_shares = [shares for _ in 1:nd],
+    )
+    v = collect(range(50.0, 150.0; length = nd))
+    fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
+
+    fig = plot_province_forecast_detail(chn, fc; province = 2, n_patches = 3)
+    @test fig isa Mk.Figure
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test length(axes) == 2
+    ## Each panel names the stream and the province it is a split for.
+    @test axes[1].xlabel[] == "New confirmed cases ($(PROVINCE_LABELS[2]))"
+    @test axes[2].xlabel[] == "New confirmed deaths ($(PROVINCE_LABELS[2]))"
+    ## The histogram is that province's share of the national draws, so its
+    ## 90% band is 0.2 times the national band for the deaths.
+    band = only(p for p in axes[2].scene.plots if p isa Mk.VSpan)
+    @test band[1][][1] ≈ 0.2 * quantile(v ./ 5, 0.05)
+    ## Each panel takes the colour of the matching national panel.
+    national = [
+        x for x in plot_forecast(fc).content if x isa Mk.Axis
+    ]
+    hist_colour(ax) = only(p for p in ax.scene.plots if p isa Mk.Hist).color[]
+    @test hist_colour.(axes) == hist_colour.(national)
+    ## No observed week, no reference rule.
+    @test all(ax -> !any(p -> p isa Mk.VLines, ax.scene.plots), axes)
+
+    ## An observed week is drawn as a rule, and the axis widens to hold an
+    ## observation beyond the forecast's upper tail.
+    obs_fig = plot_province_forecast_detail(
+        chn, fc; province = 2, n_patches = 3,
+        observed = (; confirmed_new = 500, confirmed_deaths_new = 3)
+    )
+    obs_axes = [x for x in obs_fig.content if x isa Mk.Axis]
+    for ax in obs_axes
+        @test count(p -> p isa Mk.VLines, ax.scene.plots) == 1
+    end
+    @test obs_axes[1].limits[][1][2] >= 500
+
+    ## A forecast without the deaths column draws the cases panel alone.
+    one = plot_province_forecast_detail(
+        chn, DataFrame(confirmed_new = v); province = 1, n_patches = 3
+    )
+    @test length([x for x in one.content if x isa Mk.Axis]) == 1
+
+    ## A province outside the patches is an error, not an empty figure.
+    @test_throws ArgumentError plot_province_forecast_detail(
+        chn, fc; province = 4, n_patches = 3
+    )
 end
 
 @testitem "plot_evolution_by_group clamps and marks past ymax" setup = [

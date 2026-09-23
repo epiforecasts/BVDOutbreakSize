@@ -15,15 +15,17 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## render can fan out across CI runners. `methods` carries the data, the
 ## model and how it is fitted, `estimates/national` the national results,
 ## `estimates/province` the per-province estimates, `forecasts/national` the
-## one-week-ahead projections, `evaluation/insample` the prior and posterior
-## predictive checks, `evaluation/forecast` the scoring against what arrived,
+## one-week-ahead projections, `forecasts/province` their split by province,
+## `evaluation/insample/*` the in-sample checks and `evaluation/forecast/*`
+## the scoring against what arrived, each national and by province,
 ## and `sensitivity` the comparison and sensitivity analyses. All load the
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
     "estimates/national", "estimates/province",
-    "forecasts/national",
-    "evaluation/insample", "evaluation/forecast",
+    "forecasts/national", "forecasts/province",
+    "evaluation/insample/national", "evaluation/insample/province",
+    "evaluation/forecast/national", "evaluation/forecast/province",
     "sensitivity",
 ]
 
@@ -31,9 +33,12 @@ const PAGES = [
 ##   render-methods      → methods.jl → src/methods.md
 ##   render-main         → estimates/national.jl → src/estimates/national.md
 ##   render-province     → estimates/province.jl
-##   render-insample     → evaluation/insample.jl
 ##   render-forecast     → forecasts/national.jl
-##   render-evaluation   → evaluation/forecast.jl
+##   render-forecast-province → forecasts/province.jl
+##   render-insample     → evaluation/insample/national.jl
+##   render-insample-province → evaluation/insample/province.jl
+##   render-evaluation   → evaluation/forecast/national.jl
+##   render-evaluation-province → evaluation/forecast/province.jl
 ##   render-sensitivity  → sensitivity.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
@@ -129,10 +134,19 @@ function combine()
                 "National" => "estimates/national.md",
                 "Provinces" => "estimates/province.md",
             ],
-            "Forecasts" => "forecasts/national.md",
+            "Forecasts" => [
+                "National" => "forecasts/national.md",
+                "Provinces" => "forecasts/province.md",
+            ],
             "Evaluation" => [
-                "In-sample" => "evaluation/insample.md",
-                "Forecast" => "evaluation/forecast.md",
+                "In-sample" => [
+                    "National" => "evaluation/insample/national.md",
+                    "Provinces" => "evaluation/insample/province.md",
+                ],
+                "Forecast" => [
+                    "National" => "evaluation/forecast/national.md",
+                    "Provinces" => "evaluation/forecast/province.md",
+                ],
             ],
             "Details" => [
                 "Aim and origins" => "aim.md",
@@ -191,12 +205,18 @@ elseif STAGE == "render-main"
     render_page("estimates/national")
 elseif STAGE == "render-province"
     render_page("estimates/province")
-elseif STAGE == "render-insample"
-    render_page("evaluation/insample")
 elseif STAGE == "render-forecast"
     render_page("forecasts/national")
+elseif STAGE == "render-forecast-province"
+    render_page("forecasts/province")
+elseif STAGE == "render-insample"
+    render_page("evaluation/insample/national")
+elseif STAGE == "render-insample-province"
+    render_page("evaluation/insample/province")
 elseif STAGE == "render-evaluation"
-    render_page("evaluation/forecast")
+    render_page("evaluation/forecast/national")
+elseif STAGE == "render-evaluation-province"
+    render_page("evaluation/forecast/province")
 elseif STAGE == "render-sensitivity"
     render_page("sensitivity")
 elseif STAGE == "combine"
@@ -210,8 +230,10 @@ else
     error(
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-methods, " *
             "render-main, " *
-            "render-province, render-insample, render-forecast, " *
-            "render-evaluation, " *
+            "render-province, render-forecast, " *
+            "render-forecast-province, " *
+            "render-insample, render-insample-province, " *
+            "render-evaluation, render-evaluation-province, " *
             "render-sensitivity, combine, all"
     )
 end

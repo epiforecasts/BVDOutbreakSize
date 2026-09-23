@@ -26,6 +26,12 @@ Changes since v2.1.0.
 
 ### Model
 
+- The death analysed volume is no longer capped at the suspected-death pool (#820).
+`tau_death` becomes an intensity, specimens per suspected death, and may exceed one.
+A suspect yields more than one specimen through repeat exclusion testing, and swabbed community deaths enter the laboratory denominator without being counted as suspects, which is why the case side was never capped either.
+The death-only composer still draws a bounded fraction, since it has no case volume to scale from.
+Fitted values change.
+
 - The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
 It could never have run.
 `confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
@@ -51,6 +57,10 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- Forecasts is split into a National and a Provinces page (#830).
+- The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
+  The Provinces page shows the province split's credible intervals and,
+  per province, a forecast histogram against its most recent observed week.
 - The report is six pages rather than two, grouped in the navigation as
   Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample,
   forecast) and Details (#782). Each renders as its own CI job from the same
@@ -88,6 +98,12 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
+  It links to the home page for installing, running and updating the data rather than repeating it.
+- Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).
+  Each page opens with a summary: overall bullets, then a short block per stream or per province.
+  The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
+  The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
 
 ### Infrastructure
 

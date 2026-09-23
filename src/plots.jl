@@ -636,17 +636,34 @@ each marginal is visible.
 `labels` maps a raw chain symbol to a display name (e.g.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
 only. Symbols absent from the map keep their raw name.
+
+`plot_pair(draws::NamedTuple; ...)` takes one draw vector per named quantity
+instead of a chain, for quantities a chain holds only inside a vector
+deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
+`NamedTuple` with the same names.
 """
 function plot_pair(
         chn, params::AbstractVector{Symbol};
         thin::Integer = 2, prior = nothing,
         labels::AbstractDict = Dict{Symbol, String}()
     )
+    _named(c) = NamedTuple(p => _draws(c, p) for p in params)
+    return plot_pair(
+        _named(chn); thin,
+        prior = prior === nothing ? nothing : _named(prior), labels
+    )
+end
+
+function plot_pair(
+        draws::NamedTuple;
+        thin::Integer = 2, prior::Union{Nothing, NamedTuple} = nothing,
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     _name(p) = Symbol(get(labels, p, string(p)))
-    _table(c) = DataFrame(
-        NamedTuple(_name(p) => _draws(c, p) for p in params)
+    _table(d) = DataFrame(
+        NamedTuple(_name(p) => v for (p, v) in pairs(d))
     )[1:thin:end, :]
-    post = _table(chn)
+    post = _table(draws)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
     return PairPlots.pairplot(
@@ -672,15 +689,29 @@ size–ascertainment seesaw (`C_T` vs `p_drc`), the weaker size–fatality tilt
 without the `\$` delimiters, so `"p_\\mathrm{drc}"` renders with a subscript.
 A parameter absent from `labels` falls back to its symbol name. Returns the
 `Figure`.
+
+`plot_correlation_heatmap(draws::NamedTuple; labels)` takes one draw vector
+per named quantity instead of a chain, for quantities a chain holds only
+inside a vector deterministic, such as one province's entry of `C_T_patch`.
 """
 function plot_correlation_heatmap(
         chn, params::AbstractVector{Symbol};
         labels::AbstractDict = Dict{Symbol, String}()
     )
+    return plot_correlation_heatmap(
+        NamedTuple(p => _draws(chn, p) for p in params); labels
+    )
+end
+
+function plot_correlation_heatmap(
+        draws::NamedTuple;
+        labels::AbstractDict = Dict{Symbol, String}()
+    )
     ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
     ## properly. Callers pass plain LaTeX math strings.
     name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
-    mat = reduce(hcat, (_draws(chn, p) for p in params))
+    params = collect(keys(draws))
+    mat = reduce(hcat, (float.(v) for v in values(draws)))
     R = cor(mat)
     n = length(params)
     labs = [name(p) for p in params]
@@ -3769,6 +3800,12 @@ function plot_forecast_latent(fc::DataFrame)
     return fig
 end
 
+## Panel colours of the confirmed streams, keyed by forecast column, shared
+## by the national and per-province forecast figures.
+const _CONFIRMED_FORECAST_COLOURS = (
+    confirmed_new = :goldenrod, confirmed_deaths_new = :darkorange3,
+)
+
 """
 One-week-ahead forecast of the observed count streams from
 [`forecast_reported`](@ref): the new count each stream adds over the horizon.
@@ -3784,8 +3821,14 @@ function plot_forecast(fc::DataFrame)
     for (col, title, colour) in (
             (:cases_new, "New reported cases (DRC)", :steelblue),
             (:deaths_new, "New suspected deaths (DRC)", :firebrick),
-            (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
-            (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
+            (
+                :confirmed_new, "New confirmed cases (DRC)",
+                _CONFIRMED_FORECAST_COLOURS.confirmed_new,
+            ),
+            (
+                :confirmed_deaths_new, "New confirmed deaths (DRC)",
+                _CONFIRMED_FORECAST_COLOURS.confirmed_deaths_new,
+            ),
             (:recovered_new, "New recovered among confirmed (DRC)", :seagreen),
         )
         col in propertynames(fc) || continue
@@ -3906,6 +3949,59 @@ function plot_province_forecast(
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+One-week-ahead forecast for a single province, the per-province counterpart
+of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
+expected in patch `province` over the week to `T + 7`, one histogram panel
+per stream with its 90% predictive interval shaded.
+
+The draws are the ones [`plot_province_forecast`](@ref) summarises: the
+national draw times the province's modelled share at the most recent spatial
+vintage, held over the horizon.
+
+`observed` optionally gives a recent observed week per stream, keyed by the
+forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
+[`province_recent_counts`](@ref). Each is drawn as a dashed rule, and the
+axis widens to hold it. Panels are drawn only for the streams `fc` carries.
+"""
+function plot_province_forecast_detail(
+        chn, fc::DataFrame;
+        province::Integer,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        observed::NamedTuple = (;)
+    )
+    np = min(n_patches, length(patch_labels))
+    1 <= province <= np || throw(
+        ArgumentError("province must be in 1:$np; got $province")
+    )
+    label = patch_labels[province]
+    entries = [
+        e for e in _province_forecast_draws(chn, fc, np, patch_labels)
+            if e[2] == label
+    ]
+    isempty(entries) && return Figure()
+    cols = Dict(
+        label => col for (col, label) in _PROVINCE_FORECAST_STREAMS
+    )
+    ncols = length(entries)
+    fig = Figure(; size = (400 * ncols, 360))
+    for (i, (stream, _, draws)) in enumerate(entries)
+        col = cols[stream]
+        ax = _forecast_count_panel!(
+            fig, (1, i), draws, "New $(stream) ($(label))",
+            _CONFIRMED_FORECAST_COLOURS[col]
+        )
+        haskey(observed, col) || continue
+        o = float(observed[col])
+        vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
+        CairoMakie.xlims!(
+            ax, 0, max(1.0, quantile(draws, 0.98), 1.05 * o)
+        )
+    end
     return fig
 end
 

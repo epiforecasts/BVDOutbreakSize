@@ -1610,7 +1610,12 @@ Three pieces:
     confirmed-case positivity, drawn from the same priors as separate
     death-stream parameters.
 
-Returns the cut-off realised death testing fraction `τ_death`, the testing
+Returns the cut-off realised death testing intensity `τ_death`, specimens
+per suspected death rather than a probability, which exceeds one where the
+laboratory analyses more specimens than there are suspected deaths. The
+death-only composer, with no case volume to scale from, falls back to a
+sampled fraction that is bounded by one
+([`death_testing_scaling_model`](@ref)). Also returns the testing
 scaling, the cut-off death-pool composition `q_death`, the confirmation
 positivity and the expected confirmed-death count.
 """
@@ -1683,11 +1688,14 @@ positivity and the expected confirmed-death count.
         susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
         death_volume = map(eachindex(susp_death)) do t
             den = susp_case[t]
-            v = den > lo ? sc_c * case_analysed_daily[t] * susp_death[t] / den :
+            ## Uncapped, as on the case side. A suspect yields more than one
+            ## specimen through repeat exclusion testing, and swabbed
+            ## community deaths enter the laboratory denominator without
+            ## being counted as suspects, so the volume is specimens and not
+            ## persons. The realised `τ_death` below is that ratio and may
+            ## exceed one.
+            den > lo ? sc_c * case_analysed_daily[t] * susp_death[t] / den :
                 zero(sc_c)
-            ## Cap the volume at the suspected-death pool so confirmed deaths
-            ## stay a subset of suspected and the realised τ_death ≤ 1.
-            min(v, susp_death[t])
         end
         τ_death = susp_death[n] > lo ?
             death_volume[n] / susp_death[n] : zero(sc_c)

@@ -341,15 +341,19 @@ jobs:
           # re-running the job; a silent substitution is not detectable from
           # the page at all.
           julia --project=docs scripts/score_releases.jl
-      # Every CSV under data/, not just the ten this step rewrites: a new
+      # Every CSV under data/, not just the ones this step rewrites: a new
       # output would otherwise be left behind silently. The render restores
       # them over its own checkout, so an untouched file is replaced by an
-      # identical copy. None of them enters a fit cache key (they are all in
-      # `FIT_DATA_EXCLUDE`), so the render's strict cache lookups still hit.
+      # identical copy. None of them enters a fit cache key (each basename is
+      # in `FIT_DATA_EXCLUDE`), so the render's strict cache lookups still
+      # hit. data/ is the paths' common root, so data/province/ keeps its
+      # place in the artifact.
       - uses: actions/upload-artifact@v7
         with:
           name: overlays
-          path: data/*.csv
+          path: |
+            data/*.csv
+            data/province/*.csv
           if-no-files-found: error
           retention-days: 3
 
@@ -556,10 +560,16 @@ jobs:
             slug: estimates-province
           - id: forecasts/national
             slug: forecasts-national
-          - id: evaluation/insample
-            slug: evaluation-insample
-          - id: evaluation/forecast
-            slug: evaluation-forecast
+          - id: forecasts/province
+            slug: forecasts-province
+          - id: evaluation/insample/national
+            slug: evaluation-insample-national
+          - id: evaluation/insample/province
+            slug: evaluation-insample-province
+          - id: evaluation/forecast/national
+            slug: evaluation-forecast-national
+          - id: evaluation/forecast/province
+            slug: evaluation-forecast-province
           - id: sensitivity
             slug: sensitivity
     steps:

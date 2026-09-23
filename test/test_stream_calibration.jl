@@ -92,3 +92,45 @@ end
     @test abs(df[1, "Bias"]) < 0.1
     @test df[1, "90% coverage"] == 1.0
 end
+
+@testitem "province_composition_panels: one daily panel per province" begin
+    using BVDOutbreakSize: province_composition_panels, stream_calibration
+
+    nd = 400
+    shares = [0.6 0.5 0.5; 0.3 0.35 0.35; 0.1 0.15 0.15]
+    obs = [60 0 50; 30 0 35; 10 0 15]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_composition_rho = fill(0.05, nd),
+    )
+    panels = province_composition_panels(
+        chn; share_key = :province_shares, obs_increments = obs,
+        stream = "Confirmed cases", n_patches = 3,
+        patch_labels = ["A", "B", "C"]
+    )
+    @test length(panels) == 3
+    @test panels[2].title == "Confirmed cases, B"
+    ## The vintage with no observed cases has no split to predict, so it is
+    ## dropped rather than scored as a certain zero.
+    @test panels[1].observed == [60, 50]
+    @test all(length(r) == 2 for r in panels[1].replicates)
+    @test length(panels[1].replicates) == nd
+    @test !panels[1].cumulative
+    ## The replicates are counts that partition each vintage's observed
+    ## total, as the fitted composition does.
+    for d in 1:nd
+        @test sum(p.replicates[d][1] for p in panels) == 100
+        @test sum(p.replicates[d][2] for p in panels) == 100
+    end
+    tbl = stream_calibration(panels)
+    @test tbl[!, "Stream"] == [
+        "Confirmed cases, A", "Confirmed cases, B",
+        "Confirmed cases, C",
+    ]
+    ## Without the overdispersion there is no predictive to score.
+    @test_throws ErrorException province_composition_panels(
+        (; province_shares = [shares for _ in 1:nd]);
+        share_key = :province_shares, obs_increments = obs,
+        stream = "Confirmed cases", n_patches = 3
+    )
+end
