@@ -431,6 +431,11 @@ end
         median = Float64[], lo90 = Float64[], hi90 = Float64[]
     )
     @test plot_forecast_overlay(empty) isa CairoMakie.Makie.Figure
+    ## A caller can say why its table is empty.
+    note = plot_forecast_overlay(empty; empty_message = "Nothing yet.")
+    @test only(
+        x.text[] for x in note.content if x isa CairoMakie.Makie.Label
+    ) == "Nothing yet."
     ## Filled with the fit roles: confirmed_cases carries baseline, its
     ## individual fit and the joint; recovered carries only baseline and the
     ## joint, so its individual role is simply absent.

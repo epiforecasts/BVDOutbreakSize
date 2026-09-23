@@ -272,8 +272,10 @@ end
     )
     @test names(arch) == [
         "made_date", "horizon", "target_date", "province", "stream",
-        "draw", "value",
+        "draw", "value", "method",
     ]
+    ## The method is recorded so scoring can leave out older archives.
+    @test all(==("projection"), arch.method)
     @test nrow(arch) == NP * 2 * 2 * ND
     @test Set(arch.province) == Set(PROVINCE_NAMES[1:NP])
     @test all(arch.target_date .== made .+ Day.(arch.horizon))
