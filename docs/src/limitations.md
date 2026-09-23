@@ -1,8 +1,33 @@
 # Limitations
 
-The limitations are grouped by geography, then by data, model and evaluation, with the most consequential first.
+The limitations that apply to the whole work come first, then the national and province ones by data, model and evaluation, with the most consequential first.
 Each says what would remove it and links the issue that tracks it, where there is one.
 The detail is in the [Methods](@ref "Methods").
+
+## Overall
+
+#### Public data only
+
+Every count comes from published situation reports and WHO reports, read from the PDFs.
+There is no line list and no access to the response's internal data, so every estimate is a model-based extrapolation from aggregate totals.
+Access to line-list or internal surveillance data would remove it.
+
+#### An external view
+
+The work is done outside the outbreak response.
+Changes in reporting practice are inferred from the reports rather than known.
+Working with the teams that collect the data would remove it.
+
+#### Drafted and read by a language model
+
+The code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report, and language models read the situation-report figures, all under human review ([authors](@ref "Authors, funding and acknowledgements")).
+Errors can remain where no check reaches, since the checks are a second read of each figure, cross-checks of the confirmed totals against the published national series, and tests of the code.
+An independent replication and data read would remove it.
+
+#### Live and not peer reviewed
+
+The report is re-run as new data arrive, so the estimates change between updates, and it has not been peer reviewed.
+Peer review of a fixed version would remove it.
 
 ## National
 
@@ -118,11 +143,3 @@ More releases will remove it.
 Each province is projected on its own, without the fitted cross-province correlation, and the pooled patch is forecast as one.
 The provinces need not add up to the national forecast.
 A projection reconciled with the national one ([#831](https://github.com/epiforecasts/BVDOutbreakSize/issues/831)) would remove it.
-
-## Across the report
-
-### The code was drafted by a language model
-
-The code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report, and the situation-report figures were read by one, then reviewed.
-The work has not been independently replicated.
-An independent replication and data read would remove it.
