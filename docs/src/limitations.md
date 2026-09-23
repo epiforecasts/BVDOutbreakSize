@@ -30,7 +30,7 @@
 
 - **Streams share one case pool.** They are fitted as conditionally independent given latent incidence but observe overlapping people.
   This can understate uncertainty ([#307](https://github.com/epiforecasts/BVDOutbreakSize/issues/307)), which the [outbreak size estimated by each data stream](@ref "Outbreak size estimated by each data stream") checks.
-- **Ascertainment and testing are constant.** The DRC ascertainment and the testing fraction are each one value over the window, although ascertainment probably rose, so a change in either is read as a change in incidence ([#400](https://github.com/epiforecasts/BVDOutbreakSize/pull/400), [#546](https://github.com/epiforecasts/BVDOutbreakSize/issues/546)).
+- **Ascertainment and testing are constant.** The DRC ascertainment and the testing fraction are each one value over the window, although ascertainment probably rose, so a change in either is read as a change in incidence ([#400](https://github.com/epiforecasts/BVDOutbreakSize/pull/400), [#335](https://github.com/epiforecasts/BVDOutbreakSize/issues/335), [#546](https://github.com/epiforecasts/BVDOutbreakSize/issues/546)).
 - **Inherits McCabe et al.'s epidemiological assumptions.** A single zoonotic seed, a generation interval from earlier Ebola outbreaks, and no depletion of susceptibles.
   The onset-to-death delay and the [genetic seeding bound](@ref "Genetic bound on outbreak age") do not propagate cross-outbreak or clock uncertainty.
   These help constrain the estimated outbreak age and early reproduction number.
@@ -53,7 +53,7 @@
 
 ### Model
 
-- **Four patches, not the full provincial detail.** Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch ([#779](https://github.com/epiforecasts/BVDOutbreakSize/pull/779)).
+- **Four patches, not the full provincial detail.** Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch ([#779](https://github.com/epiforecasts/BVDOutbreakSize/pull/779), [#705](https://github.com/epiforecasts/BVDOutbreakSize/issues/705)).
   Transmission within a patch is well mixed, so spread inside a province is not represented.
 - **Importation structure is assumed, not measured.** There is no mobility or origin-destination data for this outbreak, so the [gravity kernel](@ref "Mixing and importation") is a structural assumption.
 - **Provincial testing enters the prior, not the likelihood.** The deaths do most of the work in separating a province's incidence from its case-finding, and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors"), [#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)).
