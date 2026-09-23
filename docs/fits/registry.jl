@@ -144,7 +144,7 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 ## between their `C_T` posteriors reads as evidence about the spatial
 ## structure only if nothing else differs.
 ##
-## 750 draws and 500 adaptation steps at a target acceptance of 0.80. The
+## 1000 draws and 500 adaptation steps at a target acceptance of 0.80. The
 ## effective sample size is limited by adaptation rather than by the draw
 ## count, so the budget goes there: at 900 draws and 400 adaptation steps the
 ## headline returned 48 bulk and 39 tail against the control's 256 and 203,
@@ -154,7 +154,9 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 ## hard six-hour ceiling on a GitHub-hosted job. At 900 draws and 400
 ## adaptation steps the headline took 320 minutes and the control 200. Total
 ## iterations are held at or below that, so adaptation is bought with draws
-## rather than with wall-clock.
+## rather than with wall-clock. At 800 draws and 500 adaptation steps the
+## headline took 216-265 minutes, about 0.16 minutes per iteration whether
+## adapting or drawing, so 1000 draws adds about 33 minutes.
 ##
 ## NUTS terminates at the tree-depth cap on every iteration of both fits, at
 ## 1023 leapfrog steps, rather than at a U-turn. Raising `max_depth` is the
@@ -442,7 +444,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...
                 );
-                samples = joint_samples(800), chains = chains,
+                samples = joint_samples(1000), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint")
@@ -470,7 +472,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...
                 );
-                samples = joint_samples(800), chains = chains,
+                samples = joint_samples(1000), chains = chains,
                 n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches")
