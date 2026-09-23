@@ -728,28 +728,13 @@ stream_pairs_fig #hide
 # ## Saving in-sample outputs
 
 #md # ```@raw html
-#md # <details><summary>Write the in-sample dashboard asset</summary>
+#md # <details><summary>Write the summary bullets</summary>
 #md # ```
 
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-## The report splits the surveillance panels by whether the stream was still
-## reporting at the cut-off. The dashboard shows one grid, so it is drawn here
-## over the full ordered panel set.
-CairoMakie.save(
-    joinpath(dashboard_dir, "reported_cases.png"),
-    plot_vintage_conditional_ppc(vintage_panels)
-)
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Write the summary bullets</summary>
-#md # ```
 
 ## The bullets under the summary heading at the top of the page. They read
 ## tables built further down, so they are written here and read back when
