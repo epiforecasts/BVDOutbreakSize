@@ -26,6 +26,7 @@ using StatsFuns: logit, logistic
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
+import JSON
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
     lines!, scatter!, band!, linesegments!, scatterlines!
 
@@ -191,6 +192,7 @@ include("counterfactual.jl")
 include("forecast.jl")
 include("confirmed_cfr.jl")
 include("plots.jl")
+include("maps.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")

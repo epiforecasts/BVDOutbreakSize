@@ -192,8 +192,8 @@ jobs:
 
       # `--latest=false` deliberately. The docs workflow publishes a
       # `results-*` release on every push to `main` with `make_latest: true`,
-      # and README.md links the self-contained report at
-      # `releases/latest/download/analysis.html`. A version release taking the
+      # and README.md links the rendered site at
+      # `releases/latest/download/site.zip`. A version release taking the
       # latest slot would break that link until the next `main` build.
       - name: Publish the release
         id: publish

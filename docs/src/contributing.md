@@ -147,7 +147,7 @@ The bare result object follows with `#hide`, so only the output renders.
 The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
 Edit it in `README.md` only.
 `docs/front_matter.jl` reads it at build time and fills in the dates.
-`docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
+`docs/make.jl` copies the whole README to the home page, so do not duplicate it into a report page.
 
 ## Fits and the fit cache
 
