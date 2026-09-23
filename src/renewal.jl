@@ -358,14 +358,7 @@ function patch_infections(
     )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
-    ## What each origin sends away per unit of its own generated infections:
-    ## the kernel's column sums, constant in time.
-    outflow = zeros(Tp, np)
-    @inbounds for q in 1:np, r in 1:np
-
-        r == q && continue
-        outflow[q] += importation_kernel[r, q]
-    end
+    outflow = _patch_outflow(Tp, importation_kernel)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -400,6 +393,18 @@ function patch_infections(
         end
     end
     return (; infections = I, importation = imports)
+end
+
+## What each origin sends away per unit of its own generated infections:
+## the importation kernel's off-diagonal column sums, constant in time.
+function _patch_outflow(::Type{T}, K::AbstractMatrix) where {T}
+    np = size(K, 1)
+    outflow = zeros(T, np)
+    @inbounds for q in 1:np, r in 1:np
+        r == q && continue
+        outflow[q] += K[r, q]
+    end
+    return outflow
 end
 
 """
@@ -441,7 +446,6 @@ function convolve_pmf(a::AbstractVector, b::AbstractVector)
     Tp = promote_type(eltype(a), eltype(b))
     y = zeros(Tp, na + nb - 1)
     @inbounds for i in 1:na, j in 1:nb
-
         y[i + j - 1] += a[i] * b[j]
     end
     return y
