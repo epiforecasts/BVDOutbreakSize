@@ -45,6 +45,8 @@ This moves the non-BVD death background, so fitted values change.
   the report-date span, replacing the fixed pixel-noise term and
   multiplicative slack, and the per-scan level error is sampled centred
   with an unbounded prior.
+  The onset-to-admission delay's shape prior is lognormal about the
+  line-list value, so a near-zero shape is out of reach.
   Every fit-cache key changes, so the next build refits.
 
 ### Report
