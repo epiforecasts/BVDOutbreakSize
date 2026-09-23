@@ -71,19 +71,8 @@ summary_ranges = let
     sRT = posterior_summary(RTd)
     scfr = posterior_summary(cfrd)
 
-    ints_i(s) = string(
-        "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
-        ", 60% ", round(Int, s.lo60), "–", round(Int, s.hi60),
-        ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90)
-    )
-    ints_f(
-        s,
-        d
-    ) = string(
-        "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
-        ", 60% ", round(s.lo60; digits = d), "–", round(s.hi60; digits = d),
-        ", 90% ", round(s.lo90; digits = d), "–", round(s.hi90; digits = d)
-    )
+    ## The 30/60/90% phrase the province headlines write too.
+    ints(s, d) = BVDOutbreakSize._interval_text(s; digits = d)
     start_from(t) = obs.cutoff - Day(round(Int, t))
     ints_d(s) = string(
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
@@ -105,23 +94,23 @@ summary_ranges = let
     Markdown.parse(
         """
         - **Cumulative infections:** the outbreak is estimated to have caused
-          $(ints_i(sC)) infections to date, reported and unreported.
+          $(ints(sC, 0)) infections to date, reported and unreported.
         - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
           cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
           confirmed cases are estimated to capture only a small share of the
           outbreak.
         - **Outbreak start and age:** the outbreak is estimated to have begun on
           a start date of $(ints_d(sT)), an elapsed age to the cut-off of
-          $(ints_i(sT)) days.
+          $(ints(sT, 0)) days.
         - **Growth rate and doubling time:** the initial growth rate is
-          estimated to have been $(ints_f(sr0, 3)) per day, an initial doubling
-          time of $(ints_f(sdt0, 1)) days.
-          The latest growth rate is estimated to be $(ints_f(sr, 3)) per day, a
-          latest doubling time of $(ints_f(sdt, 1)) days.
+          estimated to have been $(ints(sr0, 3)) per day, an initial doubling
+          time of $(ints(sdt0, 1)) days.
+          The latest growth rate is estimated to be $(ints(sr, 3)) per day, a
+          latest doubling time of $(ints(sdt, 1)) days.
         - **Reproduction number:** the initial reproduction number is estimated
-          to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
+          to have been $(ints(sR0, 2)) and the latest to be $(ints(sRT, 2)).
         - **Case-fatality ratio:** the case-fatality ratio is estimated to be
-          $(ints_f(scfr, 2)).
+          $(ints(scfr, 2)).
         - **Shift from priors:** how far the data has moved each estimate from
           its prior, in prior interquartile ranges, where a value of one means
           the posterior median sits one prior interquartile range from the prior
