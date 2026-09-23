@@ -329,3 +329,17 @@ end
         (; a = 1), national(); kw...
     )
 end
+
+@testitem "province_share_draws splits each draw's total" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: province_share_draws
+
+    fc = DataFrame(
+        patch = [1, 2, 1, 2], draw = [1, 1, 2, 2],
+        confirmed_new = [30.0, 10.0, 0.0, 0.0]
+    )
+    sh = province_share_draws(fc, :confirmed_new; n_patches = 2)
+    ## Shares are per draw, and a draw with nothing projected anywhere has
+    ## no share to give, so it is left out rather than divided by zero.
+    @test sh == [[0.75], [0.25]]
+end
