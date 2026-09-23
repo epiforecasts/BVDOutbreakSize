@@ -333,10 +333,15 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## decides it: the leading count is read as the numerator only when its
     ## ratio to the denominator reproduces the printed rate to within that
     ## rate's own rounding. A vintage writing this shape without a rate
-    ## stays unparsed and is reported rather than guessed at.
+    ## stays unparsed and is reported rather than guessed at. SitRep 130's
+    ## Tshopo bullet leads the same way with no noun at all: "3 nouveaux (2
+    ## vivants et 1 deces) sur 4 echantillons ... (positivite : 75%)".
     if positives === nothing && analysed !== nothing && analysed > 0
         rate = match(r"positivite[^0-9]{0,4}(\d+(?:,\d+)?)", text)
-        lead = match(Regex("^\\D*(\\d+) (?:nouveaux? )?" * SAMPLES), text)
+        lead = match(
+            Regex("^\\D*(\\d+) (?:(?:nouveaux? )?" * SAMPLES * "|nouveaux \\()"),
+            text
+        )
         if rate !== nothing && lead !== nothing
             printed = parse(Float64, replace(rate[1], ',' => '.'))
             n = parse(Int, lead[1])
