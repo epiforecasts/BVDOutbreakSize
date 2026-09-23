@@ -134,3 +134,103 @@ end
         stream = "Confirmed cases", n_patches = 3
     )
 end
+
+@testitem "_composition_predictive: fixed-seed draws are pinned" begin
+    using BVDOutbreakSize: _composition_predictive
+
+    ## Rebuilt reports must redraw the same composition band, so the draws
+    ## for a fixed seed are pinned exactly.
+    shares = [0.6 0.5; 0.3 0.35; 0.1 0.15]
+    ms = [shares for _ in 1:5]
+    totals = [200, 300]
+    preds = _composition_predictive(ms, fill(0.05, 5), totals, 2)
+    counts = [round.(Int, preds[p][d] .* totals) for p in 1:3 for d in 1:2]
+    @test counts == [
+        [104, 123], [105, 167], [73, 107], [69, 117], [23, 70], [26, 16],
+    ]
+end
+
+@testitem "province_count_panels: splits each draw's national total" begin
+    using BVDOutbreakSize: province_count_panels, stream_calibration
+
+    nd = 300
+    shares = [0.6 0.5 0.5; 0.3 0.35 0.35; 0.1 0.15 0.15]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_composition_rho = fill(0.05, nd),
+    )
+    ## The national grid carries days the province tables skip (3 and 6),
+    ## whose increments merge into the next province vintage. The first
+    ## province vintage is the cumulative count to date, so it takes the
+    ## baseline as well.
+    national_days = [1, 2, 3, 4, 5, 6, 7]
+    national = [[d, 1, 2, 3, 0, 4, 5] for d in 1:nd]
+    province_days = [2, 4, 7]
+    obs = [60 3 5; 30 1 3; 10 1 1]
+    panels = province_count_panels(
+        chn; share_key = :province_shares, obs_increments = obs,
+        province_days, national_days, national_replicates = national,
+        baseline = 10, stream = "Confirmed cases", n_patches = 3,
+        patch_labels = ["A", "B", "C"]
+    )
+    @test length(panels) == 3
+    @test panels[3].title == "Confirmed cases, C"
+    @test panels[1].observed == [60, 3, 5]
+    @test length(panels[1].replicates) == nd
+    @test !panels[1].cumulative
+    ## Each draw's province counts partition that draw's national total over
+    ## the province vintage, not the observed one.
+    for d in 1:nd
+        @test sum(p.replicates[d][1] for p in panels) == 10 + d + 1
+        @test sum(p.replicates[d][2] for p in panels) == 5
+        @test sum(p.replicates[d][3] for p in panels) == 9
+    end
+    @test size(stream_calibration(panels), 1) == 3
+end
+
+@testitem "province_count_panels: a zero national total gives zeros" begin
+    using BVDOutbreakSize: province_count_panels
+
+    nd = 50
+    shares = [0.5 0.5; 0.5 0.5]
+    chn = (;
+        province_death_shares = [shares for _ in 1:nd],
+        province_death_composition_rho = fill(0.05, nd),
+    )
+    panels = province_count_panels(
+        chn; share_key = :province_death_shares,
+        obs_increments = [1 0; 1 0], province_days = [1, 2],
+        national_days = [1, 2],
+        national_replicates = [[4, 0] for _ in 1:nd],
+        stream = "Confirmed deaths", n_patches = 2,
+        patch_labels = ["A", "B"]
+    )
+    @test all(r[2] == 0 for p in panels for r in p.replicates)
+    @test all(sum(p.replicates[d][1] for p in panels) == 4 for d in 1:nd)
+end
+
+@testitem "province_count_panels: rejects grids that do not line up" begin
+    using BVDOutbreakSize: province_count_panels
+
+    nd = 10
+    shares = [0.5; 0.5;;]
+    chn = (;
+        province_shares = [shares for _ in 1:nd],
+        province_composition_rho = fill(0.05, nd),
+    )
+    kw = (;
+        share_key = :province_shares, obs_increments = [1; 1;;],
+        stream = "Confirmed cases", n_patches = 2,
+        patch_labels = ["A", "B"],
+    )
+    ## A province vintage off the national grid cannot be binned.
+    @test_throws ErrorException province_count_panels(
+        chn; kw..., province_days = [5], national_days = [1, 2],
+        national_replicates = [[1, 1] for _ in 1:nd]
+    )
+    ## The national replicates must pair one to one with the chain draws.
+    @test_throws ErrorException province_count_panels(
+        chn; kw..., province_days = [2], national_days = [1, 2],
+        national_replicates = [[1, 1] for _ in 1:(nd - 1)]
+    )
+end
