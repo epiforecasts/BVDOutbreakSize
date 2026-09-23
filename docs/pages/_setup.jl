@@ -16,6 +16,7 @@ using DataFrames: DataFrame, eachrow
 import CSV
 using Random
 using Markdown
+using Logging: SimpleLogger, with_logger
 using Dates: Date, Day, value
 using BVDOutbreakSize
 import CairoMakie
@@ -65,12 +66,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
     function _timed(f, what)
         t0 = time()
         path = _render_log_path()
-        result = isempty(path) ? f() :
+        result = if isempty(path)
+            f()
+        else
             open(path, "a") do io
-                Base.CoreLogging.with_logger(
-                    Base.CoreLogging.SimpleLogger(io)
-                ) do
-                    redirect_stderr(f, io)
+                with_logger(() -> redirect_stderr(f, io), SimpleLogger(io))
             end
         end
         _render_log("$what: $(_since(t0))")
@@ -176,8 +176,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## Every fit is loaded through the content-addressed cache (`fit_or_load`):
     ## reused when a fit with the same model source, data and settings already
-    ## exists — produced once by the per-fit CI matrix (`.github/workflows/
-    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set
+    ## exists — produced once by the `fit_*` jobs in
+    ## `.github/workflows/docs.yml` or on the HPC — and refitted otherwise. Set
     ## `BVD_REFIT=all` to force a full refit. Each fit is loaded on first use
     ## (`load_fit`), so a cold cache fits one at a time; `task fit-all` runs
     ## the whole registry in parallel first.
