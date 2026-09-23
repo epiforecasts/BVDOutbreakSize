@@ -104,6 +104,8 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Infrastructure
 
+- The headline joint fit and its no-patches control keep 1000 draws per chain, up from 800, with 500 adaptation steps unchanged (#838).
+  This adds about 33 minutes to the joint fit job.
 - One rule decides when a stream first and last reported (#817).
 `stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
 They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
