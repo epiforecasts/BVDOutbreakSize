@@ -55,6 +55,18 @@ Changes since v2.1.0.
   The link could not run, so every fit already used the composition link.
 - The pooled background is set with `background_pooling = background_pooling_model` rather than `background_re = true` (#791).
   Results are unchanged.
+- The per-province analysed-specimen volume is scored as a third composition, conditional on the national daily analysed total (#784).
+  The modelled split is each patch's BVD suspects plus its share of the non-BVD background, a partially pooled simplex centred on population share (`background_split_model`).
+  The BVD suspects carry the case composition's relative ascertainment, so the two compositions agree on how many of a patch's cases reach the laboratory.
+  The testing fraction stays national and the per-province positives remain unfitted.
+  The headline fit drops the per-head testing covariate from the ascertainment prior, since the same series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31).
+- Province isolation occupancy and bed counts enter the treatment-flow stream as splits of the printed sum of the provinces present each day (#784).
+  The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and per-patch shares of the national capacity walk.
+  The occupancy split is scored weekly and the bed split on days a province's count changes, since a stock reprinted daily is not a fresh draw of the split.
+  The national tile and the national implied capacity keep their likelihoods on every day.
+  Occupancy is split on the uncapped per-patch demand, since a province can print more patients than beds where patients are held outside the counted structures.
+  The fit reports beds, demand, utilisation and shortfall by province at the cut-off.
+- A pooled patch's occupancy or bed count is used on a day only when every member that has printed before prints that day, so a silent member is never read as an empty ward (#784).
 
 ### Data
 
@@ -150,43 +162,12 @@ Changes since v2.1.0.
 - The API reference is grouped into eleven pages in the order a fit runs, and says which names are public (#782).
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
-- The per-province analysed-specimen volume is scored as a third composition,
-  conditional on the national daily analysed total. The modelled split is each
-  patch's BVD suspects plus its share of the non-BVD background, a partially
-  pooled simplex centred on population share (`background_split_model`) that
-  this term identifies. The BVD suspects carry the case composition's
-  relative ascertainment, so the two compositions agree on how many of a
-  patch's cases reach the laboratory; the testing fraction stays national
-  and the term samples no contrast of its own. The per-province positives
-  remain unfitted. The headline fit drops the per-head testing covariate
-  from the ascertainment prior, since the same series now enters through
-  this composition; its coefficient was 0.05 (90% -0.14 to 0.31).
-- Province isolation occupancy and bed counts enter the treatment-flow stream
-  as splits of the printed sum of the provinces present each day, over
-  per-patch bed demand (the national demand shared out by each patch's
-  admissions through the stays) and per-patch shares of the national capacity
-  walk. The occupancy split is scored weekly and the bed split on days a
-  province's count changes, since a stock reprinted daily is not a fresh draw
-  of the split. The national tile and the national implied capacity keep their
-  likelihoods on every day. Occupancy is split on the uncapped per-patch
-  demand, since a province can print more patients than beds where patients
-  are held outside the counted structures, and the fit reports beds, demand,
-  utilisation and shortfall by province at the cut-off.
-- A pooled patch's occupancy or bed count is used on a day only when every
-  member that has printed before prints that day, so a silent member is never
-  read as an empty ward.
-- The in-sample checks page carries posterior predictive checks on the three
-  province terms, the weekly laboratory split as a composition and the
-  occupancy and bed splits over the provinces present each day
-  (`plot_province_split_ppc`), and the province page a table of beds,
-  demand, occupied beds, utilisation and shortfall by province.
+- The in-sample Provinces page carries posterior predictive checks on the three province terms, and the Provinces estimates page a table of beds, demand, occupied beds, utilisation and shortfall by province (#784).
 
 ### Data
 
-- `province_isolation_history` and `province_bed_capacity_history` blocks,
-  sparse by province, transcribed from the occupation tables to SitRep 080 and
-  the per-province care prose from 081, with `scripts/scan_province_care.jl`
-  and a blind second read reconciled against each other.
+- `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
+  They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
 
 ### Fixed
 
