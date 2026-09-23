@@ -24,8 +24,11 @@ Changes since v2.1.0.
   The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
 - An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
-  A `missing` vector still samples under the same per-entry keys.
   The two submodels' gradients run 1.2 to 1.9 times faster.
+- The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule.
+  Its gradient runs about 4.2 times faster on the 1066 scanned cells.
+- These submodels score and draw their vectors through `NegBinomialVector`, `CensoredNegBinomialVector` and `StudentTVector`, so each keeps a single `~` for observed and `missing` data.
+  A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
