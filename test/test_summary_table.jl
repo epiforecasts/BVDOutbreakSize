@@ -268,3 +268,14 @@ end
         (; base.C_T_patch), np
     )
 end
+||||||| parent of 5a524e80 (test(summaries): median and interval as a summary phrase)
+
+@testitem "median_interval_text reads as plain words" begin
+    using BVDOutbreakSize: median_interval_text
+
+    draws = collect(0.0:100.0)
+    @test median_interval_text(draws) ==
+        "about 50 (90% credible interval 5 to 95)"
+    @test median_interval_text(draws ./ 100; digits = 2) ==
+        "about 0.5 (90% credible interval 0.05 to 0.95)"
+end
