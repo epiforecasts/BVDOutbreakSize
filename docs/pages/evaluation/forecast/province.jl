@@ -30,10 +30,10 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 # ## Forecast by province
 #
-# The one-week-ahead forecast split by province, scored against what each province went on to report.
-# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
-# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
-# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
+# The frozen fit's one-week-ahead forecast of each province's confirmed cases and deaths, scored against what each province went on to report.
+# Each province's forecast is drawn from the joint chain one posterior draw at a time, so its interval carries the joint model's uncertainty rather than a province's alone.
+# How the province forecast is built is set out on the [province forecasts](@ref "Province forecasts") page.
+# Every release's archived province forecast is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
 
 #md # ```@raw html
 #md # <details><summary>Province forecast against observed</summary>
@@ -89,7 +89,10 @@ MarkdownTable(province_validation_table) #hide
 
 # ## Forecast by province across releases
 #
-# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+# The archived province forecast of each release, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+# Releases before v2.2.0 archived the national forecast split by each province's modelled share, held over the horizon.
+# Releases from v2.2.0 archive a per-province renewal projection from the joint chain.
+# The scores below pool both, so they measure the province forecast as published rather than one method.
 # The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
 
 #md # ```@raw html
