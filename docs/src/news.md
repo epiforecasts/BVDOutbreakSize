@@ -10,7 +10,7 @@ Changes since v2.1.0.
 ### Performance
 
 - Hand-written reverse-mode rules for the daily convolution and renewal
-  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
+  kernels (`convolve_delay`, `convolve_pmf`,
   `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
   grid, so left to the backend every iteration's intermediates reach the
   tape; the rules replace that with a closed-form adjoint of the same
@@ -148,13 +148,18 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- `convolve_survival` and `survival_weights` are removed, along with the export and the reverse-mode rule.
+  No model, page or script called them.
+- Every reverse-mode rule is tested through Mooncake's `test_rule`, over one table of cases with the argument types its call sites pass.
+  The hand-written finite-difference and ForwardDiff comparisons are gone, and `FiniteDifferences` with them.
+  An `:ad_perf` item in the AD job times each rule against Mooncake's own derivation of the same kernel and fails unless the rule takes at most 0.8 of its time.
+  Test-only textbook loops pin the values of every kernel whose body was rewritten for speed.
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
 - The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
   `BVD_JOINT_MAX_DEPTH` overrides it.
 - The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
-- The joint fit's NUTS tree depth cap rises from 10 to 12, and `BVD_JOINT_MAX_DEPTH` overrides it (#846).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
