@@ -686,12 +686,11 @@ province full while another has slack. Pass
     ##
     ## Centred: each step is drawn at the sampled scale rather than as a
     ## standard half-normal multiplied by it. `eps` floors the scale so a
-    ## `σ_cap ≈ 0` draw stays a proper distribution.
-    steps ~ product_distribution(
-        fill(
-            truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
-            max(nb - 1, 1)
-        )
+    ## `σ_cap ≈ 0` draw stays a proper distribution. `filldist` holds one
+    ## copy of the truncated distribution rather than one per step.
+    steps ~ filldist(
+        truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
+        max(nb - 1, 1)
     )
     log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
     walk = interpolate_knots(log_knots, days, n)
@@ -1309,7 +1308,7 @@ scales and the correlation matrix.
     ## `LKJCholesky` samples the Cholesky factor directly, so the
     ## decomposition never lands on the AD tape.
     σ_level ~ region_sd_prior
-    σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
+    σ_δ ~ filldist(region_drift_sd_prior, n_patches)
     ## Mean reversion. The deviations are an AR(1) toward zero on the knots,
     ## parameterised by the half-life of a provincial divergence in days,
     ## which is the elicitable quantity. The per-knot retention is
