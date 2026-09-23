@@ -144,7 +144,7 @@ end
 
     I = full_run(EPS)
     shares = [0.7 0.6; 0.2 0.3; 0.1 0.1]
-    conf_daily = 1.0e5
+    conf_daily = 1.0e7
     fc = forecast_provinces(
         projection_chain(I; conf_daily, shares);
         horizon = H, n_patches = NP

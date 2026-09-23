@@ -6,7 +6,7 @@
 # The confirmed counts start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage, and then grow with the province's own projected infections.
 # The provinces are projected separately, so they need not add up to the national forecast on the [forecasts](@ref "Forecasts") page.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
-# How the province forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
+# The [forecast by province](@ref "Forecast by province") evaluation scores a different forecast, the national forecast split by each province's share and held over the week.
 #
 # The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
 # The symptom-onset curve is national only, so there is no province nowcast.
