@@ -776,24 +776,27 @@ end
 end
 
 @testitem "onset_report_scales: error formula match, grows with magnitude" begin
-    using BVDOutbreakSize: onset_report_scales
+    using BVDOutbreakSize: onset_report_scales, ONSET_READ_FLOOR_SD
 
     level_cur = [0.0, 100.0, 40.0]
     level_prev = [0.0, 80.0, 0.0]
     means = level_cur .- level_prev
     ## Cells 1 and 3 have a virtual (empty) predecessor and so score a
-    ## level (`τ_prev = 0`); cell 2 is a correction between two real
-    ## snapshots and carries both snapshots' noise scale.
+    ## level (`τ_prev = 0`, one read); cell 2 is a correction between two
+    ## real snapshots and carries both snapshots' noise scale (two reads).
     τ_cur = [2.1, 3.0, 5.0]
     τ_prev = [0.0, 2.5, 0.0]
+    f = ONSET_READ_FLOOR_SD
     s = onset_report_scales(
         means, level_cur, level_prev, τ_cur, τ_prev; scan_sd = 0.04
     )
-    @test s[1] ≈ sqrt(2.1^2)
-    @test s[2] ≈ sqrt(20.0 + 3.0^2 + 2.5^2 + 0.04^2 * (100.0^2 + 80.0^2))
+    @test s[1] ≈ sqrt(f^2 + 2.1^2)
+    @test s[2] ≈ sqrt(
+        20.0 + 2 * f^2 + 3.0^2 + 2.5^2 + 0.04^2 * (100.0^2 + 80.0^2)
+    )
     ## A level cell carries the counting variation of the cases it reports,
     ## which for a bar of 40 dominates the noise-scale term.
-    @test s[3] ≈ sqrt(40.0 + 5.0^2 + 0.04^2 * 40.0^2)
+    @test s[3] ≈ sqrt(40.0 + f^2 + 5.0^2 + 0.04^2 * 40.0^2)
     @test s[3] > sqrt(40.0)
     ## The scale grows with the modelled magnitude.
     @test s[2] > s[1]
@@ -831,28 +834,33 @@ end
     @test s[1] > 0
 end
 
-@testitem "onset_report_scale: matches the two-term formula" begin
-    using BVDOutbreakSize: onset_report_scale
+@testitem "onset_report_scale: matches the per-cell formula" begin
+    using BVDOutbreakSize: onset_report_scale, ONSET_READ_FLOOR_SD
 
     μ, level_cur, level_prev = 20.0, 100.0, 80.0
     τ_cur, τ_prev = 3.0, 2.5
+    f = ONSET_READ_FLOOR_SD
 
     plain = onset_report_scale(μ, level_cur, level_prev, τ_cur, τ_prev)
-    @test plain ≈ sqrt(max(μ, 0.0) + τ_cur^2 + τ_prev^2)
+    @test plain ≈ sqrt(max(μ, 0.0) + 2 * f^2 + τ_cur^2 + τ_prev^2)
 
     with_scan = onset_report_scale(
         μ, level_cur, level_prev, τ_cur, τ_prev; scan_sd = 0.04
     )
     @test with_scan ≈ sqrt(
-        max(μ, 0.0) + τ_cur^2 + τ_prev^2 +
+        max(μ, 0.0) + 2 * f^2 + τ_cur^2 + τ_prev^2 +
             0.04^2 * (level_cur^2 + level_prev^2)
     )
     @test with_scan > plain
 
     ## A read against the virtual empty predecessor (`τ_prev = 0`) carries
-    ## only its own snapshot's noise scale.
+    ## one read's floor and its own snapshot's noise scale.
     level_only = onset_report_scale(μ, μ, 0.0, τ_cur, 0.0)
-    @test level_only ≈ sqrt(max(μ, 0.0) + τ_cur^2)
+    @test level_only ≈ sqrt(max(μ, 0.0) + f^2 + τ_cur^2)
+
+    ## The floor keeps a zero-mean, zero-noise cell's scale positive.
+    @test onset_report_scale(0.0, 0.0, 0.0, 0.0, 0.0) ≈ f
+    @test onset_report_scale(0.0, 0.0, 0.0, 1.0e-9, 1.0e-9) ≈ sqrt(2) * f
 
     ## A negative modelled mean still floors at zero rather than taking the
     ## square root of a negative counting term.

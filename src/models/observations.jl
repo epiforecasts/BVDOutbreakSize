@@ -3230,12 +3230,14 @@ the square root of a variance built from two sources.
     fitted per-scan level SD here.
 
 ```math
-\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + \\tau_{\\text{cur},i}^2 +
+\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + r_i f^2 + \\tau_{\\text{cur},i}^2 +
     \\tau_{\\text{prev},i}^2 + \\text{scan\\_sd}^2 \\cdot
     (\\ell_{\\text{cur},i}^2 + \\ell_{\\text{prev},i}^2)},
 ```
 
-with `μ_i = means[i]` the modelled increment. The counting term cancels for
+with `μ_i = means[i]` the modelled increment, `r_i` the reads a cell
+differences (one against the empty predecessor, two otherwise) and `f` the
+per-read floor `ONSET_READ_FLOOR_SD`. The counting term cancels for
 a genuine correction between two snapshots only to the extent that the two
 reads share the same realised cases: the newly reported cases in between are
 a fresh count, and `μ_i` is exactly their expected number, so the same
@@ -3279,8 +3281,14 @@ function onset_report_scales(
 end
 
 """
+Reading noise a digitised bar cannot go below, in counts per read: the
+fixed floor `onset_report_scale` adds to every cell.
+"""
+const ONSET_READ_FLOOR_SD = 1.0
+
+"""
     onset_report_scale(μ, level_cur, level_prev, τ_cur, τ_prev;
-        scan_sd = 0.0)
+        scan_sd = 0.0, floor_sd = ONSET_READ_FLOOR_SD)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula: one
 increment mean `μ` between cumulative levels `level_cur` and `level_prev`,
@@ -3291,15 +3299,21 @@ projected increment. See [`onset_report_scales`](@ref) for the terms.
 """
 function onset_report_scale(
         μ::Real, level_cur::Real, level_prev::Real,
-        τ_cur::Real, τ_prev::Real; scan_sd::Real = 0.0
+        τ_cur::Real, τ_prev::Real; scan_sd::Real = 0.0,
+        floor_sd::Real = ONSET_READ_FLOOR_SD
     )
     T = promote_type(
         typeof(float(μ)), typeof(float(level_cur)),
         typeof(float(level_prev)), typeof(float(τ_cur)),
-        typeof(float(τ_prev)), typeof(float(scan_sd))
+        typeof(float(τ_prev)), typeof(float(scan_sd)),
+        typeof(float(floor_sd))
     )
+    ## One read for a level against the empty predecessor (`τ_prev == 0`),
+    ## two for an increment. The floor keeps a cell whose observed and
+    ## modelled increments are both zero from driving `τ` to zero.
+    reads = iszero(τ_prev) ? 1 : 2
     return sqrt(
-        max(μ, zero(T)) + τ_cur^2 + τ_prev^2 +
+        max(μ, zero(T)) + reads * floor_sd^2 + τ_cur^2 + τ_prev^2 +
             scan_sd^2 * (level_cur^2 + level_prev^2)
     )
 end
