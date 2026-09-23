@@ -127,6 +127,7 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
 - The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
