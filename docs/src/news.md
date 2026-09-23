@@ -9,6 +9,25 @@ Changes since v2.1.0.
 
 ### Performance
 
+- Hand-written reverse-mode rules for the daily convolution and renewal
+  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
+  `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
+  grid, so left to the backend every iteration's intermediates reach the
+  tape; the rules replace that with a closed-form adjoint of the same
+  shape. The joint's gradient drops about 20%
+  under Mooncake, the default backend, and the delay-heavy observation
+  submodels rather more; the measurements are in #810. Each is a native
+  `Mooncake.rrule!!` method on a declared primitive signature. Values are
+  unchanged: each rule is checked against central differences and against
+  the gradient of an unregistered clone of the same function body.
+- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
+  The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
+  Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
+- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
+  A `missing` vector still samples under the same per-entry keys.
+  The two submodels' gradients run 1.2 to 1.9 times faster.
+- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
+  A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
