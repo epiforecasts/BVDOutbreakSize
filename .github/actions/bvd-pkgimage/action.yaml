@@ -1,0 +1,68 @@
+name: BVDOutbreakSize pkgimage
+description: >-
+  Hand the docs environment's compiled BVDOutbreakSize image from the `list`
+  job to the later jobs of the same run.
+
+# Compiling BVDOutbreakSize with the docs precompile workload takes ~13 min.
+# Every later job restores a `docs-env` depot cache, but by the time the
+# render jobs start, hours later, their own run's cache has usually been
+# evicted or superseded and they restore another run's. That depot holds
+# BVDOutbreakSize built from other sources, so each job compiled it again.
+# The dependencies in it still match, so only this one image has to travel.
+#
+# `save` must run after the environment is precompiled. `restore` must run
+# after the depot cache and the pinned manifest are restored and before the
+# first Pkg call, since `Pkg.develop` and `Pkg.instantiate` both precompile.
+# If the image is missing or no longer matches the dependencies, Julia
+# compiles it as before.
+inputs:
+  mode:
+    description: '`save` or `restore`.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Locate the compiled image
+      id: locate
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        if [ "$MODE" = save ]; then
+          dir="$RUNNER_TEMP/bvd-pkgimage"
+          mkdir -p "$dir"
+          ji=$(julia --project=docs -e '
+            using BVDOutbreakSize
+            print(Base.pkgorigins[Base.PkgId(BVDOutbreakSize)].cachepath)')
+          cp "$ji" "${ji%.ji}.so" "$dir"
+          du -sh "$dir"/*
+        else
+          dir=$(julia -e 'print(joinpath(DEPOT_PATH[1], "compiled",
+            "v$(VERSION.major).$(VERSION.minor)", "BVDOutbreakSize"))')
+          mkdir -p "$dir"
+        fi
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+    - if: inputs.mode == 'save'
+      uses: actions/upload-artifact@v7
+      with:
+        name: bvd-pkgimage
+        path: ${{ steps.locate.outputs.dir }}
+        if-no-files-found: error
+        # A handoff inside the run, ~100-300 MB each.
+        retention-days: 1
+    - if: inputs.mode == 'restore'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: bvd-pkgimage
+        path: ${{ steps.locate.outputs.dir }}
+    - if: inputs.mode == 'restore'
+      name: Report whether the image is usable
+      continue-on-error: true
+      shell: bash
+      run: |
+        julia --project=docs -e '
+          pkg = Base.identify_package("BVDOutbreakSize")
+          println("BVDOutbreakSize pkgimage usable: ", Base.isprecompiled(pkg))'

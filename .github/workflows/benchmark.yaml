@@ -92,6 +92,9 @@ jobs:
           # cancelled mid-`Pkg` never becomes the newest snapshot for the
           # restore key. Matches the test and docs workflows.
           save-always: false
+          # One cache for both arms. The matrix carries each arm's commit,
+          # so keyed on it a new commit always started from an empty depot.
+          include-matrix: false
 
       # On `workflow_dispatch` there is no pull request, so fall back to the
       # default branch against this checkout.

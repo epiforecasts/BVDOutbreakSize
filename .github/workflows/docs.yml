@@ -78,7 +78,7 @@ jobs:
           # scanners or the backfill driver used to rebuild the whole report
           # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/changed-paths/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
   # Resolve and precompile the single shared environment once, list the fit
   # ids by group, and pin the manifest. On main and tag builds the two
@@ -118,16 +118,13 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
             Pkg.precompile()'
-      # Temporary, and duplicated in the other job on purpose rather than
-      # pulled into a composite action: it exists to confirm the diagnosis
-      # behind JULIA_CPU_TARGET above and comes out once a run shows the
-      # render reusing the depot. Until then it tells a job that recompiled
-      # from a restored depot apart from one that simply landed on a
-      # different machine, which the timings alone cannot do.
-      - name: Record the runner's CPU
-        run: |
-          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
-            >> "$GITHUB_STEP_SUMMARY"
+      # The later jobs restore this image rather than compiling their own.
+      # A failed upload only costs them that compile.
+      - name: Hand the compiled package to the later jobs
+        continue-on-error: true
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: save
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
@@ -234,6 +231,11 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       # The fleet is mixed and the joint fit's wall clock varies by half
       # again between runs of the same commit, so the summary names the CPU
       # a refit ran on. Read it next to the fit's timing when a job runs long.
@@ -361,6 +363,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       # Refresh the released-estimate overlay so the sensitivity page's
       # "Estimate evolution across releases" figure picks up the newest
       # results-v* release. Best-effort: on any failure it uses the committed
@@ -457,6 +463,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
@@ -621,21 +631,15 @@ jobs:
           # enters the cache key, so each render misses the shared depot and
           # re-precompiles the whole stack (~530 deps) before rendering.
           include-matrix: false
-      # Temporary, and duplicated in the other job on purpose rather than
-      # pulled into a composite action: it exists to confirm the diagnosis
-      # behind JULIA_CPU_TARGET above and comes out once a run shows the
-      # render reusing the depot. Until then it tells a job that recompiled
-      # from a restored depot apart from one that simply landed on a
-      # different machine, which the timings alone cannot do.
-      - name: Record the runner's CPU
-        run: |
-          echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
-            >> "$GITHUB_STEP_SUMMARY"
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
@@ -818,6 +822,10 @@ jobs:
         with:
           name: manifest
           path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
