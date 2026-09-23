@@ -6,6 +6,7 @@
 # [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
 # How these forecasts have scored against the data that arrived afterwards is
 # on the [evaluation](@ref "Forecast evaluation") page.
+# The split by province is on the [province forecasts](@ref "Province forecasts") page.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -20,9 +21,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## National
-#
-# ### One-week-ahead forecast results
+# ## One-week-ahead forecast results
 #
 # The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
 # The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
@@ -119,7 +118,7 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 
 forecast_flows_fig #hide
 
-# ### Symptom-onset nowcast and forecast results
+# ## Symptom-onset nowcast and forecast results
 #
 # The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
 # The two halves must not be added together: the first three rows are the state of the outbreak at the cut-off, the next three the coming week.
@@ -260,28 +259,3 @@ end;
 #md # ```
 
 onset_forecast_fig #hide
-
-# ## By province
-#
-# The forecast split by province is below, for the two streams the spatial tables report.
-# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week.
-#
-
-#md # ```@raw html
-#md # <details><summary>Province forecast split</summary>
-#md # ```
-
-province_forecast_fig = plot_province_forecast(
-    chn_joint, forecast;
-    n_patches = N_PATCHES
-);
-province_forecast = province_forecast_table(
-    chn_joint, forecast;
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_forecast_fig #hide
