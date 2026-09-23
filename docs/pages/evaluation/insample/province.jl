@@ -1,7 +1,7 @@
-# # Province evaluation
+# # Province in-sample checks
 #
-# How well the joint model reproduces the per-province data it was fitted to, and how its province forecasts scored against what each province went on to report.
-# The national checks are on the [national evaluation](@ref "National evaluation") page.
+# Whether the fitted joint model reproduces the per-province data it was fitted to.
+# The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
 # The per-province confirmed cases and deaths enter the model as compositions of the national totals, so the in-sample checks here are on each province's share of those totals rather than its count.
 
 #md # ```@raw html
@@ -20,19 +20,17 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # ## Summary
 #
 # The overall bullets come first, then a short block per province, from the checks further down this page.
-# Each block gives how well the case and death compositions reproduce that province's counts, as bias and 90% coverage, and how its forecasts scored against the persistence baseline across releases.
+# Each block gives how well the case and death compositions reproduce that province's counts.
 # Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
-# Coverage is nominally 0.9, and relative skill below one beats the baseline.
+# Coverage is nominally 0.9.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
 #md # dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-#md # Markdown.parse(read(joinpath(dir, "evaluation_province.md"), String))
+#md # Markdown.parse(read(joinpath(dir, "evaluation_insample_province.md"), String))
 #md # ```
 
-# ## Province in-sample checks
-#
-# ### Province prior predictive check
+# ## Province prior predictive check
 #
 # Before any observation is taken into account, what does the prior imply about each province's share of the confirmed cases and deaths?
 # The shared prior on the national page is drawn from a single population and carries no province quantities.
@@ -154,7 +152,7 @@ province_pair_fig = plot_pair(
 
 province_pair_fig #hide
 
-# ### [Province compositions](@id province-compositions)
+# ## [Province compositions](@id province-compositions)
 #
 # The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
 # The panels below show that modelled share at every spatial vintage against the observed one.
@@ -195,7 +193,7 @@ province_case_ppc_fig #hide
 
 province_death_ppc_fig #hide
 
-# ### Province stream calibration
+# ## Province stream calibration
 #
 # Each province's cases and deaths are scored vintage by vintage against the same composition predictive as the grey bands above, as counts at the observed national total.
 # The columns are those of the national [stream calibration](@ref "Stream calibration").
@@ -240,7 +238,7 @@ MarkdownTable(province_calibration_table) #hide
 #md # </details>
 #md # ```
 
-# ### Province correlations and totals
+# ## Province correlations and totals
 #
 # The heatmap is the posterior correlation between the national outbreak size ($C_T$) and, for each province, its reproduction number at the cut-off, its relative case ascertainment and its case-fatality ratio.
 # The case composition identifies only the product of a province's ascertainment and its incidence, so a strong negative correlation between the two is expected, and the deaths are what separate them.
@@ -315,176 +313,7 @@ province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 #md # ```
 
 province_pairs_fig #hide
-
-# ## Province forecast evaluation
-#
-# How the province split of the forecasts on the [forecasts](@ref "Forecasts") page has scored against what each province went on to report.
-# Scoring follows the national [forecast evaluation](@ref "Forecast evaluation"), against the same persistence baseline.
-
-# ### Forecast by province
-#
-# The one-week-ahead forecast split by province, scored against what each province went on to report.
-# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
-# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
-# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
-
-#md # ```@raw html
-#md # <details><summary>Province forecast against observed</summary>
-#md # ```
-
-## The frozen fit's one-week-ahead national forecast, the same one the
-## national page validates, which the province split multiplies draw by
-## draw. `validation_forecast_from` is defined in the shared setup.
-validation_forecast = validation_forecast_from(frozen_lastweek);
-
-## Per-province cumulative confirmed cases and deaths at the frozen cut-off
-## and at the current one, so the truth for the week is their difference.
-## Read off the same increment matrices the compositions are scored on, so
-## the clamped revision is treated identically on both sides.
-province_truth = let
-    cur_c = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    cur_d = province_increment_matrix(
-        obs.province_death_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_c = province_increment_matrix(
-        frozen_lastweek.o.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_d = province_increment_matrix(
-        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES
-    )
-    (;
-        observed = vec(sum(cur_c.increments; dims = 2)),
-        baseline = vec(sum(froz_c.increments; dims = 2)),
-        death_observed = vec(sum(cur_d.increments; dims = 2)),
-        death_baseline = vec(sum(froz_d.increments; dims = 2)),
-    )
-end
-
-province_validation_table = province_forecast_vs_truth(
-    frozen_lastweek.chn, validation_forecast;
-    observed = province_truth.observed,
-    baseline = province_truth.baseline,
-    death_observed = province_truth.death_observed,
-    death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_validation_table) #hide
-
-# ### Forecast by province across releases
-#
-# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-# The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
-
-#md # ```@raw html
-#md # <details><summary>Load and summarise the province forecast scores</summary>
-#md # ```
-
-province_scores_df = _release_data(
-    "province_forecast_scores.csv",
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, crps = Float64,
-        log_crps = Float64, dispersion = Float64, overprediction = Float64,
-        underprediction = Float64, coverage_50 = Float64,
-        coverage_90 = Float64,
-        bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64,
-    )
-)
-## There is no individual single-stream fit to compare against, and `fit` is
-## single-valued by construction once the baseline is set aside. Both are
-## dropped rather than rendered as columns that cannot vary. The figures
-## keep the full tables, since they compare the joint against the baseline.
-province_score_by_horizon_table = forecast_score_by_horizon(
-    province_scores_df
-)
-province_score_by_release_table = forecast_score_by_release(
-    province_scores_df
-)
-_province_display(tbl) = drop_degenerate_fit_column(
-    drop_individual_fit_columns(tbl)
-)
-province_score_overview_display = _province_display(
-    forecast_score_overview(province_scores_df)
-)
-province_score_by_horizon_display = _province_display(
-    province_score_by_horizon_table
-)
-## See the comment on `joint_score_by_release_table` on the national page for
-## why this setup chunk's last statement needs a trailing `;`.
-province_score_by_release_display = _province_display(
-    province_score_by_release_table
-);
-
-_province_empty = "No scored province forecasts yet. No release old " *
-    "enough for its targets to have been observed carries a stored " *
-    "province forecast.";
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_score_overview_display) #hide
-
-# The relative skill against the baseline by horizon, one panel per stream and province, on a log-scaled skill axis with the reference line at one.
-
-province_relative_skill_fig = plot_forecast_relative_skill(
-    province_score_by_horizon_table; empty_message = _province_empty
-);
-
-province_relative_skill_fig #hide
-
-# What that error is made of, by horizon: the mean CRPS split into its width, its overprediction and its underprediction.
-
-province_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
-    province_score_by_horizon_table;
-    title = "CRPS decomposition by horizon, by province",
-    empty_message = _province_empty
-);
-
-province_crps_by_horizon_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Province scores by horizon</summary>
-#md # ```
-
-MarkdownTable(province_score_by_horizon_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# The same relative skill release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
-
-province_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
-    province_score_by_release_table;
-    title = "Relative skill against the baseline by release, by province",
-    empty_message = _province_empty
-);
-
-province_skill_by_cutoff_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Province scores by release</summary>
-#md # ```
-
-MarkdownTable(province_score_by_release_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# ## Saving province evaluation outputs
+# ## Saving province in-sample outputs
 
 #md # ```@raw html
 #md # <details><summary>Write the summary bullets</summary>
@@ -493,76 +322,28 @@ MarkdownTable(province_score_by_release_display) #hide
 ## The bullets under the summary heading at the top of the page. They read
 ## tables built further down, so they are written here and read back when
 ## the site is assembled.
-evaluation_province_summary = let
+evaluation_insample_province_summary = let
     fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
         string(round(x; digits = 2))
-    cal = Dict(r["Stream"] => r for r in eachrow(province_calibration_table))
-    overview = forecast_score_overview(province_scores_df)
-    ## The archive labels each province stream `<stream> [<province name>]`.
-    function scored(p)
-        tag = string(" [", PROVINCE_NAMES[p], "]")
-        rows = filter(
-            r -> endswith(r.stream, tag) && !ismissing(r.rel_to_baseline),
-            overview
-        )
-        return (; tag, rows)
-    end
-    function calibration(kind, p)
-        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
-        r === nothing && return string("- ", kind, ": not scored.")
-        return string(
-            "- ", kind, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
-        )
-    end
-    function skill(p)
-        sc = scored(p)
-        size(sc.rows, 1) == 0 &&
-            return "- Forecasts: no scored forecast yet."
-        return string(
-            "- Forecasts: relative skill against the baseline ",
-            join(
-                [
-                    string(
-                        replace(r.stream, sc.tag => ""), " ",
-                        fmt(r.rel_to_baseline), " over ", r.n, " forecasts"
-                    )
-                        for r in eachrow(sc.rows)
-                ], ", "
-            ), "."
-        )
-    end
-    ## Overall: the province streams the compositions reproduce least well,
-    ## and how many provinces' forecasts beat the baseline on every stream
-    ## scored for them.
     fitted = filter(r -> isfinite(r["Bias"]), province_calibration_table)
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
     )
-    worst_txt = join(
-        [
-            string(
-                r["Stream"], " (bias ", fmt(r["Bias"]),
-                ", 90% coverage ", fmt(r["90% coverage"]), ")"
-            )
-                for r in eachrow(worst)
-        ], "; "
-    )
     low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
     n_cov = count(>=(0.8), fitted[!, "90% coverage"])
-    with_scores = [p for p in 1:N_PATCHES if size(scored(p).rows, 1) > 0]
-    n_beat = count(
-        p -> all(<(1), scored(p).rows.rel_to_baseline), with_scores
-    )
-    forecast_txt = isempty(with_scores) ?
-        "- **Forecasts:** no province forecast has been scored yet." :
-        string(
-            "- **Forecasts:** ", n_beat, " of ", length(with_scores),
-            " provinces with scored forecasts beat the baseline on every ",
-            "stream scored for them."
-        )
     overall = [
-        string("- **Least well reproduced:** ", worst_txt, "."),
+        string(
+            "- **Least well reproduced:** ",
+            join(
+                [
+                    string(
+                        r["Stream"], " (bias ", fmt(r["Bias"]),
+                        ", 90% coverage ", fmt(r["90% coverage"]), ")"
+                    )
+                        for r in eachrow(worst)
+                ], "; "
+            ), "."
+        ),
         string(
             "- **Coverage:** ", n_cov, " of ", size(fitted, 1),
             " province streams have 90% coverage of at least 0.8",
@@ -572,14 +353,22 @@ evaluation_province_summary = let
                     fmt(low[1, "90% coverage"]), "."
                 )
         ),
-        forecast_txt,
     ]
+    cal = Dict(r["Stream"] => r for r in eachrow(province_calibration_table))
+    function calibration(kind, p)
+        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
+        r === nothing && return string("- ", kind, ": not scored.")
+        return string(
+            "- ", kind, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
+            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
+        )
+    end
     detail = [
         join(
             [
                 string("**", PROVINCE_LABELS[p], "**"), "",
                 calibration("Confirmed cases", p),
-                calibration("Confirmed deaths", p), skill(p),
+                calibration("Confirmed deaths", p),
             ], "\n"
         )
             for p in 1:N_PATCHES
@@ -590,10 +379,7 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-write(
-    joinpath(dashboard_dir, "evaluation_province.md"),
-    evaluation_province_summary
-);
+write(joinpath(dashboard_dir, "evaluation_insample_province.md"), evaluation_insample_province_summary);
 
 #md # ```@raw html
 #md # </details>

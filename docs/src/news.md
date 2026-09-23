@@ -89,11 +89,10 @@ This moves the non-BVD death background, so fitted values change.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
 - The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
   It links to the home page for installing, running and updating the data rather than repeating it.
-- Evaluation has one page per geography, National and Provinces, each with an in-sample section and a forecast-evaluation section (#833).
-  They replace the in-sample and forecast pages.
-  Each opens with summary bullets on stream calibration and forecast skill, one bullet per province on the Provinces page.
-  The Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
-  It adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
+- Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).
+  Each page opens with a summary: overall bullets, then a short block per stream or per province.
+  The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
+  The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
 
 ### Infrastructure
 

@@ -11,7 +11,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 This page summarises the headline results.
 See the [National](national.md) and [Provinces](province.md) pages for the estimates at each level.
 See [Forecasts](../forecasts/national.md) for the week ahead.
-See the [national](../evaluation/national.md) and [province](../evaluation/province.md) evaluation pages for how the model fits the data and how past forecasts scored.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province page alongside.
 See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
