@@ -158,14 +158,15 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 ## headline took 216-265 minutes, about 0.16 minutes per iteration whether
 ## adapting or drawing, so 1000 draws adds about 33 minutes.
 ##
-## NUTS terminates at the tree-depth cap on every iteration of both fits, at
-## 1023 leapfrog steps, rather than at a U-turn. Raising `max_depth` is the
-## direct fix and each extra level doubles the leapfrog steps, which does not
-## fit the budget. A lower acceptance target lengthens the step and shortens
+## At `max_depth = 10` NUTS terminated at the tree-depth cap on every
+## iteration of both fits, at 1023 leapfrog steps, rather than at a U-turn.
+## The cap is now 12 (4095 steps). Each extra level doubles the steps an
+## iteration can take, so if trajectories still reach the cap the joint job
+## outgrows its 350-minute timeout. A lower acceptance target lengthens the step and shortens
 ## the trajectories instead.
 ##
-## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
-## override all three without editing this file.
+## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
+## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
 joint_target_accept() = parse(
     Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
@@ -181,10 +182,15 @@ joint_warmup(default::Integer) = parse(
     get(ENV, "BVD_JOINT_WARMUP", string(default))
 )
 
+joint_max_depth() = parse(
+    Int,
+    get(ENV, "BVD_JOINT_MAX_DEPTH", "12")
+)
+
 ## The sampler budget both halves of the spatial sensitivity splat.
 joint_sampler_args() = (;
     samples = joint_samples(1000), n_adapts = joint_warmup(500),
-    target_accept = joint_target_accept(),
+    target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
 function build_fit_specs(
