@@ -9,8 +9,8 @@
 # [`src/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/src).
 # See [aim and origins](@ref "Aim and origins") and [limitations](@ref "Limitations").
 #
-# **Offline copy.** A self-contained single-file HTML version of this report, built from the same run, is attached to each results release: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
-# It carries the front matter, the methods and the national results, and links to the other pages resolve against the hosted site.
+# **Offline copy.** Each results release attaches the rendered site built from the same run: [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/site.zip).
+# The `README.txt` inside says how to view it.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>

@@ -49,6 +49,8 @@ This moves the non-BVD death background, so fitted values change.
 
 - The limitations page opens with those that apply to the whole work, then groups the national and province ones by data, model and evaluation, one short bullet each (#840).
   Limitations that later work had overtaken are rewritten or dropped, and the province ones are added.
+- The offline `analysis.html` is gone (#839).
+  Each release's `site.zip` now unpacks to `BVDOutbreakSize/<base>/` and carries a `README.txt` on serving it locally.
 - Each province is projected a week ahead by its own renewal equation
   rather than a fixed share of the national forecast, and only these
   projections are archived and scored (#836).
@@ -94,6 +96,7 @@ This moves the non-BVD death background, so fitted values change.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
 - The Provinces page opens with bullets comparing the provinces (#832).
+- The Provinces estimate page shows maps of infections to date, the reproduction number at the cut-off and relative case ascertainment by province. The Provinces forecast page maps next week's projected confirmed cases (#841).
   They give each province's share of infections, the range of the reproduction number and the probability each province is growing, the spread in case-fatality ratio and case ascertainment, and the share of infections imported between provinces, as 90% credible intervals.
   A detail section follows with each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals.
   The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.

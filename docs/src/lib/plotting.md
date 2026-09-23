@@ -13,6 +13,6 @@ Pages = ["plotting.md"]
 
 ```@autodocs
 Modules = [BVDOutbreakSize]
-Pages = ["plots.jl"]
+Pages = ["plots.jl", "maps.jl"]
 Private = false
 ```
