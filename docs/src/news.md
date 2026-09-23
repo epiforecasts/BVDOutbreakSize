@@ -48,6 +48,7 @@ This moves the non-BVD death background, so fitted values change.
 ### Report
 
 - Forecasts is split into a National and a Provinces page (#830).
+- The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
   The Provinces page shows the province split's credible intervals and,
   per province, a forecast histogram against its most recent observed week.
 - The report is six pages rather than two, grouped in the navigation as
