@@ -36,3 +36,44 @@ end
     @test count("joint_sampler_args()...", src) == 2
     @test count("n_adapts = joint_warmup(", src) == 1
 end
+
+@testitem "the joint sampler settings are part of the fit cache key" tags = [
+    :quality,
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    vars = (
+        "BVD_JOINT_SAMPLES", "BVD_JOINT_WARMUP",
+        "BVD_JOINT_TARGET_ACCEPT", "BVD_JOINT_MAX_DEPTH",
+    )
+    unset = Tuple(v => nothing for v in vars)
+    base = withenv(unset...) do
+        Dict(id => fit_key(id) for id in ("joint", "sens_no_patches", "deaths"))
+    end
+
+    ## The same settings give the same key, and so does a default set
+    ## explicitly.
+    withenv(unset...) do
+        @test fit_key("joint") == base["joint"]
+    end
+    withenv(
+        "BVD_JOINT_SAMPLES" => "1000", "BVD_JOINT_WARMUP" => "500",
+        "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "12"
+    ) do
+        @test fit_key("joint") == base["joint"]
+        @test fit_key("sens_no_patches") == base["sens_no_patches"]
+    end
+
+    ## Each override moves both joint keys and leaves the other fits alone.
+    overrides = (
+        "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
+        "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "11",
+    )
+    for ov in overrides
+        withenv(unset..., ov) do
+            @test fit_key("joint") != base["joint"]
+            @test fit_key("sens_no_patches") != base["sens_no_patches"]
+            @test fit_key("deaths") == base["deaths"]
+        end
+    end
+end
