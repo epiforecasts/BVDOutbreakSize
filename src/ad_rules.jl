@@ -994,7 +994,8 @@ Mooncake.@is_primitive(
 ## `z = (x − μ) / σ` and `g = (ν + 1) z / (ν + z²)` each cell contributes
 ##
 ##     ∂ℓ/∂μ = g / σ,    ∂ℓ/∂σ = (g z − 1) / σ,
-##     ∂ℓ/∂ν = (ψ((ν + 1)/2) − ψ(ν/2) − 1/ν − log1p(z²/ν) + g z / ν) / 2,
+##     ∂ℓ/∂ν = (ψ((ν + 1)/2) − ψ(ν/2) − 1/ν
+##              − log1p(z²/ν) + g z / ν) / 2,
 ##
 ## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards are `safe_studentt`'s: a floored `σ`
 ## or a defaulted `ν` passes no derivative. A cell whose term is not finite
