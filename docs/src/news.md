@@ -20,27 +20,27 @@ Changes since v2.1.0.
   `Mooncake.rrule!!` method on a declared primitive signature. Values are
   unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
-- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
+- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables (#837).
   The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
-- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
+- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count (#837).
   The two submodels' gradients run 1.2 to 1.9 times faster.
-- The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule.
+- The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule (#856).
   Its gradient runs about 4.2 times faster on the 1066 scanned cells.
-- Each patch row of the province composition in `province_composition_model` is scored as one summed BetaBinomial term with its own rule, through `BetaBinomialVector`.
+- Each patch row of the province composition in `province_composition_model` is scored as one summed BetaBinomial term with its own rule, through `BetaBinomialVector` (#856).
   A row's gradient runs about 5 times faster than through a `product_distribution` of BetaBinomials.
-- These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data.
+- These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data (#856).
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
-- `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!`.
+- `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!` (#856).
   Its rule's pullback is the matching per-lag `axpy!` and `dot`.
   On a whole series the forward runs about 1.6 times faster and the gradient about 1.2 times faster.
   On a matrix row both are unchanged.
   On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
-- The `convolve_pmf` rule's pullback is one `axpy!` and one `dot` per entry of the second PMF.
+- The `convolve_pmf` rule's pullback is one `axpy!` and one `dot` per entry of the second PMF (#856).
   Its gradient runs about 1.1 to 1.6 times faster.
-- `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval.
+- `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval (#856).
   The forward runs about 1.7 times faster and the gradient about 1.25 times faster.
-- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
+- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
@@ -141,16 +141,16 @@ Changes since v2.1.0.
 
 ### Fixed
 
-- An isolation-occupancy count at its censoring ceiling now has a Mooncake gradient.
+- An isolation-occupancy count at its censoring ceiling now has a Mooncake gradient (#856).
   The censored NegativeBinomial tail came from Rmath, which Mooncake cannot differentiate, so one such count would have stopped every gradient.
   No isolation count in the current data sits at its ceiling, and an admissions count never can, since its ceiling is at least half a bed above it.
   The tail now comes from `SpecialFunctions.beta_inc`.
 
 ### Infrastructure
 
-- `convolve_survival` and `survival_weights` are removed, along with the export and the reverse-mode rule.
+- `convolve_survival` and `survival_weights` are removed, along with the export and the reverse-mode rule (#856).
   No model, page or script called them.
-- Every reverse-mode rule is tested through Mooncake's `test_rule`, over one table of cases with the argument types its call sites pass.
+- Every reverse-mode rule is tested through Mooncake's `test_rule`, over one table of cases with the argument types its call sites pass (#856).
   The hand-written finite-difference and ForwardDiff comparisons are gone, and `FiniteDifferences` with them.
   An `:ad_perf` item in the AD job times each rule against Mooncake's own derivation of the same kernel and fails unless the rule takes at most 0.8 of its time.
   Test-only textbook loops pin the values of every kernel whose body was rewritten for speed.
