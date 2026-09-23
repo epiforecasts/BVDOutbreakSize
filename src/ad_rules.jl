@@ -112,13 +112,15 @@ function Mooncake.rrule!!(
     y = convolve_pmf(ap, bp)
     ȳ = zero(y)
     function convolve_pmf_pullback!!(::NoRData)
+        ## `y[j:j+na−1]` holds `b[j] · a` for each `j`, so
+        ##
+        ##     ā    += b[j] · ȳ[j:j+na−1]
+        ##     b̄[j] += ȳ[j:j+na−1] · a
         na = length(ap)
-        nb = length(bp)
-        @inbounds for i in 1:na, j in 1:nb
-
-            g = ȳ[i + j - 1]
-            ā[i] += g * bp[j]
-            b̄[j] += g * ap[i]
+        for j in eachindex(bp)
+            ȳj = view(ȳ, j:(j + na - 1))
+            axpy!(bp[j], ȳj, ā)
+            b̄[j] += dot(ȳj, ap)
         end
         return NoRData(), NoRData(), NoRData()
     end
