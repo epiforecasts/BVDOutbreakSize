@@ -9,10 +9,18 @@ _draws(chn, name::Symbol) = vec(Array(chn[name]))
 
 A posterior as a phrase for a summary bullet: the median and the
 equal-tailed 90% credible interval, `"about m (90% credible interval lo to
-hi)"`. Counts round to whole numbers by default.
+hi)"`. Counts round to whole numbers by default. Otherwise each value is
+shown to `digits` decimals.
 """
 function median_interval_text(draws; digits::Integer = 0)
-    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    ## Padded to `digits` decimals, so 0.8 reads 0.80.
+    function fmt(x)
+        digits <= 0 && return string(round(Int, x))
+        str = string(round(x; digits))
+        shown = something(findfirst('.', str), lastindex(str) + 1)
+        shown > lastindex(str) && (str *= ".")
+        return str * "0"^(digits - (lastindex(str) - shown))
+    end
     return string(
         "about ", fmt(quantile(draws, 0.5)), " (90% credible interval ",
         fmt(quantile(draws, 0.05)), " to ", fmt(quantile(draws, 0.95)), ")"
