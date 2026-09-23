@@ -40,6 +40,17 @@ Changes since v2.1.0.
   Its gradient runs about 1.1 to 1.6 times faster.
 - `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval (#856).
   The forward runs about 1.7 times faster and the gradient about 1.25 times faster.
+- `patch_infections` and its rule take each patch's daily force of infection from one shared inline loop (#856).
+  The loop may reassociate its sum, so values can differ from a sequential sum in the last bits.
+- The bed-capacity walk steps and the per-patch deviation scales are drawn through `filldist` rather than a `product_distribution` of copies of one truncated Normal (#856).
+  Values are unchanged.
+- `onset_vintage_indices`, `admission_headroom` and `censoring_cap` read only data and pass no derivative (#856).
+- The treatment-flow model's default priors and delay submodels are built once at load time rather than on every evaluation of the joint (#856).
+  The unread `confirmed_incare_deaths_daily` series is removed from its return value.
+- The joint's reported-only quantities are built behind a zero-derivative barrier, `_detached` (#856).
+  These are the cumulative series, the combined delay PMFs, the patch model's national totals and headline quantities, its daily deviations and its correlation matrix.
+  Keys and values are unchanged, and a test checks that the joint's log density and gradient are the same with and without the barrier.
+- The national onsets and the export-weighted infections sum the patches with one matrix-vector product each (#856).
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
