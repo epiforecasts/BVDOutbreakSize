@@ -179,20 +179,25 @@ province_rt_fig #hide
 #md # <details><summary>Spatial hyperparameter summary table</summary>
 #md # ```
 
+## Labels for the spatial hyperparameters, shared by this table and the pair
+## plot against their prior below.
+spatial_labels = Dict(
+    :region_sd => "Rt deviation spread",
+    :region_halflife => "Rt deviation half-life (days)",
+    :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+    :province_ascertainment_sd => "Ascertainment spread",
+    :province_testing_coefficient => "Testing effect on ascertainment",
+    :importation_epsilon => "Importation intensity",
+    :province_cfr_sd => "Lethality spread",
+    :province_death_ascertainment_sd => "Death-confirmation spread"
+)
 spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
         :province_ascertainment_sd, :province_testing_coefficient,
     ];
-    digits = 3,
-    labels = Dict(
-        :region_sd => "Rt deviation spread",
-        :region_halflife => "Rt deviation half-life (days)",
-        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-        :province_ascertainment_sd => "Ascertainment spread",
-        :province_testing_coefficient => "Testing effect on ascertainment"
-    )
+    digits = 3, labels = spatial_labels
 );
 
 #md # ```@raw html
@@ -225,16 +230,6 @@ patch_prior_chn = sample(
 #md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>
 #md # ```
 
-spatial_labels = Dict(
-    :region_sd => "Rt deviation spread",
-    :region_halflife => "Rt deviation half-life",
-    :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-    :province_ascertainment_sd => "Ascertainment spread",
-    :province_testing_coefficient => "Testing effect",
-    :importation_epsilon => "Importation intensity",
-    :province_cfr_sd => "Lethality spread",
-    :province_death_ascertainment_sd => "Death-confirmation spread"
-)
 spatial_pair_fig = plot_pair(
     chn_joint,
     [
