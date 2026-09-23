@@ -2,7 +2,9 @@
 # the page with the `BVD_DOC_PAGE` environment variable (one of `methods`,
 # `estimates/national`, `estimates/province`, `forecasts/national`,
 # `forecasts/province`,
-# `evaluation/insample`, `evaluation/forecast`, `sensitivity`). Every model
+# `evaluation/insample/national`, `evaluation/insample/province`,
+# `evaluation/forecast/national`, `evaluation/forecast/province`,
+# `sensitivity`). Every model
 # fit is loaded from the content-addressed cache (`BVD_FIT_CACHE`) rather
 # than refitted, so this is fast once the per-fit matrix (or an earlier run)
 # has populated the cache.
@@ -24,13 +26,16 @@ PAGE in (
     "methods",
     "estimates/national", "estimates/province", "forecasts/national",
     "forecasts/province",
-    "evaluation/insample", "evaluation/forecast", "sensitivity",
+    "evaluation/insample/national", "evaluation/insample/province",
+    "evaluation/forecast/national", "evaluation/forecast/province",
+    "sensitivity",
 ) ||
     error(
     "BVD_DOC_PAGE must be one of methods, estimates/national, " *
         "estimates/province, forecasts/national, forecasts/province, " *
-        "evaluation/insample, " *
-        "evaluation/forecast, sensitivity; got \"$PAGE\""
+        "evaluation/insample/national, evaluation/insample/province, " *
+        "evaluation/forecast/national, evaluation/forecast/province, " *
+        "sensitivity; got \"$PAGE\""
 )
 
 const LITERATE_SRC = joinpath(@__DIR__, "pages", "$PAGE.jl")

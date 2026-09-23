@@ -358,4 +358,31 @@ if !@isdefined(_BVD_SETUP_LOADED)
         isfile(path) && return CSV.read(path, DataFrame)
         return DataFrame([k => T[] for (k, T) in pairs(schema)])
     end
+
+    ## One-week-ahead forecast from a frozen fit, the one the evaluation
+    ## pages score against what has since been observed. A function rather
+    ## than a value, so only the pages that validate pay for the forecast.
+    ## `obs_recovered` is passed so the forecast carries a `recovered_new`
+    ## column (materialised only when the recovered origin is given), letting
+    ## the recovered stream be scored like the other streams. The onset grid
+    ## is the one the frozen fit saw, not the live one, so the forecast
+    ## carries an `onset reports` row scored on the triangle the frozen fit
+    ## was fitted to.
+    function validation_forecast_from(frozen)
+        onset_days = frozen.o.onset_curve_history.onset_days
+        grid_start = isempty(onset_days) ? nothing : minimum(onset_days)
+        grid_end = isnothing(grid_start) ? nothing :
+            max(maximum(frozen.o.onset_curve_history.report_days), grid_start)
+        return forecast_reported(
+            frozen.chn;
+            horizon = 7,
+            obs_cases = frozen.o.reported_cases,
+            obs_deaths = frozen.o.total_deaths,
+            obs_confirmed = frozen.o.confirmed_cases,
+            obs_confirmed_deaths = frozen.o.confirmed_deaths,
+            obs_recovered = frozen.o.recovered_cases,
+            grid_n = frozen.o.n,
+            onset_grid_start = grid_start, onset_grid_end = grid_end
+        )
+    end
 end # _BVD_SETUP_LOADED guard

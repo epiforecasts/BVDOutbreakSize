@@ -1,11 +1,8 @@
 # # Forecast evaluation
 #
-# How the forecasts on the [forecasts](@ref "Forecasts") page have scored
-# against the data that arrived afterwards.
-# Scoring is the continuous ranked probability score against a persistence
-# baseline, defined in the
-# [forecast scoring](@ref "Forecast scoring against a persistence baseline")
-# Methods section.
+# How the forecasts on the [forecasts](@ref "Forecasts") page have scored against the data that arrived afterwards.
+# Scoring is the continuous ranked probability score against a persistence baseline, defined in the [forecast scoring](@ref "Forecast scoring against a persistence baseline") Methods section.
+# The same scoring by province is on the [province forecast evaluation](@ref "Province forecast evaluation") page.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -20,9 +17,19 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## National
+# ## Summary
 #
-# ### Forecast validation
+# The overall bullets come first, then each stream's own scores, from the sections further down this page.
+# Relative skill is the model's CRPS over the persistence baseline's, so a value below one beats the baseline.
+# Coverage is the fraction of forecasts whose observed value falls inside the 90% predictive interval, nominally 0.9.
+
+#md # ```@eval
+#md # using Markdown, BVDOutbreakSize
+#md # dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+#md # Markdown.parse(read(joinpath(dir, "evaluation_forecast_national.md"), String))
+#md # ```
+
+# ## Forecast validation
 #
 # How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports are still updating are validated here.
@@ -39,33 +46,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # ```
 
 ## frozen_lastweek and frozen_lastweek_streams are computed in the setup
-## block above.
-## `obs_recovered` is passed so the frozen fit's forecast carries a
-## `recovered_new` column (materialised only when the recovered origin is
-## given), letting the recovered stream be scored against the observed count
-## below like the other streams.
-## The onset grid is the one the FROZEN fit saw, not the live one, so the
-## validation forecast carries an `onset reports` row scored on the triangle
-## the frozen fit was actually fitted to.
-_val_onset_days = frozen_lastweek.o.onset_curve_history.onset_days
-_val_grid_start = isempty(_val_onset_days) ? nothing :
-    minimum(_val_onset_days)
-_val_grid_end = isnothing(_val_grid_start) ? nothing :
-    max(
-        maximum(frozen_lastweek.o.onset_curve_history.report_days),
-        _val_grid_start
-    )
-validation_forecast = forecast_reported(
-    frozen_lastweek.chn;
-    horizon = 7,
-    obs_cases = frozen_lastweek.o.reported_cases,
-    obs_deaths = frozen_lastweek.o.total_deaths,
-    obs_confirmed = frozen_lastweek.o.confirmed_cases,
-    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-    obs_recovered = frozen_lastweek.o.recovered_cases,
-    grid_n = frozen_lastweek.o.n,
-    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end
-);
+## block above, and `validation_forecast_from` is defined there.
+validation_forecast = validation_forecast_from(frozen_lastweek);
 
 ## Each frozen individual (single-stream) fit's own one-week-ahead new-count
 ## forecast at the same cut-off as `frozen_lastweek`, from
@@ -204,7 +186,7 @@ validation_table = forecast_vs_truth(
 ## html-showable, so the table goes out as an ordinary markdown table #src
 ## rather than a fixed-width block of printed output. See its docstring #src
 ## for the mechanism. The same treatment is applied to every DataFrame #src
-## display in this file and in `analysis.jl`. #src
+## display in the report pages. #src
 MarkdownTable(validation_table) #hide
 
 #md # ```@raw html
@@ -279,7 +261,7 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
-# #### Streams no longer reported
+# ### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
 # The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
@@ -322,7 +304,7 @@ validation_stopped_fig = plot_forecast(
 MarkdownTable(validation_stopped_streams) #hide
 validation_stopped_fig #hide
 
-# ### Forecast scoring across releases
+# ## Forecast scoring across releases
 #
 # Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
 # The tables in this section are the joint model's, one row per stream.
@@ -335,13 +317,12 @@ validation_stopped_fig #hide
 # Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 #
-# Five things are excluded from the scores here and in the frozen section below, each for a stated reason rather than for scoring badly, and the second of them applies to the frozen section alone.
+# Four things are excluded from the scores here and in the frozen section below, each for a stated reason rather than for scoring badly, and the second of them applies to the frozen section alone.
 #
 # - One whole reconstruction (`results-v1.6.0`): its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample rather than a forecast.
 # - Frozen section only: the confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026, whose forecaster could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
 # - An onset window containing a vintage whose reread total falls, since its increment is not what the situation reports added.
 # - A stream that carries no persistence baseline, which is what makes a window scoreable at all.
-# - A province window holding a harmonisation-break day, since that day's backfill is published for the country and not by province.
 #
 # Nothing is dropped from the archive itself; `data/forecast_scores*.csv` and `data/forecast_overlay*.csv` record everything that was scored.
 #
@@ -349,7 +330,7 @@ validation_stopped_fig #hide
 # Its printed total therefore moves with the scan error as well as with late reporting.
 # On fourteen vintages the reread total falls, which a cumulative onset curve cannot do, and on many others it repeats unchanged.
 # The fit absorbs that with a per-vintage scan level; the scored truth cannot, since it is the increment between the vintages at the two ends of a window.
-# A window containing a falling vintage is therefore left unscored, the rule province windows holding a harmonisation-break day already follow.
+# A window containing a falling vintage is therefore left unscored, the rule the [province scores](@ref "Forecast by province across releases") already apply to a window holding a harmonisation-break day.
 # It bites hardest at the longer horizons, a four-week window being more likely to contain a reread than a one-week one: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
 # Read the onset row's skill against the baseline rather than its coverage, and read it as resting on a handful of windows.
 
@@ -493,7 +474,7 @@ forecast_overlay_fig = plot_forecast_overlay(
 
 forecast_overlay_fig #hide
 
-# ### Frozen-fit forecast evaluation
+# ## Frozen-fit forecast evaluation
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
@@ -633,7 +614,7 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # </details>
 #md # ```
 
-# #### Frozen skill by release
+# ### Frozen skill by release
 #
 # Skill at each cut-off more than one release forecast, one point per release rather than pooled across releases.
 # Releases run in the order they were cut, evenly spaced rather than to calendar scale.
@@ -703,7 +684,7 @@ frozen_overlay_fig #hide
 #md # </details>
 #md # ```
 
-# ### Individual fits against the baseline
+# ## Individual fits against the baseline
 #
 # This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
 
@@ -763,119 +744,9 @@ MarkdownTable(individual_score_by_release_table) #hide
 #md # </details>
 #md # ```
 
-# ## By province
-
-# ### Forecast by province
+# ## Saving forecast outputs
 #
-# The one-week-ahead forecast split by province, scored against what each province went on to report.
-# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
-# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
-# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
-
-#md # ```@raw html
-#md # <details><summary>Province forecast against observed</summary>
-#md # ```
-
-## Per-province cumulative confirmed cases and deaths at the frozen cut-off
-## and at the current one, so the truth for the week is their difference.
-## Read off the same increment matrices the compositions are scored on, so
-## the clamped revision is treated identically on both sides.
-province_truth = let
-    cur_c = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    cur_d = province_increment_matrix(
-        obs.province_death_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_c = province_increment_matrix(
-        frozen_lastweek.o.province_confirmed_history,
-        PROVINCE_NAMES, N_PATCHES
-    )
-    froz_d = province_increment_matrix(
-        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES
-    )
-    (;
-        observed = vec(sum(cur_c.increments; dims = 2)),
-        baseline = vec(sum(froz_c.increments; dims = 2)),
-        death_observed = vec(sum(cur_d.increments; dims = 2)),
-        death_baseline = vec(sum(froz_d.increments; dims = 2)),
-    )
-end
-
-province_validation_table = province_forecast_vs_truth(
-    frozen_lastweek.chn, validation_forecast;
-    observed = province_truth.observed,
-    baseline = province_truth.baseline,
-    death_observed = province_truth.death_observed,
-    death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_validation_table) #hide
-
-# ### Forecast by province across releases
-#
-# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-
-#md # ```@raw html
-#md # <details><summary>Load and summarise the province forecast scores</summary>
-#md # ```
-
-province_scores_df = _release_data(
-    "province_forecast_scores.csv",
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, crps = Float64,
-        log_crps = Float64, dispersion = Float64, overprediction = Float64,
-        underprediction = Float64, coverage_50 = Float64,
-        coverage_90 = Float64,
-        bias = Float64, n_samples = Int,
-        log_rel_to_baseline = Float64,
-    )
-)
-## The joint patch model is the only model that forecasts the provinces, so
-## there is no individual single-stream fit to compare against and `fit` is
-## single-valued by construction. Both are dropped rather than rendered as
-## columns that cannot vary.
-##
-## See the comment above `joint_score_by_release_table`'s assignment for why
-## this setup chunk's last statement needs a trailing `;`.
-province_score_overview_display = drop_degenerate_fit_column(
-    drop_individual_fit_columns(forecast_score_overview(province_scores_df))
-)
-province_score_by_horizon_display = drop_degenerate_fit_column(
-    drop_individual_fit_columns(
-        forecast_score_by_horizon(province_scores_df)
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(province_score_overview_display) #hide
-
-#md # ```@raw html
-#md # <details><summary>Province scores by horizon</summary>
-#md # ```
-
-MarkdownTable(province_score_by_horizon_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# ## Saving forecast results
-#
-# The one-week-back validation forecast, in the same archive format as the
-# release forecast, so the frozen "last week versus now" forecast is recorded
-# as a release asset alongside the forecast it is scored against.
+# The one-week-back validation forecast, in the same archive format as the release forecast, so the frozen "last week versus now" forecast is recorded as a release asset alongside the forecast it is scored against.
 
 #md # ```@raw html
 #md # <details><summary>Write forecast outputs</summary>
@@ -893,6 +764,72 @@ CSV.write(
         made_date = frozen_lastweek.o.cutoff, thin = 5
     )
 )
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Write the summary bullets</summary>
+#md # ```
+
+## The bullets under the summary heading at the top of the page. They read
+## tables built further down, so they are written here and read back when
+## the site is assembled.
+evaluation_forecast_national_summary = let
+    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
+        string(round(x; digits = 2))
+    scored(tbl) = filter(r -> !ismissing(r.rel_to_baseline), tbl)
+    function beat(label, tbl)
+        rows = scored(tbl)
+        size(rows, 1) == 0 &&
+            return string("- **", label, ":** no scored forecasts yet.")
+        return string(
+            "- **", label, ":** beat the baseline on ",
+            count(<(1), rows.rel_to_baseline), " of ", size(rows, 1),
+            " streams."
+        )
+    end
+    function block(lead, tbl)
+        rows = scored(tbl)
+        size(rows, 1) == 0 && return nothing
+        return join(
+            vcat(
+                [string("**", lead, "**"), ""],
+                [
+                    string(
+                        "- ", r.stream, ": relative skill ",
+                        fmt(r.rel_to_baseline), ", 90% coverage ",
+                        fmt(r.coverage_90), ", bias ", fmt(r.bias), " over ",
+                        r.n, " forecasts."
+                    )
+                        for r in eachrow(rows)
+                ]
+            ), "\n"
+        )
+    end
+    frozen_joint = select_fit_role(frozen_score_overview_table, "joint")
+    overall = [
+        beat("Joint model across releases", joint_score_overview_table),
+        beat("Frozen joint model", frozen_joint),
+    ]
+    blocks = filter(
+        !isnothing,
+        [
+            block("Across releases", joint_score_overview_table),
+            block("Frozen fits", frozen_joint),
+        ]
+    )
+    join(vcat([join(overall, "\n")], blocks), "\n\n")
+end
+dashboard_dir = joinpath(
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
+)
+mkpath(dashboard_dir)
+write(
+    joinpath(dashboard_dir, "evaluation_forecast_national.md"),
+    evaluation_forecast_national_summary
+);
 
 #md # ```@raw html
 #md # </details>
