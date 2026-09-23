@@ -135,19 +135,58 @@ end
     )
 end
 
-@testitem "_composition_predictive: fixed-seed draws are pinned" begin
-    using BVDOutbreakSize: _composition_predictive
+@testitem "_composition_predictive: draws match the pre-refactor code" begin
+    using BVDOutbreakSize: _composition_predictive, safe_betabinomial
+    using Random: MersenneTwister
 
-    ## Rebuilt reports must redraw the same composition band, so the draws
-    ## for a fixed seed are pinned exactly.
-    shares = [0.6 0.5; 0.3 0.35; 0.1 0.15]
-    ms = [shares for _ in 1:5]
-    totals = [200, 300]
-    preds = _composition_predictive(ms, fill(0.05, 5), totals, 2)
-    counts = [round.(Int, preds[p][d] .* totals) for p in 1:3 for d in 1:2]
-    @test counts == [
-        [104, 123], [105, 167], [73, 107], [69, 117], [23, 70], [26, 16],
-    ]
+    ## Rebuilt reports must redraw the same composition band. RNG streams
+    ## differ between Julia versions, so rather than pinning numbers the
+    ## draws are checked against the allocation as it was written before the
+    ## counts core was split out, run with the same seed in this session.
+    function reference(ms, rho, totals, nv; seed = 20_240)
+        rng = MersenneTwister(seed)
+        np = size(first(ms), 1)
+        nd = length(ms)
+        preds = [[fill(NaN, nv) for _ in 1:nd] for _ in 1:np]
+        counts = zeros(Int, np)
+        for (d, m) in enumerate(ms)
+            for i in 1:nv
+                total = totals[i]
+                total > 0 || continue
+                remaining = total
+                tail = 1.0
+                for p in 1:(np - 1)
+                    p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
+                    counts[p] = rand(
+                        rng,
+                        safe_betabinomial(max(remaining, 0), p_cond, rho[d])
+                    )
+                    remaining -= counts[p]
+                    tail = max(tail - m[p, i], 1.0e-10)
+                end
+                counts[np] = max(remaining, 0)
+                for p in 1:np
+                    preds[p][d][i] = counts[p] / total
+                end
+            end
+        end
+        return preds
+    end
+
+    shares = [0.6 0.5 0.4; 0.3 0.35 0.4; 0.1 0.15 0.2]
+    ms = [shares for _ in 1:50]
+    rho = collect(range(0.01, 0.3; length = 50))
+    ## The zero-total vintage checks the skipped draws leave the stream in
+    ## step.
+    totals = [200, 0, 300]
+    @test isequal(
+        _composition_predictive(ms, rho, totals, 3),
+        reference(ms, rho, totals, 3)
+    )
+    @test isequal(
+        _composition_predictive(ms, rho, totals, 3; seed = 7),
+        reference(ms, rho, totals, 3; seed = 7)
+    )
 end
 
 @testitem "province_count_panels: splits each draw's national total" begin
