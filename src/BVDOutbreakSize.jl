@@ -19,7 +19,7 @@ import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
-using Distributions: Distribution, pdf, cdf, Poisson,
+using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
     LogNormal, Beta, LKJCholesky,
     Gamma, TDist, truncated, censored, product_distribution
@@ -183,12 +183,6 @@ include("data.jl")
 include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
-## Off leaves Mooncake to derive the kernels itself, which is what an A/B
-## of the speedup compares against:
-##   set_preferences!(BVDOutbreakSize, "ad_rules" => false)
-if @load_preference("ad_rules", true)
-    include("ad_rules.jl")
-end
 include("summaries.jl")
 include("diagnostics.jl")
 include("scoring.jl")
@@ -201,6 +195,13 @@ include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
 include("models/fit_args.jl")
+## Off leaves Mooncake to derive the kernels itself, which is what an A/B
+## of the speedup compares against:
+##   set_preferences!(BVDOutbreakSize, "ad_rules" => false)
+## Included after the models, since some rules are on observation helpers.
+if @load_preference("ad_rules", true)
+    include("ad_rules.jl")
+end
 include("precompile.jl")
 
 end # module

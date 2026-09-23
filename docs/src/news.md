@@ -9,6 +9,25 @@ Changes since v2.1.0.
 
 ### Performance
 
+- Hand-written reverse-mode rules for the daily convolution and renewal
+  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
+  `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
+  grid, so left to the backend every iteration's intermediates reach the
+  tape; the rules replace that with a closed-form adjoint of the same
+  shape. The joint's gradient drops about 20%
+  under Mooncake, the default backend, and the delay-heavy observation
+  submodels rather more; the measurements are in #810. Each is a native
+  `Mooncake.rrule!!` method on a declared primitive signature. Values are
+  unchanged: each rule is checked against central differences and against
+  the gradient of an unregistered clone of the same function body.
+- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
+  The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
+  Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
+- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
+  A `missing` vector still samples under the same per-entry keys.
+  The two submodels' gradients run 1.2 to 1.9 times faster.
+- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
+  A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
@@ -92,6 +111,8 @@ Changes since v2.1.0.
   Each page opens with a summary: overall bullets, then a short block per stream or per province.
   The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
   The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
+- The report is split into pages, grouped in the navigation as Summary, Estimates (National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with coverage given overall and per province (#842).
 - The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
   About carries a new page on the authors, funding and citation.
 - The summary dashboard, National and Provinces pages open with their own summary and the "Last updated" and "Data as of" dates (#782, #822, #832).
@@ -112,12 +133,17 @@ Changes since v2.1.0.
   This adds about 33 minutes to the joint fit job.
 - The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
   `BVD_JOINT_MAX_DEPTH` overrides it.
+- The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
+- The joint fit's NUTS tree depth cap rises from 10 to 12, and `BVD_JOINT_MAX_DEPTH` overrides it (#846).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
 - The documentation build fails when the headline joint fit has not converged, and comments the verdict on the pull request (#764).
 - A pull request builds the report, runs the tests and measures coverage only when it changes something they depend on (#776, #805).
 - The CI fit cache key matches the key the fits use, so a change to files no fit reads no longer triggers a refit (#739).
+- A scheduled workflow deletes superseded Julia depot caches, so they take less of the 10 GB Actions cache budget the fit caches share (#852).
+  The documentation build's later jobs reuse the package image `list` compiled, rather than spending 13 to 16 minutes each compiling it again when their own depot cache has gone.
+  The benchmark workflow's two arms share one depot cache, so a run no longer starts from an empty depot.
 - One rule decides when a stream first and last reported, exported as `history_first_date`, `history_last_date` and the new `stream_first_date` (#817).
   Every date is unchanged.
 - `task fetch-fits` downloads the fits from the latest documentation run, and a local build refuses to fit inline unless `BVD_FIT_STRICT=false` is set (#782).
