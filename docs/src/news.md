@@ -47,6 +47,8 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- The province forecast continues the fitted patch model as it generates the data: correlated provincial deviations, the fitted delays and ascertainment, and the fitted composition splitting the national forecast, so the provinces add up to it (#845).
+  Its archive method is now `projection-v2`, and only that method is scored.
 - The limitations page opens with those that apply to the whole work, then groups the national and province ones by data, model and evaluation, one short bullet each (#840).
   Limitations that later work had overtaken are rewritten or dropped, and the province ones are added.
 - The offline `analysis.html` is gone (#839).
