@@ -44,9 +44,10 @@ A flag reaches the model as a value rather than a type, so both arms were inferr
 Mean 0.10 rather than 0.25, keeping 99% of its mass below the BVD CFR mean of 0.33.
 The previous prior sat close to the BVD CFR itself, against the submodel's own reasoning that non-BVD suspect illness is less lethal.
 This moves the non-BVD death background, so fitted values change.
-- The onset reporting-triangle likelihood now scores the first surviving
-  snapshot's complete printed curve as levels against a virtual empty
-  predecessor, alongside the between-vintage increments (#793).
+- The onset reporting-triangle likelihood scores between-vintage
+  increments inside a nowcast window of two delay supports, and beyond it
+  the latest snapshot's complete printed curve as levels, right-truncated
+  at its own report day (#793).
   Digitisation noise is a per-snapshot scale on a weekly random walk over
   the report-date span, replacing the fixed pixel-noise term and
   multiplicative slack, and the per-scan level error is sampled centred

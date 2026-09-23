@@ -286,11 +286,10 @@ end
     @test minimum(h.report_days .- h.onset_days) == 2
 end
 
-@testitem "load_onset_curve: every printed date is scored, not a trailing window" begin
-    ## A synthetic 3-vintage triangle with wide printed extents (58-68
-    ## days), wide enough that a trailing 28-day window would drop most of
-    ## the settled early dates. Every printed date both vintages of a pair
-    ## cover is scored.
+@testitem "load_onset_curve: increments inside the window, latest levels beyond" begin
+    ## A synthetic 3-vintage triangle with printed extents wider than the
+    ## nowcast window. Pairs score increments inside the window; the latest
+    ## vintage scores levels beyond it.
     using BVDOutbreakSize: load_onset_curve, ONSET_REPORT_MAX_DELAY
     using Dates: Date, Day
 
@@ -312,17 +311,24 @@ end
     end
     write(path, join(lines, "\n"))
 
-    h = load_onset_curve(path; cutoff = Date("2026-03-11"), seeding)
-
     D = ONSET_REPORT_MAX_DELAY
-    old_count = count(
-        i -> h.report_days[i] - h.onset_days[i] <= D - 1,
-        eachindex(h.onset_days)
+    h = load_onset_curve(
+        path; cutoff = Date("2026-03-11"), seeding, settled_window = D
     )
-    @test length(h.onset_days) > old_count
-    ## The first pair (58-day extent against an empty predecessor) alone
-    ## already carries 58 cells, all of them printed dates.
-    @test count(==(h.report_days[1]), h.report_days) == 58
+    window = 2 * D
+    R1, R3 = 60, 70
+    ## Every cell of the first vintage is a level inside its window.
+    first = h.report_days .== R1
+    @test all(==(0), h.prev_report_days[first])
+    @test sort(h.onset_days[first]) == collect((R1 - window + 1):58)
+    ## The latest vintage scores one level cell per printed date beyond
+    ## the window, and increments inside it.
+    latest = h.report_days .== R3
+    levels = latest .& (h.prev_report_days .== 0)
+    @test sort(h.onset_days[levels]) == collect(1:(R3 - window))
+    incs = latest .& (h.prev_report_days .> 0)
+    @test minimum(h.onset_days[incs]) == R3 - window + 1
+    @test all(==(1), h.increments[levels])
 end
 
 @testitem "onset_report_moments: full coverage agrees with the old window on shared cells" begin
@@ -737,14 +743,14 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
-@testitem "load_onset_curve: the archive's first snapshot covers one cell per printed bar" begin
+@testitem "load_onset_curve: the archive's latest snapshot anchors the complete curve" begin
     ## The seeding day sits before the genetic TMRCA bound and the earliest
     ## digitised onset date is in late April, so every scored cell sits
-    ## inside the 1-based grid. Also pins that the first surviving vintage
-    ## (scored as levels against the virtual empty predecessor, see
-    ## `onset_reporting_model`) gets exactly one cell per onset date in its
-    ## own printed extent.
-    using BVDOutbreakSize: BVDOutbreakSize, load_observations
+    ## inside the 1-based grid. The latest surviving vintage scores one
+    ## level cell per printed date beyond the nowcast window, and nothing
+    ## else scores those dates against it.
+    using BVDOutbreakSize: BVDOutbreakSize, load_observations,
+        ONSET_REPORT_MAX_DELAY
     using Dates: Day
 
     obs = load_observations()
@@ -762,17 +768,19 @@ end
             BVDOutbreakSize._read_onset_curve_blocks(path)
         )
     )
-    first_block = blocks[1]
-    lo, hi = extrema(keys(first_block.onsets))
+    last_block = blocks[end]
+    lo = minimum(keys(last_block.onsets))
     _date(u) = obs.cutoff - Day(obs.n - u)
-
-    first_report_day = h.report_days[1]
-    ## Every one of the first vintage's cells is a level cell.
-    @test all(==(0), h.prev_report_days[h.report_days .== first_report_day])
-    first_dates = sort(
-        _date.(h.onset_days[h.report_days .== first_report_day])
-    )
-    @test first_dates == collect(lo:Day(1):hi)
+    R = maximum(h.report_days)
+    @test _date(R) == last_block.report_date
+    window = 2 * ONSET_REPORT_MAX_DELAY
+    levels = (h.report_days .== R) .& (h.prev_report_days .== 0)
+    @test sort(_date.(h.onset_days[levels])) ==
+        collect(lo:Day(1):_date(R - window))
+    @test allunique(h.onset_days[levels])
+    ## Inside the window the latest vintage scores increments only.
+    incs = (h.report_days .== R) .& (h.prev_report_days .> 0)
+    @test minimum(h.onset_days[incs]) >= R - window + 1
 end
 
 @testitem "onset_report_scales: error formula match, grows with magnitude" begin

@@ -858,45 +858,46 @@ onset_delay_profile_fig = plot_onset_delay_profile(
 
 onset_delay_profile_fig #hide
 
-# The figure below is the first surviving snapshot's own printed curve against the model's fitted level for those same cells (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section for why this snapshot is scored as levels rather than corrections).
+# The figure below is the latest snapshot's printed curve against the model's fitted level for those same bars, right-truncated at its report day.
 
 #md # ```@raw html
-#md # <details><summary>First snapshot: complete curve against fitted level</summary>
+#md # <details><summary>Latest snapshot: complete curve against fitted level</summary>
 #md # ```
 
-_onset_first_R = first(_onset_report_grid_days)
-_onset_first_snap = _onset_snap_by_day[_onset_first_R]
-_onset_first_us = sort(
-    obs.onset_curve_history.onset_days[
-        _onset_cells_by_report[_onset_first_R],
+_onset_last_R = last(_onset_report_grid_days)
+_onset_last_snap = _onset_snap_by_day[_onset_last_R]
+_onset_last_us = sort(
+    [
+        u for u in eachindex(_onset_daily_draws[1])
+            if haskey(_onset_last_snap.onsets, grid_date(u))
     ]
 )
-_onset_first_observed = Float64[
-    get(_onset_first_snap.onsets, grid_date(u), 0) for u in _onset_first_us
+_onset_last_observed = Float64[
+    _onset_last_snap.onsets[grid_date(u)] for u in _onset_last_us
 ]
-_onset_first_draws = [
+_onset_last_draws = [
     onset_level_predictive_draws(
         u, _onset_daily_draws, _onset_hazard, _onset_scan_level,
-        _onset_noise_scale, 1;
+        _onset_noise_scale, length(_onset_report_grid_days);
         grid_start = _onset_hazard_grid_start,
         alpha_grid_start = _onset_grid_start,
-        target_delay = _onset_first_R - u
+        target_delay = _onset_last_R - u
     )
-        for u in _onset_first_us
+        for u in _onset_last_us
 ]
-_onset_first_title = "First snapshot " *
-    "($(string(_onset_first_snap.report_date))): " *
+_onset_last_title = "Latest snapshot " *
+    "($(string(_onset_last_snap.report_date))): " *
     "complete curve vs fitted level"
-onset_first_snapshot_fig = plot_onset_level_band(
-    grid_date.(_onset_first_us), _onset_first_observed, _onset_first_draws;
-    title = _onset_first_title, band_colour = :mediumpurple
+onset_last_snapshot_fig = plot_onset_level_band(
+    grid_date.(_onset_last_us), _onset_last_observed, _onset_last_draws;
+    title = _onset_last_title, band_colour = :mediumpurple
 );
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-onset_first_snapshot_fig #hide
+onset_last_snapshot_fig #hide
 
 # Each panel below is one digitised snapshot, plotted by onset date.
 # The grey crosses are the counts that snapshot's own figure printed.

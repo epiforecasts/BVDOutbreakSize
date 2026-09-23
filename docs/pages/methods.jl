@@ -1684,7 +1684,7 @@ cfr_prior_fig #hide
 # A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute error is per bar and the multiplicative error is one number for the whole figure.
 # The modelled level each cell differences therefore carries its own scan's sampled level $\mathrm{scan\_level}_s \sim \mathrm{Normal}(1,\ \sigma_{\text{scan}})$, with $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ unbounded above.
 #
-# The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
+# Inside the nowcast window the first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than increments; beyond the window the latest snapshot's bars score levels, right-truncated at its own report day. That is what anchors α.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
 #
 # Three things stay weak.

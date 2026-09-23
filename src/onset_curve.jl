@@ -126,26 +126,20 @@ advancing the manifest `as_of_date` past a newly-digitised vintage's
 report date picks that vintage up with no code change.
 
 For each pair of consecutive (post-dedup, in-cutoff) vintages `s-1, s` and
-each onset date `u` both figures print within `settled_window` days past
-the delay support (`R - u <= ONSET_REPORT_MAX_DELAY + settled_window`), one
-increment cell is built:
+each onset date `u` both figures print inside the nowcast window
+(`R - u < ONSET_REPORT_MAX_DELAY + settled_window`), one increment cell is
+built:
 
 ```
 y = confirmed_total(s, u) - confirmed_total(s-1, u)
 ```
 
-The stream has two components: between-vintage increments (corrections
-that right truncation, [`onset_report_cdf`](@ref), undoes through the
-delay hazard and calendar walk) and the first surviving vintage's own
-printed extent, differenced against a virtual empty predecessor (below).
-The second gives a noisy `alpha(u) · onsets(u)` curve back to the start of
-the digitised window (late April in the current data), anchoring
-ascertainment in a way corrections alone cannot.
-
-Every printed onset date both vintages of a pair cover is scored:
-[`onset_reporting_model`](@ref) fits a per-snapshot noise scale on its own
-report-date walk, so a settled cell (true value ~0) still carries
-information about that scale.
+The first vintage's cells inside its window are levels against a virtual
+empty predecessor. Beyond the window the latest vintage's printed bars
+enter as level cells too, right-truncated at its own report day: the
+complete curve, giving a noisy `alpha(u) · onsets(u)` back to the start of
+the digitised window (late April in the current data). No onset date is
+scored both ways at the latest vintage.
 
 The window is clipped to the onset dates both vintages' figures actually
 print. Each block has its own printed extent, its earliest to latest
@@ -243,6 +237,7 @@ function load_onset_curve(
     report_days = Int[]
     prev_report_days = Int[]
     increments = Int[]
+    window = ONSET_REPORT_MAX_DELAY + Int(settled_window)
     for s in eachindex(snaps)
         R = _idx(snaps[s].report_date)
         Rprev = s == 1 ? 0 : _idx(snaps[s - 1].report_date)
@@ -254,12 +249,10 @@ function load_onset_curve(
             cov_lo = max(cov_lo, extents[s - 1][1])
             cov_hi = min(cov_hi, extents[s - 1][2])
         end
-        ## Increment cells reach `settled_window` days past the delay
-        ## support, where the modelled increment is zero and only the
-        ## noise scale is informed; the first snapshot's levels cover its
-        ## whole extent.
-        lo = s == 1 ? max(1, cov_lo) :
-            max(1, cov_lo, R - ONSET_REPORT_MAX_DELAY - settled_window + 1)
+        ## The nowcast window: cells reach `settled_window` days past the
+        ## delay support, where the modelled increment is zero and only
+        ## the noise scale is informed.
+        lo = max(1, cov_lo, R - window + 1)
         ## A cell differences this vintage against its predecessor, so the
         ## predecessor must have been able to report that onset date. An
         ## onset day past `Rprev` has a negative previous delay, for which
@@ -275,6 +268,17 @@ function load_onset_curve(
             push!(report_days, R)
             push!(prev_report_days, Rprev)
             push!(increments, cur - prev)
+        end
+    end
+    ## The complete curve: the latest vintage's printed bars beyond the
+    ## nowcast window, scored as levels against the empty predecessor with
+    ## right truncation at its own report day.
+    let s = lastindex(snaps), R = _idx(snaps[s].report_date)
+        for u in max(1, extents[s][1]):min(extents[s][2], R - window)
+            push!(onset_days, u)
+            push!(report_days, R)
+            push!(prev_report_days, 0)
+            push!(increments, get(snaps[s].onsets, _date(u), 0))
         end
     end
     ## Per-vintage cumulative confirmed total, over every printed bar rather
