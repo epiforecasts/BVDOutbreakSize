@@ -22,7 +22,8 @@
     using FiniteDifferences: central_fdm, grad
     using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
     using BVDOutbreakSize: convolve_delay, convolve_survival,
-        convolve_pmf, interpolate_knots, renewal_infections
+        convolve_pmf, interpolate_knots, renewal_infections,
+        abscond_thinned, abscond_thinned_flows
 
     ## Drive one native rule: build zero-tangent coduals for the arguments,
     ## seed the output tangent with the cotangent, run the pullback, and
@@ -120,6 +121,58 @@
         ## accumulates the recursion into a working copy of it.
         @test out_tangent == Ī
     end
+
+    @testset "abscond_thinned" begin
+        pmf = abs.(randn(15)) .+ 0.1
+        pmf ./= sum(pmf)
+        κ = 0.07
+        ȳ = randn(15)
+        y, (p̄, _), rdata = run_rule(abscond_thinned, pmf, κ; cotangent = ȳ)
+        @test y == abscond_thinned(pmf, κ)
+        fp, fκ = grad(fdm, (p, k) -> sum(ȳ .* abscond_thinned(p, k)), pmf, κ)
+        @test p̄ ≈ fp rtol = 1.0e-7
+        ## The scalar rate has no fdata, so its cotangent is the rdata.
+        @test rdata[3] ≈ fκ rtol = 1.0e-7
+        @test rdata[1] isa NoRData && rdata[2] isa NoRData
+    end
+
+    @testset "abscond_thinned_flows" begin
+        ## Unequal schedule lengths so both branches of the cohort walk run,
+        ## and leading zero admissions so the forward pass skips cohorts.
+        n = 40
+        adm1 = [zeros(3); abs.(randn(n - 3)) .+ 0.5]
+        adm2 = [zeros(3); abs.(randn(n - 3)) .+ 0.5]
+        pmf1 = abs.(randn(15)) .+ 0.1
+        pmf1 ./= sum(pmf1)
+        pmf2 = abs.(randn(9)) .+ 0.1
+        pmf2 ./= sum(pmf2)
+        κ = 0.07
+        h = 0.05 .+ 0.3 .* rand(n)
+        ȳ1 = randn(n)
+        ȳ2 = randn(n)
+        args = (adm1, pmf1, adm2, pmf2, κ, h)
+        codual_args = map(zero_fcodual, args)
+        out, pb = Mooncake.rrule!!(
+            zero_fcodual(abscond_thinned_flows), codual_args...
+        )
+        tangent(out)[1] .= ȳ1
+        tangent(out)[2] .= ȳ2
+        rdata = pb(NoRData())
+        @test primal(out) == abscond_thinned_flows(args...)
+        fgs = grad(
+            fdm,
+            (a, p, b, q, k, c) -> begin
+                y1, y2 = abscond_thinned_flows(a, p, b, q, k, c)
+                sum(ȳ1 .* y1) + sum(ȳ2 .* y2)
+            end,
+            args...
+        )
+        for i in (1, 2, 3, 4, 6)
+            @test tangent(codual_args[i]) ≈ fgs[i] rtol = 1.0e-7
+        end
+        @test rdata[6] ≈ fgs[5] rtol = 1.0e-7
+        @test all(i -> rdata[i] isa NoRData, (1, 2, 3, 4, 5, 7))
+    end
 end
 
 @testitem "AD rules: Mooncake with the rule matches ForwardDiff" tags = [
@@ -129,7 +182,8 @@ end
     using ForwardDiff: ForwardDiff
     using Mooncake: Mooncake
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
-        interpolate_knots, renewal_infections
+        interpolate_knots, renewal_infections, abscond_thinned,
+        abscond_thinned_flow, abscond_thinned_flows
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -142,12 +196,12 @@ end
 
     ## ForwardDiff's gradient of the same objective, one argument at a time.
     ## ForwardDiff never consults Mooncake's rule table, so it differentiates
-    ## the kernel body in `src/renewal.jl` itself.
+    ## the kernel body in `src/renewal.jl` or `src/models/` itself.
     function fgrad(f, args...)
         return ntuple(length(args)) do i
-            ForwardDiff.gradient(args[i]) do v
-                f(ntuple(j -> j == i ? v : args[j], length(args))...)
-            end
+            fi(v) = f(ntuple(j -> j == i ? v : args[j], length(args))...)
+            args[i] isa Real ? ForwardDiff.derivative(fi, args[i]) :
+                ForwardDiff.gradient(fi, args[i])
         end
     end
 
@@ -206,6 +260,45 @@ end
         check_grads(
             (p, q, r) -> sum(Ī .* renewal_infections(p, q, r)),
             Rt, g, seed_vec
+        )
+    end
+
+    @testset "abscond_thinned" begin
+        pmf = abs.(randn(15)) .+ 0.1
+        pmf ./= sum(pmf)
+        ȳ = randn(15)
+        check_grads((p, k) -> sum(ȳ .* abscond_thinned(p, k)), pmf, 0.07)
+    end
+
+    @testset "abscond_thinned_flows" begin
+        ## Leading zero admissions: the forward pass skips those cohorts, and
+        ## ForwardDiff still sees their derivative in the admissions.
+        n = 40
+        adm1 = [zeros(3); abs.(randn(n - 3)) .+ 0.5]
+        adm2 = [zeros(3); abs.(randn(n - 3)) .+ 0.5]
+        h = 0.05 .+ 0.3 .* rand(n)
+        ȳ1 = randn(n)
+        ȳ2 = randn(n)
+        obj = (a, p, b, q, k, c) -> begin
+            y1, y2 = abscond_thinned_flows(a, p, b, q, k, c)
+            sum(ȳ1 .* y1) + sum(ȳ2 .* y2)
+        end
+        ## Each schedule in turn the longer, and one longer than the series
+        ## so every cohort is truncated.
+        for (l1, l2) in ((15, 9), (9, 15), (50, 12))
+            pmf1 = abs.(randn(l1)) .+ 0.1
+            pmf1 ./= sum(pmf1)
+            pmf2 = abs.(randn(l2)) .+ 0.1
+            pmf2 ./= sum(pmf2)
+            check_grads(obj, adm1, pmf1, adm2, pmf2, 0.07, h)
+        end
+        ## The single-flow wrapper passes the same arrays as both flows, so
+        ## the rule's tangents alias.
+        pmf = abs.(randn(15)) .+ 0.1
+        pmf ./= sum(pmf)
+        check_grads(
+            (a, p, k, c) -> sum(ȳ1 .* abscond_thinned_flow(a, p, k, c)),
+            adm1, pmf, 0.07, h
         )
     end
 end

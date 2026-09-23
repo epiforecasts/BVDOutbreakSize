@@ -1,7 +1,8 @@
-# Native `Mooncake.rrule!!` methods for the `renewal.jl` kernels. Each is a
-# loop over a daily grid, so left to the backend every iteration's
-# intermediates go on the tape; these replace that with a closed-form
-# adjoint of the same shape as the forward loop.
+# Native `Mooncake.rrule!!` methods for the `renewal.jl` kernels and the
+# abscond thinning in `models/observations.jl`. Each is a loop over a daily
+# grid, so left to the backend every iteration's intermediates go on the
+# tape; these replace that with a closed-form adjoint of the same shape as
+# the forward loop.
 #
 # Signatures are restricted to `Array{<:IEEEFloat}`, what every call site
 # passes. Anything else falls through to Mooncake's derived rule.
@@ -224,4 +225,142 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(I, Ī), renewal_infections_pullback!!
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(abscond_thinned), Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat,
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(abscond_thinned_flows), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+        Array{<:Mooncake.IEEEFloat},
+    },
+)
+
+## `y[i] = pmf[i] · s^(i−1)` with `s = 1 − κ`. The scalar `κ` has no fdata,
+## so its cotangent goes back as rdata.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(abscond_thinned)},
+        pmf::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        κ::CoDual{<:Mooncake.IEEEFloat}
+    )
+    pp = primal(pmf)
+    κp = primal(κ)
+    p̄ = tangent(pmf)
+    y = abscond_thinned(pp, κp)
+    ȳ = zero(y)
+    function abscond_thinned_pullback!!(::NoRData)
+        s = one(κp) - κp
+        ## `pw` is `s^(i−1)` and `dpw` its derivative in `s`, both carried
+        ## as running products so no power is taken.
+        pw = one(s)
+        dpw = zero(s)
+        s̄ = zero(s)
+        @inbounds for i in eachindex(pp)
+            p̄[i] += ȳ[i] * pw
+            s̄ += ȳ[i] * pp[i] * dpw
+            dpw = dpw * s + pw
+            pw *= s
+        end
+        return NoRData(), NoRData(), oftype(κp, -s̄)
+    end
+    return CoDual(y, ȳ), abscond_thinned_pullback!!
+end
+
+## Adjoint of the confirmation-stopped abscond thinning. Per cohort `t` the
+## forward walk is
+##
+##     u[d] = u[d−1] · (1 − h[t+d−1]),    s[d] = s[d−1] · (1 − κ u[d])
+##     outk[t+d] += admk[t] · pmfk[d+1] · s[d]
+##
+## The pullback recomputes `u` and `s` for one cohort into scratch buffers,
+## then walks the cohort backwards carrying `s̄` and `ū`. It walks the
+## cohorts the forward pass skips (both admissions zero) too: their output
+## is zero but its derivative in the admissions is not.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(abscond_thinned_flows)},
+        adm1::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        pmf1::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        adm2::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        pmf2::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        κ::CoDual{<:Mooncake.IEEEFloat},
+        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    a1p, p1p = primal(adm1), primal(pmf1)
+    a2p, p2p = primal(adm2), primal(pmf2)
+    κp = primal(κ)
+    hp = primal(conf_hazard)
+    ## `abscond_thinned_flow` passes the same arrays twice, so these tangents
+    ## can alias: the pullback only ever adds into them.
+    ā1, p̄1 = tangent(adm1), tangent(pmf1)
+    ā2, p̄2 = tangent(adm2), tangent(pmf2)
+    h̄ = tangent(conf_hazard)
+    y1, y2 = abscond_thinned_flows(a1p, p1p, a2p, p2p, κp, hp)
+    ȳ1 = zero(y1)
+    ȳ2 = zero(y2)
+    function abscond_thinned_flows_pullback!!(::NoRData)
+        n = length(a1p)
+        nmax1 = length(p1p)
+        nmax2 = length(p2p)
+        T = eltype(y1)
+        one_T = one(T)
+        u = Vector{T}(undef, max(nmax1, nmax2))
+        s = similar(u)
+        κ̄ = zero(T)
+        @inbounds for t in 1:n
+            a1 = a1p[t]
+            a2 = a2p[t]
+            dmax1 = min(nmax1 - 1, n - t)
+            dmax2 = min(nmax2 - 1, n - t)
+            dm = max(dmax1, dmax2)
+            ## `u[d+1]`, `s[d+1]` hold the survivals at cohort age `d`.
+            ā1[t] += ȳ1[t] * p1p[1]
+            ā2[t] += ȳ2[t] * p2p[1]
+            p̄1[1] += ȳ1[t] * a1
+            p̄2[1] += ȳ2[t] * a2
+            u[1] = one_T
+            s[1] = one_T
+            for d in 1:dm
+                u[d + 1] = u[d] * (one_T - hp[t + d - 1])
+                s[d + 1] = s[d] * (one_T - κp * u[d + 1])
+            end
+            ūc = zero(T)
+            s̄c = zero(T)
+            for d in dm:-1:1
+                sd = s[d + 1]
+                if d <= dmax1
+                    g = ȳ1[t + d]
+                    ā1[t] += g * p1p[d + 1] * sd
+                    p̄1[d + 1] += g * a1 * sd
+                    s̄c += g * a1 * p1p[d + 1]
+                end
+                if d <= dmax2
+                    g = ȳ2[t + d]
+                    ā2[t] += g * p2p[d + 1] * sd
+                    p̄2[d + 1] += g * a2 * sd
+                    s̄c += g * a2 * p2p[d + 1]
+                end
+                ## s[d] = s[d−1] · (1 − κ u[d])
+                ud = u[d + 1]
+                sprev = s[d]
+                κ̄ -= s̄c * sprev * ud
+                ūc -= s̄c * sprev * κp
+                s̄c *= one_T - κp * ud
+                ## u[d] = u[d−1] · (1 − h[t+d−1])
+                hd = hp[t + d - 1]
+                h̄[t + d - 1] -= ūc * u[d]
+                ūc *= one_T - hd
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
+            oftype(κp, κ̄), NoRData()
+    end
+    return CoDual((y1, y2), (ȳ1, ȳ2)), abscond_thinned_flows_pullback!!
 end
