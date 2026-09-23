@@ -10,7 +10,8 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
+using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
+    predict
 using Turing: DynamicPPL
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
@@ -95,7 +96,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
     onset_nowcast_draws, plot_onset_nowcast_grid,
     predict_no_onward_deaths, plot_no_onward_deaths,
-    forecast_reported, forecast_stream, forecast_table, forecast_archive,
+    forecast_draws, forecast_reported, forecast_stream, forecast_table,
+    forecast_archive,
     province_forecast_archive,
     forecast_onsets, onset_forecast_table,
     plot_forecast,
