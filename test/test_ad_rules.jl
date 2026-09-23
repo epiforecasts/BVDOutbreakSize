@@ -559,7 +559,8 @@ end
     using Mooncake: Mooncake
     using Distributions: logpdf, censored
     using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
-        censored_nbinomial_loglik, NegBinomialVector, StudentTVector
+        betabinomial_loglik, censored_nbinomial_loglik, NegBinomialVector,
+        StudentTVector, BetaBinomialVector
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -585,6 +586,11 @@ end
     y = round.(Int, m .+ 3 .* σ .* randn(rng, 60))
     @test mgrad((a, b, d) -> logpdf(StudentTVector(a, b, d), y), m, σ, 4.0) ==
         mgrad((a, b, d) -> studentt_loglik(a, b, y, d), m, σ, 4.0)
+    n = rand(rng, 0:300, 30)
+    k = [rand(rng, 0:t) for t in n]
+    p = 0.05 .+ 0.9 .* rand(rng, 30)
+    @test mgrad((q, r) -> logpdf(BetaBinomialVector(n, q, r), k), p, 0.05) ==
+        mgrad((q, r) -> betabinomial_loglik(n, q, r, k), p, 0.05)
 end
 
 @testitem "AD rules: the occupancy rule records the model's balance" tags = [
