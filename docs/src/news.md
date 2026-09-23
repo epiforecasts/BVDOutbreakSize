@@ -47,7 +47,7 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
-- The limitations page is organised by national and province, then by data, model and evaluation, with one heading per limitation (#840).
+- The limitations page opens with those that apply to the whole work, then groups the national and province ones by data, model and evaluation, one bullet each (#840).
   Each says what would remove it and links the issue that tracks it.
   Limitations that later work had overtaken are rewritten or dropped, and the province ones are added.
 - Each province is projected a week ahead by its own renewal equation
