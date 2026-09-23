@@ -3422,18 +3422,20 @@ function onset_scan_adjust(
     means = Vector{T}(undef, m)
     lc = Vector{T}(undef, m)
     lp = Vector{T}(undef, m)
-    ns = length(scan_level)
     @inbounds for i in 1:m
-        s = vintage_idx[i]
-        p = prev_vintage_idx[i]
-        cs = (s >= 1 && s <= ns) ? scan_level[s] : one(T)
-        cp = (p >= 1 && p <= ns) ? scan_level[p] : one(T)
-        lc[i] = level_cur[i] * cs
-        lp[i] = level_prev[i] * cp
+        lc[i] = level_cur[i] * _scan_multiplier(scan_level, vintage_idx[i])
+        lp[i] = level_prev[i] *
+            _scan_multiplier(scan_level, prev_vintage_idx[i])
         means[i] = lc[i] - lp[i]
     end
     return (; means, level_cur = lc, level_prev = lp)
 end
+
+## Whether scan index `s` names a scan, and the multiplier a read off it
+## takes: that scan's level, or exactly one for the sentinel `0`.
+@inline _scan_in_range(scan_level, s) = s >= 1 && s <= length(scan_level)
+@inline _scan_multiplier(scan_level, s) =
+    _scan_in_range(scan_level, s) ? scan_level[s] : one(eltype(scan_level))
 
 """
     onset_report_scales(means, level_cur, level_prev, prev_report_idx;
@@ -3547,6 +3549,33 @@ function onset_report_scale(
         max(μ, zero(T)) + pixel_sd^2 * reads +
             scan_sd^2 * (level_cur^2 + level_prev^2)
     )
+end
+
+"""
+    onset_scanned_cells(level_cur, level_prev, scan_level, vintage_idx,
+        prev_vintage_idx, prev_report_idx, pixel_sd)
+
+Per-cell increment means and observation scales the onset likelihood
+scores: [`onset_scan_adjust`](@ref) applies each vintage's scan level, and
+[`onset_report_scales`](@ref) builds the scale from the adjusted levels
+with pixel noise `pixel_sd` and no scan-level term. Returns
+`(; means, scales)`. One call, so a Mooncake rule covers the pair.
+"""
+function onset_scanned_cells(
+        level_cur::AbstractVector, level_prev::AbstractVector,
+        scan_level::AbstractVector,
+        vintage_idx::AbstractVector{<:Integer},
+        prev_vintage_idx::AbstractVector{<:Integer},
+        prev_report_idx::AbstractVector{<:Integer}, pixel_sd::Real
+    )
+    scanned = onset_scan_adjust(
+        level_cur, level_prev, scan_level, vintage_idx, prev_vintage_idx
+    )
+    scales = onset_report_scales(
+        scanned.means, scanned.level_cur, scanned.level_prev,
+        prev_report_idx; pixel_sd
+    )
+    return (; scanned.means, scales)
 end
 
 """
@@ -4007,13 +4036,10 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         hazard_state.grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
-    scanned = onset_scan_adjust(
-        moments.level_cur, moments.level_prev,
-        scan_level, vintages.vintage_idx, vintages.prev_vintage_idx
-    )
-    scales = onset_report_scales(
-        scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd
+    scanned = onset_scanned_cells(
+        moments.level_cur, moments.level_prev, scan_level,
+        vintages.vintage_idx, vintages.prev_vintage_idx, prev_report_days,
+        pixel_sd
     )
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
@@ -4023,7 +4049,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## cells keep the flat `increments` name the predictive path reads.
     increments_state ~ to_submodel(
         onset_increments_model(
-            scanned.means, σ_mult .* scales,
+            scanned.means, σ_mult .* scanned.scales,
             onset_curve_history.increments, ν
         ), false
     )

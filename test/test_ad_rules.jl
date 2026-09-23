@@ -22,7 +22,7 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, onset_report_expected_total, studentt_loglik,
         betabinomial_loglik, onset_vintage_indices, censoring_cap,
-        admission_headroom
+        admission_headroom, onset_scanned_cells
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -77,6 +77,21 @@
             onsets = abs.(randn(rng, n)) .* 20,
             alpha = abs.(randn(rng, nu)) .* 0.3,
         )
+    end
+
+    ## Scanned onset cells over `ns` scans. Previous reads are the sentinel
+    ## `0` or, for one cell, an index past the last scan. `lratio` sets the
+    ## previous level against the current one: below one the means are
+    ## positive, above one negative, both clear of the kink at zero.
+    function scanned_args(rng, m, ns; lratio = 0.6)
+        lc = 5 .+ 20 .* rand(rng, m)
+        lp = lratio .* lc .* (0.8 .+ 0.2 .* rand(rng, m))
+        vi = rand(rng, 1:ns, m)
+        pvi = [rand(rng) < 0.2 ? 0 : max(v - 1, 0) for v in vi]
+        pvi[end] = ns + 1
+        pri = [p == 0 ? 0 : 10 + p for p in pvi]
+        c = 1 .+ 0.05 .* randn(rng, ns)
+        return (lc, lp, c, vi, pvi, pri, 2.1)
     end
 
     ## Every native rule with the argument types its call sites pass: float
@@ -302,6 +317,20 @@
         add!(
             "D = 28", onset_report_expected_total, big.onsets, big.lh,
             big.γ, 120, big.alpha, 220; perf = true
+        )
+
+        add!("30 cells", onset_scanned_cells, scanned_args(rng, 30, 6)...)
+        add!(
+            "negative means", onset_scanned_cells,
+            scanned_args(rng, 30, 6; lratio = 1.6)...
+        )
+        add!(
+            "no cells", onset_scanned_cells, Float64[], Float64[], [1.0],
+            Int[], Int[], Int[], 2.1
+        )
+        add!(
+            "1100 cells", onset_scanned_cells,
+            scanned_args(rng, 1100, 45)...; perf = true
         )
 
         ## Increments are integers of either sign, as scanned, or floats, as
@@ -553,7 +582,8 @@ end
 @testitem "AD rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
-    using BVDOutbreakSize: nbinomial_loglik, studentt_loglik
+    using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
+        onset_scanned_cells, onset_scan_adjust, onset_report_scales
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -577,6 +607,60 @@ end
     @test all(!iszero, gm[61:63])
     ## A defaulted `ν` passes no derivative.
     @test iszero(only(mgrad(d -> studentt_loglik(m, σ, y, d), -1.0)))
+
+    ## A scanned cell whose mean is exactly zero, as for an onset date
+    ## outside the series, or negative passes no derivative through the
+    ## counting term. The unfused pair, which Mooncake derives for itself,
+    ## gives the same gradient.
+    lc, lp = [0.0, 12.0, 0.0, 8.0], [0.0, 4.0, 0.0, 9.0]
+    vi, pvi, pri = [1, 2, 2, 2], [0, 1, 1, 1], [0, 5, 5, 5]
+    w = randn(rng, 4)
+    function fused(a, b, c)
+        cells = onset_scanned_cells(a, b, c, vi, pvi, pri, 2.1)
+        return sum(w .* cells.scales)
+    end
+    function unfused(a, b, c)
+        x = onset_scan_adjust(a, b, c, vi, pvi)
+        scales = onset_report_scales(
+            x.means, x.level_cur, x.level_prev, pri; pixel_sd = 2.1
+        )
+        return sum(w .* scales)
+    end
+    g_fused = mgrad(fused, lc, lp, [1.02, 0.97])
+    @test all(iszero, g_fused[1][[1, 3, 4]])
+    @test all(
+        map(
+            (a, b) -> isapprox(a, b; rtol = 1.0e-12),
+            g_fused, mgrad(unfused, lc, lp, [1.02, 0.97])
+        )
+    )
+end
+
+@testitem "AD rules: the onset rules fire at the joint's call signatures" tags = [
+    :ad,
+] begin
+    using Mooncake: Mooncake, MinimalCtx, ReverseMode
+    using BVDOutbreakSize: load_observations, joint_fit_args,
+        default_breakpoint, onset_vintage_indices, onset_scanned_cells
+
+    ## The argument types `onset_reporting_model` passes on the production
+    ## data: float vectors from the moments and the scan levels, the
+    ## history's day vectors and the vintage indices built from them.
+    obs = load_observations()
+    h = joint_fit_args(
+        obs; breakpoint = default_breakpoint(obs)
+    ).onset_curve_history
+    v = onset_vintage_indices(h.report_days, h.prev_report_days)
+    F = Vector{Float64}
+    fires(sig) = Mooncake.is_primitive(
+        MinimalCtx, ReverseMode, sig, Base.get_world_counter()
+    )
+    @test fires(
+        Tuple{
+            typeof(onset_scanned_cells), F, F, F, typeof(v.vintage_idx),
+            typeof(v.prev_vintage_idx), typeof(h.prev_report_days), Float64,
+        }
+    )
 end
 
 @testitem "AD rules: the vector distributions score through the rules" tags = [

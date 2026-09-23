@@ -96,6 +96,19 @@
             as_of
         )
     end
+    ## Positive and negative means, the sentinel and out-of-range previous
+    ## scans, and no cells.
+    for (note, lratio) in (("positive means", 0.6), ("negative means", 1.6))
+        add!(
+            "onset_scanned_cells $note", onset_scanned_cells,
+            ref_onset_scanned_cells, scanned_args(rng, 40, 6; lratio)...
+        )
+    end
+    add!(
+        "onset_scanned_cells no cells", onset_scanned_cells,
+        ref_onset_scanned_cells, Float64[], Float64[], [1.0], Int[], Int[],
+        Int[], 2.1
+    )
     μ = exp.(4 .+ 0.5 .* randn(rng, 60))
     x = rand(rng, 0:120, 60)
     for k in (0.7, 8.3, 150.0)

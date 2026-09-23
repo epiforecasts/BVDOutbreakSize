@@ -132,6 +132,18 @@ function ref_onset_report_expected_total(onsets, lh, γ, gs, alpha, as_of)
     return total
 end
 
+## Cell `i` reads scan `s_i` now and scan `p_i` before, each at that scan's
+## level, or one for an index naming no scan. Its mean is
+## `ℓ_cur c_s − ℓ_prev c_p` and its scale `sqrt(max(mean, 0) + pixel_sd² r)`
+## over `r = 2` reads, or one read when there is no previous report.
+function ref_onset_scanned_cells(lc, lp, c, s, p, prev_report, pixel_sd)
+    level(k) = 1 <= k <= length(c) ? c[k] : 1.0
+    means = [lc[i] * level(s[i]) - lp[i] * level(p[i]) for i in eachindex(lc)]
+    reads = [prev_report[i] > 0 ? 2 : 1 for i in eachindex(lc)]
+    scales = sqrt.(max.(means, 0) .+ pixel_sd^2 .* reads)
+    return (; means, scales)
+end
+
 ## One `logpdf` per count, with in-range parameters.
 function ref_nbinomial_loglik(k, μ, x)
     return sum(
