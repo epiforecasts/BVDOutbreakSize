@@ -165,11 +165,18 @@ end
     ## marginally (full 1123 against 1159 at 0 and 1203 at +1; stable region
     ## 918 against 988 at 0 and 978 at +1) - 127 and 128 print the same 14
     ## sept 2026 last tick, so no axis miscalibration explains it either.
+    ## 129->130 also prefers shift -1 (full 1351 against 1458 at 0 and 1515
+    ## at +1; stable region, cutoff 31 August, 968 against 1012 at 0 and
+    ## 1060 at +1) despite both vintages printing the identical, directly
+    ## and independently verified 21 September last tick (see the SitRep
+    ## 129/130 paragraph above), so again no axis miscalibration explains
+    ## it - the sixteenth such documented exception in this stream.
     documented = Dict(
         "093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
         "119" => "120", "120" => "121", "121" => "122", "122" => "123",
-        "123" => "124", "125" => "126", "126" => "127", "127" => "128"
+        "123" => "124", "125" => "126", "126" => "127", "127" => "128",
+        "129" => "130"
     )
 
     unexpected = Tuple{String, String, Int, Int}[]

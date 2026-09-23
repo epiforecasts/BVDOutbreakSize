@@ -8,6 +8,8 @@
 # `data/rt_by_release.csv` and `data/r0_by_release.csv`, in the style of
 # `data/released_estimates.csv` (see `scripts/refresh_releases.jl`), and
 # the per-fit `rt_`, `size_` and `r0_by_release_by_stream.csv` overlays.
+# The forecast overlays go to `data/forecast_overlay.csv` and, per province,
+# `data/province/forecast_overlay.csv`.
 #
 # The inputs are the assets of every results release on GitHub: a
 # forecast archive (`stream_forecasts.csv`, `forecast.csv`, or a
@@ -1250,6 +1252,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## a national stream, so pooling the two would mix a share of a national
     ## forecast in with the forecast it is a share of.
     province_score_rows = NamedTuple[]
+    province_overlay_rows = NamedTuple[]
     rt_rows = NamedTuple[]
     r0_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
@@ -1500,6 +1503,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
         if !isnothing(presult)
             append!(province_score_rows, presult.rows)
+            append!(province_overlay_rows, presult.overlay)
             n_province_scored += 1
             n_province_breaks += presult.spans_break
             n_province_no_baseline += presult.no_baseline
@@ -1800,6 +1804,37 @@ if abspath(PROGRAM_FILE) == @__FILE__
         "Wrote $(nrow(province_scores)) per-province scores over " *
             "$n_province_scored release(s) to " *
             "data/province_forecast_scores.csv"
+    )
+
+    ## `data/province/forecast_overlay.csv`: the per-province forecasts'
+    ## median and bounds with the observed truth, in the national overlay's
+    ## schema. Its basename is already in `FIT_DATA_EXCLUDE`, which matches
+    ## on basename, so it stays out of the fit key. Written even when empty
+    ## (header only), since the docs build reads it.
+    province_overlay = _overlay_frame(province_overlay_rows)
+    province_overlay_dest = joinpath(
+        @__DIR__, "..", "data", "province", "forecast_overlay.csv"
+    )
+    mkpath(dirname(province_overlay_dest))
+    write_simple_csv(
+        province_overlay_dest,
+        [
+            :release => province_overlay.release,
+            :made_date => string.(province_overlay.made_date),
+            :stream => province_overlay.stream,
+            :horizon => province_overlay.horizon,
+            :target_date => string.(province_overlay.target_date),
+            :fit => province_overlay.fit,
+            :observed => province_overlay.observed,
+            :median => province_overlay.median,
+            :lo30 => province_overlay.lo30, :hi30 => province_overlay.hi30,
+            :lo60 => province_overlay.lo60, :hi60 => province_overlay.hi60,
+            :lo90 => province_overlay.lo90, :hi90 => province_overlay.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(province_overlay)) per-province overlay rows to " *
+            "data/province/forecast_overlay.csv"
     )
 
     ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
