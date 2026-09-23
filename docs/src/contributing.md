@@ -297,7 +297,8 @@ Widen the list when something new feeds a build: a pattern that is too narrow sk
 
 ### Before asking for review
 
-Go through the whole diff against `main` with this list before asking for a review, human or `@seabbs-review-bot`.
+These are the issues most often flagged in review.
+Check the whole diff against `main` for them before asking for one.
 
 - Comments, docstrings and test names state what the code does now, briefly.
   History belongs in [News](news.md).
