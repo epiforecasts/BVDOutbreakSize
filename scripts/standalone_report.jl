@@ -86,6 +86,12 @@ function find_one(root::AbstractString, suffix::AbstractString)
     return only(hits)
 end
 
+## The Vitepress `assets/` directory. It sits once at the site root, beside
+## `vp-icons.css`, rather than beside each page.
+function site_assets(build_dir::AbstractString)
+    return joinpath(dirname(find_one(build_dir, "vp-icons.css")), "assets")
+end
+
 function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     ## The methods and the national estimates, in that order, so the offline
     ## copy carries the model as well as the results. The published asset
@@ -93,7 +99,7 @@ function build_standalone(build_dir::AbstractString, out_file::AbstractString)
     ## move.
     page = find_one(build_dir, joinpath("estimates", "national.html"))
     methods_page = find_one(build_dir, "methods.html")
-    assets = joinpath(dirname(page), "assets")
+    assets = site_assets(build_dir)
     html = read(page, String)
 
     ## The front matter (title, authors, dates, abstract, scope) is not on
