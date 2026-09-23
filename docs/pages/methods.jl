@@ -13,8 +13,8 @@
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
+## Shared setup: packages, observations and the fit registry. See
+## `docs/pages/_setup.jl`.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
