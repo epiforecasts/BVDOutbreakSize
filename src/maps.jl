@@ -483,3 +483,174 @@ function plot_zone_map_panels(
     )
     return fig
 end
+
+## Province maps: each patch's value drawn on every health zone of the
+## provinces it pools, with the province names in place of zone labels.
+
+export province_map_summary, province_zone_values, plot_province_map
+
+"""
+$(TYPEDSIGNATURES)
+
+The posterior median and equal-tailed `level` interval of each patch's draws,
+as the `values`, `lower` and `upper` a [`plot_province_map`](@ref) panel
+takes. `draws` holds one draw vector per patch.
+"""
+function province_map_summary(
+        draws::AbstractVector{<:AbstractVector}; level::Real = 0.9
+    )
+    a = (1 - level) / 2
+    return (;
+        values = [median(d) for d in draws],
+        lower = [quantile(d, a) for d in draws],
+        upper = [quantile(d, 1 - a) for d in draws],
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+[`province_map_summary`](@ref) of the per-patch deterministic `key` of
+`chn`, for its first `n_patches` patches.
+"""
+function province_map_summary(
+        chn, key::Symbol, n_patches::Integer; level::Real = 0.9
+    )
+    return province_map_summary(_per_patch(chn, key, n_patches); level)
+end
+
+## Patch index of a geojson province key, through the patch memberships, or
+## `nothing` for a province no patch pools.
+function _province_patch(province::AbstractString)
+    k = zone_key(province)
+    return findfirst(p -> k in PROVINCE_MEMBERS[p], PROVINCE_NAMES)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Spread per-patch `values`, in [`PROVINCE_NAMES`](@ref) order, over the
+health zones of the provinces each patch pools, as the `values` and `zones`
+of a [`plot_zone_map_panels`](@ref) panel. `lower` and `upper`, when given,
+are spread the same way. A zone whose province no patch pools, or whose
+patch has no value, is left out.
+"""
+function province_zone_values(
+        values::AbstractVector; lower = nothing, upper = nothing,
+        geojson::AbstractString = zone_geojson_path(),
+        provinces::AbstractVector = ZONE_MAP_PROVINCES
+    )
+    for b in (lower, upper)
+        b === nothing || length(b) == length(values) || error(
+            "province_zone_values: $(length(b)) bounds for " *
+                "$(length(values)) patches."
+        )
+    end
+    zones = String[]
+    patch = Int[]
+    for z in load_health_zones_geojson(geojson; provinces)
+        p = _province_patch(z.province)
+        (p === nothing || p > length(values)) && continue
+        push!(zones, z.zone)
+        push!(patch, p)
+    end
+    out = (; values = [values[p] for p in patch], zones)
+    lower === nothing || (out = merge(out, (; lower = lower[patch])))
+    upper === nothing || (out = merge(out, (; upper = upper[patch])))
+    return out
+end
+
+## Label position of each province in `geo`: the area-weighted mean of its
+## zones' part centroids. Named by the entry of `provinces` it folds to.
+function _province_label_points(geo, provinces)
+    names = Dict(zone_key(String(p)) => String(p) for p in provinces)
+    labels = String[]
+    points = CairoMakie.Point2f[]
+    for prov in unique(geo.province)
+        ax = ay = w = 0.0
+        for z in findall(==(prov), geo.province), poly in geo.polygons[z]
+
+            c = _ring_centroid(
+                CairoMakie.Makie.GeometryBasics.coordinates(poly.exterior)
+            )
+            ax += c[1] * c[3]
+            ay += c[2] * c[3]
+            w += c[3]
+        end
+        push!(labels, get(names, zone_key(prov), prov))
+        push!(points, CairoMakie.Point2f(ax / w, ay / w))
+    end
+    return labels, points
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Choropleths of the patches, one per entry of `panels`, wrapping after
+`ncols`. Each panel is a NamedTuple with per-patch `values` in
+[`PROVINCE_NAMES`](@ref) order, optional per-patch `lower` and `upper`, and
+any of the other [`plot_zone_map`](@ref) keywords. Every health zone takes
+its patch's value through [`province_zone_values`](@ref), so a pooled patch
+colours all its provinces, and each province is named at its centre instead
+of the zones being labelled. With `diverging_at`, a patch whose interval
+straddles it is washed out.
+"""
+function plot_province_map(
+        panels::AbstractVector{<:NamedTuple};
+        geojson::AbstractString = zone_geojson_path(),
+        provinces::AbstractVector = ZONE_MAP_PROVINCES, ncols::Integer = 3,
+        title::AbstractString = "", panel_size = (520, 400),
+        fontsize = 11
+    )
+    zone_panels = map(panels) do panel
+        opts = Base.structdiff(panel, NamedTuple{(:values, :lower, :upper)})
+        z = province_zone_values(
+            panel.values; lower = get(panel, :lower, nothing),
+            upper = get(panel, :upper, nothing), geojson, provinces
+        )
+        merge(opts, z)
+    end
+    fig = plot_zone_map_panels(
+        zone_panels; geojson, provinces, ncols, label_top = 0, title,
+        panel_size
+    )
+    geo = _zone_table(load_health_zones_geojson(geojson; provinces))
+    labels, points = _province_label_points(geo, provinces)
+    for ax in fig.content
+        ax isa Axis || continue
+        ## Zone boundaries would read as zone-level values, so only the
+        ## province outlines are drawn.
+        for p in ax.scene.plots
+            p isa CairoMakie.Makie.Poly && (p.strokewidth = 0)
+        end
+        CairoMakie.text!(
+            ax, points; text = labels, fontsize, font = :bold,
+            align = (:center, :center), color = :white,
+            strokecolor = :white, strokewidth = 3.0
+        )
+        CairoMakie.text!(
+            ax, points; text = labels, fontsize, font = :bold,
+            align = (:center, :center), color = :black
+        )
+    end
+    return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One province choropleth of per-patch `values`. The keywords are those of a
+[`plot_province_map`](@ref) panel (`lower`, `upper`, `title`,
+`diverging_at`, `scale`, `colorbar_label`, ...) plus its `geojson`,
+`provinces` and `panel_size`.
+"""
+function plot_province_map(
+        values::AbstractVector{<:Real};
+        geojson::AbstractString = zone_geojson_path(),
+        provinces::AbstractVector = ZONE_MAP_PROVINCES,
+        panel_size = (760, 540), kwargs...
+    )
+    return plot_province_map(
+        [(; values, kwargs...)]; geojson, provinces, ncols = 1, panel_size
+    )
+end
