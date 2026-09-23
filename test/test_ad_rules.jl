@@ -467,3 +467,101 @@ end
         check_occupancy(args)
     end
 end
+
+@testitem "AD rules: onset-reporting kernels match ForwardDiff" tags = [
+    :ad,
+] begin
+    using Random: seed!
+    using ForwardDiff: ForwardDiff
+    using Mooncake: Mooncake
+    using BVDOutbreakSize: onset_report_cdf_table,
+        onset_report_anchor_series, onset_report_moments,
+        onset_report_expected_total
+
+    ## Same pairing as above: Mooncake runs the registered rule, ForwardDiff
+    ## the kernel body in `src/models/observations.jl`.
+    function check_grads(f, args...)
+        rule = Mooncake.build_rrule(f, args...)
+        v, g = Mooncake.value_and_gradient!!(rule, f, args...)
+        ## The table and total rules rebuild the forward loop themselves.
+        @test v == f(args...)
+        for i in eachindex(args)
+            d = ForwardDiff.gradient(args[i]) do v
+                f(ntuple(j -> j == i ? v : args[j], length(args))...)
+            end
+            ## `atol` covers the constant anchor, whose table gradient is
+            ## zero up to round-off.
+            @test g[i + 1] ≈ d rtol = 1.0e-10 atol = 1.0e-12
+        end
+        return nothing
+    end
+
+    seed!(20260923)
+    D = 12
+    gs = 5
+    ge = 40
+    n = 45
+    nu = ge - gs + 1
+    lh = randn(D) .- 2
+    ## Shorter than the table's reach, so the calendar index clamps at the
+    ## top end as it does for onset dates near `grid_end`.
+    γ = 0.3 .* randn(nu)
+    onsets = abs.(randn(n)) .* 20
+    alpha = abs.(randn(nu)) .* 0.3
+    tab = onset_report_cdf_table(lh, γ, gs, gs, ge)
+
+    @testset "onset_report_cdf_table" begin
+        W = randn(D, nu)
+        check_grads(
+            (l, g) -> sum(W .* onset_report_cdf_table(l, g, gs, gs, ge)),
+            lh, γ
+        )
+    end
+
+    @testset "onset_report_anchor_series" begin
+        w = randn(nu)
+        ## A daily anchor series and the length-1 constant default.
+        for a in (abs.(randn(n)) .* 0.3, [0.15])
+            check_grads(
+                (t, v) -> sum(w .* onset_report_anchor_series(t, gs, v)),
+                tab, a
+            )
+        end
+    end
+
+    @testset "onset_report_moments" begin
+        ## Cells from a first vintage (previous report date before every
+        ## onset, so a negative delay), from later vintages, and past the
+        ## delay support on both report dates.
+        oi = Int[]
+        ri = Int[]
+        pri = Int[]
+        for (R, Rp) in ((gs + 4, 0), (22, gs + 4), (31, 22), (ge, 31))
+            for u in max(R - D + 1, gs):R
+                push!(oi, u)
+                push!(ri, R)
+                push!(pri, Rp)
+            end
+        end
+        append!(oi, [gs, gs + 1])
+        append!(ri, [ge, ge])
+        append!(pri, [ge - 1, gs + D + 3])
+        w1, w2, w3 = randn(length(oi)), randn(length(oi)), randn(length(oi))
+        check_grads(
+            (t, o, al) -> begin
+                r = onset_report_moments(t, gs, o, gs, al, oi, ri, pri)
+                sum(w1 .* r.means) + sum(w2 .* r.level_cur) +
+                    sum(w3 .* r.level_prev)
+            end,
+            tab, onsets, alpha
+        )
+    end
+
+    @testset "onset_report_expected_total" begin
+        ## Onset dates before `grid_start` clamp both `γ` and `alpha`.
+        check_grads(
+            (o, l, g, al) -> onset_report_expected_total(o, l, g, gs, al, n),
+            onsets, lh, γ, alpha
+        )
+    end
+end
