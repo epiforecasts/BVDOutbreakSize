@@ -78,6 +78,8 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
+  It links to the home page for installing, running and updating the data rather than repeating it.
 
 ### Infrastructure
 
