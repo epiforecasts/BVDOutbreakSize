@@ -514,7 +514,9 @@ end
             importation_kernel
         ), false
     )
-    onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
+    ## Summed over the patches with one matrix-vector product.
+    onsets_total = transpose(patch_state.onsets_matrix) *
+        ones(eltype(patch_state.onsets_matrix), n_patches)
     cumulative_infections := patch_state.cumulative_total
     C_T := patch_state.C_T
     cumulative_onsets := _detached(cumsum, onsets_total)
@@ -933,15 +935,10 @@ reproduction number implied by the summed patch infections.
     export_pressure_state ~ to_submodel(export_pressure(n_patches))
     export_weight := export_pressure_state.weights
     export_pressure_sd := export_pressure_state.pooling_sd
-    ## Built in one pass into a preallocated vector, so the submodel call
-    ## below cannot box a rebound local.
-    _wts = export_pressure_state.weights
-    Tw = promote_type(eltype(patch_state.infections_matrix), eltype(_wts))
-    export_infections = zeros(Tw, n)
-    @inbounds for p in 1:n_patches, t in 1:n
-
-        export_infections[t] += _wts[p] * patch_state.infections_matrix[p, t]
-    end
+    ## The patches' infections weighted by export propensity, one
+    ## matrix-vector product.
+    export_infections = transpose(patch_state.infections_matrix) *
+        export_pressure_state.weights
     exports_state ~ to_submodel(
         exports(
             exported_cases, export_infections, p_uganda;

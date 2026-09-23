@@ -1283,7 +1283,6 @@ scales and the correlation matrix.
         rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start)
     )
     Rt_national = rt_state.Rt
-    log_Rt_national = log.(Rt_national)
     ## The deviations live on the same weekly knots as the national walk, so
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
@@ -1302,7 +1301,7 @@ scales and the correlation matrix.
             Rt_matrix1[1, t] = Rt_national[t]
         end
         return (;
-            Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
+            Rt_matrix = Rt_matrix1, Rt_national,
             δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
             σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
             Ω = ones(Tp1, 1, 1), δ_halflife = zero(Tp1),
@@ -1368,34 +1367,35 @@ scales and the correlation matrix.
         end
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
-    δ_patch = zeros(Tp, n_patches, n)
     Rt_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
         ## A view, not a copy: `interpolate_knots` only reads its knots, and
         ## the copy put one `getindex` per knot on the gradient tape.
         δ_daily = interpolate_knots(view(δ_knots, p, :), days, n)
         for t in 1:n
-            δ_patch[p, t] = δ_daily[t]
-            Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
+            Rt_matrix[p, t] = Rt_national[t] * exp(δ_daily[t])
         end
     end
-    ## Cross-patch correlation matrix, reconstructed from its factor for
-    ## reporting (Ω = L Lᵀ).
-    Ω = zeros(Tp, n_patches, n_patches)
-    @inbounds for i in 1:n_patches, j in 1:n_patches
-
-        acc = zero(Tp)
-        for k in 1:min(i, j)
-            acc += L[i, k] * L[j, k]
-        end
-        Ω[i, j] = acc
-    end
+    ## The daily deviations and the cross-patch correlation matrix
+    ## (Ω = L Lᵀ) are reported only.
+    δ_patch = _detached(_daily_deviations, δ_knots, days, n)
+    Ω = _detached(*, L, transpose(L))
     return (;
-        Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
+        Rt_matrix, Rt_national, δ_patch, δ_knots,
         σ_level, σ_δ, Ω, δ_halflife, sigma_rw = rt_state.sigma_rw,
         log_R0 = rt_state.log_R0,
         intervention_effect = rt_state.intervention_effect,
     )
+end
+
+## Each patch's knot deviations (rows of `δ_knots`) interpolated to the
+## daily grid.
+function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
+    δ = zeros(eltype(δ_knots), size(δ_knots, 1), n)
+    for p in axes(δ_knots, 1)
+        δ[p, :] = interpolate_knots(view(δ_knots, p, :), days, n)
+    end
+    return δ
 end
 
 """
