@@ -21,12 +21,9 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## One-week-ahead forecast results
+# ## Forecast summary
 #
-# The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
-# The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
-# The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
-# The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
+# The expected counts for the week after the cut-off, from the forecast below.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -41,6 +38,33 @@ forecast = forecast_reported(
     obs_confirmed_deaths = obs.confirmed_deaths,
     obs_recovered = obs.recovered_cases
 );
+forecast_week_end = obs.cutoff + Day(7);
+national_forecast_bullets = join(
+    [
+        "- **Confirmed cases:** $(median_interval_text(forecast.confirmed_new)) new laboratory-confirmed cases in the week to $(forecast_week_end).",
+        "- **Confirmed deaths:** $(median_interval_text(forecast.confirmed_deaths_new)) new confirmed deaths over the same week.",
+        "- **Infections:** $(median_interval_text(forecast.infections_new)) new infections, reported and unreported.",
+        "- **Reproduction number:** $(median_interval_text(forecast.rt_forecast; digits = 2)) on $(forecast_week_end).",
+    ], "\n"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+Markdown.parse(national_forecast_bullets) #hide
+
+# ## One-week-ahead forecast results
+#
+# The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
+# The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
+# The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
+# The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
+
+#md # ```@raw html
+#md # <details><summary>Summarise the one-week-ahead forecast</summary>
+#md # ```
+
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html

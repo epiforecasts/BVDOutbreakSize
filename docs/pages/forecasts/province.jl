@@ -1,12 +1,14 @@
 # # Province forecasts
 #
-# This page splits the one-week-ahead national forecast on the [forecasts](@ref "Forecasts") page by province.
-# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage.
-# The share is held at that value over the week.
+# This page projects each province a week ahead from the joint model's fit.
+# Each province's renewal equation runs on past the cut-off, with the provinces still exchanging infections through importation.
+# Its reproduction number follows the national trend's walk, and its deviation from that trend reverts toward zero at the fitted half-life.
+# The confirmed counts start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage, and then grow with the province's own projected infections.
+# The provinces are projected separately, so they need not add up to the national forecast on the [forecasts](@ref "Forecasts") page.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
-# How the split has scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
+# How the province forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
 #
-# The spatial tables report confirmed cases and confirmed deaths, so the split covers those two streams.
+# The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
 # The symptom-onset curve is national only, so there is no province nowcast.
 #
 # This page is generated from
@@ -27,37 +29,48 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## One-week-ahead forecast by province
+# ## Province forecast summary
 #
-# The table and figure give the new confirmed cases and confirmed deaths expected in each province by $T + 7$.
+# The expected confirmed counts in each province for the week after the cut-off.
 
 #md # ```@raw html
-#md # <details><summary>Generate the one-week-ahead forecast and its province split</summary>
+#md # <details><summary>Project each province a week ahead</summary>
 #md # ```
 
-## The same call as the national page, so the split is of the national
-## forecast shown there.
-forecast = forecast_reported(
+province_projection = forecast_provinces(
     chn_joint;
-    horizon = 7,
-    obs_cases = obs.reported_cases,
-    obs_deaths = obs.total_deaths,
-    obs_confirmed = obs.confirmed_cases,
-    obs_confirmed_deaths = obs.confirmed_deaths,
-    obs_recovered = obs.recovered_cases
+    horizon = 7, n_patches = N_PATCHES
 );
 province_forecast = province_forecast_table(
-    chn_joint, forecast;
+    chn_joint, province_projection;
     n_patches = N_PATCHES
 );
 province_forecast_fig = plot_province_forecast(
-    chn_joint, forecast;
+    chn_joint, province_projection;
     n_patches = N_PATCHES
+);
+province_week_end = obs.cutoff + Day(7);
+province_forecast_bullets = join(
+    [
+        let rows = province_projection.patch .== p
+            "- **$(PROVINCE_LABELS[p]):** " *
+                "$(median_interval_text(province_projection[rows, :confirmed_new])) new confirmed cases and " *
+                "$(median_interval_text(province_projection[rows, :confirmed_deaths_new])) new confirmed deaths in the week to $(province_week_end)."
+        end
+            for p in 1:N_PATCHES
+    ], "\n"
 );
 
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+Markdown.parse(province_forecast_bullets) #hide
+
+# ## One-week-ahead forecast by province
+#
+# The table and figure give the new confirmed cases and confirmed deaths expected in each province by $T + 7$.
+# The table also gives each province's new infections and its reproduction number at $T + 7$.
 
 #md # ```@raw html
 #md # <details><summary>Province forecast summary table</summary>
@@ -103,7 +116,7 @@ forecast_province_table(p) = MarkdownTable(
     ]
 )
 forecast_province_fig(p) = plot_province_forecast_detail(
-    chn_joint, forecast;
+    chn_joint, province_projection;
     province = p, n_patches = N_PATCHES,
     observed = forecast_province_observed(p)
 )
