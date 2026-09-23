@@ -747,11 +747,6 @@ CairoMakie.save(
 #md # </details>
 #md # ```
 
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 #md # ```@raw html
 #md # <details><summary>Write the summary bullets</summary>
 #md # ```
