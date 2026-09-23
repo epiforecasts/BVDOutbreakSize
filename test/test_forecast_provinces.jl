@@ -4,6 +4,7 @@
     using BVDOutbreakSize: patch_infections, province_importation_kernel,
         PROVINCE_POPULATIONS, cdf_nmax
     using Distributions: Gamma
+    using DataFrames: DataFrame
 
     ## A three-patch outbreak run for `n + h` days at a constant reproduction
     ## number per patch. The chain carries the first `n` days, so the
@@ -31,7 +32,8 @@
     function projection_chain(
             I; delta = zeros(NP), drift_sd = zeros(NP),
             halflife = 42.0, sigma_rw = 0.0, eps = EPS,
-            conf_daily = nothing, shares = nothing
+            conf_daily = nothing, shares = nothing,
+            deaths_daily = nothing, death_shares = nothing
         )
         base = (;
             R_T_patch = [copy(RT) for _ in 1:ND],
@@ -57,8 +59,31 @@
                 )
             )
         end
+        if deaths_daily !== nothing
+            cum = collect(range(0.0, deaths_daily * N; length = N))
+            cum[end] = cum[end - 1] + deaths_daily
+            base = merge(
+                base, (;
+                    cumulative_confirmed_deaths = [copy(cum) for _ in 1:ND],
+                    k_confirmed_deaths = fill(1.0e8, ND),
+                    province_death_shares = [copy(death_shares) for _ in 1:ND],
+                )
+            )
+        end
         return base
     end
+
+    ## A chain carrying both confirmed streams, and a national forecast the
+    ## province summaries must not read.
+    full_chain() = projection_chain(
+        full_run(EPS);
+        conf_daily = 1.0e3, shares = [0.7 0.6; 0.2 0.3; 0.1 0.1],
+        deaths_daily = 1.0e2, death_shares = [0.5 0.5; 0.3 0.3; 0.2 0.2]
+    )
+    national() = DataFrame(
+        confirmed_new = fill(1.0e6, ND),
+        confirmed_deaths_new = fill(1.0e6, ND)
+    )
 end
 
 @testitem "forecast_provinces continues the patch renewal" setup = [
@@ -211,4 +236,96 @@ end
     captions = [x.text[] for x in fig.content if x isa Mk.Label]
     @test any(c -> occursin("own renewal equation", c), captions)
     @test !any(c -> occursin("modelled share", c), captions)
+end
+
+@testitem "province summaries project a national forecast" setup = [
+    ProvinceProjection,
+] begin
+    using BVDOutbreakSize: forecast_provinces, province_forecast_table
+
+    ## A national forecast is replaced by the projection from the chain, so
+    ## the table reads the same draws whichever it is given.
+    chn = full_chain()
+    proj = forecast_provinces(chn; n_patches = NP)
+    @test province_forecast_table(chn, national(); n_patches = NP) ==
+        province_forecast_table(chn, proj; n_patches = NP)
+
+    ## A chain with no per-patch state cannot be projected by province.
+    @test_throws ErrorException province_forecast_table(
+        (; a = 1), national(); n_patches = NP
+    )
+end
+
+@testitem "province_forecast_archive archives the projection" setup = [
+    ProvinceProjection,
+] begin
+    using Dates: Date, Day
+    using DataFrames: nrow
+    using BVDOutbreakSize: forecast_provinces, province_forecast_archive,
+        PROVINCE_NAMES
+
+    chn = full_chain()
+    made = Date("2026-09-06")
+    arch = province_forecast_archive(
+        chn, [(7, national()), (14, national())];
+        made_date = made, n_patches = NP
+    )
+    @test names(arch) == [
+        "made_date", "horizon", "target_date", "province", "stream",
+        "draw", "value",
+    ]
+    @test nrow(arch) == NP * 2 * 2 * ND
+    @test Set(arch.province) == Set(PROVINCE_NAMES[1:NP])
+    @test all(arch.target_date .== made .+ Day.(arch.horizon))
+    ## Each horizon's values are that horizon's projection, not the national
+    ## forecast passed in.
+    for h in (7, 14)
+        proj = forecast_provinces(
+            chn; horizon = h, n_patches = NP, patch_labels = PROVINCE_NAMES
+        )
+        got = arch[
+            (arch.horizon .== h) .& (arch.province .== PROVINCE_NAMES[1]) .&
+                (arch.stream .== "confirmed cases"), :value,
+        ]
+        @test got == float.(proj[proj.patch .== 1, :confirmed_new])
+    end
+
+    thinned = province_forecast_archive(
+        chn, [(7, national())];
+        made_date = made, n_patches = NP, thin = 2
+    )
+    @test nrow(thinned) == NP * 2 * cld(ND, 2)
+end
+
+@testitem "province_forecast_vs_truth scores the projection" setup = [
+    ProvinceProjection,
+] begin
+    using Statistics: quantile
+    using BVDOutbreakSize: forecast_provinces, province_forecast_vs_truth
+
+    chn = full_chain()
+    kw = (;
+        observed = [900, 100, 30], baseline = [800, 60, 20],
+        death_observed = [40, 20, 5], death_baseline = [20, 10, 5],
+        n_patches = NP,
+    )
+    df = province_forecast_vs_truth(chn, national(); kw...)
+    @test size(df, 1) == 2 * NP
+    cases = df[df[!, "Stream"] .== "Confirmed cases", :]
+    @test cases[!, "Observed"] == [100, 40, 10]
+    deaths = df[df[!, "Stream"] .== "Confirmed deaths", :]
+    @test deaths[!, "Observed"] == [20, 10, 0]
+    ## The interval is the projection's, so the national forecast passed in
+    ## does not reach it.
+    proj = forecast_provinces(chn; n_patches = NP)
+    v = float.(proj[proj.patch .== 1, :confirmed_new])
+    @test cases[1, "Upper 90%"] == round(quantile(v, 0.95))
+    @test province_forecast_vs_truth(chn, proj; kw...) == df
+    @test eltype(df[!, "Within 90% PI"]) == Bool
+    @test !("Central estimate" in names(df))
+
+    ## A chain with no per-patch state cannot be scored by province.
+    @test_throws ErrorException province_forecast_vs_truth(
+        (; a = 1), national(); kw...
+    )
 end
