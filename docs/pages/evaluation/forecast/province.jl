@@ -202,6 +202,37 @@ MarkdownTable(province_score_by_release_display) #hide
 #md # </details>
 #md # ```
 
+# Each release's province forecasts against what each province went on to report, one panel per province stream and horizon.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the observed count.
+
+#md # ```@raw html
+#md # <details><summary>Load the archived province forecasts and their outcomes</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `province_forecast.csv`, projection rows only, in the national overlay's
+## schema. A missing file reads as an empty table.
+evaluation_province_overlay_df = _release_data(
+    joinpath("province", "forecast_overlay.csv"),
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
+evaluation_province_overlay_fig = plot_forecast_overlay(
+    scored_overlay(evaluation_province_overlay_df);
+    empty_message = _province_empty
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evaluation_province_overlay_fig #hide
+
 # ## Saving province forecast outputs
 
 #md # ```@raw html
