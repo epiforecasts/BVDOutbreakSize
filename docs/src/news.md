@@ -91,6 +91,8 @@ Changes since v2.1.0.
   The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
   The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
 - The report is split into pages, grouped in the navigation as Summary, Estimates (National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with coverage given overall and per province (#842).
+- The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
   About carries a new page on the authors, funding and citation.
 - The summary dashboard, National and Provinces pages open with their own summary and the "Last updated" and "Data as of" dates (#782, #822, #832).
   The summary dashboard is shorter, with the fit diagnostics behind a dropdown.
@@ -108,8 +110,7 @@ Changes since v2.1.0.
 
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
-- The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
-  `BVD_JOINT_MAX_DEPTH` overrides it.
+- The joint fit's NUTS tree depth cap rises from 10 to 12, and `BVD_JOINT_MAX_DEPTH` overrides it (#846).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
