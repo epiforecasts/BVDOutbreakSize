@@ -3486,6 +3486,12 @@ function plot_forecast_latent(fc::DataFrame)
     return fig
 end
 
+## Panel colours of the confirmed streams, keyed by forecast column, shared
+## by the national and per-province forecast figures.
+const _CONFIRMED_FORECAST_COLOURS = (
+    confirmed_new = :goldenrod, confirmed_deaths_new = :darkorange3,
+)
+
 """
 One-week-ahead forecast of the observed count streams from
 [`forecast_reported`](@ref): the new count each stream adds over the horizon.
@@ -3501,8 +3507,14 @@ function plot_forecast(fc::DataFrame)
     for (col, title, colour) in (
             (:cases_new, "New reported cases (DRC)", :steelblue),
             (:deaths_new, "New suspected deaths (DRC)", :firebrick),
-            (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
-            (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
+            (
+                :confirmed_new, "New confirmed cases (DRC)",
+                _CONFIRMED_FORECAST_COLOURS.confirmed_new,
+            ),
+            (
+                :confirmed_deaths_new, "New confirmed deaths (DRC)",
+                _CONFIRMED_FORECAST_COLOURS.confirmed_deaths_new,
+            ),
             (:recovered_new, "New recovered among confirmed (DRC)", :seagreen),
         )
         col in propertynames(fc) || continue
@@ -3658,24 +3670,19 @@ function plot_province_forecast_detail(
             if e[2] == label
     ]
     isempty(entries) && return Figure()
-    ## Colours match the national confirmed panels in `plot_forecast`.
-    colours = Dict(
-        "confirmed cases" => :goldenrod,
-        "confirmed deaths" => :darkorange3
-    )
-    obs_keys = Dict(
+    cols = Dict(
         label => col for (col, label) in _PROVINCE_FORECAST_STREAMS
     )
     ncols = length(entries)
     fig = Figure(; size = (400 * ncols, 360))
     for (i, (stream, _, draws)) in enumerate(entries)
+        col = cols[stream]
         ax = _forecast_count_panel!(
             fig, (1, i), draws, "New $(stream) ($(label))",
-            colours[stream]
+            _CONFIRMED_FORECAST_COLOURS[col]
         )
-        key = obs_keys[stream]
-        haskey(observed, key) || continue
-        o = float(observed[key])
+        haskey(observed, col) || continue
+        o = float(observed[col])
         vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
         CairoMakie.xlims!(
             ax, 0, max(1.0, quantile(draws, 0.98), 1.05 * o)
