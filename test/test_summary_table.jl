@@ -268,7 +268,6 @@ end
         (; base.C_T_patch), np
     )
 end
-||||||| parent of 5a524e80 (test(summaries): median and interval as a summary phrase)
 
 @testitem "median_interval_text reads as plain words" begin
     using BVDOutbreakSize: median_interval_text
