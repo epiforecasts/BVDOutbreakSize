@@ -118,6 +118,34 @@ MarkdownTable(province_forecast) #hide
 
 province_forecast_fig #hide
 
+# The map shades each province by its patch's median projected new confirmed cases, so the pooled patch shades all its provinces alike.
+
+#md # ```@raw html
+#md # <details><summary>Map of projected new confirmed cases</summary>
+#md # ```
+
+province_forecast_map = plot_province_map(
+    province_map_summary(
+        [
+            float.(
+                province_projection[
+                    province_projection.patch .== p, :confirmed_new,
+                ]
+            )
+                for p in 1:N_PATCHES
+        ]
+    ).values;
+    title = "New confirmed cases, week to $(province_week_end)",
+    scale = CairoMakie.Makie.pseudolog10,
+    colorbar_label = "Confirmed cases (median)"
+);
+
+province_forecast_map #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Forecast for each province
 #
 # Each province below has its own summary table and forecast figure.
