@@ -77,7 +77,8 @@ province_validation_table = province_forecast_vs_truth(
     baseline = province_truth.baseline,
     death_observed = province_truth.death_observed,
     death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES
+    n_patches = N_PATCHES,
+    breakpoint = default_breakpoint(frozen_lastweek.o)
 );
 
 #md # ```@raw html

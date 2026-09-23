@@ -2040,16 +2040,17 @@ cfr_prior_fig #hide
 #
 # #### Province forecast
 #
-# We project each province seven days beyond the cut-off by continuing its renewal equation from the joint posterior, without refitting.
-# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at the intensity fitted at the cut-off.
+# We project each province seven days beyond the cut-off by continuing the fitted patch model from the joint posterior, without refitting.
+# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
-# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations at its fitted scale, centred so the deviations still sum to zero.
-# The fresh innovations do not carry the fitted cross-province correlation.
-# The confirmed cases and confirmed deaths start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage.
-# Each day then grows with the province's projected infections, with no delay between infection and report, as in the national forecast, and is replicated through the stream's fitted dispersion.
-# The provinces are projected separately, so they need not add up to the national forecast.
+# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations drawn as the model draws them: the fitted scales times the fitted cross-province correlation, centred so the deviations still sum to zero.
+# The fitted intervention effect and the importation intensity follow their ramp past the cut-off.
+# The confirmed cases and deaths follow the model's split of the province data into a national total and its composition.
+# Each province's infections pass through the fitted incubation period and onset-to-confirmation delay, or onset-to-death-confirmation delay for deaths.
+# Its expected count over the week, weighted by its fitted relative ascertainment, and for deaths also by its relative case-fatality ratio, gives its expected share.
+# Each draw of the national forecast is then split across the provinces by the fitted composition, with its overdispersion, so the provinces add up to the national forecast.
 # The symptom-onset curve is national only, so there is no province nowcast.
-# Each release archives the projection with its method recorded, and only projection forecasts are scored.
+# Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
 # ### Forecast-versus-frozen evaluation
 #

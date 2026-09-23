@@ -28,9 +28,20 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # <details><summary>Project each province a week ahead</summary>
 #md # ```
 
-province_projection = forecast_provinces(
+## The national forecast whose confirmed totals the provinces split, the
+## same call the national forecast page makes.
+province_national_forecast = forecast_reported(
     chn_joint;
-    horizon = 7, n_patches = N_PATCHES
+    horizon = 7,
+    obs_cases = obs.reported_cases,
+    obs_deaths = obs.total_deaths,
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths,
+    obs_recovered = obs.recovered_cases
+);
+province_projection = forecast_provinces(
+    chn_joint, province_national_forecast;
+    horizon = 7, n_patches = N_PATCHES, breakpoint = _BREAKPOINT
 );
 province_forecast = province_forecast_table(
     chn_joint, province_projection;
@@ -46,8 +57,7 @@ province_summary_markdown = let proj = province_projection
     pct(x) = string(round(Int, 100 * x), "%")
     share_text(v) = median_interval_text(v; scale = 100, suffix = "%")
     ## Overall: the provinces ranked by their median projection, each with
-    ## its share of the provinces' combined projection and how often it
-    ## projects the most.
+    ## its share of the national forecast and how often it projects the most.
     function overall(col, stream)
         shares = province_share_draws(proj, col; n_patches = N_PATCHES)
         top = [argmax([s[k] for s in shares]) for k in eachindex(shares[1])]
@@ -66,8 +76,8 @@ province_summary_markdown = let proj = province_projection
             "- **Most $(stream):** $(ranked). " *
                 "$(PROVINCE_LABELS[lead]) projects the most in " *
                 "$(pct(count(==(lead), top) / length(top))) of draws.",
-            "- **Share of $(stream):** $(split_text), of the provinces' " *
-                "combined projection.",
+            "- **Share of $(stream):** $(split_text), of the national " *
+                "forecast.",
         ]
     end
     function detail(p)

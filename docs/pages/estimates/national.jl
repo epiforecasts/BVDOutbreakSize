@@ -1176,7 +1176,8 @@ CSV.write(
     joinpath(output_dir, "province_forecast.csv"),
     province_forecast_archive(
         chn_joint, forecast_runs;
-        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5
+        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5,
+        breakpoint = _BREAKPOINT
     )
 );
 
