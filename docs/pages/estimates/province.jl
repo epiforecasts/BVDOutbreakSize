@@ -239,7 +239,6 @@ spatial_labels = Dict(
     :region_halflife => "Rt deviation half-life (days)",
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
     :province_ascertainment_sd => "Ascertainment spread",
-    :province_testing_coefficient => "Testing effect on ascertainment",
     :importation_epsilon => "Importation intensity",
     :province_cfr_sd => "Lethality spread",
     :province_death_ascertainment_sd => "Death-confirmation spread"
@@ -248,7 +247,7 @@ spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :province_testing_coefficient,
+        :province_ascertainment_sd,
     ];
     digits = 3, labels = spatial_labels
 );
@@ -327,8 +326,7 @@ spatial_pair_fig = plot_pair(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :province_testing_coefficient,
-        :importation_epsilon, :province_cfr_sd,
+        :province_ascertainment_sd, :importation_epsilon, :province_cfr_sd,
         :province_death_ascertainment_sd,
     ];
     prior = prior_patch_chn, labels = spatial_labels

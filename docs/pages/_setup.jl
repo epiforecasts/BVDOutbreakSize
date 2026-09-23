@@ -329,10 +329,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
-    province_testing = province_testing_covariate(
-        obs.province_lab_daily_history
-    )
-
     ## Draws from the four-patch prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
@@ -361,7 +357,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
             n_patches = N_PATCHES,
             province_increments = province_cases.increments,
             province_days = province_cases.days,
-            province_testing_covariate = province_testing,
             province_death_increments = province_deaths.increments,
             province_death_days = province_deaths.days
         )
@@ -471,7 +466,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
                 n_patches = N_PATCHES,
                 province_increments = missing,
                 province_days = province_cases.days,
-                province_testing_covariate = province_testing,
+                province_lab_increments = missing,
+                province_lab_days = province_lab.days,
+                province_lab_bins = province_lab.bins,
+                province_isolation = province_isolation,
+                province_capacity = province_capacity,
                 province_death_increments = missing,
                 province_death_days = province_deaths.days
             ),

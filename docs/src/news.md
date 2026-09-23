@@ -158,7 +158,9 @@ Changes since v2.1.0.
   relative ascertainment, so the two compositions agree on how many of a
   patch's cases reach the laboratory; the testing fraction stays national
   and the term samples no contrast of its own. The per-province positives
-  remain unfitted.
+  remain unfitted. The headline fit drops the per-head testing covariate
+  from the ascertainment prior, since the same series now enters through
+  this composition; its coefficient was 0.05 (90% -0.14 to 0.31).
 - Province isolation occupancy and bed counts enter the treatment-flow stream
   as splits of the printed sum of the provinces present each day, over
   per-patch bed demand (the national demand shared out by each patch's

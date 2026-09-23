@@ -1023,9 +1023,11 @@ province's incidence and its case-finding. The death composition
 identifies the incidence split, since the case-fatality ratio and the
 death-confirmation probability are national, and the case composition then
 identifies the relative case ascertainment as the residual. The
-`province_testing_covariate` keyword puts each patch's logged tests per
+`province_testing_covariate` keyword can put each patch's logged tests per
 head ([`province_testing_covariate`](@ref)) on the prior for that
-ascertainment. The death composition takes no covariate.
+ascertainment; the production fit leaves it at zero, since the same
+laboratory series is scored by the composition below and would otherwise
+enter twice. The death composition takes no covariate.
 
 A third composition scores the per-province analysed-specimen volume
 conditional on the national daily total. The modelled split is each

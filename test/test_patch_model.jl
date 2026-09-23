@@ -1568,9 +1568,10 @@ end
 @testitem "province_testing_covariate: the patch contrast in the manifest" begin
     using BVDOutbreakSize
 
-    ## The covariate the headline fit carries. Ituri analyses far more
-    ## samples per head over the laboratory window than Nord-Kivu, a contrast
-    ## nothing else in the model represents.
+    ## The covariate as built from the manifest. Ituri analyses far more
+    ## samples per head over the laboratory window than Nord-Kivu. The
+    ## headline fit no longer puts it on the ascertainment prior, since the
+    ## laboratory composition scores the same series.
     ##
     ## These are properties of the covariate, not of one vintage. The values
     ## themselves move whenever the laboratory history advances, so pinning

@@ -100,8 +100,6 @@ function patch_fit_args(obs)
         province_days = prov.days,
         province_death_increments = prov_deaths.increments,
         province_death_days = prov_deaths.days,
-        province_testing_covariate =
-            province_testing_covariate(obs.province_lab_daily_history),
         province_lab_increments = prov_lab.increments,
         province_lab_days = prov_lab.days,
         province_lab_bins = prov_lab.bins,
