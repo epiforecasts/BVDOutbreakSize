@@ -34,6 +34,11 @@ Changes since v2.1.0.
 
 ### Model
 
+- The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` directions of a sum-to-zero vector rather than as `n` draws with their mean subtracted (#855).
+  The Rt deviations keep a learned cross-province correlation, now on those directions, so no sampled parameter is left that the likelihood cannot see.
+  `region_drift_sd` and `region_corr_primary_secondary` are now the per-province sd and correlation of the sum-to-zero innovations.
+  The province forecast draws its deviation innovations with the fitted covariance.
+  Fitted values change.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
   Fitted values change.
