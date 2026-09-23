@@ -51,13 +51,12 @@ for c in 1:nchains
     ne = vec(chn[FC.Extra(:numerical_error)][:, c])
     lp = vec(chn[FC.Extra(:logjoint)][:, c])
     ct = vec(chn[:C_T][:, c])
-    say(
-        @sprintf(
-            "chain %d: step %.5f  depth>=%d %.2f  steps %.0f  accept %.2f  " *
-                "div %d  lp %.0f±%.0f  C_T %.0f",
-            c, median(ss), max_depth, mean(td .>= max_depth), mean(ns),
-            mean(ar), sum(ne), median(lp), std(lp), median(ct)
-        )
+    line = @sprintf(
+        "chain %d: step %.5f  depth>=%d %.2f  steps %.0f  accept %.2f  div %d  lp %.0f±%.0f  C_T %.0f",
+        c, median(ss), max_depth, mean(td .>= max_depth), mean(ns), mean(ar),
+        sum(ne), median(lp), std(lp), median(ct)
+    )
+    say(line)
     )
 end
 say("headline: ", fit_diagnostics(chn))
