@@ -2021,6 +2021,29 @@ function accumulate_occupancy(
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
     )
+    return _accumulate_occupancy(
+        Val(false), A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
+    )
+end
+
+## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
+## Ties go to the second argument of `max` and to the bound of `clamp`,
+## lower bound first, the sides Mooncake's own rules for them take.
+const _OCC_UNCONF = 0x01
+const _OCC_DENOM = 0x02
+const _OCC_BVD = 0x04
+const _OCC_BG = 0x08
+const _OCC_CONF_X = 0x10
+const _OCC_CONF_HI = 0x20
+const _OCC_SUSP = 0x40
+
+## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
+## returns the non-case stock `O_bg` and the branch flags for each day, which
+## the Mooncake rule in `src/ad_rules.jl` reads.
+function _accumulate_occupancy(
+        ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
+        conf_hazard
+    ) where {record}
     n = length(A_bvd)
     T = promote_type(
         eltype(A_bvd), eltype(A_bg), eltype(deaths),
@@ -2031,6 +2054,8 @@ function accumulate_occupancy(
     O_conf = Vector{T}(undef, n)
     O_susp = Vector{T}(undef, n)
     abscond = Vector{T}(undef, n)
+    O_bg = record ? Vector{T}(undef, n) : nothing
+    flags = record ? Vector{UInt8}(undef, n) : nothing
     z = zero(T)
     Obvd_prev = z
     Obg_prev = z
@@ -2042,28 +2067,47 @@ function accumulate_occupancy(
     @inbounds for t in 1:n
         bvd_out = deaths[t] + recover[t]
         ab = κ * Osusp_prev
-        unconf = max(Obvd_prev - Oconf_prev, z)
+        x_u = Obvd_prev - Oconf_prev
+        unconf = max(x_u, z)
         denom = max(Osusp_prev, ε)
         ab_bvd = ab * (unconf / denom)
         ab_bg = ab * (Obg_prev / denom)
-        Obvd_t = max(Obvd_prev + A_bvd[t] - bvd_out - ab_bvd, z)
-        Obg_t = max(Obg_prev + A_bg[t] - ruleout[t] - ab_bg, z)
+        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
+        Obvd_t = max(x_bvd, z)
+        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
+        Obg_t = max(x_bg, z)
         Dt = Obvd_t + Obg_t
         conf_in = conf_hazard[t] * unconf
         share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        Oconf_t = clamp(Oconf_prev + conf_in - bvd_out * share, z, Obvd_t)
-        Osusp_t = max(Dt - Oconf_t, z)
+        x_conf = Oconf_prev + conf_in - bvd_out * share
+        Oconf_t = clamp(x_conf, z, Obvd_t)
+        x_susp = Dt - Oconf_t
+        Osusp_t = max(x_susp, z)
         demand[t] = Dt
         O_bvd[t] = Obvd_t
         O_conf[t] = Oconf_t
         O_susp[t] = Osusp_t
         abscond[t] = ab
+        if record
+            f = 0x00
+            x_u > z && (f |= _OCC_UNCONF)
+            Osusp_prev > ε && (f |= _OCC_DENOM)
+            x_bvd > z && (f |= _OCC_BVD)
+            x_bg > z && (f |= _OCC_BG)
+            if x_conf > z
+                f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
+            end
+            x_susp > z && (f |= _OCC_SUSP)
+            O_bg[t] = Obg_t
+            flags[t] = f
+        end
         Obvd_prev = Obvd_t
         Obg_prev = Obg_t
         Oconf_prev = Oconf_t
         Osusp_prev = Osusp_t
     end
-    return (; demand, O_bvd, O_conf, O_susp, abscond)
+    y = (; demand, O_bvd, O_conf, O_susp, abscond)
+    return record ? (y, O_bg, flags) : y
 end
 
 """

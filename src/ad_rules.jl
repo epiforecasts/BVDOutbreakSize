@@ -471,83 +471,6 @@ Mooncake.@is_primitive(
     },
 )
 
-## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
-## Ties go to the second argument of `max` and to the bound of `clamp`,
-## lower bound first, the sides Mooncake's own rules for them take.
-const _OCC_UNCONF = 0x01
-const _OCC_DENOM = 0x02
-const _OCC_BVD = 0x04
-const _OCC_BG = 0x08
-const _OCC_CONF_X = 0x10
-const _OCC_CONF_HI = 0x20
-const _OCC_SUSP = 0x40
-
-## The forward balance of `accumulate_occupancy`, also recording the
-## non-case stock and which side of each `max` and `clamp` was taken.
-function _accumulate_occupancy_taped(
-        A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
-    )
-    n = length(A_bvd)
-    T = promote_type(
-        eltype(A_bvd), eltype(A_bg), eltype(deaths),
-        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
-    )
-    demand = Vector{T}(undef, n)
-    O_bvd = Vector{T}(undef, n)
-    O_conf = Vector{T}(undef, n)
-    O_susp = Vector{T}(undef, n)
-    abscond = Vector{T}(undef, n)
-    O_bg = Vector{T}(undef, n)
-    flags = Vector{UInt8}(undef, n)
-    z = zero(T)
-    Obvd_prev = z
-    Obg_prev = z
-    Oconf_prev = z
-    Osusp_prev = z
-    ε = eps(T)
-    @inbounds for t in 1:n
-        bvd_out = deaths[t] + recover[t]
-        ab = κ * Osusp_prev
-        x_u = Obvd_prev - Oconf_prev
-        unconf = max(x_u, z)
-        denom = max(Osusp_prev, ε)
-        ab_bvd = ab * (unconf / denom)
-        ab_bg = ab * (Obg_prev / denom)
-        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
-        Obvd_t = max(x_bvd, z)
-        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
-        Obg_t = max(x_bg, z)
-        Dt = Obvd_t + Obg_t
-        conf_in = conf_hazard[t] * unconf
-        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        x_conf = Oconf_prev + conf_in - bvd_out * share
-        Oconf_t = clamp(x_conf, z, Obvd_t)
-        x_susp = Dt - Oconf_t
-        Osusp_t = max(x_susp, z)
-        f = 0x00
-        x_u > z && (f |= _OCC_UNCONF)
-        Osusp_prev > ε && (f |= _OCC_DENOM)
-        x_bvd > z && (f |= _OCC_BVD)
-        x_bg > z && (f |= _OCC_BG)
-        if x_conf > z
-            f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
-        end
-        x_susp > z && (f |= _OCC_SUSP)
-        demand[t] = Dt
-        O_bvd[t] = Obvd_t
-        O_conf[t] = Oconf_t
-        O_susp[t] = Osusp_t
-        abscond[t] = ab
-        O_bg[t] = Obg_t
-        flags[t] = f
-        Obvd_prev = Obvd_t
-        Obg_prev = Obg_t
-        Oconf_prev = Oconf_t
-        Osusp_prev = Osusp_t
-    end
-    return (; demand, O_bvd, O_conf, O_susp, abscond), O_bg, flags
-end
-
 function Mooncake.rrule!!(
         ::CoDual{typeof(accumulate_occupancy)},
         A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
@@ -568,8 +491,9 @@ function Mooncake.rrule!!(
     r̄ = tangent(recover)
     ō = tangent(ruleout)
     h̄ = tangent(conf_hazard)
-    y, O_bg, flags = _accumulate_occupancy_taped(
-        primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp, hp
+    y, O_bg, flags = _accumulate_occupancy(
+        Val(true), primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp,
+        hp
     )
     ȳ = map(zero, y)
     function accumulate_occupancy_pullback!!(::NoRData)

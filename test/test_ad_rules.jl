@@ -618,7 +618,7 @@ end
     using ForwardDiff: ForwardDiff
     using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
     using BVDOutbreakSize: accumulate_occupancy, convolve_delay,
-        _accumulate_occupancy_taped, _OCC_CONF_HI
+        _accumulate_occupancy, _OCC_CONF_HI
 
     ## Admissions, discharge schedules and a confirmation hazard shaped like
     ## the treatment-flow model's. `dmult` above one discharges more than
@@ -679,10 +679,10 @@ end
     )
     for kw in scenarios
         args = occupancy_inputs(60; kw...)
-        ## The rule's forward pass is its own copy of the balance, so it
-        ## must reproduce the model's outputs bit for bit.
+        ## The recording forward pass the rule runs gives the model's
+        ## outputs bit for bit.
         y = accumulate_occupancy(args...)
-        ỹ, _, flags = _accumulate_occupancy_taped(args...)
+        ỹ, _, flags = _accumulate_occupancy(Val(true), args...)
         @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
         haskey(kw, :hflat) && @test any(f -> f & _OCC_CONF_HI != 0, flags)
         ## The rule fires: the output tangent is the rule's `NamedTuple`.
