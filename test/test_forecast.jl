@@ -44,8 +44,10 @@ end
     @test all(c -> c in propertynames(fc), cols)
     ## Each new count is the model's own future daily counts summed over the
     ## week, and each cumulative the observed cut-off plus it.
-    @test fc.confirmed_new == sum.(x -> x[1:7], draws("forecast_confirmed.increments"))
-    @test fc.cases_new == sum.(x -> x[1:7], draws("forecast_reports.increments"))
+    @test fc.confirmed_new ==
+        [sum(x[1:7]) for x in draws("forecast_confirmed.increments")]
+    @test fc.cases_new ==
+        [sum(x[1:7]) for x in draws("forecast_reports.increments")]
     @test fc.confirmed_cum == OBS.obs_confirmed .+ fc.confirmed_new
     @test fc.recovered_cum == OBS.obs_recovered .+ fc.recovered_new
     @test fc.isolation_level ==

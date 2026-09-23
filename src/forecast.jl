@@ -350,10 +350,10 @@ function forecast_provinces(
     H = _check_horizon(pp, h)
     np = min(n_patches, length(patch_labels))
     inf = _forecast_vectors(pp, "forecast_infections_patch")
-    isnothing(inf) && throw(
+    (isnothing(inf) || length(first(inf)) != n_patches * H) && throw(
         ArgumentError(
-            "these draws carry no province forecast; draw them from " *
-                "`bvd_joint` with more than one patch."
+            "these draws carry no $(n_patches)-patch forecast; draw them " *
+                "from `bvd_joint` with $(n_patches) patches."
         )
     )
     rt = _draw_vectors(pp, :forecast_rt_patch)

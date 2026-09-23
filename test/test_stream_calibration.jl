@@ -135,19 +135,46 @@ end
     )
 end
 
-@testitem "_composition_predictive: fixed-seed draws are pinned" begin
-    using BVDOutbreakSize: _composition_predictive
+@testitem "_composition_predictive: draws are the model's split, seeded" begin
+    using BVDOutbreakSize: _composition_predictive, _composition_counts,
+        composition_split_model
+    using Turing: DynamicPPL
+    using Random: MersenneTwister
+    using Statistics: mean, std
 
-    ## Rebuilt reports must redraw the same composition band, so the draws
-    ## for a fixed seed are pinned exactly.
-    shares = [0.6 0.5; 0.3 0.35; 0.1 0.15]
-    ms = [shares for _ in 1:5]
-    totals = [200, 300]
-    preds = _composition_predictive(ms, fill(0.05, 5), totals, 2)
-    counts = [round.(Int, preds[p][d] .* totals) for p in 1:3 for d in 1:2]
-    @test counts == [
-        [104, 123], [105, 167], [73, 107], [69, 117], [23, 70], [26, 16],
-    ]
+    ## Rebuilt reports must redraw the same composition band, so a fixed
+    ## seed gives the same draws. RNG streams differ between Julia versions,
+    ## so no draw is pinned to a number.
+    nd = 2000
+    shares = [0.6 0.5 0.4; 0.3 0.35 0.4; 0.1 0.15 0.2]
+    ms = [shares for _ in 1:nd]
+    rho = fill(0.05, nd)
+    totals = [200, 0, 300]
+    a = _composition_predictive(ms, rho, totals, 3)
+    @test isequal(a, _composition_predictive(ms, rho, totals, 3))
+    @test !isequal(a, _composition_predictive(ms, rho, totals, 3; seed = 7))
+    ## The draws are the fitted composition's own split: the same seed
+    ## through `composition_split_model` gives the same counts.
+    counts = _composition_counts(ms[1:5], rho[1:5], fill(totals, 5); seed = 3)
+    rng = MersenneTwister(3)
+    for d in 1:5
+        m = composition_split_model(missing, shares, totals, rho[d])
+        x = first(
+            DynamicPPL.init!!(
+                rng, m, DynamicPPL.VarInfo(), DynamicPPL.InitFromPrior()
+            )
+        ).obs_increments
+        @test [counts[p][d] for p in 1:3] == [x[p, :] for p in 1:3]
+    end
+    ## Each draw partitions the total and a zero total has no split.
+    @test all(d -> sum(a[p][d][1] for p in 1:3) ≈ 1, 1:nd)
+    @test all(d -> all(p -> isnan(a[p][d][2]), 1:3), 1:nd)
+    ## The mean share is the expected one, to within four Monte Carlo
+    ## standard errors.
+    for p in 1:3, i in (1, 3)
+        v = [a[p][d][i] for d in 1:nd]
+        @test abs(mean(v) - shares[p, i]) < 4 * std(v) / sqrt(nd)
+    end
 end
 
 @testitem "province_count_panels: splits each draw's national total" begin
