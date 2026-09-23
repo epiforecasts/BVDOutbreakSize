@@ -811,3 +811,56 @@ end
         )
     end
 end
+
+@testitem "AD rules: betabinomial_loglik passes Mooncake's test_rule" tags = [
+    :ad,
+] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using Mooncake.TestUtils: test_rule
+    using BVDOutbreakSize: betabinomial_loglik
+
+    ## The composition hands its observed row as a `Vector{Int}` or, from a
+    ## matrix, a view. The rule must fire on both.
+    fires(sig) = Mooncake.is_primitive(
+        Mooncake.MinimalCtx, Mooncake.ReverseMode, sig,
+        Base.get_world_counter()
+    )
+    row = view(zeros(Int, 2, 2), 1, :)
+    for obs_type in (Vector{Int}, typeof(row))
+        @test fires(
+            Tuple{
+                typeof(betabinomial_loglik), Vector{Int}, Vector{Float64},
+                Float64, obs_type,
+            }
+        )
+    end
+
+    rng = Xoshiro(20260923)
+    n = rand(rng, 0:300, 30)
+    p = 0.05 .+ 0.9 .* rand(rng, 30)
+    x = [rand(rng, 0:n[i]) for i in 1:30]
+    ## A window with no trials.
+    n[3] = 0
+    x[3] = 0
+    ## Probabilities outside `[0, 1]` sit in the clamps' flat region, so they
+    ## pass no derivative and finite differences agree.
+    p_clamp = copy(p)
+    p_clamp[[1, 2]] .= (-0.5, 1.5)
+    x_clamp = copy(x)
+    x_clamp[1] = 0
+    x_clamp[2] = n[2]
+    M = zeros(Int, 2, 30)
+    M[1, :] .= x
+    ## `ρ` below its floor or above its cap is clamped and passes no
+    ## derivative.
+    for (q, ρ, obs) in (
+            (p, 0.05, x), (p, 0.3, x), (p, 0.8, view(M, 1, :)),
+            (p_clamp, 0.05, x_clamp), (p, 1.0e-7, x), (p, 1.5, x),
+        )
+        test_rule(
+            rng, betabinomial_loglik, n, q, ρ, obs;
+            is_primitive = true, mode = Mooncake.ReverseMode
+        )
+    end
+end

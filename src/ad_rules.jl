@@ -1217,3 +1217,78 @@ function Mooncake.rrule!!(
     end
     return CoDual(s, NoFData()), studentt_loglik_pullback!!
 end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(betabinomial_loglik), AbstractVector{<:Integer},
+        Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+        AbstractVector{<:Integer},
+    },
+)
+
+## Value and gradient of `betabinomial_loglik` in one pass. With
+## concentration `c = (1 − ρ) / ρ`, `α = c·p` and `β = c·(1 − p)`, each
+## count `x` of `n` trials contributes
+##
+##     ∂ℓ/∂α = ψ(x + α) − ψ(α) + ψ(α + β) − ψ(n + α + β),
+##     ∂ℓ/∂β = ψ(n − x + β) − ψ(β) + ψ(α + β) − ψ(n + α + β),
+##
+## chained through `α` and `β` to `p` and `c`, and through `c` to `ρ`. The
+## guards in `safe_betabinomial` are mirrored: a clamped `p` or `ρ`, or an
+## `α` or `β` held at its floor, passes no derivative. A term that is not
+## finite adds none either.
+function _betabinomial_loglik_grad(
+        trials::AbstractVector, p::AbstractVector, ρ, obs::AbstractVector
+    )
+    T = float(promote_type(eltype(p), typeof(ρ)))
+    lo = eps(T)
+    ρ_lo = T(1.0e-6)
+    ρ_on = isfinite(ρ) && !(ρ < ρ_lo) && !(ρ > one(T) - ρ_lo)
+    ρc = isfinite(ρ) ? clamp(T(ρ), ρ_lo, one(T) - ρ_lo) : ρ_lo
+    c = (one(T) - ρc) / ρc
+    s = zero(T)
+    dc = zero(T)
+    dp = zeros(T, length(p))
+    @inbounds for i in eachindex(trials, p, obs)
+        n = trials[i]
+        x = obs[i]
+        q = p[i]
+        d = safe_betabinomial(n, q, ρ)
+        ℓ = logpdf(d, x)
+        s += ℓ
+        isfinite(ℓ) || continue
+        α, β = d.α, d.β
+        pc = isfinite(q) ? clamp(T(q), lo, one(T) - lo) : one(T) / 2
+        ψ_ab = digamma(α + β) - digamma(n + α + β)
+        ∂α = c * pc > lo ? digamma(x + α) - digamma(α) + ψ_ab : zero(T)
+        ∂β = c * (one(T) - pc) > lo ?
+            digamma(n - x + β) - digamma(β) + ψ_ab : zero(T)
+        p_on = isfinite(q) && !(q < lo) && !(q > one(T) - lo)
+        p_on && (dp[i] = c * (∂α - ∂β))
+        dc += ∂α * pc + ∂β * (one(T) - pc)
+    end
+    return s, (ρ_on ? -dc / ρc^2 : zero(T)), dp
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(betabinomial_loglik)},
+        trials::CoDual{<:AbstractVector{<:Integer}},
+        p::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        ρ::CoDual{<:Mooncake.IEEEFloat},
+        obs::CoDual{<:AbstractVector{<:Integer}}
+    )
+    ## The gradient is taken in the forward pass, since a caller may
+    ## overwrite `p` in place before the pullback runs.
+    s, dρ, dp = _betabinomial_loglik_grad(
+        primal(trials), primal(p), primal(ρ), primal(obs)
+    )
+    p̄ = tangent(p)
+    ## `ρ` is a scalar, so its adjoint goes back as rdata rather than into
+    ## a tangent buffer.
+    function betabinomial_loglik_pullback!!(s̄)
+        p̄ .+= s̄ .* dp
+        return NoRData(), NoRData(), NoRData(), s̄ * dρ, NoRData()
+    end
+    return CoDual(s, NoFData()), betabinomial_loglik_pullback!!
+end

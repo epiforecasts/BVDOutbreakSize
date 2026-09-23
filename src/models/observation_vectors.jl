@@ -52,10 +52,28 @@ struct StudentTVector{
     ν::T
 end
 
+"""
+Independent [`safe_betabinomial`](@ref) counts, entry `i` out of
+`trials[i]` with mean probability `p[i]` and the shared overdispersion
+`ρ`. `logpdf` is [`betabinomial_loglik`](@ref).
+"""
+struct BetaBinomialVector{
+        I <: AbstractVector{<:Integer}, P <: AbstractVector{<:Real}, R <: Real,
+    } <: Distributions.DiscreteMultivariateDistribution
+    "Per-entry trial counts."
+    trials::I
+    "Per-entry mean probabilities."
+    p::P
+    "Shared overdispersion."
+    ρ::R
+end
+
 Base.length(
     d::Union{NegBinomialVector, CensoredNegBinomialVector, StudentTVector}
 ) = length(d.μ)
+Base.length(d::BetaBinomialVector) = length(d.p)
 Base.eltype(::Type{<:NegBinomialVector}) = Int
+Base.eltype(::Type{<:BetaBinomialVector}) = Int
 ## A draw above a ceiling returns the ceiling, which need not be a whole
 ## number (`admission_headroom`), so censored draws are floats.
 Base.eltype(::Type{<:CensoredNegBinomialVector}) = Float64
@@ -71,6 +89,9 @@ function Distributions._logpdf(
 end
 function Distributions._logpdf(d::StudentTVector, x::AbstractVector)
     return studentt_loglik(d.μ, d.σ, x, d.ν)
+end
+function Distributions._logpdf(d::BetaBinomialVector, x::AbstractVector)
+    return betabinomial_loglik(d.trials, d.p, d.ρ, x)
 end
 
 function Distributions._rand!(
@@ -100,6 +121,14 @@ function Distributions._rand!(
     )
     @inbounds for i in eachindex(x, d.μ, d.σ)
         x[i] = rand(rng, safe_studentt(d.μ[i], d.σ[i], d.ν))
+    end
+    return x
+end
+function Distributions._rand!(
+        rng::AbstractRNG, d::BetaBinomialVector, x::AbstractVector{<:Real}
+    )
+    @inbounds for i in eachindex(x, d.trials, d.p)
+        x[i] = rand(rng, safe_betabinomial(d.trials[i], d.p[i], d.ρ))
     end
     return x
 end

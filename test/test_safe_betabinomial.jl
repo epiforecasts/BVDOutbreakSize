@@ -72,3 +72,67 @@ end
     ## Default `Beta(1, 24)` favours a small overdispersion (mean ≈ 0.04).
     @test 0.01 < mean(draws) < 0.1
 end
+
+@testitem "BetaBinomialVector matches one BetaBinomial per count" begin
+    using BVDOutbreakSize: BetaBinomialVector, safe_betabinomial,
+        betabinomial_loglik, province_composition_model
+    using Distributions: logpdf, product_distribution
+    using Random: Xoshiro
+    using Turing: DynamicPPL, returned
+
+    trials = [120, 0, 300, 0, 45]
+    p = [0.2, 0.3, 0.05, 0.1, 0.6]
+    x = [30, 0, 12, 0, 20]
+    ρ = 0.03
+    d = BetaBinomialVector(trials, p, ρ)
+    product = product_distribution(
+        [safe_betabinomial(trials[i], p[i], ρ) for i in 1:5]
+    )
+    @test length(d) == 5
+    @test logpdf(d, x) == betabinomial_loglik(trials, p, ρ, x)
+    @test logpdf(d, x) ≈ logpdf(product, x)
+    ## The same draws as the product it stands in for, from the same seed.
+    @test rand(Xoshiro(7), d) == rand(Xoshiro(7), product)
+    @test rand(Xoshiro(7), d, 3) == rand(Xoshiro(7), product, 3)
+
+    ## Composition: each observed patch row is one summed term, equal to the
+    ## row's `product_distribution` of BetaBinomials.
+    rng = Xoshiro(3)
+    modelled = exp.([3.0, 1.5, 0.5] .+ 0.3 .* randn(rng, 3, 8))
+    obs = round.(Int, modelled)
+    model = province_composition_model(obs, modelled)
+    draw = rand(Xoshiro(2), model)
+    state = returned(model, draw)
+    function stick_breaking(shares, rho)
+        remaining = vec(sum(obs; dims = 1))
+        tail = ones(8)
+        total = 0.0
+        for q in 1:2
+            p_cond = clamp.(shares[q, :] ./ tail, 0.0, 1.0)
+            total += logpdf(
+                product_distribution(
+                    [
+                        safe_betabinomial(max(remaining[i], 0), p_cond[i], rho)
+                            for i in 1:8
+                    ]
+                ), obs[q, :]
+            )
+            remaining .-= obs[q, :]
+            tail .= max.(tail .- shares[q, :], 1.0e-10)
+        end
+        return total
+    end
+    @test DynamicPPL.loglikelihood(model, draw) ≈
+        stick_breaking(state.shares, state.rho)
+    ## The predictive path samples each free row under one key and fills the
+    ## last row with the remainder.
+    predictive = province_composition_model(missing, modelled)
+    rows = filter(
+        v -> DynamicPPL.getsym(v) == :obs_increments,
+        collect(keys(DynamicPPL.VarInfo(Xoshiro(1), predictive)))
+    )
+    @test length(rows) == 2
+    drawn = returned(predictive, rand(Xoshiro(1), predictive)).obs_increments
+    totals = [round(Int, max(sum(modelled[:, i]), 0.0)) for i in 1:8]
+    @test vec(sum(drawn; dims = 1)) == totals
+end

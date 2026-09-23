@@ -87,6 +87,24 @@ function safe_betabinomial(n::Integer, p, ρ)
 end
 
 """
+Summed log-likelihood of the counts `obs` under one
+[`safe_betabinomial`](@ref) per entry, with trial counts `trials`, mean
+probabilities `p` and the shared overdispersion `ρ`. Equal to what one `~`
+per count accumulates, as a single term. `src/ad_rules.jl` gives it a
+closed-form Mooncake rule, so the backend does not tape each `logpdf`.
+"""
+function betabinomial_loglik(
+        trials::AbstractVector{<:Integer}, p::AbstractVector, ρ,
+        obs::AbstractVector
+    )
+    s = zero(float(promote_type(eltype(p), typeof(ρ))))
+    @inbounds for i in eachindex(trials, p, obs)
+        s += logpdf(safe_betabinomial(trials[i], p[i], ρ), obs[i])
+    end
+    return s
+end
+
+"""
 Modelled between-vintage increments of a daily series `daily`, summed
 directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
@@ -4066,22 +4084,16 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## vintages the scalar form emits 80 of them, enough to push the gradient
     ## compile past an hour. The vectorised form emits `2 * (np - 1)`.
     ##
-    ## The running state is allocated once and mutated rather than rebound
-    ## each time round the loop, since the comprehension below reads all
-    ## three and a local a closure reads and the body reassigns goes in a
-    ## `Core.Box` (see "Closures in model code" in the contributing guide).
+    ## Each row is one [`BetaBinomialVector`](@ref), scored as one summed
+    ## term through its Mooncake rule. The running remainder and tail are
+    ## allocated once and mutated in place.
     remaining = copy(totals)
     tail = ones(eltype(shares), nv)
-    p_cond = zeros(eltype(shares), nv)
-    trials = zeros(Int, nv)
     for p in 1:(np - 1)
         ## Conditional share of patch `p` among the patches not yet allocated.
-        for i in 1:nv
-            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
-            trials[i] = max(remaining[i], 0)
-        end
-        obs_increments[p, :] ~ product_distribution(
-            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv]
+        p_cond = clamp.(shares[p, :] ./ tail, 0.0, 1.0)
+        obs_increments[p, :] ~ BetaBinomialVector(
+            max.(remaining, 0), p_cond, rho
         )
         ## Guard the running tail against round-off driving it to zero or
         ## negative on the last step.
