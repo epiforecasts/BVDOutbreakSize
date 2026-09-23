@@ -247,8 +247,12 @@ end
     @test fm.confirmed[1] > 0
     @test fm.confirmed_deaths[1] > 0
     @test fm.deaths[1] > 0
-    ## And they decay rather than stop, as the delay distributions drain.
-    @test fm.confirmed[end] < fm.confirmed[1]
+    ## The first future day's counts come almost wholly from infections
+    ## before the cut-off, so stopping transmission barely moves them. Later
+    ## days lose the infections that no longer happen.
+    base = returned(fix_future(mh, d.θh, d.fut), d.θ0).forecast_means
+    @test fm.confirmed[1] ≈ base.confirmed[1] rtol = 0.05
+    @test fm.confirmed[end] < base.confirmed[end]
 end
 
 @testitem "province forecasts add up to the national forecast" setup = [

@@ -11,6 +11,7 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
+using Turing: DynamicPPL
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
 import AbstractMCMC
@@ -110,7 +111,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     euler_lotka_r, r_to_R0, doubling_time, seed_infections,
     confirmed_break_correction,
     seed_at_renewal_start,
-    knot_days,
+    knot_days, future_knot_days, ForecastHorizon, horizon_days,
+    with_horizon, forecast_days,
     interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
     safe_rate,
     # prior / latent submodels
@@ -170,7 +172,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
     province_export_pressure_model,
-    province_composition_model
+    province_composition_model, composition_shares, composition_split_model
 
 include("docstrings.jl")
 include("constants.jl")

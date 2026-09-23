@@ -2002,3 +2002,24 @@ end
         d -> sum(fc.confirmed_new[fc.draw .== d]) == 500, 1:PATCH_DRAWS
     )
 end
+
+@testitem "the live patch joint keeps its density with a horizon" setup = [
+    PatchJointChain,
+] begin
+    using BVDOutbreakSize: with_horizon
+    using Turing: logjoint, fix
+    using Random: Xoshiro
+
+    ## Prior draws on the live observations, which have data shapes the
+    ## fixtures in test_forecast_horizon.jl do not.
+    mh = with_horizon(patch_model, 28)
+    for seed in 1:3
+        θ0 = rand(Xoshiro(seed), patch_model)
+        θh = rand(Xoshiro(seed + 10), mh)
+        k0 = collect(keys(θ0))
+        fut = filter(k -> !(k in k0), collect(keys(θh)))
+        @test all(k -> occursin(r"future|forecast", string(k)), fut)
+        @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ==
+            logjoint(patch_model, θ0)
+    end
+end

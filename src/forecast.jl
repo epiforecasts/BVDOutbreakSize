@@ -5,6 +5,21 @@
 # horizon growth factor. Each is replicated as an integer count per draw, so
 # the intervals carry both parameter and observation uncertainty.
 
+"""
+    with_horizon(model, horizon) -> DynamicPPL.Model
+
+The fitted `model` rebuilt to run `horizon` days past its cut-off: the same
+arguments and keywords with `forecast = ForecastHorizon(horizon)`, or the
+fitted model itself (`forecast = nothing`) for a horizon of zero. The
+extended model keeps every fitted variable and adds only the future ones,
+so `predict` on it with the fitted chain keeps each draw's parameters and
+draws the future (see [`ForecastHorizon`](@ref)).
+"""
+function with_horizon(model::DynamicPPL.Model, horizon::Integer)
+    forecast = horizon > 0 ? ForecastHorizon(horizon) : nothing
+    return model.f(values(model.args)...; model.defaults..., forecast)
+end
+
 ## Floor on the reproduction number passed to `euler_lotka_r`. Its Newton
 ## solve overflows to a non-finite growth rate below R ≈ 1e-3, which a draw
 ## forecasting a steep decline can reach over the horizon. Below 1e-2 the

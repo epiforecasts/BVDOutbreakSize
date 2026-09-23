@@ -525,7 +525,8 @@ ascertainment and the background CFR for reuse by
             oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
-        )
+        ),
+        cutoff::Union{Nothing, Integer} = nothing
     )
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
@@ -535,14 +536,15 @@ ascertainment and the background CFR for reuse by
     bvd_deaths_daily = (p_death * CFR) .* convolve_delay(onsets, od_state.pmf)
 
     n = length(bvd_deaths_daily)
-    vobs = vintage_obs(deaths_history, total_deaths, n)
+    nc = something(cutoff, n)
+    vobs = vintage_obs(deaths_history, total_deaths, nc)
 
     ## `λ_bg_death` is the mean daily background death rate.
     if case_bg_daily !== nothing
         bgcfr_state ~ to_submodel(background_cfr)
         cfr_bg = bgcfr_state.cfr_bg
         bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
-        λ_bg_death = sum(bg_death_daily) / n
+        λ_bg_death = sum(upto(bg_death_daily, nc)) / nc
         bg_death_sigma = zero(CFR)
     else
         cfr_bg = zero(CFR)
@@ -569,9 +571,9 @@ ascertainment and the background CFR for reuse by
         vintage_increments_model(sdd_modelled, sdd_obs, k)
     )
 
-    raw_total = sum(deaths_daily)
+    raw_total = sum(upto(deaths_daily, nc))
     expected_deaths_T := safe_rate(raw_total)
-    bg_death_total = sum(bg_death_daily)
+    bg_death_total = sum(upto(bg_death_daily, nc))
 
     return (;
         CFR, p_death, cfr_bg, od_pmf = od_state.pmf, deaths_daily,
@@ -629,7 +631,8 @@ sitrep.
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
-        )
+        ),
+        cutoff::Union{Nothing, Integer} = nothing
     )
     pos_state ~ to_submodel(positivity)
     report_state ~ to_submodel(onset_to_report)
@@ -642,7 +645,8 @@ sitrep.
     bvd_reports_daily = convolve_delay(onsets, report_pmf)
 
     n = length(bvd_reports_daily)
-    vobs = vintage_obs(reported_history, reported_cases, n)
+    nc = something(cutoff, n)
+    vobs = vintage_obs(reported_history, reported_cases, nc)
 
     ## Daily non-BVD background. `nothing` (the renewal default) holds it at
     ## the constant scalar `λ_bg` over the grid. An injected `background_re`
@@ -653,7 +657,9 @@ sitrep.
         bg_sigma = zero(λ_bg)
         bg_daily = fill(λ_bg, n)
     else
-        bg_state ~ to_submodel(background_re(n))
+        bg_state ~ to_submodel(
+            cutoff === nothing ? background_re(n) : background_re(n; cutoff)
+        )
         λ_bg_base = bg_state.λ_mu
         bg_sigma = bg_state.σ_bg
         bg_daily = bg_state.λ
@@ -677,15 +683,15 @@ sitrep.
         vintage_increments_model(sd_modelled, sd_obs, k)
     )
 
-    raw_total = sum(reports_daily)
+    raw_total = sum(upto(reports_daily, nc))
     expected_reports := safe_rate(raw_total)
 
     ## Implied per-suspected positivity at the cut-off: the BVD share of the
     ## expected suspected total.
-    bvd_total = p_drc * sum(bvd_reports_daily)
+    bvd_total = p_drc * sum(upto(bvd_reports_daily, nc))
     positivity := safe_rate(bvd_total) / expected_reports
 
-    bg_total = sum(bg_daily)
+    bg_total = sum(upto(bg_daily, nc))
 
     return (;
         p_drc, λ_bg = λ_bg_base, τ_test, report_pmf,
@@ -1085,9 +1091,11 @@ quantities.
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
         ## Zero pins the step at the published discrepancy and samples no
         ## parameter.
-        confirmed_break_sd::Real = 25.0
+        confirmed_break_sd::Real = 25.0,
+        cutoff::Union{Nothing, Integer} = nothing
     )
     n = length(onsets)
+    nc = something(cutoff, n)
     ## `missing` cut-off scalar means generator mode: observed increments are
     ## left missing so `predict` resamples them.
     have_data = !ismissing(confirmed_cases)
@@ -1140,7 +1148,7 @@ quantities.
             analysed_daily_raw,
         cap_start
     )
-    rvobs = vintage_obs(lab_history, tests_analysed, n)
+    rvobs = vintage_obs(lab_history, tests_analysed, nc)
     analysed_inc = bin_increments(analysed_daily, rvobs.days)
     ## Generator mode leaves the volume increments missing so `predict`
     ## resamples them, like the early/late windows below.
@@ -1328,7 +1336,7 @@ quantities.
     ## redundant. It would also build a DynamicPPL tracking closure capturing
     ## the branch-assigned (so boxed) `p_pos`, whose pointer-PHI Enzyme's
     ## `nodecayed_phis!` pass cannot differentiate through.
-    expected_analysed = safe_rate(sum(analysed_daily))
+    expected_analysed = safe_rate(sum(upto(analysed_daily, nc)))
     ## Expected confirmed at the cut-off and the overall positivity, over the
     ## modelled early volume, the observed cumulative analysed windows and the
     ## late windows (anchored days contribute `p · analysed`, unanchored days
@@ -1449,7 +1457,8 @@ rate and the daily at-risk prevalence for reuse by
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
-        )
+        ),
+        cutoff::Union{Nothing, Integer} = nothing
     )
     travel_state ~ to_submodel(traveller)
     daily_travellers = travel_state.daily_travellers
@@ -1463,11 +1472,11 @@ rate and the daily at-risk prevalence for reuse by
     ## At-risk prevalence (person-days): infected but not yet detected.
     prevalence = cumsum(infections) .- cumsum(detected_daily)
     export_prevalence = p_uganda .* q .* prevalence
-    n = length(export_prevalence)
+    n = something(cutoff, length(export_prevalence))
 
     if isempty(export_case_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
-        raw_exports = sum(export_prevalence)
+        raw_exports = sum(upto(export_prevalence, n))
         expected_exports_T := safe_rate(raw_exports)
         exported_cases ~ Poisson(expected_exports_T)
     else
@@ -1541,9 +1550,10 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         travelled_prevalence::AbstractVector, CFR::Real,
         od_pmf::AbstractVector, incubation_pmf::AbstractVector;
         export_death_days::AbstractVector{<:Integer} = Int[],
-        pre_death_exports::Union{Missing, Integer} = 0
+        pre_death_exports::Union{Missing, Integer} = 0,
+        cutoff::Union{Nothing, Integer} = nothing
     )
-    n = length(travelled_prevalence)
+    n = something(cutoff, length(travelled_prevalence))
     ## Infection→death PMF by age (age 0 = same day).
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
     ## Per-day expected export-death increment. Its running sum is the
@@ -1552,7 +1562,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
-        expected_exports_deaths_T := safe_rate(sum(death_daily))
+        expected_exports_deaths_T := safe_rate(sum(upto(death_daily, n)))
         exports_deaths ~ Poisson(expected_exports_deaths_T)
     else
         ## Dated per-day Poisson. The clock stops at the last death day.
@@ -1571,7 +1581,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         expected_exports_deaths_T := safe_rate(pre + sum(μ_day))
     end
 
-    return (; expected_exports_deaths_T)
+    return (; expected_exports_deaths_T, death_daily)
 end
 
 """
@@ -1643,13 +1653,14 @@ positivity and the expected confirmed-death count.
         scaling = death_testing_scaling_model(),
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
-        specificity = test_specificity_model()
+        specificity = test_specificity_model(),
+        cutoff::Union{Nothing, Integer} = nothing
     )
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
     s_test = sens_state.s_test
     spec = spec_state.spec
-    n = length(deaths_daily)
+    n = something(cutoff, length(deaths_daily))
 
     ## Suspected deaths carried to laboratory receipt by the same
     ## report-to-receipt delay the confirmed cases use, with the BVD component.
@@ -1740,7 +1751,9 @@ positivity and the expected confirmed-death count.
         vintage_increments_model(modelled_inc, cdeath_obs, k)
     )
 
-    expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
+    expected_confirmed_deaths := safe_rate(
+        sum(upto(confirmed_death_daily, n))
+    )
     ## Cut-off death-pool composition and confirmation positivity, surfaced as
     ## `death_composition` and `death_confirmation`.
     q_death := q_death_daily[n]
@@ -2237,7 +2250,8 @@ series for forecasting and replication.
         ## `cumulative_occupancy_offset`.
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         ## Prior sd of each occupancy break step (beds), centred on zero.
-        occupancy_break_sd::Real = 25.0
+        occupancy_break_sd::Real = 25.0,
+        cutoff::Union{Nothing, Integer} = nothing
     )
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
@@ -2252,6 +2266,7 @@ series for forecasting and replication.
         k = k_external
     end
     n = length(bvd_reports_daily)
+    nc = something(cutoff, n)
     ## `β_iso` is identified by the in-care death flow (Tableau 6 décédés)
     ## relative to admissions and occupancy. The recovered-among-confirmed
     ## ("cumul guéris") stream is modelled separately off the confirmed cases
@@ -2266,9 +2281,12 @@ series for forecasting and replication.
         Int.(capacity_history.days)
     )
     cap_start = isempty(cap_obs_days) ? 1 : minimum(cap_obs_days)
-    cap_state ~ to_submodel(capacity(n; start = cap_start))
+    cap_state ~ to_submodel(
+        cutoff === nothing ? capacity(n; start = cap_start) :
+            capacity(n; start = cap_start, cutoff)
+    )
     C = cap_state.C
-    C_T = isempty(C) ? zero(eltype(C)) : C[end]
+    C_T = isempty(C) ? zero(eltype(C)) : C[nc]
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2327,7 +2345,9 @@ series for forecasting and replication.
     ## non-zero (a lab stream supplies it). With a structural zero the
     ## confirmed sub-stock is empty, so the split likelihood no-ops and
     ## those days stay on the total.
-    split_active = any(>(zero(eltype(borrowed_hazard))), borrowed_hazard)
+    split_active = any(
+        >(zero(eltype(borrowed_hazard))), upto(borrowed_hazard, nc)
+    )
 
     ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed
     ## hazard. Sampled only when the hazard is non-zero, so no unidentified
@@ -2522,7 +2542,7 @@ series for forecasting and replication.
     ## demand capped at the bed count. Bed demand is the uncapped latent
     ## stock.
     z0 = zero(eltype(C))
-    dem_T = isempty(demand) ? z0 : demand[end]
+    dem_T = isempty(demand) ? z0 : demand[nc]
     occ_T = min(dem_T, C_T)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
@@ -2537,12 +2557,12 @@ series for forecasting and replication.
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[nc])
     incare_deaths_T = safe_rate(
         isempty(deaths_daily) ? z0 :
-            deaths_daily[end]
+            deaths_daily[nc]
     )
-    ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[end])
+    ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[nc])
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
@@ -2554,8 +2574,8 @@ series for forecasting and replication.
     incare_cfr := CFR_iso
     incare_cfr_modifier := β_iso
     treatment_overall_los := overall_los
-    conf_incare_T = isempty(conf_split) ? z0 : conf_split[end]
-    susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[end], z0)
+    conf_incare_T = isempty(conf_split) ? z0 : conf_split[nc]
+    susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[nc], z0)
     conf_incare_rate = safe_rate(conf_incare_T)
     susp_incare_rate = safe_rate(susp_incare_T)
     expected_confirmed_incare := conf_incare_rate
@@ -2568,7 +2588,7 @@ series for forecasting and replication.
     ## How much of the observed reclassification the model absorbed as a
     ## reporting artefact, the rest carried by real demand. Fitted and
     ## possibly negative, so reported raw rather than through `safe_rate`.
-    break_T = isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    break_T = isempty(occ_break_offset) ? z0 : occ_break_offset[nc]
     occupancy_break := break_T
 
     return (;
@@ -2579,7 +2599,8 @@ series for forecasting and replication.
         ruleout_los_mean = ruleout_los_state.mean,
         admission_delay_mean = adm_delay_state.mean,
         overall_los, abscond_frac, k_isolation = k,
-        demand, occupancy = min.(demand, C), isolation,
+        demand, occupancy = min.(demand, C), isolation, C,
+        occupancy_mean = occ_obs_total,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
@@ -2649,7 +2670,8 @@ the daily recovered series and the cut-off total.
         ),
         ## Dispersion can be injected from the joint composer's pooled set
         ## (`k_external`). Standalone it samples its own from `dispersion`.
-        k_external::Union{Nothing, Real} = nothing
+        k_external::Union{Nothing, Real} = nothing,
+        cutoff::Union{Nothing, Integer} = nothing
     )
     rec_state ~ to_submodel(recovery(CFR))
     p_recover = rec_state.p_recover
@@ -2668,14 +2690,14 @@ the daily recovered series and the cut-off total.
         delay_state.pmf
     )
 
-    n = length(confirmed_daily)
+    n = something(cutoff, length(confirmed_daily))
     vobs = vintage_obs(recovered_history, recovered_total, n)
     modelled_inc = bin_increments(recovered_daily, vobs.days)
     recovered_increments ~ to_submodel(
         vintage_increments_model(modelled_inc, vobs.obs_increments, k)
     )
 
-    expected_recovered := safe_rate(sum(recovered_daily))
+    expected_recovered := safe_rate(sum(upto(recovered_daily, n)))
 
     return (;
         p_recover, recovery_delay_mean = delay_state.mean,
@@ -3796,7 +3818,98 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
         σ_scan, η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
+        pixel_sd, ν,
     )
+end
+
+"""
+    composition_shares(weight, modelled)
+
+Expected share of each patch at each vintage: the modelled per-patch
+increments `modelled` `(n_patches × n_vintages)` weighted by the per-patch
+`weight` and normalised within each vintage. `safe_rate` floors the
+modelled increments away from zero so a vintage with no modelled cases in a
+patch still gives a defined (tiny) share rather than a 0/0.
+"""
+function composition_shares(weight::AbstractVector, modelled::AbstractMatrix)
+    np, nv = size(modelled)
+    Ts = promote_type(eltype(modelled), eltype(weight))
+    shares = zeros(Ts, np, nv)
+    @inbounds for i in 1:nv
+        tot = zero(Ts)
+        for p in 1:np
+            shares[p, i] = weight[p] * safe_rate(modelled[p, i])
+            tot += shares[p, i]
+        end
+        for p in 1:np
+            shares[p, i] /= tot
+        end
+    end
+    return shares
+end
+
+"""
+Split each vintage's `totals` across the patches by stick-breaking at the
+expected `shares` with the overdispersed Binomial
+[`safe_betabinomial`](@ref) at overdispersion `rho` (see
+[`province_composition_model`](@ref)). Patch `p` is drawn from the cases
+patches `1 … p−1` left, at its share among the patches not yet allocated,
+and the last patch takes the remainder. `obs_increments` is the observed
+split, or `missing` to draw one, which is how a forecast splits a national
+forecast across the provinces. On that path the last patch's remainder is
+filled in too, so the returned matrix sums to `totals` in every column.
+"""
+@model function composition_split_model(
+        obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
+        shares::AbstractMatrix, totals::AbstractVector{<:Integer}, rho::Real
+    )
+    np, nv = size(shares)
+    predictive = ismissing(obs_increments)
+    if predictive
+        obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
+    end
+    ## The loop runs over patches on the outside and scores every vintage in
+    ## one `~`, rather than a scalar `~` per (patch, vintage). Within a
+    ## vintage the patches are sequential, patch `p`'s trial count being what
+    ## patches `1 … p-1` left behind, but across vintages they are
+    ## independent, so the vintages vectorise. Each `~` puts DynamicPPL
+    ## bookkeeping on the Mooncake tape, and with two compositions over 20
+    ## vintages the scalar form emits 80 of them, enough to push the gradient
+    ## compile past an hour. The vectorised form emits `2 * (np - 1)`.
+    ##
+    ## The running state is allocated once and mutated rather than rebound
+    ## each time round the loop, since the comprehension below reads all
+    ## three and a local a closure reads and the body reassigns goes in a
+    ## `Core.Box` (see "Closures in model code" in the contributing guide).
+    remaining = copy(totals)
+    tail = ones(eltype(shares), nv)
+    p_cond = zeros(eltype(shares), nv)
+    trials = zeros(Int, nv)
+    for p in 1:(np - 1)
+        ## Conditional share of patch `p` among the patches not yet allocated.
+        for i in 1:nv
+            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
+            trials[i] = max(remaining[i], 0)
+        end
+        obs_increments[p, :] ~ product_distribution(
+            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv]
+        )
+        ## Guard the running tail against round-off driving it to zero or
+        ## negative on the last step.
+        for i in 1:nv
+            remaining[i] -= obs_increments[p, i]
+            tail[i] = max(tail[i] - shares[p, i], 1.0e-10)
+        end
+    end
+    ## The last patch is the remainder, not a free draw. Filled in only on the
+    ## predictive path. On the fitting path it is already the observed count
+    ## and must not be written over.
+    if predictive
+        for i in 1:nv
+            obs_increments[np, i] = max(remaining[i], 0)
+        end
+    end
+    return (; obs_increments)
 end
 
 """
@@ -3973,80 +4086,18 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         log_sev_raw = τ_sev .* z_sev
         sev = exp.(log_sev_raw .- (sum(log_sev_raw) / np))
     end
-    ## Expected share of each patch at each vintage. `safe_rate` floors the
-    ## modelled increments away from zero so an early vintage with no
-    ## modelled cases in a patch still gives a defined (tiny) share rather
-    ## than a 0/0.
-    Ts = promote_type(eltype(modelled_confirmed), eltype(asc), eltype(sev))
-    weight = asc .* sev
-    shares = zeros(Ts, np, nv)
-    @inbounds for i in 1:nv
-        tot = zero(Ts)
-        for p in 1:np
-            shares[p, i] = weight[p] * safe_rate(modelled_confirmed[p, i])
-            tot += shares[p, i]
-        end
-        for p in 1:np
-            shares[p, i] /= tot
-        end
-    end
+    ## Expected share of each patch at each vintage.
+    shares = composition_shares(asc .* sev, modelled_confirmed)
     ## The totals are conditioned on, not scored: they are already in the
-    ## joint density through the national confirmed stream. They are built in
-    ## a helper rather than in a branch here, because `obs_increments` is
-    ## rebound just below and a local a closure reads and the body reassigns
-    ## is boxed.
-    predictive = ismissing(obs_increments)
+    ## joint density through the national confirmed stream.
     totals = _composition_totals(obs_increments, modelled_confirmed)
-    if predictive
-        obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
-    end
-    ## Stick-breaking: allocate each vintage's total across the patches. The
-    ## final patch takes the remainder and carries no free draw, so the
-    ## composition has `np - 1` degrees of freedom per vintage.
-    ##
-    ## The loop runs over patches on the outside and scores every vintage in
-    ## one `~`, rather than a scalar `~` per (patch, vintage). Within a
-    ## vintage the patches are sequential, patch `p`'s trial count being what
-    ## patches `1 … p-1` left behind, but across vintages they are
-    ## independent, so the vintages vectorise. Each `~` puts DynamicPPL
-    ## bookkeeping on the Mooncake tape, and with two compositions over 20
-    ## vintages the scalar form emits 80 of them, enough to push the gradient
-    ## compile past an hour. The vectorised form emits `2 * (np - 1)`.
-    ##
-    ## The running state is allocated once and mutated rather than rebound
-    ## each time round the loop, since the comprehension below reads all
-    ## three and a local a closure reads and the body reassigns goes in a
-    ## `Core.Box` (see "Closures in model code" in the contributing guide).
-    remaining = copy(totals)
-    tail = ones(eltype(shares), nv)
-    p_cond = zeros(eltype(shares), nv)
-    trials = zeros(Int, nv)
-    for p in 1:(np - 1)
-        ## Conditional share of patch `p` among the patches not yet allocated.
-        for i in 1:nv
-            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
-            trials[i] = max(remaining[i], 0)
-        end
-        obs_increments[p, :] ~ product_distribution(
-            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv]
-        )
-        ## Guard the running tail against round-off driving it to zero or
-        ## negative on the last step.
-        for i in 1:nv
-            remaining[i] -= obs_increments[p, i]
-            tail[i] = max(tail[i] - shares[p, i], 1.0e-10)
-        end
-    end
-    ## The last patch is the remainder, not a free draw. Filled in only on the
-    ## predictive path. On the fitting path it is already the observed count
-    ## and must not be written over.
-    if predictive
-        for i in 1:nv
-            obs_increments[np, i] = max(remaining[i], 0)
-        end
-    end
+    ## Attached unprefixed, so the split's `obs_increments[p, :]` sit
+    ## directly under the composition's own prefix.
+    split_state ~ to_submodel(
+        composition_split_model(obs_increments, shares, totals, rho), false
+    )
     return (;
-        shares, rho = ρ, obs_increments,
+        shares, rho = ρ, obs_increments = split_state.obs_increments,
         province_ascertainment = asc, ascertainment_sd = τ_asc,
         testing_coefficient = β_asc,
         province_severity = sev, severity_sd = τ_sev,
