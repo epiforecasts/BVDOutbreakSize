@@ -59,7 +59,7 @@ Changes since v2.1.0.
   The modelled split is each patch's BVD suspects plus its share of the non-BVD background, a partially pooled simplex centred on population share (`background_split_model`).
   The BVD suspects carry the case composition's relative ascertainment, so the two compositions agree on how many of a patch's cases reach the laboratory.
   The testing fraction stays national and the per-province positives remain unfitted.
-  The headline fit drops the per-head testing covariate from the ascertainment prior, since the same series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31).
+  The headline fit drops the per-head testing covariate from the ascertainment prior, since the same series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
 - Province isolation occupancy and bed counts enter the treatment-flow stream as splits of the printed sum of the provinces present each day (#784).
   The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and per-patch shares of the national capacity walk.
   The occupancy split is scored weekly and the bed split on days a province's count changes, since a stock reprinted daily is not a fresh draw of the split.
