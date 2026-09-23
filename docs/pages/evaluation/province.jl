@@ -73,7 +73,7 @@ MarkdownTable(prior_province_table) #hide
 #md # </details>
 #md # ```
 
-# The prior composition checks draw the same bands as the [posterior ones](@ref "Province compositions") below, from the prior shares.
+# The prior composition checks draw the same bands as the [posterior ones](@ref province-compositions) below, from the prior shares.
 
 #md # ```@raw html
 #md # <details><summary>Province composition prior predictive checks</summary>
@@ -281,13 +281,19 @@ province_correlation_fig #hide
 #md # <details><summary>Province totals against observed</summary>
 #md # ```
 
-## Keyed by panel title, which names the stream and the province.
+## Keyed by panel title, which names the stream and the province. A total
+## that is the same in every draw (a patch with no deaths at any vintage) has
+## no spread to plot and gives the corner plot a zero-width axis, so it is
+## left out.
+_varying_panels = filter(
+    p -> length(unique(sum(r) for r in p.replicates)) > 1, province_panels
+);
 province_totals = NamedTuple(
     Symbol(p.title) => [sum(Float64.(r)) for r in p.replicates]
-        for p in province_panels
+        for p in _varying_panels
 );
 province_observed = NamedTuple(
-    Symbol(p.title) => Float64(sum(p.observed)) for p in province_panels
+    Symbol(p.title) => Float64(sum(p.observed)) for p in _varying_panels
 );
 province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 
