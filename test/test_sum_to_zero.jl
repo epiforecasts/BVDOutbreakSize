@@ -218,8 +218,14 @@ end
     obs = [853 21 42; 77 2 5; 3 0 0; 10 1 2]
     modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2; 9.0 1.0 1.5]
     @testset "$name" for (name, model) in (
-            ("patch_rt_model, two patches", patch_rt_model(60, 2, log(1.5); rt_start = 10)),
-            ("patch_rt_model, four patches", patch_rt_model(60, 4, log(1.5); rt_start = 10)),
+            (
+                "patch_rt_model, two patches",
+                patch_rt_model(60, 2, log(1.5); rt_start = 10),
+            ),
+            (
+                "patch_rt_model, four patches",
+                patch_rt_model(60, 4, log(1.5); rt_start = 10),
+            ),
             (
                 "patch_infection_model, coupled",
                 patch_infection_model(60, 4; importation_kernel = kernel4),
