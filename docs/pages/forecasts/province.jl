@@ -89,7 +89,7 @@ recent_cases = province_recent_counts(
 recent_deaths = province_recent_counts(
     obs.province_death_history, PROVINCE_NAMES, N_PATCHES
 )
-function province_observed(p)
+function forecast_province_observed(p)
     o = (;)
     recent_cases === nothing ||
         (o = merge(o, (; confirmed_new = recent_cases.counts[p])))
@@ -97,14 +97,14 @@ function province_observed(p)
         (o = merge(o, (; confirmed_deaths_new = recent_deaths.counts[p])))
     return o
 end
-province_detail_table(p) = MarkdownTable(
+forecast_province_table(p) = MarkdownTable(
     province_forecast[
         province_forecast.Province .== PROVINCE_LABELS[p], :,
     ]
 )
-province_detail_fig(p) = plot_province_forecast_detail(
+forecast_province_fig(p) = plot_province_forecast_detail(
     chn_joint, forecast;
-    province = p, n_patches = N_PATCHES, observed = province_observed(p)
+    province = p, n_patches = N_PATCHES, observed = forecast_province_observed(p)
 )
 ## The province blocks below are written out one per patch.
 @assert N_PATCHES == 4 && PROVINCE_LABELS[1:4] ==
@@ -127,11 +127,11 @@ Markdown.parse(recent_note) #hide
 #md # <details><summary>Ituri</summary>
 #md # ```
 
-province_detail_table(1) #hide
+forecast_province_table(1) #hide
 
 #-
 
-province_detail_fig(1) #hide
+forecast_province_fig(1) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -141,11 +141,11 @@ province_detail_fig(1) #hide
 #md # <details><summary>Nord-Kivu</summary>
 #md # ```
 
-province_detail_table(2) #hide
+forecast_province_table(2) #hide
 
 #-
 
-province_detail_fig(2) #hide
+forecast_province_fig(2) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -155,11 +155,11 @@ province_detail_fig(2) #hide
 #md # <details><summary>Haut-Uele</summary>
 #md # ```
 
-province_detail_table(3) #hide
+forecast_province_table(3) #hide
 
 #-
 
-province_detail_fig(3) #hide
+forecast_province_fig(3) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -171,11 +171,11 @@ province_detail_fig(3) #hide
 #md # <details><summary>Other provinces</summary>
 #md # ```
 
-province_detail_table(4) #hide
+forecast_province_table(4) #hide
 
 #-
 
-province_detail_fig(4) #hide
+forecast_province_fig(4) #hide
 
 #md # ```@raw html
 #md # </details>
