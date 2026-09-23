@@ -9,7 +9,7 @@
         s = joint_sampler_args()
         @test s.samples == 1000
         @test s.n_adapts == 500
-        @test s.target_accept == 0.80
+        @test s.target_accept == 0.8
     end
     withenv(
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
@@ -32,5 +32,5 @@ end
         joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"), String
     )
     @test count("joint_sampler_args()...", src) == 2
-    @test !occursin("n_adapts = joint_warmup(", src)
+    @test count("n_adapts = joint_warmup(", src) == 1
 end

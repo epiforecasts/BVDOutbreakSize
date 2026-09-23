@@ -181,6 +181,12 @@ joint_warmup(default::Integer) = parse(
     get(ENV, "BVD_JOINT_WARMUP", string(default))
 )
 
+## The sampler budget both halves of the spatial sensitivity splat.
+joint_sampler_args() = (;
+    samples = joint_samples(1000), n_adapts = joint_warmup(500),
+    target_accept = joint_target_accept(),
+)
+
 function build_fit_specs(
         obs;
         breakpoint = default_breakpoint(obs),
@@ -444,9 +450,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...
                 );
-                samples = joint_samples(1000), chains = chains,
-                n_adapts = joint_warmup(500),
-                target_accept = joint_target_accept(),
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("joint")
             ),
         ),
@@ -472,9 +476,7 @@ function build_fit_specs(
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...
                 );
-                samples = joint_samples(1000), chains = chains,
-                n_adapts = joint_warmup(500),
-                target_accept = joint_target_accept(),
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("sens_no_patches")
             ),
         ),
