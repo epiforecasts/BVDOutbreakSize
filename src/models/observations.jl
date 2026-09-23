@@ -3090,21 +3090,38 @@ function onset_report_cdf_table(
         γ::AbstractVector, grid_start::Integer, u_lo::Integer,
         u_hi::Integer
     )
-    D = length(logit_h0)
-    ng = length(γ)
     T = promote_type(eltype(logit_h0), eltype(γ))
     nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
-    table = Matrix{T}(undef, D, nu)
-    @inbounds for k in 1:nu
+    table = Matrix{T}(undef, length(logit_h0), nu)
+    ## The survival products, then their complements in place.
+    _onset_columns!(nothing, table, logit_h0, γ, grid_start, u_lo)
+    @. table = one(T) - table
+    return table
+end
+
+## The survival recurrence of each onset date's delay column, the one walk
+## `onset_report_cdf_table`, `onset_report_expected_total` and their Mooncake
+## rules share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
+## survival product up to and including delay `j`, and, unless `H` is
+## `nothing`, `H[j + 1, k]` is that delay's hazard.
+function _onset_columns!(
+        H::Union{Nothing, AbstractMatrix}, S::AbstractMatrix,
+        logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
+        u_lo::Integer
+    )
+    ng = length(γ)
+    T = eltype(S)
+    @inbounds for k in axes(S, 2)
         u = Int(u_lo) + k - 1
         surv = one(T)
-        for j in 0:(D - 1)
-            gi = clamp(u + j - grid_start + 1, 1, ng)
-            surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
-            table[j + 1, k] = one(T) - surv
+        for j in axes(S, 1)
+            hj = logistic(logit_h0[j] + γ[clamp(u + j - grid_start, 1, ng)])
+            surv *= (one(T) - hj)
+            S[j, k] = surv
+            H === nothing || (H[j, k] = hj)
         end
     end
-    return table
+    return nothing
 end
 
 """
@@ -3566,18 +3583,29 @@ function onset_report_expected_total(
         logit_h0::AbstractVector, γ::AbstractVector,
         grid_start::Integer, alpha::AbstractVector, as_of::Integer
     )
-    T = promote_type(
-        eltype(onsets), eltype(logit_h0), eltype(γ),
-        eltype(alpha)
+    T = promote_type(eltype(logit_h0), eltype(γ))
+    ge = max(min(Int(as_of), length(onsets)), 0)
+    S = Matrix{T}(undef, length(logit_h0), ge)
+    _onset_columns!(nothing, S, logit_h0, γ, grid_start, 1)
+    return _onset_expected_total(onsets, S, grid_start, alpha, as_of)
+end
+
+## `onset_report_expected_total` off the survival products `S` of onset
+## dates `1:size(S, 2)`, each term `onsets[u] · F(u, as_of - u)` as
+## `onset_report_F` gives it.
+function _onset_expected_total(
+        onsets::AbstractVector, S::AbstractMatrix, grid_start::Integer,
+        alpha::AbstractVector, as_of::Integer
     )
-    total = zero(T)
-    n = length(onsets)
+    T = promote_type(eltype(onsets), eltype(S), eltype(alpha))
+    D = size(S, 1)
     na = length(alpha)
-    ge = min(Int(as_of), n)
-    @inbounds for u in 1:ge
-        δ = as_of - u
+    total = zero(T)
+    @inbounds for u in axes(S, 2)
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
-        total += onsets[u] * onset_report_F(δ, logit_h0, γ, u, grid_start, α)
+        num = D == 0 ? zero(T) : one(T) - S[min(as_of - u, D - 1) + 1, u]
+        den = one(T) - (D == 0 ? one(T) : S[D, u])
+        total += onsets[u] * (α * (num / safe_rate(den)))
     end
     return total
 end

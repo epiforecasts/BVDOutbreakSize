@@ -624,32 +624,11 @@ Mooncake.@is_primitive(
 ## Derivative of `safe_rate`: the identity above its floor, flat on it.
 _safe_rate_slope(x) = _safe_rate_on(x) ? one(x) : zero(x)
 
-## Hazards and survival products of one onset date's delay column, as the
-## forward loop builds them. `surv[j + 1]` is the product up to and
-## including delay `j`.
-function _onset_column!(
-        h::AbstractVector, surv::AbstractVector,
-        logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
-        grid_start::Integer
-    )
-    D = length(logit_h0)
-    ng = length(γ)
-    T = eltype(surv)
-    s = one(T)
-    @inbounds for j in 0:(D - 1)
-        gi = clamp(u + j - grid_start + 1, 1, ng)
-        hj = logistic(logit_h0[j + 1] + γ[gi])
-        s *= (one(T) - hj)
-        h[j + 1] = hj
-        surv[j + 1] = s
-    end
-    return nothing
-end
-
-## `1 - surv[j]` has derivative `surv[j] · h[i]` in the logit `x_i` for every
-## `i ≤ j`, so a column's adjoint is `x̄_i = h_i · Σ_{j ≥ i} c̄_j surv_j`, one
-## backward running sum. Each `x̄_i` lands on `logit_h0[i]` and on the
-## (clamped) calendar day it read from `γ`.
+## Adjoint of one `_onset_columns!` column, with `c̄` the cotangent of
+## `1 - surv`. `1 - surv[j]` has derivative `surv[j] · h[i]` in the logit
+## `x_i` for every `i ≤ j`, so a column's adjoint is
+## `x̄_i = h_i · Σ_{j ≥ i} c̄_j surv_j`, one backward running sum. Each `x̄_i`
+## lands on `logit_h0[i]` and on the (clamped) calendar day it read from `γ`.
 function _onset_column_adjoint!(
         l̄::AbstractVector, γ̄::AbstractVector, c̄::AbstractVector,
         h::AbstractVector, surv::AbstractVector, u::Integer,
@@ -687,9 +666,7 @@ function Mooncake.rrule!!(
     T = promote_type(eltype(lp), eltype(γp))
     H = Matrix{T}(undef, D, nu)
     S = Matrix{T}(undef, D, nu)
-    @inbounds for k in 1:nu
-        _onset_column!(view(H, :, k), view(S, :, k), lp, γp, lo + k - 1, gs)
-    end
+    _onset_columns!(H, S, lp, γp, gs, lo)
     table = one(T) .- S
     out = Mooncake.zero_fcodual(table)
     t̄ = tangent(out)
@@ -841,22 +818,13 @@ function Mooncake.rrule!!(
     ## is the cotangent at `jn`, the denominator's at `D - 1`. The forward
     ## pass keeps each onset date's column for the pullback.
     D = length(lp)
-    n = length(op)
     na = length(alp)
     T = promote_type(eltype(op), eltype(lp), eltype(γp), eltype(alp))
-    ge = min(t, n)
-    H = Matrix{T}(undef, D, max(ge, 0))
-    S = Matrix{T}(undef, D, max(ge, 0))
-    total = zero(T)
-    @inbounds for u in 1:ge
-        _onset_column!(view(H, :, u), view(S, :, u), lp, γp, u, gs)
-        δ = t - u
-        α = alp[clamp(u - gs + 1, 1, na)]
-        jn = min(δ, D - 1)
-        num = (δ < 0 || D == 0) ? zero(T) : one(T) - S[jn + 1, u]
-        den = one(T) - (D == 0 ? one(T) : S[D, u])
-        total += op[u] * (α * (num / safe_rate(den)))
-    end
+    ge = max(min(t, length(op)), 0)
+    H = Matrix{T}(undef, D, ge)
+    S = Matrix{T}(undef, D, ge)
+    _onset_columns!(H, S, lp, γp, gs, 1)
+    total = _onset_expected_total(op, S, gs, alp, t)
     function onset_report_expected_total_pullback!!(ȳ::Mooncake.IEEEFloat)
         D == 0 && return ntuple(_ -> NoRData(), 7)
         c̄ = zeros(T, D)
