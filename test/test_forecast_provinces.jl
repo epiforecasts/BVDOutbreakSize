@@ -1,7 +1,7 @@
 ## Tests for the per-province forward projection, `forecast_provinces`.
 
 @testsnippet ProvinceProjection begin
-    using BVDOutbreakSize: patch_infections, province_importation_kernel,
+    using BVDOutbreakSize: BVDOutbreakSize, patch_infections, province_importation_kernel,
         PROVINCE_POPULATIONS, cdf_nmax, convolve_delay, discretise_censored,
         lognormal_meansd
     using Distributions: Gamma
@@ -232,9 +232,10 @@ end
     independent = P * D * D * P
     got = cov(innov)
     @test all(abs.(got .- target) .< 0.006)
-    ## The same check separates the fitted correlation from independent
-    ## draws, so it would catch the correlation being dropped.
-    @test abs(got[1, 2] - independent[1, 2]) > 0.03
+    ## Independent draws would sit about 0.024 away from the target in the
+    ## Ituri row, four times the tolerance above, so the check would catch
+    ## the correlation being dropped.
+    @test maximum(abs.(got .- independent)) > 0.015
 end
 
 @testitem "forecast_provinces splits the national total by the fitted composition" setup = [
@@ -492,7 +493,7 @@ end
 @testitem "the national walk keeps its draws" begin
     using Random: MersenneTwister
     using Distributions: Gamma
-    using BVDOutbreakSize: cdf_nmax, euler_lotka_r
+    using BVDOutbreakSize: BVDOutbreakSize, cdf_nmax, euler_lotka_r
 
     ## The walk continuation as `_evolving_rates` wrote it before it was
     ## shared with `forecast_provinces`, kept here so the national forecast
