@@ -543,29 +543,21 @@ function patch_overview_table(
     return df
 end
 
-## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
-## 90% e–f`. `digits = 0` writes whole numbers.
-function _interval_text(s; digits::Integer = 2, unit::AbstractString = "")
+## Equal-tailed 90% interval as `lo–hi`. `digits = 0` writes whole numbers.
+function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
+    s = posterior_summary(draws)
     fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
-    return join(
-        (
-            string(
-                lvl, "% ",
-                fmt(getproperty(s, Symbol("lo", lvl))), "–",
-                fmt(getproperty(s, Symbol("hi", lvl))), unit
-            )
-                for lvl in (30, 60, 90)
-        ), ", "
-    )
+    return string(fmt(s.lo90), "–", fmt(s.hi90), unit)
 end
 
 """
-Markdown bullets summarising each province of the patch model, one bullet per
-province. Each gives the cumulative infections and the reproduction number at
+Markdown headline for the patch model, one single-line bullet per province.
+Each gives the cumulative infections to date and the reproduction number at
 the cut-off, and, when the chain carries them, the case-fatality ratio
-(`CFR_patch`, as a percentage) and the relative case ascertainment
-(`province_ascertainment`). Every quantity is written as its equal-tailed
-30%, 60% and 90% credible intervals.
+(`CFR_patch`, as a percentage) and the case ascertainment relative to the
+national average (`province_ascertainment`). Every quantity is written as its
+equal-tailed 90% credible interval. The 30%, 60% and 90% intervals are in
+[`patch_summary_table`](@ref).
 
 The reproduction number and the relative ascertainment are identified only
 as a product by the case composition, so the two are given together.
@@ -587,26 +579,24 @@ function patch_headline(
     cfr = per_patch(:CFR_patch)
     asc = per_patch(:province_ascertainment)
     bullets = map(1:np) do p
-        lines = [
-            "- **$(patch_labels[p]):** " *
-                _interval_text(posterior_summary(C_T[p]); digits = 0) *
-                " infections to date.",
-            "  The reproduction number at the cut-off is " *
-                _interval_text(posterior_summary(R_T[p])) * ".",
+        parts = [
+            "reproduction number " * _interval90_text(R_T[p]),
         ]
         cfr === nothing || push!(
-            lines,
-            "  The case-fatality ratio is " *
-                _interval_text(
-                posterior_summary(100 .* cfr[p]); digits = 1, unit = "%"
-            ) * "."
+            parts,
+            "case-fatality ratio " *
+                _interval90_text(100 .* cfr[p]; digits = 1, unit = "%")
         )
         asc === nothing || push!(
-            lines,
-            "  Case ascertainment relative to the national average is " *
-                _interval_text(posterior_summary(asc[p])) * "."
+            parts,
+            "case ascertainment " * _interval90_text(asc[p]) *
+                " times the national average"
         )
-        join(lines, "\n")
+        tail = length(parts) == 1 ? only(parts) :
+            join(parts[1:(end - 1)], ", ") * " and " * last(parts)
+        "- **$(patch_labels[p]):** " *
+            _interval90_text(C_T[p]; digits = 0) *
+            " infections to date, " * tail * "."
     end
     return join(bullets, "\n") * "\n"
 end
