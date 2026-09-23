@@ -295,6 +295,22 @@ A push to `main`, a tag and a manual run are never gated.
 The lists live in each workflow's `changes` job and are checked by `.github/actions/changed-paths/patterns_test.sh`, which pre-commit runs whenever one of them is edited.
 Widen the list when something new feeds a build: a pattern that is too narrow skips the job that would have caught the change, and nothing reports that as a failure.
 
+### Before asking for review
+
+Go through the whole diff against `main` with this list before asking for a review, human or `@seabbs-review-bot`.
+
+- Comments, docstrings and test names state what the code does now, briefly.
+  History belongs in [News](news.md).
+- Every claim in a comment, docstring, news entry or pull request description is true of the code in the diff.
+  That includes cross-references, and unchanged text next to the change that it makes stale.
+- A number in the news or a pull request description names its source: a benchmark comment, a job log or a committed script.
+- Nothing is duplicated.
+  Reuse an existing helper, and write a test's reference implementation from the formula rather than copying the code under test.
+- Nothing is added or exported without a consumer outside its own tests, and code the change leaves unused is removed.
+- A new function matches its siblings in keywords, index ranges, missing-value checks and error messages.
+- Report pages follow "Analysis report prose" above.
+- New behaviour has a test that fails if the change is reverted.
+
 ## Releases
 
 A release is cut by commenting `@release` on any issue or pull request.
