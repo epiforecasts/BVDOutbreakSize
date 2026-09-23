@@ -90,7 +90,7 @@ Changes since v2.1.0.
   Each page opens with a summary: overall bullets, then a short block per stream or per province.
   The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
   The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
-- The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+- The report is split into pages, grouped in the navigation as Summary, Estimates (National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
   About carries a new page on the authors, funding and citation.
 - The summary dashboard, National and Provinces pages open with their own summary and the "Last updated" and "Data as of" dates (#782, #822, #832).
   The summary dashboard is shorter, with the fit diagnostics behind a dropdown.
