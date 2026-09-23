@@ -2263,9 +2263,7 @@ than of the chain, so the caller supplies them. A grid whose knot count
 disagrees with the stored innovation length raises rather than silently
 building a walk of the wrong length.
 
-Shared by the report's reporting-delay figures and by
-[`forecast_onsets`](@ref), so the fitted hazard the analysis plots and the
-one the forecast projects forward are the same object.
+Used by the report's reporting-delay figures.
 """
 function reconstruct_onset_hazard(
         chn; grid_start::Integer,
@@ -3619,23 +3617,23 @@ This is the figure form of [`province_forecast_table`](@ref), and the figure
 the release archive [`province_forecast_archive`](@ref) carries the draws
 behind.
 
-`fc` is a [`forecast_provinces`](@ref) frame, each province projected by
-its own renewal. A national [`forecast_reported`](@ref) result is replaced by
-the one-week projection from `chn`.
+`fc` is a [`forecast_provinces`](@ref) frame. A national
+[`forecast_reported`](@ref) result is replaced by the one-week province
+forecast read from the posterior-predictive draws `pp`.
 
 Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
 neither returns an empty figure.
 """
 function plot_province_forecast(
-        chn, fc::DataFrame;
+        pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
         title::AbstractString = "One-week-ahead forecast by province"
     )
     np = min(n_patches, length(patch_labels))
-    entries = _province_forecast_draws(chn, fc, np, patch_labels)
+    entries = _province_forecast_draws(pp, fc, np, patch_labels)
     isempty(entries) && return Figure()
     ## One panel per stream, each holding every province's interval on the
     ## shared province axis.
@@ -3668,8 +3666,8 @@ function plot_province_forecast(
     CairoMakie.Label(
         fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province is projected by its own " *
-            "renewal equation.";
+            "the median as a dot. Each province is forecast by the fitted " *
+            "patch model, and the provinces add up to the national forecast.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3684,7 +3682,8 @@ per stream with its 90% predictive interval shaded.
 
 The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
 [`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
-result is replaced by the one-week projection from `chn`.
+result is replaced by the one-week province forecast read from the draws
+`pp`.
 
 `observed` optionally gives a recent observed week per stream, keyed by the
 forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
@@ -3692,7 +3691,7 @@ forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
 axis widens to hold it. Panels are drawn only for the streams `fc` carries.
 """
 function plot_province_forecast_detail(
-        chn, fc::DataFrame;
+        pp, fc::DataFrame;
         province::Integer,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
@@ -3704,7 +3703,7 @@ function plot_province_forecast_detail(
     )
     label = patch_labels[province]
     entries = [
-        e for e in _province_forecast_draws(chn, fc, np, patch_labels)
+        e for e in _province_forecast_draws(pp, fc, np, patch_labels)
             if e[2] == label
     ]
     isempty(entries) && return Figure()

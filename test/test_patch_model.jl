@@ -1977,29 +1977,27 @@ end
     @test !has_frac(patch_infection_model(n, 1; breakpoint = bp, rt_start))
 end
 
-@testitem "forecast_provinces runs on a sampled patch chain" setup = [
+@testitem "forecast_provinces reads predict draws of a sampled patch chain" setup = [
     PatchJointChain,
 ] begin
-    using DataFrames: DataFrame
-    using BVDOutbreakSize: forecast_provinces
+    using BVDOutbreakSize: forecast_provinces, forecast_reported,
+        forecast_draws
 
-    ## The key names the projection reads are the ones the fitted model
-    ## writes, which a hand-built chain cannot show.
-    national = DataFrame(
-        confirmed_new = fill(500, PATCH_DRAWS),
-        confirmed_deaths_new = fill(50, PATCH_DRAWS)
-    )
-    fc = forecast_provinces(
-        patch_chain, national;
-        n_patches = np, breakpoint = obs.who_first_sitrep_days
+    ## The key names the province forecast reads are the ones the patch
+    ## joint writes, on the live observations and a prior-sampled chain.
+    pp = forecast_draws(patch_model, patch_chain; horizon = 7)
+    fc = forecast_provinces(pp; n_patches = np)
+    national = forecast_reported(
+        pp; obs_cases = obs.reported_cases, obs_deaths = obs.total_deaths,
+        obs_confirmed = obs.confirmed_cases
     )
     @test size(fc, 1) == np * PATCH_DRAWS
     @test all(isfinite, fc.infections_new)
     @test all(isfinite, fc.rt_forecast)
-    ## The case composition is sampled, so the provinces split each draw's
-    ## national total.
+    ## The provinces split each draw's national forecast.
     @test all(
-        d -> sum(fc.confirmed_new[fc.draw .== d]) == 500, 1:PATCH_DRAWS
+        d -> sum(fc.confirmed_new[fc.draw .== d]) == national.confirmed_new[d],
+        1:PATCH_DRAWS
     )
 end
 
