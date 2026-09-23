@@ -2,7 +2,7 @@
 #
 # Whether the fitted joint model reproduces the per-province data it was fitted to.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
-# The per-province confirmed cases and deaths enter the model as compositions of the national totals, so the in-sample checks here are on each province's share of those totals rather than its count.
+# The per-province confirmed cases and deaths enter the model as compositions of the national totals, so most of the in-sample checks here are on each province's share of those totals, and one is on its count.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -20,7 +20,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # ## Summary
 #
 # The overall bullets come first, then a short block per province, from the checks further down this page.
-# Each block gives how well the case and death compositions reproduce that province's counts.
+# Each block gives how well the case and death compositions reproduce that province's counts, first at the observed national total and then with the national total predicted too.
 # Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
 # Coverage is nominally 0.9.
 
@@ -213,6 +213,100 @@ MarkdownTable(province_calibration_table) #hide
 #md # </details>
 #md # ```
 
+# ## Province counts
+#
+# The calibration above holds each vintage's national total at its observed value.
+# Here the national total is predicted as well, so each province's cases and deaths are scored as counts.
+# Each posterior predictive draw of the national confirmed cases or deaths is summed over each spatial vintage and split between the provinces by the same draw's composition, following the factorisation on the [Methods](@ref methods-province-compositions) page.
+# The first vintage is the cumulative count to that date.
+# A province can be well calibrated on its share and not on its count when the national stream is not.
+
+#md # ```@raw html
+#md # <details><summary>Build the province count panels</summary>
+#md # ```
+
+## The joint posterior predictive, shared with the national page (see
+## `joint_posterior_predictive` in `docs/pages/_setup.jl`). Its draws pair
+## one to one with `chn_joint`, whose shares split them.
+pp_joint = joint_posterior_predictive();
+_pp_draws(vn) = collect(pp_joint[BVDOutbreakSize.FlexiChains.Prefixed(vn)]);
+
+## The national confirmed cases are replicated per laboratory window, oldest
+## first, as on the national page. The first confirmed vintage is an
+## unreplicated baseline.
+_conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
+    obs.confirmed_history, obs.lab_history, obs.lab_daily_history
+);
+_conf_obs = collect(
+    first(
+        pp_joint[k] for k in keys(pp_joint)
+            if occursin(
+                "confirmed_state.confirmed_positives.positives", string(k)
+            )
+    )
+);
+_conf_replicates = [
+    vcat(collect(e), collect(p), collect(l))
+        for (e, p, l) in zip(
+            vec(_pp_draws(@varname(early_increments.increments))),
+            vec(_conf_obs),
+            vec(_pp_draws(@varname(late_increments.increments)))
+        )
+];
+province_case_count_panels = province_count_panels(
+    chn_joint;
+    share_key = :province_shares,
+    obs_increments = province_cases.increments,
+    province_days = province_cases.days,
+    national_days = vcat(
+        _conf_windows.early_days, _conf_windows.obs_days,
+        _conf_windows.late_days
+    ),
+    national_replicates = _conf_replicates,
+    baseline = Int(first(obs.confirmed_history.counts)),
+    stream = "Confirmed cases", n_patches = N_PATCHES
+);
+## The national confirmed deaths are replicated from zero at every vintage.
+province_death_count_panels = province_count_panels(
+    chn_joint;
+    share_key = :province_death_shares,
+    obs_increments = province_deaths.increments,
+    province_days = province_deaths.days,
+    national_days = obs.confirmed_deaths_history.days,
+    national_replicates = _pp_draws(@varname(cdeath_increments.increments)),
+    stream = "Confirmed deaths", n_patches = N_PATCHES
+);
+province_count_calibration_table = stream_calibration(
+    vcat(province_case_count_panels, province_death_count_panels)
+);
+province_count_calibration_fig = plot_stream_calibration(
+    province_count_calibration_table
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Province count calibration plot</summary>
+#md # ```
+
+province_count_calibration_fig #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Province count calibration table</summary>
+#md # ```
+
+MarkdownTable(province_count_calibration_table) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Province correlations and totals
 #
 # The heatmap is the posterior correlation between the national outbreak size ($C_T$) and, for each province, its reproduction number at the cut-off, its relative case ascertainment and its case-fatality ratio.
@@ -304,8 +398,19 @@ evaluation_insample_province_summary = let
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
     )
-    low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
-    n_cov = count(>=(0.8), fitted[!, "90% coverage"])
+    function coverage_bullet(heading, tbl, scale)
+        low = first(sort(tbl, "90% coverage"), min(1, size(tbl, 1)))
+        return string(
+            "- **", heading, ":** ", count(>=(0.8), tbl[!, "90% coverage"]),
+            " of ", size(tbl, 1), " province streams have 90% coverage of ",
+            "at least 0.8", scale,
+            size(low, 1) == 0 ? "." :
+                string(
+                    "; the lowest is ", low[1, "Stream"], " at ",
+                    fmt(low[1, "90% coverage"]), "."
+                )
+        )
+    end
     overall = [
         string(
             "- **Least well reproduced:** ",
@@ -319,22 +424,23 @@ evaluation_insample_province_summary = let
                 ], "; "
             ), "."
         ),
-        string(
-            "- **Coverage:** ", n_cov, " of ", size(fitted, 1),
-            " province streams have 90% coverage of at least 0.8",
-            size(low, 1) == 0 ? "." :
-                string(
-                    "; the lowest is ", low[1, "Stream"], " at ",
-                    fmt(low[1, "90% coverage"]), "."
-                )
+        coverage_bullet("Coverage", fitted, ""),
+        coverage_bullet(
+            "Count-scale coverage",
+            filter(
+                r -> isfinite(r["Bias"]), province_count_calibration_table
+            ),
+            " on the count scale"
         ),
     ]
-    cal = Dict(r["Stream"] => r for r in eachrow(province_calibration_table))
-    function calibration(kind, p)
-        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
-        r === nothing && return string("- ", kind, ": not scored.")
+    rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
+    cal = rows(province_calibration_table)
+    count_cal = rows(province_count_calibration_table)
+    function calibration(tbl, kind, p, label)
+        r = get(tbl, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
+        r === nothing && return string("- ", label, ": not scored.")
         return string(
-            "- ", kind, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
+            "- ", label, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
             fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
         )
     end
@@ -342,8 +448,16 @@ evaluation_insample_province_summary = let
         join(
             [
                 string("**", PROVINCE_LABELS[p], "**"), "",
-                calibration("Confirmed cases", p),
-                calibration("Confirmed deaths", p),
+                calibration(cal, "Confirmed cases", p, "Confirmed cases"),
+                calibration(cal, "Confirmed deaths", p, "Confirmed deaths"),
+                calibration(
+                    count_cal, "Confirmed cases", p,
+                    "Confirmed cases as counts"
+                ),
+                calibration(
+                    count_cal, "Confirmed deaths", p,
+                    "Confirmed deaths as counts"
+                ),
             ], "\n"
         )
             for p in 1:N_PATCHES
