@@ -315,23 +315,27 @@ MarkdownTable(vintage_table) #hide
 # A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
 #
 # ```math
-# \boldsymbol\delta_{1} = \sigma_{\text{lvl}}\, Q L \mathbf{z},
+# \boldsymbol\delta_{1} = \sigma_{\text{lvl}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z},
 # \qquad
 # \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
-#   + Q\, \mathrm{diag}(\mathbf{s})\, L \mathbf{z}_k, \tag{6}
+#   + \frac{0.05}{\sqrt{\nu}}\, Q A \mathbf{z}_k, \tag{6}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
-# s_j \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
-# LL^{\top} \sim \mathrm{LKJ}(2), \tag{7}
+# AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $s_j$ the scale of basis direction $j$, $L$ the Cholesky factor of the $(P - 1) \times (P - 1)$ correlation of the directions and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
-# Every sampled dimension reaches the likelihood, and the covariance of the innovations, $Q\, \mathrm{diag}(\mathbf{s})\, LL^{\top} \mathrm{diag}(\mathbf{s})\, Q^{\top}$, is a full covariance of a sum-to-zero vector.
+# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# The covariance of the innovations, $(0.05^2/\nu)\, Q AA^{\top} Q^{\top}$, is a full covariance of a sum-to-zero vector.
+# $A$ has as many entries as that covariance has free parameters, and each knot draws $P - 1$ values, one per direction the deviations can move in.
+# The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
+# Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
 # We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
-# The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each is $-1/(P - 1)$.
+# The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
+# With three patches the standard deviations fix the correlations, so asking whether the correlation is needed is asking whether the patches' standard deviations differ.
+# The model can also be fitted without the correlation (`region_correlation = false`), with one scale $s$ shared by every basis direction, so that every pair of patches has correlation $-1/(P - 1)$.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
