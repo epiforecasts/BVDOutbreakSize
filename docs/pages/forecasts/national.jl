@@ -21,7 +21,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## Forecast summary
+# ## Summary
 #
 # The expected counts for the week after the cut-off, from the forecast below.
 

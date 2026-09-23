@@ -19,7 +19,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## Province forecast summary
+# ## Summary
 #
 # The overall bullets compare the provinces.
 # The detail under each province gives its own projection.
