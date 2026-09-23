@@ -17,6 +17,7 @@ say(args...) = (println(args...); flush(stdout))
 warm = parse(Int, get(ENV, "SMOKE_WARMUP", "150"))
 draws = parse(Int, get(ENV, "SMOKE_DRAWS", "150"))
 nchains = parse(Int, get(ENV, "SMOKE_CHAINS", "4"))
+max_depth = parse(Int, get(ENV, "SMOKE_MAX_DEPTH", "10"))
 
 obs = load_observations()
 say("onset cells: ", length(obs.onset_curve_history.increments))
@@ -37,7 +38,7 @@ end
 t0 = time()
 chn = nuts_sample(
     model; samples = draws, chains = nchains, n_adapts = warm,
-    target_accept = 0.8, callback = nothing
+    target_accept = 0.8, max_depth = max_depth, callback = nothing
 )
 say(@sprintf("sampling wall clock: %.1f min", (time() - t0) / 60))
 chn = repair_chain_keys(chn)
@@ -45,16 +46,17 @@ FC = parentmodule(typeof(chn))
 for c in 1:nchains
     ss = vec(chn[FC.Extra(:step_size)][:, c])
     td = vec(chn[FC.Extra(:tree_depth)][:, c])
+    ns = vec(chn[FC.Extra(:n_steps)][:, c])
     ar = vec(chn[FC.Extra(:acceptance_rate)][:, c])
     ne = vec(chn[FC.Extra(:numerical_error)][:, c])
     lp = vec(chn[FC.Extra(:logjoint)][:, c])
     ct = vec(chn[:C_T][:, c])
     say(
         @sprintf(
-            "chain %d: step %.5f  depth10 %.2f  accept %.2f  div %d  " *
-                "lp %.0f±%.0f  C_T %.0f",
-            c, median(ss), mean(td .>= 10), mean(ar), sum(ne), median(lp),
-            std(lp), median(ct)
+            "chain %d: step %.5f  depth>=%d %.2f  steps %.0f  accept %.2f  " *
+                "div %d  lp %.0f±%.0f  C_T %.0f",
+            c, median(ss), max_depth, mean(td .>= max_depth), mean(ns),
+            mean(ar), sum(ne), median(lp), std(lp), median(ct)
         )
     )
 end
