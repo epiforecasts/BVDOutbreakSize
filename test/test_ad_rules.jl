@@ -193,9 +193,13 @@
                 0.05 .+ 0.3 .* rand(rng, 40)
             )
         end
+        ## The forward pass skips a cohort with no admissions, so Mooncake's
+        ## own derivation passes those admissions no derivative where the
+        ## rule does. The timed case admits on every day, so the two agree.
         add!(
-            "n = 220", abscond_thinned_flows, adm(220), pmf(rng, 35),
-            adm(220), pmf(rng, 45), 0.05, 0.05 .+ 0.3 .* rand(rng, 220);
+            "n = 220", abscond_thinned_flows, rand(rng, 220) .+ 0.5,
+            pmf(rng, 35), rand(rng, 220) .+ 0.5, pmf(rng, 45), 0.05,
+            0.05 .+ 0.3 .* rand(rng, 220);
             perf = true
         )
 
@@ -370,6 +374,93 @@ end
         pmf(rng, 12; mass = 0.98), 0.37;
         is_primitive = false, mode = ReverseMode
     )
+end
+
+@testitem "AD rules: each rule beats Mooncake's own derivation" tags = [
+    :ad, :ad_perf,
+] setup = [ADRuleCases] begin
+    using Mooncake: Mooncake, DefaultCtx, MinimalCtx, Mode, ReverseMode,
+        MooncakeInterpreter, build_rrule, get_interpreter, randn_tangent,
+        zero_codual
+    using Printf: @printf
+    using BVDOutbreakSize: BVDOutbreakSize
+
+    ## A context that sees every primitive the default one does except the
+    ## rules `src/ad_rules.jl` registers, so Mooncake derives those kernels
+    ## from their source as it would with the `ad_rules` preference off.
+    struct NoPackageRulesCtx end
+    function registered_here(M, sig)
+        m = try
+            which(
+                Mooncake._is_primitive,
+                Tuple{Type{MinimalCtx}, Type{M}, Type{sig}}
+            )
+        catch
+            return false
+        end
+        return parentmodule(m) === BVDOutbreakSize
+    end
+    function Mooncake.is_primitive(
+            ::Type{NoPackageRulesCtx}, M::Type{<:Mode}, sig, world::UInt
+        )
+        @nospecialize sig
+        registered_here(M, sig) && return false
+        return Mooncake.is_primitive(DefaultCtx, M, sig, world)
+    end
+
+    ## Value and argument tangents of one pullback. `__value_and_pullback!!`
+    ## is the call a prepared `Mooncake.Cache` makes, here on either rule.
+    pullback!(rule, ȳ, cx) = Mooncake.__value_and_pullback!!(rule, ȳ, cx...)
+
+    ## Fastest time per call over batches of about 20 µs.
+    function fastest(run; seconds = 0.3)
+        run()
+        evals = max(1, round(Int, 2.0e-5 / max(@elapsed(run()), 1.0e-9)))
+        best = Inf
+        stop = time() + seconds
+        while time() < stop
+            best = min(best, @elapsed(foreach(_ -> run(), 1:evals)) / evals)
+        end
+        return best
+    end
+
+    agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))
+    agrees(a::Union{Real, AbstractArray{<:Real}}, b) = isapprox(
+        a, b; rtol = 1.0e-8
+    )
+    agrees(a, b) = a == b
+
+    ## Under coverage instrumentation the timings are not those of a fit, so
+    ## the ratios are reported but not asserted there.
+    instrumented = Base.JLOptions().code_coverage != 0
+    rng = Xoshiro(20260923)
+    for c in filter(c -> c.perf, rule_cases(rng))
+        fx = (c.f, c.args...)
+        sig = Tuple{map(Core.Typeof, fx)...}
+        with = build_rrule(get_interpreter(ReverseMode), sig)
+        without = build_rrule(
+            MooncakeInterpreter(NoPackageRulesCtx, ReverseMode), sig
+        )
+        ȳ = randn_tangent(rng, c.f(c.args...))
+        @testset "$(c.name)" begin
+            ## The derived arm bypasses the rule and gives the same answer.
+            @test with === Mooncake.rrule!!
+            @test !(without isa typeof(Mooncake.rrule!!))
+            @test agrees(
+                pullback!(with, ȳ, map(zero_codual, fx)),
+                pullback!(without, ȳ, map(zero_codual, fx))
+            )
+            cx = map(zero_codual, fx)
+            t_rule = fastest(() -> pullback!(with, ȳ, cx))
+            t_derived = fastest(() -> pullback!(without, ȳ, cx))
+            ratio = t_rule / t_derived
+            @printf(
+                "%-40s rule %8.2f µs  derived %8.2f µs  ratio %.3f\n",
+                c.name, 1.0e6 * t_rule, 1.0e6 * t_derived, ratio
+            )
+            instrumented || @test ratio <= 0.8
+        end
+    end
 end
 
 @testitem "AD rules: pullbacks leave the output tangent as given" tags = [
