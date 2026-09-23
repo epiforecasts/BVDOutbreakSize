@@ -104,6 +104,7 @@
 
         add!("14 ⊕ 9", convolve_pmf, pmf(rng, 14), pmf(rng, 9))
         add!("1 ⊕ 1", convolve_pmf, [0.4], [0.7])
+        add!("empty ⊕ 5", convolve_pmf, Float64[], pmf(rng, 5))
         add!("45 ⊕ 45", convolve_pmf, pmf(rng, 45), pmf(rng, 45); perf = true)
 
         ## Every knot layout the model builds: a regular weekly grid, a
@@ -150,6 +151,11 @@
         end
         add!("3 patches", patch_infections, patch_args(3, 40, 7, 12)...)
         add!("1 patch", patch_infections, patch_args(1, 30, 5, 10)...)
+        add!("G > n", patch_infections, patch_args(3, 10, 3, 15)...)
+        add!(
+            "seed covers the grid", patch_infections,
+            patch_args(2, 5, 7, 4)...
+        )
         add!(
             "3 patches, n = 220", patch_infections,
             patch_args(3, 220, 14, 35)...; perf = true
@@ -182,9 +188,9 @@
         add!("κ = 0", abscond_thinned, pmf(rng, 15), 0.0)
         add!("L = 45", abscond_thinned, pmf(rng, 45), 0.05; perf = true)
 
-        ## Leading zero admissions skip those cohorts. Each schedule in turn
-        ## the longer, and one longer than the series so every cohort is
-        ## truncated.
+        ## Leading zero admissions skip those cohorts. The first two cases
+        ## swap which schedule is longer. In the third the first schedule is
+        ## longer than the series, so every cohort it admits is truncated.
         adm(n) = [zeros(3); abs.(randn(rng, n - 3)) .+ 0.5]
         for (l1, l2) in ((15, 9), (9, 15), (50, 12))
             add!(
@@ -257,6 +263,7 @@
         ## A daily anchor series and the length-1 constant default.
         add!("daily anchor", onset_report_anchor_series, o.tab, gs, o.alpha)
         add!("constant anchor", onset_report_anchor_series, o.tab, gs, [0.15])
+        add!("D = 1", onset_report_anchor_series, o.tab[1:1, :], gs, o.alpha)
         add!(
             "D = 28", onset_report_anchor_series, big.tab, 120,
             abs.(randn(rng, 220)) .* 0.3; perf = true
@@ -266,13 +273,30 @@
             o.alpha, o.oi, o.ri, o.pri
         )
         add!(
+            "no cells", onset_report_moments, o.tab, gs, o.onsets, gs,
+            o.alpha, Int[], Int[], Int[]
+        )
+        add!(
             "D = 28", onset_report_moments, big.tab, 120, big.onsets, 120,
             big.alpha, big.oi, big.ri, big.pri; perf = true
         )
-        ## Onset dates before `grid_start` clamp both `γ` and `alpha`.
+        ## Onset dates before `grid_start` clamp both `γ` and `alpha`, and a
+        ## cut-off before `grid_start` reads only clamped days.
         add!(
             "D = 12", onset_report_expected_total, o.onsets, o.lh, o.γ, gs,
             o.alpha, 45
+        )
+        add!(
+            "D = 1", onset_report_expected_total, o.onsets, o.lh[1:1], o.γ,
+            gs, o.alpha, 45
+        )
+        add!(
+            "D = 0", onset_report_expected_total, o.onsets, Float64[], o.γ,
+            gs, o.alpha, 45
+        )
+        add!(
+            "cut-off before grid_start", onset_report_expected_total,
+            o.onsets, o.lh, o.γ, gs, o.alpha, gs - 2
         )
         add!(
             "D = 28", onset_report_expected_total, big.onsets, big.lh,
