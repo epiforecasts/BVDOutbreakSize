@@ -63,15 +63,25 @@ end
     src = read(
         joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String
     )
+    ## A write into a subdirectory of data/ is captured as its relative path
+    ## and checked the way the hash checks it, by basename or directory.
     written = Set(
-        m.captures[1]
+        joinpath(
+            (
+                x.captures[1]
+                    for x in eachmatch(r"\"([\w.]+)\"", m.captures[1])
+            )...
+        )
             for m in eachmatch(
-                r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src
+                r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*" *
+                r"((?:\"\w+\",\s*)*\"[\w.]+\.csv\")",
+                src
             )
     )
     @test length(written) >= 4  # guards against a silent regex miss
+    @test joinpath("province", "forecast_overlay.csv") in written
     for f in written
-        @test f in FIT_DATA_EXCLUDE
+        @test _is_excluded(f, FIT_DATA_EXCLUDE)
     end
 end
 
