@@ -58,6 +58,7 @@ Find out more in the [contributing guide](https://epiforecasts.io/BVDOutbreakSiz
 
 **Use of AI.** The model code and analysis were drafted by a language model, then reviewed and revised under human oversight.
 The named authors are responsible for that oversight.
+Every release is signed off by a person, who cuts it with an `@release` comment that needs write access to the repository.
 
 <!-- SHARED:END -->
 

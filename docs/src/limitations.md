@@ -12,7 +12,8 @@ The detail is in the [Methods](@ref "Methods").
 - **An external view.** The work is done outside the outbreak response.
   Changes in reporting practice are inferred from the reports rather than known.
   Working with the teams that collect the data would remove it.
-- **Drafted and read by a language model.** The code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report, and language models read the situation-report figures, all under human review ([authors](@ref "Authors, funding and acknowledgements")).
+- **Drafted and read by a language model.** The code and analysis were drafted by a language model and reviewed by people and by language models ([authors](@ref "Authors, funding and acknowledgements")).
+  Language models also read the situation-report figures, and every release is signed off by a person before it is published.
   Errors can remain where no check reaches, since the checks are a second read of each figure, cross-checks of the confirmed totals against the published national series, and tests of the code.
   An independent replication and data read would remove it.
 - **Live and not peer reviewed.** The report is re-run as new data arrive, so the estimates change between updates, and it has not been peer reviewed.
@@ -22,7 +23,7 @@ The detail is in the [Methods](@ref "Methods").
 
 ### Data
 
-- **Delays rest on priors from other outbreaks.** Almost every count is a report-dated aggregate, so the epidemic's timing comes through delays set by priors from earlier outbreaks.
+- **Delays rest on priors from other outbreaks.** Almost every count is a report-dated aggregate, so the epidemic's timing comes through delays whose estimates rest mainly on priors from earlier outbreaks.
   The case-fatality ratio and the generation interval rest on priors too, and only the onset-to-report delay is informed by the data, through the [onset curve](@ref "Symptom-onset reporting delay").
   A line list from this outbreak would remove it.
 - **The suspected streams are no longer published.** The suspected cases and deaths stopped being published, so the late window rests on the confirmed, laboratory, treatment-centre and onset data.
@@ -40,7 +41,7 @@ The detail is in the [Methods](@ref "Methods").
 - **Ascertainment and testing are constant.** The DRC ascertainment and the testing fraction are each one value over the window, so a change in either is read as a change in incidence.
   Time-varying ascertainment ([#400](https://github.com/epiforecasts/BVDOutbreakSize/pull/400), [#335](https://github.com/epiforecasts/BVDOutbreakSize/issues/335)) and testing ([#546](https://github.com/epiforecasts/BVDOutbreakSize/issues/546)) would remove it.
 - **The outbreak's start rests on fixed assumptions.** The model assumes a single zoonotic seed, no depletion of susceptibles, a fixed molecular clock for the [genetic bound](@ref "Genetic bound on outbreak age") and a fixed timing for the response ramp.
-  These set the outbreak's age and its early reproduction number.
+  These help constrain the estimated outbreak age and early reproduction number.
   Estimates from this outbreak's genomes and dated response milestones would remove it.
 - **The bed shortfall is not measured.** Occupancy shows demand only up to the beds filled, so the shortfall above capacity comes from the [treatment-centre flow](@ref "Treatment-centre flow") model and its priors ([#640](https://github.com/epiforecasts/BVDOutbreakSize/issues/640)).
   A count of patients waiting for a bed would remove it.
@@ -73,7 +74,7 @@ The detail is in the [Methods](@ref "Methods").
   The patches are coupled by an assumed [gravity kernel](@ref "Mixing and importation") in the absence of mobility data.
   A health-zone model ([#779](https://github.com/epiforecasts/BVDOutbreakSize/pull/779), [#705](https://github.com/epiforecasts/BVDOutbreakSize/issues/705)) and mobility data would narrow it.
 - **Province case-finding rests on the prior.** A province's confirmed share is the product of its incidence and its case-finding, and testing by province enters only the prior.
-  The deaths separate the two, and the prior sets where the estimate sits along the ridge ([province parameters](@ref "Province parameters against their priors")).
+  The deaths separate the two, and the prior strongly influences where the estimate sits along the ridge ([province parameters](@ref "Province parameters against their priors")).
   Scoring the province analysed volume ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)) would narrow it.
 - **Beds and occupancy are national only.** One national bed capacity and demand cannot show saturation in one province while another has free beds.
   Ituri holds most occupied beds, so the national shortfall understates local unmet need.
