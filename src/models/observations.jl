@@ -3021,15 +3021,23 @@ function onset_report_G(
     ## `min(δ, D - 1)`, so one walk over the delay support gives both.
     jn = min(Int(δ), D - 1)
     surv = one(T)
-    num = zero(T)
+    surv_n = one(T)
     @inbounds for j in 0:(D - 1)
         gi = clamp(u + j - grid_start + 1, 1, ng)
         surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
-        j == jn && (num = one(T) - surv)
+        j == jn && (surv_n = surv)
     end
-    δ < 0 && (num = zero(T))
-    return num / safe_rate(one(T) - surv)
+    δ < 0 && (surv_n = one(T))
+    return _onset_report_share(surv_n, surv)
 end
+
+## Share of an onset date's eventual reports in by a delay, from the
+## survival to that delay `surv_n` and to the end of the support `surv_D`:
+## `(1 − surv_n) / (1 − surv_D)`, with the denominator floored.
+## [`onset_report_G`](@ref) and the batched `_onset_expected_total` both
+## call it.
+@inline _onset_report_share(surv_n, surv_D) =
+    (one(surv_n) - surv_n) / safe_rate(one(surv_D) - surv_D)
 
 """
     onset_report_F(δ, logit_h0, γ, u, grid_start, α)
@@ -3622,9 +3630,9 @@ function _onset_expected_total(
     total = zero(T)
     @inbounds for u in axes(S, 2)
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
-        num = D == 0 ? zero(T) : one(T) - S[min(as_of - u, D - 1) + 1, u]
-        den = one(T) - (D == 0 ? one(T) : S[D, u])
-        total += onsets[u] * (α * (num / safe_rate(den)))
+        share = D == 0 ? zero(T) :
+            _onset_report_share(S[min(as_of - u, D - 1) + 1, u], S[D, u])
+        total += onsets[u] * (α * share)
     end
     return total
 end
