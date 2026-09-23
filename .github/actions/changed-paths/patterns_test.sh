@@ -66,7 +66,7 @@ check "README"                 "README.md"                                 true 
 # directly, so these reach the tests as well as the report.
 check "a fit-registry helper"  "docs/fits/registry.jl"                     true  true
 check "a build script"         "scripts/score_releases.jl"                 true  true
-# `scripts/` is split the same way: only the three the docs workflow runs
+# `scripts/` is split the same way: only the two the docs workflow runs
 # rebuild the report. The SitRep downloader, the scanners and the backfill
 # driver do not.
 check "the SitRep downloader"  "scripts/download_sitreps.jl"               false true
