@@ -135,14 +135,17 @@ end
     )
 end
 
-@testitem "_composition_predictive: draws match the pre-refactor code" begin
+@testitem "_composition_predictive: draws match an independent reference implementation" begin
     using BVDOutbreakSize: _composition_predictive, safe_betabinomial
     using Random: MersenneTwister
 
-    ## Rebuilt reports must redraw the same composition band. RNG streams
-    ## differ between Julia versions, so rather than pinning numbers the
-    ## draws are checked against the allocation as it was written before the
-    ## counts core was split out, run with the same seed in this session.
+    ## `reference` is an independent copy of the stick-breaking allocation:
+    ## per draw and vintage, each patch takes a BetaBinomial count of what the
+    ## earlier patches left and the last takes the remainder, returned as
+    ## shares. Comparing against it with the same seed in one session checks
+    ## the band is redrawn exactly without pinning numbers, since RNG streams
+    ## differ between Julia versions.
+    ## Keep it in step with `_composition_counts` if that algorithm changes.
     function reference(ms, rho, totals, nv; seed = 20_240)
         rng = MersenneTwister(seed)
         np = size(first(ms), 1)
