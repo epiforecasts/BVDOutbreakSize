@@ -13,15 +13,32 @@ NUTS proposals during warmup do not trip the distribution domain check.
 Shared by the count-stream observation submodels.
 """
 function safe_nbinomial(k, μ)
-    ## Guard the dispersion `r`, not just `p`: `NegativeBinomial(0, p)`
-    ## throws `DomainError: r > 0`, which aborts a gradient rather than
-    ## rejecting the step.
-    r = (isfinite(k) && k > zero(k)) ? k : eps(typeof(k))
-    p_raw = r / (r + max(μ, eps(typeof(μ))))
-    p = isfinite(p_raw) ?
-        clamp(p_raw, eps(typeof(r)), one(r) - eps(typeof(r))) :
-        eps(typeof(r))
-    return NegativeBinomial(r, p)
+    g = _nbinomial_params(k, μ)
+    return NegativeBinomial(g.r, g.p)
+end
+
+## `x` where it is finite and positive, otherwise `fallback`, and whether
+## `x` was kept. The domain guard of `safe_nbinomial`'s dispersion and
+## `safe_studentt`'s scale and degrees of freedom.
+@inline function _positive_or(x, fallback)
+    on = isfinite(x) && x > zero(x)
+    return (on ? x : fallback), on
+end
+
+## The guarded parameters `safe_nbinomial(k, μ)` builds from: the dispersion
+## `r`, the floored mean `m` and the success probability `p`, with whether
+## `p` fell inside its clamp. `r` is guarded as well as `p`, because
+## `NegativeBinomial(0, p)` throws `DomainError: r > 0`, which aborts a
+## gradient rather than rejecting the step.
+@inline function _nbinomial_params(k, μ)
+    r, _ = _positive_or(k, eps(typeof(k)))
+    m = max(μ, eps(typeof(μ)))
+    p_raw = r / (r + m)
+    lo = eps(typeof(r))
+    hi = one(r) - lo
+    p_on = isfinite(p_raw) && !(p_raw > hi) && !(p_raw < lo)
+    p = isfinite(p_raw) ? clamp(p_raw, lo, hi) : lo
+    return (; r, m, p, p_on)
 end
 
 """
@@ -99,15 +116,36 @@ windows.
 """
 function safe_betabinomial(n::Integer, p, ρ)
     T = float(promote_type(typeof(p), typeof(ρ)))
+    g = _betabinomial_shapes(p, _betabinomial_concentration(T, ρ).s)
+    return BetaBinomial(n, g.α, g.β)
+end
+
+## The concentration `s = (1 − ρc) / ρc` of `safe_betabinomial`, with the
+## clamped `ρc` and whether `ρ` fell inside its clamp. `ρ` is floored at
+## 1e-6 (capping `s` at ≈1e6) so a near-zero draw stays a well-conditioned
+## near-Binomial, and capped below 1 so `s` stays positive.
+@inline function _betabinomial_concentration(::Type{T}, ρ) where {T}
+    ρ_lo = T(1.0e-6)
+    ρ_hi = one(T) - ρ_lo
+    ρ_on = isfinite(ρ) && !(ρ < ρ_lo) && !(ρ > ρ_hi)
+    ρc = isfinite(ρ) ? clamp(T(ρ), ρ_lo, ρ_hi) : ρ_lo
+    return (; s = (one(T) - ρc) / ρc, ρc, ρ_on)
+end
+
+## The shapes `α = s·pc` and `β = s·(1 − pc)` of `safe_betabinomial` at
+## concentration `s`, each floored at `eps`, with the mean `pc` clamped into
+## `(0, 1)`. Also returns whether `p` fell inside its clamp and whether each
+## shape sits above its floor.
+@inline function _betabinomial_shapes(p, s::T) where {T}
     lo = eps(T)
+    p_on = isfinite(p) && !(p < lo) && !(p > one(T) - lo)
     pc = isfinite(p) ? clamp(T(p), lo, one(T) - lo) : one(T) / 2
-    ## Floor ρ at 1e-6 (capping `s` at ≈1e6) so a near-zero draw stays a
-    ## well-conditioned near-Binomial, and cap below 1 so `s` stays positive.
-    ρc = isfinite(ρ) ? clamp(T(ρ), T(1.0e-6), one(T) - T(1.0e-6)) : T(1.0e-6)
-    s = (one(T) - ρc) / ρc
-    α = max(s * pc, lo)
-    β = max(s * (one(T) - pc), lo)
-    return BetaBinomial(n, α, β)
+    sα = s * pc
+    sβ = s * (one(T) - pc)
+    return (;
+        α = max(sα, lo), β = max(sβ, lo), pc, p_on,
+        α_on = sα > lo, β_on = sβ > lo,
+    )
 end
 
 """
@@ -2782,10 +2820,15 @@ at some onset date than an earlier one, from digitisation noise rather than
 a real reporting reversal) and so cannot take a count distribution.
 """
 function safe_studentt(μ::Real, σ::Real, ν::Real)
-    σc = (isfinite(σ) && σ > zero(σ)) ? σ : eps(typeof(float(σ)))
-    νc = (isfinite(ν) && ν > zero(ν)) ? ν : oftype(float(ν), 4)
+    σc, _ = _studentt_scale(σ)
+    νc, _ = _studentt_dof(ν)
     return μ + σc * TDist(νc)
 end
+
+## `safe_studentt`'s guards on the scale and the degrees of freedom, each
+## returning the guarded value and whether the argument was kept.
+_studentt_scale(σ) = _positive_or(σ, eps(typeof(float(σ))))
+_studentt_dof(ν) = _positive_or(ν, oftype(float(ν), 4))
 
 """
 Summed log-likelihood of the increments `obs` under one
@@ -2800,15 +2843,14 @@ function studentt_loglik(
         obs::AbstractVector, ν::Real
     )
     T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
-    νc = (isfinite(ν) && ν > zero(ν)) ? ν : oftype(float(ν), 4)
+    νc, _ = _studentt_dof(ν)
     νp12 = (νc + 1) / 2
     ## `TDist`'s log-density at zero is its normalising constant, so each
     ## cell's term below is the location-scale `logpdf` evaluated in full.
     c = logpdf(TDist(νc), zero(T))
     s = zero(T)
     @inbounds for i in eachindex(means, sds, obs)
-        σ = sds[i]
-        σc = (isfinite(σ) && σ > zero(σ)) ? σ : eps(typeof(float(σ)))
+        σc, _ = _studentt_scale(sds[i])
         z = (obs[i] - means[i]) / σc
         s += (c - νp12 * log1p(z^2 / νc)) - log(σc)
     end

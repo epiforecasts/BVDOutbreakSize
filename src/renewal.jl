@@ -10,9 +10,11 @@ count. A plain `max(x, eps)` would propagate the NaN
 (`max(NaN, eps) = NaN`) and trip the Poisson / NegativeBinomial domain
 check.
 """
-@inline function safe_rate(x)
-    return isfinite(x) ? max(x, eps(typeof(x))) : eps(typeof(x))
-end
+@inline safe_rate(x) = _safe_rate_on(x) ? x : eps(typeof(x))
+
+## Whether `safe_rate` passes `x` through rather than flooring it, which is
+## where its slope is one.
+@inline _safe_rate_on(x) = isfinite(x) && x > eps(typeof(x))
 
 """
 LogNormal with the given `mean` and standard deviation `sd`, by moment

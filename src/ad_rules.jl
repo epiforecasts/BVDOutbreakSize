@@ -698,7 +698,7 @@ Mooncake.@is_primitive(
 )
 
 ## Derivative of `safe_rate`: the identity above its floor, flat on it.
-_safe_rate_slope(x) = (isfinite(x) && x > eps(typeof(x))) ? one(x) : zero(x)
+_safe_rate_slope(x) = _safe_rate_on(x) ? one(x) : zero(x)
 
 ## Hazards and survival products of one onset date's delay column, as the
 ## forward loop builds them. `surv[j + 1]` is the product up to and
@@ -1052,36 +1052,30 @@ end
 ##
 ##     ∂ℓ/∂r = log p + ψ(r + x) − ψ(r),    ∂ℓ/∂p = r / p − x / (1 − p),
 ##
-## chained through `p` to `μ` and `k`. The guards in `safe_rate` and
-## `safe_nbinomial` are mirrored: a floored `k` or `μ`, or a clamped `p`,
+## chained through `p` to `μ` and `k`. The guards are the ones `safe_rate`
+## and `safe_nbinomial` apply: a floored `k` or `μ`, or a clamped `p`,
 ## passes no derivative. A term that is not finite adds none either.
 function _nbinomial_loglik_grad(
         k::T, modelled::AbstractVector,
         obs::AbstractVector
     ) where {T}
-    lo = eps(T)
-    hi = one(T) - lo
-    k_on = isfinite(k) && k > zero(k)
-    r = k_on ? k : lo
+    _, k_on = _positive_or(k, eps(T))
     s = zero(T)
     dk = zero(T)
     dμ = zeros(T, length(modelled))
     @inbounds for i in eachindex(modelled, obs)
         μ = modelled[i]
         x = obs[i]
-        μ_on = isfinite(μ) && μ > lo
-        m = μ_on ? μ : lo
-        p_raw = r / (r + m)
-        p = isfinite(p_raw) ? clamp(p_raw, lo, hi) : lo
+        (; r, m, p, p_on) = _nbinomial_params(k, safe_rate(μ))
         ℓ = logpdf(NegativeBinomial(r, p), x)
         s += ℓ
         isfinite(ℓ) || continue
         ∂r = iszero(x) ? log(p) : log(p) + digamma(r + x) - digamma(r)
-        if isfinite(p_raw) && !(p_raw > hi) && !(p_raw < lo)
+        if p_on
             ∂p = r / p - x / (one(T) - p)
             den = (r + m)^2
             ∂r += ∂p * m / den
-            μ_on && (dμ[i] = -∂p * r / den)
+            _safe_rate_on(μ) && (dμ[i] = -∂p * r / den)
         end
         dk += ∂r
     end
@@ -1125,16 +1119,15 @@ Mooncake.@is_primitive(
 ##     ∂ℓ/∂μ = g / σ,    ∂ℓ/∂σ = (g z − 1) / σ,
 ##     ∂ℓ/∂ν = (ψ((ν + 1)/2) − ψ(ν/2) − 1/ν − log1p(z²/ν) + g z / ν) / 2,
 ##
-## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards in `safe_studentt` are mirrored: a
-## floored `σ` or a defaulted `ν` passes no derivative. A cell whose term is
-## not finite adds none either.
+## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards are `safe_studentt`'s: a floored `σ`
+## or a defaulted `ν` passes no derivative. A cell whose term is not finite
+## adds none either.
 function _studentt_loglik_grad(
         means::AbstractVector, sds::AbstractVector,
         obs::AbstractVector, ν::Real
     )
     T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
-    ν_on = isfinite(ν) && ν > zero(ν)
-    νc = ν_on ? ν : oftype(float(ν), 4)
+    νc, ν_on = _studentt_dof(ν)
     νp12 = (νc + 1) / 2
     c = logpdf(TDist(νc), zero(T))
     ∂ν_c = (digamma(νp12) - digamma(νc / 2) - 1 / νc) / 2
@@ -1143,9 +1136,7 @@ function _studentt_loglik_grad(
     dμ = zeros(T, length(means))
     dσ = zeros(T, length(means))
     @inbounds for i in eachindex(means, sds, obs)
-        σ = sds[i]
-        σ_on = isfinite(σ) && σ > zero(σ)
-        σc = σ_on ? σ : eps(typeof(float(σ)))
+        σc, σ_on = _studentt_scale(sds[i])
         z = (obs[i] - means[i]) / σc
         l1 = log1p(z^2 / νc)
         ℓ = (c - νp12 * l1) - log(σc)
@@ -1200,40 +1191,32 @@ Mooncake.@is_primitive(
 ##     ∂ℓ/∂β = ψ(n − x + β) − ψ(β) + ψ(α + β) − ψ(n + α + β),
 ##
 ## chained through `α` and `β` to `p` and `c`, and through `c` to `ρ`. The
-## guards in `safe_betabinomial` are mirrored: a clamped `p` or `ρ`, or an
-## `α` or `β` held at its floor, passes no derivative. A term that is not
-## finite adds none either.
+## guards are `safe_betabinomial`'s: a clamped `p` or `ρ`, or an `α` or `β`
+## held at its floor, passes no derivative. A term that is not finite adds
+## none either.
 function _betabinomial_loglik_grad(
         trials::AbstractVector, p::AbstractVector, ρ, obs::AbstractVector
     )
     T = float(promote_type(eltype(p), typeof(ρ)))
-    lo = eps(T)
-    ρ_lo = T(1.0e-6)
-    ρ_on = isfinite(ρ) && !(ρ < ρ_lo) && !(ρ > one(T) - ρ_lo)
-    ρc = isfinite(ρ) ? clamp(T(ρ), ρ_lo, one(T) - ρ_lo) : ρ_lo
-    c = (one(T) - ρc) / ρc
+    conc = _betabinomial_concentration(T, ρ)
+    c = conc.s
     s = zero(T)
     dc = zero(T)
     dp = zeros(T, length(p))
     @inbounds for i in eachindex(trials, p, obs)
         n = trials[i]
         x = obs[i]
-        q = p[i]
-        d = safe_betabinomial(n, q, ρ)
-        ℓ = logpdf(d, x)
+        (; α, β, pc, p_on, α_on, β_on) = _betabinomial_shapes(p[i], c)
+        ℓ = logpdf(BetaBinomial(n, α, β), x)
         s += ℓ
         isfinite(ℓ) || continue
-        α, β = d.α, d.β
-        pc = isfinite(q) ? clamp(T(q), lo, one(T) - lo) : one(T) / 2
         ψ_ab = digamma(α + β) - digamma(n + α + β)
-        ∂α = c * pc > lo ? digamma(x + α) - digamma(α) + ψ_ab : zero(T)
-        ∂β = c * (one(T) - pc) > lo ?
-            digamma(n - x + β) - digamma(β) + ψ_ab : zero(T)
-        p_on = isfinite(q) && !(q < lo) && !(q > one(T) - lo)
+        ∂α = α_on ? digamma(x + α) - digamma(α) + ψ_ab : zero(T)
+        ∂β = β_on ? digamma(n - x + β) - digamma(β) + ψ_ab : zero(T)
         p_on && (dp[i] = c * (∂α - ∂β))
         dc += ∂α * pc + ∂β * (one(T) - pc)
     end
-    return s, (ρ_on ? -dc / ρc^2 : zero(T)), dp
+    return s, (conc.ρ_on ? -dc / conc.ρc^2 : zero(T)), dp
 end
 
 function Mooncake.rrule!!(
