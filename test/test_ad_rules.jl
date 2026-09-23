@@ -24,7 +24,7 @@
     using BVDOutbreakSize: convolve_delay, convolve_survival,
         convolve_pmf, interpolate_knots, renewal_infections,
         abscond_thinned, abscond_thinned_flows, patch_infections,
-        nbinomial_loglik
+        nbinomial_loglik, studentt_loglik
 
     ## Drive one native rule: build zero-tangent coduals for the arguments,
     ## seed the output tangent with the cotangent, run the pullback, and
@@ -231,6 +231,38 @@
             @test rdata[4] isa NoRData
         end
     end
+
+    @testset "studentt_loglik" begin
+        ## Scalar output and a scalar `ν`, whose adjoint comes back as rdata.
+        ## Increments are integers of either sign, as scanned, or floats, as
+        ## simulated, which take a tangent of their own.
+        μ = 20 .* randn(60)
+        σ = exp.(1 .+ 0.5 .* randn(60))
+        x = round.(Int, μ .+ 3 .* σ .* randn(60))
+        xf = μ .+ 3 .* σ .* randn(60)
+        for (ν, c) in ((4.0, x), (1.5, x), (40.0, x), (4.0, xf))
+            s̄ = randn()
+            codual_μ = zero_fcodual(μ)
+            codual_σ = zero_fcodual(σ)
+            codual_c = zero_fcodual(c)
+            out, pb = Mooncake.rrule!!(
+                zero_fcodual(studentt_loglik), codual_μ, codual_σ,
+                codual_c, zero_fcodual(ν)
+            )
+            @test primal(out) == studentt_loglik(μ, σ, c, ν)
+            rdata = pb(s̄)
+            fμ, fσ, fν = grad(
+                fdm, (a, b, d) -> s̄ * studentt_loglik(a, b, c, d), μ, σ, ν
+            )
+            @test tangent(codual_μ) ≈ fμ rtol = 1.0e-7
+            @test tangent(codual_σ) ≈ fσ rtol = 1.0e-7
+            @test rdata[5] ≈ fν rtol = 1.0e-7
+            @test all(r -> r isa NoRData, rdata[1:4])
+            if c isa Vector{Float64}
+                @test tangent(codual_c) ≈ -tangent(codual_μ)
+            end
+        end
+    end
 end
 
 @testitem "AD rules: Mooncake with the rule matches ForwardDiff" tags = [
@@ -242,7 +274,7 @@ end
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
         interpolate_knots, renewal_infections, abscond_thinned,
         abscond_thinned_flow, abscond_thinned_flows, patch_infections,
-        nbinomial_loglik
+        nbinomial_loglik, studentt_loglik
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -445,6 +477,44 @@ end
         ## the clamp passes no derivative to the means.
         m_grad = mgrad((b) -> nbinomial_loglik(1.0e20, b, x), μ)
         @test all(iszero, m_grad[1])
+    end
+
+    @testset "studentt_loglik" begin
+        μ = 20 .* randn(60)
+        σ = exp.(1 .+ 0.5 .* randn(60))
+        x = round.(Int, μ .+ 3 .* σ .* randn(60))
+        ## The call site's argument types, so the rule serves the model.
+        @test fires(
+            Tuple{
+                typeof(studentt_loglik), typeof(μ), typeof(σ), typeof(x),
+                Float64,
+            }
+        )
+        ## Scales at the `safe_studentt` floor (negative, non-finite) pass no
+        ## derivative to the scale but still pass one to the mean.
+        μ_floor = vcat(μ, [-2.0, 1.0, 0.5])
+        σ_floor = vcat(σ, [-1.0, NaN, Inf])
+        x_floor = vcat(x, [1, -4, 2])
+        for ν in (4.0, 1.5, 40.0)
+            check_grads(
+                (a, b, d) -> studentt_loglik(a, b, x_floor, d),
+                μ_floor, σ_floor, ν
+            )
+        end
+        ## ForwardDiff's `Dual` comparison reads a scale of exactly zero as
+        ## above the floor, so a zero scale is checked in the mean alone.
+        μ0, σ0, x0 = vcat(μ_floor, 3.0), vcat(σ_floor, 0.0), vcat(x_floor, 5)
+        g = mgrad((a, b) -> studentt_loglik(a, b, x0, 4.0), μ0, σ0)
+        @test all(iszero, g[2][61:64])
+        @test all(!iszero, g[1][61:64])
+        @test g[1] ≈ ForwardDiff.gradient(
+            a -> studentt_loglik(a, σ0, x0, 4.0), μ0
+        ) rtol = 1.0e-10
+        ## Float increments take a tangent too.
+        xf = μ .+ 3 .* σ .* randn(60)
+        check_grads(studentt_loglik, μ, σ, xf, 4.0)
+        ## A defaulted `ν` passes no derivative.
+        @test iszero(mgrad(d -> studentt_loglik(μ, σ, x, d), -1.0)[1])
     end
 end
 

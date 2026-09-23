@@ -1524,3 +1524,32 @@ end
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
         onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end
+
+@testitem "summed Student-t likelihood matches one term per cell" begin
+    using BVDOutbreakSize: safe_studentt, studentt_loglik,
+        onset_increments_model
+    using Distributions: logpdf
+    using Random: Xoshiro
+    using Turing: DynamicPPL
+    using Turing.DynamicPPL: @varname
+
+    loglik(m) = DynamicPPL.loglikelihood(m, DynamicPPL.VarInfo(Xoshiro(1), m))
+    ## A floored scale (zero, non-finite) and negative increments included.
+    μ = [12.0, -3.5, 40.5, 7.2, 0.0, 9.0]
+    σ = [3.0, 2.5, 0.0, 6.1, NaN, 1.0]
+    x = [10, -6, 44, 3, 0, 20]
+    per_term(ν) = sum(logpdf(safe_studentt(μ[i], σ[i], ν), x[i]) for i in 1:6)
+    ## A defaulted `ν` falls back to 4 in both.
+    for ν in (4.0, 1.5, -1.0)
+        @test studentt_loglik(μ, σ, x, ν) ≈ per_term(ν)
+        @test loglik(onset_increments_model(μ, σ, x, ν)) ≈ per_term(ν)
+    end
+    @test studentt_loglik(μ, σ, x, -1.0) == studentt_loglik(μ, σ, x, 4.0)
+    @test loglik(onset_increments_model(Float64[], Float64[], Int[], 4.0)) == 0
+
+    ## A `missing` vector still samples under the indexed keys the
+    ## predictive path reads.
+    keyset(m) = Set(keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
+    @test keyset(onset_increments_model(μ, σ, missing, 4.0)) ==
+        Set(@varname(increments[i]) for i in 1:6)
+end

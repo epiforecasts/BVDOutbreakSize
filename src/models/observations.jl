@@ -2767,6 +2767,34 @@ function safe_studentt(μ::Real, σ::Real, ν::Real)
 end
 
 """
+Summed log-likelihood of the increments `obs` under one
+[`safe_studentt`](@ref) per cell, about `means[i]` with scale `sds[i]` and
+the shared degrees of freedom `ν`, with the same guards. Equal to what one
+`~` per cell accumulates, as a single term, with the normalising constant
+evaluated once. `src/ad_rules.jl` gives it a closed-form Mooncake rule, so
+the backend does not tape each `logpdf`.
+"""
+function studentt_loglik(
+        means::AbstractVector, sds::AbstractVector,
+        obs::AbstractVector, ν::Real
+    )
+    T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
+    νc = (isfinite(ν) && ν > zero(ν)) ? ν : oftype(float(ν), 4)
+    νp12 = (νc + 1) / 2
+    ## `TDist`'s log-density at zero is its normalising constant, so each
+    ## cell's term below is the location-scale `logpdf` evaluated in full.
+    c = logpdf(TDist(νc), zero(T))
+    s = zero(T)
+    @inbounds for i in eachindex(means, sds, obs)
+        σ = sds[i]
+        σc = (isfinite(σ) && σ > zero(σ)) ? σ : eps(typeof(float(σ)))
+        z = (obs[i] - means[i]) / σc
+        s += (c - νp12 * log1p(z^2 / νc)) - log(σc)
+    end
+    return s
+end
+
+"""
     onset_increments_model(means, sds, increments, ν)
 
 Heavy-tailed likelihood for the reporting-triangle increment cells: cell `i`
@@ -2779,7 +2807,9 @@ observe-versus-assume from whether the tilde's symbol is in the enclosing
 model's argument names (`DynamicPPL.inargnames`), so a local variable on
 the left of `~` is treated as latent, silently dropping the likelihood.
 Same argument shape as [`vintage_increments_model`](@ref). A `missing`
-argument samples instead (the predictive-generator path).
+argument samples instead (the predictive-generator path) under the
+`<prefix>.increments[i]` keys. A supplied vector is scored as one summed
+term ([`studentt_loglik`](@ref)).
 """
 @model function onset_increments_model(
         means::AbstractVector,
@@ -2789,9 +2819,13 @@ argument samples instead (the predictive-generator path).
     n = length(means)
     if ismissing(increments)
         increments = Vector{Union{Missing, Float64}}(missing, n)
-    end
-    for i in 1:n
-        increments[i] ~ safe_studentt(means[i], sds[i], ν)
+        for i in 1:n
+            increments[i] ~ safe_studentt(means[i], sds[i], ν)
+        end
+    elseif n > 0
+        @addlogprob! (;
+            loglikelihood = studentt_loglik(means, sds, increments, ν),
+        )
     end
     return (; means, sds, increments)
 end

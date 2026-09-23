@@ -1141,3 +1141,79 @@ function Mooncake.rrule!!(
     end
     return CoDual(s, NoFData()), nbinomial_loglik_pullback!!
 end
+
+## The increments `studentt_loglik` scores: counts in the package data, floats
+## in simulated triangles. Float increments take the adjoint `−∂ℓ/∂μ`.
+const _StudentTObs = Union{Array{<:Integer}, _FloatArray}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(studentt_loglik), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, _StudentTObs, Mooncake.IEEEFloat,
+    },
+)
+
+## Value and gradient of `studentt_loglik` in one pass. With
+## `z = (x − μ) / σ` and `g = (ν + 1) z / (ν + z²)` each cell contributes
+##
+##     ∂ℓ/∂μ = g / σ,    ∂ℓ/∂σ = (g z − 1) / σ,
+##     ∂ℓ/∂ν = (ψ((ν + 1)/2) − ψ(ν/2) − 1/ν − log1p(z²/ν) + g z / ν) / 2,
+##
+## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards in `safe_studentt` are mirrored: a
+## floored `σ` or a defaulted `ν` passes no derivative. A cell whose term is
+## not finite adds none either.
+function _studentt_loglik_grad(
+        means::AbstractVector, sds::AbstractVector,
+        obs::AbstractVector, ν::Real
+    )
+    T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
+    ν_on = isfinite(ν) && ν > zero(ν)
+    νc = ν_on ? ν : oftype(float(ν), 4)
+    νp12 = (νc + 1) / 2
+    c = logpdf(TDist(νc), zero(T))
+    ∂ν_c = (digamma(νp12) - digamma(νc / 2) - 1 / νc) / 2
+    s = zero(T)
+    dν = zero(T)
+    dμ = zeros(T, length(means))
+    dσ = zeros(T, length(means))
+    @inbounds for i in eachindex(means, sds, obs)
+        σ = sds[i]
+        σ_on = isfinite(σ) && σ > zero(σ)
+        σc = σ_on ? σ : eps(typeof(float(σ)))
+        z = (obs[i] - means[i]) / σc
+        l1 = log1p(z^2 / νc)
+        ℓ = (c - νp12 * l1) - log(σc)
+        s += ℓ
+        isfinite(ℓ) || continue
+        g = (νc + 1) * z / (νc + z^2)
+        dμ[i] = g / σc
+        σ_on && (dσ[i] = (g * z - 1) / σc)
+        dν += ∂ν_c - l1 / 2 + g * z / (2 * νc)
+    end
+    return s, (ν_on ? dν : zero(T)), dμ, dσ
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(studentt_loglik)},
+        means::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        sds::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        obs::CoDual{<:_StudentTObs},
+        ν::CoDual{<:Mooncake.IEEEFloat}
+    )
+    s, dν, dμ, dσ = _studentt_loglik_grad(
+        primal(means), primal(sds), primal(obs), primal(ν)
+    )
+    μ̄ = tangent(means)
+    σ̄ = tangent(sds)
+    x̄ = tangent(obs)
+    ## `ν` is a scalar, so its adjoint goes back as rdata. Integer
+    ## increments carry no tangent.
+    function studentt_loglik_pullback!!(s̄)
+        μ̄ .+= s̄ .* dμ
+        σ̄ .+= s̄ .* dσ
+        x̄ isa _FloatArray && (x̄ .-= s̄ .* dμ)
+        return NoRData(), NoRData(), NoRData(), NoRData(), s̄ * dν
+    end
+    return CoDual(s, NoFData()), studentt_loglik_pullback!!
+end
