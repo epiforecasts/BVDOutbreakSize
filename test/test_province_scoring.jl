@@ -198,3 +198,48 @@ end
         score_province_release("results-1", nothing, obs, grid_date)
     )
 end
+
+@testitem "the province scores read projection rows only" setup = [
+    ProvinceFixture,
+] begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    made, target = grid_date(17), grid_date(24)
+    obs = (;
+        cutoff = grid_date(30),
+        province_confirmed_history = _province_fixture(),
+    )
+    function archive(; method)
+        path = joinpath(mktempdir(), "province_forecast.csv")
+        open(path, "w") do io
+            println(
+                io, "made_date,horizon,target_date,province,stream,draw,value" *
+                    (isnothing(method) ? "" : ",method")
+            )
+            for province in ("ituri", "other"), (d, v) in enumerate(8.0:12.0)
+                row = (made, 7, target, province, "confirmed cases", d, v)
+                m = isnothing(method) ? () :
+                    (province == "ituri" ? method : "share",)
+                println(io, join((row..., m...), ','))
+            end
+        end
+        return path
+    end
+
+    ## Only rows the per-province projection made are scored.
+    result = score_province_release(
+        "results-1", archive(; method = "projection"), obs, grid_date
+    )
+    @test unique(r.stream for r in result.rows) == ["confirmed cases [ituri]"]
+    @test unique(r.stream for r in result.overlay) ==
+        ["confirmed cases [ituri]"]
+
+    ## An archive with no method column predates the projection, so the
+    ## whole release is skipped rather than scored as a share split.
+    @test score_province_release(
+        "results-1", archive(; method = nothing), obs, grid_date
+    ) === :no_projection
+end

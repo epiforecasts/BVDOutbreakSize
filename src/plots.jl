@@ -1187,18 +1187,21 @@ interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
 about a dozen for a busier release history.
 
-Returns a figure carrying a short note in place of the panels when no
+Returns a figure carrying `empty_message` in place of the panels when no
 forecasts have been scored yet.
 """
-function plot_forecast_overlay(overlay::DataFrame)
+function plot_forecast_overlay(
+        overlay::DataFrame;
+        empty_message::AbstractString =
+            "No forecasts scored yet. No release carries a stored forecast."
+    )
     streams = unique(overlay.stream)
     ## An empty table is the expected early state, so say so rather than
     ## returning a blank panel.
     if isempty(streams)
         fig = Figure(; size = (860, 160))
         CairoMakie.Label(
-            fig[1, 1],
-            "No forecasts scored yet. No release carries a stored forecast.";
+            fig[1, 1], empty_message;
             tellwidth = false, tellheight = false, color = (:black, 0.55)
         )
         return fig
@@ -3616,11 +3619,9 @@ This is the figure form of [`province_forecast_table`](@ref), and the figure
 the release archive [`province_forecast_archive`](@ref) carries the draws
 behind.
 
-Each province's count is the national draw times that province's modelled
-share at the most recent spatial vintage, multiplied draw by draw, so the
-interval carries the correlation between the two factors. The split is held
-at its current value over the horizon rather than projected forward, which
-the bar widths do not express.
+`fc` is a [`forecast_provinces`](@ref) frame, each province projected by
+its own renewal. A national [`forecast_reported`](@ref) result is replaced by
+the one-week projection from `chn`.
 
 Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
@@ -3667,9 +3668,8 @@ function plot_province_forecast(
     CairoMakie.Label(
         fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province's count is the national " *
-            "forecast draw times its modelled share at the last spatial " *
-            "vintage, held over the horizon.";
+            "the median as a dot. Each province is projected by its own " *
+            "renewal equation.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3682,9 +3682,9 @@ of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
 expected in patch `province` over the week to `T + 7`, one histogram panel
 per stream with its 90% predictive interval shaded.
 
-The draws are the ones [`plot_province_forecast`](@ref) summarises: the
-national draw times the province's modelled share at the most recent spatial
-vintage, held over the horizon.
+The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
+[`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
+result is replaced by the one-week projection from `chn`.
 
 `observed` optionally gives a recent observed week per stream, keyed by the
 forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from

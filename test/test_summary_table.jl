@@ -268,3 +268,19 @@ end
         (; base.C_T_patch), np
     )
 end
+
+@testitem "median_interval_text reads as plain words" begin
+    using BVDOutbreakSize: median_interval_text
+
+    draws = collect(0.0:100.0)
+    @test median_interval_text(draws) ==
+        "about 50 (90% credible interval 5 to 95)"
+    @test median_interval_text(draws ./ 100; digits = 2) ==
+        "about 0.50 (90% credible interval 0.05 to 0.95)"
+    ## Decimals are padded, so a reproduction number reads 0.80, not 0.8.
+    @test median_interval_text(fill(0.8, 10); digits = 2) ==
+        "about 0.80 (90% credible interval 0.80 to 0.80)"
+    ## A share reads as a percentage through the same phrase.
+    @test median_interval_text(draws ./ 100; scale = 100, suffix = "%") ==
+        "about 50% (90% credible interval 5% to 95%)"
+end

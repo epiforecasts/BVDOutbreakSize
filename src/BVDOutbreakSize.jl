@@ -2,6 +2,7 @@ module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
+using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister
@@ -42,11 +43,13 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     stream_first_date, stream_last_date,
     stream_reporting,
     stream_report_status,
-    summary_table, posterior_summary, markdown_table, MarkdownTable,
+    summary_table, posterior_summary, median_interval_text,
+    markdown_table, MarkdownTable,
     patch_summary_table, patch_overview_table, patch_headline,
     patch_detail_headline,
     province_cfr_table, province_forecast_table,
     province_forecast_vs_truth, plot_province_forecast,
+    forecast_provinces, province_share_draws,
     plot_province_forecast_detail,
     fit_diagnostics, diagnostics_table,
     parameter_diagnostics, worst_parameters_table,
