@@ -8,8 +8,8 @@
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
 # The [forecast by province](@ref "Forecast by province") evaluation scores this projection.
 #
-# Releases made before the per-province projection was merged ([#836](https://github.com/epiforecasts/BVDOutbreakSize/pull/836)) archived a different province forecast, the national forecast split by each province's share at the last spatial vintage and held over the week.
-# Releases from that merge onwards archive this projection.
+# Releases before v2.2.0 archived a different province forecast, the national forecast split by each province's share at the last spatial vintage and held over the week.
+# Releases from v2.2.0 onwards archive this projection.
 # Scores of past province forecasts, and the past forecasts shown below, therefore mix the two methods.
 #
 # The spatial tables report confirmed cases and confirmed deaths, so those are the observed streams projected.
@@ -259,7 +259,7 @@ forecast_province_fig(4) #hide
 
 # ## Past forecasts against what was observed
 #
-# Each release since 15 September 2026 archives its province split, so this figure has few made dates so far.
+# Each release since 15 September 2026 archives its province forecast, so this figure has few made dates so far.
 # Each panel is one province stream at one horizon.
 # The x-axis is the cut-off each forecast was made from.
 # Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the province went on to report.
