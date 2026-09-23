@@ -34,7 +34,7 @@
 
 ### Evaluation
 
-- The [onset forecast](@ref "Symptom-onset nowcast and forecast") mostly measures scan error, since its interval is dominated by the per-scan error rather than the epidemic.
+- The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error rather than the epidemic.
 - The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks, so it can see later corrections ([details](@ref "Forecast scoring against a persistence baseline")).
 - Past forecasts that were not stored are rebuilt from each release's own code but with current dependency versions, so they are not exact.
 
@@ -44,8 +44,8 @@
 
 - Confirmed cases and deaths are the only province data fitted.
   Occupancy and beds by province are not, and there is no province onset nowcast.
-- **The province tables cover part of the window.** The province vintages start on 15 June and stop before the cut-off, and harmonisation backfill is published only nationally.
-  Outside those vintages the provinces are informed only through the national streams ([province compositions](@ref province-compositions)).
+- The province tables start on 15 June, and harmonisation backfill is published only nationally.
+  Before then the provinces are informed only through the national streams ([province compositions](@ref province-compositions)).
 
 ### Model
 
@@ -54,8 +54,3 @@
 - Provincial testing enters the prior, not the likelihood, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model carries one national bed capacity and demand, so it cannot represent local saturation.
   Ituri holds most of the occupied beds, so the national bed shortfall understates local unmet need.
-
-### Evaluation
-
-- No province projection has been scored yet, since only [province forecast](@ref "Province forecast") projections are scored and earlier fixed-share archives are not.
-- Each province is projected on its own, without the fitted cross-province correlation and with the pooled patch forecast as one, so the province forecasts need not sum to the national one.
