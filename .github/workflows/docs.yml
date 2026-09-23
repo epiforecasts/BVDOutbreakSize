@@ -556,6 +556,8 @@ jobs:
             slug: estimates-province
           - id: forecasts/national
             slug: forecasts-national
+          - id: forecasts/province
+            slug: forecasts-province
           - id: evaluation/insample
             slug: evaluation-insample
           - id: evaluation/forecast

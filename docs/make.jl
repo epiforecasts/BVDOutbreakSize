@@ -15,14 +15,15 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## render can fan out across CI runners. `methods` carries the data, the
 ## model and how it is fitted, `estimates/national` the national results,
 ## `estimates/province` the per-province estimates, `forecasts/national` the
-## one-week-ahead projections, `evaluation/insample` the prior and posterior
+## one-week-ahead projections, `forecasts/province` their split by province,
+## `evaluation/insample` the prior and posterior
 ## predictive checks, `evaluation/forecast` the scoring against what arrived,
 ## and `sensitivity` the comparison and sensitivity analyses. All load the
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
     "estimates/national", "estimates/province",
-    "forecasts/national",
+    "forecasts/national", "forecasts/province",
     "evaluation/insample", "evaluation/forecast",
     "sensitivity",
 ]
@@ -33,6 +34,7 @@ const PAGES = [
 ##   render-province     → estimates/province.jl
 ##   render-insample     → evaluation/insample.jl
 ##   render-forecast     → forecasts/national.jl
+##   render-forecast-province → forecasts/province.jl
 ##   render-evaluation   → evaluation/forecast.jl
 ##   render-sensitivity  → sensitivity.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
@@ -129,7 +131,10 @@ function combine()
                 "National" => "estimates/national.md",
                 "Provinces" => "estimates/province.md",
             ],
-            "Forecasts" => "forecasts/national.md",
+            "Forecasts" => [
+                "National" => "forecasts/national.md",
+                "Provinces" => "forecasts/province.md",
+            ],
             "Evaluation" => [
                 "In-sample" => "evaluation/insample.md",
                 "Forecast" => "evaluation/forecast.md",
@@ -195,6 +200,8 @@ elseif STAGE == "render-insample"
     render_page("evaluation/insample")
 elseif STAGE == "render-forecast"
     render_page("forecasts/national")
+elseif STAGE == "render-forecast-province"
+    render_page("forecasts/province")
 elseif STAGE == "render-evaluation"
     render_page("evaluation/forecast")
 elseif STAGE == "render-sensitivity"
@@ -211,6 +218,7 @@ else
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-methods, " *
             "render-main, " *
             "render-province, render-insample, render-forecast, " *
+            "render-forecast-province, " *
             "render-evaluation, " *
             "render-sensitivity, combine, all"
     )
