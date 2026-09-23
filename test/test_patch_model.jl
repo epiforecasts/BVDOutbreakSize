@@ -1976,3 +1976,29 @@ end
     ## One patch has nothing to seed either way.
     @test !has_frac(patch_infection_model(n, 1; breakpoint = bp, rt_start))
 end
+
+@testitem "forecast_provinces runs on a sampled patch chain" setup = [
+    PatchJointChain,
+] begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_provinces
+
+    ## The key names the projection reads are the ones the fitted model
+    ## writes, which a hand-built chain cannot show.
+    national = DataFrame(
+        confirmed_new = fill(500, PATCH_DRAWS),
+        confirmed_deaths_new = fill(50, PATCH_DRAWS)
+    )
+    fc = forecast_provinces(
+        patch_chain, national;
+        n_patches = np, breakpoint = obs.who_first_sitrep_days
+    )
+    @test size(fc, 1) == np * PATCH_DRAWS
+    @test all(isfinite, fc.infections_new)
+    @test all(isfinite, fc.rt_forecast)
+    ## The case composition is sampled, so the provinces split each draw's
+    ## national total.
+    @test all(
+        d -> sum(fc.confirmed_new[fc.draw .== d]) == 500, 1:PATCH_DRAWS
+    )
+end

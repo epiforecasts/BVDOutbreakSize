@@ -229,13 +229,21 @@ end
         return path
     end
 
-    ## Only rows the per-province projection made are scored.
+    ## Only rows the current per-province projection made are scored.
     result = score_province_release(
-        "results-1", archive(; method = "projection"), obs, grid_date
+        "results-1", archive(; method = "projection-v2"), obs, grid_date
     )
     @test unique(r.stream for r in result.rows) == ["confirmed cases [ituri]"]
     @test unique(r.stream for r in result.overlay) ==
         ["confirmed cases [ituri]"]
+
+    ## Rows of the earlier projection, which split no national total, are
+    ## not scored either.
+    earlier = score_province_release(
+        "results-1", archive(; method = "projection"), obs, grid_date
+    )
+    @test isempty(earlier.rows)
+    @test isempty(earlier.overlay)
 
     ## An archive with no method column predates the projection, so the
     ## whole release is skipped rather than scored as a share split.
