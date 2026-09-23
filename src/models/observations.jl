@@ -259,13 +259,16 @@ is observed data DynamicPPL conditions on and a `missing` argument is
 sampled (the predictive-generator path) under the whole-vector predict key
 `<prefix>.increments`. Both go through one [`NegBinomialVector`](@ref), so
 a supplied vector is scored as one summed term. An empty vector (zero
-vintages) adds nothing to the log density.
+vintages) adds no variable and nothing to the log density.
 """
 @model function vintage_increments_model(
         modelled::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Integer}},
         k::Real
     )
+    ## No vintages: no variable, since a zero-length count vector would
+    ## still read as a sampled discrete latent.
+    isempty(modelled) && return (; modelled, increments = Int[])
     increments ~ NegBinomialVector(k, modelled)
     return (; modelled, increments)
 end
@@ -285,6 +288,7 @@ scored as one summed term. Shares the surveillance dispersion `k`.
         ceilings::AbstractVector,
         obs::Union{Missing, AbstractVector{<:Integer}}, k::Real
     )
+    isempty(means) && return (; means, ceilings, obs = Int[])
     obs ~ CensoredNegBinomialVector(k, means, ceilings)
     return (; means, ceilings, obs)
 end
@@ -2792,6 +2796,7 @@ so a supplied vector is scored as one summed term.
         sds::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Real}}, ν::Real
     )
+    isempty(means) && return (; means, sds, increments = Float64[])
     increments ~ StudentTVector(means, sds, ν)
     return (; means, sds, increments)
 end

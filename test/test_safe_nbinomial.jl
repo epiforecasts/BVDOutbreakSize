@@ -80,5 +80,7 @@ end
     frac = [44.5, 60.0, 1.0e6]
     draw = censored_occupancy_model(low, frac, missing, k)(Xoshiro(2)).obs
     @test draw isa Vector{Float64} && all(draw .<= frac)
-    @test isempty(vintage_increments_model(Float64[], missing, k)().increments)
+    ## No vintages: no variable.
+    @test isempty(keyset(vintage_increments_model(Float64[], missing, k)))
+    @test isempty(keyset(censored_occupancy_model(Float64[], Float64[], missing, k)))
 end
