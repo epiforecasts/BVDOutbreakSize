@@ -58,8 +58,7 @@ This moves the non-BVD death background, so fitted values change.
   framing (#782).
 - The summary dashboard is shorter (#782). The fit diagnostics are behind a
   dropdown, and the per-province infections and parameter panels and the
-  per-stream reproduction number are linked rather than repeated. The
-  by-province headline table stays.
+  per-stream reproduction number are linked rather than repeated.
 - The API reference is grouped into eleven pages following the order a fit
   runs in, and says which names are public and which are internal (#782).
   It was one undifferentiated `@autodocs` dump.
