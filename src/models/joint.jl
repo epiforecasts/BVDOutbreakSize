@@ -517,7 +517,7 @@ end
     onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
     cumulative_infections := patch_state.cumulative_total
     C_T := patch_state.C_T
-    cumulative_onsets := cumsum(onsets_total)
+    cumulative_onsets := _detached(cumsum, onsets_total)
     return (; patch_state, onsets_total)
 end
 
@@ -1019,24 +1019,31 @@ reproduction number implied by the summed patch infections.
         province_cfr_sd := death_composition_state.severity_sd
     end
 
-    cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
+    ## The cumulative series and the combined delay PMFs below are reported
+    ## only, so they are built behind `_detached`.
+    cumulative_expected_deaths := _detached(
+        cumsum, deaths_state.bvd_deaths_daily
+    )
 
-    cumulative_confirmed := _cumulative_confirmed(
-        confirmed_state.confirmed_daily, confirmed_history, n
+    cumulative_confirmed := _detached(
+        _cumulative_confirmed, confirmed_state.confirmed_daily,
+        confirmed_history, n
     )
     ## Each of the remaining count streams sums to its own cut-off expected
     ## total, so none needs the baseline re-add the confirmed path takes.
-    cumulative_reports := cumsum(cases_state.reports_daily)
-    cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
-    cumulative_confirmed_deaths := cumsum(
-        confirmed_deaths_state.confirmed_death_daily
+    cumulative_reports := _detached(cumsum, cases_state.reports_daily)
+    cumulative_deaths_total := _detached(cumsum, deaths_state.deaths_daily)
+    cumulative_confirmed_deaths := _detached(
+        cumsum, confirmed_deaths_state.confirmed_death_daily
     )
-    cumulative_recovered := cumsum(recovered_state.recovered_daily)
-    onset_to_confirmation_pmf := convolve_pmf(
-        cases_state.report_pmf, confirmed_state.receipt_pmf
+    cumulative_recovered := _detached(
+        cumsum, recovered_state.recovered_daily
     )
-    onset_to_death_confirmation_pmf := convolve_pmf(
-        deaths_state.od_pmf, confirmed_state.receipt_pmf
+    onset_to_confirmation_pmf := _detached(
+        convolve_pmf, cases_state.report_pmf, confirmed_state.receipt_pmf
+    )
+    onset_to_death_confirmation_pmf := _detached(
+        convolve_pmf, deaths_state.od_pmf, confirmed_state.receipt_pmf
     )
 
     onset_to_sample_mean := cases_state.report_mean +

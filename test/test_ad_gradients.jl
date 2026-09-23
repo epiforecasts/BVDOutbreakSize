@@ -10,11 +10,12 @@
 ## cannot be benchmarked without also being asserted differentiable, or
 ## asserted without being timed. Adding a model there adds it to both.
 ##
-## The full `bvd_joint` is not a component here and is not differentiated
-## anywhere in the suite: one gradient sits behind a cold Mooncake compile
-## of roughly 18 minutes. The components below are the submodels, the latent
-## process and every single-stream composer, so the joint is a composition
-## of surfaces each asserted differentiable here. Its own gradient is timed
+## The full `bvd_joint` is not a component here: one gradient sits behind a
+## cold Mooncake compile of roughly 18 minutes. Its only gradient in the
+## suite is the `_detached` check in `test/test_ad_rules.jl`. The components
+## below are the submodels, the latent process and every single-stream
+## composer, so the joint is a composition of surfaces each asserted
+## differentiable here. Its own gradient is timed
 ## by the benchmark suite and exercised end to end by the NUTS fits the docs
 ## build runs.
 ##

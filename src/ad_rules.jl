@@ -80,6 +80,8 @@ Mooncake.@zero_derivative(
 Mooncake.@zero_derivative(
     Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
 )
+## Work that reaches only reported quantities (see `_detached`).
+Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(convolve_delay)},

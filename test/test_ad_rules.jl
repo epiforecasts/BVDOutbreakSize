@@ -694,3 +694,42 @@ end
     @test isfinite(lp)
     @test all(isfinite, g) && !iszero(g[3])
 end
+
+@testitem "AD rules: the joint's detached work reaches no likelihood" tags = [
+    :ad,
+] begin
+    using Mooncake: Mooncake, DefaultCtx, Mode, ReverseMode,
+        MooncakeInterpreter, build_rrule, get_interpreter, value_and_gradient!!
+    using LogDensityProblems: logdensity
+    using Turing: DynamicPPL
+    using BVDOutbreakSize: _detached
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+
+    ## A context in which `_detached` is an ordinary call, so Mooncake
+    ## differentiates the wrapped work. If a wrapped value reached a
+    ## likelihood, the gradient would differ from the one under the
+    ## zero-derivative barrier.
+    struct ThroughDetachedCtx end
+    function Mooncake.is_primitive(
+            ::Type{ThroughDetachedCtx}, M::Type{<:Mode}, sig, world::UInt
+        )
+        @nospecialize sig
+        sig <: Tuple{typeof(_detached), Vararg} && return false
+        return Mooncake.is_primitive(DefaultCtx, M, sig, world)
+    end
+
+    scen = only(
+        filter(s -> s.name == "bvd_joint", ADFixtures.scenarios(; joint = true))
+    )
+    vi, x = ADFixtures.linked_point(scen.model; seed = scen.seed)
+    ldf = DynamicPPL.LogDensityFunction(scen.model, DynamicPPL.getlogjoint, vi)
+    f = y -> logdensity(ldf, y)
+    sig = Tuple{typeof(f), typeof(x)}
+    barrier = build_rrule(get_interpreter(ReverseMode), sig)
+    through = build_rrule(MooncakeInterpreter(ThroughDetachedCtx, ReverseMode), sig)
+    lp_b, (_, g_b) = value_and_gradient!!(barrier, f, x)
+    lp_t, (_, g_t) = value_and_gradient!!(through, f, x)
+    @test isfinite(lp_b)
+    @test lp_b == lp_t
+    @test g_b == g_t
+end

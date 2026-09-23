@@ -5,6 +5,13 @@
 # can be reused across composers without duplication. Delays are sampled
 # from priors and discretised with CensoredDistributions. Nothing is fixed.
 
+## `f(args...)` with no derivative passed back through it. Wraps work whose
+## result reaches only `:=` quantities the fit reports, never a likelihood,
+## so the gradient does not tape it. Its rule is in `src/ad_rules.jl`. A
+## wrapped value that reached a likelihood would get a wrong gradient, which
+## the joint's barrier test in `test/test_ad_rules.jl` checks for.
+_detached(f, args...) = f(args...)
+
 ## --- Delay submodels (priors only, all delays sampled) -------------------
 
 """
@@ -1602,18 +1609,10 @@ the others, which is what the imports figure on the analysis page draws.
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
-    ## 7. Per-patch cumulatives and the national aggregate.
-    cumulative_matrix = zeros(Tp, n_patches, n)
-    @inbounds for p in 1:n_patches
-        acc = zero(Tp)
-        for t in 1:n
-            acc += infections_matrix[p, t]
-            cumulative_matrix[p, t] = acc
-        end
-    end
-    C_T_patch = [@inbounds(cumulative_matrix[p, n]) for p in 1:n_patches]
-    infections_total = vec(sum(infections_matrix; dims = 1))
-    cumulative_total = cumsum(infections_total)
+    ## 7. National totals and headline quantities (see
+    ##    [`_patch_headlines`](@ref)), which the fit reports and no likelihood
+    ##    reads.
+    headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets_matrix = zeros(Tp, n_patches, n)
@@ -1622,36 +1621,50 @@ the others, which is what the imports figure on the analysis page draws.
             infections_matrix[p, :], inc_state.pmf
         )
     end
-    ## 9. Aggregate reproduction number. Inverting the renewal equation on
-    ##    the summed infections gives the incidence-weighted mean of the
-    ##    patch `Rt`s. With `I_{p,t} = R_{p,t} · force_{p,t}`, summing over
-    ##    patches gives `I_t / Σ_p force_{p,t} = Σ_p R_{p,t} force_{p,t} /
-    ##    Σ_p force_{p,t}`. This is the `Rt` that reproduces the national
-    ##    trajectory, so it is the one the headline `R_T` reports. Only the
-    ##    cut-off day is inverted, since that is the only day reported.
-    R_T = implied_national_Rt_at(infections_total, g, n)
-    ## 10. Headline quantities, mirroring [`infection_model`](@ref) so a
-    ##     patch chain summarises exactly like a single-patch one.
-    r = euler_lotka_r(R_T, g)
+    ## 9. Headline quantities, mirroring [`infection_model`](@ref) so a
+    ##    patch chain summarises exactly like a single-patch one.
     T_total = growth_state.T + τ_obs
     return (;
-        infections_matrix, cumulative_matrix, onsets_matrix,
+        infections_matrix, onsets_matrix,
         Rt_matrix, importation_matrix,
         δ_patch, δ_knots = rt_state.δ_knots,
-        C_T_patch,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
         δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
-        infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,
-        g, R0, r0 = r_clock, r, R_T,
+        g, R0, r0 = r_clock,
         m = growth_state.m, τ = growth_state.τ,
-        T = T_total, C_T = @inbounds(cumulative_total[n]),
-        doubling_time = doubling_time(r),
+        T = T_total,
         seed_at_renewal_start = seed0_total, seed_fraction,
-        seeding_age = seeding_age(cumulative_total, n),
         incubation_pmf = inc_state.pmf,
+        headlines...,
+    )
+end
+
+"""
+National totals and headline quantities of [`patch_infection_model`](@ref),
+read off the per-patch infections.
+
+`infections_total` and `cumulative_total` sum the patches, `C_T_patch` is
+each patch's cumulative at the cut-off and `C_T` the national one. `R_T`
+inverts the renewal equation on the summed infections on the cut-off day
+([`implied_national_Rt_at`](@ref)). With `I_{p,t} = R_{p,t} · force_{p,t}`
+that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
+incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
+the national trajectory. `r`, `doubling_time` and `seeding_age` follow from
+it as in [`infection_model`](@ref).
+"""
+function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)
+    infections_total = vec(sum(infections_matrix; dims = 1))
+    cumulative_total = cumsum(infections_total)
+    C_T_patch = vec(sum(infections_matrix; dims = 2))
+    R_T = implied_national_Rt_at(infections_total, g, n)
+    r = euler_lotka_r(R_T, g)
+    return (;
+        infections_total, cumulative_total, C_T_patch,
+        C_T = cumulative_total[n], R_T, r, doubling_time = doubling_time(r),
+        seeding_age = seeding_age(cumulative_total, n),
     )
 end
 
