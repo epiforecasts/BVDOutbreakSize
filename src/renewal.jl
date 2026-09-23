@@ -292,6 +292,18 @@ end
 @inline _eps(e::Real, q::Integer, t::Integer) = e
 @inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
 
+## Renewal force of patch `p` on day `t`, `Σ_{s ≥ 1} I[p, t − s] g[s]` over
+## the lags inside the grid. Shared by `patch_infections` and its rule.
+## `@simd` lets the sum reassociate, so it can differ from a sequential sum
+## in the last bits.
+@inline function _patch_force(I::AbstractMatrix, g::AbstractVector, p, t)
+    f = zero(eltype(I))
+    @inbounds @simd for s in 1:min(t - 1, length(g))
+        f += I[p, t - s] * g[s]
+    end
+    return f
+end
+
 """
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
 
@@ -368,12 +380,7 @@ function patch_infections(
     @inbounds for t in (L + 1):n
         ## What each patch generates today from its own renewal force.
         for p in 1:np
-            force = zero(Tp)
-            kmax = min(t - 1, length(g))
-            for s in 1:kmax
-                force += I[p, t - s] * g[s]
-            end
-            gen[p] = Rt_matrix[p, t] * force
+            gen[p] = Rt_matrix[p, t] * _patch_force(I, g, p, t)
         end
         ## Importation redistributes transmission rather than adding to it. A
         ## fraction `epsilon * K[p, q]` of what `q` generates is realised in

@@ -47,6 +47,30 @@ function ref_renewal_infections_with_force(Rt, g, seed)
     return I, force
 end
 
+## Patch `p` generates `G[p, t] = R[p, t] Σ_{s = 1}^{min(t − 1, G)} I[p, t − s] g[s]`
+## after its seed. It keeps `(1 − ε[p, t] Σ_{r ≠ p} K[r, p]) G[p, t]` and
+## receives the arrivals `A[p, t] = Σ_{q ≠ p} ε[q, t] K[p, q] G[q, t]`.
+function ref_patch_infections(R, g, seeds, K, ε)
+    np, n = size(R)
+    I = zeros(np, n)
+    A = zeros(np, n)
+    I[:, 1:min(size(seeds, 2), n)] = seeds[:, 1:min(size(seeds, 2), n)]
+    for t in (size(seeds, 2) + 1):n
+        G = [
+            R[p, t] * sum(I[p, t - s] * g[s] for s in 1:min(t - 1, length(g)))
+                for p in 1:np
+        ]
+        for p in 1:np
+            sent = sum(K[r, p] for r in 1:np if r != p; init = 0.0)
+            A[p, t] = sum(
+                ε[q, t] * K[p, q] * G[q] for q in 1:np if q != p; init = 0.0
+            )
+            I[p, t] = (1 - ε[p, t] * sent) * G[p] + A[p, t]
+        end
+    end
+    return (; infections = I, importation = A)
+end
+
 ## The occupancy balance of `accumulate_occupancy`'s docstring, day by day.
 function ref_accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, κ, h)
     n = length(A_bvd)

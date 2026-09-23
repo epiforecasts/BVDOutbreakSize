@@ -873,10 +873,7 @@ function Mooncake.rrule!!(
         @inbounds for t in n:-1:(L + 1)
             kmax = min(t - 1, length(gp))
             for p in 1:np
-                f = zero(Tf)
-                for s in 1:kmax
-                    f += I[p, t - s] * gp[s]
-                end
+                f = _patch_force(I, gp, p, t)
                 force[p] = f
                 gen[p] = Rp[p, t] * f
                 ḡen[p] = zero(Tf)

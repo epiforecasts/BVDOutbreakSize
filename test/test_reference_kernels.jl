@@ -48,6 +48,21 @@
             pmf(rng, G), rand(rng, L) .+ 1
         )
     end
+    ## Uncoupled, one patch, the seed covering the grid, and the production
+    ## shape with a generation interval longer than the seed.
+    for (np, n, L, G, scale) in (
+            (3, 40, 7, 12, 0.0), (1, 30, 5, 10, 0.5), (2, 6, 6, 4, 0.5),
+            (3, 220, 14, 35, 0.5),
+        )
+        K = rand(rng, np, np) .* 0.2
+        foreach(p -> K[p, p] = 0, 1:np)
+        add!(
+            "patch_infections np = $np, n = $n, L = $L, G = $G, ε × $scale",
+            patch_infections, ref_patch_infections,
+            rand(rng, np, n) .+ 0.8, pmf(rng, G), rand(rng, np, L) .+ 1, K,
+            scale .* rand(rng, np, n)
+        )
+    end
     for (note, kw) in (
             ("balanced", (;)), ("floored stocks", (; dmult = 1.6, κ = 0.08)),
             ("confirmed clamp", (; stop = 59, hflat = 0.9)),
