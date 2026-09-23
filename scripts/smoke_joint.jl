@@ -57,7 +57,6 @@ for c in 1:nchains
         sum(ne), median(lp), std(lp), median(ct)
     )
     say(line)
-    )
 end
 say("headline: ", fit_diagnostics(chn))
 df = sort!(parameter_diagnostics(chn), :ess_bulk)
