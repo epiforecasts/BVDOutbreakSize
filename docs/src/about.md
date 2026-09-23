@@ -22,7 +22,10 @@ We thank the INSP and WHO teams who compile and publish these reports.
 
 ## Prior work this builds on
 
-The replication that started this work, and the reanalysis that grounds the onset-to-death delay, are set out with the other sources on the [references](references.md) page.
+This work started as a replication of the [mccabe2026](@citet) report on the size of the outbreak.
+It has since grown into a joint model fitted to more of the published data streams.
+The [aim and origins](aim.md) page sets out what has changed since the replication.
+The onset-to-admission and onset-to-death delays come from a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the line list from the 2012 Bundibugyo outbreak in Isiro [rosello2015](@cite).
 
 ## Citing this work
 
