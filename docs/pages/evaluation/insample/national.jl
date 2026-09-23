@@ -820,7 +820,10 @@ evaluation_insample_national_summary = let
     )
     join(vcat([join(overall, "\n")], blocks), "\n\n")
 end
-write(joinpath(dashboard_dir, "evaluation_insample_national.md"), evaluation_insample_national_summary);
+write(
+    joinpath(dashboard_dir, "evaluation_insample_national.md"),
+    evaluation_insample_national_summary
+);
 
 #md # ```@raw html
 #md # </details>

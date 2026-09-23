@@ -259,7 +259,10 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-write(joinpath(dashboard_dir, "evaluation_forecast_province.md"), evaluation_forecast_province_summary);
+write(
+    joinpath(dashboard_dir, "evaluation_forecast_province.md"),
+    evaluation_forecast_province_summary
+);
 
 #md # ```@raw html
 #md # </details>
