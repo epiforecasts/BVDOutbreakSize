@@ -40,22 +40,46 @@ function nbinomial_loglik(k, modelled::AbstractVector, obs::AbstractVector)
 end
 
 """
+Log-probability that a draw from the `NegativeBinomial` `d` is at least `x`,
+the censored tail of a count at its ceiling. Equal to `logccdf(d, x - 1)`,
+computed as `1 − I_p(r, x)` from `SpecialFunctions.beta_inc`, whose
+plain-Julia body Mooncake differentiates. `logccdf` calls Rmath's
+`pnbinom` through a `ccall`, which Mooncake cannot. A tail too small for a
+normal float is summed term by term in log space from `x` up, until a term
+adds less than `exp(-40)` of the total. A fractional `x` takes the tail from
+the next count up.
+"""
+function nbinomial_logtail(d::NegativeBinomial, x::Real)
+    x > 0 || return zero(float(typeof(d.p)))
+    u = ceil(x)
+    I, J = beta_inc(d.r, u, d.p)
+    I < J && return log1p(-I)
+    J >= floatmin(J) && return log(J)
+    s = logpdf(d, u)
+    t = logpdf(d, u + 1)
+    while t > s - 40
+        s = logaddexp(s, t)
+        u += 1
+        t = logpdf(d, u + 1)
+    end
+    return s
+end
+
+"""
 Summed right-censored NegativeBinomial log-likelihood of the counts `obs`
 about the means `means`, each censored at the matching `ceilings`. A count
 below its ceiling scores the uncensored `logpdf`, so those go through
-[`nbinomial_loglik`](@ref) together. Only the counts at the ceiling take
-the censored tail. Equal to one `~ censored(...)` per count.
+[`nbinomial_loglik`](@ref) together. A count at its ceiling scores the
+censored tail [`nbinomial_logtail`](@ref), and one above it `-Inf`. Equal
+to one `~ censored(...)` per count.
 """
 function censored_nbinomial_loglik(k, means, ceilings, obs)
-    below = obs .< safe_rate.(ceilings)
+    upper = safe_rate.(ceilings)
+    below = obs .< upper
     s = nbinomial_loglik(k, means[below], obs[below])
     @inbounds for i in findall(!, below)
-        s += logpdf(
-            censored(
-                safe_nbinomial(k, safe_rate(means[i]));
-                upper = safe_rate(ceilings[i])
-            ), obs[i]
-        )
+        s += obs[i] > upper[i] ? oftype(s, -Inf) :
+            nbinomial_logtail(safe_nbinomial(k, safe_rate(means[i])), obs[i])
     end
     return s
 end

@@ -530,9 +530,8 @@ end
             (a, b) -> nbinomial_loglik(a, b, x), 8.3, μ
         )
         check_grads(nb, 8.3, μ)
-        ## Counts below their ceilings only: Mooncake has no rule for the
-        ## censored tail's Rmath call.
-        up = fill(1.0e6, 60)
+        ## Every seventh count sits at its ceiling and scores the tail.
+        up = [i % 7 == 0 ? float(x[i]) : 1.0e6 for i in 1:60]
         @test mgrad(
             (a, b) -> logpdf(censored(NegBinomialVector(a, b); upper = up), x),
             8.3, μ
@@ -864,4 +863,62 @@ end
             is_primitive = true, mode = Mooncake.ReverseMode
         )
     end
+end
+
+@testitem "AD: the censored NegativeBinomial tail passes Mooncake's test_rule" tags = [
+    :ad,
+] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using Mooncake.TestUtils: test_rule
+    using Distributions: NegativeBinomial, Normal
+    using Turing: @model, filldist, to_submodel, DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using ADTypes: AutoMooncake
+    using BVDOutbreakSize: nbinomial_logtail, censored_nbinomial_loglik,
+        censored_occupancy_model
+
+    rng = Xoshiro(20260923)
+    ## Tails near one (demand far above the ceiling), moderate and far, one
+    ## too small for a normal float, a dispersion below one, and a zero
+    ## count, whose tail is one. A small step keeps `p` inside `(0, 1)`.
+    for (r, μ, u) in (
+            (8.3, 400.0, 40), (8.3, 50.0, 40), (8.3, 20.0, 60),
+            (0.7, 100.0, 40), (30.0, 200.0, 120), (2.0, 5.0, 60),
+            (200.0, 5.0, 300), (8.3, 50.0, 0),
+        )
+        test_rule(
+            rng, nbinomial_logtail, NegativeBinomial(r, r / (r + μ)), u;
+            is_primitive = false, mode = Mooncake.ReverseMode,
+            max_fd_step = 1.0e-5
+        )
+    end
+
+    ## The summed likelihood with counts at their ceilings. The ceilings are
+    ## captured as integers, so finite differences never move a count across
+    ## its ceiling.
+    μ = exp.(4 .+ 0.5 .* randn(rng, 20))
+    x = rand(rng, 0:120, 20)
+    up = [i % 4 == 0 ? x[i] : 10^6 for i in 1:20]
+    test_rule(
+        rng, (a, b) -> censored_nbinomial_loglik(a, b, float.(up), x), 8.3, μ;
+        is_primitive = false, mode = Mooncake.ReverseMode
+    )
+
+    ## Through the model: one count at its ceiling gives a finite gradient.
+    @model function occupancy(obs, ceilings)
+        lk ~ Normal(2, 0.5)
+        lμ ~ filldist(Normal(3.5, 0.5), length(obs))
+        x ~ to_submodel(
+            censored_occupancy_model(exp.(lμ), ceilings, obs, exp(lk))
+        )
+    end
+    model = occupancy([20, 40, 31], [60.0, 40.0, 50.0])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, DynamicPPL.VarInfo(model);
+        adtype = AutoMooncake(; config = nothing)
+    )
+    lp, g = logdensity_and_gradient(ldf, [2.0, 3.4, 3.7, 3.5])
+    @test isfinite(lp)
+    @test all(isfinite, g) && !iszero(g[3])
 end

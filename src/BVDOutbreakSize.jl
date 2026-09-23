@@ -24,7 +24,8 @@ using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     LogNormal, Beta, LKJCholesky,
     Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
-using StatsFuns: logit, logistic
+using StatsFuns: logit, logistic, logaddexp
+using SpecialFunctions: beta_inc
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots

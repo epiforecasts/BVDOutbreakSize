@@ -130,6 +130,13 @@ Changes since v2.1.0.
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 
+### Fixed
+
+- An isolation-occupancy count at its censoring ceiling now has a Mooncake gradient.
+  The censored NegativeBinomial tail came from Rmath, which Mooncake cannot differentiate, so one such count would have stopped every gradient.
+  No isolation count in the current data sits at its ceiling, and an admissions count never can, since its ceiling is at least half a bed above it.
+  The tail now comes from `SpecialFunctions.beta_inc`.
+
 ### Infrastructure
 
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).

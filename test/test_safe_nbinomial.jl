@@ -93,3 +93,22 @@ end
     @test isempty(keyset(vintage_increments_model(Float64[], missing, k)))
     @test isempty(keyset(censored_occupancy_model(Float64[], Float64[], missing, k)))
 end
+
+@testitem "nbinomial_logtail matches the censored logpdf at the ceiling" begin
+    using BVDOutbreakSize: nbinomial_logtail, censored_nbinomial_loglik
+    using Distributions: NegativeBinomial, logpdf, censored
+
+    ## The reference is Distributions' `censored` logpdf, which takes the tail
+    ## from Rmath. The grid includes tails too small for a normal float.
+    for r in (0.3, 2.0, 8.3, 200.0), μ in (5.0, 40.0, 400.0), u in (1, 40, 300)
+        d = NegativeBinomial(r, r / (r + μ))
+        @test nbinomial_logtail(d, u) ≈
+            logpdf(censored(d; upper = float(u)), u) rtol = 1.0e-10
+    end
+    d = NegativeBinomial(8.3, 0.2)
+    @test nbinomial_logtail(d, 0) == 0
+    @test nbinomial_logtail(d, 44.5) ≈
+        logpdf(censored(d; upper = 44.5), 44.5) rtol = 1.0e-10
+    ## A count above its ceiling has no probability.
+    @test censored_nbinomial_loglik(8.3, [30.0], [40.0], [41]) == -Inf
+end
