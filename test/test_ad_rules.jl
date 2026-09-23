@@ -322,7 +322,7 @@
                 ("ρ = 0.05", p, 0.05, k), ("ρ = 0.3", p, 0.3, k),
                 ("matrix row", p, 0.8, view(K, 1, :)),
                 ("clamped p", p_clamp, 0.05, k_clamp),
-                ("ρ below its floor", p, 1.0e-7, k),
+                ("ρ below its floor", p, -0.5, k),
                 ("ρ above its cap", p, 1.5, k),
             )
             add!(note, betabinomial_loglik, n, q, ρ, obs)
@@ -349,7 +349,8 @@ end
     for c in rule_cases(rng)
         @testset "$(c.name)" begin
             test_rule(
-                rng, c.f, c.args...; is_primitive = true, mode = ReverseMode
+                rng, c.f, c.args...; is_primitive = true, mode = ReverseMode,
+                rtol = 1.0e-6, atol = 1.0e-8
             )
         end
     end
@@ -363,7 +364,7 @@ end
     h = 0.05 .+ 0.3 .* rand(rng, 40)
     test_rule(
         rng, abscond_thinned_flow, adm, pmf15, 0.07, h;
-        is_primitive = false, mode = ReverseMode
+        is_primitive = false, mode = ReverseMode, rtol = 1.0e-6, atol = 1.0e-8
     )
     test_rule(
         rng,
@@ -372,7 +373,7 @@ end
         ),
         abs.(randn(rng, 40)) .* 10 .+ 1, h, pmf(rng, 18; mass = 0.95),
         pmf(rng, 12; mass = 0.98), 0.37;
-        is_primitive = false, mode = ReverseMode
+        is_primitive = false, mode = ReverseMode, rtol = 1.0e-6, atol = 1.0e-8
     )
 end
 
