@@ -68,6 +68,19 @@ Mooncake.@is_primitive(
     },
 )
 
+## Data-only helpers: lookups over the observation grid and the recorded
+## histories, with no sampled quantity among their arguments. They pass no
+## derivative, so the backend need not tape them.
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(onset_vintage_indices), Vararg}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(admission_headroom), Vararg}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
+)
+
 function Mooncake.rrule!!(
         ::CoDual{typeof(convolve_delay)},
         x::CoDual{<:_FloatVec}, delay::CoDual{<:_FloatVec}

@@ -21,7 +21,8 @@
         clinical_stay_survival, accumulate_occupancy,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, onset_report_expected_total, studentt_loglik,
-        betabinomial_loglik
+        betabinomial_loglik, onset_vintage_indices, censoring_cap,
+        admission_headroom
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -357,6 +358,32 @@
             0.05 .+ 0.9 .* rand(rng, 20), 0.05,
             [rand(rng, 0:t) for t in nb]; perf = true
         )
+
+        ## The data-only helpers pass no derivative. Their inputs are the
+        ## integer day indices and counts the histories carry, including a
+        ## `missing` observation vector and a capacity history with no
+        ## counts, as the predictive generator passes.
+        add!("scored cells", onset_vintage_indices, o.ri, o.pri)
+        add!(
+            "production-sized", onset_vintage_indices, big.ri, big.pri;
+            perf = true
+        )
+        days = collect(100:219)
+        counts = rand(rng, 150:400, 120)
+        cap = (; days = collect(100:3:219), counts = rand(rng, 300:500, 40))
+        occ = (; days, counts)
+        add!("120 days", censoring_cap, days, counts, cap; perf = true)
+        add!("missing counts", censoring_cap, days, missing, cap)
+        add!(
+            "no recorded capacity", censoring_cap, days, counts,
+            (; days = Int[], counts = Int[])
+        )
+        admitted = rand(rng, 0:40, 120)
+        add!(
+            "120 days", admission_headroom, days, admitted, cap, occ;
+            perf = true
+        )
+        add!("missing counts", admission_headroom, days, missing, cap, occ)
         return cases
     end
 end
