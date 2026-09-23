@@ -90,9 +90,8 @@ MarkdownTable(province_validation_table) #hide
 # ## Forecast by province across releases
 #
 # The archived province forecast of each release, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
-# Releases before v2.2.0 archived the national forecast split by each province's modelled share, held over the horizon.
-# Releases from v2.2.0 archive a per-province renewal projection from the joint chain.
-# The scores below pool both, so they measure the province forecast as published rather than one method.
+# The scores cover the per-province renewal projection from the joint chain only.
+# They fill in as releases carrying that projection become old enough for their targets to have been observed.
 # The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
 
 #md # ```@raw html
@@ -137,13 +136,21 @@ province_score_by_release_display = _province_display(
     province_score_by_release_table
 );
 
-_province_empty = "No scored province forecasts yet. No release old " *
-    "enough for its targets to have been observed carries a stored " *
-    "province forecast.";
+_province_empty = "No scored province forecasts yet. This fills in as " *
+    "releases carrying the per-province projection accumulate.";
+## A plain statement above the tables when nothing is scored yet, and
+## nothing otherwise.
+province_scores_note = size(province_scores_df, 1) == 0 ?
+    Markdown.parse(
+        "No province forecast has been scored yet. This section fills in " *
+        "as releases carrying the per-province projection accumulate."
+    ) : nothing;
 
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+province_scores_note #hide
 
 MarkdownTable(province_score_overview_display) #hide
 
@@ -223,7 +230,11 @@ evaluation_forecast_province_summary = let
         p -> all(<(1), scored(p).rows.rel_to_baseline), with_scores
     )
     overall = if isempty(with_scores)
-        ["- **Forecasts:** no province forecast has been scored yet."]
+        [
+            "- **Forecasts:** no province forecast has been scored yet. " *
+                "This fills in as releases carrying the per-province " *
+                "projection accumulate.",
+        ]
     else
         [
             string(
