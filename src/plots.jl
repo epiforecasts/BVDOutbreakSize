@@ -3627,6 +3627,64 @@ function plot_province_forecast(
 end
 
 """
+One-week-ahead forecast for a single province, the per-province counterpart
+of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
+expected in patch `province` over the week to `T + 7`, one histogram panel
+per stream with its 90% predictive interval shaded.
+
+The draws are the ones [`plot_province_forecast`](@ref) summarises: the
+national draw times the province's modelled share at the most recent spatial
+vintage, held over the horizon.
+
+`observed` optionally gives a recent observed week per stream, keyed by the
+forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
+[`province_recent_counts`](@ref). Each is drawn as a dashed rule, and the
+axis widens to hold it. Panels are drawn only for the streams `fc` carries.
+"""
+function plot_province_forecast_detail(
+        chn, fc::DataFrame;
+        province::Integer,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        observed::NamedTuple = (;)
+    )
+    np = min(n_patches, length(patch_labels))
+    1 <= province <= np || throw(
+        ArgumentError("province must be in 1:$np; got $province")
+    )
+    label = patch_labels[province]
+    entries = [
+        e for e in _province_forecast_draws(chn, fc, np, patch_labels)
+            if e[2] == label
+    ]
+    isempty(entries) && return Figure()
+    ## Colours match the national confirmed panels in `plot_forecast`.
+    colours = Dict(
+        "confirmed cases" => :goldenrod,
+        "confirmed deaths" => :darkorange3
+    )
+    obs_keys = Dict(
+        label => col for (col, label) in _PROVINCE_FORECAST_STREAMS
+    )
+    ncols = length(entries)
+    fig = Figure(; size = (400 * ncols, 360))
+    for (i, (stream, _, draws)) in enumerate(entries)
+        ax = _forecast_count_panel!(
+            fig, (1, i), draws, "New $(stream) ($(label))",
+            colours[stream]
+        )
+        key = obs_keys[stream]
+        haskey(observed, key) || continue
+        o = float(observed[key])
+        vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
+        CairoMakie.xlims!(
+            ax, 0, max(1.0, quantile(draws, 0.98), 1.05 * o)
+        )
+    end
+    return fig
+end
+
+"""
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed demand (the need a week ahead,
 under unconstrained supply) against the occupancy the situation reports would
