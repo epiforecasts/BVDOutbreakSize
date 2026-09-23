@@ -83,6 +83,8 @@ This moves the non-BVD death background, so fitted values change.
 - The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block reads the same credible intervals (#832).
 - The summary dashboard no longer shows the modelled against observed reported cases (#832).
   The evaluation pages carry that check.
+- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
+  It links to the home page for installing, running and updating the data rather than repeating it.
 
 ### Infrastructure
 
