@@ -1494,6 +1494,7 @@ the others, which is what the imports figure on the analysis page draws.
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
+        basis = sum_to_zero_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1582,20 +1583,24 @@ the others, which is what the imports figure on the analysis page draws.
     ##    only carries size and distance. Pooled because the small provinces
     ##    export too little for their own level to be identified, so
     ##    `σ_ε → 0` recovers one shared intensity and a province the data say
-    ##    nothing about sits at the pooled mean. The deviations are centred,
-    ##    so `ε_bar` stays the overall level. Time-varying because the
+    ##    nothing about sits at the pooled mean. The deviations sum to zero,
+    ##    so `ε_bar` stays the overall level. They are drawn on the
+    ##    `n_patches - 1` sum-to-zero directions ([`sum_to_zero_basis`](@ref)),
+    ##    which gives the distribution of `n_patches` independent
+    ##    `N(0, σ_ε²)` draws with their mean subtracted, with no direction
+    ##    the likelihood cannot see. Time-varying because the
     ##    outbreak being known changes movement, and the provinces that arrive
     ##    either side of the breakpoint are what separates `β_ε`.
     ε_matrix = zeros(Tp, n_patches, n)
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
-        z_ε ~ product_distribution(fill(Normal(0, 1), n_patches))
+        z_ε ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         β_ε ~ importation_effect_prior
-        z_bar = sum(z_ε) / n_patches
+        log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
         ramp = sigmoid_ramp(n, breakpoint)
         @inbounds for q in 1:n_patches
-            lvl = ε_bar * exp(σ_ε * (z_ε[q] - z_bar))
+            lvl = ε_bar * exp(log_ε_dev[q])
             for t in 1:n
                 ## Capped at one: the origin cannot send away more than it
                 ## generates. The prior sits four orders of magnitude below

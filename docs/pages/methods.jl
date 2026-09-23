@@ -509,7 +509,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (z_q - \bar z)\bigr)\,
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z})_q\bigr)\,
 #     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
 # ```
 #
@@ -517,8 +517,10 @@ MarkdownTable(vintage_table) #hide
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# z_q \sim \mathrm{Normal}(0, 1). \tag{16}
+# \mathbf{z} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
 # ```
+#
+# with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 #
 
 #md # ```@raw html

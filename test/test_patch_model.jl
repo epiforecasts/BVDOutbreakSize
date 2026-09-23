@@ -1902,7 +1902,7 @@ end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin
     using BVDOutbreakSize: patch_infection_model, sigmoid_ramp
-    using Turing: DynamicPPL, returned
+    using Turing: DynamicPPL, returned, sample, Prior
     using Random: Xoshiro
 
     n, np, rt_start, bp = 60, 3, 30, 10
@@ -1916,7 +1916,7 @@ end
     ## Everything but the intensity is held at one draw, so the trajectories
     ## differ only through what the intensity does.
     function run(;
-            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 0.5, 2.0],
+            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
             β_ε = 0.0
         )
         m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
@@ -1926,17 +1926,24 @@ end
     ## `σ_ε -> 0` recovers one shared intensity: the per-origin offsets stop
     ## mattering, so the arrivals no longer depend on `z_ε` at all.
     shared = run()
-    other_z = run(z_ε = [3.0, -4.0, 1.5])
+    other_z = run(z_ε = [3.0, -4.0])
     @test shared.importation_matrix ≈ other_z.importation_matrix
     ## With spread on, they do. A pooled intensity that ignored `σ_ε` would
     ## pass the check above and fail this one.
     spread = run(σ_ε = 0.7)
     @test !(spread.importation_matrix ≈ shared.importation_matrix)
 
-    ## The deviations are centred, so `ε_bar` is the level: shifting every
-    ## offset by a constant leaves the intensities, and the arrivals, alone.
-    shifted = run(σ_ε = 0.7, z_ε = [-1.0, 0.5, 2.0] .+ 5.0)
-    @test shifted.importation_matrix ≈ spread.importation_matrix
+    ## The log deviations sum to zero, so `ε_bar` is the level: the origin
+    ## intensities have geometric mean `ε_bar` whatever the spread.
+    fixed = DynamicPPL.fix(
+        base; ε_bar = 0.02, σ_ε = 0.7, z_ε = [-1.0, 2.0], β_ε = 0.0
+    )
+    chn = sample(Xoshiro(1), fixed, Prior(), 3; progress = false)
+    for e in vec(collect(chn[:importation_epsilon_patch]))
+        @test length(e) == np
+        @test exp(sum(log, e) / np) ≈ 0.02
+        @test !all(≈(0.02), e)
+    end
 
     ## The detection ramp moves the intensity the way its sign says. On the
     ## first renewal day every history is still the seed, so the arrivals
