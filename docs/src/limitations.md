@@ -1,24 +1,15 @@
 # Limitations
 
-The limitations that apply to the whole work come first, then the national and province ones by data, model and evaluation, with the most consequential first.
-Each says what would remove it and links the issue that tracks it, where there is one.
-The detail is in the [Methods](@ref "Methods").
-
 ## Overall
 
 - **Fitted to aggregate counts.** The DRC data are national and per-province situation-report totals, read from the published PDFs, and the Uganda data are three export cases with one death from WHO reports.
   We do not have a line list, information on case definitions or reporting completeness, or access to the response's internal data.
   Every estimate is a model-based extrapolation under strong assumptions, not a measurement.
-  Access to line-list or internal surveillance data would remove it.
 - **An external view.** The work is done outside the outbreak response.
   Changes in reporting practice are inferred from the reports rather than known.
-  Working with the teams that collect the data would remove it.
 - **LLM-driven implementation.** The code and analysis were drafted by a language model and reviewed by people and by language models ([authors](@ref "Authors, funding and acknowledgements")).
-  Language models also read the situation-report figures, and every release is signed off by a person before it is published.
-  Errors can remain where no check reaches, since the checks are a second read of each figure, cross-checks of the confirmed totals against the published national series, and tests of the code.
-  It has not been independently replicated, and an independent replication and data read would remove it.
 - **Live and not peer reviewed.** The report is re-run as new data arrive, so the estimates change between updates, and it has not been peer reviewed.
-  Peer review of a fixed version would remove it.
+  Every release is signed off by a person before it is published.
 
 ## National
 
