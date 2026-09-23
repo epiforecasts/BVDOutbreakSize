@@ -5,7 +5,7 @@
 #
 # The model runs one renewal equation per province and fits the national streams against the summed provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
 # The per-province case-fatality ratio sits with the national one in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
-# The per-province forecast is in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") and its scoring in the [forecast by province](@ref "Forecast by province").
+# The per-province forecast is on the [province forecasts](@ref "Province forecasts") page and its scoring is in the [forecast by province](@ref "Forecast by province").
 # Each needs a quantity the page it sits on already computes.
 #
 # This page is generated from
