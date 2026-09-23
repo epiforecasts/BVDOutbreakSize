@@ -47,6 +47,8 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
+  Its summary gives the count-scale coverage overall and per province.
 - Each province is projected a week ahead by its own renewal equation
   rather than a fixed share of the national forecast, and only these
   projections are archived and scored (#836).
