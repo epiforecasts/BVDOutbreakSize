@@ -221,6 +221,9 @@ The renewal trajectory and the per-day force of infection it was built
 from, as `(infections, force)`. [`renewal_infections`](@ref) returns the
 first; the derivative rule needs the second, which it would otherwise
 have to rebuild from a copy of this loop.
+
+Each day's force is one `dot` of the most recent infections with the
+generation interval reversed, a single BLAS call on float arrays.
 """
 function renewal_infections_with_force(
         Rt::AbstractVector, g::AbstractVector,
@@ -228,18 +231,17 @@ function renewal_infections_with_force(
     )
     n = length(Rt)
     L = length(seed)
+    G = length(g)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
     I = zeros(Tp, n)
     force = zeros(Tp, n)
     @inbounds for j in 1:min(L, n)
         I[j] = seed[j]
     end
-    @inbounds for t in (L + 1):n
-        f = zero(Tp)
-        kmax = min(t - 1, length(g))
-        for s in 1:kmax
-            f += I[t - s] * g[s]
-        end
+    rg = reverse(g)
+    for t in (L + 1):n
+        k = min(t - 1, G)
+        f = dot(view(rg, (G - k + 1):G), view(I, (t - k):(t - 1)))
         force[t] = f
         I[t] = Rt[t] * f
     end

@@ -36,6 +36,8 @@ Changes since v2.1.0.
   On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
 - The `convolve_pmf` rule's pullback is one `axpy!` and one `dot` per entry of the second PMF.
   Its gradient runs about 1.1 to 1.6 times faster; the forward keeps its double loop, which beats the BLAS form on PMFs this short.
+- `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval.
+  The forward runs about 1.7 times faster and the gradient about 1.25 times faster; the rule's reverse walk keeps its fused loop, which beats per-day `axpy!` calls.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
