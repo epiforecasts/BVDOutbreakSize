@@ -45,3 +45,25 @@
     @test_throws ErrorException find_one(root, "absent.html")
     @test_throws ErrorException find_one(root, "ational.html")
 end
+
+@testitem "standalone report reads the stylesheets from the site root" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "standalone_report.jl"
+        )
+    )
+
+    ## Vitepress writes `assets/` once at the site root, beside
+    ## `vp-icons.css`, not beside each page.
+    root = mktempdir()
+    site = joinpath(root, "1")
+    mkpath(joinpath(site, "estimates"))
+    mkpath(joinpath(site, "assets"))
+    write(joinpath(site, "estimates", "national.html"), "")
+    write(joinpath(site, "vp-icons.css"), "")
+    write(joinpath(site, "assets", "style.abc.css"), "")
+
+    @test site_assets(root) == joinpath(site, "assets")
+end
