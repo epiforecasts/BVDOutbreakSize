@@ -57,6 +57,21 @@ function _approx_daily(C, r, T)
     return max(float(daily), 0.0)
 end
 
+## Log-Rt on horizon day `d` of the fitted weekly walk continued past the
+## cut-off from level `log_R`: the fresh weekly innovations `innov` (and their
+## running sums `cum_innov`) summed to the last whole week, plus the share of
+## the next week's innovation the day has reached. Daily log-Rt is the linear
+## interpolation between the weekly knots, as in [`rt_walk_model`](@ref).
+## Shared by the national and the per-province forecasts, so both continue
+## the walk the same way.
+function _walk_log_rt(log_R, innov, cum_innov, d::Integer, week::Integer)
+    weeks = d / week
+    j = floor(Int, weeks)
+    whole = j == 0 ? 0.0 : cum_innov[j]
+    part = j < length(innov) ? (weeks - j) * innov[j + 1] : 0.0
+    return log_R + whole + part
+end
+
 ## Per-draw growth-rate path over the horizon. The fitted weekly walk is
 ## continued past the cut-off with fresh innovations at its own step scale,
 ## and the future Rt converted back to a daily growth rate through the
@@ -111,11 +126,7 @@ function _evolving_rates(
         log_R = log(max(R_T[i], 1.0e-6))
         log_rt = log_R
         for d in 1:horizon
-            weeks = d / week
-            j = floor(Int, weeks)
-            whole = j == 0 ? 0.0 : cum_innov[j]
-            part = j < nknots ? (weeks - j) * innov[j + 1] : 0.0
-            log_rt = log_R + whole + part
+            log_rt = _walk_log_rt(log_R, innov, cum_innov, d, week)
             rt_d = exp(log_rt)
             rs[d] = euler_lotka_r(max(rt_d, _RT_EULER_FLOOR), g)
         end
@@ -767,7 +778,8 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
 end
 
 ## Piecewise-linear interpolation of knot values `ks` (knot 0 at the
-## cut-off, knot `j` at `j * week` days on) to horizon day `d`.
+## cut-off, knot `j` at `j * week` days on) to horizon day `d`, for the
+## provincial deviations, which revert rather than accumulate.
 function _knot_interp(ks, d::Integer, week::Integer)
     j = fld(d, week)
     j >= length(ks) - 1 && return ks[end]
@@ -881,7 +893,8 @@ function forecast_provinces(
         g = _gi_pmf(α[i], θ[i]; nmax = gi_nmax)
         L = min(length(g), n)
         ## National walk: one path shared by every province.
-        nat = vcat(0.0, cumsum(sigma[i] .* randn(rng, nknots)))
+        nat_innov = sigma[i] .* randn(rng, nknots)
+        nat_cum = cumsum(nat_innov)
         ## Provincial deviations: mean-reverting, centred at every knot.
         φ = exp2(-week / halflife[i])
         δ = zeros(np, nknots + 1)
@@ -894,7 +907,7 @@ function forecast_provinces(
         Rt = zeros(np, L + h)
         for p in 1:np, d in 1:h
 
-            shift = _knot_interp(nat, d, week) +
+            shift = _walk_log_rt(0.0, nat_innov, nat_cum, d, week) +
                 _knot_interp(view(δ, p, :), d, week) - δ[p, 1]
             Rt[p, L + d] = R_T[i][p] * exp(shift)
         end

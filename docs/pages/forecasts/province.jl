@@ -44,10 +44,7 @@ province_week_end = obs.cutoff + Day(7);
 province_summary_markdown = let proj = province_projection
     draws(p, col) = float.(proj[proj.patch .== p, col])
     pct(x) = string(round(Int, 100 * x), "%")
-    share_text(v) = string(
-        "about ", pct(quantile(v, 0.5)), " (90% credible interval ",
-        pct(quantile(v, 0.05)), " to ", pct(quantile(v, 0.95)), ")"
-    )
+    share_text(v) = median_interval_text(v; scale = 100, suffix = "%")
     ## Overall: the provinces ranked by their median projection, each with
     ## its share of the provinces' combined projection and how often it
     ## projects the most.

@@ -1071,14 +1071,11 @@ function score_province_release(
     header, rows = read_simple_csv(forecast_path)
     method_i = findfirst(==("method"), header)
     isnothing(method_i) && return :no_projection
+    kept_rows = filter(r -> r[method_i] == PROVINCE_FORECAST_METHOD, rows)
     kept = joinpath(mktempdir(), basename(forecast_path))
-    open(kept, "w") do io
-        println(io, join(header, ','))
-        for r in rows
-            r[method_i] == PROVINCE_FORECAST_METHOD || continue
-            println(io, join(r, ','))
-        end
-    end
+    write_simple_csv(
+        kept, [h => [r[i] for r in kept_rows] for (i, h) in enumerate(header)]
+    )
     return score_release(tag, kept, obs, grid_date; vintage_obs_path)
 end
 

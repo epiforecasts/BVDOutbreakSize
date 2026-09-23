@@ -2,6 +2,7 @@ module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
+using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister

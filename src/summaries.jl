@@ -5,21 +5,25 @@
 _draws(chn, name::Symbol) = vec(Array(chn[name]))
 
 """
-    median_interval_text(draws; digits = 0) -> String
+    median_interval_text(draws; digits = 0, scale = 1, suffix = "")
+        -> String
 
 A posterior as a phrase for a summary bullet: the median and the
 equal-tailed 90% credible interval, `"about m (90% credible interval lo to
 hi)"`. Counts round to whole numbers by default. Otherwise each value is
-shown to `digits` decimals.
+shown to `digits` decimals, so 0.8 reads 0.80. Each value is multiplied by
+`scale` and followed by `suffix`, so `scale = 100, suffix = "%"` reads a
+share as a percentage.
 """
-function median_interval_text(draws; digits::Integer = 0)
-    ## Padded to `digits` decimals, so 0.8 reads 0.80.
+function median_interval_text(
+        draws; digits::Integer = 0, scale::Real = 1,
+        suffix::AbstractString = ""
+    )
     function fmt(x)
-        digits <= 0 && return string(round(Int, x))
-        str = string(round(x; digits))
-        shown = something(findfirst('.', str), lastindex(str) + 1)
-        shown > lastindex(str) && (str *= ".")
-        return str * "0"^(digits - (lastindex(str) - shown))
+        v = scale * x
+        s = digits <= 0 ? string(round(Int, v)) :
+            Printf.format(Printf.Format("%.$(digits)f"), v)
+        return s * suffix
     end
     return string(
         "about ", fmt(quantile(draws, 0.5)), " (90% credible interval ",
@@ -1147,27 +1151,28 @@ for scoring by [`province_forecast_archive`](@ref).
 
 `fc` is a [`forecast_provinces`](@ref) frame, each province projected by its
 own renewal. A national [`forecast_reported`](@ref) result is replaced by the
-one-week projection from `chn`. The table adds each province's new latent
+projection from `chn` at `horizon` days, which also labels the rows. The table adds each province's new latent
 infections and its reproduction number at the horizon.
 """
 function province_forecast_table(
         chn, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
+        horizon::Integer = 7,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    proj = _as_province_projection(chn, fc, np, patch_labels)
+    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
     entries = [
-        (province, "New $(label) by T+7", draws, digits)
+        (province, "New $(label) by T+$(horizon)", draws, digits)
             for (label, province, draws) in _province_projection_draws(
                 proj, np, patch_labels
             )
     ]
     ## Each province's latent quantities follow its observed streams.
     for p in 1:np, (col, quantity, dg) in (
-                (:infections_new, "New infections by T+7", digits),
-                (:rt_forecast, "Reproduction number at T+7", 2),
+                (:infections_new, "New infections by T+$(horizon)", digits),
+                (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
             )
 
         col in propertynames(proj) || continue
