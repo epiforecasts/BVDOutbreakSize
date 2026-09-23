@@ -127,6 +127,7 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
 - The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
