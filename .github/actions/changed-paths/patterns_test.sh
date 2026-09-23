@@ -76,6 +76,8 @@ check "agent instructions"     "AGENTS.md"                                 false
 check "citation metadata"      "CITATION.cff"                              false false
 check "an unrelated workflow"  ".github/workflows/release.yml"             false false
 check "the docs workflow"      ".github/workflows/docs.yml"                true  false
+check "the docs pkgimage action" ".github/actions/bvd-pkgimage/action.yaml" true false
+check "the cache prune"        $'.github/workflows/cache-prune.yml\n.github/scripts/prune_depot_caches.py' false false
 check "the test workflow"      ".github/workflows/test.yml"                false true
 check "the coverage workflow"  ".github/workflows/codecoverage.yaml"       false true
 check "this gate itself"       ".github/actions/changed-paths/action.yaml" true  true
