@@ -47,6 +47,11 @@ This moves the non-BVD death background, so fitted values change.
 
 ### Report
 
+- Each province is projected a week ahead by its own renewal equation,
+  continued from the fitted patch chain, rather than taking a fixed share of
+  the national forecast (#836).
+  Both forecast pages open with summary bullets giving next week's counts as
+  credible intervals.
 - Forecasts is split into a National and a Provinces page (#830).
 - The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
   The Provinces page shows the province split's credible intervals and,
