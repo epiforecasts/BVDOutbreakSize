@@ -78,6 +78,12 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The Provinces page opens with a summary of each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals (#832).
+  The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.
+  Pair plots set the spatial hyperparameters and each province's parameters against a prior drawn from the patch model.
+- The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block reads the same credible intervals (#832).
+- The summary dashboard no longer shows the modelled against observed reported cases (#832).
+  The evaluation pages carry that check.
 
 ### Infrastructure
 
