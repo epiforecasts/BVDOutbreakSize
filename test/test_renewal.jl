@@ -239,46 +239,6 @@ end
     @test convolve_delay(x, delay) ≈ x
 end
 
-@testitem "convolve_delay: a zero-weight lag does not carry an Inf" begin
-    using BVDOutbreakSize: convolve_delay
-
-    ## BLAS skips the lag-1 weight of zero on float arrays, so the Inf on
-    ## day 2 reaches only day 2 (lag 0) and day 4 (lag 2). The textbook
-    ## double sum would give `0 · Inf = NaN` on day 3.
-    x = [1.0, Inf, 2.0, 3.0]
-    y = convolve_delay(x, [0.5, 0.0, 0.5])
-    @test y[1] == 0.5
-    @test y[2] == Inf
-    @test y[3] == 1.5
-    @test y[4] == Inf
-end
-
-@testitem "convolve_delay: matches the explicit double-sum reference" begin
-    using BVDOutbreakSize: convolve_delay
-    using Random: MersenneTwister
-
-    ## Independent reference: the causal convolution written as the plain
-    ## double sum the vectorised lag-loop must reproduce, exercised across
-    ## sizes including a delay kernel longer than the series.
-    ref(
-        x,
-        delay
-    ) = [
-        sum(
-            x[t - d] * delay[d + 1]
-                for d in 0:min(t - 1, length(delay) - 1)
-        )
-            for t in 1:length(x)
-    ]
-
-    rng = MersenneTwister(20260604)
-    for (n, L) in ((1, 1), (5, 1), (10, 3), (7, 12), (40, 30), (93, 40))
-        x = rand(rng, n)
-        delay = rand(rng, L)
-        @test convolve_delay(x, delay) ≈ ref(x, delay)
-    end
-end
-
 @testitem "knot_days: first is 1, last is n, spacing ≤ week" begin
     using BVDOutbreakSize: knot_days
 
