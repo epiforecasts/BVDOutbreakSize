@@ -345,3 +345,95 @@ end
     ## no share to give, so it is left out rather than divided by zero.
     @test sh == [[0.75], [0.25]]
 end
+
+@testitem "province_forecast_table projects a national forecast at its horizon" setup = [
+    ProvinceProjection,
+] begin
+    using BVDOutbreakSize: forecast_provinces, province_forecast_table
+
+    chn = full_chain()
+    proj = forecast_provinces(chn; horizon = 14, n_patches = NP)
+    tbl = province_forecast_table(chn, national(); horizon = 14, n_patches = NP)
+    @test tbl == province_forecast_table(chn, proj; horizon = 14, n_patches = NP)
+    @test "New confirmed cases by T+14" in tbl.Quantity
+    @test "Reproduction number at T+14" in tbl.Quantity
+end
+
+@testitem "forecast_provinces shares the national walk across provinces" setup = [
+    ProvinceProjection,
+] begin
+    using BVDOutbreakSize: forecast_provinces
+
+    ## With the deviations held at zero, each province's reproduction number
+    ## moves only with the national walk, so every province moves by the same
+    ## factor within a draw, and the walk does move it.
+    fc = forecast_provinces(
+        projection_chain(full_run(EPS); sigma_rw = 0.3);
+        horizon = H, n_patches = NP
+    )
+    moves = [
+        [
+            log(only(fc[(fc.patch .== p) .& (fc.draw .== d), :rt_forecast]) / RT[p])
+                for p in 1:NP
+        ] for d in 1:ND
+    ]
+    @test all(m -> all(x -> isapprox(x, m[1]; atol = 1.0e-12), m), moves)
+    @test any(m -> abs(m[1]) > 1.0e-6, moves)
+end
+
+@testitem "the national walk keeps its draws" begin
+    using Random: MersenneTwister
+    using Distributions: Gamma
+    using BVDOutbreakSize: cdf_nmax, euler_lotka_r
+
+    ## The walk continuation as `_evolving_rates` wrote it before it was
+    ## shared with `forecast_provinces`, kept here so the national forecast
+    ## is shown to draw exactly the same values with the same seed.
+    function reference(chn, horizon; rng, week = 7)
+        sigma = chn[Symbol("rt_state.sigma_rw")]
+        R_T = chn[:R_T]
+        α = chn[Symbol("gi_state.α")]
+        θ = chn[Symbol("gi_state.θ")]
+        nknots = cld(horizon, week)
+        paths = Vector{Vector{Float64}}(undef, length(R_T))
+        rt_term = Vector{Float64}(undef, length(R_T))
+        for i in eachindex(R_T)
+            innov = sigma[i] .* randn(rng, nknots)
+            cum_innov = cumsum(innov)
+            g = BVDOutbreakSize._gi_pmf(α[i], θ[i])
+            rs = Vector{Float64}(undef, horizon)
+            log_R = log(max(R_T[i], 1.0e-6))
+            log_rt = log_R
+            for d in 1:horizon
+                weeks = d / week
+                j = floor(Int, weeks)
+                whole = j == 0 ? 0.0 : cum_innov[j]
+                part = j < nknots ? (weeks - j) * innov[j + 1] : 0.0
+                log_rt = log_R + whole + part
+                rs[d] = euler_lotka_r(
+                    max(exp(log_rt), BVDOutbreakSize._RT_EULER_FLOOR), g
+                )
+            end
+            paths[i] = rs
+            rt_term[i] = exp(log_rt)
+        end
+        return (; paths, rt_term)
+    end
+
+    nd = 25
+    chn = (;
+        R_T = collect(range(0.6, 1.6; length = nd)),
+        var"rt_state.z" = zeros(nd),
+        var"rt_state.sigma_rw" = fill(0.2, nd),
+        var"gi_state.α" = fill(2.71, nd),
+        var"gi_state.θ" = fill(5.65, nd),
+    )
+    for horizon in (7, 10, 14, 28)
+        got = BVDOutbreakSize._evolving_rates(
+            chn, horizon; rng = MersenneTwister(11)
+        )
+        want = reference(chn, horizon; rng = MersenneTwister(11))
+        @test got.paths == want.paths
+        @test got.rt_term == want.rt_term
+    end
+end
