@@ -701,9 +701,9 @@ end
     using Mooncake: Mooncake, DefaultCtx, Mode, ReverseMode,
         MooncakeInterpreter, build_rrule, get_interpreter, value_and_gradient!!
     using LogDensityProblems: logdensity
+    using Random: Xoshiro
     using Turing: DynamicPPL
-    using BVDOutbreakSize: _detached
-    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+    using BVDOutbreakSize: _detached, bvd_joint
 
     ## A context in which `_detached` is an ordinary call, so Mooncake
     ## differentiates the wrapped work. If a wrapped value reached a
@@ -718,11 +718,12 @@ end
         return Mooncake.is_primitive(DefaultCtx, M, sig, world)
     end
 
-    scen = only(
-        filter(s -> s.name == "bvd_joint", ADFixtures.scenarios(; joint = true))
-    )
-    vi, x = ADFixtures.linked_point(scen.model; seed = scen.seed)
-    ldf = DynamicPPL.LogDensityFunction(scen.model, DynamicPPL.getlogjoint, vi)
+    ## Three patches, so the per-patch deviations and the correlation matrix
+    ## are built behind the barrier too.
+    model = bvd_joint(40, 2, 3, 5, 1, 4, 10; n_patches = 3, breakpoint = 14)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(20260923), model), model)
+    x = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
     f = y -> logdensity(ldf, y)
     sig = Tuple{typeof(f), typeof(x)}
     barrier = build_rrule(get_interpreter(ReverseMode), sig)

@@ -12,10 +12,10 @@
 ##
 ## The full `bvd_joint` is not a component here: one gradient sits behind a
 ## cold Mooncake compile of roughly 18 minutes. Its only gradient in the
-## suite is the `_detached` check in `test/test_ad_rules.jl`. The components
-## below are the submodels, the latent process and every single-stream
-## composer, so the joint is a composition of surfaces each asserted
-## differentiable here. Its own gradient is timed
+## suite is the three-patch `_detached` check in `test/test_ad_rules.jl`.
+## The components below are the submodels, the latent process and every
+## single-stream composer, so the joint is a composition of surfaces each
+## asserted differentiable here. Its own gradient is timed
 ## by the benchmark suite and exercised end to end by the NUTS fits the docs
 ## build runs.
 ##
