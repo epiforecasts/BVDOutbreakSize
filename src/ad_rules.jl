@@ -1,8 +1,8 @@
 # Native `Mooncake.rrule!!` methods for the `renewal.jl` kernels and the
-# abscond thinning in `models/observations.jl`. Each is a loop over a daily
-# grid, so left to the backend every iteration's intermediates go on the
-# tape; these replace that with a closed-form adjoint of the same shape as
-# the forward loop.
+# observation kernels in `models/observations.jl`. Each is a loop over a
+# daily grid, so left to the backend every iteration's intermediates go on
+# the tape; these replace that with a closed-form adjoint of the same shape
+# as the forward loop.
 #
 # Signatures are restricted to `Array{<:IEEEFloat}`, what every call site
 # passes. Anything else falls through to Mooncake's derived rule.
@@ -363,4 +363,110 @@ function Mooncake.rrule!!(
             oftype(κp, κ̄), NoRData()
     end
     return CoDual((y1, y2), (ȳ1, ȳ2)), abscond_thinned_flows_pullback!!
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(two_clock_confirmed), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(clinical_stay_survival), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+    },
+)
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(two_clock_confirmed)},
+        A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        S_clin::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    Ap = primal(A_bvd)
+    hp = primal(conf_hazard)
+    Sp = primal(S_clin)
+    Ā = tangent(A_bvd)
+    h̄ = tangent(conf_hazard)
+    S̄ = tangent(S_clin)
+    O = two_clock_confirmed(Ap, hp, Sp)
+    Ō = zero(O)
+    function two_clock_confirmed_pullback!!(::NoRData)
+        n = length(Ap)
+        L = length(Sp)
+        one_T = one(eltype(O))
+        ## Day `t` walks cohorts `u = t, t-1, …` with the unconfirmed
+        ## product `p` extended by `(1 − h[u])` after each is scored:
+        ##
+        ##     O[t] += A[u] · (1 − p) · S[t−u+1],   p ← p · (1 − h[u])
+        ##
+        ## The pullback replays each day's products into `p_at`, then walks
+        ## the cohorts back in the opposite order carrying the adjoint of
+        ## `p`, so no factor is divided out.
+        p_at = Vector{eltype(O)}(undef, L)
+        @inbounds for t in 1:n
+            g = Ō[t]
+            iszero(g) && continue
+            umin = max(1, t - L + 1)
+            p = one_T
+            for u in t:-1:umin
+                p_at[t - u + 1] = p
+                p *= (one_T - hp[u])
+            end
+            p̄ = zero(one_T)
+            for u in umin:t
+                d = t - u
+                pk = p_at[d + 1]
+                s = Sp[d + 1]
+                h̄[u] -= p̄ * pk
+                Ā[u] += g * (one_T - pk) * s
+                S̄[d + 1] += g * Ap[u] * (one_T - pk)
+                p̄ = p̄ * (one_T - hp[u]) - g * Ap[u] * s
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(O, Ō), two_clock_confirmed_pullback!!
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(clinical_stay_survival)},
+        death_pmf::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        recover_pmf::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        cfr::CoDual{<:Mooncake.IEEEFloat}
+    )
+    dp = primal(death_pmf)
+    rp = primal(recover_pmf)
+    c = primal(cfr)
+    d̄ = tangent(death_pmf)
+    r̄ = tangent(recover_pmf)
+    S = clinical_stay_survival(dp, rp, c)
+    S̄ = zero(S)
+    function clinical_stay_survival_pullback!!(::NoRData)
+        ## `S[d] = 1 − Σ_{i ≤ d} (c · dp[i] + (1 − c) · rp[i])`, so entry
+        ## `i` of either PMF feeds every survival weight at or above `i`:
+        ## its adjoint is the reverse cumulative sum of `S̄`, scaled by its
+        ## mixture weight.
+        run = zero(eltype(S̄))
+        c̄ = zero(eltype(S̄))
+        @inbounds for i in length(S̄):-1:1
+            run += S̄[i]
+            pd = zero(eltype(dp))
+            pr = zero(eltype(rp))
+            if i <= length(dp)
+                pd = dp[i]
+                d̄[i] -= c * run
+            end
+            if i <= length(rp)
+                pr = rp[i]
+                r̄[i] -= (one(c) - c) * run
+            end
+            c̄ -= run * (pd - pr)
+        end
+        return NoRData(), NoRData(), NoRData(), convert(typeof(c), c̄)
+    end
+    return CoDual(S, S̄), clinical_stay_survival_pullback!!
 end

@@ -302,3 +302,85 @@ end
         )
     end
 end
+
+@testitem "AD rules: treatment cohort kernels match ForwardDiff" tags = [
+    :ad,
+] begin
+    using Random: seed!
+    using ForwardDiff: ForwardDiff
+    using Mooncake: Mooncake
+    using BVDOutbreakSize: clinical_stay_survival, two_clock_confirmed
+
+    ## Mooncake's gradient, with the registered rule, against ForwardDiff
+    ## on the kernel body. `cfr` is a scalar, so its ForwardDiff reference
+    ## is a derivative rather than a gradient.
+    function mgrad(f, args...)
+        rule = Mooncake.build_rrule(f, args...)
+        _, g = Mooncake.value_and_gradient!!(rule, f, args...)
+        return g[2:end]
+    end
+    function fgrad(f, args...)
+        return ntuple(length(args)) do i
+            fi = v -> f(ntuple(j -> j == i ? v : args[j], length(args))...)
+            args[i] isa Real ? ForwardDiff.derivative(fi, args[i]) :
+                ForwardDiff.gradient(fi, args[i])
+        end
+    end
+    function check_grads(f, args...)
+        for (mi, di) in zip(mgrad(f, args...), fgrad(f, args...))
+            @test mi ≈ di rtol = 1.0e-10
+        end
+        return nothing
+    end
+
+    seed!(20260923)
+
+    @testset "clinical_stay_survival" begin
+        ## Unequal PMF lengths, either way round, exercise the zero tail.
+        for (Ld, Lr) in ((18, 12), (10, 16), (14, 14))
+            dp = abs.(randn(Ld)) .+ 0.1
+            dp ./= 1.05 * sum(dp)
+            rp = abs.(randn(Lr)) .+ 0.1
+            rp ./= 1.02 * sum(rp)
+            S̄ = randn(max(Ld, Lr))
+            check_grads(
+                (a, b, c) -> sum(S̄ .* clinical_stay_survival(a, b, c)),
+                dp, rp, 0.37
+            )
+        end
+    end
+
+    @testset "two_clock_confirmed" begin
+        ## A survival longer than the grid stops the cohort walk at day 1
+        ## rather than at the support.
+        for (n, L) in ((40, 15), (10, 15))
+            A = abs.(randn(n)) .* 10 .+ 1
+            h = rand(n) .* 0.3
+            S = sort(rand(L); rev = true)
+            Ō = randn(n)
+            check_grads(
+                (a, b, c) -> sum(Ō .* two_clock_confirmed(a, b, c)),
+                A, h, S
+            )
+        end
+    end
+
+    @testset "composed as the treatment model calls them" begin
+        n = 40
+        A = abs.(randn(n)) .* 10 .+ 1
+        h = rand(n) .* 0.3
+        dp = abs.(randn(18)) .+ 0.1
+        dp ./= 1.05 * sum(dp)
+        rp = abs.(randn(12)) .+ 0.1
+        rp ./= 1.02 * sum(rp)
+        Ō = randn(n)
+        check_grads(
+            (a, b, d, r, c) -> sum(
+                Ō .* two_clock_confirmed(
+                    a, b, clinical_stay_survival(d, r, c)
+                )
+            ),
+            A, h, dp, rp, 0.37
+        )
+    end
+end
