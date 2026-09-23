@@ -204,7 +204,7 @@ validation_table = forecast_vs_truth(
 ## html-showable, so the table goes out as an ordinary markdown table #src
 ## rather than a fixed-width block of printed output. See its docstring #src
 ## for the mechanism. The same treatment is applied to every DataFrame #src
-## display in the report pages. #src
+## display in this file and in `analysis.jl`. #src
 MarkdownTable(validation_table) #hide
 
 #md # ```@raw html
