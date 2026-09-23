@@ -553,19 +553,28 @@ function interpolate_knots(
         return out
     end
     @inbounds for t in 1:n
-        b = 1
-        while b < nb - 1 && t > days[b + 1]
-            b += 1
-        end
-        d0 = days[b]
-        d1 = days[b + 1]
-        ## Clamp the fraction to `[0, 1]` so days outside the knot span hold
-        ## flat at the nearest knot instead of extrapolating the end segment.
-        frac = d1 == d0 ? zero(Tp) :
-            clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
+        b, frac = _knot_bracket(days, t, Tp)
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out
+end
+
+## The knot segment `b` that day `t` falls in, between `days[b]` and
+## `days[b + 1]`, and the fraction of the way along it. The fraction is
+## clamped to `[0, 1]` so days outside the knot span hold flat at the nearest
+## knot instead of extrapolating the end segment. Needs at least two knots.
+@inline function _knot_bracket(
+        days::AbstractVector{<:Integer}, t::Integer, ::Type{T}
+    ) where {T}
+    nb = length(days)
+    b = 1
+    @inbounds while b < nb - 1 && t > days[b + 1]
+        b += 1
+    end
+    @inbounds d0, d1 = days[b], days[b + 1]
+    frac = d1 == d0 ? zero(T) :
+        clamp(T(t - d0) / T(d1 - d0), zero(T), one(T))
+    return b, frac
 end
 
 """

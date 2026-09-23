@@ -2895,11 +2895,20 @@ function studentt_loglik(
     c = logpdf(TDist(νc), zero(T))
     s = zero(T)
     @inbounds for i in eachindex(means, sds, obs)
-        σc, _ = _studentt_scale(sds[i])
-        z = (obs[i] - means[i]) / σc
-        s += (c - νp12 * log1p(z^2 / νc)) - log(σc)
+        s += _studentt_cell(c, νp12, νc, means[i], sds[i], obs[i]).ℓ
     end
     return s
+end
+
+## One cell's term of `studentt_loglik`, given the normalising constant `c`,
+## `(ν + 1) / 2` and the guarded `ν`, with the pieces its gradient reads: the
+## standardised residual `z`, `log1p(z² / ν)` and the guarded scale with
+## whether it was kept.
+@inline function _studentt_cell(c, νp12, νc, μ, σ, x)
+    σc, σ_on = _studentt_scale(σ)
+    z = (x - μ) / σc
+    l1 = log1p(z^2 / νc)
+    return (; ℓ = (c - νp12 * l1) - log(σc), z, l1, σc, σ_on)
 end
 
 """
@@ -3304,10 +3313,10 @@ function onset_report_moments(
         ## `F = α · num / den`, both numerators and the denominator read
         ## off this onset date's column. A negative delay is the
         ## right-truncation case and contributes exactly zero.
-        num_cur = (δ_cur < 0 || D == 0) ? zero(T) :
-            cdf_table[min(Int(δ_cur), D - 1) + 1, k]
-        num_prev = (δ_prev < 0 || D == 0) ? zero(T) :
-            cdf_table[min(Int(δ_prev), D - 1) + 1, k]
+        jc = _onset_delay_row(δ_cur, D)
+        jp = _onset_delay_row(δ_prev, D)
+        num_cur = jc == 0 ? zero(T) : cdf_table[jc, k]
+        num_prev = jp == 0 ? zero(T) : cdf_table[jp, k]
         sden = safe_rate(D > 0 ? cdf_table[D, k] : zero(T))
         level_cur[i] = onset_rate * (α * (num_cur / sden))
         level_prev[i] = onset_rate * (α * (num_prev / sden))
@@ -3315,6 +3324,11 @@ function onset_report_moments(
     end
     return (; means, level_cur, level_prev)
 end
+
+## The row of a `D`-row delay-CDF table column holding delay `δ`, capped at
+## the last row, or `0` for a negative delay or an empty table.
+@inline _onset_delay_row(δ, D) =
+    (δ < 0 || D == 0) ? 0 : min(Int(δ), D - 1) + 1
 
 """
     onset_vintage_indices(report_idx, prev_report_idx)

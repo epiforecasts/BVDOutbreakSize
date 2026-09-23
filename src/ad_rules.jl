@@ -148,14 +148,7 @@ function Mooncake.rrule!!(
         end
         Tf = eltype(ō)
         @inbounds for t in 1:np
-            b = 1
-            while b < nb - 1 && t > dayp[b + 1]
-                b += 1
-            end
-            d0 = dayp[b]
-            d1 = dayp[b + 1]
-            frac = d1 == d0 ? zero(Tf) :
-                clamp(Tf(t - d0) / Tf(d1 - d0), zero(Tf), one(Tf))
+            b, frac = _knot_bracket(dayp, t, Tf)
             g = ō[t]
             k̄[b] += (one(Tf) - frac) * g
             k̄[b + 1] += frac * g
@@ -761,8 +754,8 @@ function Mooncake.rrule!!(
             α = alp[ia]
             δc = ci[i] - u
             δp = pri[i] - u
-            jc = (δc < 0 || D == 0) ? 0 : min(Int(δc), D - 1) + 1
-            jp = (δp < 0 || D == 0) ? 0 : min(Int(δp), D - 1) + 1
+            jc = _onset_delay_row(δc, D)
+            jp = _onset_delay_row(δp, D)
             num_c = jc == 0 ? zero(T) : cp[jc, k]
             num_p = jp == 0 ? zero(T) : cp[jp, k]
             cD = D > 0 ? cp[D, k] : zero(T)
@@ -1014,10 +1007,9 @@ function _studentt_loglik_grad(
     dμ = zeros(T, length(means))
     dσ = zeros(T, length(means))
     @inbounds for i in eachindex(means, sds, obs)
-        σc, σ_on = _studentt_scale(sds[i])
-        z = (obs[i] - means[i]) / σc
-        l1 = log1p(z^2 / νc)
-        ℓ = (c - νp12 * l1) - log(σc)
+        (; ℓ, z, l1, σc, σ_on) = _studentt_cell(
+            c, νp12, νc, means[i], sds[i], obs[i]
+        )
         s += ℓ
         isfinite(ℓ) || continue
         g = (νc + 1) * z / (νc + z^2)
