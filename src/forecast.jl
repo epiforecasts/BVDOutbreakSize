@@ -791,17 +791,23 @@ end
 ## knot's provincial deviation innovations. A chain carrying
 ## `region_drift_factor` gives the fitted one. Otherwise each province's
 ## `region_drift_sd` scales an independent draw and the vector is centred,
-## the same matrix `(I - J / np) diag(σ_δ)` applied to `np` draws. Only
-## the first `np` of the chain's patches are kept, as for the other
-## per-patch keys.
+## the same matrix `(I - J / np) diag(σ_δ)` applied to `np` draws, over the
+## first `np` of the chain's patches. The fitted factor sums to zero only
+## over all of the chain's patches, so it needs `np` to be all of them.
 function _drift_factors(chn, np::Integer)
     sds = _draw_vectors(chn, :region_drift_sd)
     if _has_key(chn, :region_drift_factor)
+        npc = length(first(sds))
+        npc == np || throw(
+            ArgumentError(
+                "forecast_provinces: the chain has $npc patches but " *
+                    "$np were asked for; the fitted drift factor sums " *
+                    "to zero only over all of them"
+            )
+        )
         return [
-            reshape(collect(v), length(σ), :)[1:np, :]
-                for (v, σ) in zip(
-                    _draw_vectors(chn, :region_drift_factor), sds
-                )
+            reshape(collect(v), np, :)
+                for v in _draw_vectors(chn, :region_drift_factor)
         ]
     end
     return [

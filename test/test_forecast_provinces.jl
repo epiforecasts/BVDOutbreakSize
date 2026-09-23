@@ -186,6 +186,14 @@ end
         @test change[1] ≈ -change[2]
         @test abs(change[1]) > 1.0e-6
     end
+    ## Its rows sum to zero only over every patch, so asking for fewer is
+    ## an error rather than a projection that no longer sums to zero.
+    @test_throws ArgumentError forecast_provinces(
+        projection_chain(
+            I; delta, drift_sd = [0.25, 0.25, 0.0], drift_factor = F
+        );
+        horizon = H, n_patches = NP - 1
+    )
 end
 
 @testitem "forecast_provinces grows confirmed counts at each patch's rate" setup = [
