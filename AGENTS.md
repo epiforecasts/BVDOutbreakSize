@@ -1,6 +1,6 @@
 # BVDOutbreakSize
 
-See [`README.md`](README.md) for what this project estimates and [`docs/src/contributing.md`](docs/src/contributing.md) for the layout, the commands and the conventions.
+See [`README.md`](README.md) for what this project estimates and [`docs/src/contributing.md`](docs/src/contributing.md) for the commands and the conventions.
 See [`scripts/README.md`](scripts/README.md) before running a script, as they differ in which Julia project they need.
 
 This file carries only what those do not.
