@@ -19,7 +19,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
-    LogNormal, Beta, LKJCholesky,
+    LogNormal, Beta, Chi,
     Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic

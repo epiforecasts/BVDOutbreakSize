@@ -4,9 +4,9 @@
 @testsnippet SumToZeroReference begin
     using Random: Xoshiro, randn
     using Statistics: mean
-    using Distributions: LKJCholesky, Normal, truncated
+    using Distributions: LKJCholesky, Normal, Chi, truncated
     using BVDOutbreakSize: sum_to_zero_basis, sum_to_zero_factor,
-        sum_to_zero, sum_to_zero_moments
+        sum_to_zero, sum_to_zero_moments, bartlett_factor
 
     ## Naive dense references, written out entry by entry.
     matmul(A, B) = [
@@ -20,6 +20,18 @@
     ## The construction the patch model used before: `n` per-patch scales,
     ## an `n × n` correlation factor, then the mean subtracted.
     old_factor(σ, L) = matmul(centring(length(σ)), matmul(diagm_(σ), L))
+
+    ## A Bartlett factor of a `Wishart(ν, I_k)` draw, written out directly.
+    function bartlett_draw(rng, k, ν)
+        A = zeros(k, k)
+        for i in 1:k
+            A[i, i] = sqrt(sum(abs2, randn(rng, ν - i + 1)))
+            for j in 1:(i - 1)
+                A[i, j] = randn(rng)
+            end
+        end
+        return A
+    end
 end
 
 @testitem "sum_to_zero_basis: orthonormal and orthogonal to the ones" setup = [
@@ -82,6 +94,15 @@ end
     end
 end
 
+@testitem "bartlett_factor: fills a lower-triangular factor row by row" setup = [
+    SumToZeroReference,
+] begin
+    A = bartlett_factor([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])
+    @test A == [1.0 0.0 0.0; 4.0 2.0 0.0; 5.0 6.0 3.0]
+    @test bartlett_factor([0.7], Float64[]) == fill(0.7, 1, 1)
+    @test_throws DimensionMismatch bartlett_factor([1.0, 2.0], [1.0, 2.0])
+end
+
 @testitem "sum_to_zero_moments: match the covariance and the draws" setup = [
     SumToZeroReference,
 ] begin
@@ -133,28 +154,65 @@ end
     ## Reference check against the construction the patch model used
     ## before. With `n` per-patch scales `σ_p ~ half-N(0, c)` and an
     ## `n × n` LKJ correlation, then centred, each patch's deviation has
-    ## expected variance `c² (n - 1) / n`. The basis form, `n - 1` scales
-    ## from the same prior and an `(n - 1) × (n - 1)` LKJ, has the same
-    ## expected variance for every patch.
+    ## expected variance `c² (n - 1) / n`. The Wishart form,
+    ## `(c / √ν) Q A` with `A Aᵀ ~ Wishart(ν, I_{n-1})`, has the same
+    ## expected variance for every patch, and the same distribution of the
+    ## sd for every patch, whatever order the patches come in.
     rng = Xoshiro(3)
     c = 0.05
     sd_prior = truncated(Normal(0, c); lower = 0)
     N = 40_000
     for n in (3, 4)
         Q = sum_to_zero_basis(n)
+        ν = n - 1
         old_var = zeros(n)
         new_var = zeros(n)
-        for _ in 1:N
+        new_sd = zeros(N, n)
+        for d in 1:N
             Lo = rand(rng, LKJCholesky(n, 2.0)).L
             Fo = old_factor(rand(rng, sd_prior, n), Lo)
-            Ln = rand(rng, LKJCholesky(n - 1, 2.0)).L
-            Fn = sum_to_zero_factor(Q, rand(rng, sd_prior, n - 1), Ln)
+            Fn = sum_to_zero_factor(Q, c / sqrt(ν), bartlett_draw(rng, n - 1, ν))
             old_var .+= sum_to_zero_moments(Fo).sd .^ 2 ./ N
-            new_var .+= sum_to_zero_moments(Fn).sd .^ 2 ./ N
+            sd = sum_to_zero_moments(Fn).sd
+            new_var .+= sd .^ 2 ./ N
+            new_sd[d, :] = sd
         end
         @test all(isapprox.(old_var, c^2 * (n - 1) / n; rtol = 0.03))
         @test all(isapprox.(new_var, c^2 * (n - 1) / n; rtol = 0.03))
+        ## Each patch's sd is `c √((n - 1) / (n ν))` times a `Chi(ν)` draw,
+        ## so its mass near zero is the same for every patch.
+        near_zero = [mean(new_sd[:, p] .< 0.4 * c) for p in 1:n]
+        @test maximum(near_zero) - minimum(near_zero) < 0.015
     end
+end
+
+@testitem "patch_rt_model: the prior treats every patch alike" tags = [
+    :slow,
+] setup = [SumToZeroReference] begin
+    using BVDOutbreakSize: patch_rt_model
+    using Turing: sample, Prior
+    using Turing.DynamicPPL: returned
+    using Statistics: median, quantile
+
+    ## Reordering the patches rotates the sum-to-zero basis, and the Wishart
+    ## prior on the basis covariance does not change under a rotation. So
+    ## every patch's sd and every pair's correlation has the same prior. A
+    ## prior built from independent scales on the basis directions fails
+    ## this: the last patch loads on one direction only.
+    np = 4
+    m = patch_rt_model(60, np, log(1.5); rt_start = 10)
+    rets = vec(
+        returned(m, sample(Xoshiro(5), m, Prior(), 6000; progress = false))
+    )
+    sd_near_zero = [mean(r.σ_δ[p] < 0.02 for r in rets) for p in 1:np]
+    sd_q90 = [quantile([r.σ_δ[p] for r in rets], 0.9) for p in 1:np]
+    @test maximum(sd_near_zero) - minimum(sd_near_zero) < 0.04
+    @test maximum(sd_q90) / minimum(sd_q90) < 1.06
+    pairs = [(p, q) for p in 1:np for q in (p + 1):np]
+    cor_med = [median([r.Ω[p, q] for r in rets]) for (p, q) in pairs]
+    cor_q90 = [quantile([r.Ω[p, q] for r in rets], 0.9) for (p, q) in pairs]
+    @test maximum(cor_med) - minimum(cor_med) < 0.06
+    @test maximum(cor_q90) - minimum(cor_q90) < 0.08
 end
 
 @testitem "sum_to_zero: Mooncake matches finite differences" tags = [:ad] setup = [
@@ -175,10 +233,17 @@ end
         rng, sum_to_zero_factor, Q, 0.4; is_primitive = false
     )
     Mooncake.TestUtils.test_rule(
+        rng, sum_to_zero_factor, Q, 0.4, L; is_primitive = false
+    )
+    Mooncake.TestUtils.test_rule(
         rng, sum_to_zero, F, randn(rng, 3); is_primitive = false
     )
     Mooncake.TestUtils.test_rule(
         rng, F -> sum_to_zero_moments(F).cor, F; is_primitive = false
+    )
+    Mooncake.TestUtils.test_rule(
+        rng, bartlett_factor, [1.2, 0.8, 0.5], randn(rng, 3);
+        is_primitive = false
     )
 end
 
@@ -223,8 +288,19 @@ end
                 patch_rt_model(60, 2, log(1.5); rt_start = 10),
             ),
             (
+                "patch_rt_model, three patches",
+                patch_rt_model(60, 3, log(1.5); rt_start = 10),
+            ),
+            (
                 "patch_rt_model, four patches",
                 patch_rt_model(60, 4, log(1.5); rt_start = 10),
+            ),
+            (
+                "patch_rt_model, four patches, no correlation",
+                patch_rt_model(
+                    60, 4, log(1.5); rt_start = 10,
+                    region_correlation = false
+                ),
             ),
             (
                 "patch_infection_model, coupled",

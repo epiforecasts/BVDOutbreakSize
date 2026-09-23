@@ -74,6 +74,37 @@ end
 @inline _stz_scale(s::AbstractVector, j::Integer) = @inbounds s[j]
 
 """
+Lower-triangular `k × k` Bartlett factor with diagonal `d` and strictly
+lower entries `o`, filled row by row.
+
+With `d[j] ~ Chi(ν - j + 1)` and `o ~ N(0, I)` the product `A Aᵀ` is a
+`Wishart(ν, I_k)` draw ([Bartlett decomposition](https://en.wikipedia.org/wiki/Wishart_distribution#Bartlett_decomposition)).
+That prior is invariant under any rotation of the `k` directions, so with
+[`sum_to_zero_factor`](@ref)`(Q, c, A)` the implied prior on the
+sum-to-zero vector is the same whatever order its entries come in. `A`
+is the unique Cholesky factor of `A Aᵀ`, so its `k (k + 1) / 2` entries
+are exactly the free parameters of the covariance.
+"""
+function bartlett_factor(d::AbstractVector, o::AbstractVector)
+    k = length(d)
+    length(o) == k * (k - 1) ÷ 2 || throw(
+        DimensionMismatch(
+            "bartlett_factor: $(length(o)) lower entries for a $k × $k factor"
+        )
+    )
+    A = zeros(promote_type(eltype(d), eltype(o)), k, k)
+    m = 0
+    @inbounds for i in 1:k
+        A[i, i] = d[i]
+        for j in 1:(i - 1)
+            m += 1
+            A[i, j] = o[m]
+        end
+    end
+    return A
+end
+
+"""
 Sum-to-zero vector `F z` for a loading matrix `F` from
 [`sum_to_zero_factor`](@ref) and `n - 1` standard-normal draws `z`.
 """
@@ -100,8 +131,9 @@ vector `F z`, from its covariance `Σ = F Fᵀ`. Returns `(; sd, cor)`.
 
 The correlations of a sum-to-zero vector are constrained: its entries
 cannot all be positively correlated, since `Σ 1 = 0` makes each row of `Σ`
-sum to zero. With equal standard deviations every correlation is
-`-1 / (n - 1)`. For `n = 3` the three standard deviations determine the
+sum to zero. With equal standard deviations each entry's correlations with
+the others average `-1 / (n - 1)`, and they all equal it only when the
+vector is exchangeable. For `n = 3` the three standard deviations determine the
 three correlations exactly, `cor_{12} = (sd_3² - sd_1² - sd_2²) /
 (2 sd_1 sd_2)`, and for larger `n` they constrain them. With `n = 1` the
 vector is identically zero and the correlation is reported as one.
