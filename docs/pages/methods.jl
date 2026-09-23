@@ -1729,7 +1729,7 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# #### Province compositions
+# #### [Province compositions](@id methods-province-compositions)
 #
 # The situation reports' spatial tables give per-province confirmed cases and confirmed deaths at shared vintages.
 # At every vintage the provinces sum exactly to the national total the matching stream above already scores.

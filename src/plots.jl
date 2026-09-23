@@ -3272,50 +3272,59 @@ end
 ## Predictive shares for every patch at every vintage, one trajectory per
 ## posterior draw. Each draw's expected shares `m` and overdispersion
 ## `rho[d]` are pushed back through the stick-breaking allocation
-## [`province_composition_model`](@ref) scores: patch `p` takes a
-## `BetaBinomial` count out of what patches `1 ... p-1` left of the vintage's
-## observed total, at that patch's conditional share, and the last patch
-## takes the remainder. The returned shares carry the composition's
-## extra-Multinomial scatter as well as the posterior width of the expected
-## share.
+## [`province_composition_model`](@ref) scores (see `_composition_counts`).
+## The returned shares carry the composition's extra-Multinomial scatter as
+## well as the posterior width of the expected share.
 ##
 ## The vintage's observed total is the trial count, matching the fitted
 ## likelihood, so the check is on the split alone. A vintage with no observed
 ## cases has no split to predict and stays NaN.
-##
-## The seed is fixed so a rebuilt report redraws the same band rather than
-## moving it by the Monte Carlo error of the simulation.
 function _composition_predictive(
         ms, rho, totals, nv::Integer;
         seed::Integer = 20_240
     )
+    counts = _composition_counts(ms, rho, fill(totals, length(ms)); seed)
+    return [
+        [
+            [totals[i] > 0 ? c[i] / totals[i] : NaN for i in 1:nv]
+                for c in cp
+        ]
+            for cp in counts
+    ]
+end
+
+## Predictive counts for every patch at every vintage, one trajectory per
+## posterior draw, allocating `totals[d][i]` for draw `d` at vintage `i`.
+## Patch `p` takes a `BetaBinomial` count out of what patches `1 ... p-1`
+## left of the total, at that patch's conditional share, and the last patch
+## takes the remainder. A vintage with a total of zero allocates zero to
+## every patch.
+##
+## The seed is fixed so a rebuilt report redraws the same band rather than
+## moving it by the Monte Carlo error of the simulation.
+function _composition_counts(ms, rho, totals; seed::Integer = 20_240)
     rng = MersenneTwister(seed)
-    np = size(first(ms), 1)
-    nd = length(ms)
-    preds = [[fill(NaN, nv) for _ in 1:nd] for _ in 1:np]
-    counts = zeros(Int, np)
+    np, nv = size(first(ms))
+    out = [[zeros(Int, nv) for _ in ms] for _ in 1:np]
     for (d, m) in enumerate(ms)
         for i in 1:nv
-            total = totals[i]
+            total = totals[d][i]
             total > 0 || continue
             remaining = total
             tail = 1.0
             for p in 1:(np - 1)
                 p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
-                counts[p] = rand(
+                out[p][d][i] = rand(
                     rng,
                     safe_betabinomial(max(remaining, 0), p_cond, rho[d])
                 )
-                remaining -= counts[p]
+                remaining -= out[p][d][i]
                 tail = max(tail - m[p, i], 1.0e-10)
             end
-            counts[np] = max(remaining, 0)
-            for p in 1:np
-                preds[p][d][i] = counts[p] / total
-            end
+            out[np][d][i] = max(remaining, 0)
         end
     end
-    return preds
+    return out
 end
 
 """
