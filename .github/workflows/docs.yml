@@ -1,11 +1,11 @@
 name: Documenter
 
 # The report is fanned out across CI runners instead of built in one ~5h job
-# that hit GitHub's 6h cap. `list` enumerates the fits, `fit` runs them one per
-# matrix job (content-addressed, so unchanged fits are cache hits), `render`
-# executes the two literate pages (analysis, sensitivity) from the cached
-# chains in parallel, and `combine` assembles and deploys the Vitepress site
-# and publishes the results release. Everything the jobs run lives in Julia
+# that hit GitHub's 6h cap. `list` enumerates the fits by group, the `fit_*`
+# jobs run them one per matrix job (content-addressed, so unchanged fits are
+# cache hits), the `render_*` jobs execute each literate page from the cached
+# chains as soon as the fit groups it reads are done, and `combine` assembles
+# and deploys the Vitepress site and publishes the results release. Everything the jobs run lives in Julia
 # entry points (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
 # same build runs locally with `task docs`.
 
@@ -81,15 +81,18 @@ jobs:
             ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
   # Resolve and precompile the single shared environment once, list the fit
-  # ids, and pin the manifest. On main and tag builds the three sensitivity
-  # re-fits are included; on pull request builds they are skipped.
+  # ids by group, and pin the manifest. On main and tag builds the two
+  # sensitivity re-fits are included; on PR builds that group is empty.
   list:
     name: Resolve env and list fits
     needs: changes
     if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     outputs:
-      ids: ${{ steps.ids.outputs.ids }}
+      joint_ids: ${{ steps.ids.outputs.joint_ids }}
+      streams_ids: ${{ steps.ids.outputs.streams_ids }}
+      frozen_ids: ${{ steps.ids.outputs.frozen_ids }}
+      sensitivity_ids: ${{ steps.ids.outputs.sensitivity_ids }}
       fit_hash: ${{ steps.fit_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +128,7 @@ jobs:
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
-        run: echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
+        run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
       # themselves are keyed on, so the Actions cache and the Julia cache
       # cannot disagree about what invalidates a fit.
@@ -177,7 +180,13 @@ jobs:
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
   # historical fits stay cache hits across data-only updates.
-  fit:
+  #
+  # The fits are split into one job per group (`docs/fits/list.jl --groups`)
+  # because `needs` can only wait on a whole job, not on one matrix leg. Each
+  # render job then waits on the groups its page reads rather than on every
+  # fit. The groups share these steps through the `fit-steps` anchor, so
+  # cache keys and artifact names (`fit-<id>`) are the same as one matrix.
+  fit_joint:
     name: Fit ${{ matrix.id }}
     needs: list
     runs-on: ubuntu-latest
@@ -188,8 +197,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        id: ${{ fromJSON(needs.list.outputs.ids) }}
-    steps:
+        id: ${{ fromJSON(needs.list.outputs.joint_ids) }}
+    steps: &fit-steps
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
@@ -294,6 +303,41 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  fit_streams:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.streams_ids) }}
+    steps: *fit-steps
+
+  fit_frozen:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.frozen_ids) }}
+    steps: *fit-steps
+
+  # Empty on pull requests, where a matrix over no ids would fail the run.
+  fit_sensitivity:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    if: needs.list.outputs.sensitivity_ids != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.sensitivity_ids) }}
+    steps: *fit-steps
+
   # Rescore the published releases and refresh the release overlays, once, in
   # parallel with the fits. Nothing here reads this run's fits: the scoring
   # compares past releases' saved forecasts against the current data, so it
@@ -375,7 +419,7 @@ jobs:
   # something a reader has to go looking for.
   convergence:
     name: Check joint convergence
-    needs: fit
+    needs: fit_joint
     # Not the default `success()`. The verdict is one comment edited in
     # place, so a build where this job never ran leaves the previous build's
     # verdict on the thread reading as current: "no new comment" and "still
@@ -384,7 +428,7 @@ jobs:
     # reaches the steps below, which find no fit and say the check could not
     # be made.
     #
-    # A cancelled run has nothing to report. A `fit` that was skipped means
+    # A cancelled run has nothing to report. A `fit_joint` that was skipped means
     # no fit was attempted, either because this change does not reach the
     # report and the whole build was gated off, or because `list` failed and
     # the build is already red for a reason that has nothing to do with
@@ -397,7 +441,7 @@ jobs:
     # The `${{ }}` is required, not decoration: an `if` whose expression
     # starts with `!` has to be wrapped or quoted.
     if: >-
-      ${{ !cancelled() && needs.fit.result != 'skipped' &&
+      ${{ !cancelled() && needs.fit_joint.result != 'skipped' &&
       github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -547,42 +591,32 @@ jobs:
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
   # and its half of the shared output/ and summary_assets/.
-  render:
+  #
+  # The pages are split into one job per set of fit groups they read (the
+  # `load_fit` calls at the top of each page), so each starts as soon as its
+  # own fits finish rather than after the whole fit matrix. A page that reads
+  # a fit its job does not wait on fails on the strict cache miss, naming the
+  # key. The jobs share these steps through the `render-steps` anchor. In each
+  # matrix, `id` is the page path under docs/pages, `slug` is the same with
+  # the separator flattened (an artifact name cannot carry a slash), `fits` is
+  # the glob of fit artifacts the page reads, and `overlays` says whether it
+  # reads the rescored release overlays.
+  render_methods:
     name: Render ${{ matrix.id }}
-    needs: [fit, overlays]
+    needs: list
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
-    # `list` did that once), the render is plots/PPCs only. Split across three
-    # pages, so each does a share.
+    # `list` did that once), the render is plots/PPCs only.
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        # `id` is the page path under docs/pages; `slug` is the same with
-        # the separator flattened, because an artifact name cannot carry a
-        # slash.
         include:
           - id: methods
             slug: methods
-          - id: estimates/national
-            slug: estimates-national
-          - id: estimates/province
-            slug: estimates-province
-          - id: forecasts/national
-            slug: forecasts-national
-          - id: forecasts/province
-            slug: forecasts-province
-          - id: evaluation/insample/national
-            slug: evaluation-insample-national
-          - id: evaluation/insample/province
-            slug: evaluation-insample-province
-          - id: evaluation/forecast/national
-            slug: evaluation-forecast-national
-          - id: evaluation/forecast/province
-            slug: evaluation-forecast-province
-          - id: sensitivity
-            slug: sensitivity
-    steps:
+            fits: ''
+            overlays: false
+    steps: &render-steps
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
@@ -612,15 +646,19 @@ jobs:
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
+      # Only the fits this page reads (`fits`, an artifact-name glob), which
+      # the job's `needs` has waited for.
       - name: Collect cached fits
+        if: matrix.fits != ''
         uses: actions/download-artifact@v8
         with:
-          pattern: fit-*
+          pattern: ${{ matrix.fits }}
           path: logs/fit_cache
           merge-multiple: true
       # The release overlays the `overlays` job rescored, over this job's own
-      # checkout of data/.
+      # checkout of data/, for the pages that read them.
       - name: Collect the refreshed release overlays
+        if: matrix.overlays
         uses: actions/download-artifact@v8
         with:
           name: overlays
@@ -649,12 +687,107 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  render_joint:
+    name: Render ${{ matrix.id }}
+    needs: fit_joint
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: estimates/province
+            slug: estimates-province
+            fits: fit-joint
+            overlays: false
+          - id: forecasts/national
+            slug: forecasts-national
+            fits: fit-joint
+            overlays: false
+          - id: evaluation/insample/national
+            slug: evaluation-insample-national
+            fits: fit-joint
+            overlays: false
+          - id: evaluation/insample/province
+            slug: evaluation-insample-province
+            fits: fit-joint
+            overlays: false
+    steps: *render-steps
+
+  render_joint_overlays:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, overlays]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: forecasts/province
+            slug: forecasts-province
+            fits: fit-joint
+            overlays: true
+    steps: *render-steps
+
+  render_validation:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_frozen, overlays]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: evaluation/forecast/national
+            slug: evaluation-forecast-national
+            fits: fit-{joint,frozen_validation*}
+            overlays: true
+          - id: evaluation/forecast/province
+            slug: evaluation-forecast-province
+            fits: fit-frozen_validation
+            overlays: true
+    steps: *render-steps
+
+  # These two pages read every group. The sensitivity group is skipped on
+  # pull requests, which would skip this job too under the default
+  # `success()`, so the condition is spelled out.
+  render_all:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_streams, fit_frozen, fit_sensitivity, overlays]
+    if: >-
+      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
+      needs.fit_streams.result == 'success' &&
+      needs.fit_frozen.result == 'success' &&
+      needs.overlays.result == 'success' &&
+      (needs.fit_sensitivity.result == 'success' ||
+      needs.fit_sensitivity.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: estimates/national
+            slug: estimates-national
+            fits: fit-*
+            overlays: false
+          - id: sensitivity
+            slug: sensitivity
+            fits: fit-*
+            overlays: true
+    steps: *render-steps
+
   # Assemble the Vitepress site from both pre-rendered pages (a single
   # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
   # combined outputs as a results release.
   combine:
     name: Combine and deploy
-    needs: render
+    needs:
+      - render_methods
+      - render_joint
+      - render_joint_overlays
+      - render_validation
+      - render_all
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Every branch's preview lands on the one gh-pages ref, so two PRs
