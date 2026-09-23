@@ -1180,9 +1180,9 @@ CSV.write(
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5)
 );
 
-## The per-province split of the same forecasts, in the `forecast.csv`
-## schema plus the province each row is a share of, so a release records the
-## provincial forecast it made alongside the national one.
+## The province forecast archive, in the `forecast.csv` schema plus the
+## province each row belongs to, so a release records the provincial forecast
+## it made alongside the national one.
 CSV.write(
     joinpath(output_dir, "province_forecast.csv"),
     province_forecast_archive(
