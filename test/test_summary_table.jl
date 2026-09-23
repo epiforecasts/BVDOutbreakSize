@@ -217,6 +217,29 @@ end
     @test_throws ErrorException patch_headline((; base.C_T_patch), np)
 end
 
+@testitem "patch_headline reads importation for the requested patches only" setup = [
+    PatchHeadlineDraws,
+] begin
+    using BVDOutbreakSize: patch_headline
+
+    ## One import a day into the first two patches and a hundred into the
+    ## third, flattened patch-fastest.
+    skewed = (;
+        base...,
+        importation_patch = [
+            repeat([1.0, 1.0, 100.0], ndays) for _ in 1:nd
+        ],
+    )
+    ## Twenty imports against about 1 200 infections in the first two
+    ## patches. Summing the third patch's imports would give over 80%.
+    md = patch_headline(skewed, 2)
+    @test occursin(r"another province make up 1\.\d–1\.\d%", md)
+    ## An importation vector that is not a whole number of days of the
+    ## chain's patches is an error rather than a silent misread.
+    bad = (; base..., importation_patch = [ones(3 * ndays + 1) for _ in 1:nd])
+    @test_throws ErrorException patch_headline(bad, np)
+end
+
 @testitem "patch_detail_headline gives each province its intervals" setup = [
     PatchHeadlineDraws,
 ] begin
