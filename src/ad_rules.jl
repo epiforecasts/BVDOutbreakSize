@@ -918,8 +918,10 @@ function Mooncake.rrule!!(
             w = onset_rate * α / sden
             jc > 0 && (c̄[jc, k] += w * gc)
             jp > 0 && (c̄[jp, k] += w * gp)
-            D > 0 && (c̄[D, k] -= onset_rate * α * r / sden *
-                _safe_rate_slope(cD))
+            D > 0 && (
+                c̄[D, k] -= onset_rate * α * r / sden *
+                    _safe_rate_slope(cD)
+            )
         end
         return ntuple(_ -> NoRData(), 9)
     end
