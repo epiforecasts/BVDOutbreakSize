@@ -28,27 +28,18 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # <details><summary>Project each province a week ahead</summary>
 #md # ```
 
-## The national forecast whose confirmed totals the provinces split, the
-## same call the national forecast page makes.
-province_national_forecast = forecast_reported(
-    chn_joint;
-    horizon = 7,
-    obs_cases = obs.reported_cases,
-    obs_deaths = obs.total_deaths,
-    obs_confirmed = obs.confirmed_cases,
-    obs_confirmed_deaths = obs.confirmed_deaths,
-    obs_recovered = obs.recovered_cases
-);
+## Read from the same draws as the national forecast page, so the provinces
+## add up to the national forecast shown there.
+province_draws = fit_forecast("joint");
 province_projection = forecast_provinces(
-    chn_joint, province_national_forecast;
-    horizon = 7, n_patches = N_PATCHES, breakpoint = _BREAKPOINT
+    province_draws; horizon = 7, n_patches = N_PATCHES
 );
 province_forecast = province_forecast_table(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     n_patches = N_PATCHES
 );
 province_forecast_fig = plot_province_forecast(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     n_patches = N_PATCHES
 );
 province_week_end = obs.cutoff + Day(7);
@@ -188,7 +179,7 @@ forecast_province_table(p) = MarkdownTable(
     ]
 )
 forecast_province_fig(p) = plot_province_forecast_detail(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     province = p, n_patches = N_PATCHES,
     observed = forecast_province_observed(p)
 )

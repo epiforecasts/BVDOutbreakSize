@@ -1,9 +1,10 @@
 # # Forecasts
 #
-# Every release projects each DRC stream a week ahead from the joint
+# Every release forecasts each DRC stream a week ahead from the joint
 # posterior.
-# The projection is a no-change forward run, defined in the
-# [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
+# The forecast is drawn from the fitted model run past the cut-off, as the
+# [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section
+# describes.
 # How these forecasts have scored against the data that arrived afterwards is
 # on the [evaluation](@ref "Forecast evaluation") page.
 # The split by province is on the [province forecasts](@ref "Province forecasts") page.
@@ -30,7 +31,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # ```
 
 forecast = forecast_reported(
-    chn_joint;
+    fit_forecast("joint");
     horizon = 7,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
@@ -56,7 +57,7 @@ Markdown.parse(national_forecast_bullets) #hide
 
 # ## One-week-ahead forecast results
 #
-# The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
+# The table and figures below give the cumulative and new expected counts by $T + 7$ from the forecast defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
 # The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
 # The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
 # The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
@@ -156,12 +157,9 @@ forecast_flows_fig #hide
 #md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
 #md # ```
 
-## `_onset_grid_start`/`_onset_grid_end` are the triangle's own grid, built
-## from the observations in the shared setup.
 onset_forecast = forecast_onsets(
-    chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end,
-    n = obs.n, horizon = 7,
+    fit_forecast("joint");
+    horizon = 7,
     obs_value = something(obs.onset_curve_history.last_total, 0)
 );
 onset_forecast_summary = onset_forecast_table(onset_forecast);

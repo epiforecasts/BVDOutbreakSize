@@ -1976,17 +1976,19 @@ cfr_prior_fig #hide
 #
 # ### One-week-ahead forecast
 #
-# We project each DRC stream seven days beyond the cut-off.
-# The reproduction number keeps evolving over the horizon by continuing its weekly walk past the cut-off rather than holding it fixed, with no further interventions and no saturation imposed.
-# The walk carries fresh innovations at its fitted step scale, so the spread of the projected reproduction number widens with the square root of the horizon, as the fitted walk's does.
-# The projection carries both parameter and observation uncertainty.
-# Each count stream is replicated day by day through its own fitted dispersion and the daily replicates summed, so the observation noise enters at the resolution the dispersion was fitted at.
-# We forecast the DRC observation streams as forecast targets: the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the isolation/treatment beds and the recovered total.
-# For the beds we project the bed demand, the need a week ahead under unconstrained supply (the cut-off demand grown by the horizon factor like the case inflow).
-# We also project the supply-limited occupancy that this demand produces against the bed capacity.
-# The gap between them is the projected bed shortfall, the quantity of interest if bed occupancy is supply-constrained.
-# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total rather than a still-growing series.
-# Exports are not forecast, since cross-border travel is unlikely to continue at its baseline rate, so the forward travel rate the export model relies on no longer holds.
+# Forecasts are drawn from the fitted model itself.
+# We run the model past the cut-off and treat each day after it as an observation that is missing.
+# For each posterior draw we keep the fitted parameters and draw the missing observations from the model.
+# The reproduction number continues its weekly walk with fresh innovations at its fitted step size, and the intervention ramp carries on.
+# The renewal, every delay and ascertainment, and each stream's own likelihood then produce the future counts, so the forecast carries parameter and observation uncertainty.
+# The walks for the non-BVD background and the bed capacity are held at their cut-off values.
+# Up to the cut-off the model and its density are unchanged, so the forecast needs no refit.
+# We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
+# A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
+# The bed occupancy is the censored count the occupancy likelihood scores, capped at the recorded capacity.
+# We also report the modelled bed demand and its shortfall against the modelled capacity.
+# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
+# Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The figure is shown in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") below.
 #
 # #### Symptom-onset nowcast and forecast
@@ -2018,8 +2020,9 @@ cfr_prior_fig #hide
 #     u)}_{\text{not yet happened}} .
 # ```
 #
-# Onsets past the cut-off are projected under the same evolving growth-rate path the other streams use.
-# The calendar-time effect $\gamma$ is held flat at its last fitted value across the horizon.
+# Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
+# The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
+# The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the roughly 4% per-scan level error as well as with genuine late reporting.
@@ -2040,21 +2043,17 @@ cfr_prior_fig #hide
 #
 # #### Province forecast
 #
-# We project each province seven days beyond the cut-off by continuing the fitted patch model from the joint posterior, without refitting.
-# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
-# Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
-# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations drawn as the model draws them: the fitted scales times the fitted cross-province correlation, centred so the deviations still sum to zero.
-# The fitted intervention effect and the importation intensity follow their ramp past the cut-off.
-# The confirmed cases and deaths follow the model's split of the province data into a national total and its composition.
-# Each province's infections pass through the fitted incubation period and onset-to-confirmation delay, or onset-to-death-confirmation delay for deaths.
-# Its expected count over the week, weighted by its fitted relative ascertainment, and for deaths also by its relative case-fatality ratio, gives its expected share.
-# Each draw of the national forecast is then split across the provinces by the fitted composition, with its overdispersion, so the provinces add up to the national forecast.
+# The province forecast is drawn from the same run of the fitted patch model past the cut-off.
+# Each province's deviation from the national walk reverts at the fitted half-life and takes fresh innovations with the fitted cross-province correlation.
+# The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
+# Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
+# The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
 # ### Forecast-versus-frozen evaluation
 #
-# We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and projecting one week ahead with the same forecast machinery.
+# We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.
 # We then compare that projection against the counts observed by the current cut-off.
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
 # Each frozen re-fit uses the full headline settings (1000 draws across two chains).
