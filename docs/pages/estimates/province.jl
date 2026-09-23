@@ -49,6 +49,46 @@ province_headline = Markdown.parse(province_headline_md);
 
 province_headline #hide
 
+# ### Maps
+#
+# The maps shade each province by its patch's posterior median, so the pooled patch shades all its provinces alike.
+# The reproduction number at the cut-off and the relative case ascertainment are centred on one, and a province whose 90% credible interval spans one is washed out.
+# The [Methods](@ref "Methods") page defines each quantity.
+
+#md # ```@raw html
+#md # <details><summary>Maps of infections, reproduction number and ascertainment</summary>
+#md # ```
+
+province_map_fig = plot_province_map(
+    [
+        (;
+            values = province_map_summary(
+                chn_joint, :C_T_patch, N_PATCHES
+            ).values,
+            title = "Infections to date", scale = log10,
+            colorbar_label = "Infections (median)",
+        ),
+        (;
+            province_map_summary(chn_joint, :R_T_patch, N_PATCHES)...,
+            title = "Reproduction number at the cut-off",
+            diverging_at = 1.0, colorbar_label = "R (median)",
+        ),
+        (;
+            province_map_summary(
+                chn_joint, :province_ascertainment, N_PATCHES
+            )...,
+            title = "Relative case ascertainment", diverging_at = 1.0,
+            scale = log10, colorbar_label = "Relative to national (median)",
+        ),
+    ]
+);
+
+province_map_fig #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ### Detail by province
 #
 # Each province's own estimates are below, as equal-tailed 30%, 60% and 90% credible intervals.

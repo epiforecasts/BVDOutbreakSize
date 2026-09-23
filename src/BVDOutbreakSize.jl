@@ -2,6 +2,7 @@ module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, std
 using TOML: TOML
+using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister
@@ -25,6 +26,7 @@ using StatsFuns: logit, logistic
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
+import JSON
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
     lines!, scatter!, band!, linesegments!, scatterlines!
 
@@ -42,11 +44,13 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     stream_first_date, stream_last_date,
     stream_reporting,
     stream_report_status,
-    summary_table, posterior_summary, markdown_table, MarkdownTable,
+    summary_table, posterior_summary, median_interval_text,
+    markdown_table, MarkdownTable,
     patch_summary_table, patch_overview_table, patch_headline,
     patch_detail_headline,
     province_cfr_table, province_forecast_table,
     province_forecast_vs_truth, plot_province_forecast,
+    forecast_provinces, province_share_draws,
     plot_province_forecast_detail,
     fit_diagnostics, diagnostics_table,
     parameter_diagnostics, worst_parameters_table,
@@ -55,6 +59,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     diagnostic_contrast, diagnostic_contrast_table,
     streams_table, comparison_table,
     bias_sample, stream_calibration, province_composition_panels,
+    province_count_panels,
     onsets_over_time,
     crps_sample, log_crps_sample, crps_decomposition, score_draws,
     forecast_score_overview, forecast_score_by_horizon,
@@ -181,6 +186,7 @@ include("counterfactual.jl")
 include("forecast.jl")
 include("confirmed_cfr.jl")
 include("plots.jl")
+include("maps.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")

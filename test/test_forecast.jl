@@ -1171,65 +1171,6 @@ end
     @test median(_beds(0.0)) - median(_beds(-200.0)) ≈ 200 atol = 1
 end
 
-@testitem "province_forecast_archive splits the national archive" begin
-    using DataFrames: DataFrame, nrow
-    using Dates: Date, Day
-    using BVDOutbreakSize: province_forecast_archive, PROVINCE_NAMES
-
-    ## Each province's row is the national draw times its share at the last
-    ## vintage, so the provinces partition the national forecast draw by
-    ## draw. A split that does not add up would double-count or lose cases.
-    nd = 20
-    shares = [0.8 0.75; 0.15 0.2; 0.05 0.05]
-    chn = (;
-        province_shares = [shares for _ in 1:nd],
-        province_death_shares = [shares for _ in 1:nd],
-    )
-    fc = DataFrame(
-        confirmed_new = fill(100.0, nd),
-        confirmed_deaths_new = fill(40.0, nd)
-    )
-    made = Date("2026-09-06")
-    arch = province_forecast_archive(
-        chn, [(7, fc), (14, fc)];
-        made_date = made, n_patches = 3
-    )
-
-    @test arch isa DataFrame
-    @test names(arch) == [
-        "made_date", "horizon", "target_date", "province",
-        "stream", "draw", "value",
-    ]
-    @test Set(arch.stream) == Set(["confirmed cases", "confirmed deaths"])
-    @test Set(arch.province) == Set(PROVINCE_NAMES[1:3])
-    @test Set(arch.horizon) == Set([7, 14])
-    @test all(arch.made_date .== made)
-    @test all(arch.target_date .== arch.made_date .+ Day.(arch.horizon))
-    ## The last vintage is column 2, so the shares are 0.75/0.20/0.05.
-    week = arch.horizon .== 7
-    cases = arch[(arch.stream .== "confirmed cases") .& week, :]
-    @test nrow(cases) == 3 * nd
-    @test sum(cases[cases.draw .== 1, :value]) ≈ 100.0
-    @test cases[(cases.province .== "ituri") .& (cases.draw .== 1), :value] ≈
-        [75.0]
-
-    ## Thinning keeps every second draw, per province and stream.
-    thinned = province_forecast_archive(
-        chn, [(7, fc)]; made_date = made,
-        n_patches = 3, thin = 2
-    )
-    @test nrow(thinned) == 2 * 3 * fld(nd, 2)
-
-    ## A forecast carrying only the case stream archives that stream alone,
-    ## so a fit without the confirmed deaths column is not faked.
-    cases_only = province_forecast_archive(
-        chn,
-        [(7, DataFrame(confirmed_new = fill(100.0, nd)))];
-        made_date = made, n_patches = 3
-    )
-    @test Set(cases_only.stream) == Set(["confirmed cases"])
-end
-
 ## The single-stream composers must expose the same cumulative-trajectory
 ## aliases `bvd_joint` does. Without one, `forecast_stream` falls back to
 ## inverting the stream's cumulative total under exponential growth, which

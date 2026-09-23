@@ -1,9 +1,7 @@
 ## The report's front matter (title, authors, dates, reading links, abstract,
 ## scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->`
-## marker. The home page shows the whole README and the offline
-## `analysis.html` opens with the front matter, so both read it from here.
-## The summary and National pages take the abstract and the dates from here
-## too.
+## marker. The home page shows the whole README. The summary and National
+## pages take the abstract and the dates from here.
 
 using BVDOutbreakSize: load_observations
 import Dates

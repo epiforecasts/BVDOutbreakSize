@@ -73,12 +73,12 @@ jobs:
           label: 'the report'
           # `ext/` and `scripts/` are named file by file rather than as
           # directories. The Enzyme extension is never loaded here (Enzyme is
-          # not in the docs environment), and of the scripts only these three
+          # not in the docs environment), and of the scripts only these two
           # run in this workflow, so a change to the SitRep downloader, the
           # scanners or the backfill driver used to rebuild the whole report
           # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|standalone_report)\.jl|\.github/(workflows/docs\.yml|actions/changed-paths/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/changed-paths/))
 
   # Resolve and precompile the single shared environment once, list the fit
   # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
@@ -770,27 +770,39 @@ jobs:
             exit 1
           fi
           ls -l output
-      # Lift the rendered analysis page out of the multi-file Vitepress
-      # site into one self-contained HTML file (CSS and fonts inlined,
-      # SPA JavaScript dropped) for sharing and download.
-      - name: Build self-contained report
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          julia --project=docs scripts/standalone_report.jl \
-            docs/build output/analysis.html
-          ls -l output/analysis.html
       # Bundle the rendered site produced by the combine build
       # (docs/build/) so each release is a self-contained snapshot.
+      # DocumenterVitepress builds base i of `bases.txt` into `docs/build/i/`
+      # with absolute asset paths under `/BVDOutbreakSize/<base>/`. The zip
+      # holds the first base at that path so it can be served as is.
       - name: Zip rendered site into release bundle
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
           set -euo pipefail
-          if [ ! -d docs/build ]; then
+          if [ ! -f docs/build/bases.txt ] || [ ! -d docs/build/1 ]; then
             echo "::error::docs/build/ missing; expected the rendered site"
             exit 1
           fi
-          (cd docs/build && zip -r "$GITHUB_WORKSPACE/output/site.zip" .)
+          base=$(head -n 1 docs/build/bases.txt)
+          if [ -z "$base" ]; then
+            echo "::error::docs/build/bases.txt names no base"
+            exit 1
+          fi
+          if ! grep -q "\"/BVDOutbreakSize/$base/assets/" docs/build/1/index.html; then
+            echo "::error::docs/build/1 is not built for base $base"
+            exit 1
+          fi
+          stage="$RUNNER_TEMP/site"
+          rm -rf "$stage"
+          mkdir -p "$stage/BVDOutbreakSize/$(dirname "$base")"
+          cp -r docs/build/1 "$stage/BVDOutbreakSize/$base"
+          printf '%s\n' \
+            "Run \`python3 -m http.server\` in this folder and open" \
+            "http://localhost:8000/BVDOutbreakSize/$base/" \
+            "To load another page directly, add .html to its address." \
+            > "$stage/README.txt"
+          (cd "$stage" && zip -qr "$GITHUB_WORKSPACE/output/site.zip" \
+            README.txt BVDOutbreakSize)
           ls -l output/site.zip
       # On a version tag (e.g. v1.2.0) the output bundle is named after
       # the tag, so a major code release has a matching, permanent
@@ -813,15 +825,14 @@ jobs:
             four-week-ahead forecasts of the observed streams
             (`forecast.csv`, with the one-week-back validation forecast in
             `forecast_validation.csv`) for later scoring, a copy of the
-            input `observations.toml`, a
-            `site.zip` snapshot of the rendered report site, and
-            `analysis.html` — a self-contained single-file copy of the
-            report that opens offline.
+            input `observations.toml`, and a `site.zip` snapshot of the
+            rendered report site. See `README.txt` in `site.zip` for how
+            to view it offline.
 
             Rendered analysis:
             https://epiforecasts.io/BVDOutbreakSize/dev/analysis
 
-            Self-contained report (always latest build):
-            https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html
+            Rendered site to download (always latest build):
+            https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/site.zip
           files: output/*
           make_latest: 'true'

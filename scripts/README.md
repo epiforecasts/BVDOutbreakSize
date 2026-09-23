@@ -36,9 +36,8 @@ Download the PDFs first with `download_sitreps.jl`.
 | Script | What it does |
 | --- | --- |
 | `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. |
-| `standalone_report.jl` | Lifts the rendered Vitepress analysis page into one self-contained offline HTML file. |
 
-Both also run under `--project=.`.
+It also runs under `--project=.`.
 CI uses `--project=docs` because that environment is already instantiated at that point in the build.
 
 ## Entry points and reproduction

@@ -147,7 +147,7 @@ The bare result object follows with `#hide`, so only the output renders.
 The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
 Edit it in `README.md` only.
 `docs/front_matter.jl` reads it at build time and fills in the dates.
-`docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
+`docs/make.jl` copies the whole README to the home page, so do not duplicate it into a report page.
 
 ## Fits and the fit cache
 
@@ -156,7 +156,7 @@ Fits are cached under `logs/fit_cache`, keyed on a content hash.
 
 - The bytes of each file in `FIT_SOURCE_FILES`: the files under `src/models/`, `renewal.jl`, `sampling.jl`, `constants.jl`, `data.jl` and `onset_curve.jl` in `src/`, and the cache code itself.
 - Every file under `data/` except those named in `FIT_DATA_EXCLUDE`.
-- The cache schema version and the sampler settings.
+- The cache schema version and the sampler settings, including `joint_sampler_args()` for the headline joint and its spatial control.
 
 Any edit to one of those files, a comment included, changes the key for every fit.
 In CI that is a cold refit of every model, which takes hours.
