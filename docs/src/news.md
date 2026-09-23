@@ -24,13 +24,13 @@ Changes since v2.1.0.
   unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
 - Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
-The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
-Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
+  The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
+  Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
 - An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
-A `missing` vector still samples under the same per-entry keys.
-The two submodels' gradients run 1.2 to 1.9 times faster.
+  A `missing` vector still samples under the same per-entry keys.
+  The two submodels' gradients run 1.2 to 1.9 times faster.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
-A change to the rules therefore forces a refit.
+  A change to the rules therefore forces a refit.
 
 ### Model
 
