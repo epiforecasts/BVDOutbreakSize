@@ -9,174 +9,60 @@ Changes since v2.1.0.
 
 ### Performance
 
-- Hand-written reverse-mode rules for the daily convolution and renewal kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`, `interpolate_knots`, `renewal_infections`).
-  Each is a loop over the daily grid, so left to the backend every iteration's intermediates reach the tape; the rules replace that with a closed-form adjoint of the same shape.
-  The joint's gradient drops about 20% under Mooncake, the default backend, and the delay-heavy observation submodels rather more; the measurements are in #810.
-  Each is a native `Mooncake.rrule!!` method on a declared primitive signature.
-  Values are unchanged: each rule is checked against central differences and against the gradient of an unregistered clone of the same function body.
+- Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
+  Values are unchanged.
+- The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
 
 ### Model
 
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
-  `tau_death` becomes an intensity, specimens per suspected death, and may exceed one.
-  A suspect yields more than one specimen through repeat exclusion testing, and swabbed community deaths enter the laboratory denominator without being counted as suspects, which is why the case side was never capped either.
-  The death-only composer still draws a bounded fraction, since it has no case volume to scale from.
+  `tau_death` is now specimens per suspected death and may exceed one.
   Fitted values change.
-
-- The `:free` confirmed-positivity link is removed, with `confirmed_positivity_model` and the `positivity_link` keyword.
-  It could never have run.
-  `confirmed_cases_model` returned `s_test` and `spec` unconditionally but assigned them only on the composition branch, so the free link raised `UndefVarError`.
-  Every fit used the composition link.
-- The pooled background takes a submodel rather than a flag.
-  `background_re = true` becomes `background_pooling = background_pooling_model`.
-  The option and the gradients are unchanged.
-  A flag reaches the model as a value rather than a type, so both arms were inferred on every build and the suspected-case submodel specialised twice.
-- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)` (#800).
-  Mean 0.10 rather than 0.25, keeping 99% of its mass below the BVD CFR mean of 0.33.
-  The previous prior sat close to the BVD CFR itself, against the submodel's own reasoning that non-BVD suspect illness is less lethal.
-  This moves the non-BVD death background, so fitted values change.
+- The background case-fatality ratio prior is `Beta(2, 18)` rather than `Beta(2, 6)`, with mean 0.10 rather than 0.25 (#800).
+  Fitted values change.
+- The `:free` confirmed-positivity link and the `positivity_link` keyword are removed (#791).
+  The link could not run, so every fit already used the composition link.
+- The pooled background is set with `background_pooling = background_pooling_model` rather than `background_re = true` (#791).
+  Results are unchanged.
 
 ### Report
 
-- The offline `analysis.html` is gone (#839).
-  Each release's `site.zip` now unpacks to `BVDOutbreakSize/<base>/` and carries a `README.txt` on serving it locally.
-- Each province is projected a week ahead by its own renewal equation rather than a fixed share of the national forecast, and only these projections are archived and scored (#836).
-  Both forecast pages open with summary bullets.
-- Forecasts is split into a National and a Provinces page (#830).
-- The Provinces forecast page plots each release's archived province forecasts against what each province went on to report (#835).
-  The Provinces page shows the province split's credible intervals and, per province, a forecast histogram against its most recent observed week.
-- The report is six pages rather than two, grouped in the navigation as Estimates (summary, national, provinces), Forecasts, Evaluation (in-sample, forecast) and Details (#782).
-  Each renders as its own CI job from the same cached fits.
-- The forecasts, the forecast evaluation and the sensitivity analyses each open on a national section and carry a by-province one, so a health-zone stratum has one place to go on each (#782).
-  The forward forecast split by province previously had no heading and sat inside the national results.
-- The in-sample checks are a page of their own: the posterior predictive checks, the stream calibration, the exports, the posterior correlations and the province composition checks (#782).
-  The estimates pages keep the estimates and the prior-versus-posterior plots that qualify them.
-- The McCabe comparison is a table in the methods, one row per component linking to the section that specifies it, rather than bullets in the framing (#782).
-- The summary dashboard is shorter (#782).
-  The fit diagnostics are behind a dropdown, and the per-province infections and parameter panels and the per-stream reproduction number are linked rather than repeated.
-- The API reference is grouped into eleven pages following the order a fit runs in, and says which names are public and which are internal (#782).
-  It was one undifferentiated `@autodocs` dump.
-- The aim and origins and the limitations are pages of their own rather than dropdowns inside the analysis, and a new page carries the authors, the funding and the citation (#782).
-- The methods are a page of their own under Details (#804).
-  The National page was 3 825 lines with the methods taking lines 41 to 2230, so the results did not start until line 2231.
-  The prior predictive check moves to the in-sample page, and its draws to the shared setup so every page overlays the same ones.
-  The offline `analysis.html` carries both the methods and the national results.
-- The National page opens with its own title and summary rather than a copy of the README front matter.
-  It keeps the "Last updated" and "Data as of" dates at the top.
-- The Provinces page opens the same way as the National page, with the "Last updated" and "Data as of" dates, and its links no longer call the National page "analysis".
-  The front matter repeated the home page, and its contributing link was dead once the page moved into `estimates/`.
-  The offline `analysis.html` still opens with the front matter, now rendered from `README.md` by `scripts/standalone_report.jl`.
-- The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
-  It replaces a list of every other page, which still sent readers to the National page for the methods.
-  It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
-- The Provinces page opens with bullets comparing the provinces (#832).
-- The Provinces estimate page shows maps of infections to date, the reproduction number at the cut-off and relative case ascertainment by province.
-  The Provinces forecast page maps next week's projected confirmed cases (#841).
-  They give each province's share of infections, the range of the reproduction number and the probability each province is growing, the spread in case-fatality ratio and case ascertainment, and the share of infections imported between provinces, as 90% credible intervals.
-  A detail section follows with each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals.
-  The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.
-  Pair plots set the spatial hyperparameters and each province's parameters against a prior drawn from the patch model.
-- The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block shows the comparison bullets (#832).
-- The summary dashboard no longer shows the modelled against observed reported cases (#832).
-  The evaluation pages carry that check.
-- The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
-  It links to the home page for installing, running and updating the data rather than repeating it.
-- Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).
-  Each page opens with a summary: overall bullets, then a short block per stream or per province.
-  The in-sample Provinces page adds a prior predictive check drawn from the four-patch model, per-province calibration of the case and death compositions, a posterior correlation heatmap, and predictive province totals against observed.
-  The forecast Provinces page adds skill by horizon, the CRPS decomposition and skill by release for the province forecast scores.
+- The report is split into pages, grouped in the navigation as Estimates (Summary, National, Provinces), Forecasts (National, Provinces), Evaluation (In-sample and Forecast, each National and Provinces), Details (Aim and origins, Methods, Limitations, Sensitivity), API and About (#782, #804, #830, #833).
+  About carries a new page on the authors, funding and citation.
+- The summary dashboard, National and Provinces pages open with their own summary and the "Last updated" and "Data as of" dates (#782, #822, #832).
+  The summary dashboard is shorter, with the fit diagnostics behind a dropdown.
+- The Provinces estimates page compares the provinces, maps infections, the reproduction number and case ascertainment, and gives each province's estimates as 30%, 60% and 90% credible intervals (#832, #841).
+  Pair plots set each province's parameters against the prior.
+- Each province is forecast a week ahead by its own renewal equation rather than as a share of the national forecast (#835, #836, #841).
+  The Provinces forecast page maps next week's projected confirmed cases and plots past forecasts against what each province went on to report.
+- The province evaluation pages add a prior predictive check, calibration of the case and death compositions, a posterior correlation heatmap, and forecast skill by horizon and by release (#833).
+- The McCabe comparison is a table in the methods (#782).
+- The API reference is grouped into eleven pages in the order a fit runs, and says which names are public (#782).
+- Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
+- The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 
 ### Infrastructure
 
-- The headline joint fit and its no-patches control keep 1000 draws per chain, up from 800, with 500 adaptation steps unchanged (#838).
+- The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
-- One rule decides when a stream first and last reported (#817).
-  `stream_coverage_end` and `stream_coverage_start` in the release scorer, `hist_last_date` on the methods page and that page's inline export and onset dates each had their own copy of it.
-  They now call the exported `history_first_date` and `history_last_date`, which `stream_last_date` and the new `stream_first_date` are built on too.
-  Every date is unchanged, checked against the previous bodies over 18 weekly vintages.
-
-- `ChainRulesCore` is no longer a direct dependency (#808).
-  It arrived with the analytic Gamma-CDF rule in #50 and outlived it by #155.
-  Nothing has referenced it since, and Aqua's stale-dependency check missed it because the self-named import counted as a use.
-  It stays in the resolved manifest through DynamicPPL and Mooncake, so nothing changes at runtime.
-
-- A release is cut by commenting `@release` on any issue or pull request (#767).
-  The notes are the newest `news.md` section, which is what they have always been, copied across by hand.
-  The comment tags `main`, publishes the release, and opens a pull request bumping the version and starting the next section.
-  `@release minor` and `@release major` set the size of that bump.
-  `task release-notes` prints the notes before anything is published.
-- The documentation build fails when the headline joint fit has not converged (#764).
-  The verdict is a comment on the pull request, edited in place on each build, naming the thresholds breached and the worst-mixing parameters.
-  It is a leaf job, so the preview still builds and still comments.
-- A pull request builds the report, runs the tests and measures coverage only when it changes something they are built from (#776).
-  Each workflow decides in a job of its own, so a skipped build says so rather than leaving no check at all.
-  A push, a tag and a manual run are never gated.
-- The fit cache key CI restores is the one the fits are keyed on (#739).
-  The Actions key hashed all of `data/`, including the generated tables that `FIT_DATA_EXCLUDE` drops, so a rescore commit refit every model for inputs no fit reads.
-  It also left out `docs/fits/cache.jl`.
-  The key now comes from `fit_content_hash`, so there is one list.
-- The automatic version increment is gone (#607).
-  `@release` bumps the version as part of cutting a release.
-  The automatic one moved it without opening a news section, and could open a second pull request racing the one `@release` opens.
-  It had not run since v1.14.0 in any case.
-  `/version major|minor|patch` on a pull request is unaffected.
-- A version tag's documentation build waits for the `main` build of the same commit and reuses its cached fits (#765).
-  The two used to run together and each refit every model.
-  For v2.1.0 the tag build passed the job's time limit, so no `results-v2.1.0` release was published.
-  Each fit job's summary now names the runner's CPU, because the same fit runs up to half again as long on some runners.
-- The precompile workload compiles the fit the report runs, rather than a model shaped like it.
-  The two had drifted, so the most expensive stream in the model cached nothing.
-  Both now build their keywords from `joint_fit_args`, and a test asserts the two models are the same type.
-  The headline joint's cold build drops from 1095 s to 292 s.
-- `task benchmark-compile` reports the cold AD-compile cost per component.
-  The existing suite times steady-state gradients only, which is why an 18 minute cold compile went untracked.
-- The release helper reads a Windows checkout.
-  Its version-heading pattern missed CRLF line endings, so `news.md` parsed as a file with no version sections and the Windows test cell failed on every push.
-- The Literate report pages move from `docs/examples/` to `docs/pages/`, and `scripts/run.jl` runs all of them rather than the two it named (#782).
-- The offline `analysis.html` resolves its pages by path rather than by basename (#807).
-  Two pages render to `national.html`, the national estimates and the forecasts, and directory order decided which one the release asset carried.
-- The documentation build no longer runs for changes it cannot see (#805).
-  The gate named `ext/` and `scripts/` as whole directories; it now names the one extension the build loads and the three scripts it runs, so a change to the Enzyme extension, the SitRep downloader, a scanner or the backfill driver no longer rebuilds the report.
-  A prose-only change under `benchmark/` no longer starts a two-arm benchmark run, and the benchmark comment buckets the memory column on its own terms rather than on the band measured from timing spread.
-- A local documentation build loads its fits the way CI does (#782).
-  `task fetch-fits` downloads them from the latest successful documentation run, the render refuses to fit inline unless `BVD_FIT_STRICT=false` is set, and `task fit-all` takes every available thread instead of fitting the registry one model at a time.
+- A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
+  The automatic version increment is gone.
+- A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
+- The documentation build fails when the headline joint fit has not converged, and comments the verdict on the pull request (#764).
+- A pull request builds the report, runs the tests and measures coverage only when it changes something they depend on (#776, #805).
+- The CI fit cache key matches the key the fits use, so a change to files no fit reads no longer triggers a refit (#739).
+- One rule decides when a stream first and last reported, exported as `history_first_date`, `history_last_date` and the new `stream_first_date` (#817).
+  Every date is unchanged.
+- `task fetch-fits` downloads the fits from the latest documentation run, and a local build refuses to fit inline unless `BVD_FIT_STRICT=false` is set (#782).
+  `task fit-all` uses every available thread.
+- `task benchmark-compile` reports the cold AD compile cost per component (#791).
+- The opt-in Enzyme backend differentiates every observation submodel and single-stream composer (#789).
+  `bvd_joint` and `patch_infection_model` still fail under Enzyme.
+- The report pages move from `docs/examples/` to `docs/pages/`, and `scripts/run.jl` runs all of them (#782).
+- The release helper reads a Windows checkout with CRLF line endings (#792).
 - `M_PRIOR_BASE`, `M_PRIOR_BASE_DATE` and `m_prior_centre` are removed (#800).
-  They served the integral model, which the renewal model replaced.
-  The v1.3.0 integral backfill runs inside that release's own worktree and resolves them against its own constants, so nothing here read them.
-  No fitted values change.
-
-  The existing suite times steady-state gradients only, which is why an 18 minute cold compile went untracked.
-
-- The fit cache key CI restores is the one the fits are keyed on (#739).
-  The Actions key hashed all of `data/`, including the generated scoring tables and `data/README.md` that `FIT_DATA_EXCLUDE` drops from the Julia key, so a rescore commit or a README edit missed the cache and refit every model for inputs no fit reads.
-  It also left out `docs/fits/cache.jl`, so a change to the hashing rule itself would not have invalidated anything.
-  The key is now taken from `fit_content_hash` rather than restated, so there is one list.
-
-- The opt-in Enzyme backend now differentiates every observation submodel and single-stream composer, and the AD check sweeps them all rather than one composer and the joint (#789).
-  The scenarios had passed `missing` for their cut-off totals, which scores nothing and puts the stream on the predictive-generator path, so what was benchmarked and asserted was a surface no fit differentiates.
-  Mooncake, the default, differentiates either, so this was invisible until Enzyme rejected the union element type that path allocates.
-  `bvd_joint` and `patch_infection_model` are still broken under Enzyme, and the bed-occupancy stream is too slow to compile to run at all; all three are declared in the fixtures rather than left out of the sweep.
-
-- The automatic version increment is gone (#607).
-  It opened a patch-bump pull request on every push to `main` where the version had not changed, which is now both redundant and harmful: `@release` bumps the version as part of cutting a release, and the automatic one moved it without opening a news section, which is what left a merged change with no heading to write under.
-  It could also open a second pull request racing the one `@release` opens, bumping the same field by a different route.
-  It had not run since v1.14.0 in any case, wedged behind a stale branch its own guard would not clear.
-  `/version major|minor|patch` on a pull request is unaffected.
-
-- A pull request only builds the report, runs the tests and measures coverage when it changes something they are built from (#776).
-  The fits alone cost hours, and a change to the test suite, the benchmarks or an unrelated workflow produced a site identical to the one on `main`; a change to the analysis pages or the README ran the whole test suite to no purpose.
-  Each workflow decides in a job of its own, so a skipped build says so in its summary rather than leaving no check at all.
-  A push, a tag and a manual run are never gated.
-- A release is cut by commenting `@release` on any issue or pull request (#767).
-  The notes are the newest `docs/src/news.md` section, which is what they have always been, copied across by hand.
-  The comment tags `main`, publishes the release and opens a pull request bumping the version and starting the next section, so the following change has a heading to write under.
-  `@release minor` and `@release major` choose the size of that bump.
-- `scripts/release_notes.jl` holds the text handling behind it and runs locally through `task release-notes`, so the notes can be read before anything is published.
-- Pushing a version tag starts a second documentation build of the commit that was just pushed to `main`.
-  The two builds used to run at the same time and each refit every model; for v2.1.0 the tag build's joint fit ran past the job's time limit, so no `results-v2.1.0` release was published.
-  The tag build now waits for the `main` build to finish and reuses its cached fits (#765).
-  Each fit job's summary also names the runner's CPU, because the same fit runs up to half again as long on some runners.
-
+  Nothing used them once the renewal model replaced the integral model, and no fitted values change.
+- `ChainRulesCore` is no longer a direct dependency (#808).
 
 ## v2.1.0
 
