@@ -23,7 +23,8 @@
     using Mooncake: Mooncake, NoRData, primal, tangent, zero_fcodual
     using BVDOutbreakSize: convolve_delay, convolve_survival,
         convolve_pmf, interpolate_knots, renewal_infections,
-        abscond_thinned, abscond_thinned_flows, patch_infections
+        abscond_thinned, abscond_thinned_flows, patch_infections,
+        nbinomial_loglik
 
     ## Drive one native rule: build zero-tangent coduals for the arguments,
     ## seed the output tangent with the cotangent, run the pullback, and
@@ -206,6 +207,30 @@
         end
         @test tangent(out).infections == Ī
     end
+
+    @testset "nbinomial_loglik" begin
+        ## Scalar output and a scalar `k`, so the cotangent goes in as the
+        ## pullback's argument and `k`'s adjoint comes back as rdata.
+        μ = exp.(4 .+ 0.5 .* randn(60))
+        x = rand(0:120, 60)
+        x[3] = 0
+        for k in (8.3, 0.7, 150.0)
+            s̄ = randn()
+            codual_μ = zero_fcodual(μ)
+            out, pb = Mooncake.rrule!!(
+                zero_fcodual(nbinomial_loglik), zero_fcodual(k),
+                codual_μ, zero_fcodual(x)
+            )
+            @test primal(out) == nbinomial_loglik(k, μ, x)
+            rdata = pb(s̄)
+            fk, fμ = grad(fdm, (a, b) -> s̄ * nbinomial_loglik(a, b, x), k, μ)
+            @test rdata[2] ≈ fk rtol = 1.0e-7
+            @test tangent(codual_μ) ≈ fμ rtol = 1.0e-7
+            ## The function and the counts carry no derivative.
+            @test rdata[1] isa NoRData && rdata[3] isa NoRData
+            @test rdata[4] isa NoRData
+        end
+    end
 end
 
 @testitem "AD rules: Mooncake with the rule matches ForwardDiff" tags = [
@@ -216,7 +241,8 @@ end
     using Mooncake: Mooncake
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
         interpolate_knots, renewal_infections, abscond_thinned,
-        abscond_thinned_flow, abscond_thinned_flows, patch_infections
+        abscond_thinned_flow, abscond_thinned_flows, patch_infections,
+        nbinomial_loglik
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -395,6 +421,30 @@ end
             end,
             Rt, g, seeds, K, ε
         )
+    end
+
+    @testset "nbinomial_loglik" begin
+        μ = exp.(4 .+ 0.5 .* randn(60))
+        x = rand(0:120, 60)
+        x[3] = 0
+        ## A mean at the `safe_rate` floor passes no derivative. ForwardDiff's
+        ## own quotient rule cancels there when `k` is small, so the floored
+        ## means are checked at a moderate `k` only.
+        μ_floor = vcat(μ, [0.0, 1.0e-18])
+        x_floor = vcat(x, [3, 40])
+        for (k, m, c) in ((8.3, μ_floor, x_floor), (0.4, μ, x), (250.0, μ, x))
+            m_grad = mgrad((a, b) -> nbinomial_loglik(a, b, c), k, m)
+            @test m_grad[1] ≈ ForwardDiff.derivative(
+                a -> nbinomial_loglik(a, m, c), k
+            ) rtol = 1.0e-10
+            @test m_grad[2] ≈ ForwardDiff.gradient(
+                b -> nbinomial_loglik(k, b, c), m
+            ) rtol = 1.0e-10
+        end
+        ## `k` large enough that `p` clamps at `1 − eps` for every count:
+        ## the clamp passes no derivative to the means.
+        m_grad = mgrad((b) -> nbinomial_loglik(1.0e20, b, x), μ)
+        @test all(iszero, m_grad[1])
     end
 end
 

@@ -1,19 +1,20 @@
 # Native `Mooncake.rrule!!` methods for the `renewal.jl` kernels and the
 # observation kernels in `models/observations.jl`. Each is a loop over a
-# daily grid, so left to the backend every iteration's intermediates go on
-# the tape; these replace that with a closed-form adjoint of the same shape
-# as the forward loop.
+# daily grid or an observation vector, so left to the backend every
+# iteration's intermediates go on the tape; these replace that with a
+# closed-form adjoint of the same shape as the forward loop.
 #
-# Signatures are restricted to `Array{<:IEEEFloat}` and `IEEEFloat`
-# scalars, plus a view of one into such an array where a call site passes a
-# row of a per-patch matrix. Anything else falls through to Mooncake's
-# derived rule.
+# Differentiable arguments are restricted to `Array{<:IEEEFloat}` and
+# `IEEEFloat` scalars, plus a view of one into such an array where a call
+# site passes a row of a per-patch matrix. Anything else falls through to
+# Mooncake's derived rule.
 #
 # These earn their place only while the backend's own derivation is worse.
 # `task benchmark-rules` times both arms; if the gap has closed after a
 # backend upgrade, delete this file rather than maintain it.
 
 using Mooncake: CoDual, NoFData, NoRData, primal, tangent
+using SpecialFunctions: digamma
 
 ## An array argument a rule accepts: a float array, or a view into one (a
 ## row of a per-patch matrix). A view's tangent is its parent's tangent, so
@@ -64,6 +65,13 @@ Mooncake.@is_primitive(
         typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
         Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
         Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(nbinomial_loglik), Mooncake.IEEEFloat,
+        Array{<:Mooncake.IEEEFloat}, Array{<:Integer},
     },
 )
 
@@ -1070,4 +1078,64 @@ function Mooncake.rrule!!(
         return ntuple(_ -> NoRData(), 6)
     end
     return out, patch_infections_pullback!!
+end
+
+## Value and gradient of `nbinomial_loglik` in one pass. With `r = k` and
+## `p = r / (r + μ)` each count `x` contributes
+##
+##     ∂ℓ/∂r = log p + ψ(r + x) − ψ(r),    ∂ℓ/∂p = r / p − x / (1 − p),
+##
+## chained through `p` to `μ` and `k`. The guards in `safe_rate` and
+## `safe_nbinomial` are mirrored: a floored `k` or `μ`, or a clamped `p`,
+## passes no derivative. A term that is not finite adds none either.
+function _nbinomial_loglik_grad(
+        k::T, modelled::AbstractVector,
+        obs::AbstractVector
+    ) where {T}
+    lo = eps(T)
+    hi = one(T) - lo
+    k_on = isfinite(k) && k > zero(k)
+    r = k_on ? k : lo
+    s = zero(T)
+    dk = zero(T)
+    dμ = zeros(T, length(modelled))
+    @inbounds for i in eachindex(modelled, obs)
+        μ = modelled[i]
+        x = obs[i]
+        μ_on = isfinite(μ) && μ > lo
+        m = μ_on ? μ : lo
+        p_raw = r / (r + m)
+        p = isfinite(p_raw) ? clamp(p_raw, lo, hi) : lo
+        ℓ = logpdf(NegativeBinomial(r, p), x)
+        s += ℓ
+        isfinite(ℓ) || continue
+        ∂r = iszero(x) ? log(p) : log(p) + digamma(r + x) - digamma(r)
+        if isfinite(p_raw) && !(p_raw > hi) && !(p_raw < lo)
+            ∂p = r / p - x / (one(T) - p)
+            den = (r + m)^2
+            ∂r += ∂p * m / den
+            μ_on && (dμ[i] = -∂p * r / den)
+        end
+        dk += ∂r
+    end
+    return s, (k_on ? dk : zero(T)), dμ
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(nbinomial_loglik)},
+        k::CoDual{<:Mooncake.IEEEFloat},
+        modelled::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        obs::CoDual{<:Array{<:Integer}}
+    )
+    s, dk, dμ = _nbinomial_loglik_grad(
+        primal(k), primal(modelled), primal(obs)
+    )
+    μ̄ = tangent(modelled)
+    ## `k` is a scalar, so its adjoint goes back as rdata rather than into
+    ## a tangent buffer.
+    function nbinomial_loglik_pullback!!(s̄)
+        μ̄ .+= s̄ .* dμ
+        return NoRData(), s̄ * dk, NoRData(), NoRData()
+    end
+    return CoDual(s, NoFData()), nbinomial_loglik_pullback!!
 end
