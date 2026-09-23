@@ -17,8 +17,8 @@ Q_{j+1, j} = \\frac{-j}{\\sqrt{j (j + 1)}},
 zero below. Any vector `Q y` sums to zero, and `Q Qᵀ = I - J / n` is the
 centring projector, so `σ Q z` with `z ~ N(0, I_{n-1})` has exactly the
 distribution of a standard-normal `n`-vector scaled by `σ` and centred.
-It does so with `n - 1` draws, leaving no direction the likelihood cannot
-see. With `n = 1` the basis is empty (`1 × 0`).
+It does so with `n - 1` draws, one per direction a sum-to-zero vector can
+move in. With `n = 1` the basis is empty (`1 × 0`).
 """
 function sum_to_zero_basis(n::Integer)
     n >= 1 || throw(ArgumentError("sum_to_zero_basis: n = $n < 1"))
