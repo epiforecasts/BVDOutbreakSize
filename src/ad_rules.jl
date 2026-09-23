@@ -860,7 +860,7 @@ function Mooncake.rrule!!(
     I = y.infections
     function patch_infections_pullback!!(::NoRData)
         Tf = eltype(I)
-        outflow = _patch_outflow(Tf, Kp)
+        outflow = _patch_outflow(Tf, Kp, np)
         ## Each day's force and generated infections are rebuilt from the
         ## forward infections rather than stored. The walk runs backwards so
         ## a day's adjoint is complete before it is pushed onto earlier days,

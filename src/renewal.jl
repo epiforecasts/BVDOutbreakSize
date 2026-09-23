@@ -358,7 +358,7 @@ function patch_infections(
     )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
-    outflow = _patch_outflow(Tp, importation_kernel)
+    outflow = _patch_outflow(Tp, importation_kernel, np)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -395,10 +395,11 @@ function patch_infections(
     return (; infections = I, importation = imports)
 end
 
-## What each origin sends away per unit of its own generated infections:
-## the importation kernel's off-diagonal column sums, constant in time.
-function _patch_outflow(::Type{T}, K::AbstractMatrix) where {T}
-    np = size(K, 1)
+## What each of the first `np` origins sends away per unit of its own
+## generated infections: the importation kernel's off-diagonal column sums
+## over those patches, constant in time. The kernel may cover more patches
+## than the model runs, so `np` comes from the caller.
+function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
     outflow = zeros(T, np)
     @inbounds for q in 1:np, r in 1:np
         r == q && continue
