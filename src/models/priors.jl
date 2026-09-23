@@ -1609,9 +1609,8 @@ the others, which is what the imports figure on the analysis page draws.
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
-    ## 7. National totals and headline quantities (see
-    ##    [`_patch_headlines`](@ref)), which the fit reports and no likelihood
-    ##    reads.
+    ## 7. National totals and headline quantities, which the fit reports and
+    ##    no likelihood reads.
     headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
