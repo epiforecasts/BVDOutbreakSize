@@ -19,8 +19,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 
 # ## Summary
 #
-# One bullet per province, from the checks further down this page.
-# Each gives how well the case and death compositions reproduce that province's counts, as bias and 90% coverage, and how its forecasts scored against the persistence baseline across releases.
+# The overall bullets come first, then a short block per province, from the checks further down this page.
+# Each block gives how well the case and death compositions reproduce that province's counts, as bias and 90% coverage, and how its forecasts scored against the persistence baseline across releases.
 # Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
 # Coverage is nominally 0.9, and relative skill below one beats the baseline.
 
@@ -498,43 +498,93 @@ evaluation_province_summary = let
         string(round(x; digits = 2))
     cal = Dict(r["Stream"] => r for r in eachrow(province_calibration_table))
     overview = forecast_score_overview(province_scores_df)
-    function calibration(kind, p)
-        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
-        r === nothing && return string(lowercase(kind), " not scored")
-        return string(
-            lowercase(kind), " bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages"
-        )
-    end
     ## The archive labels each province stream `<stream> [<province name>]`.
-    function skill(p)
+    function scored(p)
         tag = string(" [", PROVINCE_NAMES[p], "]")
         rows = filter(
             r -> endswith(r.stream, tag) && !ismissing(r.rel_to_baseline),
             overview
         )
-        size(rows, 1) == 0 && return "no scored forecast yet"
-        return join(
-            [
-                string(
-                    replace(r.stream, tag => ""), " ",
-                    fmt(r.rel_to_baseline), " over ", r.n, " forecasts"
-                )
-                    for r in eachrow(rows)
-            ], ", "
+        return (; tag, rows)
+    end
+    function calibration(kind, p)
+        r = get(cal, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
+        r === nothing && return string("- ", kind, ": not scored.")
+        return string(
+            "- ", kind, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
+            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
         )
     end
-    join(
+    function skill(p)
+        sc = scored(p)
+        size(sc.rows, 1) == 0 &&
+            return "- Forecasts: no scored forecast yet."
+        return string(
+            "- Forecasts: relative skill against the baseline ",
+            join(
+                [
+                    string(
+                        replace(r.stream, sc.tag => ""), " ",
+                        fmt(r.rel_to_baseline), " over ", r.n, " forecasts"
+                    )
+                        for r in eachrow(sc.rows)
+                ], ", "
+            ), "."
+        )
+    end
+    ## Overall: the province streams the compositions reproduce least well,
+    ## and how many provinces' forecasts beat the baseline on every stream
+    ## scored for them.
+    fitted = filter(r -> isfinite(r["Bias"]), province_calibration_table)
+    worst = first(
+        sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
+    )
+    worst_txt = join(
         [
             string(
-                "- **", PROVINCE_LABELS[p], ":** ",
-                calibration("Confirmed cases", p), "; ",
-                calibration("Confirmed deaths", p),
-                "; relative skill against the baseline ", skill(p), "."
+                r["Stream"], " (bias ", fmt(r["Bias"]),
+                ", 90% coverage ", fmt(r["90% coverage"]), ")"
             )
-                for p in 1:N_PATCHES
-        ], "\n"
+                for r in eachrow(worst)
+        ], "; "
     )
+    low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
+    n_cov = count(>=(0.8), fitted[!, "90% coverage"])
+    with_scores = [p for p in 1:N_PATCHES if size(scored(p).rows, 1) > 0]
+    n_beat = count(
+        p -> all(<(1), scored(p).rows.rel_to_baseline), with_scores
+    )
+    forecast_txt = isempty(with_scores) ?
+        "- **Forecasts:** no province forecast has been scored yet." :
+        string(
+            "- **Forecasts:** ", n_beat, " of ", length(with_scores),
+            " provinces with scored forecasts beat the baseline on every ",
+            "stream scored for them."
+        )
+    overall = [
+        string("- **Least well reproduced:** ", worst_txt, "."),
+        string(
+            "- **Coverage:** ", n_cov, " of ", size(fitted, 1),
+            " province streams have 90% coverage of at least 0.8",
+            size(low, 1) == 0 ? "." :
+                string(
+                    "; the lowest is ", low[1, "Stream"], " at ",
+                    fmt(low[1, "90% coverage"]), "."
+                )
+        ),
+        forecast_txt,
+    ]
+    detail = [
+        join(
+            [
+                string("**", PROVINCE_LABELS[p], "**"), "",
+                calibration("Confirmed cases", p),
+                calibration("Confirmed deaths", p), skill(p),
+            ], "\n"
+        )
+            for p in 1:N_PATCHES
+    ]
+    join(vcat([join(overall, "\n")], detail), "\n\n")
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
