@@ -303,7 +303,7 @@ Check the whole diff against `main` for them before asking for one.
 - Comments, docstrings and test names state what the code does now, briefly.
   History belongs in [News](news.md).
 - Every claim in a comment, docstring, news entry or pull request description is true of the code in the diff.
-  That includes cross-references, and unchanged text next to the change that it makes stale.
+  That includes cross-references, and any unchanged text next to the change that the change makes stale.
 - A number in the news or a pull request description names its source: a benchmark comment, a job log or a committed script.
 - Nothing is duplicated.
   Reuse an existing helper, and write a test's reference implementation from the formula rather than copying the code under test.
