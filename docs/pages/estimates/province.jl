@@ -309,7 +309,7 @@ province_pair_figs[4] #hide
 
 # ## Composition checks
 #
-# Whether the model reproduces each province's observed share of the national total is on the [in-sample checks](@ref "Province compositions") page.
+# Whether the model reproduces each province's observed share of the national total is on the [in-sample checks](@ref province-compositions) page.
 
 # ## Saving province assets
 #
