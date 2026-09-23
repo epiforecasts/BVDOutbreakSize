@@ -70,6 +70,39 @@ struct BetaBinomialVector{
 end
 
 """
+Independent counts split on their trial counts: entry `i` with
+`trials[i] > 0` is a [`safe_betabinomial`](@ref) of `trials[i]` with mean
+probability `p[i]` and overdispersion `ρ`, and every other entry a
+[`safe_nbinomial`](@ref) about `μ[i]` with dispersion `k`. `logpdf` is a
+[`BetaBinomialVector`](@ref) over the first group plus a
+[`NegBinomialVector`](@ref) over the second.
+"""
+struct SplitCountVector{
+        B <: BetaBinomialVector, N <: NegBinomialVector,
+    } <: Distributions.DiscreteMultivariateDistribution
+    "Entries with a trial count."
+    anchored::Vector{Int}
+    "Entries without one."
+    unanchored::Vector{Int}
+    "Distribution of the anchored entries."
+    binomial::B
+    "Distribution of the unanchored entries."
+    negbinomial::N
+end
+
+function SplitCountVector(
+        trials::AbstractVector{<:Integer}, p::AbstractVector, ρ::Real,
+        k::Real, μ::AbstractVector
+    )
+    a = findall(>(0), trials)
+    u = findall(<=(0), trials)
+    return SplitCountVector(
+        a, u, BetaBinomialVector(trials[a], p[a], ρ),
+        NegBinomialVector(k, μ[u])
+    )
+end
+
+"""
     censored(d::NegBinomialVector; upper::AbstractVector)
 
 Right-censor each entry of `d` at the matching `upper`, as `censored` does
@@ -84,8 +117,10 @@ Base.length(
     d::Union{NegBinomialVector, CensoredNegBinomialVector, StudentTVector}
 ) = length(d.μ)
 Base.length(d::BetaBinomialVector) = length(d.p)
+Base.length(d::SplitCountVector) = length(d.anchored) + length(d.unanchored)
 Base.eltype(::Type{<:NegBinomialVector}) = Int
 Base.eltype(::Type{<:BetaBinomialVector}) = Int
+Base.eltype(::Type{<:SplitCountVector}) = Int
 ## A draw above a ceiling returns the ceiling, which need not be a whole
 ## number (`admission_headroom`), so censored draws are floats.
 Base.eltype(::Type{<:CensoredNegBinomialVector}) = Float64
@@ -104,6 +139,10 @@ function Distributions._logpdf(d::StudentTVector, x::AbstractVector)
 end
 function Distributions._logpdf(d::BetaBinomialVector, x::AbstractVector)
     return betabinomial_loglik(d.trials, d.p, d.ρ, x)
+end
+function Distributions._logpdf(d::SplitCountVector, x::AbstractVector)
+    return logpdf(d.binomial, x[d.anchored]) +
+        logpdf(d.negbinomial, x[d.unanchored])
 end
 
 function Distributions._rand!(
@@ -142,6 +181,13 @@ function Distributions._rand!(
     @inbounds for i in eachindex(x, d.trials, d.p)
         x[i] = rand(rng, safe_betabinomial(d.trials[i], d.p[i], d.ρ))
     end
+    return x
+end
+function Distributions._rand!(
+        rng::AbstractRNG, d::SplitCountVector, x::AbstractVector{<:Real}
+    )
+    x[d.anchored] = rand(rng, d.binomial)
+    x[d.unanchored] = rand(rng, d.negbinomial)
     return x
 end
 

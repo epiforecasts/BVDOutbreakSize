@@ -587,7 +587,7 @@ end
     using Distributions: logpdf, censored
     using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
         betabinomial_loglik, censored_nbinomial_loglik, NegBinomialVector,
-        StudentTVector, BetaBinomialVector
+        StudentTVector, BetaBinomialVector, SplitCountVector
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -618,6 +618,18 @@ end
     p = 0.05 .+ 0.9 .* rand(rng, 30)
     @test mgrad((q, r) -> logpdf(BetaBinomialVector(n, q, r), k), p, 0.05) ==
         mgrad((q, r) -> betabinomial_loglik(n, q, r, k), p, 0.05)
+    ## The split vector scores its two groups through both rules.
+    n[[4, 9, 17]] .= 0
+    a, u = findall(>(0), n), findall(iszero, n)
+    μs = exp.(3 .+ 0.5 .* randn(rng, 30))
+    @test mgrad(
+        (q, r, s, m) -> logpdf(SplitCountVector(n, q, r, s, m), k),
+        p, 0.05, 8.3, μs
+    ) == mgrad(
+        (q, r, s, m) -> betabinomial_loglik(n[a], q[a], r, k[a]) +
+            nbinomial_loglik(s, m[u], k[u]),
+        p, 0.05, 8.3, μs
+    )
 end
 
 @testitem "AD rules: the occupancy rule records the model's balance" tags = [

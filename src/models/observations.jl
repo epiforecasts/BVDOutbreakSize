@@ -845,10 +845,12 @@ so the posterior-predictive trajectory reconstructs without interleaving.
 
 `increments` is a model argument on the left of `~`, so a supplied vector
 is observed data and a `missing` argument is sampled (the
-predictive-generator path). A `Vector{Union{Missing, Int}}` with some
-entries `missing` scores only the present ones, used to observe the
-anchored days while leaving the unanchored days latent under the
-no-extrapolation probe.
+predictive-generator path). A supplied integer vector is scored as one
+[`SplitCountVector`](@ref), a summed BetaBinomial term over the anchored
+days plus a summed NegativeBinomial term over the rest. A
+`Vector{Union{Missing, Int}}` with some entries `missing` scores only the
+present ones, one `~` per day, used to observe the anchored days while
+leaving the unanchored days latent under the no-extrapolation probe.
 """
 @model function late_confirmed_model(
         increments::Union{Missing, AbstractVector},
@@ -856,6 +858,10 @@ no-extrapolation probe.
         p_pos::AbstractVector, k::Real, ρ::Real = 0.0
     )
     n = length(modelled)
+    if increments isa AbstractVector{<:Integer} && n > 0
+        increments ~ SplitCountVector(analysed, p_pos, ρ, k, modelled)
+        return (; modelled, increments)
+    end
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
     end
@@ -1411,10 +1417,9 @@ quantities.
     late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support, unanchored days
-    ## the increment itself. The `Union{Missing, Int}` element type is kept so
-    ## the one submodel still handles the generator-mode `missing` below.
+    ## the increment itself.
     if have_data && n_late > 0
-        late_obs = Vector{Union{Missing, Int}}(undef, n_late)
+        late_obs = Vector{Int}(undef, n_late)
         for i in 1:n_late
             a = windows.late_analysed[i]
             late_obs[i] = a > 0 ?
