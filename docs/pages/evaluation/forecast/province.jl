@@ -1,6 +1,6 @@
 # # Province forecast evaluation
 #
-# How the province split of the forecasts on the [forecasts](@ref "Forecasts") page has scored against what each province went on to report.
+# How the province forecasts on the [province forecasts](@ref "Province forecasts") page have scored against what each province went on to report.
 # Scoring follows the national [forecast evaluation](@ref "Forecast evaluation"), against the same persistence baseline.
 # The in-sample province checks are on the [province in-sample checks](@ref "Province in-sample checks") page.
 
@@ -40,8 +40,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # ```
 
 ## The frozen fit's one-week-ahead national forecast, the same one the
-## national page validates, which the province split multiplies draw by
-## draw. `validation_forecast_from` is defined in the shared setup.
+## forecast evaluation page validates. `validation_forecast_from` is defined
+## in the shared setup.
 validation_forecast = validation_forecast_from(frozen_lastweek);
 
 ## Per-province cumulative confirmed cases and deaths at the frozen cut-off
