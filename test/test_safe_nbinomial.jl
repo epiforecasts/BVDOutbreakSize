@@ -38,7 +38,7 @@ end
 
 @testitem "summed NegativeBinomial likelihoods match one term per count" begin
     using BVDOutbreakSize: safe_nbinomial, safe_rate,
-        vintage_increments_model, censored_occupancy_model
+        vintage_increments_model, censored_occupancy_model, NegBinomialVector
     using Distributions: logpdf, censored
     using Random: Xoshiro
     using Turing: DynamicPPL
@@ -80,6 +80,15 @@ end
     frac = [44.5, 60.0, 1.0e6]
     draw = censored_occupancy_model(low, frac, missing, k)(Xoshiro(2)).obs
     @test draw isa Vector{Float64} && all(draw .<= frac)
+    ## The censored vector draws what a `censored` NegativeBinomial per entry
+    ## draws from the same stream.
+    entries = [
+        censored(safe_nbinomial(k, safe_rate(low[i])); upper = frac[i])
+            for i in 1:3
+    ]
+    rng = Xoshiro(3)
+    @test rand(Xoshiro(3), censored(NegBinomialVector(k, low); upper = frac)) ==
+        [rand(rng, e) for e in entries]
     ## No vintages: no variable.
     @test isempty(keyset(vintage_increments_model(Float64[], missing, k)))
     @test isempty(keyset(censored_occupancy_model(Float64[], Float64[], missing, k)))

@@ -275,8 +275,8 @@ end
         interpolate_knots, renewal_infections, abscond_thinned,
         abscond_thinned_flow, abscond_thinned_flows, patch_infections,
         nbinomial_loglik, studentt_loglik, censored_nbinomial_loglik,
-        NegBinomialVector, CensoredNegBinomialVector, StudentTVector
-    using Distributions: logpdf
+        NegBinomialVector, StudentTVector
+    using Distributions: logpdf, censored
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -534,7 +534,8 @@ end
         ## censored tail's Rmath call.
         up = fill(1.0e6, 60)
         @test mgrad(
-            (a, b) -> logpdf(CensoredNegBinomialVector(a, b, up), x), 8.3, μ
+            (a, b) -> logpdf(censored(NegBinomialVector(a, b); upper = up), x),
+            8.3, μ
         ) == mgrad(
             (a, b) -> censored_nbinomial_loglik(a, b, up, x), 8.3, μ
         )

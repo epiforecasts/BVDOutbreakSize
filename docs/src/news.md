@@ -29,7 +29,7 @@ Changes since v2.1.0.
   Its gradient runs about 4.2 times faster on the 1066 scanned cells.
 - Each patch row of the province composition in `province_composition_model` is scored as one summed BetaBinomial term with its own rule, through `BetaBinomialVector`.
   A row's gradient runs about 5 times faster than through a `product_distribution` of BetaBinomials.
-- These submodels score and draw their vectors through `NegBinomialVector`, `CensoredNegBinomialVector` and `StudentTVector`, so each keeps a single `~` for observed and `missing` data.
+- These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data.
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
   A change to the rules therefore forces a refit.

@@ -22,7 +22,8 @@ end
 """
 Independent right-censored [`safe_nbinomial`](@ref) counts, entry `i` about
 `μ[i]` and censored at `upper[i]`, both through [`safe_rate`](@ref), with
-the shared dispersion `k`. `logpdf` is
+the shared dispersion `k`. Built by
+`censored(NegBinomialVector(k, μ); upper)`. `logpdf` is
 [`censored_nbinomial_loglik`](@ref).
 """
 struct CensoredNegBinomialVector{
@@ -66,6 +67,17 @@ struct BetaBinomialVector{
     p::P
     "Shared overdispersion."
     ρ::R
+end
+
+"""
+    censored(d::NegBinomialVector; upper::AbstractVector)
+
+Right-censor each entry of `d` at the matching `upper`, as `censored` does
+for one `NegativeBinomial`. Returns a
+[`CensoredNegBinomialVector`](@ref).
+"""
+function Distributions.censored(d::NegBinomialVector; upper::AbstractVector)
+    return CensoredNegBinomialVector(d.k, d.μ, upper)
 end
 
 Base.length(

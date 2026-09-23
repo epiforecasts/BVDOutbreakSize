@@ -298,8 +298,8 @@ the effective capacity `ceilings[i]`. The censored tail probability still
 depends on the demand above the ceiling, so demand stays identified when
 beds are full rather than the occupancy going flat in demand. A `missing`
 `obs` samples (the predictive path) under the `<prefix>.obs` key. Both go
-through one [`CensoredNegBinomialVector`](@ref), so a supplied vector is
-scored as one summed term. Shares the surveillance dispersion `k`.
+through one `censored` [`NegBinomialVector`](@ref), so a supplied vector
+is scored as one summed term. Shares the surveillance dispersion `k`.
 """
 @model function censored_occupancy_model(
         means::AbstractVector,
@@ -307,7 +307,7 @@ scored as one summed term. Shares the surveillance dispersion `k`.
         obs::Union{Missing, AbstractVector{<:Integer}}, k::Real
     )
     isempty(means) && return (; means, ceilings, obs = Int[])
-    obs ~ CensoredNegBinomialVector(k, means, ceilings)
+    obs ~ censored(NegBinomialVector(k, means); upper = ceilings)
     return (; means, ceilings, obs)
 end
 
