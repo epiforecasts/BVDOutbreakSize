@@ -181,3 +181,58 @@ end
         rng, F -> sum_to_zero_moments(F).cor, F; is_primitive = false
     )
 end
+
+@testitem "sum-to-zero submodels: finite log density and Mooncake gradient" tags = [
+    :ad,
+] begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using ADTypes: AutoForwardDiff
+    import ForwardDiff
+    using Distributions: Normal, truncated
+    using Random: Xoshiro
+    using BVDOutbreakSize: patch_rt_model, patch_infection_model,
+        province_composition_model, default_adtype
+
+    ## Each submodel whose deviations sit on the sum-to-zero basis, at a
+    ## prior draw in unconstrained space, against ForwardDiff on the same
+    ## log density.
+    function check(model)
+        vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(11), model), model)
+        x = collect(vi[:])
+        grad_with(adtype) = logdensity_and_gradient(
+            DynamicPPL.LogDensityFunction(
+                model, DynamicPPL.getlogjoint, vi; adtype
+            ), x
+        )
+        logp, grad = grad_with(default_adtype())
+        @test isfinite(logp)
+        @test all(isfinite, grad)
+        @test any(!iszero, grad)
+        _, grad_fd = grad_with(AutoForwardDiff())
+        @test grad ≈ grad_fd rtol = 1.0e-6
+        return nothing
+    end
+
+    kernel4 = [p == q ? 0.0 : 1.0e-4 for p in 1:4, q in 1:4]
+    obs = [853 21 42; 77 2 5; 3 0 0; 10 1 2]
+    modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2; 9.0 1.0 1.5]
+    @testset "$name" for (name, model) in (
+            ("patch_rt_model, two patches", patch_rt_model(60, 2, log(1.5); rt_start = 10)),
+            ("patch_rt_model, four patches", patch_rt_model(60, 4, log(1.5); rt_start = 10)),
+            (
+                "patch_infection_model, coupled",
+                patch_infection_model(60, 4; importation_kernel = kernel4),
+            ),
+            (
+                "province_composition_model, covariate and severity",
+                province_composition_model(
+                    obs, modelled;
+                    testing_covariate = [0.6, -0.2, -0.3, -0.1],
+                    severity_sd_prior = truncated(Normal(0, 0.3); lower = 0)
+                ),
+            ),
+        )
+        check(model)
+    end
+end

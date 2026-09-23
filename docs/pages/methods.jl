@@ -1752,11 +1752,11 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
-# \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
+# \log a_p = \beta x_p + \tau_a (Q \mathbf{z})_p, \qquad
+# \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+# with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
 #
 # $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
 #
@@ -1767,7 +1767,7 @@ cfr_prior_fig #hide
 #
 # where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
 # A pooled patch sums its members before the ratio is taken.
-# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# The covariate sums to zero across patches by construction, so the log ascertainment sums to zero as well.
 # Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
 # It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
 # A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.

@@ -1598,7 +1598,7 @@ end
 
     ## With a real covariate it moves the shares in the covariate's
     ## direction: the patch with the most testing per head gains share.
-    draws = (; ρ = 0.05, τ_asc = 0.4, z_asc = [-0.8, 0.3, 1.1])
+    draws = (; ρ = 0.05, τ_asc = 0.4, z_asc = [-0.8, 1.1])
     shares(β) = DynamicPPL.fix(live; draws..., β_asc = β)().shares
     lifted = shares(0.5)
     flat = shares(0.0)
