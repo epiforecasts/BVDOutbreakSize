@@ -48,7 +48,6 @@ This moves the non-BVD death background, so fitted values change.
 ### Report
 
 - The limitations page opens with those that apply to the whole work, then groups the national and province ones by data, model and evaluation, one short bullet each (#840).
-  Each links the issue that tracks it, where there is one.
   Limitations that later work had overtaken are rewritten or dropped, and the province ones are added.
 - Each province is projected a week ahead by its own renewal equation
   rather than a fixed share of the national forecast, and only these
