@@ -285,6 +285,43 @@ if !@isdefined(_BVD_SETUP_LOADED)
     province_testing = province_testing_covariate(
         obs.province_lab_daily_history
     )
+
+    ## Draws from the four-patch prior for the province pages. The shared
+    ## `prior_chn` is single-population and carries no province quantities.
+    ## Every observation is withheld as in `prior_chn`, but the province
+    ## compositions are passed their observed counts: `Prior()` leaves them out
+    ## of the density, so they only fix each vintage's total, and with
+    ## `missing` an extreme prior draw can push that total past the integer
+    ## range. A function rather than an eager draw, since every page includes
+    ## this file and only the province pages need it. The draw is kept after
+    ## the first call and takes its own seeded generator, so both pages, and
+    ## `scripts/run.jl`, overlay the same draws.
+    _patch_prior_cache = Ref{Any}(nothing)
+    function patch_prior_draws(obs)
+        cached = _patch_prior_cache[]
+        cached !== nothing && first(cached) === obs && return last(cached)
+        m = bvd_joint(
+            obs.n, missing, missing, missing, missing, missing;
+            deaths_history = (; days = Int[], counts = Int[]),
+            reported_history = (; days = Int[], counts = Int[]),
+            confirmed_history = (; days = Int[], counts = Int[]),
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = obs.n - obs.who_first_sitrep_days,
+            background_pooling = background_pooling_model,
+            genetic = genetic_seeding_model,
+            tmrca_days = obs.tmrca_days,
+            n_patches = N_PATCHES,
+            province_increments = province_cases.increments,
+            province_days = province_cases.days,
+            province_testing_covariate = province_testing,
+            province_death_increments = province_deaths.increments,
+            province_death_days = province_deaths.days
+        )
+        chn = sample(Xoshiro(20260518), m, Prior(), 1_000; progress = false)
+        _patch_prior_cache[] = (obs, chn)
+        return chn
+    end
     posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))

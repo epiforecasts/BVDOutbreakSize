@@ -209,16 +209,13 @@ spatial_hyper_table #hide
 # ## Province parameters against their priors
 #
 # The pair plots below set the posterior of the province parameters against their prior.
-# The prior is drawn from the patch model, as the shared prior draws carry no province parameters.
+# The prior is the four-patch model's, as the shared prior draws carry no province parameters.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
 #md # ```
 
-patch_prior_chn = sample(
-    production_joint(obs; breakpoint = _BREAKPOINT), Prior(), 1_000;
-    progress = false
-);
+prior_patch_chn = patch_prior_draws(obs);
 
 #md # ```@raw html
 #md # </details>
@@ -238,7 +235,7 @@ spatial_pair_fig = plot_pair(
         :importation_epsilon, :province_cfr_sd,
         :province_death_ascertainment_sd,
     ];
-    prior = patch_prior_chn, labels = spatial_labels
+    prior = prior_patch_chn, labels = spatial_labels
 );
 
 #md # ```@raw html
@@ -271,7 +268,7 @@ province_pair_figs = [
             :R_T_patch, :province_ascertainment,
             :CFR_patch, :province_death_ascertainment,
         ];
-        patch = p, prior = patch_prior_chn, labels = province_pair_labels
+        patch = p, prior = prior_patch_chn, labels = province_pair_labels
     )
         for p in 1:N_PATCHES
 ];
