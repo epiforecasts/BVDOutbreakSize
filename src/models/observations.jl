@@ -3413,7 +3413,9 @@ end
 
 """
     onset_report_expected_total(onsets, logit_h0, γ, grid_start, alpha,
-        as_of; alpha_grid_start = grid_start)
+        as_of, alpha_grid_start)
+    onset_report_expected_total(onsets, logit_h0, γ, grid_start, alpha,
+        as_of)
 
 Expected reported symptom-onset total as of grid day `as_of`,
 `Σ_u onsets[u] · F(u, as_of - u)` for `u` in `1:as_of` (clamped to
@@ -3426,12 +3428,20 @@ total anchored a few days earlier than every sibling.
 
 `grid_start` is `γ`'s origin (the calendar walk's, possibly later than the
 earliest scored onset date); `alpha_grid_start` is `alpha`'s (the
-ascertainment walk's, always the earliest scored onset date). They default
-to the same value, correct only when the two coincide. Both spans start
-after grid day 1 and end at or before `as_of`, so the oldest and most
-recent terms need a calendar effect and ascertainment level the fit has no
-estimate for; [`onset_report_F`](@ref) holds both flat at their nearest
-fitted edge (see [`onset_report_G`](@ref)).
+ascertainment walk's, always the earliest scored onset date). The two
+coincide only sometimes, so `alpha_grid_start` is a positional argument
+rather than a keyword defaulting to `grid_start`: the 6-argument method
+below is the `alpha_grid_start = grid_start` case, kept for callers that
+never narrow the calendar grid independently of the ascertainment one. A
+positional argument is a primitive Mooncake can register a rule against
+(the hand-written rule lives in `ad_rules.jl`); a keyword call does not
+dispatch to a rule declared on the plain positional signature, so it
+silently fell back to generic differentiation once this argument stopped
+always equalling `grid_start`. Both spans start after grid
+day 1 and end at or before `as_of`, so the oldest and most recent terms
+need a calendar effect and ascertainment level the fit has no estimate for;
+[`onset_report_F`](@ref) holds both flat at their nearest fitted edge (see
+[`onset_report_G`](@ref)).
 
 Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
@@ -3440,8 +3450,8 @@ in range. Pure, top-level, single indexed loop.
 function onset_report_expected_total(
         onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
-        grid_start::Integer, alpha::AbstractVector, as_of::Integer;
-        alpha_grid_start::Integer = grid_start
+        grid_start::Integer, alpha::AbstractVector, as_of::Integer,
+        alpha_grid_start::Integer
     )
     T = promote_type(
         eltype(onsets), eltype(logit_h0), eltype(γ),
@@ -3457,6 +3467,16 @@ function onset_report_expected_total(
         total += onsets[u] * onset_report_F(δ, logit_h0, γ, u, grid_start, α)
     end
     return total
+end
+
+function onset_report_expected_total(
+        onsets::AbstractVector,
+        logit_h0::AbstractVector, γ::AbstractVector,
+        grid_start::Integer, alpha::AbstractVector, as_of::Integer
+    )
+    return onset_report_expected_total(
+        onsets, logit_h0, γ, grid_start, alpha, as_of, grid_start
+    )
 end
 
 """

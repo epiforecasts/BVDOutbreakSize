@@ -703,10 +703,28 @@ end
     end
 
     @testset "onset_report_expected_total" begin
-        ## Onset dates before `grid_start` clamp both `γ` and `alpha`.
+        ## Onset dates before `grid_start` clamp both `γ` and `alpha`. The
+        ## 6-arg method defaults `alpha_grid_start` to `grid_start`.
         check_grads(
             (o, l, g, al) -> onset_report_expected_total(o, l, g, gs, al, n),
             onsets, lh, γ, alpha
+        )
+    end
+
+    @testset "onset_report_expected_total with a distinct alpha grid" begin
+        ## The calendar walk's own grid can start later than the
+        ## ascertainment walk's once the two are narrowed independently
+        ## (`onset_hazard_grid_start`), so `alpha_grid_start` is threaded
+        ## through as its own positional argument rather than defaulting to
+        ## `grid_start`. A wrong offset here would still pass the 6-arg
+        ## check above, since that case has the two grids coincide.
+        ags = gs - 3
+        alpha2 = abs.(randn(ge - ags + 1)) .* 0.3
+        check_grads(
+            (o, l, g, al) -> onset_report_expected_total(
+                o, l, g, gs, al, n, ags
+            ),
+            onsets, lh, γ, alpha2
         )
     end
 end

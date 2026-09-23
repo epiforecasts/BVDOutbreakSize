@@ -326,8 +326,8 @@ level (see [`forecast_stream`](@ref)).
     )
     expected_onset_reported_T := onset_report_expected_total(
         latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n;
-        alpha_grid_start = onset_report_state.alpha_grid_start
+        onset_report_state.grid_start, onset_report_state.alpha, n,
+        onset_report_state.alpha_grid_start
     )
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
@@ -1118,8 +1118,8 @@ reproduction number implied by the summed patch infections.
     ## and does not separate here.
     expected_onset_reported_T := onset_report_expected_total(
         onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n;
-        alpha_grid_start = onset_report_state.alpha_grid_start
+        onset_report_state.grid_start, onset_report_state.alpha, n,
+        onset_report_state.alpha_grid_start
     )
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
