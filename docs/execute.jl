@@ -1,7 +1,7 @@
 # Execute one report page via Literate to produce docs/src/<page>.md. Select
 # the page with the `BVD_DOC_PAGE` environment variable (one of `methods`,
 # `estimates/national`, `estimates/province`, `forecasts/national`,
-# `evaluation/insample`, `evaluation/forecast`, `sensitivity`). Every model
+# `evaluation/national`, `evaluation/province`, `sensitivity`). Every model
 # fit is loaded from the content-addressed cache (`BVD_FIT_CACHE`) rather
 # than refitted, so this is fast once the per-fit matrix (or an earlier run)
 # has populated the cache.
@@ -22,12 +22,12 @@ const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
 PAGE in (
     "methods",
     "estimates/national", "estimates/province", "forecasts/national",
-    "evaluation/insample", "evaluation/forecast", "sensitivity",
+    "evaluation/national", "evaluation/province", "sensitivity",
 ) ||
     error(
     "BVD_DOC_PAGE must be one of methods, estimates/national, " *
-        "estimates/province, forecasts/national, evaluation/insample, " *
-        "evaluation/forecast, sensitivity; got \"$PAGE\""
+        "estimates/province, forecasts/national, evaluation/national, " *
+        "evaluation/province, sensitivity; got \"$PAGE\""
 )
 
 const LITERATE_SRC = joinpath(@__DIR__, "pages", "$PAGE.jl")

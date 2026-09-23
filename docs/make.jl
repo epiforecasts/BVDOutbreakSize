@@ -15,15 +15,15 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## render can fan out across CI runners. `methods` carries the data, the
 ## model and how it is fitted, `estimates/national` the national results,
 ## `estimates/province` the per-province estimates, `forecasts/national` the
-## one-week-ahead projections, `evaluation/insample` the prior and posterior
-## predictive checks, `evaluation/forecast` the scoring against what arrived,
+## one-week-ahead projections, `evaluation/national` and `evaluation/province`
+## the in-sample checks and the scoring against what arrived at each level,
 ## and `sensitivity` the comparison and sensitivity analyses. All load the
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
     "estimates/national", "estimates/province",
     "forecasts/national",
-    "evaluation/insample", "evaluation/forecast",
+    "evaluation/national", "evaluation/province",
     "sensitivity",
 ]
 
@@ -31,9 +31,9 @@ const PAGES = [
 ##   render-methods      → methods.jl → src/methods.md
 ##   render-main         → estimates/national.jl → src/estimates/national.md
 ##   render-province     → estimates/province.jl
-##   render-insample     → evaluation/insample.jl
 ##   render-forecast     → forecasts/national.jl
-##   render-evaluation   → evaluation/forecast.jl
+##   render-evaluation   → evaluation/national.jl
+##   render-evaluation-province → evaluation/province.jl
 ##   render-sensitivity  → sensitivity.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
@@ -131,8 +131,8 @@ function combine()
             ],
             "Forecasts" => "forecasts/national.md",
             "Evaluation" => [
-                "In-sample" => "evaluation/insample.md",
-                "Forecast" => "evaluation/forecast.md",
+                "National" => "evaluation/national.md",
+                "Provinces" => "evaluation/province.md",
             ],
             "Details" => [
                 "Aim and origins" => "aim.md",
@@ -191,12 +191,12 @@ elseif STAGE == "render-main"
     render_page("estimates/national")
 elseif STAGE == "render-province"
     render_page("estimates/province")
-elseif STAGE == "render-insample"
-    render_page("evaluation/insample")
 elseif STAGE == "render-forecast"
     render_page("forecasts/national")
 elseif STAGE == "render-evaluation"
-    render_page("evaluation/forecast")
+    render_page("evaluation/national")
+elseif STAGE == "render-evaluation-province"
+    render_page("evaluation/province")
 elseif STAGE == "render-sensitivity"
     render_page("sensitivity")
 elseif STAGE == "combine"
@@ -210,8 +210,8 @@ else
     error(
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-methods, " *
             "render-main, " *
-            "render-province, render-insample, render-forecast, " *
-            "render-evaluation, " *
+            "render-province, render-forecast, " *
+            "render-evaluation, render-evaluation-province, " *
             "render-sensitivity, combine, all"
     )
 end

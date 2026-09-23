@@ -556,10 +556,10 @@ jobs:
             slug: estimates-province
           - id: forecasts/national
             slug: forecasts-national
-          - id: evaluation/insample
-            slug: evaluation-insample
-          - id: evaluation/forecast
-            slug: evaluation-forecast
+          - id: evaluation/national
+            slug: evaluation-national
+          - id: evaluation/province
+            slug: evaluation-province
           - id: sensitivity
             slug: sensitivity
     steps:

@@ -20,7 +20,7 @@ This page covers how the project is laid out, how to run it, and the conventions
 - `src/confirmed_cfr.jl` — delay-corrected confirmed-case-fatality-ratio helpers.
 - `src/plots.jl` — plotting.
 - `docs/pages/` — the Literate report pages, one file per rendered page, in a folder per navigation group so a new geographic stratum is a new file in an existing folder.
-  `estimates/national.jl` carries the methods and the national results, `estimates/province.jl` the per-province estimates, `forecasts/national.jl` the one-week-ahead projections, `evaluation/insample.jl` the posterior predictive checks, `evaluation/forecast.jl` the scoring against what arrived, and `sensitivity.jl` the comparison and sensitivity analyses.
+  `estimates/national.jl` carries the methods and the national results, `estimates/province.jl` the per-province estimates, `forecasts/national.jl` the one-week-ahead projections, `evaluation/national.jl` and `evaluation/province.jl` the in-sample checks and the scoring against what arrived at each level, and `sensitivity.jl` the comparison and sensitivity analyses.
   All load their fits through the shared `_setup.jl`, and anything two pages both need lives there rather than on whichever page defined it first.
   `estimates/national.jl` is the main artifact, published as `analysis.html` on each release.
 - `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), `list.jl` (print fit ids for the CI matrix), and `convergence.jl` with `check_convergence.jl` (the convergence gate, `task check-convergence`).
