@@ -15,84 +15,52 @@
 
 ### Data
 
-- **Most quantities rest on weakly-informed priors.** Nearly all of the delays, the case-fatality ratio and the laboratory assumptions rest on priors informed at best by a handful of literature sources, often from other outbreaks.
-  In places the priors instead reflect our own judgement rather than anything from this outbreak.
+- **Most quantities rest on weakly-informed priors.** Nearly all of the delays, the case-fatality ratio and the laboratory assumptions rest on priors, often from other outbreaks.
   The data do little to move them, so these posteriors largely track their priors.
-  We fit the between-report increments, so the trajectory informs the change in the reproduction number over the window.
-  Apart from the onset-to-report delay, which the [onset curve](@ref "Symptom-onset reporting delay") informs, it says little about the delays, the surveillance dispersion or the reporting fractions on their own.
-  A line list from this outbreak would remove it.
+  The onset-to-report delay is the exception, informed by the [onset curve](@ref "Symptom-onset reporting delay").
 - **Almost every count is report-dated.** The digitised onset curve is the only series carrying symptom-onset dates, and it covers confirmed cases from SitRep 059 onward.
   Everything else is a total at the report date, so the epidemic's timing is recovered mainly through the assumed delays.
-  An onset-dated series for the other streams would remove it.
-- **The suspected streams are no longer published.** The suspected cases and deaths stopped being published, so the late window rests on the confirmed, laboratory, treatment-centre and onset data, and their forecasts cannot be checked.
-  The laboratory analysed-specimen series is also incomplete, covering only part of the window ([laboratory pipeline](@ref "Laboratory pipeline")).
-  Resumed publication of these series would remove it.
+- **The suspected streams are no longer published.** The late window rests on the confirmed, laboratory, treatment-centre and onset data, and the suspected forecasts cannot be checked.
+  The laboratory analysed-specimen series covers only part of the window ([laboratory pipeline](@ref "Laboratory pipeline")).
 - **Later sitreps revise earlier figures.** A later situation report can revise an earlier total up or down as suspects are reclassified and newly-reporting health zones are added.
   We do not model this revision process.
-  A revision model fitted to the vintage history would remove it.
-- **The onset curve is read from a figure.** Each report redraws the onset curve, and each bar is digitised from it, so the counts carry scan error that the model treats as noise at a fixed scale ([#824](https://github.com/epiforecasts/BVDOutbreakSize/issues/824)).
-  A per-vintage noise scale ([#793](https://github.com/epiforecasts/BVDOutbreakSize/pull/793)) would reduce it, and a published data table would remove it.
+- **The onset curve is read from a figure.** Each bar is digitised from a figure that each report redraws, so the counts carry scan error that the model treats as noise at a fixed scale ([#793](https://github.com/epiforecasts/BVDOutbreakSize/pull/793), [#824](https://github.com/epiforecasts/BVDOutbreakSize/issues/824)).
 
 ### Model
 
 - **Streams share one case pool.** They are fitted as conditionally independent given latent incidence but observe overlapping people.
-  This can understate uncertainty ([#307](https://github.com/epiforecasts/BVDOutbreakSize/issues/307)).
-  Whether they imply mutually consistent outbreak sizes is assessed in the [outbreak size estimated by each data stream](@ref "Outbreak size estimated by each data stream"), which sets each stream's own fit against the joint.
-  A likelihood that models the overlap would remove it.
-- **Ascertainment and testing are constant.** The DRC ascertainment and the testing fraction are each one value over the window, although ascertainment probably rose, so a change in either is read as a change in incidence.
-  Time-varying ascertainment ([#400](https://github.com/epiforecasts/BVDOutbreakSize/pull/400), [#335](https://github.com/epiforecasts/BVDOutbreakSize/issues/335)) and testing ([#546](https://github.com/epiforecasts/BVDOutbreakSize/issues/546)) would remove it.
+  This can understate uncertainty ([#307](https://github.com/epiforecasts/BVDOutbreakSize/issues/307)), which the [outbreak size estimated by each data stream](@ref "Outbreak size estimated by each data stream") checks.
+- **Ascertainment and testing are constant.** The DRC ascertainment and the testing fraction are each one value over the window, although ascertainment probably rose, so a change in either is read as a change in incidence ([#400](https://github.com/epiforecasts/BVDOutbreakSize/pull/400), [#546](https://github.com/epiforecasts/BVDOutbreakSize/issues/546)).
 - **Inherits McCabe et al.'s epidemiological assumptions.** A single zoonotic seed, a generation interval from earlier Ebola outbreaks, and no depletion of susceptibles.
-  The onset-to-death delay is grounded on Isiro 2012 and the [genetic seeding bound](@ref "Genetic bound on outbreak age") on an external clock rate.
-  Neither propagates cross-outbreak or clock uncertainty.
+  The onset-to-death delay and the [genetic seeding bound](@ref "Genetic bound on outbreak age") do not propagate cross-outbreak or clock uncertainty.
   These help constrain the estimated outbreak age and early reproduction number.
-  Delay estimates and a clock from this outbreak would remove it.
-- **Intervention ramp is fixed in time.** The ramp in the [reproduction number](@ref "Reproduction number") is centred on the first WHO situation report with an assumed three-week duration, and only its size is estimated.
-  Dated response milestones, or a ramp with sampled timing, would remove it.
+- **Intervention ramp is fixed in time.** The ramp in the [reproduction number](@ref "Reproduction number") has an assumed start and three-week duration, and only its size is estimated.
 - **The bed shortfall is not measured.** Occupancy shows demand only up to the beds filled, so the shortfall above capacity comes from the [treatment-centre flow](@ref "Treatment-centre flow") model and its priors ([#640](https://github.com/epiforecasts/BVDOutbreakSize/issues/640)).
-  A count of patients waiting for a bed would remove it.
 
 ### Evaluation
 
 - **The onset forecast mostly measures scan error.** The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by the per-scan error rather than the epidemic.
-  It checks the fitted delay more than it predicts cases.
-  A published onset table would remove it.
-- **Frozen-fit baselines can see later corrections.** The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks, so a later correction can reach it ([details](@ref "Forecast scoring against a persistence baseline")).
-  A snapshot archived at each frozen cut-off would remove it.
+- **Frozen-fit baselines can see later corrections.** The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks ([details](@ref "Forecast scoring against a persistence baseline")).
 - **Reconstructed forecasts are not exact.** Past forecasts that were not stored are rebuilt from each release's own code, but with current dependency versions ([#622](https://github.com/epiforecasts/BVDOutbreakSize/issues/622)).
-  Their scores are close to, but not exactly, what each release produced.
-  Pinned manifests for every release would remove it.
 
 ## Provinces
 
 ### Data
 
-- **Province data are confirmed cases and deaths only.** The spatial tables give confirmed cases and deaths, the only province data in the likelihood, and there is no province onset nowcast.
-  Occupancy and beds by province are not fitted ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)).
-  Scoring them as splits of their printed sums would narrow it.
+- **Province data are confirmed cases and deaths only.** Occupancy and beds by province are not fitted ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)), and there is no province onset nowcast.
 - **The province tables cover part of the window.** The province vintages start on 15 June and stop before the cut-off, and harmonisation backfill is published only nationally.
   Outside those vintages the provinces are informed only through the national streams ([province compositions](@ref province-compositions)).
-  Province vintages over the whole window would remove it.
 
 ### Model
 
-- **Four patches, not the full provincial detail.** Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
+- **Four patches, not the full provincial detail.** Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch ([#779](https://github.com/epiforecasts/BVDOutbreakSize/pull/779)).
   Transmission within a patch is well mixed, so spread inside a province is not represented.
-  A health-zone model ([#779](https://github.com/epiforecasts/BVDOutbreakSize/pull/779), [#705](https://github.com/epiforecasts/BVDOutbreakSize/issues/705)) would narrow it.
 - **Importation structure is assumed, not measured.** There is no mobility or origin-destination data for this outbreak, so the [gravity kernel](@ref "Mixing and importation") is a structural assumption.
-  Mobility data between provinces would remove it.
-- **Provincial testing enters the prior, not the likelihood.** The alternative was a per-patch laboratory process, fitting each province's analysed volume and positives so that the data set each patch's testing capacity directly.
-  It was not taken because those positives are the per-province confirmed counts differenced, which the composition already scores, so they would enter the joint density twice.
-  The deaths therefore do most of the work in separating a province's incidence from its case-finding, and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
-  Scoring the province analysed volume as a split of the national total ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)) would narrow it.
-- **Single national bed capacity.** The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
+- **Provincial testing enters the prior, not the likelihood.** The deaths do most of the work in separating a province's incidence from its case-finding, and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors"), [#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)).
+- **Single national bed capacity.** The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)).
   Ituri holds most of the occupied beds, so the national bed shortfall understates local unmet need.
-  Occupancy and beds by province ([#784](https://github.com/epiforecasts/BVDOutbreakSize/pull/784)) would remove it.
 
 ### Evaluation
 
 - **No province projection has been scored yet.** Only [province forecast](@ref "Province forecast") projections are scored, and earlier fixed-share archives are not.
-  The scores fill in as projections become old enough to check.
-  More releases will remove it.
-- **Province forecasts do not sum to the national one.** Each province is projected on its own, without the fitted cross-province correlation, and the pooled patch is forecast as one.
-  The provinces need not add up to the national forecast.
-  A projection reconciled with the national one ([#831](https://github.com/epiforecasts/BVDOutbreakSize/issues/831)) would remove it.
+- **Province forecasts do not sum to the national one.** Each province is projected on its own, without the fitted cross-province correlation, and the pooled patch is forecast as one ([#831](https://github.com/epiforecasts/BVDOutbreakSize/issues/831)).
