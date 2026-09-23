@@ -407,18 +407,17 @@ delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
 over lags `d` that stay in range. Maps infections to onsets, onsets to
 deaths, onsets to reports and onsets to detected exports. Type-stable and
 AD-transparent.
+
+Each lag adds one scaled, shifted copy of `x` with `axpy!`, a single BLAS
+call on float arrays. BLAS skips a lag whose weight is exactly zero, so on
+float arrays an `Inf` or `NaN` in `x` does not reach the days that lag
+feeds; other element types add `0 · x` there and propagate it.
 """
 function convolve_delay(x::AbstractVector, delay::AbstractVector)
     n = length(x)
-    Tp = promote_type(eltype(x), eltype(delay))
-    y = zeros(Tp, n)
-    @inbounds for t in 1:n
-        acc = zero(Tp)
-        dmax = min(t - 1, length(delay) - 1)
-        for d in 0:dmax
-            acc += x[t - d] * delay[d + 1]
-        end
-        y[t] = acc
+    y = zeros(promote_type(eltype(x), eltype(delay)), n)
+    for d in 1:min(length(delay), n)
+        axpy!(delay[d], view(x, 1:(n - d + 1)), view(y, d:n))
     end
     return y
 end

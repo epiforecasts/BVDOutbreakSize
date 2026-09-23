@@ -1,6 +1,7 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, std
+using LinearAlgebra: axpy!, dot
 using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow

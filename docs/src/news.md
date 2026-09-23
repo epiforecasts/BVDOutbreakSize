@@ -31,6 +31,9 @@ Changes since v2.1.0.
   A row's gradient runs about 5 times faster than through a `product_distribution` of BetaBinomials.
 - These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data.
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
+- `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!`, and its rule's pullback is the matching per-lag `axpy!` and `dot`.
+  The forward runs about 1.6 times faster and the gradient about 1.25 times faster.
+  On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).

@@ -68,32 +68,6 @@ Mooncake.@is_primitive(
     },
 )
 
-## Adjoint of the daily delay convolution `convolve_delay`. A convolution's
-## pullback is the matching correlation, one pass over the same `(t, d)`
-## pairs:
-##
-##     y[t]    = Σ_d x[t−d] · w[d+1]
-##     x̄[s]   += Σ_d ȳ[s+d] · w[d+1]
-##     w̄[d+1] += Σ_t ȳ[t] · x[t−d]
-function _convolve_delay_adjoint(
-        ȳ::AbstractVector, x::AbstractVector,
-        delay::AbstractVector
-    )
-    n = length(x)
-    D = length(delay)
-    x̄ = zeros(promote_type(eltype(ȳ), eltype(delay)), n)
-    d̄ = zeros(promote_type(eltype(ȳ), eltype(x)), D)
-    @inbounds for t in 1:min(n, length(ȳ))
-        g = ȳ[t]
-        dmax = min(t - 1, D - 1)
-        for d in 0:dmax
-            x̄[t - d] += g * delay[d + 1]
-            d̄[d + 1] += g * x[t - d]
-        end
-    end
-    return x̄, d̄
-end
-
 function Mooncake.rrule!!(
         ::CoDual{typeof(convolve_delay)},
         x::CoDual{<:_FloatVec}, delay::CoDual{<:_FloatVec}
@@ -105,9 +79,22 @@ function Mooncake.rrule!!(
     y = convolve_delay(xp, dp)
     ȳ = zero(y)
     function convolve_delay_pullback!!(::NoRData)
-        Δx, Δd = _convolve_delay_adjoint(ȳ, xp, dp)
+        ## The forward adds `w[d] · x[1:n−d+1]` to `y[d:n]` for each lag, so
+        ## the pullback is the matching correlation, one lag at a time:
+        ##
+        ##     x̄[1:n−d+1] += w[d] · ȳ[d:n]
+        ##     w̄[d]       += ȳ[d:n] · x[1:n−d+1]
+        ##
+        ## `x̄` gathers into a contiguous buffer first, since `x` may be a
+        ## strided matrix row.
+        n = length(xp)
+        Δx = zeros(eltype(x̄), n)
+        for d in 1:min(length(dp), n)
+            ȳd = view(ȳ, d:n)
+            axpy!(dp[d], ȳd, view(Δx, 1:(n - d + 1)))
+            d̄[d] += dot(ȳd, view(xp, 1:(n - d + 1)))
+        end
         x̄ .+= Δx
-        d̄ .+= Δd
         return NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), convolve_delay_pullback!!
