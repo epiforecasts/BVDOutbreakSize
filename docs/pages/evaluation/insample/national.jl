@@ -1,7 +1,8 @@
 # # In-sample checks
 #
-# Whether the fitted model reproduces the data it was fitted to.
-# How it predicts data it has not seen is on the [forecast evaluation](@ref "Forecast evaluation") page.
+# Whether the fitted joint model reproduces the national data it was fitted to.
+# The same checks by province are on the [province in-sample checks](@ref "Province in-sample checks") page.
+# How the model predicts data it has not seen is on the [forecast evaluation](@ref "Forecast evaluation") page.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -16,9 +17,19 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## National
+# ## Summary
+#
+# The overall bullets come first, then each stream's own calibration, from the checks further down this page.
+# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
+# Coverage is the fraction of vintages whose observed count falls inside the predictive interval, nominally 0.9 for the 90% interval.
 
-# ### Prior predictive check
+#md # ```@eval
+#md # using Markdown, BVDOutbreakSize
+#md # dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+#md # Markdown.parse(read(joinpath(dir, "evaluation_insample_national.md"), String))
+#md # ```
+
+# ## Prior predictive check
 #
 # Before any observation is taken into account, what does the prior imply about replicated exports, deaths and reported cases?
 # Draws from the prior over the unobserved data should bracket the observed counts.
@@ -66,7 +77,7 @@ prior_pair_fig = plot_pair(
 
 prior_pair_fig #hide
 
-# ### Posterior predictive checks
+# ## Posterior predictive checks
 #
 # A posterior predictive check draws replicated observations from the fitted joint model and compares them to the observed counts.
 # The checks cover two groups: the dated DRC surveillance streams and the Uganda exports.
@@ -76,9 +87,9 @@ prior_pair_fig #hide
 # A stream counts as still reporting when its last situation-report vintage falls within a week of the cut-off.
 # Every panel runs over its own reporting dates with the observed series overlaid, and its date axis is labelled about once a week.
 
-# #### Streams still reporting
+# ### Streams still reporting
 #
-# ##### Cumulative
+# #### Cumulative
 #
 # A cumulative panel is drawn as replicated cumulative trajectories.
 # A daily panel (the isolation-bed occupancy, the 24h analysed volume) is drawn day by day, each day's replicated count against the observed count.
@@ -523,7 +534,7 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(reporting_panels);
 
 joint_vintage_ppc_fig #hide
 
-# ##### Per-vintage incidence
+# #### Per-vintage incidence
 #
 # This is the same check applied to per-vintage incidence: the count reported between consecutive situation reports, rather than the running cumulative.
 # Plotting the increment lets a rise or a slowdown in each stream read directly off the height of each step, where the near-straight cumulative line would hide it.
@@ -543,11 +554,11 @@ joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
 
 joint_vintage_incidence_fig #hide
 
-# #### Streams no longer reporting
+# ### Streams no longer reporting
 #
 # These streams stopped reporting before the cut-off, so their panels end earlier than the ones above.
 #
-# ##### Cumulative
+# #### Cumulative
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -561,7 +572,7 @@ joint_vintage_ppc_stopped_fig = plot_vintage_conditional_ppc(stopped_panels);
 
 joint_vintage_ppc_stopped_fig #hide
 
-# ##### Per-vintage incidence
+# #### Per-vintage incidence
 
 #md # ```@raw html
 #md # <details><summary>Per-vintage incidence posterior predictive plot</summary>
@@ -577,7 +588,7 @@ joint_vintage_incidence_stopped_fig = plot_vintage_incidence_ppc(
 
 joint_vintage_incidence_stopped_fig #hide
 
-# #### Stream calibration
+# ### Stream calibration
 #
 # We score each stream's per-vintage conditional predictions against the observed counts.
 # `bias` is the mean forecast bias over the vintages (negative under-predicted, positive over-predicted, zero when the observed counts sit at the predictive median).
@@ -611,7 +622,7 @@ stream_calibration_table #hide
 #md # </details>
 #md # ```
 
-# #### Exports
+# ### Exports
 #
 # The Uganda export and export-death streams are dated per-day series, each import or death scored as a Poisson at its detection day.
 # The scalar posterior predictive sums each replicate's per-day count vector across the dated days, giving the cumulative export and death total to compare with the observed count.
@@ -647,7 +658,7 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# ### Posterior correlations and stream totals
+# ## Posterior correlations and stream totals
 #
 # The heatmap is the posterior correlation between each pair of headline quantities: the outbreak size ($C_T$), the reproduction number ($R_T$), the outbreak age ($T$), the case-fatality ratio (CFR), the DRC and Uganda ascertainment fractions ($p_\text{drc}$, $p_\text{ug}$), the non-BVD background rate ($\lambda_\text{bg}$), the fraction tested ($\tau_\text{test}$), and the cut-off total expected for each stream.
 # Blue is positive, red negative.
@@ -714,67 +725,85 @@ stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
 #md # ```
 
 stream_pairs_fig #hide
-
-# ## By province
-#
-# ### [Province compositions](@id province-compositions)
-#
-# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
-# The panels below show that modelled share at every spatial vintage against the observed one.
-# Each panel carries two bands.
-# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
-# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# The observed points should fall inside it.
-# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
-# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
-# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
-# The vintages stop before the cut-off, so the panels end earlier than the [national posterior predictive checks](@ref "Posterior predictive checks").
+# ## Saving in-sample outputs
 
 #md # ```@raw html
-#md # <details><summary>Province composition posterior predictive checks</summary>
-#md # ```
-
-province_case_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_shares,
-    obs_increments = province_cases.increments,
-    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed case share by province"
-);
-
-province_death_ppc_fig = plot_province_composition_ppc(
-    chn_joint;
-    share_key = :province_death_shares,
-    obs_increments = province_deaths.increments,
-    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
-    title = "Confirmed death share by province"
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_case_ppc_fig #hide
-
-province_death_ppc_fig #hide
-
-# ## Saving in-sample assets
-
-#md # ```@raw html
-#md # <details><summary>Write the in-sample dashboard asset</summary>
+#md # <details><summary>Write the summary bullets</summary>
 #md # ```
 
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-## The report splits the surveillance panels by whether the stream was still
-## reporting at the cut-off. The dashboard shows one grid, so it is drawn here
-## over the full ordered panel set.
-CairoMakie.save(
-    joinpath(dashboard_dir, "reported_cases.png"),
-    plot_vintage_conditional_ppc(vintage_panels)
-)
+
+## The bullets under the summary heading at the top of the page. They read
+## tables built further down, so they are written here and read back when
+## the site is assembled.
+evaluation_insample_national_summary = let
+    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
+        string(round(x; digits = 2))
+    cal = filter(r -> isfinite(r["90% coverage"]), stream_calibration_table)
+    n_cov = count(>=(0.8), cal[!, "90% coverage"])
+    calibrated(r) = string(
+        r["Stream"], " (bias ", fmt(r["Bias"]), ", 90% coverage ",
+        fmt(r["90% coverage"]), ")"
+    )
+    worst = first(
+        sort(cal, "Bias"; by = abs, rev = true), min(3, size(cal, 1))
+    )
+    pred(x, observed) = string(
+        "observed ", observed, " against a predictive median of ",
+        round(Int, quantile(x, 0.5)), " (90% interval ",
+        round(Int, quantile(x, 0.05)), "–",
+        round(Int, quantile(x, 0.95)), ")"
+    )
+    overall = [
+        string(
+            "- **Streams:** ", n_cov, " of ", size(cal, 1),
+            " fitted streams have 90% coverage of at least 0.8."
+        ),
+        string(
+            "- **Least well reproduced:** ",
+            join(calibrated.(eachrow(worst)), "; "), "."
+        ),
+        string(
+            "- **Exports:** Uganda exports ",
+            pred(pp_exports, obs.exported_cases), ", and export deaths ",
+            pred(pp_exports_deaths, obs.exports_deaths), "."
+        ),
+    ]
+    ## Per stream, split the same way as the posterior predictive checks.
+    reporting = Set(p.title for p in reporting_panels)
+    function block(lead, keep)
+        rows = filter(r -> keep(r["Stream"] in reporting), cal)
+        size(rows, 1) == 0 && return nothing
+        return join(
+            vcat(
+                [string("**", lead, "**"), ""],
+                [
+                    string(
+                        "- ", r["Stream"], ": bias ", fmt(r["Bias"]),
+                        ", 90% coverage ", fmt(r["90% coverage"]), " over ",
+                        r["Vintages"], " vintages."
+                    )
+                        for r in eachrow(rows)
+                ]
+            ), "\n"
+        )
+    end
+    blocks = filter(
+        !isnothing,
+        [
+            block("Streams still reporting", identity),
+            block("Streams no longer reporting", !),
+        ]
+    )
+    join(vcat([join(overall, "\n")], blocks), "\n\n")
+end
+write(
+    joinpath(dashboard_dir, "evaluation_insample_national.md"),
+    evaluation_insample_national_summary
+);
 
 #md # ```@raw html
 #md # </details>

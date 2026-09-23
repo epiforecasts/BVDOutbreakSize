@@ -142,6 +142,35 @@ end
     @test obj !== nothing
 end
 
+@testitem "plot_pair reads one province from vector deterministics" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    rng = MersenneTwister(3)
+    np = 3
+    draws(nd, centre) = [centre .+ 0.1 .* randn(rng, np) for _ in 1:nd]
+    post = (;
+        R_T_patch = draws(200, [1.2, 0.9, 0.7]),
+        province_ascertainment = draws(200, [1.4, 0.8, 0.6]),
+    )
+    prior = (;
+        R_T_patch = draws(300, [1.0, 1.0, 1.0]),
+        province_ascertainment = draws(300, [1.0, 1.0, 1.0]),
+    )
+    obj = plot_pair(
+        post, [:R_T_patch, :province_ascertainment];
+        patch = 2, prior,
+        labels = Dict(:R_T_patch => "Reproduction number")
+    )
+    @test obj !== nothing
+    ## A patch outside the chain is an error rather than a silent empty plot.
+    @test_throws BoundsError plot_pair(
+        post, [:R_T_patch, :province_ascertainment]; patch = 5
+    )
+end
+
 @testitem "plot_correlation_heatmap returns a Makie figure" setup = [
     HeadlessMakie,
 ] begin
@@ -165,6 +194,30 @@ end
         labels = Dict(:a => "A", :b => "B")
     )
     @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_correlation_heatmap takes named draw vectors" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_correlation_heatmap
+
+    ## Per-province quantities are vector deterministics, so the page hands
+    ## the heatmap one draw vector per named quantity rather than a chain.
+    rng = MersenneTwister(3)
+    a = randn(rng, 300)
+    draws = (; a = a, b = a .+ 0.1 .* randn(rng, 300), c = randn(rng, 300))
+    fig = plot_correlation_heatmap(draws; labels = Dict(:a => "A"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_pair takes named draw vectors" setup = [HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    rng = MersenneTwister(4)
+    draws = (; a = randn(rng, 200), b = randn(rng, 200))
+    @test plot_pair(draws; thin = 2) !== nothing
 end
 
 @testitem "plot_stream_pairs returns a renderable object" setup = [

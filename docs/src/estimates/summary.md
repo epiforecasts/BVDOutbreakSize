@@ -11,7 +11,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 This page summarises the headline results.
 See the [National](national.md) and [Provinces](province.md) pages for the estimates at each level.
 See [Forecasts](../forecasts/national.md) for the week ahead.
-See [In-sample](../evaluation/insample.md) for how the model fits the data and [Forecast](../evaluation/forecast.md) evaluation for how past forecasts scored.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province page alongside.
 See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
@@ -42,10 +42,11 @@ All intervals are equal-tailed 30%, 60% and 90% credible intervals from the join
 
 ### By province
 
-The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the three below.
-Each cell is a median with a 90% credible interval.
+The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the provinces.
+Each range is an equal-tailed 90% credible interval.
 The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
-Modelled infections by province, the per-province parameter detail and the composition checks are on the [provinces](province.md) page.
+Each province's own estimates are in the [detail by province](province.md#Detail-by-province).
+Modelled infections by province, the per-province parameter detail and the composition checks are on the same page.
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -92,12 +93,6 @@ Modelled cumulative infections, symptom onsets and deaths.
 These are the underlying outbreak, upstream of the testing and reporting that produce the observed counts, so they are larger than the reported cases.
 
 ![Estimated cumulative infections, onsets and deaths over time](../summary_assets/infections.png)
-
-## Reported cases: model versus observed
-
-Modelled reported cases against the observed reported cases over time, a check that the fit reproduces what was seen on the ground.
-
-![Modelled versus observed reported cases over time](../summary_assets/reported_cases.png)
 
 ## Estimate variation by data stream
 

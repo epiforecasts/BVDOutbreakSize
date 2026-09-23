@@ -462,6 +462,58 @@ function stream_calibration(panels::AbstractVector)
     return _prettify(DataFrame(rows))
 end
 
+"""
+Per-province posterior-predictive panels for one province composition, in
+the shape [`stream_calibration`](@ref) takes. One panel per province, titled
+`"<stream>, <province>"`, holding the observed count at each spatial vintage
+and one replicate count vector per posterior draw.
+
+The replicates push each draw's expected shares (`share_key`) and the
+composition's overdispersion back through the stick-breaking allocation at
+the vintage's observed total, the same predictive
+[`plot_province_composition_ppc`](@ref) draws as its grey band. The check is
+therefore on the split alone, conditional on the national total. A vintage
+with no observed cases has no split to predict and is dropped. Each panel is
+a daily panel (`cumulative = false`), since a vintage's count is its own
+increment.
+
+`rho_key` names the overdispersion and defaults to the one matching
+`share_key`. Errors when the chain carries none, since without it there is
+no predictive to score.
+"""
+function province_composition_panels(
+        chn; share_key::Symbol, obs_increments::AbstractMatrix,
+        stream::AbstractString,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        rho_key::Union{Nothing, Symbol} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    ms = [collect(v) for v in vec(collect(chn[share_key]))]
+    nv = size(first(ms), 2)
+    totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
+    keep = findall(>(0), totals)
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, length(ms))
+    rho === nothing && error(
+        "province_composition_panels: the chain carries no overdispersion " *
+            "for `$(share_key)` (looked for $(rho_keys))."
+    )
+    preds = _composition_predictive(ms, rho, totals, nv)
+    return [
+        (;
+            title = string(stream, ", ", patch_labels[p]),
+            observed = Int.(obs_increments[p, keep]),
+            replicates = [
+                round.(Int, s[keep] .* totals[keep]) for s in preds[p]
+            ],
+            cumulative = false,
+        )
+            for p in 1:np
+    ]
+end
+
 ## Whether a chain carries a given key. Chain types throw on a missing key
 ## rather than returning a sentinel, so presence has to be probed.
 function _has_key(chn, key::Symbol)
@@ -541,6 +593,222 @@ function patch_overview_table(
         push!(df, row)
     end
     return df
+end
+
+## Equal-tailed 90% interval as `lo–hi`. `digits = 0` writes whole numbers.
+function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
+    s = posterior_summary(draws)
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return string(fmt(s.lo90), "–", fmt(s.hi90), unit)
+end
+
+## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
+## 90% e–f`, from draws or from a `posterior_summary`. The National page's
+## headline writes its intervals with it too.
+function _interval_text(draws; digits::Integer = 2, unit::AbstractString = "")
+    return _interval_text(posterior_summary(draws); digits, unit)
+end
+function _interval_text(
+        s::NamedTuple; digits::Integer = 2, unit::AbstractString = ""
+    )
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return join(
+        (
+            string(
+                lvl, "% ",
+                fmt(getproperty(s, Symbol("lo", lvl))), "–",
+                fmt(getproperty(s, Symbol("hi", lvl))), unit
+            )
+                for lvl in (30, 60, 90)
+        ), ", "
+    )
+end
+
+## A probability as a whole percentage, kept off 0% and 100%.
+function _probability_text(p::Real)
+    p > 0.995 && return "over 99%"
+    p < 0.005 && return "under 1%"
+    return string(round(Int, 100 * p), "%")
+end
+
+## `a, b and c`.
+_and_join(xs) = length(xs) == 1 ? only(xs) :
+    join(xs[1:(end - 1)], ", ") * " and " * last(xs)
+
+## The province draws a headline reads, checked for the required ones.
+function _headline_draws(chn, np::Integer)
+    required = [:C_T_patch, :R_T_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+            "not sampled from `bvd_joint`."
+    )
+    per_patch(sym) = _has_key(chn, sym) ? _per_patch(chn, sym, np) : nothing
+    return (;
+        C_T = per_patch(:C_T_patch),
+        R_T = per_patch(:R_T_patch),
+        cfr = per_patch(:CFR_patch),
+        asc = per_patch(:province_ascertainment),
+    )
+end
+
+## `from a–b in <lowest> to c–d in <highest>`, the provinces ranked by their
+## posterior medians.
+function _range_text(
+        draws, labels; digits::Integer = 2, unit::AbstractString = ""
+    )
+    meds = median.(draws)
+    lo, hi = argmin(meds), argmax(meds)
+    return string(
+        "from ", _interval90_text(draws[lo]; digits, unit), " in ",
+        labels[lo], " to ", _interval90_text(draws[hi]; digits, unit),
+        " in ", labels[hi]
+    )
+end
+
+## Per-draw imports into the first `np` patches, summed over days. The
+## `importation_patch` deterministic is the `(n_patches x n)` matrix flattened
+## column-major, laid out against the chain's own patch count.
+function _imports_total(chn, np::Integer)
+    np_chain = length(first(_draw_vectors(chn, :C_T_patch)))
+    vs = _draw_vectors(chn, :importation_patch)
+    len = length(first(vs))
+    len % np_chain == 0 || error(
+        "`importation_patch` holds $(len) entries, which is not a whole " *
+            "number of days of $(np_chain) patches."
+    )
+    n = len ÷ np_chain
+    return [
+        sum(v[(t - 1) * np_chain + p] for t in 1:n for p in 1:np)
+            for v in vs
+    ]
+end
+
+"""
+Markdown bullets comparing the provinces of the patch model, each quantity
+as an equal-tailed 90% credible interval. Every comparison is computed draw
+by draw, so it carries the correlation between provinces.
+
+- Each province's share of infections to date, and the posterior
+  probability that the largest province has the most infections.
+- The range of the reproduction number at the cut-off across provinces, the
+  probability it is above one in each, and how many provinces are more
+  likely than not to be growing.
+- The range of the case-fatality ratio (`CFR_patch`) and of the case
+  ascertainment relative to the national average
+  (`province_ascertainment`), when the chain carries them.
+- The share of infections to date imported from another province
+  (`importation_patch`), when the chain carries it.
+
+The ranges name the provinces with the lowest and highest posterior medians.
+[`patch_detail_headline`](@ref) gives each province's own intervals.
+"""
+function patch_headline(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    labels = patch_labels[1:np]
+    nd = length(first(d.C_T))
+    totals = [sum(d.C_T[p][i] for p in 1:np) for i in 1:nd]
+    share = [100 .* d.C_T[p] ./ totals for p in 1:np]
+    top = argmax(median.(d.C_T))
+    p_top = count(
+        i -> argmax([d.C_T[p][i] for p in 1:np]) == top, 1:nd
+    ) / nd
+    bullets = String[
+        "- **Share of infections:** " * _and_join(
+            [
+                string(labels[p], " ", _interval90_text(share[p]; digits = 0), "%")
+                    for p in 1:np
+            ]
+        ) * " of infections to date. $(labels[top]) has the most " *
+            "infections with probability $(_probability_text(p_top)).",
+    ]
+    p_growing = [mean(>(1), d.R_T[p]) for p in 1:np]
+    n_growing = count(>(0.5), p_growing)
+    push!(
+        bullets,
+        "- **Reproduction number:** at the cut-off it runs " *
+            _range_text(d.R_T, labels) * ". The probability it is above " *
+            "one is " * _and_join(
+            [
+                "$(_probability_text(p_growing[p])) in $(labels[p])"
+                    for p in 1:np
+            ]
+        ) * ", so $(n_growing) of $(np) provinces " *
+            (n_growing == 1 ? "is" : "are") *
+            " more likely than not to be growing."
+    )
+    d.cfr === nothing || push!(
+        bullets,
+        "- **Case-fatality ratio:** " * _range_text(
+            [100 .* c for c in d.cfr], labels; digits = 1, unit = "%"
+        ) * "."
+    )
+    d.asc === nothing || push!(
+        bullets,
+        "- **Case ascertainment relative to the national average:** " *
+            _range_text(d.asc, labels) * "."
+    )
+    if _has_key(chn, :importation_patch)
+        imports = _imports_total(chn, np)
+        push!(
+            bullets,
+            "- **Importation:** infections imported from another province " *
+                "make up " *
+                _interval90_text(100 .* imports ./ totals; digits = 1, unit = "%") *
+                " of infections to date."
+        )
+    end
+    return join(bullets, "\n") * "\n"
+end
+
+"""
+Markdown summary of each province of the patch model: a bold lead per
+province, then a bullet each for its cumulative infections to date and its
+reproduction number at the cut-off and, when the chain carries them, its
+case-fatality ratio (`CFR_patch`, as a percentage) and its case
+ascertainment relative to the national average (`province_ascertainment`).
+Every quantity is written as its equal-tailed 30%, 60% and 90% credible
+intervals, as the National page's headline writes them.
+The same intervals for the infections, reproduction number and ascertainment
+are tabulated by [`patch_summary_table`](@ref), and the case-fatality ratio's
+by [`province_cfr_table`](@ref) as a median and 90% interval.
+
+The reproduction number and the relative ascertainment are identified only
+as a product by the case composition, so the two are given together.
+[`patch_headline`](@ref) compares the provinces.
+"""
+function patch_detail_headline(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    blocks = map(1:np) do p
+        lines = [
+            "**$(patch_labels[p])**",
+            "",
+            "- **Infections to date:** " *
+                _interval_text(d.C_T[p]; digits = 0) * ".",
+            "- **Reproduction number at the cut-off:** " *
+                _interval_text(d.R_T[p]) * ".",
+        ]
+        d.cfr === nothing || push!(
+            lines,
+            "- **Case-fatality ratio:** " *
+                _interval_text(100 .* d.cfr[p]; digits = 1, unit = "%") * "."
+        )
+        d.asc === nothing || push!(
+            lines,
+            "- **Case ascertainment relative to the national average:** " *
+                _interval_text(d.asc[p]) * "."
+        )
+        join(lines, "\n")
+    end
+    return join(blocks, "\n\n") * "\n"
 end
 
 """
