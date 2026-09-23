@@ -1110,6 +1110,27 @@ function _province_projection_draws(fc, np::Integer, patch_labels)
 end
 
 """
+    province_share_draws(fc, col; n_patches) -> Vector{Vector{Float64}}
+
+Each province's share of the provinces' combined projection of `col`, draw
+by draw, from a [`forecast_provinces`](@ref) frame. Returns one vector of
+share draws per patch. A draw in which no province projects anything has no
+share and is left out.
+"""
+function province_share_draws(
+        fc, col::Symbol; n_patches::Integer = length(PROVINCE_NAMES)
+    )
+    draws = sort(unique(fc.draw))
+    at = Dict(
+        (p, d) => float(v) for (p, d, v) in zip(fc.patch, fc.draw, fc[!, col])
+    )
+    vals = [[at[(p, d)] for d in draws] for p in 1:n_patches]
+    total = reduce(.+, vals)
+    keep = total .> 0
+    return [v[keep] ./ total[keep] for v in vals]
+end
+
+"""
 One-week-ahead forecast by province: the new confirmed cases and confirmed
 deaths expected in each province over the week to `T + 7`, as the same
 90/60/30% credible intervals [`forecast_table`](@ref) reports nationally.
