@@ -66,9 +66,6 @@ logs/
 /.benchmark-worktrees/
 
 *.html
-# The redirect stubs that keep the pre-reorganisation URLs working are
-# checked in; Vitepress copies `docs/src/public/` through unchanged.
-!/docs/src/public/**/*.html
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log

@@ -462,6 +462,58 @@ function stream_calibration(panels::AbstractVector)
     return _prettify(DataFrame(rows))
 end
 
+"""
+Per-province posterior-predictive panels for one province composition, in
+the shape [`stream_calibration`](@ref) takes. One panel per province, titled
+`"<stream>, <province>"`, holding the observed count at each spatial vintage
+and one replicate count vector per posterior draw.
+
+The replicates push each draw's expected shares (`share_key`) and the
+composition's overdispersion back through the stick-breaking allocation at
+the vintage's observed total, the same predictive
+[`plot_province_composition_ppc`](@ref) draws as its grey band. The check is
+therefore on the split alone, conditional on the national total. A vintage
+with no observed cases has no split to predict and is dropped. Each panel is
+a daily panel (`cumulative = false`), since a vintage's count is its own
+increment.
+
+`rho_key` names the overdispersion and defaults to the one matching
+`share_key`. Errors when the chain carries none, since without it there is
+no predictive to score.
+"""
+function province_composition_panels(
+        chn; share_key::Symbol, obs_increments::AbstractMatrix,
+        stream::AbstractString,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        rho_key::Union{Nothing, Symbol} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    ms = [collect(v) for v in vec(collect(chn[share_key]))]
+    nv = size(first(ms), 2)
+    totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
+    keep = findall(>(0), totals)
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, length(ms))
+    rho === nothing && error(
+        "province_composition_panels: the chain carries no overdispersion " *
+            "for `$(share_key)` (looked for $(rho_keys))."
+    )
+    preds = _composition_predictive(ms, rho, totals, nv)
+    return [
+        (;
+            title = string(stream, ", ", patch_labels[p]),
+            observed = Int.(obs_increments[p, keep]),
+            replicates = [
+                round.(Int, s[keep] .* totals[keep]) for s in preds[p]
+            ],
+            cumulative = false,
+        )
+            for p in 1:np
+    ]
+end
+
 ## Whether a chain carries a given key. Chain types throw on a missing key
 ## rather than returning a sentinel, so presence has to be probed.
 function _has_key(chn, key::Symbol)
