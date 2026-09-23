@@ -16,10 +16,31 @@
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See `docs/pages/_setup.jl`.
+## Shared setup: packages, observations and the fit registry. See
+## `docs/pages/_setup.jl`.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
+#-
+## The fits and prior draws this page reads, loaded from the cache here.
+chn_joint = load_fit("joint")
+chn_no_patches = load_fit("sens_no_patches")
+chn_exports = load_fit("exports")
+chn_deaths = load_fit("deaths")
+chn_cases = load_fit("cases")
+chn_confirmed = load_fit("confirmed")
+chn_confirmed_deaths = load_fit("confirmed_deaths")
+chn_treatment = load_fit("treatment")
+chn_onsets = load_fit("onsets")
+frozen_lastweek = load_fit("frozen_validation")
+frozen_lastweek_streams = frozen_validation_stream_fits()
+frozen_by_cutoff = frozen_fits_by_cutoff()
+frozen_results = [frozen_by_cutoff[c] for c in frozen_cutoffs]
+if RUN_SENSITIVITY
+    chn_joint_community_delay = load_fit("sens_community_delay")
+    chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
+end
+posterior_C_joint = vec(Array(chn_joint[:C_T]))
+prior_chn = joint_prior_draws();
 
 #md # ```@raw html
 #md # </details>

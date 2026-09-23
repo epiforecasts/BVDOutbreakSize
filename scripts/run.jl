@@ -5,8 +5,9 @@
 # posterior draws, forecasts, per-stream and frozen-fit comparisons and a copy
 # of the input data into `output/` at the repo root. The Release workflow
 # bundles that directory into a GitHub Release on each push to `main`. The
-# pages share `docs/pages/_setup.jl`, which is loaded once per session, so
-# each include after the first reuses the fitted chains rather than refitting.
+# pages share `docs/pages/_setup.jl`, which is loaded once per session. Each
+# fit and the prior draws are loaded on the first page that reads them and
+# reused by every later page.
 
 using BVDOutbreakSize
 
