@@ -194,3 +194,22 @@ end
     @test binned[:, 1] ≈ flat[:, 1] .+ flat[:, 2]
     @test binned[:, 2] ≈ flat[:, 3]
 end
+
+@testitem "patch fit arguments: the lab series enters once, through the composition" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: patch_fit_args
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## The per-province analysed volumes are scored by the lab composition,
+    ## so the same series no longer sits on the ascertainment prior as a
+    ## per-head testing covariate. The production model samples no
+    ## coefficient for it.
+    obs = load_observations()
+    args = patch_fit_args(obs)
+    @test !haskey(args, :province_testing_covariate)
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    ks = Set(string(k) for k in keys(vi))
+    @test !any(k -> occursin("β_asc", k), ks)
+end
