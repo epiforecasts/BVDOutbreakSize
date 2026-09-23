@@ -18,8 +18,8 @@ Changes since v2.1.0.
   under Mooncake, the default backend, and the delay-heavy observation
   submodels rather more; the measurements are in #810. Each is a native
   `Mooncake.rrule!!` method on a declared primitive signature. Values are
-  unchanged: each rule is checked against central differences and against
-  the gradient of an unregistered clone of the same function body.
+  unchanged: each rule is checked with Mooncake's `test_rule`, and each
+  rewritten kernel's values against a textbook reference loop.
 - Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables (#837).
   The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
