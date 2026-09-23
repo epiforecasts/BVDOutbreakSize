@@ -41,32 +41,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #md # <details><summary>Draw from the four-patch prior</summary>
 #md # ```
 
-## The province compositions are passed their observed counts rather than
-## `missing`. `Prior()` leaves every observation out of the density, so the
-## counts only fix each vintage's total. With `missing` the predictive path
-## draws the total from the modelled increments instead, which an extreme
-## prior draw can push past the integer range.
-prior_patch_chn = let
-    m = bvd_joint(
-        obs.n, missing, missing, missing, missing, missing;
-        deaths_history = (; days = Int[], counts = Int[]),
-        reported_history = (; days = Int[], counts = Int[]),
-        confirmed_history = (; days = Int[], counts = Int[]),
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = obs.n - obs.who_first_sitrep_days,
-        background_pooling = background_pooling_model,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days,
-        n_patches = N_PATCHES,
-        province_increments = province_cases.increments,
-        province_days = province_cases.days,
-        province_testing_covariate = province_testing,
-        province_death_increments = province_deaths.increments,
-        province_death_days = province_deaths.days
-    )
-    sample(m, Prior(), 1_000; progress = false)
-end;
+prior_patch_chn = patch_prior_draws(obs);
 
 prior_province_table = patch_overview_table(prior_patch_chn, N_PATCHES);
 

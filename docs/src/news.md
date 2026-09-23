@@ -68,8 +68,7 @@ This moves the non-BVD death background, so fitted values change.
   framing (#782).
 - The summary dashboard is shorter (#782). The fit diagnostics are behind a
   dropdown, and the per-province infections and parameter panels and the
-  per-stream reproduction number are linked rather than repeated. The
-  by-province headline table stays.
+  per-stream reproduction number are linked rather than repeated.
 - The API reference is grouped into eleven pages following the order a fit
   runs in, and says which names are public and which are internal (#782).
   It was one undifferentiated `@autodocs` dump.
@@ -88,6 +87,14 @@ This moves the non-BVD death background, so fitted values change.
 - The summary dashboard opens with the abstract, read from `README.md`, and a short guide to where the estimates, forecasts, evaluation and methods are.
   It replaces a list of every other page, which still sent readers to the National page for the methods.
   It gains a "Last updated" date next to "Data as of", which is now written as "20 September 2026" rather than "2026-09-20" to match the home page.
+- The Provinces page opens with bullets comparing the provinces (#832).
+  They give each province's share of infections, the range of the reproduction number and the probability each province is growing, the spread in case-fatality ratio and case ascertainment, and the share of infections imported between provinces, as 90% credible intervals.
+  A detail section follows with each province's infections, reproduction number, case-fatality ratio and relative case ascertainment as 30%, 60% and 90% credible intervals.
+  The per-province table sits behind a dropdown beneath it, and the point-estimate overview table is gone.
+  Pair plots set the spatial hyperparameters and each province's parameters against a prior drawn from the patch model.
+- The by-province tables move from the National page's summary to the Provinces page, and the summary dashboard's by-province block shows the comparison bullets (#832).
+- The summary dashboard no longer shows the modelled against observed reported cases (#832).
+  The evaluation pages carry that check.
 - The contributing guide covers the project's conventions for code, tests, report pages, fit caches, prose, commits, news entries and CI (#828).
   It links to the home page for installing, running and updating the data rather than repeating it.
 - Evaluation splits the in-sample checks and the forecast evaluation each into a National and a Provinces page, grouped in the navigation under In-sample and Forecast (#833).

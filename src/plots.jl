@@ -637,6 +637,10 @@ each marginal is visible.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
 only. Symbols absent from the map keep their raw name.
 
+`patch` selects one entry of vector-valued deterministics such as
+`R_T_patch` or `province_ascertainment`, so the corner plot shows one
+province. Every parameter in `params` is then read as a per-patch vector.
+
 `plot_pair(draws::NamedTuple; ...)` takes one draw vector per named quantity
 instead of a chain, for quantities a chain holds only inside a vector
 deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
@@ -645,9 +649,12 @@ deterministic, such as one province's entry of `C_T_patch`. `prior` is then a
 function plot_pair(
         chn, params::AbstractVector{Symbol};
         thin::Integer = 2, prior = nothing,
-        labels::AbstractDict = Dict{Symbol, String}()
+        labels::AbstractDict = Dict{Symbol, String}(),
+        patch::Union{Nothing, Integer} = nothing
     )
-    _named(c) = NamedTuple(p => _draws(c, p) for p in params)
+    _col(c, p) = patch === nothing ? _draws(c, p) :
+        [v[patch] for v in _draw_vectors(c, p)]
+    _named(c) = NamedTuple(p => _col(c, p) for p in params)
     return plot_pair(
         _named(chn); thin,
         prior = prior === nothing ? nothing : _named(prior), labels
