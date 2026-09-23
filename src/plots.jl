@@ -1187,18 +1187,21 @@ interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
 about a dozen for a busier release history.
 
-Returns a figure carrying a short note in place of the panels when no
+Returns a figure carrying `empty_message` in place of the panels when no
 forecasts have been scored yet.
 """
-function plot_forecast_overlay(overlay::DataFrame)
+function plot_forecast_overlay(
+        overlay::DataFrame;
+        empty_message::AbstractString =
+            "No forecasts scored yet. No release carries a stored forecast."
+    )
     streams = unique(overlay.stream)
     ## An empty table is the expected early state, so say so rather than
     ## returning a blank panel.
     if isempty(streams)
         fig = Figure(; size = (860, 160))
         CairoMakie.Label(
-            fig[1, 1],
-            "No forecasts scored yet. No release carries a stored forecast.";
+            fig[1, 1], empty_message;
             tellwidth = false, tellheight = false, color = (:black, 0.55)
         )
         return fig

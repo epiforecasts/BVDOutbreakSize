@@ -936,7 +936,10 @@ cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column. `chn
 patch chain the forecasts were made from, `fcs` an iterable of
 `(horizon, fc)` pairs and `made_date` the cut-off `Date`. Returns one row
 per `(province, stream, horizon, draw)` with columns `made_date`,
-`horizon`, `target_date`, `province`, `stream`, `draw` and `value`.
+`horizon`, `target_date`, `province`, `stream`, `draw`, `value` and
+`method`. `method` is `"projection"`, so scoring can tell these rows from
+older archives, which split the national forecast by share and carry no
+`method` column.
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`
@@ -961,7 +964,7 @@ function province_forecast_archive(
     out = DataFrame(
         made_date = Date[], horizon = Int[], target_date = Date[],
         province = String[], stream = String[], draw = Int[],
-        value = Float64[]
+        value = Float64[], method = String[]
     )
     for (horizon, fc) in fcs
         h = Int(horizon)
@@ -974,7 +977,7 @@ function province_forecast_archive(
                     out,
                     (
                         made_date, h, target, province, label, d,
-                        Float64(vals[i]),
+                        Float64(vals[i]), "projection",
                     )
                 )
             end
