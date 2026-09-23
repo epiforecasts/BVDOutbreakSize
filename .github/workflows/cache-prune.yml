@@ -1,0 +1,43 @@
+name: Prune depot caches
+
+# Keeps the Julia depot caches from pushing the fit caches out of the 10 GB
+# repository budget. See .github/scripts/prune_depot_caches.py for what is
+# deleted; the `fit-*` caches never are. It follows each Test and Code
+# coverage run, which save most of the depot caches, and runs half-hourly for
+# the docs build's, which is saved hours before that run finishes.
+on:
+  workflow_run:
+    workflows: [Test, Code coverage]
+    types: [completed]
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'list what would be deleted without deleting it'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: read
+
+# One prune at a time; a queued one sees what the running one left.
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Prune depot caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DELETE: ${{ !inputs.dry_run && '--delete' || '' }}
+        run: python3 .github/scripts/prune_depot_caches.py $DELETE
