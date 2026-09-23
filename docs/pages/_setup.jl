@@ -194,6 +194,23 @@ if !@isdefined(_BVD_SETUP_LOADED)
         ]
     )
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
+    ## The model each fit sampled, rebuilt to forecast from it.
+    _fit_models = Dict(s.id => s.model for s in _fit_specs if haskey(s, :model))
+
+    ## Days past the cut-off every forecast is drawn to. The pages read the
+    ## one-week forecast and the release archive the four weekly horizons.
+    FORECAST_HORIZON = 28
+    _forecast_cache = Dict{String, Any}()
+    ## Posterior-predictive draws past the cut-off from fit `id`: its model
+    ## run on with `predict` over its chain (see `forecast_draws`). Drawn once
+    ## per page and shared by every forecast the page reads from that fit.
+    function fit_forecast(id::AbstractString)
+        return get!(_forecast_cache, id) do
+            r = _fits[id]
+            chn = r isa NamedTuple ? r.chn : r
+            forecast_draws(_fit_models[id](), chn; horizon = FORECAST_HORIZON)
+        end
+    end
 
     ## Draws from the joint prior, with every observation withheld. The
     ## in-sample page shows them as the prior predictive check; the national
@@ -401,25 +418,19 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## than a value, so only the pages that validate pay for the forecast.
     ## `obs_recovered` is passed so the forecast carries a `recovered_new`
     ## column (materialised only when the recovered origin is given), letting
-    ## the recovered stream be scored like the other streams. The onset grid
-    ## is the one the frozen fit saw, not the live one, so the forecast
-    ## carries an `onset reports` row scored on the triangle the frozen fit
-    ## was fitted to.
-    function validation_forecast_from(frozen)
-        onset_days = frozen.o.onset_curve_history.onset_days
-        grid_start = isempty(onset_days) ? nothing : minimum(onset_days)
-        grid_end = isnothing(grid_start) ? nothing :
-            max(maximum(frozen.o.onset_curve_history.report_days), grid_start)
+    ## the recovered stream be scored like the other streams. The frozen
+    ## model is rebuilt from its own frozen observations, so the onset
+    ## forecast runs on the triangle the frozen fit was fitted to.
+    function validation_forecast_from(id::AbstractString)
+        o = _fits[id].o
         return forecast_reported(
-            frozen.chn;
+            fit_forecast(id);
             horizon = 7,
-            obs_cases = frozen.o.reported_cases,
-            obs_deaths = frozen.o.total_deaths,
-            obs_confirmed = frozen.o.confirmed_cases,
-            obs_confirmed_deaths = frozen.o.confirmed_deaths,
-            obs_recovered = frozen.o.recovered_cases,
-            grid_n = frozen.o.n,
-            onset_grid_start = grid_start, onset_grid_end = grid_end
+            obs_cases = o.reported_cases,
+            obs_deaths = o.total_deaths,
+            obs_confirmed = o.confirmed_cases,
+            obs_confirmed_deaths = o.confirmed_deaths,
+            obs_recovered = o.recovered_cases
         )
     end
 end # _BVD_SETUP_LOADED guard

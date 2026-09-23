@@ -41,7 +41,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 ## The frozen fit's one-week-ahead national forecast, the same one the
 ## forecast evaluation page validates. `validation_forecast_from` is defined
 ## in the shared setup.
-validation_forecast = validation_forecast_from(frozen_lastweek);
+validation_forecast = validation_forecast_from("frozen_validation");
 
 ## Per-province cumulative confirmed cases and deaths at the frozen cut-off
 ## and at the current one, so the truth for the week is their difference.
@@ -72,13 +72,12 @@ province_truth = let
 end
 
 province_validation_table = province_forecast_vs_truth(
-    frozen_lastweek.chn, validation_forecast;
+    fit_forecast("frozen_validation"), validation_forecast;
     observed = province_truth.observed,
     baseline = province_truth.baseline,
     death_observed = province_truth.death_observed,
     death_baseline = province_truth.death_baseline,
-    n_patches = N_PATCHES,
-    breakpoint = default_breakpoint(frozen_lastweek.o)
+    n_patches = N_PATCHES
 );
 
 #md # ```@raw html

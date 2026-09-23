@@ -1147,19 +1147,17 @@ CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 ## be scored against what is observed. Only the incident and level quantities
 ## are archived (see `forecast_archive`), thinned to keep the asset compact.
 forecast_horizons = (7, 14, 21, 28)
+forecast_joint_draws = fit_forecast("joint")
 forecast_runs = [
     (
         h,
         forecast_reported(
-            chn_joint; horizon = h,
+            forecast_joint_draws; horizon = h,
             obs_cases = obs.reported_cases,
             obs_deaths = obs.total_deaths,
             obs_confirmed = obs.confirmed_cases,
             obs_confirmed_deaths = obs.confirmed_deaths,
-            obs_recovered = obs.recovered_cases,
-            grid_n = obs.n,
-            onset_grid_start = _onset_grid_start,
-            onset_grid_end = _onset_grid_end
+            obs_recovered = obs.recovered_cases
         ),
     )
         for h in forecast_horizons
@@ -1175,9 +1173,8 @@ CSV.write(
 CSV.write(
     joinpath(output_dir, "province_forecast.csv"),
     province_forecast_archive(
-        chn_joint, forecast_runs;
-        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5,
-        breakpoint = _BREAKPOINT
+        forecast_joint_draws, forecast_runs;
+        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5
     )
 );
 
@@ -1190,9 +1187,12 @@ CSV.write(
 ## observations for the cut-off counts. The May cut-offs predate the isolation
 ## and recovered streams, so those are simply absent for them; the per-stream
 ## guard in `forecast_archive` skips a stream a fit does not carry.
-frozen_forecast_fits = unique(
-    f -> f.o.cutoff,
-    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek]
+frozen_forecast_ids = unique(
+    id -> _fits[id].o.cutoff,
+    [
+        ["frozen_$c" for c in frozen_cutoffs];
+        "frozen_$chamla_cutoff"; "frozen_validation"
+    ]
 )
 ## The `fit` column tells the frozen joint and each frozen single-stream fit
 ## apart when scored. `score_release` falls back to one default where an
@@ -1203,33 +1203,27 @@ frozen_forecast_archive = DataFrame(
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
     fit = String[]
 )
-## The onset grid belongs to the triangle each frozen fit actually saw, not
-## to the live one: the May cut-offs predate the digitised figure entirely,
-## so their grid is empty and the onset block is simply absent for them.
-function _frozen_onset_grid(o)
-    isempty(o.onset_curve_history.onset_days) && return (nothing, nothing)
-    gs = minimum(o.onset_curve_history.onset_days)
-    return (gs, max(maximum(o.onset_curve_history.report_days), gs))
-end
-for f in frozen_forecast_fits
-    _fgs, _fge = _frozen_onset_grid(f.o)
+## Each frozen model is rebuilt from its own frozen observations, so the May
+## cut-offs, which predate the digitised onset figure, carry no onset
+## forecast.
+for id in frozen_forecast_ids
+    _fo = _fits[id].o
+    _fpp = fit_forecast(id)
     runs = [
         (
             h,
             forecast_reported(
-                f.chn; horizon = h,
-                obs_cases = f.o.reported_cases,
-                obs_deaths = f.o.total_deaths,
-                obs_confirmed = f.o.confirmed_cases,
-                obs_confirmed_deaths = f.o.confirmed_deaths,
-                obs_recovered = f.o.recovered_cases,
-                grid_n = f.o.n,
-                onset_grid_start = _fgs, onset_grid_end = _fge
+                _fpp; horizon = h,
+                obs_cases = _fo.reported_cases,
+                obs_deaths = _fo.total_deaths,
+                obs_confirmed = _fo.confirmed_cases,
+                obs_confirmed_deaths = _fo.confirmed_deaths,
+                obs_recovered = _fo.recovered_cases
             ),
         )
             for h in forecast_horizons
     ]
-    _rows = forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
+    _rows = forecast_archive(runs; made_date = _fo.cutoff, thin = 5)
     _rows[!, :fit] = fill(FROZEN_FIT, size(_rows, 1))
     append!(frozen_forecast_archive, _rows)
 end
@@ -1247,26 +1241,9 @@ _frozen_stream_of = Dict(
 for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
     _stream, _label = _frozen_stream_of[_sid]
     _o = _sf.o
-    _bp = _o.n - _o.who_first_sitrep_days
-    ## Each stream on its own cut-off count, the beds on their occupancy.
-    _base = if _stream === :isolation_beds
-        isempty(_o.isolation_history.counts) ? 0 :
-            _o.isolation_history.counts[end]
-    elseif _stream === :reported_cases
-        _o.reported_cases
-    elseif _stream === :suspected_deaths
-        _o.total_deaths
-    elseif _stream === :confirmed_cases
-        _o.confirmed_cases
-    else
-        _o.confirmed_deaths
-    end
+    _spp = fit_forecast("frozen_validation_$_sid")
     for h in forecast_horizons
-        _vals = forecast_stream(
-            _sf.chn, _stream; horizon = h,
-            obs_value = _base, n = _o.n, breakpoint = _bp,
-            rt_start = 1, rt_walk_start = 1
-        )
+        _vals = forecast_stream(_spp, _stream; horizon = h)
         for (_d, _i) in enumerate(1:5:length(_vals))
             push!(
                 frozen_forecast_archive,
@@ -1425,9 +1402,8 @@ stream_draws = DataFrame(
 CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
 
 ## Per-fit forecasts of each fit's own observed stream, in the `forecast.csv`
-## long schema plus the fit that made them. Rebuilding a single-stream fit's
-## cut-off growth rate needs the grid length and the breakpoint, which are data
-## rather than chain contents, so both are passed.
+## long schema plus the fit that made them, each drawn from that fit's own
+## model run past the cut-off.
 stream_forecasts = DataFrame(
     made_date = Date[], horizon = Int[],
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
@@ -1435,15 +1411,7 @@ stream_forecasts = DataFrame(
 )
 for f in stream_fits, (stream, label, obs_value) in f.streams,
         h in forecast_horizons
-    ## The onset grid is ignored by every other stream, so it is passed
-    ## unconditionally rather than branching the loop on the stream name.
-    _vals = forecast_stream(
-        f.chn, stream; horizon = h,
-        obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start,
-        onset_grid_start = _onset_grid_start,
-        onset_grid_end = _onset_grid_end
-    )
+    _vals = forecast_stream(fit_forecast(f.fit), stream; horizon = h)
     for (d, i) in enumerate(1:stream_thin:length(_vals))
         push!(
             stream_forecasts, (
