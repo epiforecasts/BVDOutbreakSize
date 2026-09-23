@@ -332,6 +332,32 @@ end
     @test_throws ErrorException province_increment_matrix(bad, names, 3)
 end
 
+@testitem "province_recent_counts: new counts over the last window" begin
+    using BVDOutbreakSize: province_recent_counts
+
+    hist = Dict(
+        "ituri" => (; days = [10, 20, 25, 30], counts = [100, 150, 190, 220]),
+        "nord_kivu" => (; days = [10, 20, 25, 30], counts = [10, 12, 18, 20]),
+        "sud_kivu" => (; days = [10, 20, 25, 30], counts = [3, 3, 5, 4])
+    )
+    names = ["ituri", "nord_kivu", "sud_kivu"]
+
+    ## The window runs back from the last vintage to the latest vintage at
+    ## least `window` days earlier, so the span is known rather than assumed.
+    got = province_recent_counts(hist, names, 3; window = 7)
+    @test got.start_day == 20
+    @test got.last_day == 30
+    ## A downward revision is read as no new cases, as in the composition.
+    @test got.counts == [70, 8, 2]
+
+    ## Too short a history for the window, or no history, gives nothing.
+    @test province_recent_counts(hist, names, 3; window = 30) === nothing
+    @test province_recent_counts(
+        Dict{String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(),
+        names, 3
+    ) === nothing
+end
+
 @testitem "province_composition_model: scores shares, not the total" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: DynamicPPL

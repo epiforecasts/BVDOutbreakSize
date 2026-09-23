@@ -1,156 +1,58 @@
 # Contributing
 
 Issues and pull requests are welcome at [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize).
-This page covers how the project is laid out, how to run it, and the conventions to follow when changing it.
+The [home page](index.md) covers installing the package, re-fitting the model, rendering the report and updating the data.
+This page covers the conventions for changing the project.
 
-## Repository layout
+## Tasks
 
-- `src/BVDOutbreakSize.jl` — the module entry point: dependencies, the export list, and the `include` order for the rest of `src/`.
-  The functionality itself is split across single-purpose files, listed next.
-- `src/data.jl` — `load_observations` and `freeze_observations`, the observation-manifest loader.
-- `src/constants.jl` — fixed constants, including the published Imperial point estimates (`REPORT_SCENARIOS`, `REPORT_SCENARIOS_CI`).
-- `src/sampling.jl` — NUTS sampling (`nuts_sample`, `fit_parallel`) and the AD backend setup.
-- `src/renewal.jl` — the shared renewal-process helpers: `renewal_infections`, the delay convolutions `convolve_delay`, `convolve_survival` and `convolve_pmf`, and `discretise_censored`.
-- `src/ad_rules.jl` — hand-written `Mooncake.rrule!!` methods for the `renewal.jl` kernels, each on a signature declared primitive with `Mooncake.@is_primitive`.
-- `src/models/priors.jl`, `src/models/observations.jl`, `src/models/joint.jl` — the building-block submodels, the observation submodels and the composers.
-  See [Model architecture](#Model-architecture) below.
-- `src/summaries.jl`, `src/scoring.jl` — summary and comparison tables, and forecast scoring.
-- `src/counterfactual.jl` — the no-onward-deaths projection (`predict_no_onward_deaths`).
-- `src/forecast.jl` — forecast helpers (`forecast_reported`).
-- `src/confirmed_cfr.jl` — delay-corrected confirmed-case-fatality-ratio helpers.
-- `src/plots.jl` — plotting.
-- `docs/pages/` — the Literate report pages, one file per rendered page, in a folder per navigation group so a new geographic stratum is a new file in an existing folder.
-  `estimates/national.jl` carries the methods and the national results, `estimates/province.jl` the per-province estimates, `forecasts/national.jl` the one-week-ahead projections, `evaluation/national.jl` and `evaluation/province.jl` the in-sample checks and the scoring against what arrived at each level, and `sensitivity.jl` the comparison and sensitivity analyses.
-  All load their fits through the shared `_setup.jl`, and anything two pages both need lives there rather than on whichever page defined it first.
-  `estimates/national.jl` is the main artifact, published as `analysis.html` on each release.
-- `docs/fits/` — the fit-cache machinery: `registry.jl` (the fit-id list), `cache.jl` (content-addressed fit caching under `logs/fit_cache`), `one.jl` (fit and cache a single id, `task fit`), `all.jl` (fit every model, `task fit-all`), `list.jl` (print fit ids for the CI matrix), and `convergence.jl` with `check_convergence.jl` (the convergence gate, `task check-convergence`).
-- `scripts/fetch_fits.sh` — download a CI run's fits into `logs/fit_cache` (`task fetch-fits`), so a local render loads the same chains CI rendered from.
-- `docs/execute.jl` — runs one Literate page against the fit cache and writes its markdown, figures and half of `output/` (used by `task docs-main` and `task docs-sensitivity`).
-- `docs/make.jl` — the Vitepress combine step: copies `README.md` to `index.md`, assembles the site from the already-rendered markdown, and builds the bibliography (used by `task docs`).
-- `data/observations.toml` — single source of truth for observation data (case and death counts, traveller volumes, sources).
-  Loaded via `load_observations()` and never hardcoded.
-  Update this one file for a new situation report and the analysis picks it up.
-  The literate re-binds its observation `const`s from the loaded TOML, so the package constants are defaults only.
-- `scripts/run.jl` — regenerates published results by including the literate and writes CSVs to `output/`.
-- `test/` — one file per feature, driven by `test/runtests.jl`, plus `enzyme/`, `formatter/`, `jet/` and `package/` for the quality checks.
-- `external/bdbv-linelist-analysis` — git submodule, source of the onset-to-death delay priors.
+`Taskfile.yml` wraps the common commands, and `task --list` describes each one.
+The ones used while making a change:
 
-## Running and testing
+- `task format` runs Runic over `src/`, `test/`, `docs/`, `scripts/`, `benchmark/` and `ext/`.
+- `task test` runs the full test suite.
+  `task test-quick` skips the quality and AD items.
+- `task fetch-fits` downloads the fits from the latest successful docs build, and `task docs` renders the site from them.
+- `BVD_FIT_ID=<id> task fit` fits and caches one model, and `task fit-all` fits them all.
+  `julia --project=docs docs/fits/list.jl` lists the ids.
+- `task check-convergence` runs the convergence gate CI applies before publishing.
+- `task release-notes` prints the notes the next release would publish.
 
-`Taskfile.yml` at the repository root wraps the common commands.
-Run `task --list` for the full set with descriptions.
-The ones used day to day:
+To render one report page from the cached fits, set `BVD_DOC_PAGE` to its path under `docs/pages/`:
 
 ```bash
-# Instantiate the package environment (no task wraps this)
-julia --project=. -e 'using Pkg; Pkg.instantiate()'
-
-# Download the fits from the latest successful CI build, then render the
-# docs from them
-task fetch-fits
-task docs
-
-# Or fit every model locally instead, in one parallel pass
-task fit-all
-
-# Fit and cache a single model by id (list ids with
-# `julia --project=docs docs/fits/list.jl`)
-BVD_FIT_ID=deaths task fit
-
-# Render just the main analysis page from the cache, for fast iteration
-task docs-main
-task docs-sensitivity
-
-# Format with Runic over src/, test/, docs/, scripts/, benchmark/ and ext/
-task format
-
-# Run the full test suite, or skip the quality checks (Aqua/JET/format)
-# for a quicker one
-task test
-task test-quick
-
-# Regenerate the published output CSVs into output/ (no task wraps this)
-julia --project=. scripts/run.jl
+BVD_DOC_PAGE=estimates/national julia --project=docs docs/execute.jl
 ```
 
-A fit the render cannot find in the cache fails the build naming the key, rather than refitting the whole report inline.
-`fit-all` runs `threads / chains` fits at once, so it takes all available threads.
-Set `JULIA_NUM_THREADS` to cap it on a shared host.
+The scripts under `scripts/` differ in which Julia project they need.
+Read [`scripts/README.md`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/scripts/README.md) before running one.
 
-`BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
-Running `julia --project=. docs/pages/estimates/national.jl` that way steps through the full narrative and fits every model as it goes.
-This is the slow path.
+## Model code
 
-A build streams per-fit progress by default: every NUTS fit writes `logs/<fit>.log` (iteration, log-density, divergences) and a TensorBoard run under `logs/tensorboard/<fit>/`, controlled by `BVD_FIT_LOG` (`all` when unset, or `progress`, `tensorboard`, `none`).
-CI release builds set `BVD_FIT_LOG=none`.
-Tail a log for quick liveness, or run `task tensorboard` to view all fits in the worktree.
-The logs live under the git-ignored `logs/`, so each worktree keeps its own.
-A cached fit lives under `logs/fit_cache` and is keyed by a content hash of the fit-relevant code and data, so a Turing or dependency version bump invalidates it.
-Refit rather than debugging a `KeyError` on a stale chain.
+The model is built from Turing submodels in three layers under `src/models/`.
+`priors.jl` holds the building blocks, one per parameter family, each owning its own priors.
+`observations.jl` holds one observation submodel per data stream, each taking the growth state and adding its likelihood.
+`joint.jl` holds the composers that stitch these into full models, from the single-stream fits up to `bvd_joint`.
+The [Methods](methods.md) page describes the model and the [API reference](lib/api.md) lists every submodel.
 
-`test/runtests.jl` includes each `test/test_*.jl`.
-To iterate on one file, run it inside a REPL after `using BVDOutbreakSize`, or temporarily comment out the others in `runtests.jl`.
-
-CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
-
-On a pull request each of those runs only when the change touches something it is built from.
-The test suite and coverage need `src/`, `ext/`, `test/`, `data/`, `Project.toml`, and `docs/fits/` and `scripts/` because test items include files from both.
-The report needs `src/`, `ext/`, `data/`, `docs/`, `scripts/`, `README.md` and `Project.toml`.
-A workflow that skips says so in the summary of its `changes` job, so a skipped build is visible rather than being an absent check.
-A push to `main`, a tag and a manual run are never gated.
-
-The lists live in each workflow's `changes` job and are checked by `.github/actions/changed-paths/patterns_test.sh`, which pre-commit runs whenever one of them is edited.
-Widen the list when something new feeds a build: a pattern that is too narrow skips the job that would have caught the change, and nothing reports that as a failure.
-
-## Releases
-
-A release is cut by commenting `@release` on any issue or pull request.
-`.github/workflows/release.yml` tags `main`, publishes a GitHub release whose notes are the newest section of `docs/src/news.md`, and opens a pull request bumping the version and starting the next section.
-`@release minor` and `@release major` choose the size of that bump; plain `@release` is a patch.
-
-The version being released is the one already in `Project.toml`, and the newest news section must match it.
-Write the entry for a change under the open section at the top of `news.md` as part of the change itself.
-`task release-notes` prints what would be published, so the notes can be read before anything is cut.
-
-## Model architecture
-
-The model is assembled from small, swappable Turing submodels rather than one monolithic block (the build-up is drawn as a flowchart on the [Analysis](estimates/national.md) page).
-There are three layers.
-
-**Building-block submodels**, one per parameter family, each owning its own priors:
-
-- `exponential_growth_model` samples the growth rate `r` and the generation count `m`, not `r` and `T` directly, to break the `C(T) = exp(rT)` ridge.
-- `onset_to_death_model` is the gamma onset-to-death delay, built by convolving two atomic `gamma_delay_model` delays (onset→admission, admission→death) rather than fitting the onset→death delay directly.
-- `cfr_model` is the case-fatality ratio.
-- `surveillance_dispersion_model` samples on the `1/√k` scale.
-- `pooled_ascertainment_model` partially pools the DRC and Uganda reporting fractions `p_drc` and `p_uganda` on the logit scale.
-
-**Observation submodels**, one per data stream, each taking the growth state, adding its forward integral and likelihood: `exports_model` and `exports_deaths_model` (the Uganda imports and import deaths, each an inhomogeneous Poisson process over the dated detection days rather than a rectangular detection window), `deaths_model`, `reported_cases_model`, `confirmed_cases_model` and `confirmed_deaths_model` (NegBinomial DRC surveillance and laboratory streams), and `treatment_flow_model` and `recovered_model` (the isolation-occupancy and recovered-among-confirmed streams).
-
-**Composers** stitch the blocks into full generative models: `exports_only_model`, `deaths_only_model`, `cases_only_model`, `confirmed_only_model`, `confirmed_deaths_only_model`, `treatment_only_model`, `exports_deaths_only_model`, `exports_joint_only_model` (the Uganda export cases and deaths fitted jointly over one shared at-risk prevalence), and `bvd_joint` (every stream together).
-Each composer conditionally includes only the likelihoods for the streams it carries.
-A single-stream composer never instantiates the other observation submodels, so a discrete stream is never left sampled, which would trip Turing's model check.
-Pass a stream as `missing` to drop its likelihood.
-`bvd_joint` with all streams missing is the generator used for the prior and posterior predictive checks.
-
-## Conventions
-
-- Maximum 80 characters per line of code.
-- One sentence per line in write-up prose and markdown.
-  Do not wrap prose at 80 characters.
-  Code, code comments and docstrings keep the 80-character limit and wrap normally.
-  This rule is for prose only.
-- The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
-  Edit it in `README.md` only.
-  `docs/front_matter.jl` reads it at build time and fills in the dates.
-  `docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
-- Table-construction and other setup code in `analysis.jl` is hidden inside `<details>` dropdowns via `#md # @raw html` blocks.
-  The bare result object follows (with `#hide`) so only the output renders.
-- The surveillance dispersion prior is a half-normal `truncated(Normal(0.6, 0.2); lower = 0)` on `inv_sqrt_k`, following the Stan prior-choice recommendations.
-- Docstrings use DocStringExtensions (`$(TYPEDSIGNATURES)`).
-- Two implementation details: the AD backend is Mooncake reverse-mode, and models compose via `~ to_submodel(...)`.
-- NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) guard against extreme NUTS warmup proposals.
-  Keep them when editing the likelihoods.
+- Submodels compose via `~ to_submodel(...)`.
+- A composer includes only the likelihoods for the streams it carries.
+  A single-stream composer never instantiates the other observation submodels, because a discrete stream left sampled trips Turing's model check.
+- Pass a stream as `missing` to drop its likelihood.
+  `bvd_joint` with every stream missing is the generator for the prior and posterior predictive checks.
+- Pass an optional component in as a submodel rather than switching it on with a flag, as in `background_pooling = background_pooling_model`.
+  A flag reaches the model as a value rather than a type, so both arms are inferred on every build.
+- Keep the NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) when editing a likelihood.
+  They guard against extreme NUTS warmup proposals.
+- The AD backend is Mooncake reverse mode.
+  The hand-written rules in `src/ad_rules.jl` are timed against the backend's own by `task benchmark-rules`.
+  Run it after an AD backend upgrade and delete any rule that no longer pays for itself.
+- Code, code comments and docstrings keep to 80 characters per line.
+- Runic formats all Julia code.
+  Its version is pinned in both `test/formatter/Project.toml` and `.pre-commit-config.yaml`, and `test/package/CodeFormatting.jl` fails if the two drift.
+- The DocStringExtensions templates in `src/docstrings.jl` add the signature to every docstring, so a docstring carries only its prose.
+- Comments describe the code as it is.
+  The history of a change belongs in [News](news.md).
 
 ### Closures in model code
 
@@ -193,9 +95,99 @@ println(any(x -> occursin("Core.Box", string(x)),
 
 `@code_warntype` reports the same thing, as a `Core.Box` in the variable list.
 
+## Tests
+
+The tests use TestItemRunner.
+Each `test/test_*.jl` file holds the `@testitem`s for one feature.
+`test/runtests.jl` collects every item with `@run_package_tests`, so a new file needs no registering.
+
+Tags split the suite across CI jobs.
+
+- `:quality` marks the Aqua, JET, formatting and doctest items.
+- `:ad` marks the AD gradient checks.
+- `:slow` marks the items that run full NUTS fits.
+
+`runtests.jl` reads test arguments to choose among them.
+`skip_quality` drops the quality and AD items, `quality_only` and `ad_only` run one tag, and `fast` and `downgrade` drop all three.
+
+To run one file, point `TestItemRunner.run_tests` at the `test/` directory with a filter and run it with `--project=test`:
+
+```julia
+using TestItemRunner
+root = joinpath(pwd(), "test")
+TestItemRunner.run_tests(
+    root; filter = ti -> ti.filename == joinpath(root, "test_renewal.jl")
+)
+```
+
+Scope the filter to this `test/` directory, or copies of the test files in sibling worktrees are collected too.
+Read the `Test Summary` line rather than the exit code.
+
+## Report pages
+
+Each rendered page is a Literate file under `docs/pages/`, in a folder per navigation group.
+Every page includes `docs/pages/_setup.jl`, which loads the observations and every fit through the cache.
+Anything two pages need lives there rather than on whichever page defined it first.
+
+`docs/execute.jl` renders one page.
+`docs/make.jl` renders the pages and assembles the Vitepress site, one stage at a time under `BVD_DOCS_STAGE`.
+CI renders each page in its own job and then runs the combine stage.
+
+A new page needs:
+
+- its Literate file under `docs/pages/`
+- an entry in `PAGES`, a render stage and a navigation entry in `docs/make.jl`
+- an entry in the page list in `docs/execute.jl`
+- an entry in the render matrix in `.github/workflows/docs.yml`
+- its rendered markdown in `.gitignore`
+
+Setup and table-construction code sits inside `<details>` dropdowns via `#md # @raw html` blocks.
+The bare result object follows with `#hide`, so only the output renders.
+
+The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
+Edit it in `README.md` only.
+`docs/front_matter.jl` reads it at build time and fills in the dates.
+`docs/make.jl` copies the whole README to the home page, and `scripts/standalone_report.jl` opens the offline `analysis.html` with the front matter, so do not duplicate it into a report page.
+
+## Fits and the fit cache
+
+Fits are cached under `logs/fit_cache`, keyed on a content hash.
+`fit_content_hash` in `docs/fits/registry.jl` builds the hash from three inputs.
+
+- The bytes of each file in `FIT_SOURCE_FILES`: the files under `src/models/`, `renewal.jl`, `sampling.jl`, `constants.jl`, `data.jl` and `onset_curve.jl` in `src/`, and the cache code itself.
+- Every file under `data/` except those named in `FIT_DATA_EXCLUDE`.
+- The cache schema version and the sampler settings.
+
+Any edit to one of those files, a comment included, changes the key for every fit.
+In CI that is a cold refit of every model, which takes hours.
+Plotting, summary and reporting code sits outside the key, so a report change reuses the cached fits.
+
+Every file `scripts/score_releases.jl` writes into `data/` must be listed in `FIT_DATA_EXCLUDE`.
+Otherwise the render's hash differs from the fit matrix's and every fit misses.
+
+The render never fits.
+A fit missing from the cache fails the build naming its key.
+`BVD_FIT_STRICT=false` restores inline fitting, for a page run outside the cache entirely.
+
+A cached fit does not survive a version change in Turing or its dependencies.
+Refit rather than debugging a `KeyError` on a stale chain.
+Any change to the model, the priors or the data needs a refit before its results mean anything.
+
+Every NUTS fit writes a progress log to `logs/<fit>.log` and a TensorBoard run under `logs/tensorboard/<fit>/`.
+`BVD_FIT_LOG` controls this (`all` when unset, or `progress`, `tensorboard`, `none`).
+`task tensorboard` shows every fit in the worktree.
+
+## Prose
+
+- One sentence per line in markdown and write-up prose.
+  Do not wrap prose at 80 characters.
+- UK English throughout.
+- Write in the present tense and describe the current state.
+  Development history belongs in [News](news.md) and nowhere else.
+
 ### Analysis report prose
 
-These apply to the narrative prose in `docs/pages/estimates/national.jl`, and to write-up prose generally.
+These apply to the narrative prose in the report pages under `docs/pages/`, and to write-up prose generally.
 Use the existing report text as the template for tone.
 The measured sentence- and paragraph-level rules below were reverse-engineered from a manuscript the maintainers are happy with.
 The repo-specific rules that follow take precedence where the two disagree.
@@ -266,9 +258,46 @@ Keep the two in agreement: if this section changes in a way that affects the sum
 - Bullet lists, bold and italics are advisory rather than enforced here, since this is a technical report rather than a journal manuscript.
   Do not add new bullet lists or bold to the narrative prose, and do not restructure an existing list that carries genuinely parallel content, but do strip bold or italics used for mid-sentence emphasis.
 
-## Pull requests
+## Commits
 
-- `main` is branch-protected.
-  Changes go through pull requests.
-- Run the test suite before opening a pull request.
-- Add a bullet to the [News](news.md) page under `Unreleased` for any user-visible change.
+Commit messages follow Conventional Commits, `type(scope): summary`, with a lower-case imperative summary.
+The types in use are `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `ci`, `chore` and `style`, plus `data` for a change to the observations.
+The scope names the area touched, as in `fix(scripts)`, `docs(news)` or `perf(ad)`.
+
+## News
+
+Every user-visible change adds an entry to [News](news.md) as part of the change itself.
+The file holds one section per version, newest first.
+The top section is the open one, and its heading matches the version in `Project.toml`.
+Add to that section rather than starting a new one.
+
+Within a version, entries sit under `### Model`, `### Data`, `### Report`, `### Performance`, `### Fixed`, `### Infrastructure` or `### Dependencies`.
+An entry says what changed and why, in the present tense, with the pull request or issue number in brackets.
+Say whether fitted values change.
+Write one sentence per line.
+
+## Pull requests and CI
+
+`main` is branch-protected, so changes go through pull requests to `epiforecasts/BVDOutbreakSize`.
+Everything here is slow.
+The full test suite takes a long time and a full docs build fits every model.
+Open the pull request early and let CI do the long work.
+Run `task format` before every push, then only narrow checks locally: `task test-quick`, a single-file test run, or one rendered page.
+
+CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
+
+On a pull request each of those runs only when the change touches something it is built from.
+The test suite and coverage need `src/`, `ext/`, `test/`, `data/`, `Project.toml`, and `docs/fits/` and `scripts/` because test items include files from both.
+The report needs `src/`, `ext/`, `data/`, `docs/`, `scripts/`, `README.md` and `Project.toml`.
+A workflow that skips says so in the summary of its `changes` job, so a skipped build is visible rather than being an absent check.
+A push to `main`, a tag and a manual run are never gated.
+
+The lists live in each workflow's `changes` job and are checked by `.github/actions/changed-paths/patterns_test.sh`, which pre-commit runs whenever one of them is edited.
+Widen the list when something new feeds a build: a pattern that is too narrow skips the job that would have caught the change, and nothing reports that as a failure.
+
+## Releases
+
+A release is cut by commenting `@release` on any issue or pull request.
+`.github/workflows/release.yml` tags `main`, publishes a GitHub release whose notes are the newest section of `docs/src/news.md`, and opens a pull request bumping the version and starting the next section.
+`@release minor` and `@release major` choose the size of that bump; plain `@release` is a patch.
+`task release-notes` prints what would be published, so the notes can be read before anything is cut.

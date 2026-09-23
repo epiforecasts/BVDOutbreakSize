@@ -21,6 +21,7 @@ The rendered report fills in the build date and the exact data cut-off automatic
 [national](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/national) ·
 [by province](https://epiforecasts.io/BVDOutbreakSize/stable/estimates/province) ·
 [forecasts](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/national) ·
+[forecasts by province](https://epiforecasts.io/BVDOutbreakSize/stable/forecasts/province) ·
 [evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/national).
 
 **Go deeper:**

@@ -224,7 +224,7 @@ MarkdownTable(vintage_table) #hide
 # The table below shows which parameters inform each observation submodel.
 # The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
 # The *confirmed* positives are scored as a Binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
-# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing fraction and a death-pool composition positivity built from the same assay:
+# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -241,7 +241,7 @@ MarkdownTable(vintage_table) #hide
 # | Onset-to-hospitalisation delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● | ● |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
-# | Death testing fraction $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
+# | Death testing intensity $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
 # | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  | ● | ● | ● | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
@@ -840,7 +840,8 @@ cfr_prior_fig #hide
 # We assume that more severe cases, more likely to be Ebola, are preferentially tested.
 # This is captured by an enrichment factor $\delta_0$ that raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
 # The confirmed deaths mirror this laboratory pipeline rather than enriching the case composition.
-# A fraction $\tau_{\text{death}}$ of suspected deaths reach the laboratory, and they confirm at the assay positivity $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$.
+# The death analysed volume is $\tau_{\text{death}}$ specimens per suspected death, which is not a share and may exceed one for the same reason the case side is not bounded by the suspect count.
+# Those specimens confirm at the assay positivity $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$.
 # This positivity is built from the same assay sensitivity and specificity as the confirmed cases, but uses the death-pool BVD share $q_{\text{death}}$.
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR [rieger2016](@cite) rather than the Zaire-specific GeneXpert Ebola assay.
 # The GeneXpert assay does not reliably detect Bundibugyo virus [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite).

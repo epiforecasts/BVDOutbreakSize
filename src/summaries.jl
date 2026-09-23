@@ -795,6 +795,35 @@ function province_cfr_table(
     return df
 end
 
+"""
+    province_recent_counts(province_history, province_names, n_patches;
+                           window = 7)
+
+New counts in each patch over the most recent `window` days of the
+per-province cumulative histories, read off the same increments
+[`province_increment_matrix`](@ref) builds, so a downward revision counts as
+no new cases.
+
+The span runs from the latest vintage at least `window` days before the last
+one to the last vintage, so it can be longer than `window` when the tables
+skip days. Returns `(; start_day, last_day, counts)` with the span's grid day
+indices and one count per patch, or `nothing` when there is no history or it
+is shorter than the window.
+"""
+function province_recent_counts(
+        province_history,
+        province_names::AbstractVector, n_patches::Integer;
+        window::Integer = 7
+    )
+    inc = province_increment_matrix(province_history, province_names, n_patches)
+    isempty(inc.days) && return nothing
+    last_day = inc.days[end]
+    ref = findlast(<=(last_day - window), inc.days)
+    ref === nothing && return nothing
+    counts = vec(sum(inc.increments[:, (ref + 1):end]; dims = 2))
+    return (; start_day = inc.days[ref], last_day, counts)
+end
+
 ## Streams the per-province split covers, as the forecast column and the
 ## stream label. The label is the one `forecast_archive` gives the national
 ## stream, so a province row names the stream it is a share of, and the

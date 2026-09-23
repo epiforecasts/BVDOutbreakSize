@@ -169,9 +169,12 @@ row per draw and columns:
 - `:confirmed_cum`, `:confirmed_deaths_cum`: laboratory-confirmed case and
   confirmed-death counterparts, present when `obs_confirmed` and
   `obs_confirmed_deaths` are supplied. `:confirmed_deaths_cum` is not bounded
-  by `:deaths_cum`. The subset relationship is imposed per day on the latent
-  pool ([`confirmed_deaths_model`](@ref)), and either reported cumulative can
-  stall while the other accrues.
+  by `:deaths_cum`, and nothing imposes that relationship: the two are
+  independent replicates off different observed baselines, so either reported
+  cumulative can stall while the other accrues. In the joint the death
+  analysed volume is specimens rather than persons and carries no cap against
+  the suspected-death pool either; the death-only composer does bound it
+  ([`confirmed_deaths_model`](@ref)).
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the coming week
   (`*_cum` minus the corresponding observed count at the cut-off, floored at
   zero).
@@ -381,11 +384,14 @@ function forecast_reported(
                 _nb_new(rng, k_conf[i], _means(conf_daily[i]))
         )
         ## Confirmed deaths carry no cap against the suspected-death
-        ## cumulative. The subset relationship is imposed inside the model,
-        ## per day and on the latent pool, by capping the tested death volume
-        ## at `susp_death[t]` before positivity scales it
-        ## ([`confirmed_deaths_model`](@ref)), so a forecast projected from
-        ## that trajectory carries the constraint with it.
+        ## cumulative. The two reported series are separate counts on a
+        ## shared latent pool, drawn off different observed baselines with
+        ## their own dispersions, so neither bounds the other whatever the
+        ## model did. Capping here would clamp the replicate below its own
+        ## origin: the suspected total froze at 246 on 26 May and the
+        ## confirmed-death cumulative passed it three weeks later. In the
+        ## joint the latent volume is uncapped too, since it counts
+        ## specimens rather than persons ([`confirmed_deaths_model`](@ref)).
         if has_conf_deaths
             confirmed_deaths_cum[i] = round(Int, obs_confirmed_deaths) +
                 _nb_new(
