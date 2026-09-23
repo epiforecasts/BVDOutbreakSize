@@ -193,6 +193,40 @@ forecast_province_fig(4) #hide
 #md # </details>
 #md # ```
 
+# ## Past forecasts against what was observed
+#
+# Each release since 15 September 2026 archives its province split, so this figure has few made dates so far.
+# Each panel is one province stream at one horizon.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the province went on to report.
+# A window holding a harmonisation-break day is left out, because that day's backfill is published for the country and not by province.
+
+#md # ```@raw html
+#md # <details><summary>Load the archived province forecasts and their outcomes</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `province_forecast.csv`, in the national overlay's schema. A missing
+## file reads as an empty table, which the figure reports as nothing scored.
+province_overlay_df = _release_data(
+    joinpath("province", "forecast_overlay.csv"),
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
+province_overlay_fig = plot_forecast_overlay(
+    scored_overlay(province_overlay_df)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_overlay_fig #hide
+
 # ---
 #
 # The full analysis code, data and model definitions are in the
