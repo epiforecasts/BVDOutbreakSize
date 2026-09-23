@@ -33,7 +33,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 # ## Summary
 #
 # The numbers below are our estimate for each province from the joint posterior.
-# Each is given as equal-tailed 30%, 60% and 90% credible intervals.
+# Each range is an equal-tailed 90% credible interval.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 
 #md # ```@raw html
@@ -49,7 +49,7 @@ province_headline = Markdown.parse(province_headline_md);
 
 province_headline #hide
 
-# The table below gives the full credible intervals for each province, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
+# The table below gives the 30%, 60% and 90% credible intervals for each province, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
 
 #md # ```@raw html
 #md # <details><summary>Per-province summary table</summary>
