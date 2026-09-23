@@ -66,11 +66,19 @@ end
     )
     @test loglik(censored_occupancy_model(μ, ceilings, x, k)) ≈ per_term_c
 
-    ## A `missing` vector still samples under the indexed keys the
-    ## predictive path reads.
+    ## A `missing` vector samples as one variable under the whole-vector
+    ## key the predictive path reads, with each entry drawn from its own
+    ## kernel. A draw above a ceiling returns the ceiling.
     keyset(m) = Set(keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
     @test keyset(vintage_increments_model(μ, missing, k)) ==
-        Set(@varname(increments[i]) for i in 1:5)
+        Set([@varname(increments)])
     @test keyset(censored_occupancy_model(μ, ceilings, missing, k)) ==
-        Set(@varname(obs[i]) for i in 1:5)
+        Set([@varname(obs)])
+    draw = vintage_increments_model(μ, missing, k)(Xoshiro(2)).increments
+    @test draw isa Vector{Int} && length(draw) == 5 && all(>=(0), draw)
+    low = [100.0, 100.0, 5.0]
+    frac = [44.5, 60.0, 1.0e6]
+    draw = censored_occupancy_model(low, frac, missing, k)(Xoshiro(2)).obs
+    @test draw isa Vector{Float64} && all(draw .<= frac)
+    @test isempty(vintage_increments_model(Float64[], missing, k)().increments)
 end

@@ -24,6 +24,7 @@ const _PKG = pkgdir(BVDOutbreakSize)
 const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "priors.jl"),
     joinpath(_PKG, "src", "models", "observations.jl"),
+    joinpath(_PKG, "src", "models", "observation_vectors.jl"),
     joinpath(_PKG, "src", "models", "joint.jl"),
     joinpath(_PKG, "src", "models", "fit_args.jl"),
     joinpath(_PKG, "src", "renewal.jl"),

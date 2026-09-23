@@ -11,12 +11,14 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
+using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
+import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
     LogNormal, Beta, LKJCholesky,
@@ -189,6 +191,7 @@ include("plots.jl")
 include("maps.jl")
 include("models/priors.jl")
 include("models/observations.jl")
+include("models/observation_vectors.jl")
 include("models/joint.jl")
 include("models/fit_args.jl")
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B

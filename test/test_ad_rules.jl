@@ -274,7 +274,9 @@ end
     using BVDOutbreakSize: convolve_delay, convolve_survival, convolve_pmf,
         interpolate_knots, renewal_infections, abscond_thinned,
         abscond_thinned_flow, abscond_thinned_flows, patch_infections,
-        nbinomial_loglik, studentt_loglik
+        nbinomial_loglik, studentt_loglik, censored_nbinomial_loglik,
+        NegBinomialVector, CensoredNegBinomialVector, StudentTVector
+    using Distributions: logpdf
 
     ## Mooncake's gradient of `f` with respect to each of its arguments.
     ## The registered rule fires here, so this is the gradient the model
@@ -515,6 +517,33 @@ end
         check_grads(studentt_loglik, μ, σ, xf, 4.0)
         ## A defaulted `ν` passes no derivative.
         @test iszero(mgrad(d -> studentt_loglik(μ, σ, x, d), -1.0)[1])
+    end
+
+    @testset "vector distributions" begin
+        ## `logpdf` of each vector distribution is its summed helper, so the
+        ## helper's rule fires through it: the gradient is the rule's own,
+        ## bit for bit, and matches ForwardDiff.
+        μ = exp.(4 .+ 0.5 .* randn(60))
+        x = rand(0:120, 60)
+        nb(a, b) = logpdf(NegBinomialVector(a, b), x)
+        @test mgrad(nb, 8.3, μ) == mgrad(
+            (a, b) -> nbinomial_loglik(a, b, x), 8.3, μ
+        )
+        check_grads(nb, 8.3, μ)
+        up = [i % 3 == 0 ? Float64(x[i]) : 1.0e6 for i in 1:60]
+        @test mgrad(
+            (a, b) -> logpdf(CensoredNegBinomialVector(a, b, up), x), 8.3, μ
+        ) == mgrad(
+            (a, b) -> censored_nbinomial_loglik(a, b, up, x), 8.3, μ
+        )
+        m = 20 .* randn(60)
+        σ = exp.(1 .+ 0.5 .* randn(60))
+        y = round.(Int, m .+ 3 .* σ .* randn(60))
+        st(a, b, d) = logpdf(StudentTVector(a, b, d), y)
+        @test mgrad(st, m, σ, 4.0) == mgrad(
+            (a, b, d) -> studentt_loglik(a, b, y, d), m, σ, 4.0
+        )
+        check_grads(st, m, σ, 4.0)
     end
 end
 

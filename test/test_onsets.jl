@@ -1547,9 +1547,14 @@ end
     @test studentt_loglik(μ, σ, x, -1.0) == studentt_loglik(μ, σ, x, 4.0)
     @test loglik(onset_increments_model(Float64[], Float64[], Int[], 4.0)) == 0
 
-    ## A `missing` vector still samples under the indexed keys the
-    ## predictive path reads.
-    keyset(m) = Set(keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
-    @test keyset(onset_increments_model(μ, σ, missing, 4.0)) ==
-        Set(@varname(increments[i]) for i in 1:6)
+    ## A `missing` vector samples as one variable under the whole-vector
+    ## key the predictive path reads. It is unconstrained, so linking it
+    ## leaves the log density unchanged.
+    m = onset_increments_model(μ, σ, missing, 4.0)
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    @test Set(keys(vi)) == Set([@varname(increments)])
+    @test DynamicPPL.getlogjoint(DynamicPPL.link(vi, m)) ≈
+        DynamicPPL.getlogjoint(vi)
+    draw = m(Xoshiro(2)).increments
+    @test draw isa Vector{Float64} && length(draw) == 6
 end

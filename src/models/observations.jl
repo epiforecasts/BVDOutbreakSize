@@ -254,29 +254,19 @@ per-vintage increments `modelled` (see [`bin_increments`](@ref)) against
 the observed `increments` with one NegativeBinomial per vintage, sharing
 the dispersion `k`.
 
-`increments` is a model argument on the left of `~`, so a `missing`
-argument is sampled (the predictive-generator path). The indexed
-`increments[i]` keeps the predict keys (`<prefix>.increments[i]`)
-replicable. A supplied vector is scored as one summed term
-([`nbinomial_loglik`](@ref)) rather than a `~` per vintage. An empty
-vector (zero vintages) is a no-op.
+`increments` is a model argument on the left of `~`, so a supplied vector
+is observed data DynamicPPL conditions on and a `missing` argument is
+sampled (the predictive-generator path) under the whole-vector predict key
+`<prefix>.increments`. Both go through one [`NegBinomialVector`](@ref), so
+a supplied vector is scored as one summed term. An empty vector (zero
+vintages) adds nothing to the log density.
 """
 @model function vintage_increments_model(
         modelled::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Integer}},
         k::Real
     )
-    n = length(modelled)
-    if ismissing(increments)
-        increments = Vector{Union{Missing, Int}}(missing, n)
-        for i in 1:n
-            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
-        end
-    elseif n > 0
-        @addlogprob! (;
-            loglikelihood = nbinomial_loglik(k, modelled, increments),
-        )
-    end
+    increments ~ NegBinomialVector(k, modelled)
     return (; modelled, increments)
 end
 
@@ -286,30 +276,16 @@ is a NegBinomial around the latent bed demand `means[i]`, right-censored at
 the effective capacity `ceilings[i]`. The censored tail probability still
 depends on the demand above the ceiling, so demand stays identified when
 beds are full rather than the occupancy going flat in demand. A `missing`
-`obs` samples (the predictive path) under the `<prefix>.obs[i]` keys. A
-supplied vector is scored as one summed term
-([`censored_nbinomial_loglik`](@ref)). Shares the surveillance dispersion
-`k`.
+`obs` samples (the predictive path) under the `<prefix>.obs` key. Both go
+through one [`CensoredNegBinomialVector`](@ref), so a supplied vector is
+scored as one summed term. Shares the surveillance dispersion `k`.
 """
 @model function censored_occupancy_model(
         means::AbstractVector,
         ceilings::AbstractVector,
         obs::Union{Missing, AbstractVector{<:Integer}}, k::Real
     )
-    n = length(means)
-    if ismissing(obs)
-        obs = Vector{Union{Missing, Int}}(missing, n)
-        for i in 1:n
-            obs[i] ~ censored(
-                safe_nbinomial(k, safe_rate(means[i]));
-                upper = safe_rate(ceilings[i])
-            )
-        end
-    elseif n > 0
-        @addlogprob! (;
-            loglikelihood = censored_nbinomial_loglik(k, means, ceilings, obs),
-        )
-    end
+    obs ~ CensoredNegBinomialVector(k, means, ceilings)
     return (; means, ceilings, obs)
 end
 
@@ -2808,25 +2784,15 @@ model's argument names (`DynamicPPL.inargnames`), so a local variable on
 the left of `~` is treated as latent, silently dropping the likelihood.
 Same argument shape as [`vintage_increments_model`](@ref). A `missing`
 argument samples instead (the predictive-generator path) under the
-`<prefix>.increments[i]` keys. A supplied vector is scored as one summed
-term ([`studentt_loglik`](@ref)).
+`<prefix>.increments` key. Both go through one [`StudentTVector`](@ref),
+so a supplied vector is scored as one summed term.
 """
 @model function onset_increments_model(
         means::AbstractVector,
         sds::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Real}}, ν::Real
     )
-    n = length(means)
-    if ismissing(increments)
-        increments = Vector{Union{Missing, Float64}}(missing, n)
-        for i in 1:n
-            increments[i] ~ safe_studentt(means[i], sds[i], ν)
-        end
-    elseif n > 0
-        @addlogprob! (;
-            loglikelihood = studentt_loglik(means, sds, increments, ν),
-        )
-    end
+    increments ~ StudentTVector(means, sds, ν)
     return (; means, sds, increments)
 end
 
@@ -3862,7 +3828,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
     ## into a local here would make every cell latent and drop the likelihood
     ## silently (see `onset_increments_model`). Attached unprefixed so the
-    ## cells keep the flat `increments[i]` names the predictive path indexes.
+    ## cells keep the flat `increments` name the predictive path reads.
     increments_state ~ to_submodel(
         onset_increments_model(
             scanned.means, σ_mult .* scales,
