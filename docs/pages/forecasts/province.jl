@@ -104,7 +104,8 @@ forecast_province_table(p) = MarkdownTable(
 )
 forecast_province_fig(p) = plot_province_forecast_detail(
     chn_joint, forecast;
-    province = p, n_patches = N_PATCHES, observed = forecast_province_observed(p)
+    province = p, n_patches = N_PATCHES,
+    observed = forecast_province_observed(p)
 )
 ## The province blocks below are written out one per patch.
 @assert N_PATCHES == 4 && PROVINCE_LABELS[1:4] ==
