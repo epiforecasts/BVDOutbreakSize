@@ -165,18 +165,20 @@ end
         R_T_patch = draws([1.2, 0.9, 0.7], 0.05),
     )
     md = patch_headline(base, np)
-    lines = filter(startswith("- "), split(md, "\n"))
-    ## One bullet per province, in patch order.
+    lines = filter(!isempty, split(md, "\n"))
+    ## One single-line bullet per province, in patch order.
     @test length(lines) == np
     for p in 1:np
         @test startswith(lines[p], "- **$(PROVINCE_LABELS[p]):**")
     end
-    ## Equal-tailed intervals at every level, not a point estimate.
-    @test count("30% ", md) == 2 * np
-    @test count("90% ", md) == 2 * np
+    ## A 90% interval for each quantity, not a point estimate, and not the
+    ## 30% and 60% intervals the Provinces page table carries.
     @test !occursin("median", md)
+    @test !occursin("30%", md)
+    @test !occursin("60%", md)
     ## Infections are whole numbers.
-    @test !occursin(r"\d\.\d+ infections", md)
+    @test occursin(r"^- \*\*Ituri:\*\* \d+–\d+ infections to date", md)
+    @test count("reproduction number", md) == np
     @test !occursin("case-fatality", md)
     @test !occursin("ascertainment", md)
 
@@ -187,11 +189,11 @@ end
         province_ascertainment = draws([1.4, 0.8, 0.6], 0.05),
     )
     fmd = patch_headline(full, np)
+    @test length(filter(!isempty, split(fmd, "\n"))) == np
     @test count("case-fatality ratio", fmd) == np
-    @test count("ascertainment", fmd) == np
-    @test count("30% ", fmd) == 4 * np
+    @test count("times the national average", fmd) == np
     ## The case-fatality ratio is written as a percentage.
-    @test occursin(r"90% 3\d\.\d–\d\d\.\d%", fmd)
+    @test occursin(r"case-fatality ratio 3\d\.\d–4\d\.\d%", fmd)
 
     ## A chain without the per-patch deterministics says so.
     @test_throws ErrorException patch_headline((; base.C_T_patch), np)
