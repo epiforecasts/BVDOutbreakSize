@@ -329,8 +329,9 @@ level (see [`forecast_stream`](@ref)).
     onset_report_state ~ to_submodel(
         onset_report(onset_curve_history, latent.onsets)
     )
-    expected_onset_reported_T := onset_report_expected_total(
-        latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
+    ## Reported only, so built behind `_detached`.
+    expected_onset_reported_T := _detached(
+        onset_report_expected_total, latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n
     )
     onset_ascertainment := onset_report_state.alpha
@@ -1121,9 +1122,10 @@ reproduction number implied by the summed patch infections.
     ## ascertainment level and the fitted per-vintage scan level, off the
     ## same fitted hazard and ascertainment walk. See
     ## [`onset_reporting_model`](@ref) for what the vintage structure does
-    ## and does not separate here.
-    expected_onset_reported_T := onset_report_expected_total(
-        onsets, onset_report_state.logit_h0, onset_report_state.γ,
+    ## and does not separate here. The total is reported only, so it is
+    ## built behind `_detached`.
+    expected_onset_reported_T := _detached(
+        onset_report_expected_total, onsets, onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n
     )
     onset_ascertainment := onset_report_state.alpha

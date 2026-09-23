@@ -5,7 +5,8 @@
 @testitem "reference kernels: fast kernels match their textbook loops" setup = [
     ADRuleCases,
 ] begin
-    using BVDOutbreakSize: renewal_infections_with_force
+    using BVDOutbreakSize: renewal_infections_with_force,
+        onset_report_expected_total
     include(joinpath(@__DIR__, "reference_kernels.jl"))
 
     agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))
@@ -88,7 +89,8 @@
     end
     for (note, lh, as_of) in (
             ("D = 12", o.lh, 45), ("hazards 0 and 1", lh01, 45),
-            ("cut-off before the grid", o.lh, 3),
+            ("cut-off before the grid", o.lh, 3), ("D = 1", o.lh[1:1], 45),
+            ("cut-off inside the support", o.lh, 8),
         )
         add!(
             "onset_report_expected_total $note", onset_report_expected_total,
@@ -149,4 +151,15 @@
     w_inf = [0.5, 0.0, 0.5]
     @test isnan(ref_convolve_delay(x_inf, w_inf)[3])
     @test isequal(convolve_delay(x_inf, w_inf), [0.5, Inf, 1.5, Inf])
+
+    ## An empty delay support gives a zero total. With every hazard zero,
+    ## a date whose reports are all in counts in full, where the share off
+    ## the floored denominator would be zero, and the unsettled dates add
+    ## nothing.
+    @test onset_report_expected_total(o.onsets, Float64[], o.γ, 5, o.alpha, 45) ==
+        0
+    lh0 = fill(-800.0, 12)
+    α(u) = o.alpha[clamp(u - 5 + 1, 1, length(o.alpha))]
+    @test onset_report_expected_total(o.onsets, lh0, o.γ, 5, o.alpha, 45) ≈
+        sum(o.onsets[u] * α(u) for u in 1:34) rtol = 1.0e-12
 end

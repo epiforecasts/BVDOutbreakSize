@@ -609,14 +609,6 @@ Mooncake.@is_primitive(
         Array{<:Integer},
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(onset_report_expected_total), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat}, Integer,
-        Array{<:Mooncake.IEEEFloat}, Integer,
-    },
-)
 
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
@@ -850,64 +842,6 @@ function Mooncake.rrule!!(
             NoRData(), NoRData(), convert(typeof(px), p̄x)
     end
     return CoDual(y, ȳ), onset_scanned_cells_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_expected_total)},
-        onsets::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        logit_h0::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        γ::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        grid_start::CoDual{<:Integer},
-        alpha::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        as_of::CoDual{<:Integer}
-    )
-    op = primal(onsets)
-    lp = primal(logit_h0)
-    γp = primal(γ)
-    gs = Int(primal(grid_start))
-    alp = primal(alpha)
-    t = Int(primal(as_of))
-    ō = tangent(onsets)
-    l̄ = tangent(logit_h0)
-    γ̄ = tangent(γ)
-    ᾱ = tangent(alpha)
-    ## Each term is `onsets[u] · α_u · G_u` with `G = (1 - surv_jn) / den`
-    ## and `den = safe_rate(1 - surv_{D-1})`: the numerator's column adjoint
-    ## is the cotangent at `jn`, the denominator's at `D - 1`. The forward
-    ## pass keeps each onset date's column for the pullback.
-    D = length(lp)
-    na = length(alp)
-    T = promote_type(eltype(op), eltype(lp), eltype(γp), eltype(alp))
-    ge = max(min(t, length(op)), 0)
-    H = Matrix{T}(undef, D, ge)
-    S = Matrix{T}(undef, D, ge)
-    _onset_columns!(H, S, lp, γp, gs, 1)
-    total = _onset_expected_total(op, S, gs, alp, t)
-    function onset_report_expected_total_pullback!!(ȳ::Mooncake.IEEEFloat)
-        D == 0 && return ntuple(_ -> NoRData(), 7)
-        c̄ = zeros(T, D)
-        @inbounds for u in 1:ge
-            δ = t - u
-            ia = clamp(u - gs + 1, 1, na)
-            α = alp[ia]
-            jn = min(δ, D - 1)
-            num = δ < 0 ? zero(T) : one(T) - S[jn + 1, u]
-            cD = one(T) - S[D, u]
-            sden = safe_rate(cD)
-            G = num / sden
-            ō[u] += ȳ * α * G
-            ᾱ[ia] += ȳ * op[u] * G
-            w = ȳ * op[u] * α / sden
-            fill!(c̄, zero(T))
-            δ >= 0 && (c̄[jn + 1] += w)
-            c̄[D] -= w * G * _safe_rate_slope(cD)
-            _onset_column_adjoint!(
-                l̄, γ̄, c̄, view(H, :, u), view(S, :, u), u, gs
-            )
-        end
-        return ntuple(_ -> NoRData(), 7)
-    end
-    return CoDual(total, NoFData()), onset_report_expected_total_pullback!!
 end
 
 function Mooncake.rrule!!(

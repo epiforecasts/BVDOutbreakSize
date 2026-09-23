@@ -20,7 +20,7 @@
         abscond_thinned, abscond_thinned_flows, two_clock_confirmed,
         clinical_stay_survival, accumulate_occupancy,
         onset_report_cdf_table, onset_report_anchor_series,
-        onset_report_moments, onset_report_expected_total, studentt_loglik,
+        onset_report_moments, studentt_loglik,
         betabinomial_loglik, onset_vintage_indices, censoring_cap,
         admission_headroom, onset_scanned_cells
 
@@ -296,29 +296,6 @@
             "D = 28", onset_report_moments, big.tab, 120, big.onsets, 120,
             big.alpha, big.oi, big.ri, big.pri; perf = true
         )
-        ## Onset dates before `grid_start` clamp both `γ` and `alpha`, and a
-        ## cut-off before `grid_start` reads only clamped days.
-        add!(
-            "D = 12", onset_report_expected_total, o.onsets, o.lh, o.γ, gs,
-            o.alpha, 45
-        )
-        add!(
-            "D = 1", onset_report_expected_total, o.onsets, o.lh[1:1], o.γ,
-            gs, o.alpha, 45
-        )
-        add!(
-            "D = 0", onset_report_expected_total, o.onsets, Float64[], o.γ,
-            gs, o.alpha, 45
-        )
-        add!(
-            "cut-off before grid_start", onset_report_expected_total,
-            o.onsets, o.lh, o.γ, gs, o.alpha, gs - 2
-        )
-        add!(
-            "D = 28", onset_report_expected_total, big.onsets, big.lh,
-            big.γ, 120, big.alpha, 220; perf = true
-        )
-
         add!("30 cells", onset_scanned_cells, scanned_args(rng, 30, 6)...)
         add!(
             "negative means", onset_scanned_cells,
@@ -641,7 +618,8 @@ end
 ] begin
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
     using BVDOutbreakSize: load_observations, joint_fit_args,
-        default_breakpoint, onset_vintage_indices, onset_scanned_cells
+        default_breakpoint, onset_vintage_indices, onset_scanned_cells,
+        onset_report_expected_total, _detached
 
     ## The argument types `onset_reporting_model` passes on the production
     ## data: float vectors from the moments and the scan levels, the
@@ -659,6 +637,13 @@ end
         Tuple{
             typeof(onset_scanned_cells), F, F, F, typeof(v.vintage_idx),
             typeof(v.prev_vintage_idx), typeof(h.prev_report_days), Float64,
+        }
+    )
+    ## The reported-only total goes through the zero-derivative barrier.
+    @test fires(
+        Tuple{
+            typeof(_detached), typeof(onset_report_expected_total), F, F, F,
+            Int, F, Int,
         }
     )
 end
@@ -791,15 +776,13 @@ end
     @test all(isfinite, g) && !iszero(g[3])
 end
 
-@testitem "AD rules: the joint's detached work reaches no likelihood" tags = [
-    :ad,
-] begin
+@testsnippet ThroughDetached begin
     using Mooncake: Mooncake, DefaultCtx, Mode, ReverseMode,
         MooncakeInterpreter, build_rrule, get_interpreter, value_and_gradient!!
     using LogDensityProblems: logdensity
     using Random: Xoshiro
     using Turing: DynamicPPL
-    using BVDOutbreakSize: _detached, bvd_joint
+    using BVDOutbreakSize: _detached
 
     ## A context in which `_detached` is an ordinary call, so Mooncake
     ## differentiates the wrapped work. If a wrapped value reached a
@@ -814,19 +797,56 @@ end
         return Mooncake.is_primitive(DefaultCtx, M, sig, world)
     end
 
+    ## Log density and gradient at a seeded point, under the barrier and
+    ## through it.
+    function barrier_and_through(model)
+        vi = DynamicPPL.link(
+            DynamicPPL.VarInfo(Xoshiro(20260923), model), model
+        )
+        x = collect(vi[:])
+        ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
+        f = y -> logdensity(ldf, y)
+        sig = Tuple{typeof(f), typeof(x)}
+        barrier = build_rrule(get_interpreter(ReverseMode), sig)
+        through = build_rrule(
+            MooncakeInterpreter(ThroughDetachedCtx, ReverseMode), sig
+        )
+        lp_b, (_, g_b) = value_and_gradient!!(barrier, f, x)
+        lp_t, (_, g_t) = value_and_gradient!!(through, f, x)
+        return (; lp_b, g_b = copy(g_b), lp_t, g_t = copy(g_t))
+    end
+end
+
+@testitem "AD rules: the joint's detached work reaches no likelihood" tags = [
+    :ad,
+] setup = [ThroughDetached] begin
+    using BVDOutbreakSize: bvd_joint
+
     ## Three patches, so the per-patch deviations and the correlation matrix
     ## are built behind the barrier too.
-    model = bvd_joint(40, 2, 3, 5, 1, 4, 10; n_patches = 3, breakpoint = 14)
-    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(20260923), model), model)
-    x = collect(vi[:])
-    ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
-    f = y -> logdensity(ldf, y)
-    sig = Tuple{typeof(f), typeof(x)}
-    barrier = build_rrule(get_interpreter(ReverseMode), sig)
-    through = build_rrule(MooncakeInterpreter(ThroughDetachedCtx, ReverseMode), sig)
-    lp_b, (_, g_b) = value_and_gradient!!(barrier, f, x)
-    lp_t, (_, g_t) = value_and_gradient!!(through, f, x)
-    @test isfinite(lp_b)
-    @test lp_b == lp_t
-    @test g_b == g_t
+    r = barrier_and_through(
+        bvd_joint(40, 2, 3, 5, 1, 4, 10; n_patches = 3, breakpoint = 14)
+    )
+    @test isfinite(r.lp_b)
+    @test r.lp_b == r.lp_t
+    @test r.g_b == r.g_t
+end
+
+@testitem "AD rules: the onset composer's detached total reaches no likelihood" tags = [
+    :ad,
+] setup = [ThroughDetached] begin
+    using BVDOutbreakSize: onsets_only_model
+
+    history = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    r = barrier_and_through(
+        onsets_only_model(40; onset_curve_history = history, breakpoint = 14)
+    )
+    @test isfinite(r.lp_b)
+    @test r.lp_b == r.lp_t
+    @test r.g_b == r.g_t
 end

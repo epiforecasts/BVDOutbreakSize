@@ -3039,7 +3039,7 @@ end
 ## Share of an onset date's eventual reports in by a delay, from the
 ## survival to that delay `surv_n` and to the end of the support `surv_D`:
 ## `(1 − surv_n) / (1 − surv_D)`, with the denominator floored.
-## [`onset_report_G`](@ref) and the batched `_onset_expected_total` both
+## [`onset_report_G`](@ref) and [`onset_report_expected_total`](@ref) both
 ## call it.
 @inline _onset_report_share(surv_n, surv_D) =
     (one(surv_n) - surv_n) / safe_rate(one(surv_D) - surv_D)
@@ -3127,8 +3127,8 @@ function onset_report_cdf_table(
 end
 
 ## The survival recurrence of each onset date's delay column, the one walk
-## `onset_report_cdf_table`, `onset_report_expected_total` and their Mooncake
-## rules share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
+## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
+## Mooncake rule share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
 ## survival product up to and including delay `j`, and, unless `H` is
 ## `nothing`, `H[j + 1, k]` is that delay's hazard.
 function _onset_columns!(
@@ -3635,37 +3635,39 @@ calendar effect and an ascertainment level the fit has no estimate for.
 edge (see [`onset_report_G`](@ref)), so no separate extrapolated form is
 needed here.
 
+An onset date at least `D - 1` days before `as_of` has all its reports in,
+so its share `G` is one and its delay column is not built. Built from
+the full column, that share differs from one only when the column's total
+report probability sits on the `safe_rate` floor.
+
 Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
-in range. Pure, top-level, single indexed loop.
+in range. An empty delay support (`D = 0`) gives zero. Pure, top-level,
+single indexed loop.
 """
 function onset_report_expected_total(
         onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
         grid_start::Integer, alpha::AbstractVector, as_of::Integer
     )
-    T = promote_type(eltype(logit_h0), eltype(γ))
-    ge = max(min(Int(as_of), length(onsets)), 0)
-    S = Matrix{T}(undef, length(logit_h0), ge)
-    _onset_columns!(nothing, S, logit_h0, γ, grid_start, 1)
-    return _onset_expected_total(onsets, S, grid_start, alpha, as_of)
-end
-
-## `onset_report_expected_total` off the survival products `S` of onset
-## dates `1:size(S, 2)`, each term `onsets[u] · F(u, as_of - u)` as
-## `onset_report_F` gives it.
-function _onset_expected_total(
-        onsets::AbstractVector, S::AbstractMatrix, grid_start::Integer,
-        alpha::AbstractVector, as_of::Integer
+    T = promote_type(
+        eltype(onsets), eltype(logit_h0), eltype(γ), eltype(alpha)
     )
-    T = promote_type(eltype(onsets), eltype(S), eltype(alpha))
-    D = size(S, 1)
+    D = length(logit_h0)
+    D == 0 && return zero(T)
+    t = Int(as_of)
+    ge = max(min(t, length(onsets)), 0)
+    ## Columns for the unsettled dates `u0:ge` only.
+    u0 = max(t - D + 2, 1)
+    S = Matrix{T}(undef, D, max(ge - u0 + 1, 0))
+    _onset_columns!(nothing, S, logit_h0, γ, grid_start, u0)
     na = length(alpha)
     total = zero(T)
-    @inbounds for u in axes(S, 2)
+    @inbounds for u in 1:ge
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
-        share = D == 0 ? zero(T) :
-            _onset_report_share(S[min(as_of - u, D - 1) + 1, u], S[D, u])
+        k = u - u0 + 1
+        share = k < 1 ? one(T) :
+            _onset_report_share(S[min(t - u, D - 1) + 1, k], S[D, k])
         total += onsets[u] * (α * share)
     end
     return total
