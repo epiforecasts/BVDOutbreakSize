@@ -10,7 +10,7 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
+using Turing: Turing, @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
 import AbstractMCMC

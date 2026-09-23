@@ -353,6 +353,11 @@ divergences are visible live. Those warmup draws are then also retained
 in the returned chain, so the first `n_adapts` draws are adaptation
 steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
+
+`term_buffer` sets the length of the terminal step-size adaptation window,
+the last stretch of warmup where only the step size adapts. The default
+`nothing` keeps the sampler default of 50 iterations and builds plain
+`NUTS`.
 """
 function nuts_sample(
         model;
@@ -368,6 +373,7 @@ function nuts_sample(
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
+        term_buffer::Union{Nothing, Integer} = nothing,
         kwargs...
     )
     rng = MersenneTwister(seed)
@@ -391,7 +397,9 @@ function nuts_sample(
     return sample(
         rng,
         model,
-        NUTS(n_adapts, target_accept; max_depth, adtype),
+        nuts_algorithm(;
+            n_adapts, target_accept, max_depth, adtype, term_buffer
+        ),
         MCMCThreads(),
         samples, chains;
         initial_params = inits,
@@ -401,6 +409,74 @@ function nuts_sample(
         warmup_kwargs...,
         kwargs...
     )
+end
+
+# Plain `NUTS` when `term_buffer` is `nothing`, otherwise `TermBufferNUTS`.
+function nuts_algorithm(;
+        n_adapts, target_accept, max_depth, adtype, term_buffer = nothing
+    )
+    term_buffer === nothing &&
+        return NUTS(n_adapts, target_accept; max_depth, adtype)
+    term_buffer >= 0 || throw(
+        ArgumentError("term_buffer must be non-negative, got $term_buffer")
+    )
+    nuts = NUTS(n_adapts, target_accept; max_depth, adtype)
+    return TermBufferNUTS(nuts, Int(term_buffer))
+end
+
+# NUTS with a set terminal step-size adaptation window. Turing's `NUTS` builds
+# its `StanHMCAdaptor` with the AdvancedHMC defaults and takes no window
+# settings. The fields mirror `NUTS`, which Turing's generic
+# `AdaptiveHamiltonian` sampling code reads.
+struct TermBufferNUTS{AD, M <: Turing.Inference.AHMC.AbstractMetric} <:
+    Turing.Inference.AdaptiveHamiltonian
+    n_adapts::Int
+    δ::Float64
+    max_depth::Int
+    Δ_max::Float64
+    ϵ::Float64
+    adtype::AD
+    term_buffer::Int
+end
+
+function TermBufferNUTS(nuts::NUTS{AD, M}, term_buffer::Int) where {AD, M}
+    return TermBufferNUTS{AD, M}(
+        nuts.n_adapts, nuts.δ, nuts.max_depth, nuts.Δ_max, nuts.ϵ,
+        nuts.adtype, term_buffer
+    )
+end
+
+function _nuts(alg::TermBufferNUTS{AD, M}) where {AD, M}
+    return NUTS(
+        alg.n_adapts, alg.δ, alg.max_depth, alg.Δ_max, alg.ϵ, M;
+        adtype = alg.adtype
+    )
+end
+
+Turing.Inference.getmetricT(::TermBufferNUTS{AD, M}) where {AD, M} = M
+
+function Turing.Inference.make_ahmc_kernel(alg::TermBufferNUTS, ϵ)
+    return Turing.Inference.make_ahmc_kernel(_nuts(alg), ϵ)
+end
+
+function Turing.Inference.post_sample_hook(
+        chain, alg::TermBufferNUTS; kwargs...
+    )
+    return Turing.Inference.post_sample_hook(chain, _nuts(alg); kwargs...)
+end
+
+function Turing.Inference.AHMCAdaptor(
+        alg::TermBufferNUTS, metric::Turing.Inference.AHMC.AbstractMetric,
+        nadapts::Int; ϵ = alg.ϵ
+    )
+    AHMC = Turing.Inference.AHMC
+    iszero(alg.n_adapts) && return AHMC.Adaptation.NoAdaptation()
+    adaptor = AHMC.StanHMCAdaptor(
+        AHMC.MassMatrixAdaptor(metric), AHMC.StepSizeAdaptor(alg.δ, ϵ);
+        term_buffer = alg.term_buffer
+    )
+    AHMC.initialize!(adaptor, nadapts)
+    return adaptor
 end
 
 """
