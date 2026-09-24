@@ -145,10 +145,10 @@ vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 [`onset_report_expected_total`](@ref) as of `v`, over the onsets the model
 runs past the cut-off `n`. Its increment over the total at the cut-off is
 drawn with the Student-t the scored cells take, at the scale
-[`onset_report_scale`](@ref) gives a correction read off two scans, the
-two totals as the levels and inflated by the fitted `σ_mult`. The
-increment is drawn on the whole figure, not per onset date, since the
-figure's total is the quantity the forecast is scored on. The split of each
+[`onset_report_scale`](@ref) gives a correction read off two bars with the
+fitted read SD `τ`. The increment is drawn on the whole figure, not per
+onset date, since the figure's total is the quantity the forecast is
+scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
@@ -159,12 +159,7 @@ printed by the cut-off.
     then = [_onset_total(onsets, state, v) for v in vintages]
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
-    sds = [
-        state.σ_mult * onset_report_scale(
-            means[j], then[j], now, 2;
-            pixel_sd = state.pixel_sd, scan_sd = state.σ_scan
-        ) for j in eachindex(vintages)
-    ]
+    sds = [onset_report_scale(means[j], state.τ, 2) for j in eachindex(vintages)]
     forecast_onset_reports ~ to_submodel(
         onset_increments_model(means, sds, missing, state.ν)
     )
@@ -490,8 +485,7 @@ back to its constant `0.15` anchor.
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the un-prefixed name [`bvd_joint`](@ref) uses,
-the modelled ascertainment as `onset_ascertainment` and the fitted
-per-vintage scan levels as `onset_scan_level`. With the shared
+and the modelled ascertainment as `onset_ascertainment`. With the shared
 `cumulative_onsets` trajectory from `_latent` that is everything
 [`forecast_onsets`](@ref) needs, so this fit nowcasts and forecasts the
 onset stream, scored on the reported increment rather than on the digitised
@@ -524,7 +518,6 @@ level (see [`forecast_stream`](@ref)).
         )
     end
     onset_ascertainment := onset_report_state.alpha
-    onset_scan_level := onset_report_state.scan_level
     if forecast !== nothing && !isempty(onset_curve_history.onset_days)
         onset_forecast ~ to_submodel(
             onset_forecast_model(
@@ -1390,12 +1383,10 @@ density there, is the fitted model's.
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
-    ## Cut-off expected onset-reported total, the modelled per-onset-date
-    ## ascertainment level and the fitted per-vintage scan level, off the
-    ## same fitted hazard and ascertainment walk. See
-    ## [`onset_reporting_model`](@ref) for what the vintage structure does
-    ## and does not separate here. The total is reported only, so it is
-    ## built only when `:=` values are recorded.
+    ## Cut-off expected onset-reported total and the modelled per-onset-date
+    ## ascertainment level, off the same fitted hazard and ascertainment
+    ## walk. The total is reported only, so it is built only when `:=`
+    ## values are recorded.
     if _reporting(__varinfo__)
         expected_onset_reported_T := onset_report_expected_total(
             onsets,
@@ -1404,7 +1395,6 @@ density there, is the fitted model's.
         )
     end
     onset_ascertainment := onset_report_state.alpha
-    onset_scan_level := onset_report_state.scan_level
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(

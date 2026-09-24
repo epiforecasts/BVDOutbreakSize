@@ -137,25 +137,6 @@ end
     @test size(onset_report_cdf_table(lh, γ, 5, 9, 8)) == (12, 0)
 end
 
-@testitem "onset_scanned_cells: the scan adjustment and scales together" setup = [
-    KernelProperties,
-] begin
-    using BVDOutbreakSize: onset_scanned_cells, onset_scan_adjust,
-        onset_report_scales
-    rng = Xoshiro(7)
-    lc, lp = 20 .* rand(rng, 30), 15 .* rand(rng, 30)
-    level = 1 .+ 0.05 .* randn(rng, 4)
-    vi = rand(rng, 1:4, 30)
-    pvi = [rand(rng, 0:4) for _ in 1:30]
-    pri = [rand(rng, 0:6) for _ in 1:30]
-    cells = onset_scanned_cells(lc, lp, level, vi, pvi, pri, 2.1)
-    x = onset_scan_adjust(lc, lp, level, vi, pvi)
-    @test cells.means == x.means
-    @test cells.scales == onset_report_scales(
-        x.means, x.level_cur, x.level_prev, pri; pixel_sd = 2.1
-    )
-end
-
 @testitem "stick_breaking_loglik: one conditional BetaBinomial per row" begin
     using BVDOutbreakSize: stick_breaking_loglik, safe_betabinomial
     using Distributions: logpdf
