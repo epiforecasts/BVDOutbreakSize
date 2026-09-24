@@ -34,8 +34,10 @@ const REPO = normpath(joinpath(@__DIR__, "..", ".."))
 const DATA = joinpath(REPO, "paper", "data")
 const CACHE = joinpath(DATA, "release")
 const GH_REPO = "epiforecasts/BVDOutbreakSize"
-const ASSETS = ("observations.toml", "posterior_summary.csv",
-    "posterior_draws.csv")
+const ASSETS = (
+    "observations.toml", "posterior_summary.csv",
+    "posterior_draws.csv",
+)
 # Headline column name by era; the first present wins.
 const HEADLINE = ("C_T", "cumulative_cases")
 
@@ -51,9 +53,17 @@ function model_version(t)
 end
 
 # gh -R epiforecasts/BVDOutbreakSize release view results-<tag> --json assets
-release_exists(tag) = success(pipeline(Cmd(["gh", "-R", GH_REPO,
-    "release", "view", tag, "--json", "assets"]);
-    stdout = devnull, stderr = devnull))
+release_exists(tag) = success(
+    pipeline(
+        Cmd(
+            [
+                "gh", "-R", GH_REPO,
+                "release", "view", tag, "--json", "assets",
+            ]
+        );
+        stdout = devnull, stderr = devnull
+    )
+)
 
 # gh -R epiforecasts/BVDOutbreakSize release download results-<tag>
 #    -p <asset> -D paper/data/release/results-<tag>/
@@ -62,9 +72,17 @@ function fetch(tag, asset)
     dest = joinpath(dir, asset)
     isfile(dest) && return dest
     mkpath(dir)
-    run(pipeline(Cmd(["gh", "-R", GH_REPO, "release", "download", tag,
-        "-p", asset, "-D", dir, "--clobber"]); stdout = devnull))
-    isfile(dest) ? dest : nothing
+    run(
+        pipeline(
+            Cmd(
+                [
+                    "gh", "-R", GH_REPO, "release", "download", tag,
+                    "-p", asset, "-D", dir, "--clobber",
+                ]
+            ); stdout = devnull
+        )
+    )
+    return isfile(dest) ? dest : nothing
 end
 
 # Minimal CSV reader: no quoted commas in these assets.
@@ -72,7 +90,7 @@ function read_csv(path)
     lines = splitlines(read(path, String))
     header = String.(split(lines[1], ','))
     rows = [String.(split(l, ',')) for l in lines[2:end]]
-    header, rows
+    return header, rows
 end
 
 function summary_row(path)
@@ -82,8 +100,10 @@ function summary_row(path)
     for q in HEADLINE
         i = findfirst(r -> r[1] == q, rows)
         i === nothing && continue
-        return (quantity = q, lower90 = parse(Float64, rows[i][lo]),
-            upper90 = parse(Float64, rows[i][hi]))
+        return (
+            quantity = q, lower90 = parse(Float64, rows[i][lo]),
+            upper90 = parse(Float64, rows[i][hi]),
+        )
     end
     error("no headline row in $path; rows are $(first.(rows))")
 end
@@ -92,7 +112,7 @@ function draws_median(path, quantity)
     header, rows = read_csv(path)
     j = findfirst(==(quantity), header)
     j === nothing && error("no $quantity column in $path")
-    median(parse(Float64, r[j]) for r in rows)
+    return median(parse(Float64, r[j]) for r in rows)
 end
 
 csvcell(x) = occursin(r"[,\"\n]", string(x)) ?
@@ -120,15 +140,21 @@ out = map(tags) do (t, tag_date)
     cutoff = string(TOML.parsefile(files["observations.toml"])["as_of_date"])
     s = summary_row(files["posterior_summary.csv"])
     med = draws_median(files["posterior_draws.csv"], s.quantity)
-    println(rpad(t, 8), cutoff, "  ", s.quantity, "  ", fmt(med),
-        " (", fmt(s.lower90), ", ", fmt(s.upper90), ")")
-    (t, tag_date, cutoff, model_version(t), fmt(med), fmt(s.lower90),
-     fmt(s.upper90), "posterior_summary.csv;posterior_draws.csv", s.quantity)
+    println(
+        rpad(t, 8), cutoff, "  ", s.quantity, "  ", fmt(med),
+        " (", fmt(s.lower90), ", ", fmt(s.upper90), ")"
+    )
+    (
+        t, tag_date, cutoff, model_version(t), fmt(med), fmt(s.lower90),
+        fmt(s.upper90), "posterior_summary.csv;posterior_draws.csv", s.quantity,
+    )
 end
 
 open(joinpath(DATA, "release_estimates.csv"), "w") do io
-    println(io, "tag,tag_date,cutoff,model_version,median,lower90,upper90,",
-        "source_asset,quantity")
+    println(
+        io, "tag,tag_date,cutoff,model_version,median,lower90,upper90,",
+        "source_asset,quantity"
+    )
     for r in out
         println(io, join(csvcell.(r), ","))
     end

@@ -52,12 +52,12 @@ function split_csv_line(l)
         i = nextind(l, i)
     end
     push!(out, String(take!(buf)))
-    out
+    return out
 end
 function read_csv(path)
     lines = filter(!isempty, split(read(path, String), '\n'))
     header = Symbol.(split_csv_line(lines[1]))
-    [NamedTuple{Tuple(header)}(Tuple(split_csv_line(l))) for l in lines[2:end]]
+    return [NamedTuple{Tuple(header)}(Tuple(split_csv_line(l))) for l in lines[2:end]]
 end
 num(s) = parse(Float64, s)
 
@@ -93,20 +93,26 @@ function chamla_projection_rows()
     tables = collect(eachmatch(r"<table.*?</table>"s, html))
     t = findfirst(m -> occursin("Chamla central (90% PI)", m.match), tables)
     t === nothing && error("no Chamla comparison table in sensitivity.html")
-    strip_tags(s) = replace(s, r"<[^>]+>" => "", "&ndash;" => "–",
-        "&#8211;" => "–", "&#40;" => "(", "&#41;" => ")")
+    strip_tags(s) = replace(
+        s, r"<[^>]+>" => "", "&ndash;" => "–",
+        "&#8211;" => "–", "&#40;" => "(", "&#41;" => ")"
+    )
     rows = map(eachmatch(r"<tr.*?</tr>"s, tables[t].match)) do r
-        [strip_tags(c.captures[1])
-            for c in eachmatch(r"<t[hd][^>]*>(.*?)</t[hd]>"s, r.match)]
+        [
+            strip_tags(c.captures[1])
+                for c in eachmatch(r"<t[hd][^>]*>(.*?)</t[hd]>"s, r.match)
+        ]
     end
     header = rows[1]
     idate = findfirst(==("Date"), header)
     iours = findfirst(==("Our projection (90% CrI)"), header)
-    map(rows[2:end]) do r
+    return map(rows[2:end]) do r
         m = match(r"(\d+) \((\d+)–(\d+)\)", r[iours])
         d = Date(r[idate] * " 2026", dateformat"d U yyyy")
-        (date = d, median = num(m.captures[1]), lo = num(m.captures[2]),
-            hi = num(m.captures[3]))
+        (
+            date = d, median = num(m.captures[1]), lo = num(m.captures[2]),
+            hi = num(m.captures[3]),
+        )
     end
 end
 ours_chamla = chamla_projection_rows()
@@ -139,14 +145,20 @@ const FIT_LABELS = [
     ("exports", "exports"),
 ]
 
-fig = Figure(; size = (180 * MM, 150 * MM), fontsize = FS,
-    figure_padding = (4, 8, 4, 4))
-axkw = (; xgridvisible = false, ygridvisible = false,
+fig = Figure(;
+    size = (180 * MM, 150 * MM), fontsize = FS,
+    figure_padding = (4, 8, 4, 4)
+)
+axkw = (;
+    xgridvisible = false, ygridvisible = false,
     xticklabelsize = FS, yticklabelsize = FS, xlabelsize = FS,
-    ylabelsize = FS, spinewidth = 0.6, xtickwidth = 0.6, ytickwidth = 0.6)
+    ylabelsize = FS, spinewidth = 0.6, xtickwidth = 0.6, ytickwidth = 0.6,
+)
 function panel_letter(pos, s)
-    Label(pos, s; font = :bold, fontsize = 9, padding = (0, 6, 6, 0),
-        halign = :right, valign = :bottom)
+    return Label(
+        pos, s; font = :bold, fontsize = 9, padding = (0, 6, 6, 0),
+        halign = :right, valign = :bottom
+    )
 end
 
 # ---------------------------------------------------------------------
@@ -156,20 +168,27 @@ end
 # the seven-day-ahead forecast, the joint's 90% coverage of that target,
 # and whether the release is a reconstructed backfill of a tagged model
 # version rather than a forecast published at the time.
-const SkillRow = @NamedTuple{release::String, date::Date, stream::String,
-    skill::Float64, covered::Bool, backfill::Bool}
+const SkillRow = @NamedTuple{
+    release::String, date::Date, stream::String,
+    skill::Float64, covered::Bool, backfill::Bool,
+}
 skill = let
     h7 = filter(r -> r.horizon == "7", scores)
     rows = SkillRow[]
     for r in filter(r -> r.fit == "joint", h7)
         b = findfirst(
             s -> s.fit == "baseline" && s.release == r.release &&
-                s.stream == r.stream, h7)
+                s.stream == r.stream, h7
+        )
         b === nothing && continue
-        push!(rows, (release = r.release, date = Date(r.made_date),
-            stream = r.stream, skill = num(r.crps) / num(h7[b].crps),
-            covered = r.coverage_90 == "true",
-            backfill = occursin("(backfill)", r.release)))
+        push!(
+            rows, (
+                release = r.release, date = Date(r.made_date),
+                stream = r.stream, skill = num(r.crps) / num(h7[b].crps),
+                covered = r.coverage_90 == "true",
+                backfill = occursin("(backfill)", r.release),
+            )
+        )
     end
     sort(rows; by = r -> r.date)
 end
@@ -181,54 +200,81 @@ a_months = month(minimum(a_dates)):month(maximum(a_dates))
 a_ticks = [Date(2026, m, d) for m in a_months for d in (1, 15)]
 a_xticks = (dnum.(a_ticks), Dates.format.(a_ticks, "d u"))
 
-axa = Axis(fig[1, 1:3]; ylabel = "Relative CRPS (joint / persistence)",
-    yscale = log10, yticks = ([0.1, 0.3, 1, 3, 10, 30],
-        ["0.1", "0.3", "1", "3", "10", "30"]),
+axa = Axis(
+    fig[1, 1:3]; ylabel = "Relative CRPS (joint / persistence)",
+    yscale = log10, yticks = (
+        [0.1, 0.3, 1, 3, 10, 30],
+        ["0.1", "0.3", "1", "3", "10", "30"],
+    ),
     xticks = a_xticks, xminorticksvisible = true,
-    xminorticks = IntervalsBetween(4), xminortickwidth = 0.4, axkw...)
+    xminorticks = IntervalsBetween(4), xminortickwidth = 0.4, axkw...
+)
 hlines!(axa, [1.0]; color = :black, linewidth = 0.6, linestyle = :dash)
 for (s, col) in STREAMS
     rs = filter(r -> r.stream == s, skill)
     live = filter(r -> !r.backfill, rs)
-    lines!(axa, [dnum(r.date) for r in live], [r.skill for r in live];
-        color = col, linewidth = 0.8)
+    lines!(
+        axa, [dnum(r.date) for r in live], [r.skill for r in live];
+        color = col, linewidth = 0.8
+    )
     for r in rs
-        scatter!(axa, [dnum(r.date)], [r.skill]; markersize = 5,
+        scatter!(
+            axa, [dnum(r.date)], [r.skill]; markersize = 5,
             color = r.backfill ? :white : col, strokecolor = col,
-            strokewidth = 0.8)
+            strokewidth = 0.8
+        )
     end
 end
 ylims!(axa, 0.025, 40)
 a_elems = vcat(
-    [MarkerElement(; color = col, marker = :circle, markersize = 5)
-        for (_, col) in STREAMS],
-    [MarkerElement(; color = :white, strokecolor = :black,
-        strokewidth = 0.8, marker = :circle, markersize = 5),
-     MarkerElement(; color = :black, marker = :rect, markersize = 4.5),
-     MarkerElement(; color = :black, marker = :xcross, markersize = 4.5)])
-a_labels = vcat(first.(STREAMS), ["reconstructed backfill",
-    "inside 90% interval", "outside 90% interval"])
-Legend(fig[1, 1:3], a_elems, a_labels; tellwidth = false,
+    [
+        MarkerElement(; color = col, marker = :circle, markersize = 5)
+            for (_, col) in STREAMS
+    ],
+    [
+        MarkerElement(;
+            color = :white, strokecolor = :black,
+            strokewidth = 0.8, marker = :circle, markersize = 5
+        ),
+        MarkerElement(; color = :black, marker = :rect, markersize = 4.5),
+        MarkerElement(; color = :black, marker = :xcross, markersize = 4.5),
+    ]
+)
+a_labels = vcat(
+    first.(STREAMS), [
+        "reconstructed backfill",
+        "inside 90% interval", "outside 90% interval",
+    ]
+)
+Legend(
+    fig[1, 1:3], a_elems, a_labels; tellwidth = false,
     tellheight = false, halign = :center, valign = :bottom,
     framevisible = false, labelsize = FS, rowgap = 0, colgap = 8,
-    padding = (2, 2, 2, 2), margin = (2, 0, 2, 0), nbanks = 4)
+    padding = (2, 2, 2, 2), margin = (2, 0, 2, 0), nbanks = 4
+)
 
 # Coverage strip: one row per stream, a filled square where the 90%
 # interval of the joint's one-week-ahead forecast covered the observation
 # and a cross where it did not (both keyed in panel A's legend).
-axs = Axis(fig[2, 1:3]; xlabel = "Release data cut-off (2026)",
+axs = Axis(
+    fig[2, 1:3]; xlabel = "Release data cut-off (2026)",
     xticks = a_xticks, xminorticksvisible = true,
     xminorticks = IntervalsBetween(4), xminortickwidth = 0.4,
     yticks = (1:length(STREAMS), first.(STREAMS)),
-    yticklabelsize = FS_SMALL, yreversed = true, axkw...)
+    yticklabelsize = FS_SMALL, yreversed = true, axkw...
+)
 for (i, (s, col)) in enumerate(STREAMS)
     rs = filter(r -> r.stream == s, skill)
     hit = filter(r -> r.covered, rs)
     miss = filter(r -> !r.covered, rs)
-    scatter!(axs, [dnum(r.date) for r in hit], fill(i, length(hit));
-        marker = :rect, markersize = 4.5, color = col)
-    scatter!(axs, [dnum(r.date) for r in miss], fill(i, length(miss));
-        marker = :xcross, markersize = 4.5, color = col)
+    scatter!(
+        axs, [dnum(r.date) for r in hit], fill(i, length(hit));
+        marker = :rect, markersize = 4.5, color = col
+    )
+    scatter!(
+        axs, [dnum(r.date) for r in miss], fill(i, length(miss));
+        marker = :xcross, markersize = 4.5, color = col
+    )
 end
 ylims!(axs, length(STREAMS) + 0.7, 0.3)
 for ax in (axa, axs)
@@ -240,10 +286,14 @@ linkxaxes!(axa, axs)
 # ---------------------------------------------------------------------
 # Nested 30/60/90% interval bars with a median dot (helper for B–D)
 # ---------------------------------------------------------------------
-function interval_bar!(ax, x, r; color, horizontal = true, median = true,
-        base = 1.6)
-    spans = [(r.lo90, r.hi90, base), (r.lo60, r.hi60, 2 * base),
-        (r.lo30, r.hi30, 3 * base)]
+function interval_bar!(
+        ax, x, r; color, horizontal = true, median = true,
+        base = 1.6
+    )
+    spans = [
+        (r.lo90, r.hi90, base), (r.lo60, r.hi60, 2 * base),
+        (r.lo30, r.hi30, 3 * base),
+    ]
     for (lo, hi, w) in spans
         if horizontal
             lines!(ax, [lo, hi], [x, x]; color, linewidth = w)
@@ -253,12 +303,16 @@ function interval_bar!(ax, x, r; color, horizontal = true, median = true,
     end
     median || return
     pt = horizontal ? ([r.median], [x]) : ([x], [r.median])
-    scatter!(ax, pt...; color = :white, strokecolor = color,
-        strokewidth = 1.0, markersize = 5)
+    return scatter!(
+        ax, pt...; color = :white, strokecolor = color,
+        strokewidth = 1.0, markersize = 5
+    )
 end
-quantiles(r) = (median = num(r.median), lo30 = num(r.lo30),
+quantiles(r) = (
+    median = num(r.median), lo30 = num(r.lo30),
     hi30 = num(r.hi30), lo60 = num(r.lo60), hi60 = num(r.hi60),
-    lo90 = num(r.lo90), hi90 = num(r.hi90))
+    lo90 = num(r.lo90), hi90 = num(r.hi90),
+)
 
 # ---------------------------------------------------------------------
 # B: cumulative infections at the latest release, by fit
@@ -266,13 +320,17 @@ quantiles(r) = (median = num(r.median), lo30 = num(r.lo30),
 ct = Dict(r.fit => quantiles(r) for r in estimates if r.quantity == "C_T")
 b_labels = vcat(["joint"], last.(FIT_LABELS))
 b_fits = vcat(["joint"], first.(FIT_LABELS))
-axb = Axis(fig[3, 1]; xscale = log10,
+axb = Axis(
+    fig[3, 1]; xscale = log10,
     xlabel = "Cumulative infections to $(Dates.format(CUTOFF, "d u yyyy"))",
-    xticks = ([1e4, 1e5, 1e6, 1e7, 1e8],
-        ["10⁴", "10⁵", "10⁶", "10⁷", "10⁸"]),
+    xticks = (
+        [1.0e4, 1.0e5, 1.0e6, 1.0e7, 1.0e8],
+        ["10⁴", "10⁵", "10⁶", "10⁷", "10⁸"],
+    ),
     xminorticksvisible = true, xminorticks = IntervalsBetween(9),
     xminortickwidth = 0.4,
-    yticks = (1:length(b_fits), b_labels), yreversed = true, axkw...)
+    yticks = (1:length(b_fits), b_labels), yreversed = true, axkw...
+)
 for (i, f) in enumerate(b_fits)
     interval_bar!(axb, i, ct[f]; color = f == "joint" ? C_JOINT : C_SINGLE)
 end
@@ -294,20 +352,27 @@ const DC = Date(2026, 5, 16)
 cnum(d::Date) = Dates.value(d - DC)
 frozen_ct = Dict(
     Date(replace(r.Stream, "frozen " => "") * " 2026", dateformat"d U yyyy") =>
-        (lo90 = num(r.var"Lower 90%"), hi90 = num(r.var"Upper 90%"),
-         lo60 = num(r.var"Lower 60%"), hi60 = num(r.var"Upper 60%"),
-         lo30 = num(r.var"Lower 30%"), hi30 = num(r.var"Upper 30%"))
-        for r in frozen if startswith(r.Stream, "frozen"))
+        (
+        lo90 = num(r.var"Lower 90%"), hi90 = num(r.var"Upper 90%"),
+        lo60 = num(r.var"Lower 60%"), hi60 = num(r.var"Upper 60%"),
+        lo30 = num(r.var"Lower 30%"), hi30 = num(r.var"Upper 30%"),
+    )
+        for r in frozen if startswith(r.Stream, "frozen")
+)
 c_dates = sort(unique(Date(first(m)) for m in mccabe))
 c_ticks = c_dates
-axc = Axis(fig[3, 2]; ylabel = "Cumulative cases",
+axc = Axis(
+    fig[3, 2]; ylabel = "Cumulative cases",
     xlabel = "Estimate cut-off (2026)",
     xticks = (cnum.(c_ticks), Dates.format.(c_ticks, "d u")),
-    xticklabelrotation = pi / 4, axkw...)
+    xticklabelrotation = pi / 4, axkw...
+)
 for (d, q) in frozen_ct
     d in c_dates || continue
-    interval_bar!(axc, cnum(d), q; color = C_JOINT, horizontal = false,
-        median = false, base = 1.8)
+    interval_bar!(
+        axc, cnum(d), q; color = C_JOINT, horizontal = false,
+        median = false, base = 1.8
+    )
 end
 for d in c_dates
     rows = filter(m -> Date(m[1]) == d, mccabe)
@@ -317,23 +382,31 @@ for d in c_dates
         n == 0 && continue
         offs = side .* (0.35 .+ 0.9 .* (0:(n - 1)) ./ max(n - 1, 1))
         x = cnum(d) .+ offs
-        rangebars!(axc, x, [m[4] for m in rs], [m[5] for m in rs];
-            color = col, linewidth = 0.6)
+        rangebars!(
+            axc, x, [m[4] for m in rs], [m[5] for m in rs];
+            color = col, linewidth = 0.6
+        )
         scatter!(axc, x, [m[3] for m in rs]; color = col, markersize = 3)
     end
 end
 xlims!(axc, cnum(Date(2026, 5, 16)), cnum(Date(2026, 5, 29)))
 ylims!(axc, 0, 5200)
-Legend(fig[3, 2],
-    [MarkerElement(; color = C_M1, marker = :circle, markersize = 3),
-     MarkerElement(; color = C_M2, marker = :circle, markersize = 3),
-     LineElement(; color = C_JOINT, linewidth = 3)],
-    ["McCabe et al., geographic spread",
-     "McCabe et al., back-calculation",
-     "joint model frozen at the cut-off"];
+Legend(
+    fig[3, 2],
+    [
+        MarkerElement(; color = C_M1, marker = :circle, markersize = 3),
+        MarkerElement(; color = C_M2, marker = :circle, markersize = 3),
+        LineElement(; color = C_JOINT, linewidth = 3),
+    ],
+    [
+        "McCabe et al., geographic spread",
+        "McCabe et al., back-calculation",
+        "joint model frozen at the cut-off",
+    ];
     tellwidth = false, tellheight = false, halign = :left, valign = :top,
     framevisible = false, labelsize = FS_SMALL, rowgap = -2,
-    padding = (2, 2, 2, 2), margin = (2, 0, 0, 2))
+    padding = (2, 2, 2, 2), margin = (2, 0, 0, 2)
+)
 
 # ---------------------------------------------------------------------
 # D: Chamla et al. confirmed-case projection against ours and observed
@@ -341,54 +414,82 @@ Legend(fig[3, 2],
 const DD = Date(2026, 5, 16)
 ddnum(d::Date) = Dates.value(d - DD)
 d_lo, d_hi = Date(2026, 5, 16), Date(2026, 6, 28)
-d_ticks = [Date(2026, 5, 18), Date(2026, 6, 1), Date(2026, 6, 15),
-    Date(2026, 6, 24)]
-axd = Axis(fig[3, 3]; ylabel = "Cumulative confirmed cases",
+d_ticks = [
+    Date(2026, 5, 18), Date(2026, 6, 1), Date(2026, 6, 15),
+    Date(2026, 6, 24),
+]
+axd = Axis(
+    fig[3, 3]; ylabel = "Cumulative confirmed cases",
     xlabel = "Date (2026)",
     xticks = (ddnum.(d_ticks), Dates.format.(d_ticks, "d u")),
-    xticklabelrotation = pi / 4, axkw...)
+    xticklabelrotation = pi / 4, axkw...
+)
 # Observed confirmed cases, from the release's own observation history.
 hist = obs["confirmed_case_history"]
 h_dates = Date.(hist["dates"])
 h_sel = d_lo .<= h_dates .<= d_hi
-lines!(axd, ddnum.(h_dates[h_sel]), Float64.(hist["values"][h_sel]);
-    color = :black, linewidth = 0.8)
+lines!(
+    axd, ddnum.(h_dates[h_sel]), Float64.(hist["values"][h_sel]);
+    color = :black, linewidth = 0.8
+)
 anchor = Date(2026, 6, 8)
-vlines!(axd, [ddnum(anchor)]; color = (:black, 0.3), linewidth = 0.5,
-    linestyle = :dot)
+vlines!(
+    axd, [ddnum(anchor)]; color = (:black, 0.3), linewidth = 0.5,
+    linestyle = :dot
+)
 # Chamla's central scenario over the comparison window, with the low and
 # high scenarios at week 12 (24 June).
 cw = filter(c -> Date(c[1]) <= d_hi, chamla_central)
 cx = ddnum.(Date.(first.(cw))) .- 0.7
-rangebars!(axd, cx, [c[3] for c in cw], [c[4] for c in cw];
-    color = C_CHAMLA, linewidth = 0.8)
+rangebars!(
+    axd, cx, [c[3] for c in cw], [c[4] for c in cw];
+    color = C_CHAMLA, linewidth = 0.8
+)
 scatter!(axd, cx, [c[2] for c in cw]; color = C_CHAMLA, markersize = 4)
 w12 = filter(c -> !occursin("central", c[1]), chamla_w12)
 wx = ddnum(Date(2026, 6, 24)) .- 0.7 .+ [-0.9, 0.9]
-rangebars!(axd, wx, [c[3] for c in w12], [c[4] for c in w12];
-    color = (C_CHAMLA, 0.6), linewidth = 0.8)
-scatter!(axd, wx, [c[2] for c in w12]; color = (C_CHAMLA, 0.6),
-    markersize = 3)
+rangebars!(
+    axd, wx, [c[3] for c in w12], [c[4] for c in w12];
+    color = (C_CHAMLA, 0.6), linewidth = 0.8
+)
+scatter!(
+    axd, wx, [c[2] for c in w12]; color = (C_CHAMLA, 0.6),
+    markersize = 3
+)
 # Our projection from the fit frozen at 8 June.
 ox = ddnum.(getfield.(ours_chamla, :date)) .+ 0.7
-rangebars!(axd, ox, getfield.(ours_chamla, :lo), getfield.(ours_chamla, :hi);
-    color = C_JOINT, linewidth = 0.8)
-scatter!(axd, ox, getfield.(ours_chamla, :median); color = :white,
-    strokecolor = C_JOINT, strokewidth = 1.0, markersize = 5)
+rangebars!(
+    axd, ox, getfield.(ours_chamla, :lo), getfield.(ours_chamla, :hi);
+    color = C_JOINT, linewidth = 0.8
+)
+scatter!(
+    axd, ox, getfield.(ours_chamla, :median); color = :white,
+    strokecolor = C_JOINT, strokewidth = 1.0, markersize = 5
+)
 xlims!(axd, ddnum(d_lo), ddnum(d_hi))
 ylims!(axd, 0, 5200)
-Legend(fig[3, 3],
-    [MarkerElement(; color = C_CHAMLA, marker = :circle, markersize = 4),
-     MarkerElement(; color = (C_CHAMLA, 0.6), marker = :circle,
-         markersize = 3),
-     MarkerElement(; color = :white, strokecolor = C_JOINT,
-         strokewidth = 1.0, marker = :circle, markersize = 5),
-     LineElement(; color = :black, linewidth = 0.8)],
-    ["Chamla et al., central", "Chamla et al., low, high",
-     "joint model frozen at 8 June", "observed confirmed"];
+Legend(
+    fig[3, 3],
+    [
+        MarkerElement(; color = C_CHAMLA, marker = :circle, markersize = 4),
+        MarkerElement(;
+            color = (C_CHAMLA, 0.6), marker = :circle,
+            markersize = 3
+        ),
+        MarkerElement(;
+            color = :white, strokecolor = C_JOINT,
+            strokewidth = 1.0, marker = :circle, markersize = 5
+        ),
+        LineElement(; color = :black, linewidth = 0.8),
+    ],
+    [
+        "Chamla et al., central", "Chamla et al., low, high",
+        "joint model frozen at 8 June", "observed confirmed",
+    ];
     tellwidth = false, tellheight = false, halign = :left, valign = :top,
     framevisible = false, labelsize = FS_SMALL, rowgap = -2,
-    padding = (2, 2, 2, 2), margin = (2, 0, 0, 2))
+    padding = (2, 2, 2, 2), margin = (2, 0, 0, 2)
+)
 
 # ---------------------------------------------------------------------
 # Layout
@@ -414,22 +515,28 @@ println("wrote fig-evaluation.pdf and fig-evaluation.png")
 let
     beat(rs) = string(count(r -> r.skill < 1, rs), " of ", length(rs))
     live = filter(r -> !r.backfill, skill)
-    println("one-week-ahead joint beat persistence: all pairs ", beat(skill),
+    println(
+        "one-week-ahead joint beat persistence: all pairs ", beat(skill),
         "; live releases ", beat(live), "; backfills ",
-        beat(filter(r -> r.backfill, skill)))
+        beat(filter(r -> r.backfill, skill))
+    )
     for (s, _) in STREAMS
         println("  ", s, ": ", beat(filter(r -> r.stream == s, skill)))
     end
     cov = count(r -> r.covered, skill)
-    println("90% coverage of the one-week-ahead joint: ", cov, " of ",
-        length(skill))
+    println(
+        "90% coverage of the one-week-ahead joint: ", cov, " of ",
+        length(skill)
+    )
     singles = [ct[f].median for f in first.(FIT_LABELS)]
     hi = first.(FIT_LABELS)[argmax(singles)]
     lo = first.(FIT_LABELS)[argmin(singles)]
-    println("single-stream medians at ", CUTOFF, ": largest ", hi, " ",
+    println(
+        "single-stream medians at ", CUTOFF, ": largest ", hi, " ",
         round(Int, maximum(singles)), ", smallest ", lo, " ",
         round(Int, minimum(singles)), ", ratio ",
         round(maximum(singles) / minimum(singles); digits = 2),
-        "; joint ", round(Int, ct["joint"].median))
+        "; joint ", round(Int, ct["joint"].median)
+    )
     println("Chamla projection rows: ", ours_chamla)
 end
