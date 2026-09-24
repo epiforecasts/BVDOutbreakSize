@@ -92,7 +92,7 @@ summary_ranges = let
     sRT = posterior_summary(RTd)
     scfr = posterior_summary(cfrd)
 
-    ## The 30/60/90% phrase the province headlines write too.
+    ## The 30/60/90% interval phrase.
     ints(s, d) = BVDOutbreakSize._interval_text(s; digits = d)
     start_from(t) = obs.cutoff - Day(round(Int, t))
     ints_d(s) = string(
@@ -761,53 +761,20 @@ onset_pair_fig = plot_pair(
 
 onset_pair_fig #hide
 
-# Each panel below is one digitised snapshot, nowcast rather than fitted.
-# The grey crosses are the counts that snapshot's own figure printed by onset date.
-# The band predicts what the latest figure covering each of those dates prints: the snapshot's own count plus the reporting the fitted delay curve puts between the two figures' delays, through the measurement error one digitised bar carries.
-# The black points are that latest reading, so the band and the point it is read against are the same quantity, and the band should cover it.
-# The band narrows to a bar's own scan error on the onset dates where reporting had already finished when the snapshot went out, and opens where the snapshot was still missing cases.
-# That gap is the right-truncation the model has to undo (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# The nowcast of each digitised snapshot against the latest figure is on the [in-sample checks](@ref "Onset snapshot nowcasts") page.
+#
+# The posterior predictive below compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
+# The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
 
 #md # ```@raw html
-#md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
+#md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
 #md # ```
 
-## The digitised, deduplicated, cut-off-filtered snapshot blocks
-## `load_onset_curve` scores, kept here for their raw cumulative
-## onset-date counts: the fitted stream only ever sees between-vintage
-## increments, so the observed cumulative levels this figure plots are
-## read back from the source blocks directly rather than reconstructed
-## from the fitted increments.
-_onset_path = joinpath(
-    pkgdir(BVDOutbreakSize), "data",
-    "onset_curve_scanned.csv"
+_onset_last_printed = onset_snapshot_readings().last_printed
+_onset_daily_draws = onset_daily_draws(chn_joint)
+_onset_replicated = onset_bar_replicator(
+    chn_joint, Random.MersenneTwister(20260729)
 )
-_onset_snaps = filter(
-    b -> b.report_date <= obs.cutoff,
-    BVDOutbreakSize._dedup_onset_blocks(
-        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)
-    )
-)
-## Keyed by report day rather than kept in order: a snapshot whose printed
-## extent misses the scored window contributes no cells, so the panels and
-## the snapshot blocks are not guaranteed to line up positionally.
-_onset_snap_by_day = Dict(
-    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps
-)
-
-## Cell indices grouped by their snapshot's report day, and the daily
-## onsets series per posterior draw (the diff of the chain's stored
-## `cumulative_onsets` trajectory; the model does not store the daily
-## series itself, only its running sum).
-_onset_cells_by_report = Dict{Int, Vector{Int}}()
-for (i, r) in enumerate(obs.onset_curve_history.report_days)
-    push!(get!(_onset_cells_by_report, r, Int[]), i)
-end
-_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
-_onset_daily_draws = [
-    vcat(v[1], diff(v))
-        for v in vec(collect(chn_joint[:cumulative_onsets]))
-]
 
 ## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
 ## the fitted grid the same way the model extrapolates it.
@@ -815,97 +782,6 @@ function _onset_alpha(i::Integer, u::Integer)
     a = _onset_hazard.alpha[i]
     return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
 end
-
-## The same counts put through the stream's own observation model, so the
-## band is a posterior predictive of a digitised bar rather than of the
-## latent count behind it. A bar is one read off one scan with no previous
-## level to difference against, which is `onset_report_scale`'s level case
-## (`reads = 1`, `level_prev = 0`) — the case the first scored snapshot's
-## own cells carry. Without this the band is the modelled count alone and
-## covers 42% of the observed bars at a nominal 90%.
-_onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
-_onset_σ_scan = vec(collect(chn_joint[Symbol("onset_report_state.σ_scan")]))
-_onset_ppc_rng = Random.MersenneTwister(20260729)
-## Four replicates per draw rather than one: the band is a 90% interval of
-## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
-## from Monte Carlo error alone.
-function _onset_replicated(draws::AbstractVector)
-    return [
-        begin
-            μ = draws[i]
-            σ = _onset_σ_mult[i] *
-                onset_report_scale(
-                μ, μ, 0.0, 1;
-                scan_sd = _onset_σ_scan[i]
-            )
-            μ + σ * rand(_onset_ppc_rng, TDist(4.0))
-        end
-            for _ in 1:4 for i in eachindex(draws)
-    ]
-end
-
-## Latest printed value for each onset date the digitised figures cover,
-## and the report day that reading came off. Ordered by report date, so the
-## last block carrying a date gives the current reading. That is not the
-## newest snapshot for every date: the figures do not all print the same
-## range of onset dates, so a date a later figure stops short of keeps its
-## reading, and its shorter delay, from an earlier one. A date inside a
-## block's printed extent but with no row is a zero-height bar and does
-## count; a date outside that extent is not covered by that figure at all
-## and is skipped (the same rule the loader applies, see the [Data](@ref
-## methods-data) section).
-_onset_last_printed = Dict{Int, Float64}()
-_onset_last_report_day = Dict{Int, Int}()
-for snap in _onset_snaps
-    lo, hi = extrema(keys(snap.onsets))
-    R = obs.n - value(obs.cutoff - snap.report_date)
-    for d in lo:Day(1):hi
-        u = obs.n - value(obs.cutoff - d)
-        (1 <= u <= obs.n) || continue
-        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
-        _onset_last_report_day[u] = R
-    end
-end
-
-## One panel per snapshot, nowcast from the delay that snapshot had run to
-## up to the delay of the figure each of its onset dates was last printed
-## on, then through the same bar measurement error the summary figure uses.
-## Both are needed for the band and the reading it is read against to be
-## the same quantity: nowcasting to the eventual total would ride above a
-## reading that is itself still truncated, and the latent count carries no
-## scan error where the delay has run out, so it could not cover a second
-## scan of the same bar.
-_onset_panels = map(_onset_report_grid_days) do R
-    snap = _onset_snap_by_day[R]
-    us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
-    observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-    nowcast = onset_nowcast_draws(
-        us, observed, [R - u for u in us],
-        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
-        target_delays = [_onset_last_report_day[u] - u for u in us]
-    )
-    (;
-        title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast = [_onset_replicated(d) for d in nowcast],
-        latest = [_onset_last_printed[u] for u in us],
-    )
-end
-
-onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
-
-onset_fit_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-#
-# The posterior predictive below reads the same reporting triangle along the onset date instead of the report date.
-# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
-# The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
-
-#md # ```@raw html
-#md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
-#md # ```
 
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
@@ -934,9 +810,7 @@ _onset_by_date_printed = [
     ]
         for u in _onset_by_date_days
 ]
-## That count put through the same measurement error a single digitised
-## bar carries (`onset_report_scale`'s level case, as above the snapshot
-## grid), replicated four times per draw for the same reason.
+## That count put through the measurement error of one digitised bar.
 _onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
 
 onset_ppc_by_date_fig = let
@@ -1099,52 +973,7 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 
 confirmed_cfr_fig #hide
 
-# The same three ratios by province are below.
-# Each province has its own case-fatality ratio, partially pooled toward the national value, and its own death confirmation, pooled far more tightly.
-# The delay-corrected ratio is the national corrected ratio scaled by a province's lethality and death confirmation over its case ascertainment, which is what varies by province once the delays are corrected for.
-# The structural ratio is the national ratio times that province's lethality contrast.
-#
-# The death composition identifies only the product of the lethality and death-confirmation contrasts, so their split is set by their priors rather than by the data.
-# The lethality prior is the looser of the two, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding.
-# The spread of the lethality contrast is reported below against its prior, so a posterior that has not moved can be read as the prior's rather than as a finding.
-# The two spreads are on the same log scale, so their sizes are comparable directly.
-
-#md # ```@raw html
-#md # <details><summary>Province case-fatality spread</summary>
-#md # ```
-
-province_cfr_spread = summary_table(
-    chn_joint,
-    [:province_cfr_sd, :province_death_ascertainment_sd];
-    digits = 3,
-    labels = Dict(
-        :province_cfr_sd => "Lethality spread",
-        :province_death_ascertainment_sd => "Death-confirmation spread"
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_cfr_spread #hide
-
-#md # ```@raw html
-#md # <details><summary>Province case-fatality table</summary>
-#md # ```
-
-province_cfr = province_cfr_table(
-    chn_joint, confirmed_cfr;
-    province_cases = vec(sum(province_cases.increments; dims = 2)),
-    province_deaths = vec(sum(province_deaths.increments; dims = 2)),
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_cfr #hide
+# The same ratios by province are in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
 
 # ### Forecast results
 #

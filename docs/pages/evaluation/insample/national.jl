@@ -23,9 +23,8 @@ prior_chn = joint_prior_draws();
 
 # ## Summary
 #
-# The overall bullets come first, then each stream's own calibration, from the checks further down this page.
-# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
-# Coverage is the fraction of vintages whose observed count falls inside the predictive interval, nominally 0.9 for the 90% interval.
+# Whether each stream is reproduced, from the checks further down this page.
+# Bias runs from −1 to 1 and is negative when the model under-predicts, and coverage is the fraction of vintages inside the predictive interval.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -35,11 +34,7 @@ prior_chn = joint_prior_draws();
 
 # ## Prior predictive check
 #
-# Before any observation is taken into account, what does the prior imply about replicated exports, deaths and reported cases?
-# Draws from the prior over the unobserved data should bracket the observed counts.
-
-# The draws come from the shared setup, with every observation withheld, so
-# the national page overlays the same ones on each posterior.
+# Whether the prior, before any data are fitted, brackets the observed counts.
 
 #md # ```@raw html
 #md # <details><summary>Summarise the joint prior</summary>
@@ -61,8 +56,6 @@ prior_C_table #hide
 #md # </details>
 #md # ```
 
-# Pair plot of the prior over the latent quantities.
-
 #md # ```@raw html
 #md # <details><summary>Prior pair plot</summary>
 #md # ```
@@ -83,20 +76,15 @@ prior_pair_fig #hide
 
 # ## Posterior predictive checks
 #
-# A posterior predictive check draws replicated observations from the fitted joint model and compares them to the observed counts.
-# The checks cover two groups: the dated DRC surveillance streams and the Uganda exports.
-# The latent infection process is not checked here, as it carries no direct observation, and is shown instead as the estimated cumulative trajectories in the [joint model estimates](@ref "Joint model estimates") figure.
-#
-# The surveillance group is checked first, split by whether a stream was still being reported at the cut-off.
-# A stream counts as still reporting when its last situation-report vintage falls within a week of the cut-off.
-# Every panel runs over its own reporting dates with the observed series overlaid, and its date axis is labelled about once a week.
+# Whether data replicated from the fitted model reproduce each observed stream.
 
 # ### Streams still reporting
 #
+# Whether the streams reported within a week of the cut-off are reproduced.
+#
 # #### Cumulative
 #
-# A cumulative panel is drawn as replicated cumulative trajectories.
-# A daily panel (the isolation-bed occupancy, the 24h analysed volume) is drawn day by day, each day's replicated count against the observed count.
+# Whether the replicated running totals, or daily counts for a daily stream, track the observed ones.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -381,13 +369,10 @@ suspect_incare_panel = (;
 );
 
 ## Symptom-onset reporting triangle: one cell per (onset day, report day)
-## pair, several onset dates per snapshot, unlike every panel above (one
-## value per report day). To fit the same per-vintage panel shape, sum
-## the cells sharing a report day into one net correction per snapshot —
-## "one panel showing each snapshot as of its own report date" — rather
-## than a full onset-by-report grid (shown separately as the fitted-vs-
-## digitised snapshot figure in the Results section above). Per-day net
-## correction, not a running total, so `cumulative = false`.
+## pair. The cells sharing a report day are summed into one net correction
+## per snapshot to fit the per-vintage panel shape. The onset-by-report grid
+## is the snapshot nowcast figure further down. A net correction is not a
+## running total, so `cumulative = false`.
 _onset_ppc_report_days = sort(unique(obs.onset_curve_history.report_days))
 _onset_ppc_groups = [
     findall(==(r), obs.onset_curve_history.report_days)
@@ -453,9 +438,7 @@ joint_vintage_ppc_fig #hide
 
 # #### Per-vintage incidence
 #
-# This is the same check applied to per-vintage incidence: the count reported between consecutive situation reports, rather than the running cumulative.
-# Plotting the increment lets a rise or a slowdown in each stream read directly off the height of each step, where the near-straight cumulative line would hide it.
-# The replicates are the modelled per-vintage increments, shown as 30/60/90% credible ribbons with the observed increment overlaid.
+# Whether the count reported between consecutive situation reports is reproduced.
 
 #md # ```@raw html
 #md # <details><summary>Per-vintage incidence posterior predictive plot</summary>
@@ -473,7 +456,7 @@ joint_vintage_incidence_fig #hide
 
 # ### Streams no longer reporting
 #
-# These streams stopped reporting before the cut-off, so their panels end earlier than the ones above.
+# Whether the streams that stopped before the cut-off are reproduced over the dates they cover.
 #
 # #### Cumulative
 
@@ -507,15 +490,9 @@ joint_vintage_incidence_stopped_fig #hide
 
 # ### Stream calibration
 #
-# We score each stream's per-vintage conditional predictions against the observed counts.
-# `bias` is the mean forecast bias over the vintages (negative under-predicted, positive over-predicted, zero when the observed counts sit at the predictive median).
-# `50%/90% coverage` are the fractions of vintages whose observed count falls inside the central 50% and 90% predictive intervals; a well-calibrated stream keeps these near the nominal levels.
-# Streams with a large bias or coverage far from nominal are the ones the joint fit reproduces less well.
+# Whether each stream's per-vintage predictions are calibrated against the observed counts.
 
 stream_calibration_table = stream_calibration(vintage_panels);
-
-# The calibration plot's left panel marks each stream's empirical 50% and 90% coverage against dashed reference lines at the nominal levels.
-# The right panel marks the mean forecast bias against a dashed line at zero.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream calibration plot</summary>
@@ -541,8 +518,7 @@ stream_calibration_table #hide
 
 # ### Exports
 #
-# The Uganda export and export-death streams are dated per-day series, each import or death scored as a Poisson at its detection day.
-# The scalar posterior predictive sums each replicate's per-day count vector across the dated days, giving the cumulative export and death total to compare with the observed count.
+# Whether the modelled Uganda export and export-death totals match the observed ones.
 
 #md # ```@raw html
 #md # <details><summary>Scalar posterior predictive plot</summary>
@@ -575,10 +551,64 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
+# ### Onset snapshot nowcasts
+#
+# Whether the fitted reporting delay nowcasts each digitised onset snapshot to the latest figure covering its dates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+
+#md # ```@raw html
+#md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
+#md # ```
+
+## Each snapshot's own printed counts, read from the source blocks since the
+## fitted stream holds only the corrections between snapshots.
+_onset_readings = onset_snapshot_readings()
+_onset_snap_by_day = Dict(
+    obs.n - value(obs.cutoff - b.report_date) => b
+        for b in _onset_readings.snaps
+)
+_onset_cells_by_report = Dict{Int, Vector{Int}}()
+for (i, r) in enumerate(obs.onset_curve_history.report_days)
+    push!(get!(_onset_cells_by_report, r, Int[]), i)
+end
+_onset_hazard = reconstruct_onset_hazard(
+    chn_joint;
+    grid_start = _onset_grid_start, grid_end = _onset_grid_end
+)
+_onset_daily_draws = onset_daily_draws(chn_joint)
+_onset_replicated = onset_bar_replicator(
+    chn_joint, Random.MersenneTwister(20260729)
+)
+
+## Each snapshot is nowcast to the delay of the figure each of its onset
+## dates was last printed on, so the band and the latest reading are the
+## same quantity.
+_onset_panels = map(sort(collect(keys(_onset_cells_by_report)))) do R
+    snap = _onset_snap_by_day[R]
+    us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
+    observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
+    nowcast = onset_nowcast_draws(
+        us, observed, [R - u for u in us],
+        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
+        target_delays = [_onset_readings.last_report_day[u] - u for u in us]
+    )
+    (;
+        title = string(snap.report_date), dates = grid_date.(us), observed,
+        nowcast = [_onset_replicated(d) for d in nowcast],
+        latest = [_onset_readings.last_printed[u] for u in us],
+    )
+end
+
+onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_fit_fig #hide
+
 # ## Posterior correlations and stream totals
 #
-# The heatmap is the posterior correlation between each pair of headline quantities: the outbreak size ($C_T$), the reproduction number ($R_T$), the outbreak age ($T$), the case-fatality ratio (CFR), the DRC and Uganda ascertainment fractions ($p_\text{drc}$, $p_\text{ug}$), the non-BVD background rate ($\lambda_\text{bg}$), the fraction tested ($\tau_\text{test}$), and the cut-off total expected for each stream.
-# Blue is positive, red negative.
+# Which headline quantities trade off against each other, and whether the stream totals match the observed ones.
 
 #md # ```@raw html
 #md # <details><summary>Posterior correlation heatmap</summary>
@@ -606,10 +636,6 @@ correlation_fig = plot_correlation_heatmap(
 #md # ```
 
 correlation_fig #hide
-
-# The stream-total plot takes each posterior draw, sums every stream over its own reporting dates, and marks the observed total with a crosshair.
-# The diagonal panels are the predictive spread of each total against the observed value.
-# The off-diagonal panels show whether the totals move together from draw to draw.
 
 #md # ```@raw html
 #md # <details><summary>Stream totals against observed</summary>
