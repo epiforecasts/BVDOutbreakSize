@@ -36,37 +36,60 @@ end
 Daily probability mass function for the continuous delay `dist` over lags
 `0, 1, …, nmax`, discretised by double interval censoring (uniform primary
 event over a one-day window, then unit-interval censoring of the secondary
-event) via `CensoredDistributions.double_interval_censored`. For a LogNormal
-primary the CDF differentiates cleanly under Mooncake, so this is AD-safe.
-Extreme warmup proposals that drive the quadrature to a non-finite or zero
-total fall back to a uniform PMF, so the downstream convolution stays finite
-(the proposal is still rejected through its low log-likelihood). Returns a
-vector whose element type follows the delay parameters.
+event, truncated at `nmax`), as `CensoredDistributions.double_interval_censored`
+defines it. The truncation holds the CDF at one from `nmax` on, so the lag
+`nmax` entry is zero. For a LogNormal or Gamma delay the CDF differentiates
+cleanly under Mooncake, so this is AD-safe. Extreme warmup proposals that
+drive the total to a non-finite or zero value fall back to a uniform PMF, so
+the downstream convolution stays finite (the proposal is still rejected
+through its low log-likelihood). Returns a vector whose element type follows
+the delay parameters.
 """
 function discretise_censored(dist, nmax::Integer)
-    dic = double_interval_censored(dist; interval = 1.0, upper = float(nmax))
-    return _pmf_from_dic(dic, dist, nmax)
+    return _pmf_from_cdfs(_primary_censored_cdfs(dist, nmax), dist, nmax)
 end
 
-## Function barrier: `double_interval_censored` returns a `Union` of solver
-## types, so it is inferred abstractly at the call site above. Isolating
-## the PMF loop in its own method lets it specialise on the concrete `dic`
-## type, making the ~`nmax` censored-CDF evaluations type-stable under AD.
-@inline function _pmf_from_dic(dic, dist, nmax::Integer)
-    ## The interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, so
-    ## evaluating the boundary CDFs once over `0:nmax+1` and differencing
-    ## adjacent entries halves the censored-CDF evaluations the Mooncake
-    ## reverse pass walks. Each CDF is the expensive part, a primary-censored,
-    ## truncation-normalised incomplete-gamma / Normal-CDF call.
-    ## `IntervalCensored`'s `cdf` floors to the interval, so at an integer
-    ## boundary it returns the same inner CDF a `pdf` pair reads.
-    ##
-    ## CensoredDistributions' batched `pdf(dic, 0:nmax)` is value-identical
-    ## but its `Dict` cache path is not Mooncake-differentiable, so the
-    ## gradient hot path stays on this plain-array CDF difference.
-    c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
-    z0 = zero(eltype(c))
-    raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
+## Delays with a closed-form primary-censored CDF under a uniform primary.
+const _AnalyticalDelay = Union{Gamma, LogNormal, Distributions.Weibull}
+
+## Primary-censored CDF `F₊(b)` at the boundaries `b = 1, …, nmax`, with a
+## `Uniform(0, 1)` primary event.
+##
+## For the analytical delays `F₊(b) = H(b) − H(b − 1)`, where
+## `H(t) = t·F(t) − M(t)` and `M` is the delay's partial first moment. The
+## analytical CDF under a `Uniform(0, t)` primary, evaluated at `t`, is
+## `H(t) / t`, so each `H` costs one delay-CDF endpoint and each boundary
+## reuses its neighbour's.
+function _primary_censored_cdfs(dist::_AnalyticalDelay, nmax::Integer)
+    solver = AnalyticalSolver()
+    pc = Vector{float(Distributions.partype(dist))}(undef, nmax)
+    H_prev = zero(eltype(pc))
+    for i in 1:nmax
+        t = float(i)
+        H = t * primarycensored_cdf(dist, Uniform(zero(t), t), t, solver)
+        pc[i] = H - H_prev
+        H_prev = H
+    end
+    return pc
+end
+
+function _primary_censored_cdfs(dist, nmax::Integer)
+    pc = primary_censored(dist, Uniform(0.0, 1.0))
+    return [cdf(pc, t) for t in 1.0:nmax]
+end
+
+## Lag masses from the boundary CDFs `F₊(1), …, F₊(nmax)`: lag `d < nmax`
+## has `F₊(d + 1) − F₊(d)` (with `F₊(0) = 0`) and lag `nmax` has zero, then
+## the masses are normalised by their sum, which is the truncation at `nmax`.
+function _pmf_from_cdfs(pc, dist, nmax::Integer)
+    z0 = zero(eltype(pc))
+    raw = Vector{eltype(pc)}(undef, nmax + 1)
+    pc_prev = z0
+    for i in 1:nmax
+        raw[i] = max(pc[i] - pc_prev, z0)
+        pc_prev = pc[i]
+    end
+    raw[nmax + 1] = z0
     s = sum(raw)
     if !isfinite(s) || s <= zero(s)
         z = zero(pdf(dist, oneunit(float(nmax))))

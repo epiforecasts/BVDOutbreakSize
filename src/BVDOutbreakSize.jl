@@ -23,8 +23,9 @@ import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
     LogNormal, Beta, LKJCholesky,
-    Gamma, TDist, truncated, censored, product_distribution
-using CensoredDistributions: double_interval_censored
+    Gamma, TDist, Uniform, truncated, censored, product_distribution
+using CensoredDistributions: AnalyticalSolver, primary_censored,
+    primarycensored_cdf
 using StatsFuns: logit, logistic, logaddexp
 using SpecialFunctions: beta_inc
 import CairoMakie
