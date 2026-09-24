@@ -8,7 +8,9 @@
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves
 ## the rule fires for that signature. The speed item times one
-## production-sized case per rule against Mooncake's own derivation.
+## production-sized case per rule against a process that loads the package
+## with the `mooncake_rules` preference off, and the joint item compares
+## the production joint's gradient with that process.
 ##
 ## Tagged `:ad` with the rest of the gradient items, and the speed item
 ## also `:ad_perf`.
@@ -501,90 +503,111 @@ end
     end
 end
 
-@testitem "Mooncake rules: each rule beats Mooncake's own derivation" tags = [
-    :ad, :ad_perf,
-] setup = [ADRuleCases] begin
-    using Mooncake: Mooncake, DefaultCtx, MinimalCtx, Mode, ReverseMode,
-        MooncakeInterpreter, build_rrule, get_interpreter, randn_tangent,
-        zero_codual
-    using Printf: @printf
+@testsnippet RulesOff begin
+    using Serialization: serialize, deserialize
     using BVDOutbreakSize: BVDOutbreakSize
+    include(joinpath(@__DIR__, "rules_comparison.jl"))
 
-    ## A context that sees every primitive the default one does except the
-    ## rules `src/mooncake_rules.jl` registers, so Mooncake derives those
-    ## kernels from their source as it would with the `mooncake_rules`
-    ## preference off.
-    struct NoPackageRulesCtx end
-    function registered_here(M, sig)
-        m = try
-            which(
-                Mooncake._is_primitive,
-                Tuple{Type{MinimalCtx}, Type{M}, Type{sig}}
-            )
-        catch
-            return false
-        end
-        return parentmodule(m) === BVDOutbreakSize
-    end
-    function Mooncake.is_primitive(
-            ::Type{NoPackageRulesCtx}, M::Type{<:Mode}, sig, world::UInt
+    ## Runs `code` in a Julia process that loads the package with the
+    ## `mooncake_rules` preference off, with `input` bound, and returns the
+    ## value it leaves in `result`. The preference comes from a temporary
+    ## environment at the end of the load path, so the checkout is untouched.
+    function rules_off(code, input)
+        dir = mktempdir()
+        uuid = Base.PkgId(BVDOutbreakSize).uuid
+        write(
+            joinpath(dir, "Project.toml"),
+            "[deps]\nBVDOutbreakSize = \"$uuid\"\n"
         )
-        @nospecialize sig
-        registered_here(M, sig) && return false
-        return Mooncake.is_primitive(DefaultCtx, M, sig, world)
+        write(
+            joinpath(dir, "LocalPreferences.toml"),
+            "[BVDOutbreakSize]\nmooncake_rules = false\n"
+        )
+        inp, out = joinpath(dir, "in.jls"), joinpath(dir, "out.jls")
+        serialize(inp, input)
+        arm = joinpath(@__DIR__, "rules_comparison.jl")
+        script = """
+        using Serialization: serialize, deserialize
+        include($(repr(arm)))
+        input = deserialize($(repr(inp)))
+        $code
+        serialize($(repr(out)), (; rules_loaded = rules_loaded(), result))
+        """
+        sep = Sys.iswindows() ? ";" : ":"
+        cmd = addenv(
+            `$(Base.julia_cmd()) --threads=1 --project=$(Base.active_project()) -e $script`,
+            "JULIA_LOAD_PATH" => join(["@", dir, "@stdlib"], sep)
+        )
+        run(cmd)
+        return deserialize(out)
     end
 
-    ## Value and argument tangents of one pullback. `__value_and_pullback!!`
-    ## is the call a prepared `Mooncake.Cache` makes, here on either rule.
-    pullback!(rule, ȳ, cx) = Mooncake.__value_and_pullback!!(rule, ȳ, cx...)
-
-    ## Fastest time per call over batches of about 20 µs.
-    function fastest(run; seconds = 0.3)
-        run()
-        evals = max(1, round(Int, 2.0e-5 / max(@elapsed(run()), 1.0e-9)))
-        best = Inf
-        stop = time() + seconds
-        while time() < stop
-            best = min(best, @elapsed(foreach(_ -> run(), 1:evals)) / evals)
-        end
-        return best
-    end
-
-    agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))
-    agrees(a::Union{Real, AbstractArray{<:Real}}, b) = isapprox(
-        a, b; rtol = 1.0e-8
+    agrees(a::Union{Tuple, NamedTuple}, b; rtol) = all(
+        map((x, y) -> agrees(x, y; rtol), a, b)
     )
-    ## A distribution argument returns its tangent field by field.
-    agrees(a::Mooncake.Tangent, b) = agrees(a.fields, b.fields)
-    agrees(a, b) = a == b
+    agrees(a::Mooncake.Tangent, b; rtol) = agrees(a.fields, b.fields; rtol)
+    agrees(a::Real, b; rtol) = isapprox(a, b; rtol)
+    agrees(a::AbstractArray{<:Real}, b; rtol) = isapprox(a, b; rtol)
+    agrees(a::AbstractArray, b; rtol) = size(a) == size(b) &&
+        all(agrees(x, y; rtol) for (x, y) in zip(a, b))
+    ## Any other struct field by field, and anything else exactly.
+    function agrees(a, b; rtol)
+        isstructtype(typeof(a)) && fieldcount(typeof(a)) > 0 || return a == b
+        return all(
+            agrees(getfield(a, i), getfield(b, i); rtol)
+                for i in 1:fieldcount(typeof(a))
+        )
+    end
+end
+
+@testitem "Mooncake rules: the joint matches the rules-off derivation" tags = [
+    :ad,
+] setup = [RulesOff] begin
+    ## The production joint's log density and gradient with the rules and
+    ## without them, at seeded prior points.
+    model, ldf = production_ldf()
+    xs = prior_points(model)
+    on = joint_values(ldf, xs)
+    off = rules_off(
+        "result = joint_values(last(production_ldf()), input)", xs
+    )
+    @test rules_loaded()
+    @test !off.rules_loaded
+    for (a, b) in zip(on, off.result)
+        @test isfinite(a.lp)
+        @test isapprox(a.lp, b.lp; rtol = 1.0e-8)
+        ## Each component, with a floor scaled to the largest for entries
+        ## near zero.
+        floor = 1.0e-10 * maximum(abs, b.g)
+        @test all(@. abs(a.g - b.g) <= 1.0e-8 * abs(b.g) + floor)
+    end
+end
+
+@testitem "Mooncake rules: each rule beats the rules-off derivation" tags = [
+    :ad, :ad_perf,
+] setup = [ADRuleCases, RulesOff] begin
+    using Printf: @printf
+
+    ## One production-sized case per rule, timed as a value and pullback
+    ## with the rules loaded and in a process without them.
+    cases = [
+        (; c.name, c.f, c.args)
+            for c in filter(c -> c.perf, rule_cases(Xoshiro(20260923)))
+    ]
+    on = pullback_times(cases)
+    off = rules_off("result = pullback_times(input)", cases)
+    @test !off.rules_loaded
 
     ## Under coverage instrumentation the timings are not those of a fit, so
     ## the ratios are reported but not asserted there.
     instrumented = Base.JLOptions().code_coverage != 0
-    rng = Xoshiro(20260923)
-    for c in filter(c -> c.perf, rule_cases(rng))
-        fx = (c.f, c.args...)
-        sig = Tuple{map(Core.Typeof, fx)...}
-        with = build_rrule(get_interpreter(ReverseMode), sig)
-        without = build_rrule(
-            MooncakeInterpreter(NoPackageRulesCtx, ReverseMode), sig
-        )
-        ȳ = randn_tangent(rng, c.f(c.args...))
-        @testset "$(c.name)" begin
-            ## The derived arm bypasses the rule and gives the same answer.
-            @test with === Mooncake.rrule!!
-            @test !(without isa typeof(Mooncake.rrule!!))
-            @test agrees(
-                pullback!(with, ȳ, map(zero_codual, fx)),
-                pullback!(without, ȳ, map(zero_codual, fx))
-            )
-            cx = map(zero_codual, fx)
-            t_rule = fastest(() -> pullback!(with, ȳ, cx))
-            t_derived = fastest(() -> pullback!(without, ȳ, cx))
-            ratio = t_rule / t_derived
+    for (a, b) in zip(on, off.result)
+        @testset "$(a.name)" begin
+            @test agrees(a.result, b.result; rtol = 1.0e-8)
+            ratio = a.time / b.time
             @printf(
                 "%-40s rule %8.2f µs  derived %8.2f µs  ratio %.3f\n",
-                c.name, 1.0e6 * t_rule, 1.0e6 * t_derived, ratio
+                a.name, 1.0e6 * a.time, 1.0e6 * b.time, ratio
             )
             instrumented || @test ratio <= 0.8
         end
@@ -912,62 +935,6 @@ end
     lp, g = logdensity_and_gradient(ldf, [2.0, 3.4, 3.7, 3.5])
     @test isfinite(lp)
     @test all(isfinite, g) && !iszero(g[3])
-end
-
-@testsnippet ThroughDetached begin
-    using Mooncake: Mooncake, DefaultCtx, Mode, ReverseMode,
-        MooncakeInterpreter, build_rrule, get_interpreter, value_and_gradient!!
-    using LogDensityProblems: logdensity
-    using Random: Xoshiro
-    using Turing: DynamicPPL
-    using BVDOutbreakSize: _detached
-
-    ## A context in which `_detached` is an ordinary call, so Mooncake
-    ## differentiates the wrapped work. If a wrapped value reached a
-    ## likelihood, the gradient would differ from the one under the
-    ## zero-derivative barrier.
-    struct ThroughDetachedCtx end
-    function Mooncake.is_primitive(
-            ::Type{ThroughDetachedCtx}, M::Type{<:Mode}, sig, world::UInt
-        )
-        @nospecialize sig
-        sig <: Tuple{typeof(_detached), Vararg} && return false
-        return Mooncake.is_primitive(DefaultCtx, M, sig, world)
-    end
-
-    ## Log density and gradient at a seeded point, under the barrier and
-    ## through it.
-    function barrier_and_through(model)
-        vi = DynamicPPL.link(
-            DynamicPPL.VarInfo(Xoshiro(20260923), model), model
-        )
-        x = collect(vi[:])
-        ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
-        f = y -> logdensity(ldf, y)
-        sig = Tuple{typeof(f), typeof(x)}
-        barrier = build_rrule(get_interpreter(ReverseMode), sig)
-        through = build_rrule(
-            MooncakeInterpreter(ThroughDetachedCtx, ReverseMode), sig
-        )
-        lp_b, (_, g_b) = value_and_gradient!!(barrier, f, x)
-        lp_t, (_, g_t) = value_and_gradient!!(through, f, x)
-        return (; lp_b, g_b = copy(g_b), lp_t, g_t = copy(g_t))
-    end
-end
-
-@testitem "Mooncake rules: the joint's detached work reaches no likelihood" tags = [
-    :ad,
-] setup = [ThroughDetached] begin
-    using BVDOutbreakSize: bvd_joint
-
-    ## Three patches, so the per-patch deviations and the correlation matrix
-    ## are built behind the barrier too.
-    r = barrier_and_through(
-        bvd_joint(40, 2, 3, 5, 1, 4, 10; n_patches = 3, breakpoint = 14)
-    )
-    @test isfinite(r.lp_b)
-    @test r.lp_b == r.lp_t
-    @test r.g_b == r.g_t
 end
 
 @testitem "reporting guard: true only where `:=` values are recorded" begin

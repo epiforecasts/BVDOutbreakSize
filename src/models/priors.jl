@@ -9,9 +9,9 @@
 ## submodel returns that reaches only `:=` quantities the fit reports, never
 ## a likelihood, so the gradient does not tape it. The work still runs,
 ## since `m()` reads these returns; a `:=` site skips its work with
-## `_reporting` instead. Its rule is in `src/mooncake_rules.jl`. A wrapped value
-## that reached a likelihood would get a wrong gradient, which the joint's
-## barrier test in `test/test_mooncake_rules.jl` checks for.
+## `_reporting` instead. Its rule is in `src/mooncake_rules.jl`. A wrapped
+## value that reached a likelihood would get a wrong gradient, which the
+## joint's rules-off comparison in `test/test_mooncake_rules.jl` checks for.
 _detached(f, args...) = f(args...)
 
 ## True when the evaluation records `:=` values: chain rows, `Prior()` and
