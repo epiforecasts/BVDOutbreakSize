@@ -613,7 +613,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
             bl = findlast(x -> isborder[x], max(1, c - reach):(c - 1))
             bl === nothing || (lo = max(lo, max(1, c - reach) + bl))
             br = findfirst(x -> isborder[x], (c + 1):min(W, c + reach))
-            br === nothing || (hi = min(hi, c + br))
+            br === nothing || (hi = min(hi, c + br - 1))
         end
         cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
         isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
