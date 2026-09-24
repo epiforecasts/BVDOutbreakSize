@@ -4121,6 +4121,85 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
 end
 
 """
+    stick_breaking_loglik(groups, counts, shares, ρ)
+
+Log-likelihood of counts split between the members of each group by
+stick-breaking. Rows are one per count, sorted by group, and a group is a
+run of equal `groups` entries, so groups may differ in size. `shares[r]` is
+row `r`'s share of its group, the shares of a group summing to one. The
+count in row `r` is a [`safe_betabinomial`](@ref) draw from the group total
+less the counts before it in the group, with the overdispersion `ρ` and the
+conditional share `share_r / tail_r` clamped into `[0, 1]`. The running
+tail `tail_r = 1 − Σ_{q < r} share_q` is floored at 1e-10. The last row of
+a group is the remainder and adds nothing, so a one-row group adds nothing.
+`src/ad_rules.jl` gives it a closed-form Mooncake rule.
+"""
+function stick_breaking_loglik(
+        groups::AbstractVector{<:Integer}, counts::AbstractVector{<:Integer},
+        shares::AbstractVector, ρ::Real
+    )
+    cells = _stick_breaking_cells(Val(false), groups, counts, shares)
+    return betabinomial_loglik(cells.trials, cells.p, ρ, cells.obs)
+end
+
+## Branch flags of one scored row: the conditional share inside its clamp
+## (a tie passes the derivative), the next tail above its floor (a tie goes
+## to the floor), and the first row of a group, whose tail is the constant
+## one.
+const _SB_P = 0x01
+const _SB_TAIL = 0x02
+const _SB_FIRST = 0x04
+
+## The scored rows of `stick_breaking_loglik`, each a trial count, a
+## conditional share and an observed count. With `Val(true)` it also
+## returns each row's index, tail and branch flags, which the Mooncake rule
+## in `src/ad_rules.jl` reads.
+function _stick_breaking_cells(
+        ::Val{record}, groups, counts, shares
+    ) where {record}
+    T = float(eltype(shares))
+    m = length(groups)
+    trials = sizehint!(Int[], m)
+    p = sizehint!(T[], m)
+    obs = sizehint!(Int[], m)
+    rows = record ? sizehint!(Int[], m) : nothing
+    tails = record ? sizehint!(T[], m) : nothing
+    flags = record ? sizehint!(UInt8[], m) : nothing
+    tail_floor = T(1.0e-10)
+    i = 1
+    @inbounds while i <= m
+        j = i
+        total = Int(counts[i])
+        while j < m && groups[j + 1] == groups[i]
+            j += 1
+            total += counts[j]
+        end
+        remaining = total
+        tail = one(T)
+        for r in i:(j - 1)
+            q = shares[r] / tail
+            push!(trials, max(remaining, 0))
+            push!(p, clamp(q, zero(T), one(T)))
+            push!(obs, counts[r])
+            x_tail = tail - shares[r]
+            if record
+                f = r == i ? _SB_FIRST : 0x00
+                !(q > one(T)) && !(q < zero(T)) && (f |= _SB_P)
+                x_tail > tail_floor && (f |= _SB_TAIL)
+                push!(rows, r)
+                push!(tails, tail)
+                push!(flags, f)
+            end
+            remaining -= counts[r]
+            tail = max(x_tail, tail_floor)
+        end
+        i = j + 1
+    end
+    y = (; trials, p, obs)
+    return record ? (y, rows, tails, flags) : y
+end
+
+"""
 Per-vintage totals a province composition is conditioned on: the observed
 column sums where the increments are observed, and the modelled column sums
 on the predictive path, where there is no observed total to condition on.
@@ -4163,8 +4242,9 @@ totals are conditioned on, never scored, so nothing is counted twice.
 
 ### Likelihood
 
-The composition is scored by stick-breaking over the patches with the
-overdispersed Binomial [`safe_betabinomial`](@ref), the sequential form of
+The composition is scored by stick-breaking over the patches
+([`stick_breaking_loglik`](@ref)) with the overdispersed Binomial
+[`safe_betabinomial`](@ref), the sequential form of
 a Dirichlet-multinomial. For each vintage the observed count in patch `p`
 is drawn from the cases not yet allocated to patches `1 … p−1`, at the
 conditional share implied by the modelled per-patch confirmed increments:
@@ -4220,6 +4300,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         testing_coefficient_prior = Normal(0, 0.5)
     )
     np, nv = size(modelled_confirmed)
+    ismissing(obs_increments) || size(obs_increments) == (np, nv) || error(
+        "province_composition_model: $(size(obs_increments)) observed " *
+            "increments for $(np) patches and $(nv) vintages."
+    )
     ρ ~ rho_prior
     ## Read through a local. The tilde assigns `ρ` on more than one path, so
     ## the comprehension below would box it if it captured `ρ` itself.
@@ -4323,42 +4407,32 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     end
     ## Stick-breaking: allocate each vintage's total across the patches. The
     ## final patch takes the remainder and carries no free draw, so the
-    ## composition has `np - 1` degrees of freedom per vintage.
-    ##
-    ## The loop runs over patches on the outside and scores every vintage in
-    ## one `~`, rather than a scalar `~` per (patch, vintage). Within a
-    ## vintage the patches are sequential, patch `p`'s trial count being what
-    ## patches `1 … p-1` left behind, but across vintages they are
-    ## independent, so the vintages vectorise. Each `~` puts DynamicPPL
-    ## bookkeeping on the Mooncake tape, and with two compositions over 20
-    ## vintages the scalar form emits 80 of them, enough to push the gradient
-    ## compile past an hour. The vectorised form emits `2 * (np - 1)`.
-    ##
-    ## Each row is one [`BetaBinomialVector`](@ref), scored as one summed
-    ## term through its Mooncake rule. The running remainder and tail are
-    ## allocated once and mutated in place.
-    remaining = copy(totals)
-    tail = ones(eltype(shares), nv)
-    for p in 1:(np - 1)
-        ## Conditional share of patch `p` among the patches not yet allocated.
-        p_cond = clamp.(shares[p, :] ./ tail, 0.0, 1.0)
-        obs_increments[p, :] ~ BetaBinomialVector(
-            max.(remaining, 0), p_cond, rho
-        )
-        ## Guard the running tail against round-off driving it to zero or
-        ## negative on the last step.
-        for i in 1:nv
-            remaining[i] -= obs_increments[p, i]
-            tail[i] = max(tail[i] - shares[p, i], 1.0e-10)
-        end
-    end
-    ## The last patch is the remainder, not a free draw. Filled in only on the
-    ## predictive path. On the fitting path it is already the observed count
-    ## and must not be written over.
+    ## composition has `np - 1` degrees of freedom per vintage. The columns
+    ## are the groups, one per vintage.
+    groups = repeat(1:nv; inner = np)
     if predictive
-        for i in 1:nv
-            obs_increments[np, i] = max(remaining[i], 0)
+        ## One `~` per patch row, each drawing every vintage, since a patch's
+        ## trial count is what the patches before it left behind. The last
+        ## patch takes the remainder.
+        p_cond = reshape(
+            _stick_breaking_cells(
+                Val(false), groups, zeros(Int, np * nv), vec(shares)
+            ).p,
+            np - 1, nv
+        )
+        remaining = copy(totals)
+        for p in 1:(np - 1)
+            obs_increments[p, :] ~ BetaBinomialVector(
+                max.(remaining, 0), p_cond[p, :], rho
+            )
+            remaining .-= obs_increments[p, :]
         end
+        obs_increments[np, :] .= max.(remaining, 0)
+    else
+        ## One summed term through its Mooncake rule.
+        @addlogprob! stick_breaking_loglik(
+            groups, vec(obs_increments), vec(shares), rho
+        )
     end
     return (;
         shares, rho = ρ, obs_increments,

@@ -1177,3 +1177,55 @@ function Mooncake.rrule!!(
     end
     return CoDual(s, NoFData()), betabinomial_loglik_pullback!!
 end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(stick_breaking_loglik), AbstractVector{<:Integer},
+        AbstractVector{<:Integer}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat,
+    },
+)
+
+## Adjoint of the stick-breaking log-likelihood. The scored rows are one
+## `betabinomial_loglik`, whose gradient in each conditional share `q̃` and
+## in `ρ` comes from `_betabinomial_loglik_grad`. Within a group, with
+## `q = share_r / tail_r` and `tail_{r+1} = max(tail_r − share_r, 1e-10)`,
+##
+##     q̄ = q̃̄ [inside the clamp],   t̄_{r+1}' = t̄_{r+1} [above the floor],
+##     s̄hare_r = q̄ / tail_r − t̄_{r+1}',   t̄_r = t̄_{r+1}' − q̄ q / tail_r,
+##
+## walked backwards from each group's last scored row. The first row's tail
+## is the constant one.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(stick_breaking_loglik)},
+        groups::CoDual{<:AbstractVector{<:Integer}},
+        counts::CoDual{<:AbstractVector{<:Integer}},
+        shares::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        ρ::CoDual{<:Mooncake.IEEEFloat}
+    )
+    sp = primal(shares)
+    cells, rows, tails, flags = _stick_breaking_cells(
+        Val(true), primal(groups), primal(counts), sp
+    )
+    s, dρ, dq = _betabinomial_loglik_grad(
+        cells.trials, cells.p, primal(ρ), cells.obs
+    )
+    ## The shares a row read, kept since a caller may overwrite `shares` in
+    ## place before the pullback runs.
+    sr = sp[rows]
+    S̄ = tangent(shares)
+    function stick_breaking_loglik_pullback!!(ℓ̄)
+        t̄ = zero(eltype(tails))
+        @inbounds for k in length(rows):-1:1
+            f = flags[k]
+            tail = tails[k]
+            t̄′ = f & _SB_TAIL != 0 ? t̄ : zero(t̄)
+            q̄ = f & _SB_P != 0 ? ℓ̄ * dq[k] : zero(t̄)
+            S̄[rows[k]] += q̄ / tail - t̄′
+            t̄ = f & _SB_FIRST != 0 ? zero(t̄) : t̄′ - q̄ * sr[k] / tail^2
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), ℓ̄ * dρ
+    end
+    return CoDual(s, NoFData()), stick_breaking_loglik_pullback!!
+end

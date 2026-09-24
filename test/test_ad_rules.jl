@@ -21,7 +21,8 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, studentt_loglik,
-        betabinomial_loglik, onset_vintage_indices, censoring_cap,
+        betabinomial_loglik, stick_breaking_loglik, onset_vintage_indices,
+        censoring_cap,
         admission_headroom, onset_scanned_cells
 
     ## A positive PMF of length `L` with total mass `mass`.
@@ -66,6 +67,20 @@
             r == 4 && (Δ[t] = -D[t])
         end
         return (D, O_bvd, x, κ, Δ)
+    end
+
+    ## Stick-breaking rows for groups of the given sizes: each group's shares
+    ## sum to one, and its counts are a random split of a random total.
+    function stick_args(rng, sizes; ρ = 0.05)
+        groups = reduce(
+            vcat, [fill(g, k) for (g, k) in enumerate(sizes)]; init = Int[]
+        )
+        shares = reduce(
+            vcat, [(w = rand(rng, k) .+ 0.2; w ./ sum(w)) for k in sizes];
+            init = Float64[]
+        )
+        counts = rand(rng, 0:60, length(groups))
+        return (groups, counts, shares, ρ)
     end
 
     ## Onset-reporting inputs over a `D`-day delay support and the onset
@@ -388,6 +403,29 @@
             "20 vintages", betabinomial_loglik, nb,
             0.05 .+ 0.9 .* rand(rng, 20), 0.05,
             [rand(rng, 0:t) for t in nb]; perf = true
+        )
+
+        ## Groups of one to four rows, a group with no counts, and each
+        ## share's clamp and tail floor: in the last group the second share
+        ## exceeds the tail the first leaves, so its conditional share clamps
+        ## at one, the tail after it sits on its floor, and the next share
+        ## clamps against that floor.
+        add!(
+            "ragged groups", stick_breaking_loglik,
+            stick_args(rng, [1, 2, 3, 4, 3])...
+        )
+        g, y, sh, _ = stick_args(rng, [4, 4, 4])
+        y[1:4] .= 0
+        sh[9:12] .= (0.6, 0.7, 0.2, 0.1)
+        add!("clamp and floor", stick_breaking_loglik, g, y, sh, 0.3)
+        add!(
+            "ρ below its floor", stick_breaking_loglik,
+            stick_args(rng, [4, 4]; ρ = -0.5)...
+        )
+        add!("no rows", stick_breaking_loglik, Int[], Int[], Float64[], 0.05)
+        add!(
+            "4 patches × 91 vintages", stick_breaking_loglik,
+            stick_args(rng, fill(4, 91))...; perf = true
         )
 
         ## The data-only helpers pass no derivative. Their inputs are the

@@ -112,6 +112,26 @@ function ref_incare_census(D, O_bvd, x, κ, Δ)
     )
 end
 
+## Every row `r` of a group but its last draws `y_r` from the
+## `N − Σ_{q < r} y_q` counts the earlier rows leave, at the conditional share
+## `π_r / Σ_{q ≥ r} π_q`.
+function ref_stick_breaking_loglik(groups, counts, shares, ρ)
+    c = (1 - ρ) / ρ
+    lp = 0.0
+    for g in unique(groups)
+        rows = findall(==(g), groups)
+        N = sum(counts[rows])
+        for k in 1:(length(rows) - 1)
+            left = N - sum(counts[rows[1:(k - 1)]]; init = 0)
+            π = shares[rows[k]] / sum(shares[rows[k:end]])
+            lp += logpdf(
+                BetaBinomial(left, c * π, c * (1 - π)), counts[rows[k]]
+            )
+        end
+    end
+    return lp
+end
+
 ## Reporting hazard at delay `j` for onset date `u`, with the calendar index
 ## held at the nearest edge of `γ`.
 ref_onset_hazard(lh, γ, gs, u, j) = logistic(

@@ -144,6 +144,15 @@
         )
     end
 
+    for (note, sizes) in (
+            ("4 × 20", fill(4, 20)), ("ragged", [1, 2, 3, 4, 3]),
+            ("one group of one", [1]), ("no rows", Int[]),
+        )
+        add!(
+            "stick_breaking_loglik $note", stick_breaking_loglik,
+            ref_stick_breaking_loglik, stick_args(rng, sizes; ρ = 0.3)...
+        )
+    end
     for c in cases
         @testset "$(c.note)" begin
             @test agrees(c.f(c.args...), c.ref(c.args...))
