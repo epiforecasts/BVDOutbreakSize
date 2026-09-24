@@ -34,7 +34,7 @@ Changes since v2.1.0.
 
 ### Model
 
-- Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#PRNUM).
+- Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
   Fixing the future variables leaves the fitted density unchanged, which the tests check exactly on every composer and on the live patch joint.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
@@ -48,7 +48,7 @@ Changes since v2.1.0.
 
 ### Report
 
-- Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#PRNUM).
+- Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#867).
   The national forecast now carries the renewal, each stream's delays and ascertainment and its own likelihood past the cut-off.
   The province forecast splits each week of it by the fitted compositions, so the provinces add up to it.
   The province archive method is now `predict`, and only that method is scored.
