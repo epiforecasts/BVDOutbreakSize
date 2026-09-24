@@ -40,8 +40,8 @@ Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate.
-Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2.1% everywhere and within 0.5% on 42 of the 60 vintages.
-The largest gaps are SitRep 126 at −2.1% (5650 against n = 5 771), SitRep 119 at +1.9% (5429 against n = 5 326) and SitRep 129 at −1.9% (5784 against n = 5 896).
+Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2.1% everywhere and within 0.5% on 43 of the 60 vintages.
+The largest gaps are SitRep 126 at −2.1% (5650 against n = 5 771), SitRep 129 at −1.9% (5784 against n = 5 896) and SitRep 118 at −1.3% (5192 against n = 5 263).
 Individual daily bars carry pixel rounding of about ±1 case at the small September renders (2.8 px per count) and less before.
 The faded bars inside the `données potentiellement incomplètes` band are read like any other.
 

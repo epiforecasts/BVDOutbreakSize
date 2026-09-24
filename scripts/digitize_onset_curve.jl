@@ -48,8 +48,8 @@
 # crimson, dark, saturated), the same run rule with its gap of three and gridline skip,
 # the same outline thresholds (dark fraction 0.25 strict with a floor of
 # six pixels, 0.1 soft with a floor of five, both only over runs taller
-# than four pixels, and no saturated pixel in a tenth of the run), the
-# same gap rule, the
+# than four pixels, no saturated pixel in a tenth of the run, and three
+# bridged gaps), the same gap rule, the
 # same interval choice, the same mode-or-maximum rule with its support of
 # two, and the same
 # rounding. All of it is expressible on numpy arrays with cumulative sums
@@ -57,10 +57,10 @@
 #
 # Accuracy: against the printed `n` in every figure that carries one
 # (SitReps 064-130, read by OCR and checked by eye), the digitised total is
-# within 2.1% everywhere and within 0.5% on 42 of the 60 vintages. The
-# largest gaps are SitRep 126 at -2.1% (5650 against n = 5 771), SitRep 119
-# at +1.9% (5429 against n = 5 326) and SitRep 129 at -1.9% (5784 against
-# n = 5 896). Individual daily bars carry pixel rounding of about +/-1 case
+# within 2.1% everywhere and within 0.5% on 43 of the 60 vintages. The
+# largest gaps are SitRep 126 at -2.1% (5650 against n = 5 771), SitRep 129
+# at -1.9% (5784 against n = 5 896) and SitRep 118 at -1.3% (5192 against
+# n = 5 263). Individual daily bars carry pixel rounding of about +/-1 case
 # at the small September renders (2.8 px per count) and less before. The
 # faded bars inside the `donnees potentiellement incompletes` band are read
 # like any other.
@@ -423,8 +423,9 @@ end
 # vertical line's 7 px gaps. The run's top is the highest pixel darker than
 # `light`: the bar's outline, never a stray anti-alias or noise pixel
 # above it, and chroma-washed fill inside the run is crossed on the way up.
-# Returns the run height (to the outline), the run's full non-page extent
-# and the crimson, dark and saturated counts per column.
+# Returns the run height (to the outline), the run's full non-page extent,
+# the crimson, dark and saturated counts and the number of page gaps
+# bridged per column (one at the segment junction; many up a dashed line).
 function column_runs(
         page, neutral, light, crimson, darkpx, saturated, y0, gridrows,
         gridcols; gap = 3
@@ -442,15 +443,17 @@ function column_runs(
     nr = zeros(Int, W)
     nd = zeros(Int, W)
     ns = zeros(Int, W)
+    nb = zeros(Int, W)
     for x in 1:W
         r = y0 - 1
         miss = 0
         top = y0
         last = y0
-        rr = dd = ss = 0
-        cr = cd = cs = 0
+        rr = dd = ss = bb = 0
+        cr = cd = cs = cb = 0
         while r >= 1
             if !page[r, x] && !(grid[r, x] && neutral[r, x])
+                miss >= 2 && (bb += 1)
                 miss = 0
                 last = r
                 crimson[r, x] && (rr += 1)
@@ -458,7 +461,7 @@ function column_runs(
                 saturated[r, x] && (ss += 1)
                 if !light[r, x]
                     top = r
-                    cr, cd, cs = rr, dd, ss
+                    cr, cd, cs, cb = rr, dd, ss, bb
                 end
             else
                 miss += 1
@@ -471,8 +474,9 @@ function column_runs(
         nr[x] = cr
         nd[x] = cd
         ns[x] = cs
+        nb[x] = cb
     end
-    return h, hp, nr, nd, ns
+    return h, hp, nr, nd, ns, nb
 end
 
 # The regular weekly chain ending on the rightmost tick, as (week index, x)
@@ -562,17 +566,20 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     ppd = (n * sum(w .* xs) - sum(w) * sum(xs)) /
         (n * sum(w .^ 2) - sum(w)^2)   # pixels per day
     page, neutral, light, crimson, darkpx, saturated = pixel_classes(R, G, B)
-    h, hp, nr, nd, ns = column_runs(
+    h, hp, nr, nd, ns, nb = column_runs(
         page, neutral, light, crimson, darkpx, saturated, y0, yt, xs
     )
     # outline columns are mostly dark over their run (a short bar's top
     # and junction lines are a few dark pixels in every column, so the
     # floor keeps its interior as interior), and a column with
     # no saturated pixel is a gray line (the y-axis, the panel border and
-    # their anti-alias) rather than a bar; an outline drawn across two
-    # columns leaves a softer second column that still carries the
+    # their anti-alias) rather than a bar, as is one that bridged three or
+    # more page gaps (the dashed first-positive-result line, whose gaps
+    # the small renders shrink inside the bridge); an outline drawn across
+    # two columns leaves a softer second column that still carries the
     # neighbour's height, dropped when anything else is left
-    isborder = (h .> 4) .& ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h))
+    isborder = (h .> 4) .&
+        ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h) .| (nb .>= 3))
     soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
     nz = findall((h .> 2) .& .!isborder)
     barmin, barmax = minimum(nz), maximum(nz)
