@@ -354,20 +354,19 @@ block_total(block) = sum(a + d for (a, d) in values(block); init = 0)
 
 """
 For each vintage, the earliest earlier vintage whose digitised block is
-identical, else `""`. This is the loader's reprint rule: exact equality
-over the whole block, not a list of ids.
+identical, else `""`. The key is the loader's (`_dedup_onset_blocks` in
+src/onset_curve.jl): the sorted `onset_date => total` pairs, with the
+alive/dead split discarded, so this column can never disagree with
+`load_onset_curve`. The image md5 column is the independent evidence.
 """
 function reprints(scanned)
+    key(sr) = sort([d => a + dd for (d, (a, dd)) in scanned.blocks[sr]]; by = first)
+    first_seen = Dict{Vector{Pair{Date, Int}}, String}()
     out = Dict{String, String}()
-    for (i, sr) in enumerate(scanned.order)
-        out[sr] = ""
-        for j in 1:(i - 1)
-            p = scanned.order[j]
-            if scanned.blocks[p] == scanned.blocks[sr]
-                out[sr] = isempty(out[p]) ? p : out[p]
-                break
-            end
-        end
+    for sr in scanned.order
+        k = key(sr)
+        out[sr] = get(first_seen, k, "")
+        haskey(first_seen, k) || (first_seen[k] = sr)
     end
     return out
 end
