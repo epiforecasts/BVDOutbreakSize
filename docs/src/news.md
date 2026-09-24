@@ -37,6 +37,8 @@ Changes since v2.1.0.
 
 ### Model
 
+- The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
+  Fitted values change.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
   Fitted values change.
