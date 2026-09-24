@@ -258,10 +258,70 @@ end
     end
 end
 
+@testitem "patch_rt_model: samples only the n - 1 sum-to-zero directions" begin
+    using BVDOutbreakSize: patch_rt_model, knot_days, sum_to_zero_moments
+    using Turing: DynamicPPL, sample, Prior
+    using Turing.DynamicPPL: returned
+    using Random: Xoshiro
+    using Statistics: mean
+
+    ## A sum-to-zero vector over `np` patches has `np - 1` free directions,
+    ## so every per-knot draw lives on those, and the covariance of the
+    ## innovations has exactly its `np (np - 1) / 2` free parameters.
+    n = 120
+    nb = length(knot_days(n; week = 7, start = 20))
+    for np in (2, 3, 4)
+        m = patch_rt_model(
+            n, np, log(1.5); rt_start = 20, breakpoint = 60.0
+        )
+        draw = rand(Xoshiro(np), m)
+        has(k) = any(v -> DynamicPPL.getsym(v) == k, keys(draw))
+        len(k) = length(draw[DynamicPPL.VarName{k}()])
+        @test len(:z_level) == np - 1
+        @test len(:z_drift) == (np - 1) * (nb - 1)
+        @test !has(:σ_drift)
+        @test len(:bartlett_diag) == np - 1
+        ## Two patches have one direction and no lower entry to draw.
+        @test has(:bartlett_lower) == (np > 2)
+        if np > 2
+            @test len(:bartlett_lower) == (np - 1) * (np - 2) ÷ 2
+        end
+
+        ## The loading matrix is the one that built the knots: each knot's
+        ## innovation, rebuilt from the draw's own `z_drift`, matches.
+        chn = sample(Xoshiro(1), m, Prior(), 200; progress = false)
+        rets = vec(returned(m, chn))
+        zs = vec(chn[DynamicPPL.VarName{:z_drift}()])
+        for (r, z) in zip(rets, zs)
+            @test size(r.drift_factor) == (np, np - 1)
+            φ = exp2(-7 / r.δ_halflife)
+            for k in 2:nb
+                zk = z[(k - 2) * (np - 1) .+ (1:(np - 1))]
+                @test r.δ_knots[:, k] .- φ .* r.δ_knots[:, k - 1] ≈
+                    r.drift_factor * zk atol = 1.0e-12
+            end
+            mom = sum_to_zero_moments(r.drift_factor)
+            @test r.σ_δ ≈ mom.sd
+            @test r.Ω ≈ mom.cor
+            @test maximum(abs, sum(r.δ_knots; dims = 1)) < 1.0e-12
+            ## With one direction both patches have the same sd and
+            ## correlation -1.
+            if np == 2
+                @test all(≈(r.σ_δ[1]), r.σ_δ)
+                @test all(
+                    isapprox(r.Ω[i, j], -1 / (np - 1); atol = 1.0e-12)
+                        for i in 1:np, j in 1:np if i != j
+                )
+            end
+        end
+    end
+end
+
 @testitem "patch_rt_model: Rt may vary across space and over time" begin
     using BVDOutbreakSize: patch_rt_model
     using Distributions: Normal, truncated
     using Random: seed!
+    using Statistics: median
 
     ## The deviations follow a multivariate-normal random walk whose scale is
     ## itself sampled, so the model NESTS both hypotheses and lets the data
@@ -274,7 +334,7 @@ end
     flat = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
         region_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0),
-        region_drift_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0)
+        region_drift_scale = 1.0e-12
     )
     seed!(9)
     rf = flat()
@@ -287,15 +347,19 @@ end
     ## separate over time, which a constant modifier could not represent.
     wide = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_drift_sd_prior = truncated(Normal(0.5, 0.01); lower = 0)
+        region_drift_scale = 0.5
     )
-    seed!(3)
-    rw = wide()
     ## The Ituri / Nord-Kivu contrast must actually move over the window.
-    contrast(t) = rw.δ_patch[2, t] - rw.δ_patch[1, t]
-    @test abs(contrast(n) - contrast(20)) > 0.2
-    ## Sum-to-zero survives however wide the walk.
-    @test maximum(abs, sum(rw.δ_patch; dims = 1)) < 1.0e-10
+    ## One walk can end where it started, so this is read over several.
+    moves = map(1:9) do s
+        seed!(s)
+        rw = wide()
+        ## Sum-to-zero survives however wide the walk.
+        @test maximum(abs, sum(rw.δ_patch; dims = 1)) < 1.0e-10
+        contrast(t) = rw.δ_patch[2, t] - rw.δ_patch[1, t]
+        abs(contrast(n) - contrast(20))
+    end
+    @test median(moves) > 0.2
 end
 
 @testitem "province_increment_matrix: differences cumulative province counts" begin
@@ -631,7 +695,7 @@ end
     quantities = unique(df[!, "Quantity"])
     @test "Relative case ascertainment" in quantities
     @test "log-Rt vs primary patch" in quantities
-    @test "Rt deviation drift" in quantities
+    @test "Rt deviation innovation sd" in quantities
     @test unique(df[!, "Patch"]) == PROVINCE_LABELS
     ## The reported quantiles must be ordered, which the previous
     ## implementation's invented "median" (the midpoint of the 20-80
@@ -1237,7 +1301,8 @@ end
     @test !has("seed_fraction")            ## no secondary patch to seed
     @test !has("σ_δ")                      ## deviations are identically zero
     @test !has("σ_level")
-    @test !has("Ω_L")                      ## no cross-patch correlation
+    @test !has("σ_drift")
+    @test !has("bartlett")                 ## no cross-patch correlation
     @test !has("z_drift")
     @test !has("z_level")
     @test !has("composition")              ## no per-province likelihood
@@ -1558,7 +1623,7 @@ end
 
     ## With a real covariate it moves the shares in the covariate's
     ## direction: the patch with the most testing per head gains share.
-    draws = (; ρ = 0.05, τ_asc = 0.4, z_asc = [-0.8, 0.3, 1.1])
+    draws = (; ρ = 0.05, τ_asc = 0.4, z_asc = [-0.8, 1.1])
     shares(β) = DynamicPPL.fix(live; draws..., β_asc = β)().shares
     lifted = shares(0.5)
     flat = shares(0.0)
@@ -1862,7 +1927,7 @@ end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin
     using BVDOutbreakSize: patch_infection_model, sigmoid_ramp
-    using Turing: DynamicPPL, returned
+    using Turing: DynamicPPL, returned, sample, Prior
     using Random: Xoshiro
 
     n, np, rt_start, bp = 60, 3, 30, 10
@@ -1876,7 +1941,7 @@ end
     ## Everything but the intensity is held at one draw, so the trajectories
     ## differ only through what the intensity does.
     function run(;
-            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 0.5, 2.0],
+            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
             β_ε = 0.0
         )
         m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
@@ -1886,17 +1951,24 @@ end
     ## `σ_ε -> 0` recovers one shared intensity: the per-origin offsets stop
     ## mattering, so the arrivals no longer depend on `z_ε` at all.
     shared = run()
-    other_z = run(z_ε = [3.0, -4.0, 1.5])
+    other_z = run(z_ε = [3.0, -4.0])
     @test shared.importation_matrix ≈ other_z.importation_matrix
     ## With spread on, they do. A pooled intensity that ignored `σ_ε` would
     ## pass the check above and fail this one.
     spread = run(σ_ε = 0.7)
     @test !(spread.importation_matrix ≈ shared.importation_matrix)
 
-    ## The deviations are centred, so `ε_bar` is the level: shifting every
-    ## offset by a constant leaves the intensities, and the arrivals, alone.
-    shifted = run(σ_ε = 0.7, z_ε = [-1.0, 0.5, 2.0] .+ 5.0)
-    @test shifted.importation_matrix ≈ spread.importation_matrix
+    ## The log deviations sum to zero, so `ε_bar` is the level: the origin
+    ## intensities have geometric mean `ε_bar` whatever the spread.
+    fixed = DynamicPPL.fix(
+        base; ε_bar = 0.02, σ_ε = 0.7, z_ε = [-1.0, 2.0], β_ε = 0.0
+    )
+    chn = sample(Xoshiro(1), fixed, Prior(), 3; progress = false)
+    for e in vec(collect(chn[:importation_epsilon_patch]))
+        @test length(e) == np
+        @test exp(sum(log, e) / np) ≈ 0.02
+        @test !all(≈(0.02), e)
+    end
 
     ## The detection ramp moves the intensity the way its sign says. On the
     ## first renewal day every history is still the seed, so the arrivals

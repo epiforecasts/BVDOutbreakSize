@@ -155,9 +155,13 @@ end
             @test all(is_future, d.fut)
             ## Fixed variables add nothing to the density, so with the
             ## future ones fixed the extended model's density at a fitted
-            ## draw is the fitted model's, to the bit.
-            @test logjoint(fix_future(mh, d.θh, d.fut), d.θ0) ==
-                logjoint(m0, d.θ0)
+            ## draw is the fitted model's. The BLAS convolution kernels
+            ## block their sums by vector length, so a longer grid rounds
+            ## the same days differently in the last bit or two.
+            @test isapprox(
+                logjoint(fix_future(mh, d.θh, d.fut), d.θ0),
+                logjoint(m0, d.θ0); rtol = 1.0e-12
+            )
         end
         ## And at every draw of a sampled chain.
         chn = sample(
@@ -165,7 +169,10 @@ end
             chain_type = FlexiChains.VNChain, progress = false
         )
         d = future_draws(m0, mh, Xoshiro(9))
-        @test logjoint(fix_future(mh, d.θh, d.fut), chn) == logjoint(m0, chn)
+        @test isapprox(
+            logjoint(fix_future(mh, d.θh, d.fut), chn), logjoint(m0, chn);
+            rtol = 1.0e-12
+        )
     end
 end
 
@@ -178,15 +185,29 @@ end
     r0 = returned(m0, d.θ0)
     rh = returned(fix_future(mh, d.θh, d.fut), d.θ0)
     ## Every convolution and the renewal are causal, so the first `N` days of
-    ## each daily series are the fitted model's.
+    ## each daily series are the fitted model's, up to the BLAS kernels'
+    ## length-dependent rounding.
     @test size(rh.patch_state.infections_matrix, 2) == N + H
-    @test rh.patch_state.infections_matrix[:, 1:N] ==
-        r0.patch_state.infections_matrix
-    @test rh.cases_state.reports_daily[1:N] == r0.cases_state.reports_daily
-    @test rh.confirmed_state.confirmed_daily[1:N] ==
-        r0.confirmed_state.confirmed_daily
-    @test rh.deaths_state.deaths_daily[1:N] == r0.deaths_state.deaths_daily
-    @test rh.treatment_state.demand[1:N] == r0.treatment_state.demand
+    @test isapprox(
+        rh.patch_state.infections_matrix[:, 1:N],
+        r0.patch_state.infections_matrix; rtol = 1.0e-12
+    )
+    @test isapprox(
+        rh.cases_state.reports_daily[1:N], r0.cases_state.reports_daily;
+        rtol = 1.0e-12
+    )
+    @test isapprox(
+        rh.confirmed_state.confirmed_daily[1:N],
+        r0.confirmed_state.confirmed_daily; rtol = 1.0e-12
+    )
+    @test isapprox(
+        rh.deaths_state.deaths_daily[1:N], r0.deaths_state.deaths_daily;
+        rtol = 1.0e-12
+    )
+    @test isapprox(
+        rh.treatment_state.demand[1:N], r0.treatment_state.demand;
+        rtol = 1.0e-12
+    )
 end
 
 @testitem "predict keeps each draw and draws only the future" setup = [

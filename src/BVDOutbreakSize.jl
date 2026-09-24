@@ -24,7 +24,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
-    LogNormal, Beta, LKJCholesky,
+    LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
@@ -199,6 +199,7 @@ include("data.jl")
 include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
+include("sum_to_zero.jl")
 include("summaries.jl")
 include("diagnostics.jl")
 include("scoring.jl")

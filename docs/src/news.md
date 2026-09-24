@@ -38,7 +38,9 @@ Changes since v2.1.0.
 ### Model
 
 - Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
-  Fixing the future variables leaves the fitted density unchanged, which the tests check exactly on every composer and on the live patch joint.
+  Fixing the future variables leaves the fitted density unchanged to within floating-point rounding, which the tests check on every composer and on the live patch joint.
+- The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` sum-to-zero directions rather than as `n` draws then centred, with a Wishart prior on the Rt deviation covariance that province forecasts now also use (#855).
+  Fitted values change.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
   Fitted values change.

@@ -311,25 +311,31 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
-# They are correlated across patches, they revert toward zero, and they are centred at every knot so that no patch is privileged:
+# They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
+# A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
 #
 # ```math
-# \delta_{p,1} = \sigma_{\text{lvl}} (Lz)_p
-#     - \overline{\sigma_{\text{lvl}} (Lz)},
+# \boldsymbol\delta_{1} = \sigma_{\text{lvl}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z},
 # \qquad
-# \delta_{p,k} = \phi\, \delta_{p,k-1}
-#   + \bigl(\sigma_{\delta,p} (Lz_k)_p
-#     - \overline{\sigma_{\delta}(Lz_k)}\bigr), \tag{6}
+# \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
+#   + \frac{0.05}{\sqrt{\nu}}\, Q A \mathbf{z}_k, \tag{6}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
-# \sigma_{\delta,p} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
-# \Omega \sim \mathrm{LKJ}(2), \tag{7}
+# AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $z, z_k \sim \mathrm{Normal}(0, 1)$ per patch, $\Omega = LL^{\top}$ the cross-patch correlation and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
+# The covariance of the innovations, $(0.05^2/\nu)\, Q AA^{\top} Q^{\top}$, is a full covariance of a sum-to-zero vector.
+# $A$ has as many entries as that covariance has free parameters, and each knot draws $P - 1$ values, one per direction the deviations can move in.
+# The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
+# Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
+# We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
+# The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
+# With three patches the standard deviations fix the correlations, so asking whether the correlation is needed is asking whether the patches' standard deviations differ.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
@@ -507,7 +513,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (z_q - \bar z)\bigr)\,
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z})_q\bigr)\,
 #     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
 # ```
 #
@@ -515,8 +521,10 @@ MarkdownTable(vintage_table) #hide
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# z_q \sim \mathrm{Normal}(0, 1). \tag{16}
+# \mathbf{z} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
 # ```
+#
+# with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 #
 
 #md # ```@raw html
@@ -1748,11 +1756,11 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
-# \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
+# \log a_p = \beta x_p + \tau_a (Q \mathbf{z})_p, \qquad
+# \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+# with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
 #
 # $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
 #
@@ -1763,7 +1771,7 @@ cfr_prior_fig #hide
 #
 # where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
 # A pooled patch sums its members before the ratio is taken.
-# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# The covariate sums to zero across patches by construction, so the log ascertainment sums to zero as well.
 # Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
 # It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
 # A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.

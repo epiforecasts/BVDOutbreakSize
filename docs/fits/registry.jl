@@ -28,6 +28,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "joint.jl"),
     joinpath(_PKG, "src", "models", "fit_args.jl"),
     joinpath(_PKG, "src", "renewal.jl"),
+    joinpath(_PKG, "src", "sum_to_zero.jl"),
     joinpath(_PKG, "src", "mooncake_rules.jl"),
     joinpath(_PKG, "src", "sampling.jl"),
     joinpath(_PKG, "src", "constants.jl"),
