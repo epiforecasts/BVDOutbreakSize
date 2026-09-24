@@ -39,21 +39,15 @@ See `scripts/README.md`.
 Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
-These counts are approximate, and the error is a few percent in either direction per scan, independent between vintages.
-Against the printed figure `n` it ranges from −5.0% (SitReps 079/080: 2770 against n = 2 915) to +1.6% (SitRep 068: 2344 against n = 2 308).
-Per-vintage, SitRep 064 sits at −2.2% (2018 against n = 2 064), SitRep 072 at +0.4% (2531 against n = 2 521), and SitReps 069/070/071 at −3.0% (2260 against n = 2 329).
-The 079/080 figure is the largest shortfall seen so far, a couple of points past the previous −3.0% floor rather than an order of magnitude off, so it is recorded as extending the known range rather than rejected (section 4b: check neighbours before excluding).
-It is also not a new image, as the duplicate note below explains.
-Individual daily bars carry roughly ±1–2 cases of pixel noise.
-Some of the shortfall is the faded bars inside the `données potentiellement incomplètes` band at the right of each figure, whose lightened fill falls outside the colour masks.
-This mechanism can only lose cases and so does not explain the overshoots.
-Treat the sign as unknown.
+These counts are approximate.
+Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2% everywhere and within 0.5% on 48 of the 60 vintages.
+The largest gaps are SitRep 119 at +1.9% (5428 against n = 5 326), SitRep 126 at −1.8% (5670 against n = 5 771) and SitRep 118 at −1.0% (5212 against n = 5 263).
+Individual daily bars carry pixel rounding of about ±1 case at the small September renders (2.8 px per count) and less before.
+The faded bars inside the `données potentiellement incomplètes` band are read like any other.
 
-One consequence deserves emphasis before anyone fits this stream.
-Late reporting only ever adds cases, so an onset date's count must be non-decreasing across vintages, and the scans do not respect that.
-On onset dates more than three weeks before the earliest report date in the file (12 July, so onsets before 21 June), the scanned totals move both ways between consecutive distinct snapshots.
-For example, 064 → 065 falls by a net 36 cases across 34 of 54 such days, and every other consecutive pair falls somewhere too.
-A between-vintage increment of a few cases is therefore at or below the noise floor, which bounds what a reporting-delay estimate built from those increments can support.
+Late reporting only ever adds cases, so an onset date's count must be non-decreasing across vintages.
+On onset dates more than three weeks before the earlier vintage's report date, consecutive distinct snapshots differ by 0.46 cases per day on average (L1) and fall on 14% of such days, almost always by a single case.
+A between-vintage increment of one is therefore at the noise floor and anything larger is signal.
 See issue #488.
 
 SitReps 061 and 062 reuse one figure, as do 069/070/071 and 073/074 (identical n = 2 567, identical digitised total and day count).
@@ -170,13 +164,9 @@ Those cells are dropped rather than read as zeros.
 The axis gap is about five days for most vintages, close to the reporting delay itself.
 Reading it as "nothing reported yet" would force the fitted hazard to near zero over the first five days and pile the missing mass onto the delay at which the axis first covers the date.
 
-A second, larger source of between-vintage movement is the render INSP happens to lay the figure out at.
-The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller JPEG render blurs more.
-Measuring edge softness as the share of blue-ish pixels missing the strict blue mask: 0.117 at SitRep 103 (823x501), 0.113 at 104/105 (1118x710), 0.210 at 106/107 (778x440) and 0.225 at 108/109 (802x479).
-Softness roughly doubles from 105 to 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
-So the digitisation bias is a per-vintage level that moves with an observable, not a stationary error, and it does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
-It is not the whole story either: SitRep 087 to 088 falls 184 at the same render, the same softness and the same last plotted onset date.
-Issue #636 tracks the mechanism and what removing it would cost.
+The render INSP lays the figure out at moves between vintages (823x501 at SitRep 103, 1118x710 at 104/105, 778x440 at 106/107, about 750 px wide from 111) and the small renders are JPEG-compressed with chroma subsampling, which washes the fill colour out of a 3 to 4 px bar and leaves one saturated column per bar.
+The reader therefore does not depend on fill colour for the height: it reads each bar's top as its dark outline, the same in every column, and segments bars by their outline columns.
+The per-vintage level shift that the fixed colour masks used to introduce (issue #636) is gone; what remains is pixel rounding.
 
 This stream is fitted.
 `load_onset_curve` (`src/onset_curve.jl`) reads the file, collapses reprints, drops vintages reported after the manifest cut-off and builds the between-vintage increment cells.
