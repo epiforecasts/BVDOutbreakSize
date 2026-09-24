@@ -335,7 +335,6 @@ MarkdownTable(vintage_table) #hide
 # We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
 # The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
 # With three patches the standard deviations fix the correlations, so asking whether the correlation is needed is asking whether the patches' standard deviations differ.
-# The model can also be fitted without the correlation (`region_correlation = false`), with one scale $s$ shared by every basis direction, so that every pair of patches has correlation $-1/(P - 1)$.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 

@@ -1239,15 +1239,6 @@ sharing the drift's covariance shape at its own scale. With the draws
 `z_k` as the columns of `Z`, every knot's innovation comes from the one
 product `c Q A Z`.
 
-With `region_correlation = false` the innovation is `s Q z` with one scale
-`s ~ region_drift_sd_prior` and the level `σ_level Q z_level`. Every patch
-then has the same sd and every pair the correlation `-1 / (n - 1)`, the
-covariance of independent patch deviations with their mean removed. The
-default `region_drift_scale` is the root mean square of the default
-`region_drift_sd_prior`, so the two settings have the same expected
-covariance, and they coincide with two patches, where there is one
-direction and nothing to correlate. Change the two together.
-
 The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
 derived from the loading matrix ([`sum_to_zero_moments`](@ref)). The
 correlations of a sum-to-zero vector are constrained: its entries cannot
@@ -1308,10 +1299,8 @@ draws to one knot's innovations.
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
-        region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_drift_scale::Real = 0.05,
         region_drift_df::Real = n_patches - 1,
-        region_correlation::Bool = true,
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(n_patches)
@@ -1369,35 +1358,33 @@ draws to one knot's innovations.
     δ_halflife ~ region_halflife_prior
     φ = exp2(-week / δ_halflife)
     ## Loading matrices from the `n_patches - 1` sum-to-zero directions to
-    ## the patches. With correlation, a Bartlett factor of a Wishart
-    ## covariance on the directions, whose prior treats every patch alike.
-    ## Without it, or with two patches, one scale shared by every direction.
+    ## the patches: a Bartlett factor of a Wishart covariance on the
+    ## directions, whose prior treats every patch alike. With two patches
+    ## there is one direction and no lower entry to draw.
     nd = n_patches - 1
-    if region_correlation && n_patches > 2
-        region_drift_df > nd - 1 || throw(
-            ArgumentError(
-                "patch_rt_model: region_drift_df = $region_drift_df must " *
-                    "exceed n_patches - 2 = $(nd - 1)"
-            )
+    region_drift_df > nd - 1 || throw(
+        ArgumentError(
+            "patch_rt_model: region_drift_df = $region_drift_df must " *
+                "exceed n_patches - 2 = $(nd - 1)"
         )
-        bartlett_diag ~ product_distribution(
-            [Chi(region_drift_df - j + 1) for j in 1:nd]
-        )
+    )
+    bartlett_diag ~ product_distribution(
+        [Chi(region_drift_df - j + 1) for j in 1:nd]
+    )
+    if nd > 1
         bartlett_lower ~ product_distribution(
             fill(Normal(0, 1), nd * (nd - 1) ÷ 2)
         )
-        A = bartlett_factor(bartlett_diag, bartlett_lower)
-        F_drift = sum_to_zero_factor(
-            basis, region_drift_scale / sqrt(region_drift_df), A
-        )
-        F_level = sum_to_zero_factor(
-            basis, σ_level * sqrt(nd / sum(abs2, A)), A
-        )
     else
-        σ_drift ~ region_drift_sd_prior
-        F_drift = sum_to_zero_factor(basis, σ_drift)
-        F_level = sum_to_zero_factor(basis, σ_level)
+        bartlett_lower = Float64[]
     end
+    A = bartlett_factor(bartlett_diag, bartlett_lower)
+    F_drift = sum_to_zero_factor(
+        basis, region_drift_scale / sqrt(region_drift_df), A
+    )
+    F_level = sum_to_zero_factor(
+        basis, σ_level * sqrt(nd / sum(abs2, A)), A
+    )
     ## Standard-normal draws for the level and for each knot's innovation,
     ## `n_patches - 1` per knot.
     z_level ~ product_distribution(fill(region_offset_prior, nd))
@@ -1540,7 +1527,6 @@ the others, which is what the imports figure on the analysis page draws.
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
-        region_correlation::Bool = true,
         basis = sum_to_zero_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
@@ -1562,7 +1548,7 @@ the others, which is what the imports figure on the analysis page draws.
     rt_state ~ to_submodel(
         rt(
             n, n_patches, log(R0);
-            breakpoint, rt_start, rt_walk_start, region_correlation
+            breakpoint, rt_start, rt_walk_start
         ), false
     )
     Rt_matrix = rt_state.Rt_matrix

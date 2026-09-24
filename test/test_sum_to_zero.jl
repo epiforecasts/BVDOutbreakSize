@@ -296,13 +296,6 @@ end
                 patch_rt_model(60, 4, log(1.5); rt_start = 10),
             ),
             (
-                "patch_rt_model, four patches, no correlation",
-                patch_rt_model(
-                    60, 4, log(1.5); rt_start = 10,
-                    region_correlation = false
-                ),
-            ),
-            (
                 "patch_infection_model, coupled",
                 patch_infection_model(60, 4; importation_kernel = kernel4),
             ),
@@ -361,47 +354,39 @@ end
     end
 
     n = 60
-    for np in (2, 3, 4), corr in (true, false), seed in 1:3
+    for np in (2, 3, 4), seed in 1:3
         nd = np - 1
         Q = sum_to_zero_basis(np)
         for (basis, model) in (
                 (
                     Q,
-                    patch_rt_model(
-                        n, np, log(1.5); rt_start = 10,
-                        region_correlation = corr
-                    ),
+                    patch_rt_model(n, np, log(1.5); rt_start = 10),
                 ),
                 (
                     rotated(Q),
                     patch_rt_model(
                         n, np, log(1.5); rt_start = 10,
-                        region_correlation = corr, basis = rotated(Q)
+                        basis = rotated(Q)
                     ),
                 ),
             )
             r, vi = prior_draw(model, seed)
             σ_level = vi[@varname(σ_level)]
             φ = exp2(-7 / vi[@varname(δ_halflife)])
-            if corr && np > 2
-                d = vi[@varname(bartlett_diag)]
-                o = vi[@varname(bartlett_lower)]
-                B = zeros(nd, nd)
-                m = 0
-                for i in 1:nd
-                    B[i, i] = d[i]
-                    for j in 1:(i - 1)
-                        m += 1
-                        B[i, j] = o[m]
-                    end
+            ## Two patches draw no lower entry.
+            d = vi[@varname(bartlett_diag)]
+            o = np > 2 ? vi[@varname(bartlett_lower)] : Float64[]
+            B = zeros(nd, nd)
+            m = 0
+            for i in 1:nd
+                B[i, i] = d[i]
+                for j in 1:(i - 1)
+                    m += 1
+                    B[i, j] = o[m]
                 end
-                s = σ_level * sqrt(nd / sum(abs2, B))
-                c = 0.05 / sqrt(nd)
-            else
-                B = diagm_(ones(nd))
-                s = σ_level
-                c = vi[@varname(σ_drift)]
             end
+            s = σ_level * sqrt(nd / sum(abs2, B))
+            c = 0.05 / sqrt(nd)
             nb = size(r.δ_knots, 2)
             ref = reference_knots(
                 basis, B, s, c, vi[@varname(z_level)], vi[@varname(z_drift)],

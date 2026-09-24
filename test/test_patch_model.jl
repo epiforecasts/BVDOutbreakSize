@@ -270,22 +270,20 @@ end
     ## innovations has exactly its `np (np - 1) / 2` free parameters.
     n = 120
     nb = length(knot_days(n; week = 7, start = 20))
-    for np in (2, 3, 4), corr in (true, false)
+    for np in (2, 3, 4)
         m = patch_rt_model(
-            n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-            region_correlation = corr
+            n, np, log(1.5); rt_start = 20, breakpoint = 60.0
         )
         draw = rand(Xoshiro(np), m)
         has(k) = any(v -> DynamicPPL.getsym(v) == k, keys(draw))
         len(k) = length(draw[DynamicPPL.VarName{k}()])
         @test len(:z_level) == np - 1
         @test len(:z_drift) == (np - 1) * (nb - 1)
-        wishart = corr && np > 2
-        @test has(:bartlett_diag) == wishart
-        @test has(:bartlett_lower) == wishart
-        @test has(:σ_drift) == !wishart
-        if wishart
-            @test len(:bartlett_diag) == np - 1
+        @test !has(:σ_drift)
+        @test len(:bartlett_diag) == np - 1
+        ## Two patches have one direction and no lower entry to draw.
+        @test has(:bartlett_lower) == (np > 2)
+        if np > 2
             @test len(:bartlett_lower) == (np - 1) * (np - 2) ÷ 2
         end
 
@@ -306,9 +304,9 @@ end
             @test r.σ_δ ≈ mom.sd
             @test r.Ω ≈ mom.cor
             @test maximum(abs, sum(r.δ_knots; dims = 1)) < 1.0e-12
-            ## Without correlation every patch has the same sd and every
-            ## pair the correlation of a centred iid vector.
-            if !wishart
+            ## With one direction both patches have the same sd and
+            ## correlation -1.
+            if np == 2
                 @test all(≈(r.σ_δ[1]), r.σ_δ)
                 @test all(
                     isapprox(r.Ω[i, j], -1 / (np - 1); atol = 1.0e-12)

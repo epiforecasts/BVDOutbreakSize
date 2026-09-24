@@ -507,14 +507,13 @@ end
         rt_walk_start::Integer = rt_start,
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
-        ),
-        region_correlation::Bool = true
+        )
     )
     patch_state ~ to_submodel(
         patch_infection(
             n, n_patches;
             breakpoint, rt_start, rt_walk_start,
-            importation_kernel, region_correlation
+            importation_kernel
         ), false
     )
     ## Summed over the patches with one matrix-vector product.
@@ -694,8 +693,6 @@ by importation, with every national stream above fitted against the summed
 provinces. The default `n_patches = 1` collapses it onto the
 single-population model, since the sum-to-zero deviations vanish, there is
 nothing to import between, and no per-province likelihood is scored.
-`region_correlation = false` fits the provincial `Rt` deviations without a
-cross-province correlation (see [`patch_rt_model`](@ref)).
 
 The spatial information enters through two composition terms. The
 per-province confirmed cases and confirmed deaths in the situation
@@ -773,7 +770,6 @@ reproduction number implied by the summed patch infections.
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
-        region_correlation::Bool = true,
         composition = province_composition_model,
         province_increments::Union{
             Missing, AbstractMatrix{<:Integer},
@@ -834,7 +830,7 @@ reproduction number implied by the summed patch infections.
     latent ~ to_submodel(
         _patch_latent(
             n, n_patches, breakpoint, patch_infection;
-            rt_start, rt_walk_start, importation_kernel, region_correlation
+            rt_start, rt_walk_start, importation_kernel
         ), false
     )
     patch_state = latent.patch_state
