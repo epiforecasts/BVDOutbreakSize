@@ -4159,13 +4159,16 @@ function _stick_breaking_cells(
     ) where {record}
     T = float(eltype(shares))
     m = length(groups)
-    trials = sizehint!(Int[], m)
-    p = sizehint!(T[], m)
-    obs = sizehint!(Int[], m)
-    rows = record ? sizehint!(Int[], m) : nothing
-    tails = record ? sizehint!(T[], m) : nothing
-    flags = record ? sizehint!(UInt8[], m) : nothing
+    ## Every row but the last of each group is scored.
+    nc = m - count(r -> r == 1 || groups[r] != groups[r - 1], 1:m)
+    trials = Vector{Int}(undef, nc)
+    p = Vector{T}(undef, nc)
+    obs = Vector{Int}(undef, nc)
+    rows = record ? Vector{Int}(undef, nc) : nothing
+    tails = record ? Vector{T}(undef, nc) : nothing
+    flags = record ? Vector{UInt8}(undef, nc) : nothing
     tail_floor = T(1.0e-10)
+    k = 0
     i = 1
     @inbounds while i <= m
         j = i
@@ -4177,18 +4180,19 @@ function _stick_breaking_cells(
         remaining = total
         tail = one(T)
         for r in i:(j - 1)
+            k += 1
             q = shares[r] / tail
-            push!(trials, max(remaining, 0))
-            push!(p, clamp(q, zero(T), one(T)))
-            push!(obs, counts[r])
+            trials[k] = max(remaining, 0)
+            p[k] = clamp(q, zero(T), one(T))
+            obs[k] = counts[r]
             x_tail = tail - shares[r]
             if record
                 f = r == i ? _SB_FIRST : 0x00
                 !(q > one(T)) && !(q < zero(T)) && (f |= _SB_P)
                 x_tail > tail_floor && (f |= _SB_TAIL)
-                push!(rows, r)
-                push!(tails, tail)
-                push!(flags, f)
+                rows[k] = r
+                tails[k] = tail
+                flags[k] = f
             end
             remaining -= counts[r]
             tail = max(x_tail, tail_floor)
