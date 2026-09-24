@@ -225,6 +225,17 @@ tasks:
     cmds:
       - julia -t 4 --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
+  smoke-joint:
+    desc: >
+      Short multi-chain fit of the headline joint at the production sampler
+      settings, printing each chain's start, step size, depth-cap share,
+      divergences, R-hat, worst mixers and the parameters that have split
+      between chains before. Run before pushing a model change; a CI fit
+      takes five hours to say the same. SMOKE_CHAINS, SMOKE_WARMUP and
+      SMOKE_DRAWS override the defaults of 4, 150 and 150.
+    cmds:
+      - julia -t 4 --project=docs scripts/smoke_joint.jl {{.CLI_ARGS}}
+
   check-convergence:
     desc: >
       Decide whether the cached fits converged well enough to publish, the

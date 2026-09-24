@@ -3421,8 +3421,8 @@ and drifting over calendar time. Two non-centred random effects:
     \\text{logit\\_h0}(d) = \\eta_0 + \\sigma_{h0} z_{h0,d};
     ```
   - a calendar-time random walk on report date, weekly knots linearly
-    interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
-    cumulative-sum walk, same construction):
+    interpolated to the daily grid ([`rt_walk_model`](@ref)'s weekly knots,
+    here in non-centred cumulative-sum form):
     ```math
     \\sigma_\\gamma \\sim \\text{walk\\_sigma\\_prior}, \\quad
     z_{\\gamma,k} \\sim \\mathcal N(0,1), \\quad
