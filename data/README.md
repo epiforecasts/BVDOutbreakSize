@@ -35,6 +35,16 @@ The occupation table (Tableau IV, V, 5, 6 or 7 by vintage, to SitRep 080) and th
 `province_care_read.csv` is an independent blind read of the same PDFs in the same layout, made without sight of the scan.
 A blind reader takes only the `sitrep` and `report_date` columns from `insp_sitrep_scanned.csv`, because its `notes` column already carries per-province occupancy figures for many vintages.
 `scripts/province_care_manifest.jl` reconciles the two: a cell enters the manifest when both reads agree, or when only one read carries a figure for that (SitRep, province), and it stops on any disagreement, which has to be settled against the PDF and recorded in the CSV.
+
+To advance the two blocks when new reports land, after `download_sitreps.jl`:
+
+1. `julia --project=scripts scripts/scan_province_care.jl` rescans every PDF and rewrites `province_care_scanned.csv`.
+2. Append a blind read of the new reports to `province_care_read.csv`, in the same layout, made by a reader who has not seen the scan, its script or the manifest.
+   Read the `Prise en charge holistique` section (1.5 or 2.5 in the analytique format; the `Continuité des soins` heading covers logistics, not counts).
+   Written-out numbers count (`onze (11)` is 11), `aucune sortie` is 0 discharges, and a province with no paragraph that day has no row.
+3. `julia --project=scripts scripts/province_care_manifest.jl > /tmp/care_blocks.txt` stops on any cell the two reads disagree on; settle it against the PDF and record the decision in the CSV before rerunning.
+4. Replace the `[province_isolation_history]` and `[province_bed_capacity_history]` blocks (all their sub-tables) in `observations.toml` with the printed ones, keeping the file LF-terminated with one final newline.
+5. Run the province loader tests (`test/test_province_care.jl`) and `pre-commit run --files` on the three files.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_history]` carry the occupancy and bed series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
@@ -221,6 +231,7 @@ Advancing the headlines while leaving these behind both drops data and can break
 | Headline `Patients en isolement` (+ occupancy %) | `isolation_history`; occupancy → `bed_capacity_history` (= occupancy ÷ rate) |
 | Headline / Tableau 3 `Cas suspects du jour`; from SitRep 084 the alert table's `Alertes vérifiées et validées (cas suspect)` Vivants + Décédés | `suspected_daily_history` |
 | Laboratory 24h `échantillons analysés` per province (§4.3 table, or §3.2 bullets in the analytique format) | `tests_analysed_daily_history` |
+| Per-province patients in isolation and beds: the occupation table's province rows to SitRep 080, then the `Prise en charge holistique` prose (one paragraph per province) | `province_isolation_history`, `province_bed_capacity_history`, through `scripts/scan_province_care.jl`, a blind read and `scripts/province_care_manifest.jl` (see the section above) |
 | Occupation table (Tableau 6/7, or Tableau 5/6 in the analytique format): `Total admissions (24h)`, `Sorties — décédés / non-cas / évadés`, `Patients au lit (J-1)`, `dont confirmés / suspects` | `treatment_admissions_history`, `treatment_deaths_history`, `treatment_ruleout_history`, `treatment_absconded_history`, `treatment_aulit_history`, `treatment_confirmed_incare_history`, `treatment_suspect_incare_history` |
 
 Always cross-check the confirmed/death/recovered/isolation headline against the INRB-UMIE `national_*` CSV for the same date.
