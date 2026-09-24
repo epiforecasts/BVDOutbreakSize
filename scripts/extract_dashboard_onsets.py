@@ -19,6 +19,7 @@ Usage::
 
     uv run scripts/extract_dashboard_onsets.py --repo path/to/dashboard-clone
     uv run scripts/extract_dashboard_onsets.py --html trends.html
+    uv run scripts/extract_dashboard_onsets.py --self-test
 
 National and province rows go to ``data/onset_dashboard_history.csv`` and
 health-zone rows to ``data/onset_dashboard_history_zones.csv.gz``.  Consecutive
@@ -294,6 +295,17 @@ def extract_page(html: str, levels: tuple[str, ...]) -> tuple[dt.date, list[tupl
     return snapshot, rows
 
 
+def tag_repeats(snapshots):
+    """Yield each (sha, commit_date, snapshot, rows) with a flag saying its
+    rows equal the previous snapshot's, so consecutive rebuilds of the
+    same data are kept once, under the first."""
+    previous = None
+    for item in snapshots:
+        digest = hashlib.sha1(repr(item[3]).encode()).hexdigest()
+        yield item, digest == previous
+        previous = digest
+
+
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
@@ -313,7 +325,64 @@ def page_commits(repo: Path, commits: list[str] | None) -> list[tuple[str, str]]
     return out
 
 
+SELF_TEST_SVG = """
+<svg>
+<clipPath id='c0'><rect x='0' y='0' width='300' height='150'/></clipPath>
+<clipPath id='c1'><rect x='50' y='10' width='200' height='100'/></clipPath>
+<text x='30' y='110'>0</text>
+<text x='30' y='60'>5</text>
+<text x='30' y='10'>10</text>
+<polyline points='60,10 60,110 ' style='stroke-width: 1.16; stroke: #EBEBEB;' />
+<polyline points='130,10 130,110 ' style='stroke-width: 1.16; stroke: #EBEBEB;' />
+<polyline points='50,60 250,60 ' style='stroke-width: 1.16; stroke: #EBEBEB;' />
+<text x='60' y='125'>Aug 01</text>
+<text x='130' y='125'>Aug 08</text>
+<rect x='56' y='80' width='8' height='30' style='fill: #1F77B4;' />
+<rect x='56' y='70' width='8' height='10' style='fill: #FF7F0E;' />
+<rect x='66' y='90' width='8' height='20' style='fill: #1F77B4;' />
+<rect x='86' y='100' width='8' height='10' style='fill: #1F77B4;' />
+<rect x='60' y='130' width='15' height='10' style='fill: #1F77B4;' />
+<text x='80' y='135'>Observed onset</text>
+<rect x='150' y='130' width='15' height='10' style='fill: #FF7F0E;' />
+<text x='170' y='135'>Imputed onset</text>
+</svg>
+"""
+
+
+def self_test() -> int:
+    """Parse a hand-written chart through the tick-label calibration and
+    the bar reading, and check the repeat tagging; non-zero on failure."""
+    chart = parse_chart(SELF_TEST_SVG, dt.date(2026, 8, 10))
+    assert chart.dates[0] == dt.date(2026, 8, 1), chart.dates
+    assert chart.dates[-1] == dt.date(2026, 8, 4), chart.dates
+    assert chart.observed == [3, 2, 0, 1], chart.observed
+    assert chart.imputed == [1, 0, 0, 0], chart.imputed
+    assert chart.filled_gaps == 1
+    # the labels carry no year: a break after the snapshot's month-day is
+    # last year's
+    chart = parse_chart(SELF_TEST_SVG, dt.date(2026, 7, 10))
+    assert chart.dates[0] == dt.date(2025, 8, 1), chart.dates
+    # a bar off the day grid is refused
+    bad = SELF_TEST_SVG.replace("<rect x='86'", "<rect x='83'")
+    try:
+        parse_chart(bad, dt.date(2026, 8, 10))
+    except ChartError:
+        pass
+    else:
+        raise AssertionError("off-grid bar accepted")
+    a = [("national", "National", "2026-08-01", 3, 1)]
+    b = [("national", "National", "2026-08-01", 4, 1)]
+    items = [("s1", "d1", None, a), ("s2", "d2", None, a), ("s3", "d3", None, b),
+             ("s4", "d4", None, a)]
+    flags = [repeat for _, repeat in tag_repeats(items)]
+    assert flags == [False, True, False, False], flags
+    print("self-test passed")
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -328,6 +397,7 @@ def main() -> int:
     ap.add_argument(
         "--levels", default="national,province,zone", help="comma list from national,province,zone"
     )
+    ap.add_argument("--self-test", action="store_true", help="check the parser on a built-in chart")
     ap.add_argument(
         "--out",
         type=Path,
@@ -350,26 +420,27 @@ def main() -> int:
         snapshots.append(("", "", snapshot, rows))
     else:
         commits = args.commits.read_text().split() if args.commits else None
-        previous = None
-        for sha, cdate in page_commits(args.repo, commits):
-            html = git(args.repo, "cat-file", "blob", f"{sha}:{PAGE_FILE}")
-            try:
-                snapshot, rows = extract_page(html, levels)
-            except ChartError as err:
-                print(f"{sha[:8]} {cdate}: {err}", file=sys.stderr)
-                continue
-            digest = hashlib.sha1(repr(rows).encode()).hexdigest()
+
+        def parsed():
+            for sha, cdate in page_commits(args.repo, commits):
+                html = git(args.repo, "cat-file", "blob", f"{sha}:{PAGE_FILE}")
+                try:
+                    snapshot, rows = extract_page(html, levels)
+                except ChartError as err:
+                    print(f"{sha[:8]} {cdate}: {err}", file=sys.stderr)
+                    continue
+                yield sha, cdate, snapshot, rows
+
+        for (sha, cdate, snapshot, rows), repeat in tag_repeats(parsed()):
             nat = [r for r in rows if r[0] == "national"]
             print(
                 f"{sha[:8]} {cdate[:10]} data {snapshot} units {len({(r[0], r[1]) for r in rows})}"
                 f" national observed {sum(r[3] for r in nat)} imputed {sum(r[4] for r in nat)}"
-                + ("" if digest != previous else "  (same as previous, dropped)"),
+                + ("  (same as previous, dropped)" if repeat else ""),
                 file=sys.stderr,
             )
-            if digest == previous:
-                continue
-            previous = digest
-            snapshots.append((sha, cdate, snapshot, rows))
+            if not repeat:
+                snapshots.append((sha, cdate, snapshot, rows))
 
     order = {l: i for i, l in enumerate(LEVELS)}
     outputs = [(args.out, ("national", "province")), (args.zones_out, ("zone",))]

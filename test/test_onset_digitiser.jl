@@ -272,14 +272,9 @@ end
 
     ## The port is the script the automated data-updater runs, so a drift in
     ## it rewrites committed rows without anyone reading Julia output. The
-    ## check has to go through the real figures. A synthetic chart cannot
-    ## substitute: the daily bar height is a 75th percentile over a window
-    ## of four or five columns, which is deliberately robust to losing one
-    ## column at the edge, so on flat drawn bars the two implementations
-    ## agree even when their windows differ. Only the partial-height
-    ## columns that JPEG anti-aliasing leaves on a real bar edge make the
-    ## percentile move, which is why the divergence showed up on SitRep 106
-    ## and not on any drawn figure.
+    ## check goes through the real figures because the outline reader's
+    ## pixel classes, outline segmentation and rounding only get exercised
+    ## by JPEG renders, not by a drawn chart.
     root = pkgdir(BVDOutbreakSize)
     pdf_dir = joinpath(root, "data", "sitrep_pdfs")
     runner = _python_runner()
@@ -298,5 +293,29 @@ end
         )
         committed = joinpath(root, "data", "onset_curve_scanned.csv")
         @test read(out, String) == read(committed, String)
+    end
+end
+
+@testitem "the onset Python scripts pass their self-tests" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+
+    ## compare_onset_sources.py gates a non-zero exit and
+    ## extract_dashboard_onsets.py parses the dashboard SVGs; each carries
+    ## a `--self-test` over its pure functions on synthetic inputs. They
+    ## need `uv` for their PEP 723 metadata.
+    root = pkgdir(BVDOutbreakSize)
+    if Sys.which("uv") === nothing
+        @info "Python self-tests skipped: uv not on PATH"
+        @test true
+    else
+        for name in ("compare_onset_sources.py", "extract_dashboard_onsets.py")
+            script = joinpath(root, "scripts", name)
+            @test success(
+                pipeline(
+                    `uv run --no-project $script --self-test`;
+                    stdout = devnull, stderr = devnull
+                )
+            )
+        end
     end
 end
