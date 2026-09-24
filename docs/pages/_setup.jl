@@ -1,13 +1,14 @@
 # Shared setup for the report pages. This is plain Julia (not a Literate
 # page): every page under `docs/pages/` includes it so each page can render
 # on its own from the same fitted chains. It loads
-# the packages, the observations, the fit registry (`docs/fits/registry.jl`)
-# and every model fit through the content-addressed cache (`fit_or_load`),
-# then unpacks the named chains, cumulative-infection draws and display
-# labels the pages share. In CI the fits are pre-populated by the per-fit
-# matrix and loaded here; locally a missing fit is computed and cached on
-# first use.
+# the packages, the observations and the fit registry (`docs/fits/registry.jl`),
+# and defines the accessors the pages read fits and prior draws through
+# (`load_fit`, `joint_prior_draws`). Each fit is loaded through the
+# content-addressed cache (`fit_or_load`) the first time a page asks for it.
+# In CI the fits are pre-populated by the per-fit matrix; locally a missing
+# fit is computed and cached on first use.
 
+_setup_t0 = time()
 using Turing
 using Distributions
 using StatsFuns: logistic
@@ -15,6 +16,7 @@ using DataFrames: DataFrame, eachrow
 import CSV
 using Random
 using Markdown
+using Logging: SimpleLogger, with_logger
 using Dates: Date, Day, value
 using BVDOutbreakSize
 import CairoMakie
@@ -45,6 +47,36 @@ Random.seed!(20260518)
 ## imports above are idempotent, so they stay outside the guard.
 if !@isdefined(_BVD_SETUP_LOADED)
     _BVD_SETUP_LOADED = true
+
+    ## Timing lines for the render. Literate captures a page's stderr and
+    ## logs and drops them from the job log, so when `docs/execute.jl` points
+    ## `BVD_RENDER_LOG` at a file the lines go there and are printed after
+    ## the page. Otherwise (`scripts/run.jl`) they are logged.
+    _render_log_path() = strip(get(ENV, "BVD_RENDER_LOG", ""))
+    function _render_log(line)
+        path = _render_log_path()
+        isempty(path) && return @info line
+        open(io -> println(io, line), path, "a")
+        return nothing
+    end
+    _since(t0) = "$(round(time() - t0; digits = 1)) s"
+    ## Run `f()` and log how long `what` took. Under `BVD_RENDER_LOG`,
+    ## anything `f` writes to stderr (the fit cache hits) goes to the file
+    ## too.
+    function _timed(f, what)
+        t0 = time()
+        path = _render_log_path()
+        result = if isempty(path)
+            f()
+        else
+            open(path, "a") do io
+                with_logger(() -> redirect_stderr(f, io), SimpleLogger(io))
+            end
+        end
+        _render_log("$what: $(_since(t0))")
+        return result
+    end
+    _render_log("setup packages loaded: $(_since(_setup_t0))")
 
     ## Observations and grid-date helpers shared by both pages.
     obs = load_observations()
@@ -144,12 +176,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## Every fit is loaded through the content-addressed cache (`fit_or_load`):
     ## reused when a fit with the same model source, data and settings already
-    ## exists — produced once by the per-fit CI matrix (`.github/workflows/
-    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set
-    ## `BVD_REFIT=all` to force a full refit. The loads still run through
-    ## `fit_parallel`, so on a cold cache the joint overlaps the per-stream,
-    ## frozen and (gated) sensitivity re-fits and keeps all cores busy; on a
-    ## warm cache they deserialise in parallel.
+    ## exists — produced once by the `fit_*` jobs in
+    ## `.github/workflows/docs.yml` or on the HPC — and refitted otherwise. Set
+    ## `BVD_REFIT=all` to force a full refit. Each fit is loaded on first use
+    ## (`load_fit`), so a cold cache fits one at a time; `task fit-all` runs
+    ## the whole registry in parallel first.
     ## Resolve the cache dir against the package root, never the working
     ## directory: Literate executes the page with the cwd changed to docs/src,
     ## so a relative `BVD_FIT_CACHE` (as CI passes) would point at
@@ -182,18 +213,30 @@ if !@isdefined(_BVD_SETUP_LOADED)
         validation_cutoff = validation_cutoff,
         run_sensitivity = RUN_SENSITIVITY
     )
-    _fit_results = fit_parallel(
-        [
-            () -> fit_or_load(
-                fit_key(s.id), s.thunk;
+    _fit_spec_by_id = Dict(s.id => s for s in _fit_specs)
+    _loaded_fits = Dict{String, Any}()
+    ## Fit `id` from the registry, loaded on first use and kept for the
+    ## session, so a page loads only the fits it reads and `scripts/run.jl`
+    ## loads each one once across every page.
+    function load_fit(id::AbstractString)
+        haskey(_loaded_fits, id) && return _loaded_fits[id]
+        spec = get(_fit_spec_by_id, id, nothing)
+        spec === nothing && error(
+            "no fit \"$id\" in the registry for this build; known ids: " *
+                join(sort(collect(keys(_fit_spec_by_id))), ", ")
+        )
+        result = _timed("fit $id") do
+            fit_or_load(
+                fit_key(id), spec.thunk;
                 cache_dir = _fit_cache_dir,
                 refit = _refit_all,
                 strict = _strict
             )
-                for s in _fit_specs
-        ]
-    )
-    _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
+        end
+        _loaded_fits[id] = result
+        return result
+    end
+
     ## The model each fit sampled, rebuilt to forecast from it.
     _fit_models = Dict(s.id => s.model for s in _fit_specs if haskey(s, :model))
 
@@ -206,7 +249,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## per page and shared by every forecast the page reads from that fit.
     function fit_forecast(id::AbstractString)
         return get!(_forecast_cache, id) do
-            r = _fits[id]
+            r = load_fit(id)
             chn = r isa NamedTuple ? r.chn : r
             forecast_draws(_fit_models[id](), chn; horizon = FORECAST_HORIZON)
         end
@@ -214,11 +257,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## Draws from the joint prior, with every observation withheld. The
     ## in-sample page shows them as the prior predictive check; the national
-    ## page overlays them on each posterior. Drawn here, at one point in the
-    ## shared setup, so every page overlays the same draws rather than a
-    ## different stream from the same seed.
-    prior_chn = let
-        breakpoint = obs.n - obs.who_first_sitrep_days
+    ## page overlays them on each posterior. The draw is kept after the first
+    ## call and takes its own seeded generator, so both pages, and
+    ## `scripts/run.jl`, overlay the same draws.
+    _joint_prior_cache = Ref{Any}(nothing)
+    function joint_prior_draws()
+        cached = _joint_prior_cache[]
+        cached !== nothing && return cached
         m = bvd_joint(
             obs.n, missing, missing, missing, missing, missing;
             deaths_history = (; days = Int[], counts = Int[]),
@@ -226,45 +271,36 @@ if !@isdefined(_BVD_SETUP_LOADED)
             confirmed_history = (; days = Int[], counts = Int[]),
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
-            breakpoint = breakpoint,
+            breakpoint = obs.n - obs.who_first_sitrep_days,
             background_pooling = background_pooling_model,
             genetic = genetic_seeding_model,
             tmrca_days = obs.tmrca_days
         )
-        sample(m, Prior(), 2_000; progress = false)
+        chn = _timed("joint prior draws") do
+            sample(Xoshiro(20260518), m, Prior(), 2_000; progress = false)
+        end
+        _joint_prior_cache[] = chn
+        return chn
     end
 
-    ## The headline joint is the patch (meta-population) model, run over the
-    ## three affected provinces. With `n_patches = 1` the same model collapses
-    ## exactly onto the single-population one, so there is one model, not two;
-    ## `sens_no_patches` is that degenerate case, fitted as the sensitivity
-    ## check on the spatial structure.
-    chn_joint = _fits["joint"]
-    chn_no_patches = _fits["sens_no_patches"]
-    chn_exports = _fits["exports"]
-    chn_deaths = _fits["deaths"]
-    chn_cases = _fits["cases"]
-    chn_confirmed = _fits["confirmed"]
-    chn_confirmed_deaths = _fits["confirmed_deaths"]
-    chn_treatment = _fits["treatment"]
-    chn_onsets = _fits["onsets"]
-    frozen_lastweek = _fits["frozen_validation"]
-    ## One frozen individual fit per stream at the same cut-off as
-    ## `frozen_lastweek`, so the forecast validation section can show each
-    ## stream's own model alongside the frozen joint. Keyed by the same
-    ## `fit` ids the current-data individual fits use (`chn_cases`, …), so
-    ## the two dicts read the same way.
-    ## Only the still-reported streams are fitted, so a stream that has
-    ## stopped is simply absent here rather than present and filtered out
-    ## later (see `validation_stream_ids`).
-    frozen_lastweek_streams = Dict(
-        sid => _fits["frozen_validation_$sid"]
+    ## One frozen individual fit per stream at the validation cut-off, so the
+    ## forecast validation can show each stream's own model alongside the
+    ## frozen joint (`frozen_validation`). Keyed by the same ids the
+    ## current-data individual fits use. Only the still-reported streams are
+    ## fitted, so a stream that has stopped is absent rather than filtered
+    ## out later (see `validation_stream_ids`).
+    frozen_validation_stream_fits() = Dict(
+        sid => load_fit("frozen_validation_$sid")
             for sid in validation_stream_ids(obs)
     )
-    frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
-    frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
-    frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
-    frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+    ## The frozen joint fits keyed by cut-off: the McCabe-matched
+    ## `frozen_cutoffs` and Chamla's anchor. A new Dict on each call, since
+    ## a page may add its own entries.
+    function frozen_fits_by_cutoff()
+        fits = Dict(c => load_fit("frozen_$c") for c in frozen_cutoffs)
+        fits[chamla_cutoff] = load_fit("frozen_$chamla_cutoff")
+        return fits
+    end
     ## Basic reproduction number draws from a chain that walks its own
     ## renewal process, `exp` of the walk's log base `rt_state.log_R0`, the
     ## walk's starting value and a distinct quantity from the growth-clock
@@ -277,13 +313,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
         catch
             nothing
         end
-    end
-    ## Every frozen fit is a full joint fit, so it carries the same walk base
-    ## chn_joint does.
-    frozen_R0(c) = r0_walk_draws(frozen_by_cutoff[c].chn)
-    if RUN_SENSITIVITY
-        chn_joint_community_delay = _fits["sens_community_delay"]
-        chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
     end
 
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
@@ -303,9 +332,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_lab_daily_history
     )
 
-    ## Draws from the four-patch prior for the province pages. The shared
-    ## `prior_chn` is single-population and carries no province quantities.
-    ## Every observation is withheld as in `prior_chn`, but the province
+    ## Draws from the four-patch prior for the province pages. The
+    ## `joint_prior_draws` are single-population and carry no province
+    ## quantities. Every observation is withheld as there, but the province
     ## compositions are passed their observed counts: `Prior()` leaves them out
     ## of the density, so they only fix each vintage's total, and with
     ## `missing` an extreme prior draw can push that total past the integer
@@ -335,7 +364,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
             province_death_increments = province_deaths.increments,
             province_death_days = province_deaths.days
         )
-        chn = sample(Xoshiro(20260518), m, Prior(), 1_000; progress = false)
+        chn = _timed("patch prior draws") do
+            sample(Xoshiro(20260518), m, Prior(), 1_000; progress = false)
+        end
         _patch_prior_cache[] = (obs, chn)
         return chn
     end
@@ -356,6 +387,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         ## (only the cut-off scalars are set to `missing`) to keep the
         ## generator's latent dimensions identical to the fitted chain.
         _days_only(h) = (; days = h.days, counts = Int[])
+        chn_joint = load_fit("joint")
+        t0 = time()
         pp = predict(
             bvd_joint(
                 obs.n, missing, missing, missing, missing, missing, missing;
@@ -443,20 +476,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
             ),
             chn_joint
         )
+        _render_log("joint posterior predictive: $(_since(t0))")
         _joint_pp_cache[] = pp
         return pp
     end
-    posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
-
-    posterior_C_joint = vec(Array(chn_joint[:C_T]))
-    posterior_C_exports = vec(Array(chn_exports[:C_T]))
-    posterior_C_deaths = vec(Array(chn_deaths[:C_T]))
-    posterior_C_cases = vec(Array(chn_cases[:C_T]))
-    posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
-    posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]))
-    posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
-    posterior_C_onsets = vec(Array(chn_onsets[:C_T]))
-
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
     ## nested submodels stay distinct; this map only relabels them for display.
@@ -509,6 +532,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
             _onset_grid_start
         )
 
+    _render_log("setup done: $(_since(_setup_t0))")
+
     ## Cross-release score tables written by `scripts/score_releases.jl`.
     ## The committed files are header-only until a release carries the asset,
     ## so the common path reads a real file to a zero-row frame; the typed
@@ -529,7 +554,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## model is rebuilt from its own frozen observations, so the onset
     ## forecast runs on the triangle the frozen fit was fitted to.
     function validation_forecast_from(id::AbstractString)
-        o = _fits[id].o
+        o = load_fit(id).o
         return forecast_reported(
             fit_forecast(id);
             horizon = 7,

@@ -6,10 +6,42 @@
 #md # <details><summary>Load packages, data and fitted chains</summary>
 #md # ```
 
-## Shared setup: packages, observations, the fit registry and every model fit
-## (loaded from the content-addressed cache). See docs/pages/_setup.jl.
+## Shared setup: packages, observations and the fit registry. See
+## docs/pages/_setup.jl.
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
+#-
+## The fits this page reads, loaded from the cache here.
+## The headline joint is the patch (meta-population) model over the
+## provinces. `sens_no_patches` is the same model with `n_patches = 1`,
+## fitted as the check on the spatial structure.
+chn_joint = load_fit("joint")
+chn_no_patches = load_fit("sens_no_patches")
+chn_exports = load_fit("exports")
+chn_deaths = load_fit("deaths")
+chn_cases = load_fit("cases")
+chn_confirmed = load_fit("confirmed")
+chn_confirmed_deaths = load_fit("confirmed_deaths")
+chn_treatment = load_fit("treatment")
+chn_onsets = load_fit("onsets")
+frozen_lastweek = load_fit("frozen_validation")
+frozen_by_cutoff = frozen_fits_by_cutoff()
+frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+## Every frozen fit is a full joint fit, so it carries the same walk base
+## chn_joint does.
+frozen_R0(c) = r0_walk_draws(frozen_by_cutoff[c].chn)
+if RUN_SENSITIVITY
+    chn_joint_community_delay = load_fit("sens_community_delay")
+    chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
+end
+posterior_C_joint = vec(Array(chn_joint[:C_T]))
+posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
+posterior_C_exports = vec(Array(chn_exports[:C_T]))
+posterior_C_deaths = vec(Array(chn_deaths[:C_T]))
+posterior_C_cases = vec(Array(chn_cases[:C_T]))
+posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
+posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
+posterior_C_onsets = vec(Array(chn_onsets[:C_T]));
 
 #md # ```@raw html
 #md # </details>
