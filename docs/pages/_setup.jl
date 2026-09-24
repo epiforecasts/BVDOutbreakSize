@@ -522,8 +522,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## The symptom-onset triangle's own grid, derived from the observations
     ## exactly as `onset_reporting_model` derives it, since it is data rather
-    ## than chain contents. The national page's reporting-delay section and
-    ## the forecast page's nowcast both read it.
+    ## than chain contents. The national page's reporting-delay section, the
+    ## in-sample page's snapshot nowcasts and the forecast page's nowcast
+    ## read it.
     _onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
         minimum(obs.onset_curve_history.onset_days)
     _onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
@@ -532,6 +533,62 @@ if !@isdefined(_BVD_SETUP_LOADED)
             maximum(obs.onset_curve_history.report_days),
             _onset_grid_start
         )
+
+    ## The digitised onset snapshots up to the cut-off and, for each onset
+    ## date they cover, the latest printed count and the report day it came
+    ## from. The fitted stream holds only the corrections between snapshots,
+    ## so the printed levels are read from the source blocks. A date inside a
+    ## snapshot's printed extent but with no row is a zero-height bar. A date
+    ## outside it is not covered by that snapshot.
+    function onset_snapshot_readings()
+        path = joinpath(
+            pkgdir(BVDOutbreakSize), "data", "onset_curve_scanned.csv"
+        )
+        snaps = filter(
+            b -> b.report_date <= obs.cutoff,
+            BVDOutbreakSize._dedup_onset_blocks(
+                BVDOutbreakSize._read_onset_curve_blocks(path)
+            )
+        )
+        last_printed = Dict{Int, Float64}()
+        last_report_day = Dict{Int, Int}()
+        for snap in snaps
+            lo, hi = extrema(keys(snap.onsets))
+            R = obs.n - value(obs.cutoff - snap.report_date)
+            for d in lo:Day(1):hi
+                u = obs.n - value(obs.cutoff - d)
+                (1 <= u <= obs.n) || continue
+                last_printed[u] = Float64(get(snap.onsets, d, 0))
+                last_report_day[u] = R
+            end
+        end
+        return (; snaps, last_printed, last_report_day)
+    end
+
+    ## Daily modelled onsets per posterior draw, differenced from the
+    ## cumulative onsets the chain stores.
+    onset_daily_draws(chn) = [
+        vcat(v[1], diff(v)) for v in vec(collect(chn[:cumulative_onsets]))
+    ]
+
+    ## A function giving posterior predictive draws of one digitised bar
+    ## from per-draw modelled counts, through the onset stream's
+    ## measurement error for a single read (`onset_report_scale`'s level
+    ## case). Four replicates per draw keep the 90% band edge from being
+    ## ragged with Monte Carlo error.
+    function onset_bar_replicator(chn, rng)
+        σ_mult = vec(collect(chn[Symbol("onset_report_state.σ_mult")]))
+        σ_scan = vec(collect(chn[Symbol("onset_report_state.σ_scan")]))
+        return draws -> [
+            begin
+                μ = draws[i]
+                σ = σ_mult[i] *
+                    onset_report_scale(μ, μ, 0.0, 1; scan_sd = σ_scan[i])
+                μ + σ * rand(rng, TDist(4.0))
+            end
+                for _ in 1:4 for i in eachindex(draws)
+        ]
+    end
 
     _render_log("setup done: $(_since(_setup_t0))")
 
