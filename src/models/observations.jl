@@ -4051,7 +4051,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             size(modelled_confirmed, 1)
         ),
         testing_coefficient_prior = Normal(0, 0.5),
-        basis::AbstractMatrix = sum_to_zero_basis(size(modelled_confirmed, 1))
+        basis = sum_to_zero_basis(size(modelled_confirmed, 1))
     )
     np, nv = size(modelled_confirmed)
     ismissing(obs_increments) || size(obs_increments) == (np, nv) || error(

@@ -322,8 +322,7 @@ end
 @testitem "sum-to-zero sites: deviations follow the basis passed in" setup = [
     SumToZeroReference,
 ] begin
-    using BVDOutbreakSize: patch_rt_model, patch_infection_model,
-        province_composition_model
+    using BVDOutbreakSize: patch_rt_model, province_composition_model
     using Turing.DynamicPPL: OnlyAccsVarInfo, RawValueAccumulator,
         InitFromPrior, UnlinkAll, init!!, get_raw_values, @varname
 
@@ -375,9 +374,9 @@ end
                 ),
                 (
                     rotated(Q),
-                    patch_infection_model(
-                        n, np; rt_start = 10, region_correlation = corr,
-                        basis = rotated(Q)
+                    patch_rt_model(
+                        n, np, log(1.5); rt_start = 10,
+                        region_correlation = corr, basis = rotated(Q)
                     ),
                 ),
             )
