@@ -76,30 +76,48 @@ Future observations of the isolation and treatment flows, from a fitted
 [`treatment_flow_model`](@ref) state run past the cut-off. Each is drawn
 through the likelihood the fitted days are scored with. The occupancy is
 the censored negative binomial around the modelled demand plus the
-reclassification offset, capped at the recorded capacity
-([`censoring_cap`](@ref)). Admissions are censored at the free-bed headroom
-the last recorded occupancy leaves ([`admission_headroom`](@ref)). In-care
+reclassification offset. Its cap is the modelled bed capacity, which the
+capacity walk carries past the cut-off, floored at the last fitted cap
+([`censoring_cap`](@ref)). Admissions are censored at the free-bed headroom,
+that cap less the previous day's occupancy: the last recorded occupancy on
+the first day, then the drawn one ([`admission_headroom`](@ref)). In-care
 deaths and rule-outs are daily negative binomials. The latent bed demand and
-capacity are tracked alongside.
+capacity are tracked alongside. With no recorded capacity or occupancy the
+fitted days are uncensored, and so are the future ones.
 """
 @model function treatment_forecast_model(
         state, fd, capacity_history, isolation_history, k
     )
+    nocap = 1.0e6
+    have_cap = !isempty(capacity_history.counts)
+    have_occ = !isempty(isolation_history.counts)
+    last_cap = have_occ ?
+        only(
+            censoring_cap(
+                isolation_history.days[end:end],
+                isolation_history.counts[end:end], capacity_history
+            )
+        ) : 0.0
+    ceilings = have_cap ?
+        [max(float(c), last_cap) for c in state.C[fd]] :
+        fill(nocap, length(fd))
     occupancy = state.occupancy_mean[fd]
     forecast_isolation ~ to_submodel(
-        censored_occupancy_model(
-            occupancy, censoring_cap(fd, missing, capacity_history),
-            missing, k
-        )
+        censored_occupancy_model(occupancy, ceilings, missing, k)
     )
+    occ = forecast_isolation.obs
+    head = if have_cap && have_occ
+        prev = vcat(
+            float(isolation_history.counts[end]),
+            [float(occ[j]) for j in 1:(length(fd) - 1)]
+        )
+        max.(ceilings .- prev, 0.5)
+    else
+        fill(nocap, length(fd))
+    end
     admissions = state.admit_daily[fd]
     forecast_admissions ~ to_submodel(
-        censored_occupancy_model(
-            admissions,
-            admission_headroom(
-                fd, missing, capacity_history, isolation_history
-            ), missing, k
-        )
+        censored_occupancy_model(admissions, head, missing, k)
     )
     forecast_incare_deaths ~ to_submodel(
         _forecast_counts(state.deaths_daily, fd, k)
@@ -508,6 +526,7 @@ level (see [`forecast_stream`](@ref)).
             ), false
         )
     end
+    return (; onsets = latent.onsets, onset_report_state)
 end
 
 """

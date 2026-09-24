@@ -2602,9 +2602,8 @@ series for forecasting and replication.
     bed_demand_T = safe_rate(dem_T)
     expected_isolation := isolation_T
     expected_bed_demand := bed_demand_T
-    ## Cut-off daily flows: the end-of-grid value of each modelled daily
-    ## series, the one-week-ahead forecast base for admissions, in-care
-    ## deaths and rule-outs.
+    ## Cut-off daily flows: each modelled daily series on the cut-off day,
+    ## for admissions, in-care deaths and rule-outs.
     admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[nc])
     incare_deaths_T = safe_rate(
         isempty(deaths_daily) ? z0 :
@@ -3370,8 +3369,8 @@ Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
 increment mean `μ` between two modelled cumulative levels `level_cur`
 and `level_prev` read off `reads` bars (`1` for a level differenced
 against an empty predecessor, `2` for a genuine correction). The vector
-method calls this, so the two cannot drift apart. The forecast
-([`forecast_onsets`](@ref)) calls it directly to give a projected
+method calls this, so the two cannot drift apart. The onset forecast
+([`onset_forecast_model`](@ref)) calls it directly to give a future
 reporting increment the same observation scale the likelihood gives a
 scored cell. See [`onset_report_scales`](@ref) for what each term means.
 """

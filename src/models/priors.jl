@@ -691,6 +691,10 @@ spacing. A single national capacity cannot represent local saturation, one
 province full while another has slack. Pass
 `baseline_prior` / `innovation_prior` to override. Returns
 `(; C, C0, σ_cap)` with `C` a length-`n` vector.
+
+With a `cutoff` before the grid end the fitted knots end at `cutoff` and
+the walk continues past it on knots a week apart, with future steps drawn
+at the same scale.
 """
 @model function bed_capacity_walk_model(
         n::Integer; start::Integer = 1,
@@ -701,8 +705,8 @@ province full while another has slack. Pass
     )
     C0 ~ baseline_prior
     σ_cap ~ innovation_prior
-    ## The knots end at the cut-off. A grid running past it holds the
-    ## capacity at its cut-off value.
+    ## The fitted knots end at the cut-off. A grid running past it continues
+    ## the walk on future knots a week apart with steps `steps_future`.
     nc = something(cutoff, n)
     s = clamp(Int(start), 1, nc)
     days = knot_days(nc; week = week, start = s)
@@ -722,6 +726,17 @@ province full while another has slack. Pass
         )
     )
     log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
+    if cutoff !== nothing && n > nc
+        fdays = future_knot_days(nc, n - nc; week)
+        steps_future ~ product_distribution(
+            fill(
+                truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
+                length(fdays)
+            )
+        )
+        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(steps_future))
+        days = vcat(days, fdays)
+    end
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
@@ -848,6 +863,10 @@ suspected-case data support. Pass `baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
+
+With a `cutoff` before the grid end the fitted knots end at `cutoff` and
+the walk continues past it on knots a week apart, with future steps drawn
+at the same scale.
 """
 @model function background_walk_model(
         n::Integer, σ_rw::Real;
@@ -856,8 +875,9 @@ before `onset`).
         centred::Bool = true,
         cutoff::Union{Nothing, Integer} = nothing
     )
-    ## The knots end at the cut-off. A grid running past it holds the
-    ## background at its cut-off value.
+    ## The fitted knots end at the cut-off. A grid running past it continues
+    ## the walk on future knots a week apart, with steps `steps_future` (or
+    ## `z_future` when non-centred).
     nc = something(cutoff, n)
     t0 = clamp(Int(onset), 1, nc)
     nw = n - t0 + 1
@@ -884,6 +904,21 @@ before `onset`).
     ## baseline, anchored there on the first knot. Interpolated to daily so a
     ## death background scaled from it is smooth.
     log_knots = vcat(zero(σ_rw), cumsum(walk_steps))
+    if cutoff !== nothing && n > nc
+        fdays = future_knot_days(nc, n - nc; week)
+        nf = length(fdays)
+        if centred
+            steps_future ~ product_distribution(
+                fill(Normal(0, σ_rw + eps(typeof(float(σ_rw)))), nf)
+            )
+            future_steps = steps_future
+        else
+            z_future ~ product_distribution(fill(Normal(0, 1), nf))
+            future_steps = σ_rw .* z_future
+        end
+        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(future_steps))
+        days = vcat(days, fdays)
+    end
     walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
     ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the
