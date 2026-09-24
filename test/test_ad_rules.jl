@@ -672,7 +672,7 @@ end
     )
 end
 
-@testitem "AD rules: the onset, census and composition rules fire at the joint's call signatures" tags = [
+@testitem "AD rules: onset, census and composition rules fire in the joint" tags = [
     :ad,
 ] begin
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
