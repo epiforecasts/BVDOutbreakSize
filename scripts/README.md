@@ -31,6 +31,12 @@ Run it with `uv run scripts/digitize_onset_curve.py`, which fetches Pillow and n
 Both need poppler's `pdfimages`, `pdftotext` and `pdfinfo` on `PATH` (`apt install poppler-utils`, or `brew install poppler`).
 Download the PDFs first with `download_sitreps.jl`.
 
+`audit_onset_curve.jl` audits the digitised file against the figures it came from.
+It writes `data/onset_curve_figures.csv`, one row per vintage with the figure's page, image size and md5, the pixel scales the digitiser calibrated, the n printed in the figure title, the digitised total, the gap between the two and the earlier vintage it reprints.
+It also writes `output/onset_curve_audit.md` with the gap table, the settled-bar checks between consecutive snapshots (bars that fell, net change and the L1 distance at day shifts of up to two) and the worst vintages by gap and by settled-bar distance.
+The printed n is part of the raster, not the PDF text layer, so it is read with tesseract from the title strip of the embedded image and checked against the source line.
+Run it with `task onset-audit` or `julia scripts/audit_onset_curve.jl`.
+
 ## Publishing the results (`--project=docs`)
 
 | Script | What it does |
