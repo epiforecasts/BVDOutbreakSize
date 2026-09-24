@@ -16,10 +16,10 @@ so `predict` on it with the fitted chain keeps each draw's parameters and
 draws the future (see [`ForecastHorizon`](@ref)). Any conditioning or fixing
 on `model` is kept.
 """
-function with_horizon(model::DynamicPPL.Model, horizon::Integer)
+function with_horizon(model::Model, horizon::Integer)
     forecast = horizon > 0 ? ForecastHorizon(horizon) : nothing
     extended = model.f(values(model.args)...; model.defaults..., forecast)
-    return DynamicPPL.contextualize(extended, model.context)
+    return contextualize(extended, model.context)
 end
 
 """
@@ -36,7 +36,7 @@ horizon up to `horizon`. `seed` fixes the draws, so the national and the
 province forecasts read one set of draws.
 """
 function forecast_draws(
-        model::DynamicPPL.Model, chn; horizon::Integer = 28,
+        model::Model, chn; horizon::Integer = 28,
         seed::Integer = 20260520
     )
     return predict(MersenneTwister(seed), with_horizon(model, horizon), chn)

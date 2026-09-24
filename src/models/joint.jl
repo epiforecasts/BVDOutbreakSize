@@ -735,16 +735,20 @@ end
     ## summed infections, as `R_T` is at the cut-off.
     if forecast !== nothing
         fd = forecast_days(n, forecast)
-        infections_total = patch_state.infections_total
-        forecast_infections := infections_total[fd]
+        forecast_infections := patch_state.infections_total[fd]
         forecast_onsets := onsets_total[fd]
-        forecast_rt := [
-            implied_national_Rt_at(infections_total, patch_state.g, t)
-                for t in fd
-        ]
+        forecast_rt := _implied_rt_path(
+            patch_state.infections_total, patch_state.g, fd
+        )
     end
     return (; patch_state, onsets_total)
 end
+
+## The implied national reproduction number on each forecast day. A function
+## rather than a comprehension in the model body, which would capture
+## model-scope locals and box them.
+_implied_rt_path(infections, g, days) =
+    [implied_national_Rt_at(infections, g, t) for t in days]
 
 """
 Modelled per-province confirmed-death increments, binned to the vintages

@@ -12,9 +12,8 @@ using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
     predict, returned
-using Turing: DynamicPPL
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-    VarInfo, getlogjoint
+    Model, VarInfo, contextualize, getlogjoint, init!!
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,

@@ -2255,7 +2255,7 @@ onset dates), one vector per draw, as the composers return them. The
 model is the one the chain was fitted with, such as a fit spec's `model()`
 in the report.
 """
-function fitted_onset_hazard(model::DynamicPPL.Model, chn)
+function fitted_onset_hazard(model::Model, chn)
     states = [r.onset_report_state for r in vec(returned(model, chn))]
     return (;
         logit_h0 = [collect(Float64, st.logit_h0) for st in states],
@@ -3259,7 +3259,7 @@ function _composition_counts(ms, rho, totals; seed::Integer = 20_240)
             missing, m, [max(Int(t), 0) for t in totals[d]], rho[d]
         )
         x = first(
-            DynamicPPL.init!!(rng, split, VarInfo(), InitFromPrior())
+            init!!(rng, split, VarInfo(), InitFromPrior())
         ).obs_increments
         for p in 1:np, i in 1:nv
             out[p][d][i] = x[p, i]
