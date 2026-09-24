@@ -33,7 +33,7 @@ _at(v, i) = i <= length(v) ? _diag_value(v[i]) : NaN
 
 # Split a diagnostic name into its parameter and its element index. A
 # vector-valued parameter is summarised as one indexed scalar per element,
-# so the index arrives inside the name (`rt_state.log_R[13]`). A multi-index
+# so the index arrives inside the name (`rt_state.z[13]`). A multi-index
 # name keeps its first index, which is the axis the elements run along.
 function _split_index(name::AbstractString)
     m = match(r"^(.*)\[([0-9]+(?:\s*,\s*[0-9]+)*)\]$", name)
