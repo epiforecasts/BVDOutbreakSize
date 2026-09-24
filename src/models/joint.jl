@@ -1288,9 +1288,11 @@ density there, is the fitted model's.
     ## The confirmed and laboratory compositions both carry the patch
     ## onsets through the onset-to-confirmation kernel, once here.
     if !isempty(province_days) || !isempty(province_lab_days)
+        confirmed_kernel = convolve_pmf(
+            cases_state.report_pmf, confirmed_state.receipt_pmf
+        )
         confirmed_carried = _patch_carried(
-            patch_state.onsets_matrix,
-            convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+            patch_state.onsets_matrix, confirmed_kernel
         )
     end
 
@@ -1687,8 +1689,7 @@ density there, is the fitted model's.
         edges = vcat(n, vintages)
         if !isempty(province_days)
             province_future = _patch_confirmed_increments(
-                patch_state.onsets_matrix, confirmed_kernel,
-                confirmed_state.s_test, edges
+                confirmed_carried, confirmed_state.s_test, edges
             )[:, 2:end]
             forecast_province_split ~ to_submodel(
                 composition_split_model(
