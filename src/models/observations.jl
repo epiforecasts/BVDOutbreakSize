@@ -3690,11 +3690,6 @@ calendar effect and an ascertainment level the fit has no estimate for.
 edge (see [`onset_report_G`](@ref)), so no separate extrapolated form is
 needed here.
 
-An onset date at least `D - 1` days before `as_of` has all its reports in,
-so its share `G` is one and its delay column is not built. Built from
-the full column, that share differs from one only when the column's total
-report probability sits on the `safe_rate` floor.
-
 Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
 in range. An empty delay support (`D = 0`) gives zero. Pure, top-level,
@@ -3712,17 +3707,13 @@ function onset_report_expected_total(
     D == 0 && return zero(T)
     t = Int(as_of)
     ge = max(min(t, length(onsets)), 0)
-    ## Columns for the unsettled dates `u0:ge` only.
-    u0 = max(t - D + 2, 1)
-    S = Matrix{T}(undef, D, max(ge - u0 + 1, 0))
-    _onset_columns!(nothing, S, logit_h0, γ, grid_start, u0)
+    S = Matrix{T}(undef, D, ge)
+    _onset_columns!(nothing, S, logit_h0, γ, grid_start, 1)
     na = length(alpha)
     total = zero(T)
     @inbounds for u in 1:ge
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
-        k = u - u0 + 1
-        share = k < 1 ? one(T) :
-            _onset_report_share(S[min(t - u, D - 1) + 1, k], S[D, k])
+        share = _onset_report_share(S[min(t - u, D - 1) + 1, u], S[D, u])
         total += onsets[u] * (α * share)
     end
     return total

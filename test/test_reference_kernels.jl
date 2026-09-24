@@ -6,7 +6,7 @@
     ADRuleCases,
 ] begin
     using BVDOutbreakSize: renewal_infections_with_force,
-        onset_report_expected_total, stick_breaking_loglik
+        onset_report_expected_total, onset_report_F, stick_breaking_loglik
     include(joinpath(@__DIR__, "reference_kernels.jl"))
 
     agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))
@@ -167,14 +167,19 @@
     @test isnan(ref_convolve_delay(x_inf, w_inf)[3])
     @test isequal(convolve_delay(x_inf, w_inf), [0.5, Inf, 1.5, Inf])
 
-    ## An empty delay support gives a zero total. With every hazard zero,
-    ## a date whose reports are all in counts in full, where the share off
-    ## the floored denominator would be zero, and the unsettled dates add
-    ## nothing.
+    ## An empty delay support gives a zero total. With hazards whose total
+    ## report probability sits on the `safe_rate` floor, the total is still
+    ## `Σ onsets[u] · F(u, as_of - u)`, settled dates included.
     @test onset_report_expected_total(o.onsets, Float64[], o.γ, 5, o.alpha, 45) ==
         0
-    lh0 = fill(-800.0, 12)
     α(u) = o.alpha[clamp(u - 5 + 1, 1, length(o.alpha))]
-    @test onset_report_expected_total(o.onsets, lh0, o.γ, 5, o.alpha, 45) ≈
-        sum(o.onsets[u] * α(u) for u in 1:34) rtol = 1.0e-12
+    for lh_floor in (fill(-40.0, 12), fill(-800.0, 12))
+        by_date = sum(
+            o.onsets[u] * onset_report_F(45 - u, lh_floor, o.γ, u, 5, α(u))
+                for u in 1:45
+        )
+        @test onset_report_expected_total(
+            o.onsets, lh_floor, o.γ, 5, o.alpha, 45
+        ) ≈ by_date rtol = 1.0e-12
+    end
 end
