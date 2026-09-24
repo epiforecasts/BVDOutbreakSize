@@ -2008,16 +2008,13 @@ end
     using Turing: logjoint, fix
     using Random: Xoshiro
 
-    ## Prior draws on the live observations, which have data shapes the
-    ## fixtures in test_forecast_horizon.jl do not.
+    ## Every draw of the sampled chain on the live observations, which have
+    ## data shapes the fixtures in test_forecast_horizon.jl do not.
     mh = with_horizon(patch_model, 28)
-    for seed in 1:3
-        θ0 = rand(Xoshiro(seed), patch_model)
-        θh = rand(Xoshiro(seed + 10), mh)
-        k0 = collect(keys(θ0))
-        fut = filter(k -> !(k in k0), collect(keys(θh)))
-        @test all(k -> occursin(r"future|forecast", string(k)), fut)
-        @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ==
-            logjoint(patch_model, θ0)
-    end
+    k0 = collect(keys(rand(Xoshiro(1), patch_model)))
+    θh = rand(Xoshiro(2), mh)
+    fut = filter(k -> !(k in k0), collect(keys(θh)))
+    @test all(k -> occursin(r"future|forecast", string(k)), fut)
+    @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), patch_chain) ==
+        logjoint(patch_model, patch_chain)
 end

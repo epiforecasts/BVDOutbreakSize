@@ -1000,18 +1000,15 @@ end
 
 ## --- Hazard reconstruction and the onset nowcast/forecast ---------------
 
-@testitem "reconstruct_onset_hazard rebuilds the total, round-trips alpha" begin
-    ## The reconstruction is exact rather than approximate: feeding it back
-    ## into `onset_report_expected_total` with the chain's own onset
-    ## trajectory must reproduce the `expected_onset_reported_T` the model
-    ## computed for that same draw. A wrong grid, a wrong knot count or a
-    ## mis-scaled walk all break this and nothing else in the report would.
-    ## `alpha` is read straight off the chain rather than reconstructed from
-    ## non-centred components, so this also checks it round-trips through
-    ## the same total.
-    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
+@testitem "fitted_onset_hazard reads the model's own hazard" begin
+    ## The hazard is the fitted model's own state at each draw, so feeding it
+    ## back into `onset_report_expected_total` with the chain's onset
+    ## trajectory reproduces the `expected_onset_reported_T` the model
+    ## tracked for that draw, and `alpha` is the tracked ascertainment.
+    using BVDOutbreakSize: onsets_only_model, fitted_onset_hazard,
         onset_report_expected_total
     using Turing: Prior, sample
+    import FlexiChains
 
     oc = (;
         onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
@@ -1020,50 +1017,27 @@ end
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
     n = 40
+    m = onsets_only_model(n; onset_curve_history = oc)
     chn = sample(
-        onsets_only_model(n; onset_curve_history = oc), Prior(),
-        20; progress = false
+        m, Prior(), 20; chain_type = FlexiChains.VNChain, progress = false
     )
-
     grid_start = minimum(oc.onset_days)
     grid_end = maximum(oc.report_days)
-    hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
+    hz = fitted_onset_hazard(m, chn)
     daily = [
         (v = collect(t); vcat(v[1], diff(v)))
             for t in vec(collect(chn[:cumulative_onsets]))
     ]
     et = vec(Array(chn[:expected_onset_reported_T]))
-
     @test length(hz.logit_h0) == 20
     @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
-    @test all(length(a) == grid_end - grid_start + 1 for a in hz.alpha)
+    @test hz.alpha == [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
     rebuilt = [
         onset_report_expected_total(
-            daily[i], hz.logit_h0[i],
-            hz.γ[i], grid_start, hz.alpha[i], n
+            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n
         ) for i in 1:20
     ]
-    @test all(isapprox.(rebuilt, et; rtol = 1.0e-8))
-end
-
-@testitem "reconstruct_onset_hazard rejects a grid it was not fitted on" begin
-    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard
-    using Turing: Prior, sample
-
-    oc = (;
-        onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
-        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0],
-    )
-    chn = sample(
-        onsets_only_model(40; onset_curve_history = oc), Prior(), 5;
-        progress = false
-    )
-    ## A grid four times as long needs more weekly knots than the chain has
-    ## innovations for, so this is an error rather than a silently short walk.
-    @test_throws ErrorException reconstruct_onset_hazard(
-        chn;
-        grid_start = 10, grid_end = 110
-    )
+    @test rebuilt ≈ et
 end
 
 @testitem "forecast_archive carries the onset reporting increment" begin

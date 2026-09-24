@@ -11,7 +11,7 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
-    predict
+    predict, returned
 using Turing: DynamicPPL
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     VarInfo, getlogjoint
@@ -94,7 +94,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_province_composition_ppc,
     plot_rhat_spread, plot_parameter_index_diagnostics,
     plot_divergence_locations, plot_diagnostic_contrast,
-    reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
+    reconstruct_rt, reconstruct_patch_rt, fitted_onset_hazard,
     onset_nowcast_draws, plot_onset_nowcast_grid,
     predict_no_onward_deaths, plot_no_onward_deaths,
     forecast_draws, forecast_reported, forecast_stream, forecast_table,

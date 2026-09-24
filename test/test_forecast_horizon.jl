@@ -159,6 +159,13 @@ end
             @test logjoint(fix_future(mh, d.θh, d.fut), d.θ0) ==
                 logjoint(m0, d.θ0)
         end
+        ## And at every draw of a sampled chain.
+        chn = sample(
+            Xoshiro(1), m0, Prior(), 4;
+            chain_type = FlexiChains.VNChain, progress = false
+        )
+        d = future_draws(m0, mh, Xoshiro(9))
+        @test logjoint(fix_future(mh, d.θh, d.fut), chn) == logjoint(m0, chn)
     end
 end
 

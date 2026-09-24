@@ -546,16 +546,10 @@ surveillance_pair_fig #hide
 ## `_onset_grid_end`, is a fixed function of the digitised triangle rather
 ## than chain contents, so the shared setup builds it once from
 ## `obs.onset_curve_history`.
-## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
-## (the report-date calendar walk), rebuilt from the non-centred
-## innovations the chain stores. `reconstruct_onset_hazard` is the package
-## function the onset forecast also uses, so the hazard plotted here and
-## the one projected forward are the same object rather than two copies of
-## the same reconstruction that could drift apart.
-_onset_hazard = reconstruct_onset_hazard(
-    chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end
-)
+## Every posterior draw's `logit_h0` (the baseline delay hazard), `γ` (the
+## report-date calendar walk) and ascertainment level, read off the fitted
+## model's own onset-reporting state at each draw.
+_onset_hazard = fitted_onset_hazard(_fit_models["joint"](), chn_joint)
 
 ## A representative onset day (the median scored onset date), so the 7-day
 ## fraction below reflects a typical, not an edge, calendar day.

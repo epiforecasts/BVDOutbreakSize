@@ -1981,11 +1981,15 @@ cfr_prior_fig #hide
 # For each posterior draw we keep the fitted parameters and draw the missing observations from the model.
 # The reproduction number continues its weekly walk with fresh innovations at its fitted step size, and the intervention ramp carries on.
 # The renewal, every delay and ascertainment, and each stream's own likelihood then produce the future counts, so the forecast carries parameter and observation uncertainty.
-# The walks for the non-BVD background and the bed capacity are held at their cut-off values.
+# The walks for the non-BVD background and the bed capacity continue the same way.
 # Up to the cut-off the model and its density are unchanged, so the forecast needs no refit.
+# The test positivity and the onset hazard's calendar effect and ascertainment are held at their last fitted values.
+# The model defines them only over the laboratory windows and the triangle's grid, and already holds them flat beyond those up to the cut-off.
+# Two smaller departures remain.
+# Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The bed occupancy is the censored count the occupancy likelihood scores, capped at the recorded capacity.
+# The bed occupancy is the censored count the occupancy likelihood scores, capped at the modelled capacity and no lower than the last recorded cap, and admissions are capped at the free beds that leaves.
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
