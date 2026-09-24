@@ -62,7 +62,7 @@ Changes since v2.1.0.
   An earlier date counts in full, which differs from the old value only where that date's total report probability sat on the `safe_rate` floor.
 - `incare_census` builds the treatment-flow model's confirmed and suspect in-care census, its abscond flow and its offset total in one pass, with its own rule (#856).
 - `discretise_censored` evaluates each delay-CDF endpoint once for Gamma, LogNormal and Weibull delays, through CensoredDistributions' analytical CDF, rather than twice per boundary through the truncated interval-censored distribution (#856).
-  The PMFs agree with the previous ones to within 1e-14.
+  The PMFs match the library's own double-interval-censored `pdf` to within 1e-13, which a test checks.
 - The export at-risk prevalence is one convolution of the infections with the detection survival, rather than a convolution and two cumulative sums (#856).
 - The composition positivity takes its pool denominator from the carried suspected series the analysed volume already uses, so the separate background convolution is removed (#856).
 - Where a scalar scales a convolved series (deaths, background deaths, export deaths, recovered and per-patch confirmed), the delay kernel is scaled before the convolution instead (#856).
