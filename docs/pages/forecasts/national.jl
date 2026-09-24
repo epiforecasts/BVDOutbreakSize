@@ -185,8 +185,7 @@ onset_forecast_summary #hide
 
 # The left panel splits the coming week's new onset reports into reports of onsets that had already happened by the cut-off and reports of onsets still to come, and shows their sum.
 # The fourth bar is the same sum after it has been through the observation model, which is what the next vintage will actually print.
-# It is much wider than the sum it replicates, and the gap is the rescan.
-# At a printed total of a couple of thousand cases the per-scan level error alone is worth tens of cases either way, well above the epidemic uncertainty on a week of new reports.
+# It is wider than the sum it replicates by the two reads' error and the counting variation of the new reports.
 # Only the fourth bar is comparable to a digitised figure, and only it is scored.
 #
 # The right panel puts the nowcast itself on the same axes, the onsets that have happened against the share of them the triangle has printed.
@@ -213,9 +212,9 @@ onset_forecast_fig = let
     ## The first three bars are latent, so the third is exactly the first
     ## two added. The fourth is that same sum replicated through the
     ## observation model, which is the scored quantity and the only one
-    ## comparable to a digitised figure; it is wider by the per-scan level
-    ## error, which is why the three latent bars are shown as well rather
-    ## than a decomposition that appears not to add up.
+    ## comparable to a digitised figure; it is wider by the read error,
+    ## which is why the three latent bars are shown as well rather than a
+    ## decomposition that appears not to add up.
     _latent_total = onset_forecast.onset_reports_backfill .+
         onset_forecast.onset_reports_future
     for (i, d, col) in (

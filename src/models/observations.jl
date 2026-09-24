@@ -3101,9 +3101,9 @@ with `δ = report_idx - u_i` and [`onset_report_F`](@ref) supplying `F`,
 predecessor for the very first scored vintage, contributes `ℓ_prev = 0` with
 no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
-level_prev)`, each a length-`length(onset_idx)` vector. `level_cur`/
-`level_prev` are reused by [`onset_report_scales`](@ref) to grow the
-observation scale with the modelled (not observed) magnitude. The hazard
+level_prev)`, each a length-`length(onset_idx)` vector, with
+`level_cur`/`level_prev` the two cumulative levels each increment
+differences. The hazard
 enters through a delay-CDF table ([`onset_report_cdf_table`](@ref)) built
 here over `extrema(onset_idx)`. Pure and top-level (see
 [`onset_report_cdf`](@ref) for the AD-safety rationale).
@@ -3191,98 +3191,7 @@ end
     (δ < 0 || D == 0) ? 0 : min(Int(δ), D - 1) + 1
 
 """
-    onset_vintage_indices(report_idx, prev_report_idx)
-
-Map each increment cell onto the vintage its two reads come from. The
-vintages are the sorted distinct report days of the scored cells, so
-vintage `s` is the `s`-th surviving snapshot [`load_onset_curve`](@ref)
-kept. Returns `(; vintage_idx, prev_vintage_idx, n_vintages)`, the first
-two length-matched to `report_idx`. The sentinel `prev_report_idx = 0`
-(the virtual empty predecessor of the very first scored vintage, see
-[`load_onset_curve`](@ref)) maps to `prev_vintage_idx = 0`, which
-[`onset_scan_adjust`](@ref) reads as "no scan to dilate".
-
-Derived here rather than carried on the history, so any
-`(; onset_days, report_days, prev_report_days, increments)` history works.
-Integer work on the observation grid with no sampled quantity in it, so it
-costs one pass per model evaluation and contributes nothing to the gradient.
-"""
-function onset_vintage_indices(
-        report_idx::AbstractVector{<:Integer},
-        prev_report_idx::AbstractVector{<:Integer}
-    )
-    days = sort(unique(report_idx))
-    m = length(report_idx)
-    vintage_idx = Vector{Int}(undef, m)
-    prev_vintage_idx = Vector{Int}(undef, m)
-    @inbounds for i in 1:m
-        vintage_idx[i] = searchsortedfirst(days, report_idx[i])
-        p = prev_report_idx[i]
-        j = p > 0 ? searchsortedfirst(days, p) : 0
-        prev_vintage_idx[i] = (j >= 1 && j <= length(days) && days[j] == p) ?
-            j : 0
-    end
-    return (; vintage_idx, prev_vintage_idx, n_vintages = length(days))
-end
-
-"""
-    onset_scan_adjust(level_cur, level_prev, scan_level, vintage_idx,
-        prev_vintage_idx)
-
-Apply each vintage's own scan level to the modelled cumulative levels the
-increment cells difference. Cell `i` reads its current level off scan
-`vintage_idx[i]` and its previous level off scan `prev_vintage_idx[i]`, so
-
-```math
-\\ell_{\\text{cur},i} \\mapsto \\ell_{\\text{cur},i} \\, c_{s_i}, \\qquad
-\\ell_{\\text{prev},i} \\mapsto \\ell_{\\text{prev},i} \\, c_{p_i},
-\\qquad \\text{mean}_i = \\ell_{\\text{cur},i} c_{s_i} -
-    \\ell_{\\text{prev},i} c_{p_i},
-```
-
-with `scan_level[s] = 1 + σ_scan · z_scan[s]` the level a whole published
-figure was read at ([`onset_reporting_model`](@ref)). One multiplier per
-scan, not per cell: the ~28 bars digitised off one figure share a single
-level error, so a scan that reads high moves that snapshot's whole row of
-cells together. An index outside `1:length(scan_level)` (the sentinel `0`
-for the virtual empty predecessor) contributes a multiplier of exactly
-one, so the first vintage's level cells carry only their own scan's
-error. Returns the same `(; means, level_cur, level_prev)` shape
-[`onset_report_moments`](@ref) does, ready for
-[`onset_report_scales`](@ref). Pure, top-level, single indexed loop.
-"""
-function onset_scan_adjust(
-        level_cur::AbstractVector,
-        level_prev::AbstractVector, scan_level::AbstractVector,
-        vintage_idx::AbstractVector{<:Integer},
-        prev_vintage_idx::AbstractVector{<:Integer}
-    )
-    m = length(level_cur)
-    T = promote_type(
-        eltype(level_cur), eltype(level_prev),
-        eltype(scan_level)
-    )
-    means = Vector{T}(undef, m)
-    lc = Vector{T}(undef, m)
-    lp = Vector{T}(undef, m)
-    @inbounds for i in 1:m
-        lc[i] = level_cur[i] * _scan_multiplier(scan_level, vintage_idx[i])
-        lp[i] = level_prev[i] *
-            _scan_multiplier(scan_level, prev_vintage_idx[i])
-        means[i] = lc[i] - lp[i]
-    end
-    return (; means, level_cur = lc, level_prev = lp)
-end
-
-## Whether scan index `s` names a scan, and the multiplier a read off it
-## takes: that scan's level, or exactly one for the sentinel `0`.
-@inline _scan_in_range(scan_level, s) = s >= 1 && s <= length(scan_level)
-@inline _scan_multiplier(scan_level, s) =
-    _scan_in_range(scan_level, s) ? scan_level[s] : one(eltype(scan_level))
-
-"""
-    onset_report_scales(means, level_cur, level_prev, prev_report_idx;
-        pixel_sd = 2.1, scan_sd = 0.0)
+    onset_report_scales(means, τ, reads)
 
 Per-cell observation scale for the reporting-triangle increment likelihood,
 the square root of a variance built from three sources.
@@ -3296,129 +3205,65 @@ the square root of a variance built from three sources.
     has counting variation of about `sqrt(40) ≈ 6`, far larger than the
     reading error below, and scoring it on reading error alone would let 28
     level cells dominate the joint likelihood.
-  - Pixel-reading noise, roughly constant per bar read (`pixel_sd`, ≈2.1
-    cases). An increment differences two independent reads, so its variance
-    doubles. The first snapshot's level cells read only one bar, so theirs
-    does not.
-  - An optional multiplicative level error `scan_sd` on each read's own
-    cumulative level, off by default. A bar's height is read in pixels and
-    converted with the figure's own axis scale, so the multiplicative part
-    of the digitisation error belongs to the whole scan and not to the bar:
-    the likelihood carries it on the modelled level instead
-    ([`onset_scan_adjust`](@ref)) and leaves this at zero. Callers that
-    score a quantity the scan level has not already been applied to (a
-    single digitised bar, or a whole projected snapshot total) pass the
-    fitted per-scan level SD here.
+  - Rounding of each read. A digitised bar is an integer, so every read
+    carries the `1/12` variance of rounding to the nearest count. The term
+    is structural rather than measured, and it is what keeps the read SD
+    below from collapsing to zero on the settled cells whose residual is
+    exactly zero.
+  - Read error on each digitised bar, the fitted read SD `τ` of
+    [`onset_reporting_model`](@ref).
+
+`reads[i]` is the number of bars cell `i` differences: `1` for a level
+cell off the first scored snapshot and `2` for a correction between two
+snapshots. The read variances add, so
 
 ```math
-\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + \\text{pixel\\_sd}^2 \\cdot r_i +
-    \\text{scan\\_sd}^2 \\cdot
-    (\\ell_{\\text{cur},i}^2 + \\ell_{\\text{prev},i}^2)},
-\\qquad r_i = \\begin{cases} 1 & \\text{prev\\_report\\_idx}_i = 0
-    \\ \\text{(virtual first pair)} \\\\ 2 & \\text{otherwise} \\end{cases},
+\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + r_i / 12 + r_i \\tau^2},
 ```
 
-with `μ_i = means[i]` the modelled increment. The counting term cancels for
-a genuine correction between two snapshots only to the extent that the two
-reads share the same realised cases: the newly reported cases in between are
-a fresh count, and `μ_i` is exactly their expected number, so the same
-formula covers both cell kinds without a branch.
+with `μ_i = means[i]` the modelled increment and `r_i = reads[i]`. The
+counting term cancels for a genuine correction between two snapshots only
+to the extent that the two reads share the same realised cases: the newly
+reported cases in between are a fresh count, and `μ_i` is exactly their
+expected number, so the same formula covers both cell kinds without a
+branch.
 
-Every magnitude entering the scale is modelled (`means`, `level_cur`,
-`level_prev` from [`onset_report_moments`](@ref)), never the raw observed
-count: feeding the likelihood's own noisy observation back into its variance
-would bias towards overconfidence on cells that happen to undershoot. The
-caller ([`onset_reporting_model`](@ref)) applies a sampled multiplicative
-slack on top, so this fixed, measurement-derived formula is correctable by
-the data. Pure, top-level, single indexed loop.
+The magnitude entering the scale is the modelled increment (`means` from
+[`onset_report_moments`](@ref)), never the raw observed count: feeding the
+likelihood's own noisy observation back into its variance would bias
+towards overconfidence on cells that happen to undershoot. Pure,
+top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
-parameter. `σ_mult` is the diagnostic for that shortfall, but read it in
-the right direction: its prior is bounded below at 1 and unbounded above,
-so `σ_mult` mass well above 1 says the term needs its own parameter, while
-a posterior on the lower bound says the fit would like a tighter likelihood
-than the measurement floor allows. The test is the empirical over modelled
-residual ratio across bins of `means`, against the `sqrt(ν/(ν-2))` a
-Student-t implies. It is in the report's symptom-onset reporting-delay
-section, along with the per-snapshot coverage test for the shared scan
-error, which shows up only once a snapshot's cells are summed.
+parameter. The test is the empirical over modelled residual ratio across
+bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
+the report's symptom-onset reporting-delay section.
 """
 function onset_report_scales(
-        means::AbstractVector,
-        level_cur::AbstractVector,
-        level_prev::AbstractVector,
-        prev_report_idx::AbstractVector{<:Integer};
-        pixel_sd::Real = 2.1, scan_sd::Real = 0.0
+        means::AbstractVector, τ::Real, reads::AbstractVector{<:Integer}
     )
-    m = length(level_cur)
-    T = promote_type(
-        eltype(means), eltype(level_cur), eltype(level_prev),
-        typeof(float(pixel_sd)), typeof(float(scan_sd))
-    )
+    m = length(means)
+    T = promote_type(eltype(means), typeof(float(τ)))
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
-        r = prev_report_idx[i] > 0 ? 2 : 1
-        out[i] = onset_report_scale(
-            means[i], level_cur[i], level_prev[i], r;
-            pixel_sd, scan_sd
-        )
+        out[i] = onset_report_scale(means[i], τ, reads[i])
     end
     return out
 end
 
 """
-    onset_report_scale(μ, level_cur, level_prev, reads;
-        pixel_sd = 2.1, scan_sd = 0.0)
+    onset_report_scale(μ, τ, reads)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
-increment mean `μ` between two modelled cumulative levels `level_cur`
-and `level_prev` read off `reads` bars (`1` for a level differenced
-against an empty predecessor, `2` for a genuine correction). The vector
-method calls this, so the two cannot drift apart. The forecast
+increment mean `μ` over `reads` digitised bars with the read SD `τ`. The
+vector method calls this, so the two cannot drift apart. The forecast
 ([`forecast_onsets`](@ref)) calls it directly to give a projected
 reporting increment the same observation scale the likelihood gives a
 scored cell. See [`onset_report_scales`](@ref) for what each term means.
 """
-function onset_report_scale(
-        μ::Real, level_cur::Real, level_prev::Real,
-        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0
-    )
-    T = promote_type(
-        typeof(float(μ)), typeof(float(level_cur)),
-        typeof(float(level_prev)), typeof(float(pixel_sd)),
-        typeof(float(scan_sd))
-    )
-    return sqrt(
-        max(μ, zero(T)) + pixel_sd^2 * reads +
-            scan_sd^2 * (level_cur^2 + level_prev^2)
-    )
-end
-
-"""
-    onset_scanned_cells(level_cur, level_prev, scan_level, vintage_idx,
-        prev_vintage_idx, prev_report_idx, pixel_sd)
-
-Per-cell increment means and observation scales the onset likelihood
-scores: [`onset_scan_adjust`](@ref) applies each vintage's scan level, and
-[`onset_report_scales`](@ref) builds the scale from the adjusted levels
-with pixel noise `pixel_sd` and no scan-level term. Returns
-`(; means, scales)`. One call, so a Mooncake rule covers the pair.
-"""
-function onset_scanned_cells(
-        level_cur::AbstractVector, level_prev::AbstractVector,
-        scan_level::AbstractVector,
-        vintage_idx::AbstractVector{<:Integer},
-        prev_vintage_idx::AbstractVector{<:Integer},
-        prev_report_idx::AbstractVector{<:Integer}, pixel_sd::Real
-    )
-    scanned = onset_scan_adjust(
-        level_cur, level_prev, scan_level, vintage_idx, prev_vintage_idx
-    )
-    scales = onset_report_scales(
-        scanned.means, scanned.level_cur, scanned.level_prev,
-        prev_report_idx; pixel_sd
-    )
-    return (; scanned.means, scales)
+function onset_report_scale(μ::Real, τ::Real, reads::Integer)
+    T = promote_type(typeof(float(μ)), typeof(float(τ)))
+    return sqrt(max(μ, zero(T)) + reads / 12 + reads * τ^2)
 end
 
 """
@@ -3741,49 +3586,12 @@ for a missing input file. `increments` may be `missing` to sample instead
 of condition (the predictive-generator path).
 
 The observation scale ([`onset_report_scales`](@ref)) is built from
-counting variation, the measured per-bar pixel noise (`pixel_sd` ≈2.1
-cases/bar), and a sampled multiplicative slack `σ_mult ~ slack_prior`
-bounded below at 1. Each scale term is a lower bound on the truth, so a
-fitted scale below them would let a couple of hundred cells outvote every
-other stream. A short onsets-only run pulls the slack to that bound; in the
-joint fit a `σ_mult` posterior well above 1 says the scale is missing a
-term.
-
-**The scan error belongs to the figure, not to the bar.** A bar's height is
-read in pixels and converted with the axis scale that scan calibrated, so
-the digitisation error splits into an absolute per-bar term (the ≈2.1-case
-pixel noise) and a multiplicative term that is one number for the whole
-figure. `data/README.md` measures the second directly, as each vintage's
-digitised total against the total the figure prints: -5.0% to +1.6% over
-the audited vintages, one value per scan. Two mechanisms feed it. The axis
-calibration is read per figure, and the digitiser's colour masks are fixed
-thresholds against a render blur that varies with the embedded image's
-size, so a blurrier scan loses more of every bar's edge. Neither explains
-SitRep 088, whose digitised total falls 184 below SitRep 087 on the same
-render size, edge softness and plotted window, so the level is sampled free
-rather than regressed on the observable covariates.
-
-The per-scan level is therefore a sampled `1 + σ_scan · z_scan[s]` on the
-modelled cumulative levels each cell differences
-([`onset_scan_adjust`](@ref)), and the per-cell scale keeps counting and
-pixel noise alone. Scored as independent per-cell noise instead, a
-snapshot's cells can only miss in uncorrelated directions, so the net
-correction is far too tightly predicted (1 of 11 snapshots inside a nominal
-50% interval) even though the aggregate variance ratio is 1.07.
-
-`σ_scan ~ scan_sd_prior` is estimated rather than fixed at the audited
-spread, which rests on a handful of vintages, but its prior is a
-half-normal centred to put that spread (an SD of about 2.5%) in its bulk.
-The upper bound is the audit's own reach: no vintage has read more than 5%
-away from its printed total, so a level error past 8% is excluded by a data
-check.
-
-The shared level also gives the fit somewhere to put a snapshot that
-reprints nothing new. A vintage whose figure reads at the same level as its
-predecessor scores increments of about zero across its whole row. Without a
-per-scan level the only way to fit that row is to drive the reporting
-hazard towards zero at the delays it covers, which propagates into every
-other snapshot's delay shape.
+counting variation, the rounding variance of each integer read and a
+fitted read SD `τ ~ read_sd_prior`, one for every read of a digitised bar:
+a correction cell carries two reads' error and a first-snapshot level cell
+one read's. One count is about 2.9 pixels on the published figures, so a
+read is a rounding plus an outline pixel, of order one count. The prior is
+centred on that scale and the data set the value.
 
 The likelihood is Student-t with fixed degrees of freedom `ν` (default 4).
 With only a few hundred cells `ν` is weakly identified, so it is not
@@ -3791,12 +3599,11 @@ sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
-Returns `(; increments, modelled, unscanned, scan_level, logit_h0, γ,
-grid_start, grid_end, alpha, σ_mult, σ_scan, η0, σ_h0, σ_γ, β, σ_a)` with
-`modelled` the per-cell increment means the likelihood scores (each
-vintage's scan level applied), `unscanned` the same means before it (the
-epidemiological signal alone), `scan_level` the per-vintage multipliers,
-`grid_end` the report-date grid day the calendar walk was built up to
+Returns `(; increments, modelled, scales, logit_h0, γ, grid_start,
+grid_end, alpha, τ, η0, σ_h0, σ_γ, β, σ_a)` with `modelled` the per-cell
+increment means the likelihood scores, `scales` the per-cell observation
+scales it scores them with, `grid_end` the report-date grid day the
+calendar walk was built up to
 (`max(report_days)`, or `grid_start` when the history is empty), and the
 hyperparameters re-exposed at this level for the pairs-plot summary.
 """
@@ -3806,12 +3613,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        pixel_sd::Real = 2.1,
-        scan_sd_prior = truncated(
-            Normal(0.0, 0.03);
-            lower = 0.0, upper = 0.08
-        ),
-        slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
+        read_sd_prior = LogNormal(log(1.0), 0.5),
         ν::Real = 4.0
     )
     onset_days = onset_curve_history.onset_days
@@ -3851,32 +3653,20 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         ascertainment(anchor_series, grid_start, grid_end), false
     )
     alpha = asc_state.alpha
-    σ_mult ~ slack_prior
 
-    ## Per-scan level error: one non-centred multiplier per surviving
-    ## vintage, the level that scan's whole figure was read at. It sits on
-    ## the modelled level rather than in the per-cell scale, which carries
-    ## counting and pixel noise alone.
-    vintages = onset_vintage_indices(report_days, prev_report_days)
-    σ_scan ~ scan_sd_prior
-    z_scan ~ product_distribution(
-        fill(
-            Normal(0, 1),
-            max(vintages.n_vintages, 1)
-        )
-    )
-    scan_level = one(σ_scan) .+ σ_scan .* z_scan
+    ## Read error: one SD for every read of a digitised bar. A correction
+    ## cell differences two reads; a cell at the sentinel
+    ## `prev_report_days[i] = 0` (the virtual empty predecessor of the first
+    ## scored vintage) reads one bar.
+    τ ~ read_sd_prior
+    reads = [p == 0 ? 1 : 2 for p in prev_report_days]
 
     moments = onset_report_moments(
         cdf_table, grid_start, onsets,
         hazard_state.grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
-    scanned = onset_scanned_cells(
-        moments.level_cur, moments.level_prev, scan_level,
-        vintages.vintage_idx, vintages.prev_vintage_idx, prev_report_days,
-        pixel_sd
-    )
+    scales = onset_report_scales(moments.means, τ, reads)
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
@@ -3885,18 +3675,17 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## cells keep the flat `increments` name the predictive path reads.
     increments_state ~ to_submodel(
         onset_increments_model(
-            scanned.means, σ_mult .* scanned.scales,
+            moments.means, scales,
             onset_curve_history.increments, ν
         ), false
     )
     increments = increments_state.increments
 
     return (;
-        increments, modelled = scanned.means,
-        unscanned = moments.means, scan_level,
+        increments, modelled = moments.means, scales,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
-        grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
-        σ_scan, η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
+        grid_start = hazard_state.grid_start, grid_end, alpha, τ,
+        η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
     )
 end

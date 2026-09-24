@@ -334,7 +334,7 @@ validation_stopped_fig #hide
 # The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
 # Its printed total therefore moves with the scan error as well as with late reporting.
 # On fourteen vintages the reread total falls, which a cumulative onset curve cannot do, and on many others it repeats unchanged.
-# The fit absorbs that with a per-vintage scan level; the scored truth cannot, since it is the increment between the vintages at the two ends of a window.
+# The scored truth cannot absorb that, since it is the increment between the vintages at the two ends of a window.
 # A window containing a falling vintage is therefore left unscored, the rule the [province scores](@ref "Forecast by province across releases") already apply to a window holding a harmonisation-break day.
 # It bites hardest at the longer horizons, a four-week window being more likely to contain a reread than a one-week one: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
 # Read the onset row's skill against the baseline rather than its coverage, and read it as resting on a handful of windows.

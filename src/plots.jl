@@ -2411,7 +2411,7 @@ latest figure prints, drawn as 30/60/90% ribbons with a median line) and
 
 The panel is read on whether the ribbon covers the black points. Pass
 `nowcast` as a predictive rather than the latent count. Two scans of one bar
-disagree by the scan error the stream estimates, so on the onset dates where
+disagree by the read error the stream estimates, so on the onset dates where
 reporting had already finished the latent quantity is the grey cross exactly
 and would be scored against a reading it cannot match. Build it from
 [`onset_nowcast_draws`](@ref) at the latest figure's own delay, then through

@@ -480,7 +480,7 @@ function forecast_reported(
     ## carries the reporting hazard.
     if !isnothing(onset_grid_start) && !isnothing(onset_grid_end) &&
             !isnothing(grid_n) &&
-            _has_key(chn, Symbol("onset_report_state.σ_mult"))
+            _has_key(chn, Symbol("onset_report_state.τ"))
         onset_fc = forecast_onsets(
             chn; grid_start = onset_grid_start,
             grid_end = onset_grid_end, n = grid_n, horizon = horizon,
@@ -565,16 +565,10 @@ Columns, all per draw:
 
 `onset_reports_new` is replicated through the stream's own observation model
 rather than a negative binomial. The increment is scored under
-[`onset_report_scale`](@ref)'s three-term scale (counting variation,
-pixel-reading noise, per-scan level error), inflated by the fitted `σ_mult`,
-and perturbed by a Student-t with the same `ν` the likelihood uses. The scale
-is applied once to the whole projected total, so its scan-level term takes
-the fitted shared per-scan coefficient `σ_scan` rather than the whole
-measured per-bar error. At a total of a couple of thousand cases the per-scan
-level term dominates by an order of magnitude, so the interval on a weekly
-increment is mostly digitisation error rather than epidemic uncertainty. The
-forecast is therefore more useful as a check that the fitted delay and
-ascertainment reproduce the next vintage than as a case-count prediction.
+[`onset_report_scale`](@ref)'s scale (counting variation, the rounding of
+each of the two reads and the fitted read SD `τ` on each) and perturbed by
+a Student-t with the same `ν` the likelihood uses. The scale is applied
+once to the whole projected total.
 
 `grid_start` and `grid_end` are the fitted triangle's own onset/report-day
 grid (see [`reconstruct_onset_hazard`](@ref)). `n` is the model cut-off
@@ -591,8 +585,6 @@ function forecast_onsets(
         obs_value::Union{Real, Missing} = missing,
         week::Integer = 7,
         ν::Real = 4.0,
-        pixel_sd::Real = 2.1,
-        scan_frac::Real = 0.04,
         breakpoint::Union{Nothing, Real} = nothing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
@@ -607,18 +599,11 @@ function forecast_onsets(
         )
     )
     hazard = reconstruct_onset_hazard(chn; grid_start, grid_end, week)
-    σ_mult = _draws(chn, Symbol("onset_report_state.σ_mult"))
+    τ = _draws(chn, Symbol("onset_report_state.τ"))
     ## A chain that does not sample the onset-report overdispersion falls
     ## back to no quadratic term, which is that fit's own likelihood.
     k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
         _draws(chn, Symbol("onset_report_state.k_onset")) : nothing
-    ## Per-scan level error for the projected snapshot. The likelihood carries
-    ## this on the modelled level rather than in the per-cell scale (see
-    ## `onset_reporting_model`), but a projected total is scored against a
-    ## scan that has not happened yet, so its own level error has to enter the
-    ## scale here. A chain that does not sample it falls back to `scan_frac`.
-    σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
-        _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
 
     R_T = _cutoff_rt(
         chn; n = n, breakpoint = breakpoint,
@@ -684,19 +669,13 @@ function forecast_onsets(
         backfill[i] = past_then - past_now
         future[i] = fut_then
 
-        ## Replicate the projected increment through the same three-term
-        ## observation scale a scored correction cell carries: two reads
-        ## (`reads = 2`, this is a difference of two vintages), the levels
-        ## being the reported totals at the two ends of the horizon.
+        ## Replicate the projected increment through the same observation
+        ## scale a scored correction cell carries: two reads, each with the
+        ## fitted read SD, since this is a difference of two vintages.
         μ = backfill[i] + future[i]
-        base = onset_report_scale(
-            μ, past_then, past_now, 2;
-            pixel_sd, scan_sd = isnothing(σ_scan) ? scan_frac : σ_scan[i]
-        )
-        σ = σ_mult[i] * (
-            isnothing(k_onset) ? base :
-                sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64)))
-        )
+        base = onset_report_scale(μ, τ[i], 2)
+        σ = isnothing(k_onset) ? base :
+            sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64)))
         reports_new[i] = max(round(Int, μ + σ * rand(rng, TDist(ν))), 0)
     end
 
