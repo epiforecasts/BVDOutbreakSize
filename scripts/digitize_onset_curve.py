@@ -550,6 +550,13 @@ def day_column(cal, off):
 
 
 def digitize(im, last_tick_date, y_step=20):
+    return digitize_windows(im, last_tick_date, y_step)[0]
+
+
+def digitize_windows(im, last_tick_date, y_step=20):
+    """The rows `digitize` returns and, for each row's date, the 1-based
+    column span `(lo, hi)` of the columns its height was read from, so the
+    check panels draw the span the reader used."""
     cal = calibrate(im, y_step)
     W, yt, ppc, y0 = cal["W"], cal["yt"], cal["ppc"], cal["y0"]
     ks, xs, ppd = cal["ks"], cal["xs"], cal["ppd"]
@@ -584,6 +591,7 @@ def digitize(im, last_tick_date, y_step=20):
     nz = np.flatnonzero((h > 2) & ~isborder)
     barmin, barmax = int(nz.min()), int(nz.max())
     rows = []
+    windows = {}
     for off in range(7 * ks[0] - 7, 4):
         # anchor on the nearest chain tick at or before the day
         cx = day_column(cal, off)
@@ -648,7 +656,10 @@ def digitize(im, last_tick_date, y_step=20):
             continue
         total = round(max(0.0, hb - 0.5) / ppc)
         dead = min(total, round(max(0.0, float(nr[jb]) - 0.5) / ppc))
-        rows.append((lastdate + dt.timedelta(days=off), total - dead, dead))
+        date = lastdate + dt.timedelta(days=off)
+        rows.append((date, total - dead, dead))
+        read_from = resolved or cols
+        windows[date] = (min(read_from), max(read_from))
     # drop leading and trailing zero rows (a stray anti-alias column near
     # the y-axis or the band edge reads as a bar of height 0) and isolated
     # tiny strays past the curve tail
@@ -662,7 +673,8 @@ def digitize(im, last_tick_date, y_step=20):
             rows.pop()
         else:
             break
-    return rows
+    kept = {r[0] for r in rows}
+    return rows, {d: w for d, w in windows.items() if d in kept}
 
 
 HEADER = ["sitrep", "report_date", "onset_date",
