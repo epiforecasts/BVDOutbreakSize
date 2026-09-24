@@ -180,11 +180,36 @@ fit_diagnostics_table = diagnostics_table(
     )...
 );
 
+## Only the joint fit is held to the convergence thresholds.
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "convergence.jl"))
+fit_diagnostics_summary_md = let t = fit_diagnostics_table,
+        worst = argmax(t.max_rhat),
+        least = argmin(t.min_ess_bulk)
+
+    convergence_summary("joint", fit_diagnostics(chn_joint)) * "\n\n" *
+        "Across all $(length(t.fit)) fits the worst R-hat is " *
+        "$(t.max_rhat[worst]), in the $(t.fit[worst]) fit. " *
+        "The lowest bulk effective sample size is " *
+        "$(fmt_count(t.min_ess_bulk[least])), in the $(t.fit[least]) fit. " *
+        "Only the joint fit is held to the thresholds above."
+end
+fit_diagnostics_summary = Markdown.parse(fit_diagnostics_summary_md);
+
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+fit_diagnostics_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Fit diagnostics table</summary>
+#md # ```
+
 fit_diagnostics_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # #### Data currency
 #
@@ -192,11 +217,11 @@ fit_diagnostics_table #hide
 # Streams that stopped before it are carried frozen.
 
 #md # ```@raw html
-#md # <details><summary>Streams that stop before the cut-off</summary>
+#md # <details><summary>Build the data currency table</summary>
 #md # ```
 
-stream_currency_table = let status = stream_report_status(obs),
-        stale = status[.!status.reporting, :]
+stream_status = stream_report_status(obs)
+stream_currency_table = let stale = stream_status[.!stream_status.reporting, :]
     DataFrame(
         "Stream" => stale.label,
         "Last reported" => [
@@ -206,13 +231,39 @@ stream_currency_table = let status = stream_report_status(obs),
             ismissing(d) ? "-" : string(d) for d in stale.days_since
         ]
     )
+end
+stream_currency_summary = let n = length(stream_status.stream),
+        n_current = count(stream_status.reporting),
+        cutoff = format_report_date(obs.cutoff)
+
+    Markdown.parse(
+        if n_current == n
+            "All $n streams report within " *
+                "$(STREAM_REPORTING_GRACE_DAYS) days of the $cutoff cut-off."
+        else
+            "$n_current of the $n streams report within " *
+                "$(STREAM_REPORTING_GRACE_DAYS) days of the $cutoff cut-off. " *
+                "The other $(n - n_current) stopped earlier and are " *
+                "carried frozen."
+        end
+    )
 end;
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+stream_currency_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Streams that stop before the cut-off</summary>
+#md # ```
+
 MarkdownTable(stream_currency_table) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ### Joint model estimates
 #
@@ -1580,11 +1631,14 @@ open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
 end
 
-## Fit diagnostics: the same table the Results section shows, so the
-## dashboard reports how the fit behind its numbers sampled without
+## Fit diagnostics: the same summary and table the Results section shows,
+## so the dashboard reports how the fit behind its numbers sampled without
 ## building a second table.
 open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
     print(io, markdown_table(fit_diagnostics_table))
+end
+open(joinpath(dashboard_dir, "diagnostics_summary.md"), "w") do io
+    print(io, fit_diagnostics_summary_md)
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.

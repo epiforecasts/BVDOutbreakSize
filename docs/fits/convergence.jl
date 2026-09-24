@@ -138,6 +138,39 @@ function convergence_verdict(d; thresholds = convergence_thresholds())
     return (; status, failures, warnings, divergent_fraction = fraction)
 end
 
+const _STATUS_PHRASE = Dict(
+    :pass => "passes the convergence checks",
+    :warn => "passes the convergence checks with warnings",
+    :fail => "fails the convergence checks",
+)
+
+## A fraction as a percentage, with no trailing `.0` on a whole number.
+function _percent(x)
+    p = round(100 * x; sigdigits = 3)
+    return isinteger(p) ? string(Int(p)) : string(p)
+end
+
+"""
+    convergence_summary(label, d; thresholds = convergence_thresholds())
+
+A report reader's version of [`convergence_verdict`](@ref), as three
+sentences of plain prose: the verdict on the headline diagnostics `d` of the
+fit named `label`, the values behind it, and what a fit needs to pass without
+warnings.
+"""
+function convergence_summary(label, d; thresholds = convergence_thresholds())
+    v = convergence_verdict(d; thresholds = thresholds)
+    w = thresholds.warn
+    return "The $label fit $(_STATUS_PHRASE[v.status]). " *
+        "Its worst R-hat is $(fmt_value(d.max_rhat)) and its lowest bulk " *
+        "effective sample size is $(fmt_count(d.min_ess_bulk)), with " *
+        "$(d.n_divergent) divergent transitions in $(d.n_draws) draws. " *
+        "A fit passes without warnings when its worst R-hat is at most " *
+        "$(fmt_value(w.rhat)), its effective sample sizes are at least " *
+        "$(fmt_count(w.ess_bulk)) and at most " *
+        "$(_percent(w.divergent_fraction))% of its draws diverge."
+end
+
 """
     fit_convergence(id, chn; thresholds = convergence_thresholds())
 
