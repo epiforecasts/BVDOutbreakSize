@@ -318,3 +318,119 @@ end
         check(model)
     end
 end
+
+@testitem "sum-to-zero sites: deviations follow the basis passed in" setup = [
+    SumToZeroReference,
+] begin
+    using BVDOutbreakSize: patch_rt_model, patch_infection_model,
+        province_composition_model
+    using Turing.DynamicPPL: OnlyAccsVarInfo, RawValueAccumulator,
+        InitFromPrior, UnlinkAll, init!!, get_raw_values, @varname
+
+    ## A prior draw's return value and its parameter values.
+    function prior_draw(model, seed)
+        accs = OnlyAccsVarInfo(RawValueAccumulator(false))
+        r, vi = init!!(Xoshiro(seed), model, accs, InitFromPrior(), UnlinkAll())
+        return r, get_raw_values(vi)
+    end
+
+    ## Deviation knots from the formulas: level `s Q B z_level`, innovation
+    ## `η_k = c Q B z_k` with `z_k` the `k - 1`-th block of `nd` draws, and
+    ## the AR(1) in closed form `δ_k = φ^(k-1) δ_1 + Σ_{j ≤ k} φ^(k-j) η_j`.
+    function reference_knots(Q, B, s, c, z_level, z_drift, φ, nb)
+        n, nd = size(Q)
+        QB = matmul(Q, B)
+        apply(v) = vec(matmul(QB, reshape(v, :, 1)))
+        level = s .* apply(z_level)
+        η(k) = c .* apply(z_drift[((k - 2) * nd + 1):((k - 1) * nd)])
+        knots = zeros(n, nb)
+        for k in 1:nb
+            knots[:, k] = φ^(k - 1) .* level
+            for j in 2:k
+                knots[:, k] .+= φ^(k - j) .* η(j)
+            end
+        end
+        return knots
+    end
+    ## A basis of the same subspace in a different orientation: the default
+    ## one with its first two columns rotated.
+    function rotated(Q)
+        size(Q, 2) < 2 && return -Q
+        R = diagm_(ones(size(Q, 2)))
+        R[1, 1], R[1, 2], R[2, 1], R[2, 2] = 0.6, -0.8, 0.8, 0.6
+        return matmul(Q, R)
+    end
+
+    n = 60
+    for np in (2, 3, 4), corr in (true, false), seed in 1:3
+        nd = np - 1
+        Q = sum_to_zero_basis(np)
+        for (basis, model) in (
+                (
+                    Q,
+                    patch_rt_model(
+                        n, np, log(1.5); rt_start = 10,
+                        region_correlation = corr
+                    ),
+                ),
+                (
+                    rotated(Q),
+                    patch_infection_model(
+                        n, np; rt_start = 10, region_correlation = corr,
+                        basis = rotated(Q)
+                    ),
+                ),
+            )
+            r, vi = prior_draw(model, seed)
+            σ_level = vi[@varname(σ_level)]
+            φ = exp2(-7 / vi[@varname(δ_halflife)])
+            if corr && np > 2
+                d = vi[@varname(bartlett_diag)]
+                o = vi[@varname(bartlett_lower)]
+                B = zeros(nd, nd)
+                m = 0
+                for i in 1:nd
+                    B[i, i] = d[i]
+                    for j in 1:(i - 1)
+                        m += 1
+                        B[i, j] = o[m]
+                    end
+                end
+                s = σ_level * sqrt(nd / sum(abs2, B))
+                c = 0.05 / sqrt(nd)
+            else
+                B = diagm_(ones(nd))
+                s = σ_level
+                c = vi[@varname(σ_drift)]
+            end
+            nb = size(r.δ_knots, 2)
+            ref = reference_knots(
+                basis, B, s, c, vi[@varname(z_level)], vi[@varname(z_drift)],
+                φ, nb
+            )
+            @test r.δ_knots ≈ ref rtol = 1.0e-12 atol = 1.0e-14
+            @test r.drift_factor ≈ c .* matmul(basis, B) rtol = 1.0e-12
+        end
+    end
+
+    ## The composition multipliers on a passed basis: the log ascertainment
+    ## is the centred covariate term plus `τ Q z`, the severity `τ Q z`.
+    obs = [853 21 42; 77 2 5; 3 0 0; 10 1 2]
+    modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2; 9.0 1.0 1.5]
+    covariate = [0.6, -0.2, -0.3, -0.1]
+    Qr = rotated(sum_to_zero_basis(4))
+    model = province_composition_model(
+        obs, modelled; testing_covariate = covariate,
+        severity_sd_prior = truncated(Normal(0, 0.3); lower = 0), basis = Qr
+    )
+    for seed in 1:3
+        r, vi = prior_draw(model, seed)
+        apply(v) = vec(matmul(Qr, reshape(v, :, 1)))
+        centred = covariate .- mean(covariate)
+        log_asc = vi[@varname(β_asc)] .* centred .+
+            vi[@varname(τ_asc)] .* apply(vi[@varname(z_asc)])
+        @test log.(r.province_ascertainment) ≈ log_asc rtol = 1.0e-12
+        @test log.(r.province_severity) ≈
+            vi[@varname(τ_sev)] .* apply(vi[@varname(z_sev)]) rtol = 1.0e-12
+    end
+end
