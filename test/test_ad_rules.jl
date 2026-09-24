@@ -678,8 +678,7 @@ end
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
     using BVDOutbreakSize: load_observations, joint_fit_args,
         default_breakpoint, onset_vintage_indices,
-        onset_scanned_cells, onset_report_expected_total, _detached,
-        incare_census, betabinomial_loglik
+        onset_scanned_cells, incare_census, betabinomial_loglik
 
     ## The argument types `onset_reporting_model` passes on the production
     ## data: float vectors from the moments and the scan levels, the
@@ -697,13 +696,6 @@ end
         Tuple{
             typeof(onset_scanned_cells), F, F, F, typeof(v.vintage_idx),
             typeof(v.prev_vintage_idx), typeof(h.prev_report_days), Float64,
-        }
-    )
-    ## The reported-only total goes through the zero-derivative barrier.
-    @test fires(
-        Tuple{
-            typeof(_detached), typeof(onset_report_expected_total), F, F, F,
-            Int, F, Int,
         }
     )
     ## The treatment model's census takes its stocks and offset as float
@@ -917,21 +909,27 @@ end
     @test r.g_b == r.g_t
 end
 
-@testitem "AD rules: the onset composer's detached total reaches no likelihood" tags = [
-    :ad,
-] setup = [ThroughDetached] begin
-    using BVDOutbreakSize: onsets_only_model
+@testitem "reporting guard: true only where `:=` values are recorded" begin
+    using BVDOutbreakSize: _reporting
+    using Distributions: Normal
+    using Turing: @model, DynamicPPL
+    using .DynamicPPL: OnlyAccsVarInfo, ParamsWithStats, InitFromPrior,
+        ldf_accs, getlogjoint_internal, @varname
 
-    history = (;
-        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
-        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
-    )
-    r = barrier_and_through(
-        onsets_only_model(40; onset_curve_history = history, breakpoint = 14)
-    )
-    @test isfinite(r.lp_b)
-    @test r.lp_b == r.lp_t
-    @test r.g_b == r.g_t
+    @model function probe()
+        x ~ Normal()
+        if _reporting(__varinfo__)
+            y := x + 1
+        end
+        return _reporting(__varinfo__)
+    end
+    m = probe()
+
+    ## A chain row records `y`; the gradient's accumulators and `m()` do not
+    ## run the guarded branch.
+    pws = ParamsWithStats(InitFromPrior(), m)
+    @test haskey(pws.params, @varname(y))
+    @test pws.params[@varname(y)] == pws.params[@varname(x)] + 1
+    @test !_reporting(OnlyAccsVarInfo(ldf_accs(getlogjoint_internal)))
+    @test m() === false
 end

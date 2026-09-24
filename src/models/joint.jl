@@ -329,12 +329,14 @@ level (see [`forecast_stream`](@ref)).
     onset_report_state ~ to_submodel(
         onset_report(onset_curve_history, latent.onsets)
     )
-    ## Reported only, so built behind `_detached`.
-    expected_onset_reported_T := _detached(
-        onset_report_expected_total, latent.onsets,
-        onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n
-    )
+    ## Reported only, so built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        expected_onset_reported_T := onset_report_expected_total(
+            latent.onsets,
+            onset_report_state.logit_h0, onset_report_state.γ,
+            onset_report_state.grid_start, onset_report_state.alpha, n
+        )
+    end
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
 end
@@ -521,7 +523,9 @@ end
         ones(eltype(patch_state.onsets_matrix), n_patches)
     cumulative_infections := patch_state.cumulative_total
     C_T := patch_state.C_T
-    cumulative_onsets := _detached(cumsum, onsets_total)
+    if _reporting(__varinfo__)
+        cumulative_onsets := cumsum(onsets_total)
+    end
     return (; patch_state, onsets_total)
 end
 
@@ -1020,31 +1024,28 @@ reproduction number implied by the summed patch infections.
     end
 
     ## The cumulative series and the combined delay PMFs below are reported
-    ## only, so they are built behind `_detached`.
-    cumulative_expected_deaths := _detached(
-        cumsum, deaths_state.bvd_deaths_daily
-    )
-
-    cumulative_confirmed := _detached(
-        _cumulative_confirmed, confirmed_state.confirmed_daily,
-        confirmed_history, n
-    )
-    ## Each of the remaining count streams sums to its own cut-off expected
-    ## total, so none needs the baseline re-add the confirmed path takes.
-    cumulative_reports := _detached(cumsum, cases_state.reports_daily)
-    cumulative_deaths_total := _detached(cumsum, deaths_state.deaths_daily)
-    cumulative_confirmed_deaths := _detached(
-        cumsum, confirmed_deaths_state.confirmed_death_daily
-    )
-    cumulative_recovered := _detached(
-        cumsum, recovered_state.recovered_daily
-    )
-    onset_to_confirmation_pmf := _detached(
-        convolve_pmf, cases_state.report_pmf, confirmed_state.receipt_pmf
-    )
-    onset_to_death_confirmation_pmf := _detached(
-        convolve_pmf, deaths_state.od_pmf, confirmed_state.receipt_pmf
-    )
+    ## only, so they are built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
+        cumulative_confirmed := _cumulative_confirmed(
+            confirmed_state.confirmed_daily, confirmed_history, n
+        )
+        ## Each of the remaining count streams sums to its own cut-off
+        ## expected total, so none needs the baseline re-add the confirmed
+        ## path takes.
+        cumulative_reports := cumsum(cases_state.reports_daily)
+        cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
+        cumulative_confirmed_deaths := cumsum(
+            confirmed_deaths_state.confirmed_death_daily
+        )
+        cumulative_recovered := cumsum(recovered_state.recovered_daily)
+        onset_to_confirmation_pmf := convolve_pmf(
+            cases_state.report_pmf, confirmed_state.receipt_pmf
+        )
+        onset_to_death_confirmation_pmf := convolve_pmf(
+            deaths_state.od_pmf, confirmed_state.receipt_pmf
+        )
+    end
 
     onset_to_sample_mean := cases_state.report_mean +
         confirmed_state.receipt_mean
@@ -1125,12 +1126,14 @@ reproduction number implied by the summed patch infections.
     ## same fitted hazard and ascertainment walk. See
     ## [`onset_reporting_model`](@ref) for what the vintage structure does
     ## and does not separate here. The total is reported only, so it is
-    ## built behind `_detached`.
-    expected_onset_reported_T := _detached(
-        onset_report_expected_total, onsets,
-        onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n
-    )
+    ## built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        expected_onset_reported_T := onset_report_expected_total(
+            onsets,
+            onset_report_state.logit_h0, onset_report_state.γ,
+            onset_report_state.grid_start, onset_report_state.alpha, n
+        )
+    end
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
     expected_isolation_T := treatment_state.expected_isolation

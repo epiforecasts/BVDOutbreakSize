@@ -45,16 +45,14 @@ Changes since v2.1.0.
 - `onset_vintage_indices`, `admission_headroom` and `censoring_cap` read only data and pass no derivative (#856).
 - The treatment-flow model's default priors and delay submodels are built once at load time rather than on every evaluation of the joint (#856).
   The unread `confirmed_incare_deaths_daily` series is removed from its return value.
-- The joint's reported-only quantities are built behind a zero-derivative barrier, `_detached` (#856).
-  These are the cumulative series, the combined delay PMFs, the patch model's national totals and headline quantities, its daily deviations and its correlation matrix.
+- The joint's reported-only `:=` quantities, the cumulative series, the combined delay PMFs and the expected onset-reported total, are computed only when `:=` values are recorded, so the gradient skips them (#856).
+  The patch model's national totals and headline quantities, its daily deviations and its correlation matrix are returned by a submodel, so they are built behind a zero-derivative barrier, `_detached`.
   Keys and values are unchanged, and a test checks that the joint's log density and gradient are the same with and without the barrier.
 - The national onsets and the export-weighted infections sum the patches with one matrix-vector product each (#856).
 - Observed late confirmed days in `late_confirmed_model` are scored as one `SplitCountVector`, a summed BetaBinomial term over the days with a 24h analysed count plus a summed NegativeBinomial term over the rest, each through its rule (#856).
   A vector with `missing` entries is still scored one day at a time, so the predictive keys are unchanged.
 - `onset_scanned_cells` applies the per-scan levels and builds the per-cell observation scales in one call, with its own rule (#856).
-- `onset_report_expected_total` builds delay columns only for the onset dates within the delay support of the cut-off, and the joint and the onset composer compute it behind `_detached` (#856).
-  Its rule is removed.
-  An earlier date counts in full, which differs from the old value only where that date's total report probability sat on the `safe_rate` floor.
+- `onset_report_expected_total` builds its delay columns in one pass, and its rule is removed since the gradient no longer computes it (#856).
 - `incare_census` builds the treatment-flow model's confirmed and suspect in-care census, its abscond flow and its offset total in one pass, with its own rule (#856).
 - `discretise_censored` evaluates each delay-CDF endpoint once for Gamma, LogNormal and Weibull delays, through CensoredDistributions' analytical CDF, rather than twice per boundary through the truncated interval-censored distribution (#856).
   The PMFs match the library's own double-interval-censored `pdf` to within 1e-13, which a test checks.

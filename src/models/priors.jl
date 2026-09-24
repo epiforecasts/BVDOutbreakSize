@@ -5,12 +5,21 @@
 # can be reused across composers without duplication. Delays are sampled
 # from priors and discretised with CensoredDistributions. Nothing is fixed.
 
-## `f(args...)` with no derivative passed back through it. Wraps work whose
-## result reaches only `:=` quantities the fit reports, never a likelihood,
-## so the gradient does not tape it. Its rule is in `src/ad_rules.jl`. A
-## wrapped value that reached a likelihood would get a wrong gradient, which
-## the joint's barrier test in `test/test_ad_rules.jl` checks for.
+## `f(args...)` with no derivative passed back through it. Wraps work a
+## submodel returns that reaches only `:=` quantities the fit reports, never
+## a likelihood, so the gradient does not tape it. The work still runs,
+## since `m()` reads these returns; a `:=` site skips its work with
+## `_reporting` instead. Its rule is in `src/ad_rules.jl`. A wrapped value
+## that reached a likelihood would get a wrong gradient, which the joint's
+## barrier test in `test/test_ad_rules.jl` checks for.
 _detached(f, args...) = f(args...)
+
+## True when the evaluation records `:=` values: chain rows, `Prior()` and
+## `predict`. False under a `LogDensityFunction`, `m()` and `returned`, so a
+## branch it guards compiles out of the gradient. It is the check
+## DynamicPPL's own `:=` lowering makes before it stores a value, and it is
+## not public in DynamicPPL.
+_reporting(vi) = is_extracting_colon_eq_values(vi)
 
 ## --- Delay submodels (priors only, all delays sampled) -------------------
 
