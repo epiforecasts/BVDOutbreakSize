@@ -110,6 +110,11 @@ Day-grid drift from an integer tick spacing: `best shift` leaves 0 on pairs whos
 It is the one independent series on the same basis.
 For a new vintage, take the dashboard block whose `snapshot_date` is nearest the report date, join the national `observed` column on onset date to the scan block, and check the correlation and the mean absolute difference per day against the values recorded in `data/README.md` (r above 0.96, mean absolute difference under 4 cases a day).
 A vintage that agrees with the printed `n` but not with the dashboard has its days shifted or its scale wrong, and the vision check says which.
+`task onset-cross-check` (`scripts/compare_onset_sources.py`) runs that comparison for every block against the snapshot within two days of its report date, and `-- --latest N` restricts it to the newest N blocks.
+Run it after every digitiser run and every dashboard refresh.
+It reports the mean absolute daily difference on settled dates (onset more than 56 days before the later of the two dates) and on the last 14 days separately, because the two measure different things.
+A settled-date difference means one source changed its records: report it in the PR, and open an issue when it exceeds 2 cases per day, which is where the script exits non-zero.
+Edge differences measure reporting lag between the two line lists; they are expected, and are noted in the PR but not acted on.
 
 ## Publishing the results (`--project=docs`)
 

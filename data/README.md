@@ -163,6 +163,8 @@ Against the scanned SitRep curve the observed series agrees in every vintage (Pe
 The page is rebuilt by CI and committed to <https://github.com/INRB-UMIE/BDBV2026-Epidemic_Dashboard>, so the git history of `trends.html` is the vintage archive.
 `scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the bars back through each chart's own axis labels, and keeps one snapshot per distinct data version.
 The history holds 24 distinct snapshots from 2026-07-29 to 2026-09-23 out of 106 page builds.
+The snapshot cadence is irregular, 1 to 8 days between builds, so a SitRep block is compared with the nearest snapshot within two days of its report date (`task onset-cross-check`).
+At the reporting edge the dashboard's line list lagged the SitRep extract by up to 5 cases per day in early August and led it in September.
 Columns are `snapshot_date` (the processed-data date in the chart file paths), `commit_date`, `commit_sha`, `level` (`national`, `province` or `zone`), `unit`, `onset_date`, `observed` and `imputed`.
 Health-zone rows are in `onset_dashboard_history_zones.csv.gz` with the same columns.
 Days inside a chart's range with no cases are written as zero rows.

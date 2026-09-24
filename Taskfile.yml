@@ -96,6 +96,18 @@ tasks:
         rm -r "$tmp"
         echo "reference, port and committed file are identical"
 
+  onset-cross-check:
+    desc: >
+      Compare every digitised onset block with the INRB-UMIE dashboard's
+      national onset curve from the snapshot nearest its report date
+      (data/onset_dashboard_history.csv). Prints one row per block with
+      the totals, the correlation and the mean absolute daily difference
+      on settled dates and on the last 14 days, and exits non-zero when a
+      settled-date difference exceeds 2 cases per day. Pass `-- --latest N`
+      for the N newest blocks.
+    cmds:
+      - uv run --no-project scripts/compare_onset_sources.py {{.CLI_ARGS}}
+
   onset-audit:
     desc: >
       Audit the digitised onset curve against the figures it was read
