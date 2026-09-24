@@ -27,8 +27,11 @@ Changes since v2.1.0.
   The two submodels' gradients run 1.2 to 1.9 times faster.
 - The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule (#856).
   Its gradient runs about 4.2 times faster on the 1066 scanned cells.
-- Each patch row of the province composition in `province_composition_model` is scored as one summed BetaBinomial term with its own rule, through `BetaBinomialVector` (#856).
-  A row's gradient runs about 5 times faster than through a `product_distribution` of BetaBinomials.
+- An observed province composition in `province_composition_model` is scored as one stick-breaking term, `stick_breaking_loglik`, with its own rule (#856).
+  Its rows are grouped by vintage, and groups may differ in size.
+  It sums the vintages in a different order from the per-row terms, so the log density can differ in the last bits.
+  The predictive path draws each patch row through `BetaBinomialVector`, so its keys are unchanged.
+  An observed matrix of a different size from the modelled one is an error.
 - These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data (#856).
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
 - `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!` (#856).
@@ -57,6 +60,7 @@ Changes since v2.1.0.
 - `onset_report_expected_total` builds delay columns only for the onset dates within the delay support of the cut-off, and the joint and the onset composer compute it behind `_detached` (#856).
   Its rule is removed.
   An earlier date counts in full, which differs from the old value only where that date's total report probability sat on the `safe_rate` floor.
+- `incare_census` builds the treatment-flow model's confirmed and suspect in-care census, its abscond flow and its offset total in one pass, with its own rule (#856).
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
