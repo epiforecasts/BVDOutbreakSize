@@ -1,6 +1,6 @@
 # Forecasts, scoring and counterfactuals
 
-Projecting each stream forward from the posterior, scoring those forecasts against what was later observed, and the counterfactual and delay-corrected case-fatality calculations.
+Forecasting each stream from the fitted model run past its cut-off, scoring those forecasts against what was later observed, and the counterfactual and delay-corrected case-fatality calculations.
 Scoring is continuous ranked probability score and its decomposition, with a persistence baseline for relative skill.
 
 ## Index

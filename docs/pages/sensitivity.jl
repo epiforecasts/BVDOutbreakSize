@@ -779,16 +779,15 @@ frozen_streams_table = streams_table(
 
 ## The 8 June frozen joint fit matches Chamla's confirmed-case calibration
 ## anchor exactly and carries the confirmed-case testing history through then,
-## so we roll its confirmed-case stream forward with the one-week-ahead forecast
-## machinery to the dates Chamla report.
+## so we forecast its confirmed-case stream to the dates Chamla report.
 chamla_anchor = frozen_by_cutoff["2026-06-08"]
 
 ## Our projected cumulative confirmed cases at a horizon of `h` days past the
-## 8 June cut-off: a forward `forecast_reported` run (its reproduction number
-## left to keep evolving), summarised as (median, 5%, 95%).
+## 8 June cut-off, drawn from the 8 June model run past its cut-off and
+## summarised as (median, 5%, 95%).
 function _our_confirmed_h(h)
     fc = forecast_reported(
-        chamla_anchor.chn;
+        fit_forecast("frozen_2026-06-08");
         horizon = h,
         obs_cases = chamla_anchor.o.reported_cases,
         obs_deaths = chamla_anchor.o.total_deaths,

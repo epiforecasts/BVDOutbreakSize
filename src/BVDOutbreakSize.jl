@@ -11,10 +11,12 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
+using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
+    predict, returned
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-    VarInfo, filldist, getlogjoint, is_extracting_colon_eq_values
+    Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
+    is_extracting_colon_eq_values
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -22,7 +24,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
-    LogNormal, Beta, LKJCholesky,
+    LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
@@ -54,7 +56,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     patch_summary_table, patch_overview_table, patch_headline,
     province_cfr_table, province_forecast_table,
     province_forecast_vs_truth, plot_province_forecast,
-    forecast_provinces, province_share_draws,
+    forecast_provinces, province_share_draws, PROVINCE_FORECAST_METHOD,
     plot_province_forecast_detail,
     fit_diagnostics, diagnostics_table,
     parameter_diagnostics, worst_parameters_table,
@@ -96,10 +98,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_province_composition_ppc,
     plot_rhat_spread, plot_parameter_index_diagnostics,
     plot_divergence_locations, plot_diagnostic_contrast,
-    reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
+    reconstruct_rt, reconstruct_patch_rt, fitted_onset_hazard,
     onset_nowcast_draws, plot_onset_nowcast_grid,
     predict_no_onward_deaths, plot_no_onward_deaths,
-    forecast_reported, forecast_stream, forecast_table, forecast_archive,
+    forecast_draws, forecast_reported, forecast_stream, forecast_table,
+    forecast_archive,
     province_forecast_archive,
     forecast_onsets, onset_forecast_table,
     plot_forecast,
@@ -115,7 +118,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     euler_lotka_r, r_to_R0, doubling_time, seed_infections,
     confirmed_break_correction,
     seed_at_renewal_start,
-    knot_days,
+    knot_days, future_knot_days, ForecastHorizon, horizon_days,
+    with_horizon, forecast_days,
     interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
     safe_rate,
     # prior / latent submodels
@@ -174,7 +178,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
     province_export_pressure_model,
-    province_composition_model
+    province_composition_model, composition_shares, composition_split_model
 
 ## Vector observation distributions a submodel writes on the right of `~`.
 ## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
@@ -194,6 +198,7 @@ include("data.jl")
 include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
+include("sum_to_zero.jl")
 include("summaries.jl")
 include("diagnostics.jl")
 include("scoring.jl")

@@ -1,253 +1,187 @@
-## Smoke tests for the one-week-ahead forecast. Builds a tiny
-## synthetic chain carrying the parameters `forecast_reported` reads,
-## then checks the returned DataFrame contract.
+## The forecast readers. Every forecast is the fitted model run past its
+## cut-off (`forecast_draws`), so these items draw from the fixture joint of
+## test_forecast_horizon.jl and check that the national, per-stream, onset
+## and province readers return the documented shapes off one set of draws.
 
-@testsnippet ForecastFixtures begin
-    using Turing: @model, sample, Prior
-    using Distributions: Beta, Normal, truncated
+@testsnippet ForecastDraws begin
+    using BVDOutbreakSize: forecast_draws
+    using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: deaths_only_model, bvd_joint
+    using Random: Xoshiro
 
-    ## Synthetic prior carrying every parameter name that
-    ## `forecast_reported` reads: :r, :expected_reports_T,
-    ## :expected_deaths_T, :expected_infections_T, :R_T,
-    ## :expected_confirmed_T, :expected_confirmed_deaths_T, :k. The
-    ## cumulative-onset and cumulative-death trajectories are absent, so the
-    ## latent onset and death forecasts fall back to the scalar proxies.
-    @model function _forecast_test()
-        r ~ truncated(Normal(0.05, 0.01); lower = 1.0e-3)
-        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1.0e-3)
-        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.5, 0.3); lower = 1.0e-3)
-        expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
-        expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
-        return nothing
-    end
-
-    _forecast_chain(n) = sample(
-        _forecast_test(), Prior(), n;
+    const ND = 12
+    const HMAX = 14
+    const OBS = (;
+        obs_cases = 905, obs_deaths = 18, obs_confirmed = 40,
+        obs_confirmed_deaths = 5, obs_recovered = 6,
+    )
+    fitted = patch_joint()
+    chn = sample(
+        Xoshiro(21), fitted, Prior(), ND;
         chain_type = FlexiChains.VNChain, progress = false
     )
+    pp = forecast_draws(fitted, chn; horizon = HMAX)
+    draws(key) = [collect(v) for v in vec(collect(pp[Symbol(key)]))]
 end
 
-@testitem "forecast_reported returns the documented columns" tags = [
-    :slow,
-] setup = [ForecastFixtures] begin
+@testitem "forecast_reported reads the documented columns off the draws" setup = [
+    HorizonFixtures, ForecastDraws,
+] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported
 
-    chn = _forecast_chain(200)
-    fc = forecast_reported(
-        chn;
-        horizon = 7,
-        obs_cases = 905,
-        obs_deaths = 18,
-        obs_confirmed = 210,
-        obs_confirmed_deaths = 17
-    )
-
+    fc = forecast_reported(pp; horizon = 7, OBS...)
     @test fc isa DataFrame
-    @test nrow(fc) == 200
+    @test nrow(fc) == ND
     cols = [
         :cases_cum, :deaths_cum, :confirmed_cum, :confirmed_deaths_cum,
         :cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new,
         :infections_new, :onsets_new, :deaths_latent_new, :rt_forecast,
+        :bed_demand, :isolation_level, :bed_shortfall, :admissions_fc,
+        :incare_deaths_fc, :ruleouts_fc, :recovered_cum, :recovered_new,
+        :onsets_to_date, :onset_reports_new,
     ]
     @test all(c -> c in propertynames(fc), cols)
-    @test all(fc.infections_new .>= 0)
-    @test all(fc.onsets_new .>= 0)
-    @test all(fc.deaths_latent_new .>= 0)
-    @test all(fc.cases_cum .>= 0)
-    @test all(fc.deaths_cum .>= 0)
-    @test all(fc.confirmed_cum .>= 0)
-    @test all(fc.confirmed_deaths_cum .>= 0)
-    @test all(fc.cases_new .>= 0)
-    @test all(fc.deaths_new .>= 0)
-    ## New-this-week cannot exceed the cumulative forecast.
-    @test all(fc.cases_new .<= fc.cases_cum)
-    @test all(fc.deaths_new .<= fc.deaths_cum)
-    @test all(fc.confirmed_new .<= fc.confirmed_cum)
-    ## Every cumulative replicate starts at its own observed origin and only
-    ## grows from there.
-    @test all(fc.confirmed_deaths_cum .>= 17)
+    ## Each new count is the model's own future daily counts summed over the
+    ## week, and each cumulative the observed cut-off plus it.
+    @test fc.confirmed_new ==
+        [sum(x[1:7]) for x in draws("forecast_confirmed.increments")]
+    @test fc.cases_new ==
+        [sum(x[1:7]) for x in draws("forecast_reports.increments")]
+    @test fc.confirmed_cum == OBS.obs_confirmed .+ fc.confirmed_new
+    @test fc.recovered_cum == OBS.obs_recovered .+ fc.recovered_new
+    @test fc.isolation_level ==
+        round.(Int, getindex.(draws("forecast_isolation.obs"), 7))
+    @test fc.rt_forecast == getindex.(draws("forecast_rt"), 7)
+    for c in (:cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new)
+        @test all(>=(0), fc[!, c])
+    end
+    ## A longer horizon adds the second week's counts to the same draws.
+    fc14 = forecast_reported(pp; horizon = 14, OBS...)
+    @test all(fc14.confirmed_new .>= fc.confirmed_new)
+    @test_throws ArgumentError forecast_reported(pp; horizon = 15, OBS...)
+    ## Without a confirmed origin the confirmed columns are left out.
+    bare = forecast_reported(pp; obs_cases = 905, obs_deaths = 18)
+    @test !(:confirmed_cum in propertynames(bare))
 end
 
-@testitem "forecast_reported does not cap confirmed deaths at suspected" tags = [
-    :slow,
-] setup = [ForecastFixtures] begin
-    using DataFrames: DataFrame
-    using Statistics: mean, median
-    using BVDOutbreakSize: forecast_reported
-
-    ## The suspected-death headline stalls while confirmed deaths keep
-    ## accruing, which is the state the reported data has been in since
-    ## 2026-06-19: `total_deaths` froze at 246 on 2026-05-26 and the
-    ## confirmed-death cumulative passed it three weeks later. Capping the
-    ## confirmed-death replicate at the forecast suspected-death cumulative
-    ## clamps it below its own origin and floors the new count at zero.
-    chn = _forecast_chain(400)
-    fc = forecast_reported(
-        chn;
-        horizon = 7,
-        obs_cases = 905,
-        obs_deaths = 246,
-        obs_confirmed = 210,
-        obs_confirmed_deaths = 2642
-    )
-
-    ## No replicate falls below the cut-off cumulative it starts from.
-    @test all(fc.confirmed_deaths_cum .>= 2642)
-    ## The forecast is a genuine projection rather than a floor artefact.
-    @test mean(fc.confirmed_deaths_new .== 0) < 0.1
-    @test median(fc.confirmed_deaths_new) > 0
-end
-
-@testitem "forecast_reported projects isolation beds and recovered" tags = [
-    :slow,
+@testitem "forecast_draws is reproducible and keeps the fitted draws" setup = [
+    HorizonFixtures, ForecastDraws,
 ] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
+    again = forecast_draws(fitted, chn; horizon = HMAX)
+    @test draws("forecast_confirmed.increments") ==
+        [collect(v) for v in vec(collect(again[Symbol("forecast_confirmed.increments")]))]
+    @test vec(Array(pp[:C_T])) == vec(Array(chn[:C_T]))
+end
+
+@testitem "forecast_stream reads each stream off the joint's draws" setup = [
+    HorizonFixtures, ForecastDraws,
+] begin
+    using BVDOutbreakSize: forecast_stream, forecast_reported, forecast_onsets
+
+    fc = forecast_reported(pp; horizon = 7, OBS...)
+    @test forecast_stream(pp, :confirmed_cases) == fc.confirmed_new
+    @test forecast_stream(pp, :reported_cases) == fc.cases_new
+    @test forecast_stream(pp, :suspected_deaths) == fc.deaths_new
+    @test forecast_stream(pp, :confirmed_deaths) == fc.confirmed_deaths_new
+    @test forecast_stream(pp, :recovered) == fc.recovered_new
+    @test forecast_stream(pp, :isolation_beds) == fc.isolation_level
+    @test forecast_stream(pp, :onset_reports) == fc.onset_reports_new
+    ex = forecast_stream(pp, :exports; horizon = 14)
+    @test length(ex) == ND && all(>=(0), ex)
+    @test_throws ArgumentError forecast_stream(pp, :not_a_stream)
+end
+
+@testitem "forecast_stream reads a single-stream fit's own draws" setup = [
+    HorizonFixtures,
+] begin
+    using BVDOutbreakSize: forecast_draws, forecast_stream
+    using Turing: sample, Prior
     import FlexiChains
-    using DataFrames: DataFrame
-    using BVDOutbreakSize: forecast_reported, forecast_table
+    using Random: Xoshiro
 
-    ## Synthetic chain that also carries the isolation and recovered
-    ## deterministics, so the forecast projects the bed occupancy and the
-    ## cumulative recovered using their own dispersions.
-    @model function _forecast_iso_test()
-        r ~ truncated(Normal(0.05, 0.01); lower = 1.0e-3)
-        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1.0e-3)
-        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.5, 0.3); lower = 1.0e-3)
-        expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
-        expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
-        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
-        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
-        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        expected_recovered_T ~ truncated(Normal(32.0, 8.0); lower = 1.0)
-        recovered_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        return nothing
+    for (name, stream) in (
+            "cases" => :reported_cases, "deaths" => :suspected_deaths,
+            "confirmed" => :confirmed_cases,
+            "confirmed deaths" => :confirmed_deaths,
+            "treatment" => :isolation_beds, "onsets" => :onset_reports,
+            "exports" => :exports,
+        )
+        m = Dict(composers())[name]
+        c = sample(
+            Xoshiro(3), m, Prior(), 5;
+            chain_type = FlexiChains.VNChain, progress = false
+        )
+        spp = forecast_draws(m, c; horizon = 7)
+        v = forecast_stream(spp, stream)
+        @test length(v) == 5
+        @test all(>=(0), v)
+        ## The stream's own future counts from the fit's draws, summed over
+        ## the week or read on its last day.
+        spec = BVDOutbreakSize._STREAM_FORECAST[stream]
+        if stream !== :onset_reports
+            got = [collect(x) for x in vec(collect(spp[Symbol(spec.key)]))]
+            @test v == (
+                spec.level ? [round(Int, x[7]) for x in got] :
+                    [sum(x[1:7]) for x in got]
+            )
+        end
+        ## A single-stream fit forecasts only its own stream.
+        stream === :reported_cases && @test_throws ArgumentError forecast_stream(
+            forecast_draws(m, c; horizon = 7), :confirmed_cases
+        )
     end
-    chn = sample(
-        _forecast_iso_test(), Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    fc = forecast_reported(
-        chn; horizon = 7,
-        obs_cases = 905, obs_deaths = 18,
-        obs_confirmed = 210, obs_confirmed_deaths = 17,
-        obs_recovered = 32
-    )
-    @test :bed_demand in propertynames(fc)
-    @test :isolation_level in propertynames(fc)
-    @test :recovered_cum in propertynames(fc)
-    @test :recovered_new in propertynames(fc)
-    @test all(fc.isolation_level .>= 0)
-    @test all(fc.bed_demand .>= 0)
-    ## Supply-limited occupancy never exceeds the projected demand.
-    @test all(fc.isolation_level .<= fc.bed_demand)
-    ## Occupancy is min(demand, capacity): with demand (~600) above capacity
-    ## (~430) it reaches the capacity, where the old exponential soft cap would
-    ## have plateaued well below it (~0.75 of capacity).
-    @test maximum(fc.isolation_level) > 400
-    @test all(fc.recovered_cum .>= 0)
-    @test all(fc.recovered_new .<= fc.recovered_cum)
-    tbl = forecast_table(fc)
-    @test "DRC isolation beds" in tbl[!, "Stream"]
-    @test "DRC recovered among confirmed" in tbl[!, "Stream"]
-    @test "demand at T+7" in tbl[!, "Quantity"]
-    @test "occupancy at T+7" in tbl[!, "Quantity"]
-    ## The bed forecast is validated against an observed occupancy when one is
-    ## supplied; without it the beds are not scored.
-    using BVDOutbreakSize: forecast_vs_truth
-    vt = forecast_vs_truth(
-        fc;
-        observed = (confirmed_cum = 210, confirmed_deaths_cum = 17),
-        isolation = 359
-    )
-    @test "DRC isolation beds" in vt[!, "Stream"]
-    vt0 = forecast_vs_truth(
-        fc;
-        observed = (confirmed_cum = 210, confirmed_deaths_cum = 17)
-    )
-    @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
-@testitem "forecast_table has expected rows and columns" tags = [:slow] setup = [
-    ForecastFixtures,
+@testitem "forecast_onsets splits the reported total at the cut-off" setup = [
+    HorizonFixtures, ForecastDraws,
 ] begin
-    using DataFrames: DataFrame, nrow
-    using BVDOutbreakSize: forecast_reported, forecast_table
+    using BVDOutbreakSize: forecast_onsets
 
-    chn = _forecast_chain(200)
-    fc = forecast_reported(
-        chn;
-        horizon = 7,
-        obs_cases = 905,
-        obs_deaths = 18,
-        obs_confirmed = 210,
-        obs_confirmed_deaths = 17
-    )
-
-    tbl = forecast_table(fc)
-    @test tbl isa DataFrame
-    ## Two confirmed streams x two quantities (cumulative, new this week).
-    @test nrow(tbl) == 4
-    @test names(tbl) ==
-        [
-        "Stream", "Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%",
-    ]
-    @test Set(tbl[!, "Stream"]) ==
-        Set(["DRC confirmed cases", "DRC confirmed deaths"])
-    @test Set(tbl[!, "Quantity"]) ==
-        Set(["cumulative by T+7", "new this week"])
+    fc = forecast_onsets(pp; horizon = 14, obs_value = 100)
+    @test fc.onsets_unreported ≈ fc.onsets_to_date .- fc.onset_reports_to_date
+    @test all(>=(0), fc.onset_reports_new)
+    @test fc.onset_reports_cum == 100 .+ fc.onset_reports_new
+    ## The backfill and the future reports are the two parts of the mean
+    ## increment, the reports of onsets before and after the cut-off.
+    @test all(>=(-1.0e-8), fc.onset_reports_backfill)
+    @test all(>=(-1.0e-8), fc.onset_reports_future)
+    ## The triangle is forecast a whole number of weeks ahead only.
+    @test_throws ArgumentError forecast_onsets(pp; horizon = 10)
 end
 
-@testitem "forecast_vs_truth compares forecast to observed counts" tags = [
-    :slow,
-] setup = [ForecastFixtures] begin
-    using DataFrames: DataFrame, nrow
-    using BVDOutbreakSize: forecast_reported, forecast_vs_truth
+@testitem "forecast_table has expected rows and columns" setup = [
+    HorizonFixtures, ForecastDraws,
+] begin
+    using DataFrames: nrow
+    using BVDOutbreakSize: forecast_reported, forecast_table
 
-    chn = _forecast_chain(200)
-    fc = forecast_reported(
-        chn;
-        horizon = 7,
-        obs_cases = 905,
-        obs_deaths = 18,
-        obs_confirmed = 210,
-        obs_confirmed_deaths = 17
-    )
+    tbl = forecast_table(forecast_reported(pp; horizon = 7, OBS...))
+    @test "Stream" in names(tbl)
+    @test Set(tbl[!, "Quantity"]) ⊇ Set(["cumulative by T+7", "new this week"])
+end
 
-    tbl = forecast_vs_truth(
-        fc;
-        observed = (confirmed_cum = 260, confirmed_deaths_cum = 20)
-    )
+@testitem "forecast_archive returns tidy long scored streams" setup = [
+    HorizonFixtures, ForecastDraws,
+] begin
+    using DataFrames: nrow
+    using Dates: Date, Day
+    using BVDOutbreakSize: forecast_reported, forecast_archive
 
-    @test tbl isa DataFrame
-    ## Two confirmed streams x two quantities (cumulative, new this week).
-    @test nrow(tbl) == 4
-    @test names(tbl) ==
+    made = Date("2026-06-07")
+    fcs = [(h, forecast_reported(pp; horizon = h, OBS...)) for h in (7, 14)]
+    arch = forecast_archive(fcs; made_date = made, thin = 2)
+    @test names(arch) ==
+        ["made_date", "horizon", "target_date", "stream", "draw", "value"]
+    @test Set(arch.stream) == Set(
         [
-        "Stream", "Quantity", "Observed", "Lower 90%", "Lower 60%",
-        "Lower 30%", "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI",
-    ]
-    @test Set(tbl[!, "Stream"]) ==
-        Set(["DRC confirmed cases", "DRC confirmed deaths"])
-    @test Set(tbl[!, "Quantity"]) ==
-        Set(["cumulative by T+7", "new this week"])
-
-    for row in eachrow(tbl)
-        covered = row["Lower 90%"] <= row.Observed <= row["Upper 90%"]
-        @test row["Within 90% PI"] == (covered ? "yes" : "no")
-    end
+            "confirmed cases", "confirmed deaths", "recovered",
+            "isolation beds", "onset reports",
+        ]
+    )
+    @test all(arch.target_date .== arch.made_date .+ Day.(arch.horizon))
+    sub = arch[(arch.stream .== "confirmed cases") .& (arch.horizon .== 7), :]
+    @test nrow(sub) == cld(ND, 2)
 end
 
 @testitem "forecast_vs_truth covers all streams and guards on observed" begin
@@ -308,44 +242,6 @@ end
     @test only(c3.Observed) == 70
 end
 
-@testitem "forecast_archive returns tidy long scored streams" tags = [
-    :slow,
-] setup = [ForecastFixtures] begin
-    using DataFrames: DataFrame, nrow
-    using Dates: Date, Day
-    using BVDOutbreakSize: forecast_reported, forecast_archive
-
-    chn = _forecast_chain(200)
-    made = Date("2026-06-07")
-    fcs = [
-        (
-            h,
-            forecast_reported(
-                chn;
-                horizon = h,
-                obs_cases = 905, obs_deaths = 18,
-                obs_confirmed = 210, obs_confirmed_deaths = 17
-            ),
-        )
-            for h in (7, 14)
-    ]
-    arch = forecast_archive(fcs; made_date = made, thin = 2)
-
-    @test arch isa DataFrame
-    @test names(arch) ==
-        ["made_date", "horizon", "target_date", "stream", "draw", "value"]
-    ## Only the incident confirmed streams are carried by this chain (recovered
-    ## and beds are absent, so skipped), across the two horizons.
-    @test Set(arch.stream) == Set(["confirmed cases", "confirmed deaths"])
-    @test Set(arch.horizon) == Set([7, 14])
-    @test all(arch.made_date .== made)
-    ## target_date is made_date plus the horizon.
-    @test all(arch.target_date .== arch.made_date .+ Day.(arch.horizon))
-    ## Thinning keeps every second draw: 200 / 2 = 100 per (stream, horizon).
-    sub = arch[(arch.stream .== "confirmed cases") .& (arch.horizon .== 7), :]
-    @test nrow(sub) == 100
-    @test all(arch.value .>= 0)
-end
 
 @testitem "forecast_archive carries the ward-bed occupancy split" begin
     using DataFrames: DataFrame
@@ -381,874 +277,4 @@ end
         made_date = Date("2026-06-13")
     )
     @test Set(arch0.stream) == Set(["isolation beds"])
-end
-
-@testitem "forecast cumulative streams never fall below the cut-off" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
-    import FlexiChains
-    using Statistics: median
-    using BVDOutbreakSize: forecast_reported
-
-    ## A declining chain (growth rate r < 0, R_T < 1): the regime where a
-    ## stock-scaling projection (`cumulative_T * exp(r * horizon)`) can
-    ## shrink the cumulative below the observed cut-off, an impossible
-    ## decreasing cumulative. The outbreak age `:T` is carried so the daily
-    ## incidence at the cut-off is inferred from the cumulative total.
-    @model function _forecast_decline_test()
-        r ~ truncated(Normal(-0.05, 0.01); upper = -1.0e-3)
-        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1.0e-3)
-        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-        T := 100.0
-        expected_reports_T ~ truncated(Normal(900.0, 80.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(40.0, 6.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(2000.0, 200.0); lower = 1.0)
-        R_T ~ truncated(Normal(0.7, 0.1); lower = 1.0e-3, upper = 1.0)
-        expected_confirmed_T ~ truncated(Normal(800.0, 60.0); lower = 1.0)
-        expected_confirmed_deaths_T ~ truncated(Normal(30.0, 5.0); lower = 0.5)
-        return nothing
-    end
-    chn = sample(
-        _forecast_decline_test(), Prior(), 400;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-
-    obs_cases, obs_deaths, obs_confirmed = 1205, 60, 1203
-    fc(h) = forecast_reported(
-        chn; horizon = h,
-        obs_cases = obs_cases, obs_deaths = obs_deaths,
-        obs_confirmed = obs_confirmed, obs_confirmed_deaths = 35
-    )
-    f7, f21 = fc(7), fc(21)
-
-    ## Every draw's projected cumulative stays at or above the observed
-    ## cut-off, even though the outbreak is shrinking.
-    @test all(f7.cases_cum .>= obs_cases)
-    @test all(f7.deaths_cum .>= obs_deaths)
-    @test all(f7.confirmed_cum .>= obs_confirmed)
-    @test all(f21.confirmed_cum .>= obs_confirmed)
-
-    ## The cumulative grows with the horizon (more new counts accrue) rather
-    ## than shrinking, which a stock-scaling projection would do here.
-    @test median(f21.cases_cum) >= median(f7.cases_cum)
-    @test median(f21.deaths_cum) >= median(f7.deaths_cum)
-    @test median(f21.confirmed_cum) >= median(f7.confirmed_cum)
-end
-
-## Per-stream forecasts from either fit kind. Two synthetic chains stand in
-## for the two shapes `forecast_stream` must serve: a top-level chain naming
-## the joint's un-prefixed aliases, and a nested chain naming the
-## single-stream composers' submodel-bound deterministics. The nested chain
-## carries no `r`, `R_T` or `T`, so it exercises the reconstruction path.
-@testsnippet StreamFixtures begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated, product_distribution
-    import FlexiChains
-    using BVDOutbreakSize: knot_days
-
-    ## Grid length and intervention day shared by the nested chain and the
-    ## `forecast_stream` calls that reconstruct its walk.
-    const STREAM_N = 60
-    const STREAM_BREAK = 30.0
-    ## One innovation per walk step, matching `rt_walk_model` at these
-    ## settings, so `reconstruct_rt` accepts the chain.
-    const STREAM_NZ = length(knot_days(STREAM_N; week = 7, start = 1)) - 1
-
-    ## Joint-shaped: every quantity un-prefixed, as `bvd_joint`'s `:=`
-    ## aliases expose them.
-    @model function _stream_toplevel()
-        r ~ truncated(Normal(0.05, 0.01); lower = 1.0e-3)
-        R_T ~ truncated(Normal(1.5, 0.3); lower = 1.0e-3)
-        T ~ truncated(Normal(100.0, 5.0); lower = 10.0)
-        k_cases ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        k_deaths ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        k_confirmed ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        k_confirmed_deaths ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        expected_reports_T ~ truncated(Normal(900.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
-        expected_confirmed_deaths_T ~ truncated(Normal(17.0, 3.0); lower = 0.5)
-        expected_exports_T ~ truncated(Normal(12.0, 3.0); lower = 0.5)
-        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
-        expected_recovered_T ~ truncated(Normal(300.0, 30.0); lower = 1.0)
-        recovered_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
-        return nothing
-    end
-
-    ## Single-stream-shaped: each stream's expected count under its composer
-    ## binding, one scalar `dispersion_state.k`, and the walk and generation
-    ## interval the reconstruction reads. `growth_state.T` is the cryptic
-    ## duration only, and there is no `r`, `R_T` or `T`.
-    ##
-    ## Confirmed cases are the exception to the nested naming: their
-    ## submodel keeps `expected_confirmed` on a plain `=` (required for
-    ## Enzyme's AD), so `confirmed_only_model` aliases the cut-off count
-    ## un-prefixed as `expected_confirmed_T`, exactly as the joint does.
-    @model function _stream_nested()
-        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"growth_state.r" ~ truncated(Normal(0.2, 0.02); lower = 1.0e-3)
-        var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
-        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
-        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), STREAM_NZ))
-        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
-        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
-        var"dispersion_state.k" ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        var"cases_state.expected_reports" ~
-            truncated(Normal(900.0, 50.0); lower = 1.0)
-        var"deaths_state.expected_deaths_T" ~
-            truncated(Normal(40.0, 5.0); lower = 1.0)
-        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
-        var"confirmed_deaths_state.expected_confirmed_deaths" ~
-            truncated(Normal(17.0, 3.0); lower = 0.5)
-        var"exports_state.expected_exports_T" ~
-            truncated(Normal(12.0, 3.0); lower = 0.5)
-        var"treatment_state.expected_bed_demand" ~
-            truncated(Normal(600.0, 80.0); lower = 1.0)
-        var"treatment_state.expected_isolation" ~
-            truncated(Normal(400.0, 20.0); lower = 1.0)
-        ## `bed_utilisation := occ_T / C_T`, so a capacity near 430 given the
-        ## occupancy above.
-        var"treatment_state.bed_utilisation" ~
-            truncated(Normal(0.93, 0.02); lower = 0.1, upper = 1.0)
-        var"treatment_state.disp_state.k" ~
-            truncated(Normal(10.0, 3.0); lower = 1.0)
-        return nothing
-    end
-
-    _toplevel_chain(n) = sample(
-        _stream_toplevel(), Prior(), n;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    _nested_chain(n) = sample(
-        _stream_nested(), Prior(), n;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-
-    const STREAM_OBS = Dict(
-        :reported_cases => 905, :suspected_deaths => 40,
-        :confirmed_cases => 210, :confirmed_deaths => 17,
-        :exports => 12, :isolation_beds => 359
-    )
-    const STREAM_ALL = collect(keys(STREAM_OBS))
-    ## Recovered has no single-stream fit, so it is reachable from the
-    ## joint-shaped chain alone and is kept out of `STREAM_ALL`.
-    const STREAM_JOINT_OBS = Dict(:recovered => 295)
-end
-
-@testitem "forecast_stream covers every stream from a joint-shaped chain" tags = [
-    :slow,
-] setup = [StreamFixtures] begin
-    using BVDOutbreakSize: forecast_stream
-
-    chn = _toplevel_chain(200)
-    for (s, obs_value) in merge(STREAM_OBS, STREAM_JOINT_OBS)
-        fc = forecast_stream(chn, s; horizon = 7, obs_value = obs_value)
-        @test fc isa Vector
-        @test length(fc) == 200
-        @test all(fc .>= 0)
-    end
-    ## Beds are a supply-limited level, so the occupancy cannot exceed the
-    ## capacity (~430) however far the demand (~600) is projected.
-    beds = forecast_stream(
-        chn, :isolation_beds; horizon = 7,
-        obs_value = 359
-    )
-    @test maximum(beds) <= 600
-    @test maximum(beds) > 300
-end
-
-@testitem "forecast_stream projects every stream from a nested chain" tags = [
-    :slow,
-] setup = [StreamFixtures] begin
-    using BVDOutbreakSize: forecast_stream
-
-    chn = _nested_chain(200)
-    for s in STREAM_ALL
-        fc = forecast_stream(
-            chn, s; horizon = 7, obs_value = STREAM_OBS[s],
-            n = STREAM_N, breakpoint = STREAM_BREAK
-        )
-        @test fc isa Vector
-        @test length(fc) == 200
-        @test all(fc .>= 0)
-    end
-    beds = forecast_stream(
-        chn, :isolation_beds; horizon = 7,
-        obs_value = 359, n = STREAM_N, breakpoint = STREAM_BREAK
-    )
-    @test maximum(beds) > 300
-end
-
-@testitem "forecast_stream incident streams grow with the horizon" tags = [
-    :slow,
-] setup = [StreamFixtures] begin
-    using Statistics: median
-    using BVDOutbreakSize: forecast_stream
-
-    ## More new counts accrue over a longer horizon, on both chain shapes.
-    chn = _toplevel_chain(400)
-    for s in (:reported_cases, :confirmed_cases, :exports)
-        f7 = forecast_stream(chn, s; horizon = 7, obs_value = STREAM_OBS[s])
-        f21 = forecast_stream(chn, s; horizon = 21, obs_value = STREAM_OBS[s])
-        @test median(f21) >= median(f7)
-    end
-    nchn = _nested_chain(400)
-    f7 = forecast_stream(
-        nchn, :confirmed_cases; horizon = 7,
-        obs_value = 210, n = STREAM_N, breakpoint = STREAM_BREAK
-    )
-    f21 = forecast_stream(
-        nchn, :confirmed_cases; horizon = 21,
-        obs_value = 210, n = STREAM_N, breakpoint = STREAM_BREAK
-    )
-    @test median(f21) >= median(f7)
-end
-
-@testitem "forecast_stream rejects unknown and unfitted streams" tags = [
-    :slow,
-] setup = [StreamFixtures] begin
-    using BVDOutbreakSize: forecast_stream
-
-    chn = _toplevel_chain(50)
-    @test_throws ArgumentError forecast_stream(
-        chn, :not_a_stream;
-        horizon = 7, obs_value = 1
-    )
-    ## A nested chain carries no `r` or `R_T`, so without the grid length and
-    ## breakpoint needed to rebuild them the projection is an error rather
-    ## than a silent fallback to the wrong growth rate.
-    nchn = _nested_chain(50)
-    @test_throws ArgumentError forecast_stream(
-        nchn, :reported_cases;
-        horizon = 7, obs_value = 905
-    )
-end
-
-@testitem "every composer carries its own stream's forecast keys" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    import FlexiChains
-    using BVDOutbreakSize: cases_only_model, deaths_only_model,
-        confirmed_only_model, confirmed_deaths_only_model,
-        treatment_only_model, exports_only_model,
-        _STREAM_SPEC, _resolve_draws, _bed_capacity,
-        _has_key
-
-    ## The fixtures above pin `forecast_stream`'s key resolution against
-    ## hand-written chains, which cannot catch `_STREAM_SPEC` naming a key
-    ## the real model never exposes. Sample each single-stream composer
-    ## from the prior and check its own stream resolves off a real chain.
-    m_cases = cases_only_model(40, missing)
-    m_deaths = deaths_only_model(
-        33, missing;
-        deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
-    )
-    m_confirmed = confirmed_only_model(
-        40, 8;
-        confirmed_history = (; days = [20, 40], counts = [3, 8]),
-        lab_history = (; days = [20, 40], counts = [5, 9])
-    )
-    m_confirmed_deaths = confirmed_deaths_only_model(
-        40, 17, 246;
-        deaths_history = (; days = [20, 40], counts = [120, 246])
-    )
-    fits = [
-        (:reported_cases, m_cases), (:suspected_deaths, m_deaths),
-        (:confirmed_cases, m_confirmed),
-        (:confirmed_deaths, m_confirmed_deaths),
-        (:isolation_beds, treatment_only_model(33)),
-        (:exports, exports_only_model(40, 2)),
-    ]
-    for (stream, fit) in fits
-        chn = sample(
-            fit, Prior(), 10; chain_type = FlexiChains.VNChain,
-            progress = false
-        )
-        spec = _STREAM_SPEC[stream]
-        @test !isnothing(_resolve_draws(chn, spec.expected))
-        if spec.noise === :nb
-            @test !isnothing(_resolve_draws(chn, spec.dispersion))
-        end
-        ## The treatment composer exposes no `bed_capacity` key, so the
-        ## supply limit must still be recoverable from the ratio.
-        if stream === :isolation_beds
-            @test !isnothing(_bed_capacity(chn))
-        end
-        ## The by-dataset reproduction-number panels draw their reference
-        ## band off the renewal walk each fit carries, so a composer that
-        ## does not expose the walk base loses its band with no error.
-        @test _has_key(chn, Symbol("rt_state.log_R0"))
-    end
-end
-
-@testitem "forecast_stream recovers bed capacity on a standalone fit" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated, product_distribution
-    using Statistics: mean
-    import FlexiChains
-    using BVDOutbreakSize: forecast_stream, _bed_capacity, knot_days
-
-    ## A standalone treatment fit exposes no capacity key, so the cut-off
-    ## capacity is recovered from `expected_isolation / bed_utilisation`.
-    ## Fix a known capacity and check the recovery returns it: the occupancy
-    ## cancels, so the answer must not depend on the occupancy level.
-    nz = length(knot_days(60; week = 7, start = 1)) - 1
-    @model function _cap_test(occ, capacity)
-        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
-        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
-        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
-        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
-        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
-        var"treatment_state.disp_state.k" ~
-            truncated(Normal(10.0, 3.0); lower = 1.0)
-        var"treatment_state.expected_bed_demand" ~
-            truncated(Normal(600.0, 80.0); lower = 1.0)
-        var"treatment_state.expected_isolation" := occ
-        var"treatment_state.bed_utilisation" := occ / capacity
-        return nothing
-    end
-
-    ## A mid-outbreak occupancy and a near-zero early one both recover the
-    ## same fixed capacity.
-    for occ in (400.0, 1.0e-8)
-        chn = sample(
-            _cap_test(occ, 430.0), Prior(), 50;
-            chain_type = FlexiChains.VNChain, progress = false
-        )
-        cap = _bed_capacity(chn)
-        @test all(c -> isapprox(c, 430.0; rtol = 1.0e-6), cap)
-        ## The supply limit binds: demand (~600) is capped at the capacity.
-        beds = forecast_stream(
-            chn, :isolation_beds; horizon = 7,
-            obs_value = 359, n = 60, breakpoint = 30.0
-        )
-        @test maximum(beds) <= 430
-    end
-end
-
-@testitem "forecast_stream beds reproduce forecast_reported's occupancy" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
-    using Statistics: median, mean
-    import FlexiChains
-    using BVDOutbreakSize: forecast_reported, forecast_stream
-
-    ## The joint's isolation forecast must come out the same whether it is
-    ## taken from `forecast_reported` (which projects every stream at once)
-    ## or from `forecast_stream` (one stream), since both read the same
-    ## demand, capacity and isolation dispersion. The replicates draw from
-    ## different points of the RNG stream, so the distributions are compared
-    ## rather than the draws.
-    @model function _iso_parity()
-        r ~ truncated(Normal(0.05, 0.01); lower = 1.0e-3)
-        k ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        expected_reports_T ~ truncated(Normal(900.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.5, 0.3); lower = 1.0e-3)
-        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
-        expected_confirmed_deaths_T ~ truncated(Normal(17.0, 3.0); lower = 0.5)
-        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
-        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
-        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
-        return nothing
-    end
-    chn = sample(
-        _iso_parity(), Prior(), 2000;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-
-    for h in (7, 21)
-        fr = forecast_reported(
-            chn; horizon = h, obs_cases = 905,
-            obs_deaths = 40, obs_confirmed = 210,
-            obs_confirmed_deaths = 17
-        ).isolation_level
-        fs = forecast_stream(
-            chn, :isolation_beds; horizon = h,
-            obs_value = 359
-        )
-        @test isapprox(median(fr), median(fs); rtol = 0.05)
-        @test isapprox(mean(fr), mean(fs); rtol = 0.05)
-    end
-end
-
-@testitem "forecast_stream reconstructs cut-off R_T at the model's ramp" tags = [
-    :slow,
-] setup = [StreamFixtures] begin
-    using BVDOutbreakSize: _cutoff_rt, reconstruct_rt
-
-    ## A single-stream chain carries no top-level `R_T`, so `_cutoff_rt`
-    ## rebuilds it from the walk. The reconstruction is ramp-sensitive, and
-    ## the model's ramp is 21 (`sigmoid_ramp` / `rt_walk_model`), not
-    ## `reconstruct_rt`'s lighter 14 default. Pin that `_cutoff_rt` uses 21:
-    ## it must equal the ramp = 21 cut-off column and differ from ramp = 14,
-    ## so a regression back to the default would fail here.
-    chn = _nested_chain(200)
-    got = _cutoff_rt(
-        chn; n = STREAM_N, breakpoint = STREAM_BREAK,
-        rt_start = 1, rt_walk_start = 1
-    )
-    rt21 = reconstruct_rt(
-        chn; n = STREAM_N, breakpoint = STREAM_BREAK,
-        ramp = 21.0
-    )
-    rt14 = reconstruct_rt(
-        chn; n = STREAM_N, breakpoint = STREAM_BREAK,
-        ramp = 14.0
-    )
-    cut21 = [rt21[i, STREAM_N] for i in axes(rt21, 1)]
-    cut14 = [rt14[i, STREAM_N] for i in axes(rt14, 1)]
-
-    ## Uses the model ramp exactly.
-    @test got == cut21
-    ## The ramp genuinely moves the cut-off R_T, so the wrong default is a
-    ## real, detectable error rather than a harmless relabelling.
-    @test maximum(abs.(cut21 .- cut14)) > 1.0e-6
-    @test got != cut14
-end
-
-@testitem "confirmed deaths survive a stalled suspected stream" tags = [
-    :slow,
-] setup = [ForecastFixtures] begin
-    using Statistics: median
-    using BVDOutbreakSize: forecast_reported
-
-    chn = _forecast_chain(200)
-    ## The published suspected-death total has stalled below the confirmed
-    ## death total, which is what the DRC series does once confirmation
-    ## overtakes the frozen suspected headline. Capping the confirmed-death
-    ## replicate at the forecast suspected cumulative would clamp it below
-    ## its own origin and force every new count to zero.
-    fc = forecast_reported(
-        chn; horizon = 7,
-        obs_cases = 905, obs_deaths = 246,
-        obs_confirmed = 4000, obs_confirmed_deaths = 2642
-    )
-    @test median(fc.confirmed_deaths_new) > 0
-    @test all(fc.confirmed_deaths_cum .>= 2642)
-
-    ## The suspected total still leads here, but nothing enforces that.
-    capped = forecast_reported(
-        chn; horizon = 7,
-        obs_cases = 905, obs_deaths = 300,
-        obs_confirmed = 4000, obs_confirmed_deaths = 100
-    )
-    @test all(capped.confirmed_deaths_cum .<= capped.deaths_cum)
-end
-
-@testitem "confirmed deaths project from their own trajectory" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
-    import FlexiChains
-    using Statistics: median
-    using BVDOutbreakSize: forecast_reported
-
-    ## A declining chain over a long-running outbreak. Inverting the
-    ## confirmed-death cumulative under exponential growth at a negative
-    ## rate collapses the implied daily rate towards zero, so a stream still
-    ## reporting deaths every day is projected at almost nothing. The
-    ## cumulative trajectory carries the real daily rate.
-    @model function _cd_traj_test(with_trajectory::Bool)
-        r ~ truncated(Normal(-0.02, 0.001); upper = -1.0e-3)
-        inv_sqrt_k ~ truncated(Normal(0.3, 0.01); lower = 1.0e-3)
-        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-        T := 150.0
-        expected_reports_T ~ truncated(Normal(4000.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(100.0, 5.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(9000.0, 100.0); lower = 1.0)
-        R_T ~ truncated(Normal(0.9, 0.01); lower = 1.0e-3)
-        expected_confirmed_T ~ truncated(Normal(3000.0, 50.0); lower = 1.0)
-        expected_confirmed_deaths_T ~
-            truncated(Normal(280.0, 5.0); lower = 1.0)
-        cd_daily ~ truncated(Normal(20.0, 0.5); lower = 1.0)
-        if with_trajectory
-            cumulative_confirmed_deaths := cumsum(fill(cd_daily, 10))
-        end
-        return nothing
-    end
-    _chain(flag) = sample(
-        _cd_traj_test(flag), Prior(), 300;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    _fc(flag) = forecast_reported(
-        _chain(flag); horizon = 7,
-        obs_cases = 8000, obs_deaths = 4000,
-        obs_confirmed = 3000, obs_confirmed_deaths = 280
-    )
-
-    with_traj = median(_fc(true).confirmed_deaths_new)
-    without = median(_fc(false).confirmed_deaths_new)
-    ## Roughly 20 deaths a day over a shrinking week, against the handful the
-    ## exponential-age inversion implies.
-    @test with_traj > 100
-    @test without < 20
-end
-
-@testitem "each count stream is replicated through its own dispersion" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
-    import FlexiChains
-    using Statistics: mean, std
-    using BVDOutbreakSize: forecast_reported, forecast_stream
-
-    ## The population-mean dispersion is near-Poisson while the confirmed
-    ## stream's own is heavily overdispersed, so replicating the confirmed
-    ## column through the population value would understate its spread.
-    @model function _per_stream_k_test()
-        r ~ truncated(Normal(0.03, 0.0005); lower = 1.0e-3)
-        T := 100.0
-        k ~ truncated(Normal(500.0, 1.0); lower = 1.0)
-        k_confirmed ~ truncated(Normal(2.0, 0.02); lower = 0.1)
-        expected_reports_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(20.0, 1.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 5.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.2, 0.01); lower = 1.0e-3)
-        expected_confirmed_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
-        return nothing
-    end
-    chn = sample(
-        _per_stream_k_test(), Prior(), 800;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    fc = forecast_reported(
-        chn; horizon = 7,
-        obs_cases = 3000, obs_deaths = 200, obs_confirmed = 3000
-    )
-
-    rel(v) = std(v) / mean(v)
-    ## Same projected mean, so the spread difference is the dispersion.
-    @test rel(fc.confirmed_new) > 2 * rel(fc.cases_new)
-
-    ## The two forecasters agree for the same chain, stream and horizon.
-    st = forecast_stream(
-        chn, :confirmed_cases; horizon = 7,
-        obs_value = 3000
-    )
-    @test abs(mean(st) - mean(fc.confirmed_new)) < 0.1 * mean(fc.confirmed_new)
-    @test abs(std(st) - std(fc.confirmed_new)) < 0.25 * std(fc.confirmed_new)
-end
-
-@testitem "the reproduction-number continuation widens as sqrt(horizon)" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated, product_distribution
-    import FlexiChains
-    using Statistics: std
-    using BVDOutbreakSize: forecast_reported
-
-    ## The fitted walk sits on weekly knots of step SD `sigma_rw`, so
-    ## continuing it forward spreads log-Rt as the square root of the
-    ## horizon. Carrying the last innovation forward as a fixed daily slope
-    ## instead spreads it linearly, four times as wide at four weeks.
-    @model function _rt_continuation_test()
-        r ~ truncated(Normal(0.02, 0.0005); lower = 1.0e-3)
-        k ~ truncated(Normal(50.0, 1.0); lower = 1.0)
-        T := 100.0
-        expected_reports_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(20.0, 1.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 5.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.2, 1.0e-4); lower = 1.0e-3)
-        var"rt_state.sigma_rw" ~ truncated(Normal(0.15, 1.0e-4); lower = 1.0e-3)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), 8))
-        var"gi_state.α" ~ truncated(Normal(2.71, 0.01); lower = 0.1)
-        var"gi_state.θ" ~ truncated(Normal(5.65, 0.02); lower = 0.1)
-        return nothing
-    end
-    chn = sample(
-        _rt_continuation_test(), Prior(), 2000;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    _rt(h) = forecast_reported(
-        chn; horizon = h,
-        obs_cases = 3000, obs_deaths = 200
-    ).rt_forecast
-
-    s7 = std(log.(_rt(7)))
-    s28 = std(log.(_rt(28)))
-    @test 0.12 < s7 < 0.19
-    @test 1.5 < s28 / s7 < 2.8
-end
-
-@testitem "bvd_joint exposes every forecast cumulative trajectory" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    import FlexiChains
-    using BVDOutbreakSize: load_observations, bvd_joint,
-        genetic_seeding_model, _daily_at_cutoff,
-        _daily_at_cutoff_any, _draws, _STREAM_SPEC,
-        _resolve_draws
-
-    ## `_STREAM_SPEC` and `forecast_reported` name a cumulative trajectory
-    ## per observed count stream. A name the model never exposes falls back
-    ## silently to inverting the cut-off cumulative under exponential
-    ## growth, which collapses towards zero at a non-positive growth rate.
-    obs = load_observations()
-    m = bvd_joint(
-        obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        recovered_history = obs.recovered_history,
-        recovered_cases = obs.recovered_cases,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = obs.n - obs.who_first_sitrep_days,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days
-    )
-    chn = sample(
-        m, Prior(), 10;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-
-    ## Each stream's cut-off daily rate is recoverable, and its trajectory
-    ## ends on the stream's own cut-off expected total, so none of them needs
-    ## a baseline re-add on top.
-    pairs = (
-        (:cumulative_reports, :expected_reports_T),
-        (:cumulative_deaths_total, :expected_deaths_T),
-        (:cumulative_confirmed_deaths, :expected_confirmed_deaths_T),
-        (:cumulative_recovered, :expected_recovered_T),
-    )
-    for (traj, total) in pairs
-        daily = _daily_at_cutoff(chn, traj)
-        @test !isnothing(daily)
-        @test length(daily) == 10
-        ends = [collect(v)[end] for v in vec(collect(chn[traj]))]
-        @test all(isapprox.(ends, _draws(chn, total); rtol = 1.0e-6))
-    end
-
-    ## The confirmed-death stream resolves through `_STREAM_SPEC` too, so
-    ## the per-stream forecaster takes the same route.
-    @test !isnothing(
-        _daily_at_cutoff_any(chn, _STREAM_SPEC[:confirmed_deaths].trajectory)
-    )
-
-    ## Recovered has no single-stream fit, so the joint is the only chain
-    ## its spec can resolve against. All three of its keys must be there or
-    ## the stream drops out of `stream_forecasts.csv` and stops being
-    ## scored, which is how it was lost once already.
-    rec = _STREAM_SPEC[:recovered]
-    @test !isnothing(_resolve_draws(chn, rec.expected))
-    @test !isnothing(_resolve_draws(chn, rec.dispersion))
-    @test !isnothing(_daily_at_cutoff_any(chn, rec.trajectory))
-end
-
-@testitem "forecast_reported carries the occupancy reclassification offset" tags = [
-    :slow,
-] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated
-    using Statistics: median
-    using Random: MersenneTwister
-    import FlexiChains
-    using BVDOutbreakSize: forecast_reported
-
-    ## The occupancy likelihood scores `demand + Δ` against the reported
-    ## in-bed stock, where Δ is the fitted reclassification offset standing
-    ## at the cut-off. A forecast of the reported level therefore has to
-    ## carry Δ; without it the projection sits |Δ| beds above the series it
-    ## is scored against.
-    @model function _forecast_offset_test(offset)
-        r ~ truncated(Normal(0.01, 0.005); lower = 1.0e-3)
-        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1.0e-3)
-        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
-        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
-        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
-        R_T ~ truncated(Normal(1.1, 0.05); lower = 1.0e-3)
-        expected_bed_demand_T ~ truncated(Normal(800.0, 20.0); lower = 1.0)
-        bed_capacity ~ truncated(Normal(4000.0, 50.0); lower = 1.0)
-        isolation_dispersion ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"treatment_state.occupancy_break" := offset
-        return nothing
-    end
-    ## Every offset is scored on one set of prior draws. The offset is a
-    ## deterministic `:=` quantity, so passing the same seeded RNG to each
-    ## `sample` call pairs the draws and isolates the shift itself.
-    ## `forecast_reported` seeds its own replicate stream, so once the draws
-    ## are paired the runs differ by the offset alone and the medians below
-    ## are exact rather than Monte Carlo estimates.
-    _fc(offset) = forecast_reported(
-        sample(
-            MersenneTwister(20260520), _forecast_offset_test(offset),
-            Prior(), 400; chain_type = FlexiChains.VNChain,
-            progress = false
-        );
-        horizon = 7, obs_cases = 905, obs_deaths = 18
-    )
-
-    plain = _fc(0.0)
-    shifted = _fc(-200.0)
-    ## A basis revised up puts the reported occupancy above the demand, which
-    ## is why the shortfall is taken against the capacity rather than as the
-    ## gap between the two bed columns. Demand (~800) sits far below the
-    ## capacity (~4000) here, so there is no unmet need either way.
-    raised = _fc(200.0)
-    @test any(raised.isolation_level .> raised.bed_demand)
-    @test all(iszero, raised.bed_shortfall)
-    @test all(iszero, plain.bed_shortfall)
-    @test all(iszero, shifted.bed_shortfall)
-    ## The demand is the latent need and is untouched by the offset; only the
-    ## reported occupancy moves, and by the offset.
-    @test median(plain.bed_demand) ≈ median(shifted.bed_demand) atol = 1
-    @test median(plain.isolation_level) - median(shifted.isolation_level) ≈
-        200 atol = 1
-    ## A reclassification cannot push the reported stock below zero, and the
-    ## capacity still binds from above.
-    @test all(shifted.isolation_level .>= 0)
-    @test all(_fc(-5000.0).isolation_level .== 0)
-end
-
-@testitem "forecast_stream beds carry the occupancy offset too" tags = [:slow] begin
-    using Turing: @model, sample, Prior
-    using Distributions: Normal, truncated, product_distribution
-    using Statistics: median
-    using Random: MersenneTwister
-    import FlexiChains
-    using BVDOutbreakSize: forecast_stream, knot_days
-
-    ## The per-stream forecaster reads the same offset as `forecast_reported`,
-    ## so a standalone treatment fit is scored on the reported scale as well.
-    nz = length(knot_days(60; week = 7, start = 1)) - 1
-    @model function _stream_offset_test(offset)
-        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"rt_state.log_R0" ~ Normal(log(1.1), 0.05)
-        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
-        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
-        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
-        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
-        var"treatment_state.disp_state.k" ~
-            truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"treatment_state.expected_bed_demand" ~
-            truncated(Normal(800.0, 20.0); lower = 1.0)
-        var"treatment_state.expected_isolation" := 800.0
-        var"treatment_state.bed_utilisation" := 800.0 / 4000.0
-        var"treatment_state.occupancy_break" := offset
-        return nothing
-    end
-    ## Both offsets are scored on one set of prior draws. The offset is a
-    ## deterministic `:=` quantity, so passing the same seeded RNG to each
-    ## `sample` call pairs the draws and isolates the shift itself.
-    _beds(offset) = forecast_stream(
-        sample(
-            MersenneTwister(20260520), _stream_offset_test(offset),
-            Prior(), 400; chain_type = FlexiChains.VNChain,
-            progress = false
-        ),
-        :isolation_beds; horizon = 7, obs_value = 800, n = 60,
-        breakpoint = 30.0
-    )
-    @test median(_beds(0.0)) - median(_beds(-200.0)) ≈ 200 atol = 1
-end
-
-## The single-stream composers must expose the same cumulative-trajectory
-## aliases `bvd_joint` does. Without one, `forecast_stream` falls back to
-## inverting the stream's cumulative total under exponential growth, which
-## collapses towards zero as the fitted growth rate reaches zero, and the
-## individual fits then project below the joint and below the data they are
-## scored against.
-@testitem "single-stream fits carry their stream's own trajectory" tags = [
-    :slow,
-] begin
-    using Turing: sample, Prior
-    import FlexiChains
-    using BVDOutbreakSize: cases_only_model, deaths_only_model,
-        confirmed_only_model, confirmed_deaths_only_model,
-        _STREAM_SPEC, _daily_at_cutoff_any
-
-    n = 40
-    draws = 20
-    fits = (
-        (
-            :reported_cases,
-            cases_only_model(
-                n, 905;
-                reported_history = (;
-                    days = [20, 30, 40],
-                    counts = [340, 516, 905],
-                )
-            ),
-        ),
-        (
-            :suspected_deaths,
-            deaths_only_model(
-                n, 246;
-                deaths_history = (; days = [20, 40], counts = [120, 246])
-            ),
-        ),
-        (
-            :confirmed_cases,
-            confirmed_only_model(
-                n, 210;
-                confirmed_history = (;
-                    days = [20, 30, 40],
-                    counts = [40, 120, 210],
-                ),
-                lab_history = (;
-                    days = [20, 30, 40],
-                    counts = [300, 700, 1200],
-                )
-            ),
-        ),
-        (
-            :confirmed_deaths,
-            confirmed_deaths_only_model(
-                n, 17, 246;
-                deaths_history = (; days = [20, 40], counts = [120, 246]),
-                confirmed_deaths_history = (;
-                    days = [20, 40],
-                    counts = [8, 17],
-                )
-            ),
-        ),
-    )
-
-    for (stream, model) in fits
-        chn = sample(
-            model, Prior(), draws;
-            chain_type = FlexiChains.VNChain, progress = false
-        )
-        key = only(_STREAM_SPEC[stream].trajectory)
-        traj = [collect(v) for v in vec(collect(chn[key]))]
-        @test length(traj) == draws
-        @test all(t -> length(t) == n, traj)
-        ## A cumulative count never turns back on itself.
-        @test all(t -> all(diff(t) .>= -1.0e-8), traj)
-        ## So the cut-off daily rate the horizon is projected from is read
-        ## off the chain rather than inverted from the cumulative total.
-        daily = _daily_at_cutoff_any(chn, _STREAM_SPEC[stream].trajectory)
-        @test !isnothing(daily)
-        @test length(daily) == draws
-        @test all(isfinite, daily)
-    end
 end

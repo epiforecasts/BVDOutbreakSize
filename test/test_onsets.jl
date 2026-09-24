@@ -1024,18 +1024,15 @@ end
 
 ## --- Hazard reconstruction and the onset nowcast/forecast ---------------
 
-@testitem "reconstruct_onset_hazard rebuilds the total, round-trips alpha" begin
-    ## The reconstruction is exact rather than approximate: feeding it back
-    ## into `onset_report_expected_total` with the chain's own onset
-    ## trajectory must reproduce the `expected_onset_reported_T` the model
-    ## computed for that same draw. A wrong grid, a wrong knot count or a
-    ## mis-scaled walk all break this and nothing else in the report would.
-    ## `alpha` is read straight off the chain rather than reconstructed from
-    ## non-centred components, so this also checks it round-trips through
-    ## the same total.
-    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
+@testitem "fitted_onset_hazard reads the model's own hazard" begin
+    ## The hazard is the fitted model's own state at each draw, so feeding it
+    ## back into `onset_report_expected_total` with the chain's onset
+    ## trajectory reproduces the `expected_onset_reported_T` the model
+    ## tracked for that draw, and `alpha` is the tracked ascertainment.
+    using BVDOutbreakSize: onsets_only_model, fitted_onset_hazard,
         onset_report_expected_total
     using Turing: Prior, sample
+    import FlexiChains
 
     oc = (;
         onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
@@ -1044,188 +1041,27 @@ end
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
     n = 40
+    m = onsets_only_model(n; onset_curve_history = oc)
     chn = sample(
-        onsets_only_model(n; onset_curve_history = oc), Prior(),
-        20; progress = false
+        m, Prior(), 20; chain_type = FlexiChains.VNChain, progress = false
     )
-
     grid_start = minimum(oc.onset_days)
     grid_end = maximum(oc.report_days)
-    hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
+    hz = fitted_onset_hazard(m, chn)
     daily = [
         (v = collect(t); vcat(v[1], diff(v)))
             for t in vec(collect(chn[:cumulative_onsets]))
     ]
     et = vec(Array(chn[:expected_onset_reported_T]))
-
     @test length(hz.logit_h0) == 20
     @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
-    @test all(length(a) == grid_end - grid_start + 1 for a in hz.alpha)
+    @test hz.alpha == [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
     rebuilt = [
         onset_report_expected_total(
-            daily[i], hz.logit_h0[i],
-            hz.γ[i], grid_start, hz.alpha[i], n
+            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n
         ) for i in 1:20
     ]
-    @test all(isapprox.(rebuilt, et; rtol = 1.0e-8))
-end
-
-@testitem "reconstruct_onset_hazard rejects a grid it was not fitted on" begin
-    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard
-    using Turing: Prior, sample
-
-    oc = (;
-        onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
-        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0],
-    )
-    chn = sample(
-        onsets_only_model(40; onset_curve_history = oc), Prior(), 5;
-        progress = false
-    )
-    ## A grid four times as long needs more weekly knots than the chain has
-    ## innovations for, so this is an error rather than a silently short walk.
-    @test_throws ErrorException reconstruct_onset_hazard(
-        chn;
-        grid_start = 10, grid_end = 110
-    )
-end
-
-@testitem "forecast_onsets separates not-reported from not-yet-happened" begin
-    using BVDOutbreakSize: onsets_only_model, forecast_onsets
-    using Turing: Prior, sample
-    using DataFrames: nrow
-    using Statistics: mean
-
-    oc = (;
-        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
-        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
-    )
-    n = 40
-    chn = sample(
-        onsets_only_model(n; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 100; progress = false
-    )
-    fc = forecast_onsets(
-        chn; grid_start = 10, grid_end = 20, n = n,
-        horizon = 7, obs_value = 18, breakpoint = 30
-    )
-
-    @test nrow(fc) == 100
-    for col in (
-            :onsets_to_date, :onset_reports_to_date, :onsets_unreported,
-            :onsets_new, :onset_reports_backfill, :onset_reports_future,
-            :onset_reports_new, :onset_reports_cum,
-        )
-        @test col in propertynames(fc)
-        @test all(isfinite, fc[!, col])
-    end
-    ## Reports to date are a fraction F <= 1 of the onsets to date, so the
-    ## unreported remainder is non-negative by construction.
-    @test all(fc.onsets_unreported .>= 0)
-    @test all(fc.onset_reports_to_date .<= fc.onsets_to_date)
-    ## End-to-end check of the whole nowcast path: the reported-to-date
-    ## column is the same sum the model itself exposes as
-    ## `expected_onset_reported_T`, so a wrong hazard reconstruction, grid or
-    ## onset trajectory anywhere between the chain and here breaks this.
-    @test fc.onset_reports_to_date ≈
-        vec(Array(chn[:expected_onset_reported_T]))
-    ## Both horizon components are non-negative: F is non-decreasing in the
-    ## delay, so a later snapshot never reports fewer of a given onset date.
-    @test all(fc.onset_reports_backfill .>= 0)
-    @test all(fc.onset_reports_future .>= 0)
-    @test all(fc.onset_reports_new .>= 0)
-    @test all(fc.onset_reports_cum .>= 18)
-    ## The scored increment is a replicate of the two components' sum, not a
-    ## degenerate zero: the observation noise is added on top of a live mean.
-    @test any(fc.onset_reports_new .> 0)
-    @test mean(fc.onset_reports_new) > 0
-end
-
-@testitem "forecast_onsets backfill shrinks, future grows with horizon" begin
-    using BVDOutbreakSize: onsets_only_model, forecast_onsets
-    using Turing: Prior, sample
-    using Statistics: mean
-
-    oc = (;
-        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
-        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
-    )
-    chn = sample(
-        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 200; progress = false
-    )
-    f7 = forecast_onsets(
-        chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 7, breakpoint = 30
-    )
-    f21 = forecast_onsets(
-        chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 21, breakpoint = 30
-    )
-    ## The nowcast is a property of the cut-off, so it does not move with
-    ## the horizon; both horizon components do.
-    @test f7.onsets_to_date == f21.onsets_to_date
-    @test f7.onsets_unreported == f21.onsets_unreported
-    @test mean(f21.onset_reports_backfill) >= mean(f7.onset_reports_backfill)
-    @test mean(f21.onset_reports_future) > mean(f7.onset_reports_future)
-    @test mean(f21.onsets_new) > mean(f7.onsets_new)
-end
-
-@testitem "forecast_stream routes onsets through forecast_onsets" begin
-    using BVDOutbreakSize: onsets_only_model, forecast_stream,
-        forecast_onsets
-    using Turing: Prior, sample
-
-    oc = (;
-        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
-        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
-        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
-        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
-    )
-    chn = sample(
-        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 50; progress = false
-    )
-    got = forecast_stream(
-        chn, :onset_reports; horizon = 7, obs_value = 18,
-        n = 40, breakpoint = 30, onset_grid_start = 10, onset_grid_end = 20
-    )
-    want = forecast_onsets(
-        chn; grid_start = 10, grid_end = 20, n = 40,
-        horizon = 7, breakpoint = 30
-    )
-    @test got == want.onset_reports_new
-    ## The grid is data rather than chain contents, so omitting it is an
-    ## error and never a guess at the triangle's extent.
-    @test_throws ArgumentError forecast_stream(
-        chn, :onset_reports;
-        horizon = 7, obs_value = 18, n = 40, breakpoint = 30
-    )
-end
-
-@testitem "forecast_onsets needs an onset trajectory in the chain" begin
-    using BVDOutbreakSize: forecast_onsets, deaths_only_model
-    using Turing: Prior, sample
-
-    ## A fit with no onset stream carries the shared latent onset trajectory
-    ## (every composer does, via `_latent`) but none of the reporting
-    ## hazard's parameters, so this fails rather than forecasting a
-    ## reporting process the model never fitted.
-    chn = sample(
-        deaths_only_model(
-            33, missing;
-            deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
-        ),
-        Prior(), 5; progress = false
-    )
-    @test_throws Exception forecast_onsets(
-        chn; grid_start = 10,
-        grid_end = 20, n = 33, horizon = 7, breakpoint = 25
-    )
+    @test rebuilt ≈ et
 end
 
 @testitem "forecast_archive carries the onset reporting increment" begin
@@ -1243,85 +1079,6 @@ end
     @test size(rows, 1) == 4
     @test rows.value == [10.0, 12.0, 14.0, 9.0]
     @test all(rows.target_date .== Date("2026-08-01"))
-end
-
-@testitem "forecast_reported attaches the onset block only when asked" begin
-    using BVDOutbreakSize: bvd_joint, forecast_reported, forecast_onsets
-    using Turing: Prior, sample
-
-    n = 40
-    oc = (;
-        onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
-        report_days = [25, 25, 25, 25, 30, 30, 30, 30, 30],
-        prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
-        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2],
-    )
-    model = bvd_joint(
-        n, 2, 18, 905, 0, 27, 50;
-        confirmed_deaths = 5,
-        deaths_history = (; days = [13, 18, 40], counts = [10, 14, 18]),
-        reported_history = (; days = [13, 18, 40], counts = [340, 516, 905]),
-        confirmed_history = (; days = [13, 18, 40], counts = [9, 17, 27]),
-        lab_history = (; days = [18, 40], counts = [30, 50]),
-        onset_curve_history = oc,
-        breakpoint = 30
-    )
-    chn = sample(model, Prior(), 40; progress = false)
-
-    ## The grid is data, so without it the onset block is simply absent and
-    ## the rest of the forecast is unchanged.
-    plain = forecast_reported(
-        chn; horizon = 7, obs_cases = 905,
-        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5
-    )
-    @test !(:onset_reports_new in propertynames(plain))
-
-    withonsets = forecast_reported(
-        chn; horizon = 7, obs_cases = 905,
-        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5,
-        grid_n = n, onset_grid_start = 20, onset_grid_end = 30
-    )
-    @test :onset_reports_new in propertynames(withonsets)
-    @test :onsets_unreported in propertynames(withonsets)
-    @test all(withonsets.onset_reports_new .>= 0)
-    ## `grid_n` is the model cut-off, not the draw count: an onset total
-    ## summed over 40 draws instead of 40 grid days would be a different
-    ## number entirely, so check the block agrees with a direct call.
-    direct = forecast_onsets(
-        chn; grid_start = 20, grid_end = 30, n = n,
-        horizon = 7
-    )
-    @test withonsets.onsets_to_date == direct.onsets_to_date
-    ## `onsets_new` is a column of both, built the same way from the same
-    ## cut-off rate and growth path. The block keeps `forecast_reported`'s
-    ## rather than overwriting it, so they must agree or one of the two
-    ## constructions has drifted.
-    @test withonsets.onsets_new ≈ direct.onsets_new
-end
-
-@testitem "the onset stream spec names keys the onsets fit really carries" begin
-    ## `_STREAM_SPEC[:onset_reports]` does not drive the projection — the
-    ## `kind = :onset` branch hands the stream to `forecast_onsets` before
-    ## those fields are read — but a spec entry naming a key the model
-    ## never exposes cannot be caught by a test that only exercises the
-    ## `:onset` branch. Pin it against a real chain so it cannot rot
-    ## unnoticed if the fields are ever wired up.
-    using BVDOutbreakSize: onsets_only_model, _STREAM_SPEC, _resolve_draws,
-        _daily_at_cutoff_any
-    using Turing: Prior, sample
-
-    oc = (;
-        onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
-        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0],
-    )
-    chn = sample(
-        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
-        Prior(), 10; progress = false
-    )
-    spec = _STREAM_SPEC[:onset_reports]
-    @test spec.kind === :onset
-    @test !isnothing(_resolve_draws(chn, spec.expected))
-    @test !isnothing(_daily_at_cutoff_any(chn, spec.trajectory))
 end
 
 @testitem "onset_nowcast closes on the data as the delay runs out" begin

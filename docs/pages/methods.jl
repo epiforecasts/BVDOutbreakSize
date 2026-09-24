@@ -311,25 +311,31 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
-# They are correlated across patches, they revert toward zero, and they are centred at every knot so that no patch is privileged:
+# They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
+# A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
 #
 # ```math
-# \delta_{p,1} = \sigma_{\text{lvl}} (Lz)_p
-#     - \overline{\sigma_{\text{lvl}} (Lz)},
+# \boldsymbol\delta_{1} = \sigma_{\text{lvl}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z},
 # \qquad
-# \delta_{p,k} = \phi\, \delta_{p,k-1}
-#   + \bigl(\sigma_{\delta,p} (Lz_k)_p
-#     - \overline{\sigma_{\delta}(Lz_k)}\bigr), \tag{6}
+# \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
+#   + \frac{0.05}{\sqrt{\nu}}\, Q A \mathbf{z}_k, \tag{6}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
-# \sigma_{\delta,p} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
-# \Omega \sim \mathrm{LKJ}(2), \tag{7}
+# AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $z, z_k \sim \mathrm{Normal}(0, 1)$ per patch, $\Omega = LL^{\top}$ the cross-patch correlation and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
+# The covariance of the innovations, $(0.05^2/\nu)\, Q AA^{\top} Q^{\top}$, is a full covariance of a sum-to-zero vector.
+# $A$ has as many entries as that covariance has free parameters, and each knot draws $P - 1$ values, one per direction the deviations can move in.
+# The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
+# Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
+# We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
+# The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
+# With three patches the standard deviations fix the correlations, so asking whether the correlation is needed is asking whether the patches' standard deviations differ.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
@@ -507,7 +513,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (z_q - \bar z)\bigr)\,
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z})_q\bigr)\,
 #     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
 # ```
 #
@@ -515,8 +521,10 @@ MarkdownTable(vintage_table) #hide
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# z_q \sim \mathrm{Normal}(0, 1). \tag{16}
+# \mathbf{z} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
 # ```
+#
+# with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 #
 
 #md # ```@raw html
@@ -1747,11 +1755,11 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \beta x_p + \tau_a (z_p - \bar z), \qquad
-# \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
+# \log a_p = \beta x_p + \tau_a (Q \mathbf{z})_p, \qquad
+# \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+# with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
 #
 # $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
 #
@@ -1762,7 +1770,7 @@ cfr_prior_fig #hide
 #
 # where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
 # A pooled patch sums its members before the ratio is taken.
-# The covariate sums to zero across patches by construction, so centring the log ascertainment removes the mean of the pooled deviations and leaves the covariate term as it stands.
+# The covariate sums to zero across patches by construction, so the log ascertainment sums to zero as well.
 # Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
 # It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
 # A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
@@ -1975,17 +1983,25 @@ cfr_prior_fig #hide
 #
 # ### One-week-ahead forecast
 #
-# We project each DRC stream seven days beyond the cut-off.
-# The reproduction number keeps evolving over the horizon by continuing its weekly walk past the cut-off rather than holding it fixed, with no further interventions and no saturation imposed.
-# The walk carries fresh innovations at its fitted step scale, so the spread of the projected reproduction number widens with the square root of the horizon, as the fitted walk's does.
-# The projection carries both parameter and observation uncertainty.
-# Each count stream is replicated day by day through its own fitted dispersion and the daily replicates summed, so the observation noise enters at the resolution the dispersion was fitted at.
-# We forecast the DRC observation streams as forecast targets: the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the isolation/treatment beds and the recovered total.
-# For the beds we project the bed demand, the need a week ahead under unconstrained supply (the cut-off demand grown by the horizon factor like the case inflow).
-# We also project the supply-limited occupancy that this demand produces against the bed capacity.
-# The gap between them is the projected bed shortfall, the quantity of interest if bed occupancy is supply-constrained.
-# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total rather than a still-growing series.
-# Exports are not forecast, since cross-border travel is unlikely to continue at its baseline rate, so the forward travel rate the export model relies on no longer holds.
+# Forecasts are drawn from the fitted model itself.
+# We run the model past the cut-off and treat each day after it as an observation that is missing.
+# For each posterior draw we keep the fitted parameters and draw the missing observations from the model.
+# The reproduction number continues its weekly walk with fresh innovations at its fitted step size, and the intervention ramp carries on.
+# The renewal, every delay and ascertainment, and each stream's own likelihood then produce the future counts, so the forecast carries parameter and observation uncertainty.
+# The walks for the non-BVD background and the bed capacity continue the same way.
+# Up to the cut-off the model and its density are unchanged, so the forecast needs no refit.
+# The test positivity and the onset hazard's calendar effect and ascertainment are held at their last fitted values.
+# The model defines them only over the laboratory windows and the triangle's grid, and already holds them flat beyond those up to the cut-off.
+# Two smaller departures remain.
+# Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
+# We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
+# A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
+# The bed occupancy is the censored count the occupancy likelihood scores.
+# Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
+# Admissions are capped at the capacity less the previous day's occupancy, the same headroom rule the fitted days use, so they can fall to near zero when the beds are forecast full.
+# We also report the modelled bed demand and its shortfall against the modelled capacity.
+# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
+# Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The figure is shown in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") below.
 #
 # #### Symptom-onset nowcast and forecast
@@ -2017,8 +2033,9 @@ cfr_prior_fig #hide
 #     u)}_{\text{not yet happened}} .
 # ```
 #
-# Onsets past the cut-off are projected under the same evolving growth-rate path the other streams use.
-# The calendar-time effect $\gamma$ is held flat at its last fitted value across the horizon.
+# Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
+# The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
+# The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the roughly 4% per-scan level error as well as with genuine late reporting.
@@ -2038,20 +2055,17 @@ cfr_prior_fig #hide
 #
 # #### Province forecast
 #
-# We project each province seven days beyond the cut-off by continuing its renewal equation from the joint posterior, without refitting.
-# Each province is seeded with its last generation interval of fitted daily infections, and the provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at the intensity fitted at the cut-off.
-# Each province's reproduction number continues the national weekly walk, one path shared by every province, plus the province's own deviation.
-# The deviation reverts toward zero at the fitted half-life and takes fresh weekly innovations at its fitted scale, centred so the deviations still sum to zero.
-# The fresh innovations do not carry the fitted cross-province correlation.
-# The confirmed cases and confirmed deaths start from the national daily rate at the cut-off times the province's modelled share at the most recent spatial vintage.
-# Each day then grows with the province's projected infections, with no delay between infection and report, as in the national forecast, and is replicated through the stream's fitted dispersion.
-# The provinces are projected separately, so they need not add up to the national forecast.
+# The province forecast is drawn from the same run of the fitted patch model past the cut-off.
+# Each province's deviation from the national walk reverts at the fitted half-life and takes fresh innovations with the fitted cross-province correlation.
+# The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
+# Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
+# The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
 # The symptom-onset curve is national only, so there is no province nowcast.
-# Each release archives the projection with its method recorded, and only projection forecasts are scored.
+# Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
 # ### Forecast-versus-frozen evaluation
 #
-# We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and projecting one week ahead with the same forecast machinery.
+# We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.
 # We then compare that projection against the counts observed by the current cut-off.
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
 # Each frozen re-fit uses the full headline settings (1000 draws across two chains).

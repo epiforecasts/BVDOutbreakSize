@@ -626,16 +626,10 @@ surveillance_pair_fig #hide
 ## `_onset_grid_end`, is a fixed function of the digitised triangle rather
 ## than chain contents, so the shared setup builds it once from
 ## `obs.onset_curve_history`.
-## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
-## (the report-date calendar walk), rebuilt from the non-centred
-## innovations the chain stores. `reconstruct_onset_hazard` is the package
-## function the onset forecast also uses, so the hazard plotted here and
-## the one projected forward are the same object rather than two copies of
-## the same reconstruction that could drift apart.
-_onset_hazard = reconstruct_onset_hazard(
-    chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end
-)
+## Every posterior draw's `logit_h0` (the baseline delay hazard), `γ` (the
+## report-date calendar walk) and ascertainment level, read off the fitted
+## model's own onset-reporting state at each draw.
+_onset_hazard = fitted_onset_hazard(fit_model("joint"), chn_joint)
 
 ## A representative onset day (the median scored onset date), so the 7-day
 ## fraction below reflects a typical, not an edge, calendar day.
@@ -1053,19 +1047,17 @@ CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 ## be scored against what is observed. Only the incident and level quantities
 ## are archived (see `forecast_archive`), thinned to keep the asset compact.
 forecast_horizons = (7, 14, 21, 28)
+forecast_joint_draws = fit_forecast("joint")
 forecast_runs = [
     (
         h,
         forecast_reported(
-            chn_joint; horizon = h,
+            forecast_joint_draws; horizon = h,
             obs_cases = obs.reported_cases,
             obs_deaths = obs.total_deaths,
             obs_confirmed = obs.confirmed_cases,
             obs_confirmed_deaths = obs.confirmed_deaths,
-            obs_recovered = obs.recovered_cases,
-            grid_n = obs.n,
-            onset_grid_start = _onset_grid_start,
-            onset_grid_end = _onset_grid_end
+            obs_recovered = obs.recovered_cases
         ),
     )
         for h in forecast_horizons
@@ -1081,7 +1073,7 @@ CSV.write(
 CSV.write(
     joinpath(output_dir, "province_forecast.csv"),
     province_forecast_archive(
-        chn_joint, forecast_runs;
+        forecast_joint_draws, forecast_runs;
         made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5
     )
 );
@@ -1095,9 +1087,12 @@ CSV.write(
 ## observations for the cut-off counts. The May cut-offs predate the isolation
 ## and recovered streams, so those are simply absent for them; the per-stream
 ## guard in `forecast_archive` skips a stream a fit does not carry.
-frozen_forecast_fits = unique(
-    f -> f.o.cutoff,
-    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek]
+frozen_forecast_ids = unique(
+    id -> load_fit(id).o.cutoff,
+    [
+        ["frozen_$c" for c in frozen_cutoffs];
+        "frozen_$chamla_cutoff"; "frozen_validation"
+    ]
 )
 ## The `fit` column tells the frozen joint and each frozen single-stream fit
 ## apart when scored. `score_release` falls back to one default where an
@@ -1108,33 +1103,27 @@ frozen_forecast_archive = DataFrame(
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
     fit = String[]
 )
-## The onset grid belongs to the triangle each frozen fit actually saw, not
-## to the live one: the May cut-offs predate the digitised figure entirely,
-## so their grid is empty and the onset block is simply absent for them.
-function _frozen_onset_grid(o)
-    isempty(o.onset_curve_history.onset_days) && return (nothing, nothing)
-    gs = minimum(o.onset_curve_history.onset_days)
-    return (gs, max(maximum(o.onset_curve_history.report_days), gs))
-end
-for f in frozen_forecast_fits
-    _fgs, _fge = _frozen_onset_grid(f.o)
+## Each frozen model is rebuilt from its own frozen observations, so the May
+## cut-offs, which predate the digitised onset figure, carry no onset
+## forecast.
+for id in frozen_forecast_ids
+    _fo = load_fit(id).o
+    _fpp = fit_forecast(id)
     runs = [
         (
             h,
             forecast_reported(
-                f.chn; horizon = h,
-                obs_cases = f.o.reported_cases,
-                obs_deaths = f.o.total_deaths,
-                obs_confirmed = f.o.confirmed_cases,
-                obs_confirmed_deaths = f.o.confirmed_deaths,
-                obs_recovered = f.o.recovered_cases,
-                grid_n = f.o.n,
-                onset_grid_start = _fgs, onset_grid_end = _fge
+                _fpp; horizon = h,
+                obs_cases = _fo.reported_cases,
+                obs_deaths = _fo.total_deaths,
+                obs_confirmed = _fo.confirmed_cases,
+                obs_confirmed_deaths = _fo.confirmed_deaths,
+                obs_recovered = _fo.recovered_cases
             ),
         )
             for h in forecast_horizons
     ]
-    _rows = forecast_archive(runs; made_date = f.o.cutoff, thin = 5)
+    _rows = forecast_archive(runs; made_date = _fo.cutoff, thin = 5)
     _rows[!, :fit] = fill(FROZEN_FIT, size(_rows, 1))
     append!(frozen_forecast_archive, _rows)
 end
@@ -1152,26 +1141,9 @@ _frozen_stream_of = Dict(
 for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
     _stream, _label = _frozen_stream_of[_sid]
     _o = _sf.o
-    _bp = _o.n - _o.who_first_sitrep_days
-    ## Each stream on its own cut-off count, the beds on their occupancy.
-    _base = if _stream === :isolation_beds
-        isempty(_o.isolation_history.counts) ? 0 :
-            _o.isolation_history.counts[end]
-    elseif _stream === :reported_cases
-        _o.reported_cases
-    elseif _stream === :suspected_deaths
-        _o.total_deaths
-    elseif _stream === :confirmed_cases
-        _o.confirmed_cases
-    else
-        _o.confirmed_deaths
-    end
+    _spp = fit_forecast("frozen_validation_$_sid")
     for h in forecast_horizons
-        _vals = forecast_stream(
-            _sf.chn, _stream; horizon = h,
-            obs_value = _base, n = _o.n, breakpoint = _bp,
-            rt_start = 1, rt_walk_start = 1
-        )
+        _vals = forecast_stream(_spp, _stream; horizon = h)
         for (_d, _i) in enumerate(1:5:length(_vals))
             push!(
                 frozen_forecast_archive,
@@ -1198,68 +1170,52 @@ CSV.write(
 ## no single-stream fit, so the joint is the only fit that carries it.
 stream_thin = 5
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
-## Observed bed occupancy at the cut-off, the level the isolation forecast
-## anchors on.
-_iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
-    obs.isolation_history.counts[end]
-## The reporting triangle's own cumulative total at the cut-off. It anchors
-## the reported quantity rather than changing it: the onset forecast is the
-## INCREMENT this total should add over the horizon, not the level (see the
-## methods section on the nowcast and forecast).
-_onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
-## Cumulative recovered at the cut-off. The loader leaves it missing when the
-## manifest carries no recovered vintages, and the forecast returns the
-## increment rather than this base, so a zero stands in for that case.
-_recovered_at_cutoff = coalesce(obs.recovered_cases, 0)
 stream_fits = [
     (;
         fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
         streams = [
-            (:reported_cases, "reported cases", obs.reported_cases),
-            (:suspected_deaths, "suspected deaths", obs.total_deaths),
-            (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
-            (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
-            (:recovered, "recovered", _recovered_at_cutoff),
-            (:isolation_beds, "isolation beds", _iso_at_cutoff),
-            (:exports, "exports", obs.exported_cases),
-            (:onset_reports, "onset reports", _onset_at_cutoff),
+            (:reported_cases, "reported cases"),
+            (:suspected_deaths, "suspected deaths"),
+            (:confirmed_cases, "confirmed cases"),
+            (:confirmed_deaths, "confirmed deaths"),
+            (:recovered, "recovered"),
+            (:isolation_beds, "isolation beds"),
+            (:exports, "exports"),
+            (:onset_reports, "onset reports"),
         ],
     ),
     (;
         fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
-        streams = [(:reported_cases, "reported cases", obs.reported_cases)],
+        streams = [(:reported_cases, "reported cases")],
     ),
     (;
         fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
-        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)],
+        streams = [(:suspected_deaths, "suspected deaths")],
     ),
     (;
         fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
-        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)],
+        streams = [(:confirmed_cases, "confirmed cases")],
     ),
     (;
         fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
         rt_walk_start = 1,
         streams = [
-            (
-                :confirmed_deaths, "confirmed deaths",
-                obs.confirmed_deaths,
-            ),
+            (:confirmed_deaths, "confirmed deaths"),
         ],
     ),
     (;
         fit = "treatment", chn = chn_treatment, rt_start = 1,
         rt_walk_start = 1,
-        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)],
+        streams = [(:isolation_beds, "isolation beds")],
     ),
     (;
         fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
-        streams = [(:exports, "exports", obs.exported_cases)],
+        streams = [(:exports, "exports")],
     ),
     (;
         fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
-        streams = [(:onset_reports, "onset reports", _onset_at_cutoff)],
+        streams = [(:onset_reports, "onset reports")],
     ),
 ]
 
@@ -1330,25 +1286,16 @@ stream_draws = DataFrame(
 CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
 
 ## Per-fit forecasts of each fit's own observed stream, in the `forecast.csv`
-## long schema plus the fit that made them. Rebuilding a single-stream fit's
-## cut-off growth rate needs the grid length and the breakpoint, which are data
-## rather than chain contents, so both are passed.
+## long schema plus the fit that made them, each drawn from that fit's own
+## model run past the cut-off.
 stream_forecasts = DataFrame(
     made_date = Date[], horizon = Int[],
     target_date = Date[], stream = String[], draw = Int[], value = Float64[],
     fit = String[]
 )
-for f in stream_fits, (stream, label, obs_value) in f.streams,
+for f in stream_fits, (stream, label) in f.streams,
         h in forecast_horizons
-    ## The onset grid is ignored by every other stream, so it is passed
-    ## unconditionally rather than branching the loop on the stream name.
-    _vals = forecast_stream(
-        f.chn, stream; horizon = h,
-        obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start,
-        onset_grid_start = _onset_grid_start,
-        onset_grid_end = _onset_grid_end
-    )
+    _vals = forecast_stream(fit_forecast(f.fit), stream; horizon = h)
     for (d, i) in enumerate(1:stream_thin:length(_vals))
         push!(
             stream_forecasts, (
