@@ -99,6 +99,19 @@ function ref_accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, κ, h)
     return out
 end
 
+## `c = min(max(x, 0), O_bvd)`, `O_susp = max(D − c, 0)`, absconds
+## `κ O_susp(t − 1)` from day 2, total `D + Δ` and suspect census
+## `max(D + Δ − c, 0)`.
+function ref_incare_census(D, O_bvd, x, κ, Δ)
+    c = min.(max.(x, 0.0), O_bvd)
+    O_susp = max.(D .- c, 0.0)
+    return (;
+        confirmed = c, suspect = max.(D .+ Δ .- c, 0.0),
+        abscond = [t == 1 ? 0.0 : κ * O_susp[t - 1] for t in eachindex(D)],
+        total = D .+ Δ,
+    )
+end
+
 ## Reporting hazard at delay `j` for onset date `u`, with the calendar index
 ## held at the nearest edge of `γ`.
 ref_onset_hazard(lh, γ, gs, u, j) = logistic(

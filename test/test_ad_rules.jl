@@ -18,7 +18,7 @@
     using BVDOutbreakSize: convolve_delay, convolve_pmf, interpolate_knots,
         knot_days, renewal_infections, patch_infections, nbinomial_loglik,
         abscond_thinned, abscond_thinned_flows, two_clock_confirmed,
-        clinical_stay_survival, accumulate_occupancy,
+        clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, studentt_loglik,
         betabinomial_loglik, onset_vintage_indices, censoring_cap,
@@ -47,6 +47,25 @@
         h = isnothing(hflat) ? 0.1 .+ 0.3 .* abs.(sin.(days ./ 7)) :
             fill(hflat, n)
         return (A_bvd, A_bg, deaths, recover, ruleout, κ, h)
+    end
+
+    ## In-care census inputs cycling through five kinds of day, each clear of
+    ## its tie: the two-clock stock inside `[0, O_bvd]`, above `O_bvd`, below
+    ## zero, above the demand, and above a total a negative offset takes to
+    ## zero.
+    function census_args(rng, n; κ = 0.02)
+        D = 50 .+ 100 .* rand(rng, n)
+        O_bvd = 0.6 .* D
+        x = O_bvd .* (0.2 .+ 0.6 .* rand(rng, n))
+        Δ = zeros(n)
+        for t in 1:n
+            r = t % 5
+            r == 1 && (x[t] = 1.3 * O_bvd[t])
+            r == 2 && (x[t] = -5.0)
+            r == 3 && (D[t] = 0.5 * x[t])
+            r == 4 && (Δ[t] = -D[t])
+        end
+        return (D, O_bvd, x, κ, Δ)
     end
 
     ## Onset-reporting inputs over a `D`-day delay support and the onset
@@ -265,6 +284,12 @@
         add!(
             "n = 220", accumulate_occupancy, occupancy_args(rng, 220)...;
             perf = true
+        )
+        add!("every branch", incare_census, census_args(rng, 60)...)
+        add!("one day", incare_census, census_args(rng, 1)...)
+        add!("no days", incare_census, census_args(rng, 0)...)
+        add!(
+            "n = 220", incare_census, census_args(rng, 220)...; perf = true
         )
 
         gs, ge = 5, 40
@@ -715,6 +740,24 @@ end
         ỹ, _, flags = _accumulate_occupancy(Val(true), args...)
         @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
         haskey(kw, :hflat) && @test any(f -> f & _OCC_CONF_HI != 0, flags)
+    end
+end
+
+@testitem "AD rules: the census rule records the model's census" tags = [
+    :ad,
+] setup = [ADRuleCases] begin
+    using BVDOutbreakSize: _incare_census, _CEN_CONF_X, _CEN_CONF_HI,
+        _CEN_UNCONF, _CEN_SUSP
+
+    ## The recording forward pass gives the census bit for bit, and the test
+    ## inputs take every side of each clamp and floor.
+    args = census_args(Xoshiro(20260923), 60)
+    y = incare_census(args...)
+    ỹ, _, flags = _incare_census(Val(true), args...)
+    @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
+    for bit in (_CEN_CONF_X, _CEN_CONF_HI, _CEN_UNCONF, _CEN_SUSP)
+        @test any(f -> f & bit != 0, flags)
+        @test any(f -> f & bit == 0, flags)
     end
 end
 

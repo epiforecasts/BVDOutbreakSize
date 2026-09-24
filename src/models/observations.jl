@@ -2187,8 +2187,8 @@ stock. The confirmed-and-present cohort is a subset of the present
 cohort, so `O_conf ≤ O_bvd` holds by construction, without the
 proportional split's mean-field approximation: a true case that dies
 before its test returns is never counted as confirmed. Returns the
-length-`n` confirmed-in-care sub-stock. The caller forms the suspect
-sub-stock as the demand remainder `D − O_conf`.
+length-`n` confirmed-in-care sub-stock. [`incare_census`](@ref) forms the
+suspect sub-stock as the demand remainder `D − O_conf`.
 """
 function two_clock_confirmed(
         A_bvd::AbstractVector, conf_hazard::AbstractVector,
@@ -2215,6 +2215,82 @@ function two_clock_confirmed(
         O_conf[t] = acc
     end
     return O_conf
+end
+
+"""
+    incare_census(demand, O_bvd, O_conf_raw, κ, offset)
+
+Confirmed and suspect in-care census of the treatment-flow model. The
+two-clock confirmed stock `O_conf_raw` ([`two_clock_confirmed`](@ref)) is
+clamped into `[0, O_bvd]`, and the suspect stock is the demand remainder
+`O_susp(t) = max(D(t) − O_conf(t), 0)`. Absconds drain the previous day's
+suspect stock, `κ · O_susp(t − 1)`, with none on day 1. The census total
+adds the reclassification offset to the demand, and the suspect census is
+`max(total − O_conf, 0)`.
+
+Returns `(; confirmed, suspect, abscond, total)`, each a length-`n` vector.
+"""
+function incare_census(
+        demand::AbstractVector, O_bvd::AbstractVector,
+        O_conf_raw::AbstractVector, κ::Real, offset::AbstractVector
+    )
+    return _incare_census(Val(false), demand, O_bvd, O_conf_raw, κ, offset)
+end
+
+## `x` as a vector of `ref`'s element type when a generator path has left it
+## untyped, and as it is otherwise.
+_typed_as(x, ref) = eltype(x) === Any ? convert(Vector{eltype(ref)}, x) : x
+
+## Branch flags of the census, one bit per `clamp`/`max` side. `clamp`
+## returns its argument on a tie with either bound, and `max` passes a tie to
+## its second argument, the zero floor.
+const _CEN_CONF_X = 0x01
+const _CEN_CONF_HI = 0x02
+const _CEN_UNCONF = 0x04
+const _CEN_SUSP = 0x08
+
+## The forward pass of `incare_census`. With `Val(true)` it also returns the
+## un-offset suspect stock and the branch flags for each day, which the
+## Mooncake rule in `src/ad_rules.jl` reads.
+function _incare_census(
+        ::Val{record}, demand, O_bvd, O_conf_raw, κ, offset
+    ) where {record}
+    n = length(demand)
+    T = promote_type(
+        eltype(demand), eltype(O_bvd), eltype(O_conf_raw), typeof(κ),
+        eltype(offset)
+    )
+    confirmed = Vector{T}(undef, n)
+    suspect = Vector{T}(undef, n)
+    abscond = Vector{T}(undef, n)
+    total = Vector{T}(undef, n)
+    unconf = record ? Vector{T}(undef, n) : nothing
+    flags = record ? Vector{UInt8}(undef, n) : nothing
+    z = zero(T)
+    susp_prev = z
+    @inbounds for t in 1:n
+        x = O_conf_raw[t]
+        hi = O_bvd[t]
+        c = clamp(x, z, hi)
+        x_u = demand[t] - c
+        u = max(x_u, z)
+        tot = demand[t] + offset[t]
+        x_s = tot - c
+        confirmed[t] = c
+        suspect[t] = max(x_s, z)
+        abscond[t] = t == 1 ? z : κ * susp_prev
+        total[t] = tot
+        if record
+            f = x > hi ? _CEN_CONF_HI : (x < z ? 0x00 : _CEN_CONF_X)
+            x_u > z && (f |= _CEN_UNCONF)
+            x_s > z && (f |= _CEN_SUSP)
+            unconf[t] = u
+            flags[t] = f
+        end
+        susp_prev = u
+    end
+    y = (; confirmed, suspect, abscond, total)
+    return record ? (y, unconf, flags) : y
 end
 
 """
@@ -2554,44 +2630,21 @@ series for forecasting and replication.
     ## (and `O_susp = D − O_conf`) is replaced.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
-    ## `O_conf ≤ O_bvd` holds by construction; the clamp guards any prior
-    ## draw.
-    O_conf_c = map(
-        (c, b) -> clamp(c, zero(eltype(demand_raw)), b),
-        O_conf_raw, O_bvd
-    )
-    O_susp_raw = map(
-        (d, c) -> max(d - c, zero(eltype(demand_raw))),
-        demand_raw, O_conf_c
-    )
-    ## Abscond outflow off the two-clock suspect stock. Day 1 has no prior
-    ## stock.
-    abscond_daily_raw = [
-        t == 1 ? zero(eltype(demand_raw)) :
-            κ * O_susp_raw[t - 1]
-            for t in 1:n
-    ]
-    ## Assigned once each: the `map`s and the comprehension above capture
-    ## them, so reassigning them in a branch would box them.
-    _widened = eltype(demand_raw) === Any
-    demand = _widened ? convert(Vector{eltype(C)}, demand_raw) : demand_raw
-    O_conf = _widened ? convert(Vector{eltype(C)}, O_conf_c) : O_conf_c
-    O_susp = _widened ? convert(Vector{eltype(C)}, O_susp_raw) : O_susp_raw
-    abscond_daily = _widened ?
-        convert(Vector{eltype(C)}, abscond_daily_raw) :
-        abscond_daily_raw
-
-    ## Add the reclassification offset Δ(t) to the modelled total only.
+    demand = _typed_as(demand_raw, C)
+    ## Reclassification offset Δ(t), added to the modelled census total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
-    occ_offset = eltype(occ_break_offset) === Any ?
-        convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
-    ## Broadcasts, not `map(1:n) do t`: the `do`-block builds an anonymous
-    ## closure whose reverse-mode shadow Enzyme cannot construct.
-    occ_obs_total = demand .+ occ_offset
-
-    ## Confirmed and suspect census means, summing to the offset total.
-    conf_split = copy(O_conf)
-    susp_split = max.(occ_obs_total .- conf_split, zero(eltype(demand)))
+    occ_offset = _typed_as(occ_break_offset, C)
+    ## `O_conf ≤ O_bvd` holds by construction; the census clamps it to guard
+    ## any prior draw. Absconds drain the two-clock suspect stock, and the
+    ## confirmed and suspect census means sum to the offset total.
+    census = incare_census(
+        demand, _typed_as(O_bvd, C), _typed_as(O_conf_raw, C), κ,
+        occ_offset
+    )
+    abscond_daily = census.abscond
+    occ_obs_total = census.total
+    conf_split = census.confirmed
+    susp_split = census.suspect
 
     ## Occupancy likelihood: NegativeBinomial around the latent demand,
     ## right-censored at the implied-capacity bound. Days with a published

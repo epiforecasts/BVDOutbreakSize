@@ -582,6 +582,67 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), accumulate_occupancy_pullback!!
 end
 
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(incare_census), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat, Array{<:Mooncake.IEEEFloat},
+    },
+)
+
+## Adjoint of the in-care census. Per day, with `c = clamp(x, 0, O_bvd)`,
+## `u = max(D − c, 0)` and `s = max(D + Δ − c, 0)`,
+##
+##     c̄ = ȳ_conf − s̄ [s side] − ū [u side],   ū = κ · ā[t + 1],
+##     D̄ += s̄ [s side] + ū [u side],   Δ̄ += s̄ [s side] + t̄ot,
+##     D̄ += t̄ot,   κ̄ += ā[t + 1] · u,
+##
+## and `c̄` goes to `x` or to `O_bvd` by the side the clamp took.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(incare_census)},
+        demand::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        O_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        O_conf_raw::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        κ::CoDual{<:Mooncake.IEEEFloat},
+        offset::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    κp = primal(κ)
+    D̄ = tangent(demand)
+    B̄ = tangent(O_bvd)
+    X̄ = tangent(O_conf_raw)
+    Δ̄ = tangent(offset)
+    y, unconf, flags = _incare_census(
+        Val(true), primal(demand), primal(O_bvd), primal(O_conf_raw), κp,
+        primal(offset)
+    )
+    ȳ = map(zero, y)
+    function incare_census_pullback!!(::NoRData)
+        Tf = eltype(y.total)
+        κ̄ = zero(Tf)
+        n = length(flags)
+        @inbounds for t in 1:n
+            f = flags[t]
+            gs = f & _CEN_SUSP != 0 ? ȳ.suspect[t] : zero(Tf)
+            ā = t < n ? ȳ.abscond[t + 1] : zero(Tf)
+            κ̄ += ā * unconf[t]
+            gu = f & _CEN_UNCONF != 0 ? κp * ā : zero(Tf)
+            gtot = ȳ.total[t] + gs
+            D̄[t] += gtot + gu
+            Δ̄[t] += gtot
+            gc = ȳ.confirmed[t] - gs - gu
+            if f & _CEN_CONF_X != 0
+                X̄[t] += gc
+            elseif f & _CEN_CONF_HI != 0
+                B̄[t] += gc
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(),
+            convert(typeof(κp), κ̄), NoRData()
+    end
+    return CoDual(y, ȳ), incare_census_pullback!!
+end
+
 # Onset-reporting kernels from `models/observations.jl`. Each is a loop over
 # the (delay, onset date) grid or the scored cells, so the derived rule tapes
 # every logistic, product and division in it.

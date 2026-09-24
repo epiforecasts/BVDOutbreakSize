@@ -74,6 +74,12 @@
             ref_accumulate_occupancy, occupancy_args(rng, 60; kw...)...
         )
     end
+    for n in (0, 1, 60)
+        add!(
+            "incare_census n = $n", incare_census, ref_incare_census,
+            census_args(rng, n)...
+        )
+    end
     ## Hazards of 0 and 1 at the ends of the delay support, a one-day
     ## support, an empty onset range, and `γ` shorter than the table's reach.
     o = onset_args(rng; D = 12, gs = 5, ge = 40, n = 45)
