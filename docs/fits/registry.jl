@@ -176,7 +176,7 @@ joint_warmup(default::Integer) = parse(
 
 joint_max_depth() = parse(
     Int,
-    get(ENV, "BVD_JOINT_MAX_DEPTH", "11")
+    get(ENV, "BVD_JOINT_MAX_DEPTH", "10")
 )
 
 ## The fits that splat `joint_sampler_args()`.
