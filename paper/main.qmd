@@ -244,6 +244,8 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - Outbreak-specific delays from a line list [@akilimali2026].
   - Revision as an observation process [@placeholder-revision].
   - A retrospective evaluation once the outbreak has ended, against the final counts.
+  - The experiments so far were ad hoc; formal experiments across settings and outbreaks, and a deliberate application of the infectious disease modelling workflow [@abbott_workflow], could test whether the workflow improves the efficiency of agent work, and each of these is also a limitation of the present work. <!-- author statement, 24 Sep -->
+  - Who should sit in the seat for agent-driven modelling, an infectious disease modeller and of what seniority or someone on the ground, and how a team shares the work at this pace, are open questions. <!-- author statement, 24 Sep -->
 
 <!-- Conclusions -->
 
