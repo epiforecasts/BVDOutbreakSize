@@ -1524,3 +1524,38 @@ end
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
         onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end
+
+@testitem "summed Student-t likelihood matches one term per cell" begin
+    using BVDOutbreakSize: safe_studentt, StudentTVector,
+        onset_increments_model
+    using Distributions: logpdf
+    using Random: Xoshiro
+    using Turing: DynamicPPL
+    using Turing.DynamicPPL: @varname
+
+    loglik(m) = DynamicPPL.loglikelihood(m, DynamicPPL.VarInfo(Xoshiro(1), m))
+    ## A floored scale (zero, non-finite) and negative increments included.
+    μ = [12.0, -3.5, 40.5, 7.2, 0.0, 9.0]
+    σ = [3.0, 2.5, 0.0, 6.1, NaN, 1.0]
+    x = [10, -6, 44, 3, 0, 20]
+    per_term(ν) = sum(logpdf(safe_studentt(μ[i], σ[i], ν), x[i]) for i in 1:6)
+    ## A defaulted `ν` falls back to 4 in both.
+    for ν in (4.0, 1.5, -1.0)
+        @test logpdf(StudentTVector(μ, σ, ν), x) ≈ per_term(ν)
+        @test loglik(onset_increments_model(μ, σ, x, ν)) ≈ per_term(ν)
+    end
+    @test logpdf(StudentTVector(μ, σ, -1.0), x) ==
+        logpdf(StudentTVector(μ, σ, 4.0), x)
+    @test loglik(onset_increments_model(Float64[], Float64[], Int[], 4.0)) == 0
+
+    ## A `missing` vector samples as one variable under the whole-vector
+    ## key the predictive path reads. It is unconstrained, so linking it
+    ## leaves the log density unchanged.
+    m = onset_increments_model(μ, σ, missing, 4.0)
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    @test Set(keys(vi)) == Set([@varname(increments)])
+    @test DynamicPPL.getlogjoint(DynamicPPL.link(vi, m)) ≈
+        DynamicPPL.getlogjoint(vi)
+    draw = m(Xoshiro(2)).increments
+    @test draw isa Vector{Float64} && length(draw) == 6
+end

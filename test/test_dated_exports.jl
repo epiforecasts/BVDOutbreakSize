@@ -109,6 +109,35 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "exports_model prevalence counts infections not yet detected" begin
+    using Distributions: Gamma
+    using Random: MersenneTwister
+    using Turing: returned, @varname
+    using BVDOutbreakSize: exports_model, discretise_censored,
+        lognormal_meansd, cdf_nmax
+
+    n = 60
+    infections = [exp(0.08 * t) for t in 1:n]
+    inc = discretise_censored(lognormal_meansd(6.3, 3.5), 16)
+    mdl = exports_model(missing, infections, 0.3; incubation_pmf = inc)
+    draw = rand(MersenneTwister(1), mdl)
+    s = returned(mdl, draw)
+    det = discretise_censored(
+        Gamma(draw[@varname(detect_state.α)], draw[@varname(detect_state.θ)]),
+        cdf_nmax(Gamma(1.178, 3.694))
+    )
+    ## Reference: cumulative infections minus cumulative detections, where an
+    ## infection on day u is detected on day u + i + j with probability
+    ## inc[i + 1] · det[j + 1].
+    detected = zeros(n)
+    for u in 1:n, i in eachindex(inc), j in eachindex(det)
+        t = u + (i - 1) + (j - 1)
+        t <= n && (detected[t] += infections[u] * inc[i] * det[j])
+    end
+    ref = cumsum(infections) .- cumsum(detected)
+    @test maximum(abs.(s.prevalence .- ref) ./ ref) < 1.0e-12
+end
+
 @testitem "dated export increments partition the cumulative expectation" begin
     using BVDOutbreakSize: bin_increments
 
