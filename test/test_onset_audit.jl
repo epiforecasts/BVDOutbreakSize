@@ -64,8 +64,9 @@ end
     @test parse_printed_n(title * "\n" * source) == [5263, 5263]
     ## Thousands separated by a thin space, a no-break space, a full stop
     ## or nothing at all.
-    @test parse_printed_n("symptômes (n = 2 308)") == [2308]
-    @test parse_printed_n("symptômes (n = 2 308)") == [2308]
+    thin, nbsp = Char(0x202F), Char(0x00A0)
+    @test parse_printed_n("symptômes (n = 2$(thin)308)") == [2308]
+    @test parse_printed_n("symptômes (n = 2$(nbsp)308)") == [2308]
     @test parse_printed_n("symptômes (n = 2.308)") == [2308]
     @test parse_printed_n("symptomes (n=2308)") == [2308]
     ## The report text prints n for provinces and deaths on lines that do
