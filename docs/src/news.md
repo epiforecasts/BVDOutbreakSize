@@ -61,10 +61,8 @@ Changes since v2.1.0.
   The testing fraction stays national and the per-province positives remain unfitted.
   The per-head testing covariate on the ascertainment prior is removed, with `province_testing_covariate` and the `province_testing_covariate` keyword, since the same laboratory series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
 - Province isolation occupancy and bed counts enter the treatment-flow stream as splits of the printed sum of the provinces present each day (#784).
-  The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and per-patch shares of the national capacity walk.
-  The occupancy split is scored weekly and the bed split on days a province's count changes, since a stock reprinted daily is not a fresh draw of the split.
-  The national tile and the national implied capacity keep their likelihoods on every day.
-  Occupancy is split on the uncapped per-patch demand, since a province can print more patients than beds where patients are held outside the counted structures.
+  The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and static per-patch shares of the national capacity walk.
+  Occupancy is split weekly on the uncapped demand and beds on the days a count changes; the national terms keep their likelihoods every day.
   The fit reports beds, demand, utilisation and shortfall by province at the cut-off.
 - A pooled patch's occupancy or bed count is used on a day only when every member that has printed before prints that day, so a silent member is never read as an empty ward (#784).
 - The background split and the province capacity shares put their pooled offsets on the sum-to-zero directions of #855 rather than fixing the first province at its population share, so the pooling scale spreads every province alike (#784).

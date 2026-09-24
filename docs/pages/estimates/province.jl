@@ -130,18 +130,12 @@ province_detail_tables[3] #hide
 
 province_detail_tables[4] #hide
 
-# Isolation beds by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
+# #### Isolation beds
+#
+# Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
 # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
 
-#md # ```@raw html
-#md # <details><summary>Province bed table</summary>
-#md # ```
-
 province_bed_overview = province_bed_table(chn_joint, N_PATCHES);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 province_bed_overview #hide
 
@@ -429,9 +423,6 @@ mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, province_headline_md)
-end
-open(joinpath(dashboard_dir, "province_beds.md"), "w") do io
-    print(io, markdown_table(province_bed_overview))
 end
 
 #md # ```@raw html

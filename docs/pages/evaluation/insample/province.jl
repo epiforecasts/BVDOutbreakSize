@@ -202,6 +202,7 @@ province_beds_ppc_fig #hide
 # ## Province stream calibration
 #
 # Whether each province's share predictions are calibrated at the observed national total, scored as in the national [stream calibration](@ref "Stream calibration").
+# The analysed-specimen rows score the weekly laboratory split the same way, at each week's observed national analysed total.
 
 #md # ```@raw html
 #md # <details><summary>Build the province calibration panels</summary>
@@ -219,7 +220,15 @@ province_death_panels = province_composition_panels(
     obs_increments = province_deaths.increments,
     stream = "Confirmed deaths", n_patches = N_PATCHES
 );
-province_panels = vcat(province_case_panels, province_death_panels);
+province_lab_panels = province_composition_panels(
+    chn_joint;
+    share_key = :province_lab_shares,
+    obs_increments = province_lab.increments,
+    stream = "Analysed specimens", n_patches = N_PATCHES
+);
+province_panels = vcat(
+    province_case_panels, province_death_panels, province_lab_panels
+);
 province_calibration_table = stream_calibration(province_panels);
 province_calibration_fig = plot_stream_calibration(
     province_calibration_table

@@ -46,21 +46,12 @@ The model runs one renewal equation per province and fits the national streams a
 Each range is an equal-tailed 90% credible interval.
 The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
 Each province's own estimates are in the [detail by province](province.md#Detail-by-province).
-Modelled infections by province, the per-province parameter detail and the composition checks are on the same page.
+Modelled infections by province, the per-province parameter detail, the isolation beds by province and the composition checks are on the same page.
 
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "provinces.md"), String))
-```
-
-Isolation beds by province at the cut-off, from the per-province occupancy and bed figures in the situation reports.
-Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
-
-```@eval
-using Markdown, BVDOutbreakSize
-dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse(read(joinpath(dir, "province_beds.md"), String))
 ```
 
 ### Fit diagnostics
