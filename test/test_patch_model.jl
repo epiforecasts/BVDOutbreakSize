@@ -1690,6 +1690,62 @@ end
     @test !any(k -> occursin("death_composition_state.β_asc", k), ks)
 end
 
+@testitem "bvd_joint: region_basis reaches every sum-to-zero site" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: sum_to_zero_basis
+    using Turing: DynamicPPL
+    using Turing.DynamicPPL: OnlyAccsVarInfo, RawValueAccumulator,
+        InitFromPrior, UnlinkAll, init!!, get_raw_values, @varname
+    using Random: Xoshiro
+
+    ## The same seed draws the same standard-normal directions whatever the
+    ## basis, so the Rt deviations, importation intensities and both
+    ## composition multipliers change with the basis only if it reaches them.
+    obs = load_observations()
+    prov = province_increment_matrix(
+        obs.province_confirmed_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    provd = province_increment_matrix(
+        obs.province_death_history,
+        PROVINCE_NAMES, length(PROVINCE_NAMES)
+    )
+    np = length(PROVINCE_NAMES)
+    joint(basis) = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        n_patches = np,
+        province_increments = prov.increments, province_days = prov.days,
+        province_death_increments = provd.increments,
+        province_death_days = provd.days,
+        tmrca_days = obs.tmrca_days,
+        region_basis = basis
+    )
+    ## The default basis with its first two columns rotated.
+    Q = sum_to_zero_basis(np)
+    R = [i == j ? 1.0 : 0.0 for i in 1:(np - 1), j in 1:(np - 1)]
+    R[1:2, 1:2] = [0.6 -0.8; 0.8 0.6]
+    models = (joint(Q), joint(Q * R))
+    params = [collect(DynamicPPL.VarInfo(Xoshiro(3), m)[:]) for m in models]
+    @test params[1] == params[2]
+    vals = map(models) do m
+        accs = OnlyAccsVarInfo(RawValueAccumulator(true))
+        _, vi = init!!(Xoshiro(3), m, accs, InitFromPrior(), UnlinkAll())
+        get_raw_values(vi)
+    end
+    for key in (
+            @varname(delta_knots), @varname(importation_epsilon_patch),
+            @varname(province_ascertainment), @varname(province_cfr_relative),
+        )
+        @test !isapprox(vals[1][key], vals[2][key]; rtol = 1.0e-6)
+    end
+end
+
 @testitem "_patch_confirmed_increments: kernels pay both delay legs" begin
     using BVDOutbreakSize: _patch_confirmed_increments, convolve_pmf,
         convolve_delay, bin_increments
