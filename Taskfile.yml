@@ -65,6 +65,37 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_province_lab.jl {{.CLI_ARGS}}
 
+  onset-digitise:
+    desc: >
+      Digitise the symptom-onset epidemic-curve figure of every CONFIG
+      vintage into data/onset_curve_scanned.csv with the Julia reference
+      (scripts/digitize_onset_curve.jl). Incremental: opens only the PDFs
+      of vintages the file does not hold yet. Pass `-- --rebuild` after
+      changing the digitiser to re-read them all. Needs the PDFs
+      (`task download-sitreps`) and poppler.
+    cmds:
+      - julia scripts/digitize_onset_curve.jl data/sitrep_pdfs
+        data/onset_curve_scanned.csv {{.CLI_ARGS}}
+
+  onset-port-check:
+    desc: >
+      Rebuild the onset curve with both the Julia reference and the Python
+      port into a temporary directory and check that the two files and the
+      committed data/onset_curve_scanned.csv are byte-identical. Needs the
+      PDFs, poppler and uv.
+    cmds:
+      - |
+        set -e
+        tmp=$(mktemp -d)
+        julia scripts/digitize_onset_curve.jl data/sitrep_pdfs \
+          "$tmp/julia.csv" --rebuild
+        uv run --no-project scripts/digitize_onset_curve.py \
+          data/sitrep_pdfs "$tmp/python.csv" --rebuild
+        cmp "$tmp/julia.csv" "$tmp/python.csv"
+        cmp "$tmp/julia.csv" data/onset_curve_scanned.csv
+        rm -r "$tmp"
+        echo "reference, port and committed file are identical"
+
   onset-audit:
     desc: >
       Audit the digitised onset curve against the figures it was read
