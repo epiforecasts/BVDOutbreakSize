@@ -146,9 +146,9 @@ vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 runs past the cut-off `n`. Its increment over the total at the cut-off is
 drawn with the Student-t the scored cells take, at the scale
 [`onset_report_scale`](@ref) gives a correction read off two bars with the
-fitted read SD `τ`. The
-increment is drawn on the whole figure, not per onset date, since the
-figure's total is the quantity the forecast is scored on. The split of each
+fitted read SD `τ`. The increment is drawn on the whole figure, not per
+onset date, since the figure's total is the quantity the forecast is
+scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
