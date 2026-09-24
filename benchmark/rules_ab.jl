@@ -1,4 +1,4 @@
-# Times the same components with `src/ad_rules.jl` loaded and not loaded,
+# Times the same components with `src/mooncake_rules.jl` loaded and not loaded,
 # so the hand-written rules can be shown to still earn their place. The
 # rules are chosen by a package preference read at load time, so each arm
 # needs its own process; this script is one arm, and `task benchmark-rules`
@@ -16,7 +16,7 @@ using Random: seed!
 
 include(joinpath(@__DIR__, "..", "test", "ad_fixtures.jl"))
 
-const RULES_ON = load_preference(BVDOutbreakSize, "ad_rules", true)
+const RULES_ON = load_preference(BVDOutbreakSize, "mooncake_rules", true)
 
 function timed(scen)
     seed!(scen.seed)
@@ -37,7 +37,7 @@ function timed(scen)
     return best
 end
 
-println("ad_rules = ", RULES_ON)
+println("mooncake_rules = ", RULES_ON)
 for scen in ADFixtures.scenarios()
     scen.name in ADFixtures.enzyme_skip_scenarios() && continue
     println(rpad(scen.name, 36), round(timed(scen) * 1.0e3; sigdigits = 4))

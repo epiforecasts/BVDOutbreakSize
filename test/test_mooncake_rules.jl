@@ -1,5 +1,5 @@
 ## Correctness and speed gates for the hand-written reverse rules in
-## `src/ad_rules.jl`.
+## `src/mooncake_rules.jl`.
 ##
 ## A wrong derivative is worse than a slow one, and a hand-written rule
 ## replaces the one place a backend would otherwise derive it for itself,
@@ -433,7 +433,7 @@
     end
 end
 
-@testitem "AD rules: every rule passes Mooncake's test_rule" tags = [
+@testitem "Mooncake rules: every rule passes Mooncake's test_rule" tags = [
     :ad,
 ] setup = [ADRuleCases] begin
     using Mooncake: Mooncake, ReverseMode
@@ -493,7 +493,7 @@ end
     end
 end
 
-@testitem "AD rules: each rule beats Mooncake's own derivation" tags = [
+@testitem "Mooncake rules: each rule beats Mooncake's own derivation" tags = [
     :ad, :ad_perf,
 ] setup = [ADRuleCases] begin
     using Mooncake: Mooncake, DefaultCtx, MinimalCtx, Mode, ReverseMode,
@@ -503,8 +503,9 @@ end
     using BVDOutbreakSize: BVDOutbreakSize
 
     ## A context that sees every primitive the default one does except the
-    ## rules `src/ad_rules.jl` registers, so Mooncake derives those kernels
-    ## from their source as it would with the `ad_rules` preference off.
+    ## rules `src/mooncake_rules.jl` registers, so Mooncake derives those
+    ## kernels from their source as it would with the `mooncake_rules`
+    ## preference off.
     struct NoPackageRulesCtx end
     function registered_here(M, sig)
         m = try
@@ -580,7 +581,7 @@ end
     end
 end
 
-@testitem "AD rules: pullbacks leave the output tangent as given" tags = [
+@testitem "Mooncake rules: pullbacks leave the output tangent as given" tags = [
     :ad,
 ] begin
     using Random: Xoshiro
@@ -615,7 +616,7 @@ end
     @test tangent(out).infections == Ī
 end
 
-@testitem "AD rules: guarded inputs pass no derivative" tags = [:ad] begin
+@testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
     using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
@@ -672,7 +673,7 @@ end
     )
 end
 
-@testitem "AD rules: onset, census and composition rules fire in the joint" tags = [
+@testitem "Mooncake rules: onset, census and composition rules fire in the joint" tags = [
     :ad,
 ] begin
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
@@ -707,7 +708,7 @@ end
     )
 end
 
-@testitem "AD rules: the vector distributions score through the rules" tags = [
+@testitem "Mooncake rules: the vector distributions score through the rules" tags = [
     :ad,
 ] begin
     using Random: Xoshiro
@@ -760,7 +761,7 @@ end
     )
 end
 
-@testitem "AD rules: the occupancy rule records the model's balance" tags = [
+@testitem "Mooncake rules: the occupancy rule records the model's balance" tags = [
     :ad,
 ] setup = [ADRuleCases] begin
     using BVDOutbreakSize: _accumulate_occupancy, _OCC_CONF_HI
@@ -777,7 +778,7 @@ end
     end
 end
 
-@testitem "AD rules: the census rule records the model's census" tags = [
+@testitem "Mooncake rules: the census rule records the model's census" tags = [
     :ad,
 ] setup = [ADRuleCases] begin
     using BVDOutbreakSize: _incare_census, _CEN_CONF_X, _CEN_CONF_HI,
@@ -894,7 +895,7 @@ end
     end
 end
 
-@testitem "AD rules: the joint's detached work reaches no likelihood" tags = [
+@testitem "Mooncake rules: the joint's detached work reaches no likelihood" tags = [
     :ad,
 ] setup = [ThroughDetached] begin
     using BVDOutbreakSize: bvd_joint

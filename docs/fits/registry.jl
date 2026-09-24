@@ -14,10 +14,10 @@ using Distributions: truncated, Normal
 const _PKG = pkgdir(BVDOutbreakSize)
 
 ## Source files whose contents define the fits: the model and its submodels,
-## the renewal maths, the hand-written AD rules, the sampler, the data
+## the renewal maths, the hand-written Mooncake rules, the sampler, the data
 ## pipeline and this registry. A change to any of them invalidates every
 ## cached fit; plotting and reporting code (plots.jl, summaries.jl, ...)
-## deliberately does not. The AD rules are here because they change the
+## deliberately does not. The Mooncake rules are here because they change the
 ## floating-point gradients, and so the sampled chain. `cache.jl` is
 ## here because it defines what the key covers: a change to the hashing rule
 ## that left the key alone would give two different rules the same key.
@@ -28,7 +28,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "joint.jl"),
     joinpath(_PKG, "src", "models", "fit_args.jl"),
     joinpath(_PKG, "src", "renewal.jl"),
-    joinpath(_PKG, "src", "ad_rules.jl"),
+    joinpath(_PKG, "src", "mooncake_rules.jl"),
     joinpath(_PKG, "src", "sampling.jl"),
     joinpath(_PKG, "src", "constants.jl"),
     joinpath(_PKG, "src", "data.jl"),

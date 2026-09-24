@@ -1,6 +1,6 @@
 ## The package kernels written for speed against the textbook loops in
 ## `test/reference_kernels.jl`, on values. Gradients are `test_rule`'s job in
-## `test/test_ad_rules.jl`.
+## `test/test_mooncake_rules.jl`.
 
 @testitem "reference kernels: fast kernels match their textbook loops" setup = [
     ADRuleCases,

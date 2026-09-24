@@ -210,10 +210,10 @@ include("models/joint.jl")
 include("models/fit_args.jl")
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:
-##   set_preferences!(BVDOutbreakSize, "ad_rules" => false)
+##   set_preferences!(BVDOutbreakSize, "mooncake_rules" => false)
 ## Included after the models, since some rules are on observation helpers.
-if @load_preference("ad_rules", true)
-    include("ad_rules.jl")
+if @load_preference("mooncake_rules", true)
+    include("mooncake_rules.jl")
 end
 include("precompile.jl")
 

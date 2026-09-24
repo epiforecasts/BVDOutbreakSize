@@ -12,7 +12,7 @@
 ##
 ## The full `bvd_joint` is not a component here: one gradient sits behind a
 ## cold Mooncake compile of roughly 18 minutes. Its gradients in the
-## suite are the three-patch `_detached` check in `test/test_ad_rules.jl`
+## suite are the three-patch `_detached` check in `test/test_mooncake_rules.jl`
 ## and the headline joint against its fixture in `test/test_model_fixture.jl`.
 ## The components below are the submodels, the latent process and every
 ## single-stream composer, so the joint is a composition of surfaces each

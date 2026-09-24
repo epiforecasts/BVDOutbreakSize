@@ -45,8 +45,9 @@ end
 Summed log-likelihood of the counts `obs` under one
 [`safe_nbinomial`](@ref) per entry, about the [`safe_rate`](@ref) of the
 matching mean in `modelled` with the shared dispersion `k`. Equal to what
-one `~` per count accumulates, as a single term. `src/ad_rules.jl` gives it
-a closed-form Mooncake rule, so the backend does not tape each `logpdf`.
+one `~` per count accumulates, as a single term. `src/mooncake_rules.jl`
+gives it a closed-form Mooncake rule, so the backend does not tape each
+`logpdf`.
 """
 function nbinomial_loglik(k, modelled::AbstractVector, obs::AbstractVector)
     s = zero(float(promote_type(typeof(k), eltype(modelled))))
@@ -152,7 +153,7 @@ end
 Summed log-likelihood of the counts `obs` under one
 [`safe_betabinomial`](@ref) per entry, with trial counts `trials`, mean
 probabilities `p` and the shared overdispersion `ρ`. Equal to what one `~`
-per count accumulates, as a single term. `src/ad_rules.jl` gives it a
+per count accumulates, as a single term. `src/mooncake_rules.jl` gives it a
 closed-form Mooncake rule, so the backend does not tape each `logpdf`.
 """
 function betabinomial_loglik(
@@ -2046,7 +2047,7 @@ const _OCC_SUSP = 0x40
 
 ## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
 ## returns the non-case stock `O_bg` and the branch flags for each day, which
-## the Mooncake rule in `src/ad_rules.jl` reads.
+## the Mooncake rule in `src/mooncake_rules.jl` reads.
 function _accumulate_occupancy(
         ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
         conf_hazard
@@ -2253,7 +2254,7 @@ const _CEN_SUSP = 0x08
 
 ## The forward pass of `incare_census`. With `Val(true)` it also returns the
 ## un-offset suspect stock and the branch flags for each day, which the
-## Mooncake rule in `src/ad_rules.jl` reads.
+## Mooncake rule in `src/mooncake_rules.jl` reads.
 function _incare_census(
         ::Val{record}, demand, O_bvd, O_conf_raw, κ, offset
     ) where {record}
@@ -2944,7 +2945,7 @@ Summed log-likelihood of the increments `obs` under one
 [`safe_studentt`](@ref) per cell, about `means[i]` with scale `sds[i]` and
 the shared degrees of freedom `ν`, with the same guards. Equal to what one
 `~` per cell accumulates, as a single term, with the normalising constant
-evaluated once. `src/ad_rules.jl` gives it a closed-form Mooncake rule, so
+evaluated once. `src/mooncake_rules.jl` gives it a closed-form Mooncake rule, so
 the backend does not tape each `logpdf`.
 """
 function studentt_loglik(

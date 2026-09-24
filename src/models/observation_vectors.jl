@@ -2,9 +2,10 @@
 # submodel scores a whole observed vector with a single `~` and draws a
 # `missing` one with the same statement. `logpdf` is the summed helper in
 # `models/observations.jl`, which carries a closed-form Mooncake rule
-# (`src/ad_rules.jl`), and `rand` draws each entry from the matching scalar
-# `safe_*` distribution. The vector is one variable, so a sampled vector is
-# stored under one whole-vector key (`<prefix>.increments`, `<prefix>.obs`).
+# (`src/mooncake_rules.jl`), and `rand` draws each entry from the matching
+# scalar `safe_*` distribution. The vector is one variable, so a sampled
+# vector is stored under one whole-vector key (`<prefix>.increments`,
+# `<prefix>.obs`).
 
 """
 Independent [`safe_nbinomial`](@ref) counts, entry `i` about the
