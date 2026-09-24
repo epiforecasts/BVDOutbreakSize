@@ -1509,8 +1509,9 @@ with `C(s)` the cumulative infections and `detected(s)` the cumulative
 infections that have already completed the infection→detection delay by
 day `s`. The infection→detection delay is the sampled onset-to-detection
 delay convolved with the shared incubation PMF, so incubation sits inside
-it, keyed to infection like `C(s)`. `detected` is the running sum of
-`convolve_delay(infections, f_det)`. Summing the daily at-risk prevalence
+it, keyed to infection like `C(s)`. With `f_det` that delay's PMF, the
+prevalence is the infections convolved with its survival
+`P(delay > τ) = 1 − Σ_{u ≤ τ} f_det(u)`. Summing the daily at-risk prevalence
 is the discrete person-time integral. Summing `q · onsets` instead would
 charge each case only a single day of travel risk. The onset-to-detection
 prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
@@ -1572,9 +1573,9 @@ rate and the daily at-risk prevalence for reuse by
     ## Convolved with the incubation PMF so the survival clock runs from
     ## infection.
     f_det = convolve_pmf(incubation_pmf, detect_state.pmf)
-    detected_daily = convolve_delay(infections, f_det)
-    ## At-risk prevalence (person-days): infected but not yet detected.
-    prevalence = cumsum(infections) .- cumsum(detected_daily)
+    ## At-risk prevalence (person-days): infected but not yet detected. The
+    ## survival kernel stops at the end of `f_det`, which has unit mass.
+    prevalence = convolve_delay(infections, 1 .- cumsum(f_det))
     export_prevalence = p_uganda .* q .* prevalence
     n = length(export_prevalence)
 
