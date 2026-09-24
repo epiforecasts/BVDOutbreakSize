@@ -27,7 +27,7 @@ Changes since v2.1.0.
   The two submodels' gradients run 1.2 to 1.9 times faster.
 - The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule (#856).
   Its gradient runs about 4.2 times faster on the 1066 scanned cells.
-- An observed province composition in `province_composition_model` is scored as one stick-breaking term, `stick_breaking_loglik`, with its own rule (#856).
+- An observed province composition in `province_composition_model` is scored as one stick-breaking term, `stick_breaking_loglik`, whose rows go through the BetaBinomial rule in one call (#856).
   Its rows are grouped by vintage, and groups may differ in size.
   It sums the vintages in a different order from the per-row terms, so the log density can differ in the last bits.
   The predictive path draws each patch row through `BetaBinomialVector`, so its keys are unchanged.
