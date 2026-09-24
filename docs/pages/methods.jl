@@ -1989,7 +1989,9 @@ cfr_prior_fig #hide
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The bed occupancy is the censored count the occupancy likelihood scores, capped at the modelled capacity and no lower than the last recorded cap, and admissions are capped at the free beds that leaves.
+# The bed occupancy is the censored count the occupancy likelihood scores.
+# Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
+# Admissions are capped at the capacity less the previous day's occupancy, the same headroom rule the fitted days use, so they can fall to near zero when the beds are forecast full.
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
