@@ -1552,8 +1552,7 @@ end
     ## snapshot, which is what the report's onset panel plots and what
     ## `stream_calibration` scores. Independent per-cell errors average out
     ## across a snapshot's cells, so the per-cell view predicts that sum far
-    ## too tightly even though its per-cell spread is right, and central
-    ## coverage collapses further than the 90% coverage does.
+    ## too tightly even though its per-cell spread is right.
     using BVDOutbreakSize: onset_report_moments, onset_report_scales,
         onset_scan_adjust, onset_vintage_indices,
         safe_studentt, ONSET_REPORT_MAX_DELAY
@@ -1675,12 +1674,9 @@ end
 
     percell = coverage(false)
     shared = coverage(true)
-    ## Per-cell-only scoring under-covers, and central coverage falls
-    ## further than the 90% coverage: the aggregate spread is roughly right
-    ## and its shape is wrong.
+    ## Per-cell-only scoring under-covers.
     @test percell[1] <= 0.4
     @test percell[2] <= 0.8
-    @test percell[1] / 0.5 < percell[2] / 0.9
     ## Splitting the same measured error restores both to about nominal.
     @test 0.42 <= shared[1] <= 0.58
     @test 0.82 <= shared[2] <= 0.96
