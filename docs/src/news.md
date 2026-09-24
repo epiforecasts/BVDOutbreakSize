@@ -168,6 +168,8 @@ Changes since v2.1.0.
 - `BVD_JOINT_MAX_DEPTH` overrides the joint fit's NUTS tree depth cap, which stays at 10 (#846, #865).
   Depth 12 took the joint fit past the fit job's 350-minute timeout.
 - The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
+- The one-week-back validation joint and the two sensitivity re-fits of the joint run at the headline's sampler budget, 1000 draws with 500 adaptation steps at a target acceptance of 0.80 (#887).
+  They had run at 500 draws with 200 adaptation steps at 0.90, and came back with R-hat up to 1.11 and bulk ESS as low as 14 (#886).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
