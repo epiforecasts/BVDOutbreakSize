@@ -56,6 +56,12 @@ Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 
 ### Fit diagnostics
 
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "diagnostics_summary.md"), String))
+```
+
 ```@raw html
 <details><summary>Expand: how the fits behind these numbers sampled</summary>
 ```

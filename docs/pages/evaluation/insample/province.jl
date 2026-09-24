@@ -2,7 +2,6 @@
 #
 # Whether the fitted joint model reproduces the per-province data it was fitted to.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
-# The per-province confirmed cases and deaths enter the model as compositions of the national totals, so most of the in-sample checks here are on each province's share of those totals, and one is on its count.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -22,10 +21,8 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The overall bullets come first, then a short block per province, from the checks further down this page.
-# Each block gives how well the case and death compositions reproduce that province's counts, first at the observed national total and then with the national total predicted too.
-# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
-# Coverage is nominally 0.9.
+# Whether each province's cases and deaths are reproduced, from the checks further down this page.
+# Bias runs from −1 to 1 and is negative when the model under-predicts, and coverage is the fraction of vintages inside the 90% predictive interval.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -35,10 +32,7 @@ chn_joint = load_fit("joint");
 
 # ## Province prior predictive check
 #
-# Before any observation is taken into account, what does the prior imply about each province's share of the confirmed cases and deaths?
-# The shared prior on the national page is drawn from a single population and carries no province quantities.
-# The draws here come from the four-patch model's prior instead, with the province grids in place and every observation left out of the density.
-# The prior shares should bracket the observed ones without pinning them.
+# Whether the four-patch prior, before any data are fitted, brackets each province's observed share of the confirmed cases and deaths.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the four-patch prior</summary>
@@ -61,8 +55,6 @@ MarkdownTable(prior_province_table) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-# The prior composition checks draw the same bands as the [posterior ones](@ref province-compositions) below, from the prior shares.
 
 #md # ```@raw html
 #md # <details><summary>Province composition prior predictive checks</summary>
@@ -91,8 +83,6 @@ prior_death_ppc_fig = plot_province_composition_ppc(
 prior_case_ppc_fig #hide
 
 prior_death_ppc_fig #hide
-
-# The pair plot sets the prior against the posterior for each province's reproduction number at the cut-off and its cumulative infections, the latter on the log scale.
 
 #md # ```@raw html
 #md # <details><summary>Province prior and posterior pair plot</summary>
@@ -132,16 +122,7 @@ province_pair_fig #hide
 
 # ## [Province compositions](@id province-compositions)
 #
-# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
-# The panels below show that modelled share at every spatial vintage against the observed one.
-# Each panel carries two bands.
-# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
-# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# The observed points should fall inside it.
-# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
-# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
-# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
-# The vintages stop before the cut-off, so the panels end earlier than the [national posterior predictive checks](@ref "Posterior predictive checks").
+# Whether each province's modelled share of the national confirmed cases and deaths reproduces the observed share at every spatial vintage (see the [province compositions](@ref methods-province-compositions) Methods section).
 
 #md # ```@raw html
 #md # <details><summary>Province composition posterior predictive checks</summary>
@@ -173,10 +154,7 @@ province_death_ppc_fig #hide
 
 # ## Province stream calibration
 #
-# Each province's cases and deaths are scored vintage by vintage against the same composition predictive as the grey bands above, as counts at the observed national total.
-# The columns are those of the national [stream calibration](@ref "Stream calibration").
-# A vintage with no confirmed cases or deaths nationally has no split to score and is left out.
-# The check is on the split alone, so a province can be well calibrated here while the national total it is a share of is not.
+# Whether each province's share predictions are calibrated at the observed national total, scored as in the national [stream calibration](@ref "Stream calibration").
 
 #md # ```@raw html
 #md # <details><summary>Build the province calibration panels</summary>
@@ -218,11 +196,7 @@ MarkdownTable(province_calibration_table) #hide
 
 # ## Province counts
 #
-# The calibration above holds each vintage's national total at its observed value.
-# Here the national total is predicted as well, so each province's cases and deaths are scored as counts.
-# Each posterior predictive draw of the national confirmed cases or deaths is summed over each spatial vintage and split between the provinces by the same draw's composition, following the factorisation on the [Methods](@ref methods-province-compositions) page.
-# The first vintage is the cumulative count to that date.
-# A province can be well calibrated on its share and not on its count when the national stream is not.
+# Whether each province's cases and deaths are reproduced as counts once the national total is predicted as well.
 
 #md # ```@raw html
 #md # <details><summary>Build the province count panels</summary>
@@ -312,9 +286,7 @@ MarkdownTable(province_count_calibration_table) #hide
 
 # ## Province correlations and totals
 #
-# The heatmap is the posterior correlation between the national outbreak size ($C_T$) and, for each province, its reproduction number at the cut-off, its relative case ascertainment and its case-fatality ratio.
-# The case composition identifies only the product of a province's ascertainment and its incidence, so a strong negative correlation between the two is expected, and the deaths are what separate them.
-# Blue is positive, red negative.
+# Which province quantities trade off against each other, and whether each province's case and death totals agree with the observed ones.
 
 #md # ```@raw html
 #md # <details><summary>Province posterior correlation heatmap</summary>
@@ -353,12 +325,6 @@ province_correlation_fig = plot_correlation_heatmap(
 #md # ```
 
 province_correlation_fig #hide
-
-# The totals plot takes each posterior predictive draw from the composition calibration panels above, sums each province's cases and deaths over the spatial vintages, and marks the observed totals with a crosshair.
-# The diagonal panels are the predictive spread of each total against the observed value.
-# Within cases, and within deaths, the provinces split a national total that is held at its observed value, so their totals sum to that value in every draw.
-# The off-diagonal panels between two provinces' cases, or two provinces' deaths, therefore trade off by construction.
-# The panels pairing one province's cases with its deaths are the ones that show whether the two compositions agree.
 
 #md # ```@raw html
 #md # <details><summary>Province totals against observed</summary>
