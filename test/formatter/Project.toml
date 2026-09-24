@@ -16,4 +16,4 @@ Runic = "62bfec6d-59d7-401d-8490-b29ee721c001"
 # fails if the two drift. Bump both together, reformatting the tree in the
 # same commit.
 [compat]
-Runic = "=1.10.0"
+Runic = "=1.11.1"

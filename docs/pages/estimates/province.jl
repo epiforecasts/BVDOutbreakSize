@@ -4,9 +4,7 @@
 # The methods for this model are on the [Methods](@ref "Methods") page.
 #
 # The model runs one renewal equation per province and fits the national streams against the summed provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
-# The per-province case-fatality ratio sits with the national one in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
 # The per-province forecast is on the [province forecasts](@ref "Province forecasts") page and its scoring is in the [forecast by province](@ref "Forecast by province").
-# Each needs a quantity the page it sits on already computes.
 #
 # This page is generated from
 # [`docs/pages/estimates/province.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/province.jl).
@@ -94,47 +92,43 @@ province_map_fig #hide
 
 # ### Detail by province
 #
-# Each province's own estimates are below, as equal-tailed 30%, 60% and 90% credible intervals.
+# Each province's own estimates are below, as equal-tailed 30%, 60% and 90% credible intervals, with its case-fatality ratio in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
+# The log-Rt deviation is from the national trend, the drift is the deviation's walk scale and the contrast is against Ituri.
 
 #md # ```@raw html
-#md # <details><summary>Compute the per-province ranges</summary>
+#md # <details><summary>Compute the per-province tables and figure</summary>
 #md # ```
 
-province_detail_headline = Markdown.parse(
-    patch_detail_headline(chn_joint, N_PATCHES)
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_detail_headline #hide
-
-# The table below gives the same intervals for each province, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary table</summary>
-#md # ```
-
-province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
-
-province_detail_table #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary figure</summary>
-#md # ```
-
+## The tables below and the pair-plot dropdowns further down name the
+## provinces in this order.
+@assert PROVINCE_LABELS[1:N_PATCHES] ==
+    ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
+province_detail_tables = [
+    patch_summary_table(chn_joint, N_PATCHES; patch = p) for p in 1:N_PATCHES
+];
 province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 province_detail_fig #hide
 
-#md # ```@raw html
-#md # </details>
-#md # ```
+# #### Ituri
+
+province_detail_tables[1] #hide
+
+# #### Nord-Kivu
+
+province_detail_tables[2] #hide
+
+# #### Haut-Uele
+
+province_detail_tables[3] #hide
+
+# #### Other provinces
+
+province_detail_tables[4] #hide
 
 # ## Size and infections
 
@@ -249,6 +243,49 @@ spatial_hyper_table = summary_table(
 
 spatial_hyper_table #hide
 
+# ## Case-fatality ratio by province
+#
+# Whether the case-fatality ratio varies by province, set against the national ratios in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
+# Only the product of a province's lethality and death confirmation is identified, and the [province compositions](@ref methods-province-compositions) Methods section says how the priors split it.
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality spread</summary>
+#md # ```
+
+province_cfr_spread = summary_table(
+    chn_joint,
+    [:province_cfr_sd, :province_death_ascertainment_sd];
+    digits = 3, labels = spatial_labels
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr_spread #hide
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality table</summary>
+#md # ```
+
+confirmed_cfr = delay_corrected_confirmed_cfr(
+    chn_joint;
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths
+);
+province_cfr = province_cfr_table(
+    chn_joint, confirmed_cfr;
+    province_cases = vec(sum(province_cases.increments; dims = 2)),
+    province_deaths = vec(sum(province_deaths.increments; dims = 2)),
+    n_patches = N_PATCHES
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr #hide
+
 # ## Province parameters against their priors
 #
 # The pair plots below set the posterior of the province parameters against their prior.
@@ -295,9 +332,6 @@ spatial_pair_fig #hide
 #md # <details><summary>Compute the per-province pair plots</summary>
 #md # ```
 
-## The dropdowns below name the provinces in this order.
-@assert PROVINCE_LABELS[1:N_PATCHES] ==
-    ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
 province_pair_labels = Dict(
     :R_T_patch => "Reproduction number",
     :province_ascertainment => "Case ascertainment",

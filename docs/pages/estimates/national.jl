@@ -92,7 +92,7 @@ summary_ranges = let
     sRT = posterior_summary(RTd)
     scfr = posterior_summary(cfrd)
 
-    ## The 30/60/90% phrase the province headlines write too.
+    ## The 30/60/90% interval phrase.
     ints(s, d) = BVDOutbreakSize._interval_text(s; digits = d)
     start_from(t) = obs.cutoff - Day(round(Int, t))
     ints_d(s) = string(
@@ -180,23 +180,56 @@ fit_diagnostics_table = diagnostics_table(
     )...
 );
 
+## Only the joint fit is held to the convergence thresholds.
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "convergence.jl"))
+fit_convergence_summary = convergence_summary(
+    "joint", fit_diagnostics(chn_joint)
+)
+fit_diagnostics_detail_md = let t = fit_diagnostics_table,
+        rhat = filter(r -> isfinite(r.max_rhat), t),
+        ess = filter(r -> isfinite(r.min_ess_bulk), t),
+        worst = rhat[argmax(rhat.max_rhat), :],
+        least = ess[argmin(ess.min_ess_bulk), :]
+
+    fit_convergence_summary.detail * "\n\n" *
+        "Across all $(size(t, 1)) fits the worst R-hat is " *
+        "$(fmt_value(worst.max_rhat)), in the $(worst.fit) fit. " *
+        "The lowest bulk effective sample size is " *
+        "$(fmt_count(least.min_ess_bulk)), in the $(least.fit) fit. " *
+        "Only the joint fit is held to the thresholds above."
+end
+fit_diagnostics_detail = Markdown.parse(fit_diagnostics_detail_md);
+
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+Markdown.parse(fit_convergence_summary.verdict) #hide
+
+#md # ```@raw html
+#md # <details><summary>Fit diagnostics table</summary>
+#md # ```
+
+fit_diagnostics_detail #hide
+
+#-
+
 fit_diagnostics_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # #### Data currency
 #
 # The cut-off is the last date any stream reports.
-# Streams that stopped before it are carried frozen.
 
 #md # ```@raw html
-#md # <details><summary>Streams that stop before the cut-off</summary>
+#md # <details><summary>Build the data currency table</summary>
 #md # ```
 
-stream_currency_table = let status = stream_report_status(obs),
-        stale = status[.!status.reporting, :]
+stream_status = stream_report_status(obs)
+stream_currency_table = let stale = stream_status[.!stream_status.reporting, :]
     DataFrame(
         "Stream" => stale.label,
         "Last reported" => [
@@ -206,13 +239,39 @@ stream_currency_table = let status = stream_report_status(obs),
             ismissing(d) ? "-" : string(d) for d in stale.days_since
         ]
     )
+end
+stream_currency_summary = let n = length(stream_status.stream),
+        n_current = count(stream_status.reporting),
+        cutoff = format_report_date(obs.cutoff)
+
+    Markdown.parse(
+        if n_current == n
+            "All $n streams report within " *
+                "$(STREAM_REPORTING_GRACE_DAYS) days of the $cutoff cut-off."
+        else
+            "$n_current of the $n streams report within " *
+                "$(STREAM_REPORTING_GRACE_DAYS) days of the $cutoff cut-off. " *
+                "The other $(n - n_current) stopped earlier and are " *
+                "carried frozen."
+        end
+    )
 end;
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+stream_currency_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Streams that stop before the cut-off</summary>
+#md # ```
+
 MarkdownTable(stream_currency_table) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ### Joint model estimates
 #
@@ -591,10 +650,7 @@ for (i, r) in enumerate(obs.onset_curve_history.report_days)
     push!(get!(_onset_cells_by_report, r, Int[]), i)
 end
 _onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
-_onset_daily_draws = [
-    vcat(v[1], diff(v))
-        for v in vec(collect(chn_joint[:cumulative_onsets]))
-]
+_onset_daily_draws = onset_daily_draws(chn_joint)
 _onset_scan_level = [
     collect(v) for v in vec(collect(chn_joint[:onset_scan_level]))
 ]
@@ -602,22 +658,10 @@ _onset_noise_scale = [
     collect(v) for v in vec(collect(chn_joint[:onset_noise_scale]))
 ]
 
-## The digitised, deduplicated, cut-off-filtered snapshot blocks
-## `load_onset_curve` scores, kept here for their raw cumulative
-## onset-date counts: the fitted stream only ever sees between-vintage
-## increments, so the observed cumulative levels the figures below plot
-## are read back from the source blocks directly rather than
-## reconstructed from the fitted increments.
-_onset_path = joinpath(
-    pkgdir(BVDOutbreakSize), "data",
-    "onset_curve_scanned.csv"
-)
-_onset_snaps = filter(
-    b -> b.report_date <= obs.cutoff,
-    BVDOutbreakSize._dedup_onset_blocks(
-        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)
-    )
-)
+## The digitised snapshot blocks and their latest printed readings, from
+## the shared setup (`onset_snapshot_readings`).
+_onset_readings = onset_snapshot_readings()
+_onset_snaps = _onset_readings.snaps
 ## Keyed by report day rather than kept in order: a snapshot whose printed
 ## extent misses the scored window contributes no cells, so the panels and
 ## the snapshot blocks are not guaranteed to line up positionally.
@@ -849,97 +893,24 @@ onset_last_snapshot_fig = plot_onset_level_band(
 
 onset_last_snapshot_fig #hide
 
-# Each panel below is one digitised snapshot, plotted by onset date.
-# The grey crosses are the counts that snapshot's own figure printed.
-# The band is the model's posterior predictive of each onset date's eventual reported total: modelled onsets times ascertainment, sampled through `onset_increments_model`'s `missing` branch so it carries the fitted τ, `scan_level` and Student-t tail as the likelihood scores a level cell.
-# The black points are the latest figure's own reading, shown for context rather than as the target the band is read against.
-# A panel stops short at the snapshot's own last printed onset date.
-# Every snapshot is fitted, but only the first and the eight most recent are shown here.
-
-#md # ```@raw html
-#md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
-#md # ```
-
-## Latest printed value for each onset date the digitised figures cover,
-## and the report day that reading came off. Ordered by report date, so the
-## last block carrying a date gives the current reading. That is not the
-## newest snapshot for every date: the figures do not all print the same
-## range of onset dates, so a date a later figure stops short of keeps its
-## reading, and its shorter delay, from an earlier one. A date inside a
-## block's printed extent but with no row is a zero-height bar and does
-## count; a date outside that extent is not covered by that figure at all
-## and is skipped (the same rule the loader applies, see the [Data](@ref
-## methods-data) section).
-_onset_last_printed = Dict{Int, Float64}()
-_onset_last_report_day = Dict{Int, Int}()
-for snap in _onset_snaps
-    lo, hi = extrema(keys(snap.onsets))
-    R = obs.n - value(obs.cutoff - snap.report_date)
-    for d in lo:Day(1):hi
-        u = obs.n - value(obs.cutoff - d)
-        (1 <= u <= obs.n) || continue
-        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
-        _onset_last_report_day[u] = R
-    end
-end
-
-## The first snapshot plus the eight most recent, not every surviving
-## vintage: up to 48 panels is too many, and the earliest and latest carry
-## the most information (complete-curve level cells, most current
-## nowcast). Every snapshot still enters the likelihood; this only trims
-## which get their own panel.
-_onset_selected_report_days = length(_onset_report_grid_days) <= 9 ?
-    _onset_report_grid_days :
-    sort(
-        unique(
-            vcat(
-                first(_onset_report_grid_days),
-                last(_onset_report_grid_days, 8)
-            )
-        )
-    )
-
-## One panel per selected snapshot: printed counts against the model's
-## posterior predictive of the eventual reported total
-## (`onset_level_predictive_draws`'s default `target_delay = nothing`).
-## `v_idx` is the snapshot's position in the full
-## `_onset_report_grid_days`, the index its `scan_level`/`τ` are stored
-## under.
-_onset_panels = map(_onset_selected_report_days) do R
-    v_idx = findfirst(==(R), _onset_report_grid_days)
-    snap = _onset_snap_by_day[R]
-    us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
-    observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-    nowcast = [
-        onset_level_predictive_draws(
-            u, _onset_daily_draws, _onset_hazard, _onset_scan_level,
-            _onset_noise_scale, v_idx;
-            grid_start = _onset_hazard_grid_start,
-            alpha_grid_start = _onset_grid_start
-        )
-            for u in us
-    ]
-    (;
-        title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast, latest = [_onset_last_printed[u] for u in us],
-    )
-end
-
-onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
-
-onset_fit_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
+# The nowcast of each digitised snapshot against the latest figure is on the [in-sample checks](@ref "Onset snapshot nowcasts") page.
 #
-# The posterior predictive below reads the same reporting triangle along the onset date instead of the report date.
-# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, read at the current cut-off's own delay, and against the modelled onsets themselves.
+# The posterior predictive below compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
 # The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
 #md # ```
+
+_onset_last_printed = _onset_readings.last_printed
+_onset_last_report_day = _onset_readings.last_report_day
+
+## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
+## the fitted grid the same way the model extrapolates it.
+function _onset_alpha(i::Integer, u::Integer)
+    a = _onset_hazard.alpha[i]
+    return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
+end
 
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
@@ -955,8 +926,8 @@ _onset_by_date_onsets = [
 ## current cut-off's delay (`_onset_grid_end - u`) rather than the eventual
 ## total, through the same predictive measurement error a single digitised
 ## bar carries (`onset_level_predictive_draws`'s level-cell case). `v_idx`
-## is the vintage that last printed each date, the lookup the snapshot
-## panels use.
+## is the vintage that last printed each date, the lookup the in-sample
+## page's snapshot panels use.
 _onset_by_date_vidx = [
     findfirst(==(_onset_last_report_day[u]), _onset_report_grid_days)
         for u in _onset_by_date_days
@@ -1132,52 +1103,7 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 
 confirmed_cfr_fig #hide
 
-# The same three ratios by province are below.
-# Each province has its own case-fatality ratio, partially pooled toward the national value, and its own death confirmation, pooled far more tightly.
-# The delay-corrected ratio is the national corrected ratio scaled by a province's lethality and death confirmation over its case ascertainment, which is what varies by province once the delays are corrected for.
-# The structural ratio is the national ratio times that province's lethality contrast.
-#
-# The death composition identifies only the product of the lethality and death-confirmation contrasts, so their split is set by their priors rather than by the data.
-# The lethality prior is the looser of the two, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding.
-# The spread of the lethality contrast is reported below against its prior, so a posterior that has not moved can be read as the prior's rather than as a finding.
-# The two spreads are on the same log scale, so their sizes are comparable directly.
-
-#md # ```@raw html
-#md # <details><summary>Province case-fatality spread</summary>
-#md # ```
-
-province_cfr_spread = summary_table(
-    chn_joint,
-    [:province_cfr_sd, :province_death_ascertainment_sd];
-    digits = 3,
-    labels = Dict(
-        :province_cfr_sd => "Lethality spread",
-        :province_death_ascertainment_sd => "Death-confirmation spread"
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_cfr_spread #hide
-
-#md # ```@raw html
-#md # <details><summary>Province case-fatality table</summary>
-#md # ```
-
-province_cfr = province_cfr_table(
-    chn_joint, confirmed_cfr;
-    province_cases = vec(sum(province_cases.increments; dims = 2)),
-    province_deaths = vec(sum(province_deaths.increments; dims = 2)),
-    n_patches = N_PATCHES
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_cfr #hide
+# The same ratios by province are in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
 
 # ### Forecast results
 #
@@ -1683,11 +1609,15 @@ open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
 end
 
-## Fit diagnostics: the same table the Results section shows, so the
-## dashboard reports how the fit behind its numbers sampled without
+## Fit diagnostics: the same summary and table the Results section shows,
+## so the dashboard reports how the fit behind its numbers sampled without
 ## building a second table.
 open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
+    print(io, fit_diagnostics_detail_md, "\n\n")
     print(io, markdown_table(fit_diagnostics_table))
+end
+open(joinpath(dashboard_dir, "diagnostics_summary.md"), "w") do io
+    print(io, fit_convergence_summary.verdict)
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.
