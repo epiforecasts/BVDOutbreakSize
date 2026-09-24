@@ -5,6 +5,22 @@
 # can be reused across composers without duplication. Delays are sampled
 # from priors and discretised with CensoredDistributions. Nothing is fixed.
 
+## `f(args...)` with no derivative passed back through it. Wraps work a
+## submodel returns that reaches only `:=` quantities the fit reports, never
+## a likelihood, so the gradient does not tape it. The work still runs,
+## since `m()` reads these returns; a `:=` site skips its work with
+## `_reporting` instead. Its rule is in `src/mooncake_rules.jl`. A wrapped
+## value that reached a likelihood would get a wrong gradient, which the
+## joint's rules-off comparison in `test/test_mooncake_rules.jl` checks for.
+_detached(f, args...) = f(args...)
+
+## True when the evaluation records `:=` values: chain rows, `Prior()` and
+## `predict`. False under a `LogDensityFunction`, `m()` and `returned`, so a
+## branch it guards compiles out of the gradient. It is the check
+## DynamicPPL's own `:=` lowering makes before it stores a value, and it is
+## not public in DynamicPPL.
+_reporting(vi) = is_extracting_colon_eq_values(vi)
+
 ## --- Delay submodels (priors only, all delays sampled) -------------------
 
 """
@@ -718,12 +734,11 @@ at the same scale.
     ##
     ## Centred: each step is drawn at the sampled scale rather than as a
     ## standard half-normal multiplied by it. `eps` floors the scale so a
-    ## `σ_cap ≈ 0` draw stays a proper distribution.
-    steps ~ product_distribution(
-        fill(
-            truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
-            max(nb - 1, 1)
-        )
+    ## `σ_cap ≈ 0` draw stays a proper distribution. `filldist` holds one
+    ## copy of the truncated distribution rather than one per step.
+    steps ~ filldist(
+        truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
+        max(nb - 1, 1)
     )
     log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
     if cutoff !== nothing && n > nc
@@ -1372,7 +1387,6 @@ with fresh correlated innovations `z_drift_future`, and `Rt_matrix` and
         rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start, fkw...)
     )
     Rt_national = rt_state.Rt
-    log_Rt_national = log.(Rt_national)
     ## The deviations live on the same weekly knots as the national walk, so
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
@@ -1393,7 +1407,7 @@ with fresh correlated innovations `z_drift_future`, and `Rt_matrix` and
             Rt_matrix1[1, t] = Rt_national[t]
         end
         return (;
-            Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
+            Rt_matrix = Rt_matrix1, Rt_national,
             δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
             σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
             Ω = ones(Tp1, 1, 1), δ_halflife = zero(Tp1),
@@ -1406,7 +1420,7 @@ with fresh correlated innovations `z_drift_future`, and `Rt_matrix` and
     ## `LKJCholesky` samples the Cholesky factor directly, so the
     ## decomposition never lands on the AD tape.
     σ_level ~ region_sd_prior
-    σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
+    σ_δ ~ filldist(region_drift_sd_prior, n_patches)
     ## Mean reversion. The deviations are an AR(1) toward zero on the knots,
     ## parameterised by the half-life of a provincial divergence in days,
     ## which is the elicitable quantity. The per-knot retention is
@@ -1476,34 +1490,35 @@ with fresh correlated innovations `z_drift_future`, and `Rt_matrix` and
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
     Tq = eltype(knots_all)
-    δ_patch = zeros(Tq, n_patches, ng)
     Rt_matrix = zeros(Tq, n_patches, ng)
     @inbounds for p in 1:n_patches
         ## A view, not a copy: `interpolate_knots` only reads its knots, and
         ## the copy put one `getindex` per knot on the gradient tape.
         δ_daily = interpolate_knots(view(knots_all, p, :), days_all, ng)
         for t in 1:ng
-            δ_patch[p, t] = δ_daily[t]
-            Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
+            Rt_matrix[p, t] = Rt_national[t] * exp(δ_daily[t])
         end
     end
-    ## Cross-patch correlation matrix, reconstructed from its factor for
-    ## reporting (Ω = L Lᵀ).
-    Ω = zeros(Tp, n_patches, n_patches)
-    @inbounds for i in 1:n_patches, j in 1:n_patches
-
-        acc = zero(Tp)
-        for k in 1:min(i, j)
-            acc += L[i, k] * L[j, k]
-        end
-        Ω[i, j] = acc
-    end
+    ## The daily deviations and the cross-patch correlation matrix
+    ## (Ω = L Lᵀ) are reported only.
+    δ_patch = _detached(_daily_deviations, δ_knots, days, n)
+    Ω = _detached(*, L, transpose(L))
     return (;
-        Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
+        Rt_matrix, Rt_national, δ_patch, δ_knots,
         σ_level, σ_δ, Ω, δ_halflife, sigma_rw = rt_state.sigma_rw,
         log_R0 = rt_state.log_R0,
         intervention_effect = rt_state.intervention_effect,
     )
+end
+
+## Each patch's knot deviations (rows of `δ_knots`) interpolated to the
+## daily grid.
+function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
+    δ = zeros(eltype(δ_knots), size(δ_knots, 1), n)
+    for p in axes(δ_knots, 1)
+        δ[p, :] = interpolate_knots(view(δ_knots, p, :), days, n)
+    end
+    return δ
 end
 
 """
@@ -1728,18 +1743,9 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
-    ## 7. Per-patch cumulatives and the national aggregate.
-    cumulative_matrix = zeros(Tp, n_patches, ng)
-    @inbounds for p in 1:n_patches
-        acc = zero(Tp)
-        for t in 1:ng
-            acc += infections_matrix[p, t]
-            cumulative_matrix[p, t] = acc
-        end
-    end
-    C_T_patch = [@inbounds(cumulative_matrix[p, n]) for p in 1:n_patches]
-    infections_total = vec(sum(infections_matrix; dims = 1))
-    cumulative_total = cumsum(infections_total)
+    ## 7. National totals and headline quantities, which the fit reports and
+    ##    no likelihood reads.
+    headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets_matrix = zeros(Tp, n_patches, ng)
@@ -1748,36 +1754,52 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             infections_matrix[p, :], inc_state.pmf
         )
     end
-    ## 9. Aggregate reproduction number. Inverting the renewal equation on
-    ##    the summed infections gives the incidence-weighted mean of the
-    ##    patch `Rt`s. With `I_{p,t} = R_{p,t} · force_{p,t}`, summing over
-    ##    patches gives `I_t / Σ_p force_{p,t} = Σ_p R_{p,t} force_{p,t} /
-    ##    Σ_p force_{p,t}`. This is the `Rt` that reproduces the national
-    ##    trajectory, so it is the one the headline `R_T` reports. Only the
-    ##    cut-off day is inverted, since that is the only day reported.
-    R_T = implied_national_Rt_at(infections_total, g, n)
-    ## 10. Headline quantities, mirroring [`infection_model`](@ref) so a
-    ##     patch chain summarises exactly like a single-patch one.
-    r = euler_lotka_r(R_T, g)
+    ## 9. Headline quantities, mirroring [`infection_model`](@ref) so a
+    ##    patch chain summarises exactly like a single-patch one.
     T_total = growth_state.T + τ_obs
     return (;
-        infections_matrix, cumulative_matrix, onsets_matrix,
+        infections_matrix, onsets_matrix,
         Rt_matrix, importation_matrix,
         δ_patch, δ_knots = rt_state.δ_knots,
-        C_T_patch,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
         δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
-        infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,
-        g, R0, r0 = r_clock, r, R_T,
+        g, R0, r0 = r_clock,
         m = growth_state.m, τ = growth_state.τ,
-        T = T_total, C_T = @inbounds(cumulative_total[n]),
-        doubling_time = doubling_time(r),
+        T = T_total,
         seed_at_renewal_start = seed0_total, seed_fraction,
-        seeding_age = seeding_age(upto(cumulative_total, n), n),
         incubation_pmf = inc_state.pmf,
+        headlines...,
+    )
+end
+
+"""
+National totals and headline quantities of [`patch_infection_model`](@ref),
+read off the per-patch infections.
+
+`infections_total` and `cumulative_total` sum the patches, `C_T_patch` is
+each patch's cumulative at the cut-off and `C_T` the national one. `R_T`
+inverts the renewal equation on the summed infections on the cut-off day
+([`implied_national_Rt_at`](@ref)). With `I_{p,t} = R_{p,t} · force_{p,t}`
+that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
+incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
+the national trajectory. `r`, `doubling_time` and `seeding_age` follow from
+it as in [`infection_model`](@ref).
+"""
+function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)
+    infections_total = vec(sum(infections_matrix; dims = 1))
+    cumulative_total = cumsum(infections_total)
+    ## Past the cut-off when forecasting, so the fitted quantities read the
+    ## grid up to the cut-off `n`.
+    C_T_patch = vec(sum(view(infections_matrix, :, 1:n); dims = 2))
+    R_T = implied_national_Rt_at(infections_total, g, n)
+    r = euler_lotka_r(R_T, g)
+    return (;
+        infections_total, cumulative_total, C_T_patch,
+        C_T = cumulative_total[n], R_T, r, doubling_time = doubling_time(r),
+        seeding_age = seeding_age(upto(cumulative_total, n), n),
     )
 end
 

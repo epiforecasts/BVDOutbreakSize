@@ -1,6 +1,7 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, std
+using LinearAlgebra: axpy!, dot
 using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
@@ -12,18 +13,23 @@ using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
     predict, returned
+using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-    Model, VarInfo, contextualize, getlogjoint, init!!
+    Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
+    is_extracting_colon_eq_values
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
+import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Normal,
     LogNormal, Beta, LKJCholesky,
-    Gamma, TDist, truncated, censored, product_distribution
-using CensoredDistributions: double_interval_censored
-using StatsFuns: logit, logistic
+    Gamma, TDist, Uniform, truncated, censored, product_distribution
+using CensoredDistributions: AnalyticalSolver, primary_censored,
+    primarycensored_cdf
+using StatsFuns: logit, logistic, logaddexp
+using SpecialFunctions: beta_inc
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
@@ -107,7 +113,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     delay_corrected_cfr, delay_corrected_confirmed_cfr,
     confirmed_cfr_table, plot_confirmed_cfr,
     # renewal helpers
-    renewal_infections, convolve_delay, convolve_survival, convolve_pmf,
+    renewal_infections, convolve_delay, convolve_pmf,
     discretise_censored,
     euler_lotka_r, r_to_R0, doubling_time, seed_infections,
     confirmed_break_correction,
@@ -175,6 +181,18 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_export_pressure_model,
     province_composition_model, composition_shares, composition_split_model
 
+## Vector observation distributions a submodel writes on the right of `~`.
+## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
+## there and Julia 1.10 still loads the package.
+@static if VERSION >= v"1.11.0-DEV.469"
+    eval(
+        Meta.parse(
+            "public NegBinomialVector, CensoredNegBinomialVector, " *
+                "StudentTVector, BetaBinomialVector, SplitCountVector"
+        )
+    )
+end
+
 include("docstrings.jl")
 include("constants.jl")
 include("data.jl")
@@ -190,15 +208,16 @@ include("confirmed_cfr.jl")
 include("plots.jl")
 include("maps.jl")
 include("models/priors.jl")
+include("models/observation_distributions.jl")
 include("models/observations.jl")
 include("models/joint.jl")
 include("models/fit_args.jl")
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:
-##   set_preferences!(BVDOutbreakSize, "ad_rules" => false)
+##   set_preferences!(BVDOutbreakSize, "mooncake_rules" => false)
 ## Included after the models, since some rules are on observation helpers.
-if @load_preference("ad_rules", true)
-    include("ad_rules.jl")
+if @load_preference("mooncake_rules", true)
+    include("mooncake_rules.jl")
 end
 include("precompile.jl")
 

@@ -7,7 +7,8 @@ This section documents what the package offers, grouped by the job each part doe
 
 Everything the package exports is public and documented here.
 The exported surface is what the report pages, the fit registry and the scripts use, and it is what a reader should build on.
-Anything not exported is an implementation detail, kept on the [internals](internals.md) page, and may change without notice.
+The vector observation distributions are declared `public` without being exported, and are documented with the [observation models](observations.md).
+Anything else is an implementation detail, kept on the [internals](internals.md) page, and may change without notice.
 
 ## The groups
 

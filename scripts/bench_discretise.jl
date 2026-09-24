@@ -1,18 +1,16 @@
 # Mooncake gradient-timing diagnostic for the censored-delay discretisation.
 #
-# `discretise_censored` → `_pmf_from_dic` (src/renewal.jl) is the documented
-# per-gradient hot path: every delay submodel discretises a
-# `double_interval_censored` distribution once per draw, and the reverse pass
-# walks the censored-CDF evaluations. The PMF was built as
-# `[pdf(dic, d) for d in 0:nmax]`, which evaluates every interior integer
-# boundary CDF twice (lag `d` reads `cdf(d)` and `cdf(d+1)`, lag `d+1` reads
-# `cdf(d+1)` and `cdf(d+2)`, …). Differencing one CDF path over `0:nmax+1`
-# evaluates each boundary once and halves those evaluations, numerically
-# identical to the `pdf` differences it replaces.
+# `discretise_censored` (src/renewal.jl) is on every gradient: each delay
+# submodel discretises its delay once per draw, and the reverse pass walks
+# the censored-CDF evaluations. The reference below builds the PMF as
+# `[pdf(dic, d) for d in 0:nmax]` from the `double_interval_censored`
+# distribution, which evaluates each interior boundary CDF twice and each
+# boundary CDF at two delay-CDF endpoints. `discretise_censored` evaluates
+# each delay-CDF endpoint once.
 #
-# This times the old pdf-loop against the current `discretise_censored`
-# (cdf-difference) under Mooncake, for the delays the model uses, confirming
-# the values match and reporting the gradient-cost delta.
+# This times the pdf-loop against `discretise_censored` under Mooncake, for
+# the delays the model uses, confirming the values match and reporting the
+# gradient-cost delta.
 #
 # Run: julia --project=. scripts/bench_discretise.jl
 
@@ -23,7 +21,7 @@ using Mooncake: Mooncake
 using Statistics: median
 using Printf: @printf
 
-## Old implementation: a `pdf` per lag, overlapping boundary CDFs.
+## Reference: a `pdf` per lag, overlapping boundary CDFs.
 function pmf_pdf_loop(dist, nmax::Integer)
     dic = double_interval_censored(dist; interval = 1.0, upper = float(nmax))
     raw = [pdf(dic, float(d)) for d in 0:nmax]
@@ -60,7 +58,7 @@ function run_case(label, build, a, b, nmaxes)
         t_old = time_gradient(f_old, a, b)
         t_new = time_gradient(f_new, a, b)
         @printf(
-            "  nmax=%-3d  pdf-loop %8.2f µs  cdf-diff %8.2f µs  (%.2fx)  Δval=%.1e\n",
+            "  nmax=%-3d  pdf-loop %8.2f µs  package %8.2f µs  (%.2fx)  Δval=%.1e\n",
             nmax, t_old * 1.0e6, t_new * 1.0e6, t_old / t_new, abs(v_old - v_new)
         )
     end

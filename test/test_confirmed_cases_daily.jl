@@ -76,6 +76,46 @@ end
     @test isfinite(logjoint(m2, rand(MersenneTwister(2), m2)))
 end
 
+@testitem "late increments score anchored and unanchored days apart" begin
+    using BVDOutbreakSize: late_confirmed_model, SplitCountVector,
+        safe_betabinomial, safe_nbinomial, safe_rate
+    using Distributions: logpdf
+    using Turing: logjoint, @varname
+    using Random: Xoshiro
+
+    ## Days with a 24h analysed count are BetaBinomials of it, the others
+    ## NegativeBinomials of the modelled volume, one term per day. A zero
+    ## modelled volume sits on the rate floor.
+    analysed = [0, 40, 0, 12, 30, 0]
+    x = [7, 15, 3, 12, 0, 1]
+    μ = [5.0, 9.0, 0.0, 4.0, 2.0, 11.0]
+    p = [0.2, 0.3, 0.4, 0.9, 0.05, 0.5]
+    k, ρ = 6.0, 0.05
+    term(i) = analysed[i] > 0 ?
+        logpdf(safe_betabinomial(analysed[i], p[i], ρ), x[i]) :
+        logpdf(safe_nbinomial(k, safe_rate(μ[i])), x[i])
+    ref = sum(term, eachindex(x))
+
+    d = SplitCountVector(analysed, p, ρ, k, μ)
+    @test length(d) == 6
+    @test d.anchored == [2, 4, 5]
+    @test logpdf(d, x) ≈ ref rtol = 1.0e-12
+    @test logjoint(late_confirmed_model(x, μ, analysed, p, k, ρ), (;)) ≈
+        ref rtol = 1.0e-12
+
+    ## A missing day is left latent and the present days are scored one by
+    ## one, to the same per-day terms.
+    xm = Vector{Union{Missing, Int}}(x)
+    xm[3] = missing
+    m = late_confirmed_model(xm, μ, analysed, p, k, ρ)
+    @test logjoint(m, Dict(@varname(increments[3]) => 3)) ≈ ref rtol = 1.0e-12
+
+    ## Draws keep each anchored day inside its trials.
+    draw = rand(Xoshiro(1), d)
+    @test draw isa Vector{Int}
+    @test all(i -> 0 <= draw[i] <= analysed[i], d.anchored)
+end
+
 @testitem "confirmed break days de-anchor the positivity denominator" begin
     using BVDOutbreakSize: confirmed_positivity_windows
 

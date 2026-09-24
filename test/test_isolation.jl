@@ -2,45 +2,8 @@
 ## isolement"), a prevalence (length-of-stay) stream: the suspect inflow
 ## (BVD treatment stay plus non-BVD rule-out stay) carried through a
 ## length-of-stay survival into a daily stock, scored against the modelled
-## occupancy on each report day. Exercised through the `convolve_survival`
-## helper, `treatment_only_model` and `bvd_joint`.
-
-@testitem "convolve_survival: same-day discharge returns the inflow" begin
-    using BVDOutbreakSize: convolve_survival
-    x = [1.0, 2.0, 3.0, 4.0]
-    ## A length-of-stay point mass at 0 (`pmf = [1]`) gives survival
-    ## `S(0) = 1`, `S(τ>0) = 0`, so the admission day is the only occupancy
-    ## day and the occupancy equals the inflow.
-    @test convolve_survival(x, [1.0]) == x
-end
-
-@testitem "convolve_survival: fixed stay accumulates the right occupancy" begin
-    using BVDOutbreakSize: convolve_survival
-    ## A length-of-stay fixed at 2 days (`pmf = [0, 0, 1]`) means a patient
-    ## occupies a bed on the admission day and the next two days, so the
-    ## survival weights are `S(0)=S(1)=S(2)=1`, `S(τ≥3)=0`. With one
-    ## admission per day the occupancy ramps 1, 2, 3 then holds at 3.
-    los = [0.0, 0.0, 1.0]
-    x = ones(5)
-    occ = convolve_survival(x, los)
-    @test occ == [1.0, 2.0, 3.0, 3.0, 3.0]
-    ## Total occupancy equals the total inflow times `E[LOS] + 1` (here 3).
-    @test sum(convolve_survival([0.0, 0.0, 1.0, 0.0, 0.0], los)) ≈ 3.0
-end
-
-@testitem "convolve_survival: survival weights are non-increasing" begin
-    using BVDOutbreakSize: convolve_survival, discretise_censored,
-        lognormal_meansd
-    ## A single unit admission on day 1 traces the survival curve directly:
-    ## occupancy[t] = S(t-1), which must be non-increasing and start at 1.
-    los = discretise_censored(lognormal_meansd(6.0, 4.0), 30)
-    x = zeros(40)
-    x[1] = 1.0
-    occ = convolve_survival(x, los)
-    @test occ[1] ≈ 1.0
-    @test all(diff(occ) .<= 1.0e-10)
-    @test all(occ .>= -1.0e-12)
-end
+## occupancy on each report day. Exercised through `treatment_only_model`
+## and `bvd_joint`.
 
 @testitem "censoring_cap: bound from recorded capacity, never below obs" begin
     using BVDOutbreakSize: censoring_cap

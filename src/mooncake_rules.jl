@@ -35,13 +35,6 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(convolve_survival), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
         typeof(convolve_pmf), Array{<:Mooncake.IEEEFloat},
         Array{<:Mooncake.IEEEFloat},
     },
@@ -67,39 +60,21 @@ Mooncake.@is_primitive(
         Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(nbinomial_loglik), Mooncake.IEEEFloat,
-        Array{<:Mooncake.IEEEFloat}, Array{<:Integer},
-    },
-)
 
-## Adjoint of the daily delay convolution, shared by `convolve_delay` and
-## `convolve_survival`. A convolution's pullback is the matching
-## correlation, one pass over the same `(t, d)` pairs:
-##
-##     y[t]    = Σ_d x[t−d] · w[d+1]
-##     x̄[s]   += Σ_d ȳ[s+d] · w[d+1]
-##     w̄[d+1] += Σ_t ȳ[t] · x[t−d]
-function _convolve_delay_adjoint(
-        ȳ::AbstractVector, x::AbstractVector,
-        delay::AbstractVector
-    )
-    n = length(x)
-    D = length(delay)
-    x̄ = zeros(promote_type(eltype(ȳ), eltype(delay)), n)
-    d̄ = zeros(promote_type(eltype(ȳ), eltype(x)), D)
-    @inbounds for t in 1:min(n, length(ȳ))
-        g = ȳ[t]
-        dmax = min(t - 1, D - 1)
-        for d in 0:dmax
-            x̄[t - d] += g * delay[d + 1]
-            d̄[d + 1] += g * x[t - d]
-        end
-    end
-    return x̄, d̄
-end
+## Data-only helpers: lookups over the observation grid and the recorded
+## histories, with no sampled quantity among their arguments. They pass no
+## derivative, so the backend need not tape them.
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(onset_vintage_indices), Vararg}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(admission_headroom), Vararg}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
+)
+## Work that reaches only reported quantities (see `_detached`).
+Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(convolve_delay)},
@@ -112,40 +87,25 @@ function Mooncake.rrule!!(
     y = convolve_delay(xp, dp)
     ȳ = zero(y)
     function convolve_delay_pullback!!(::NoRData)
-        Δx, Δd = _convolve_delay_adjoint(ȳ, xp, dp)
+        ## The forward adds `w[d] · x[1:n−d+1]` to `y[d:n]` for each lag, so
+        ## the pullback is the matching correlation, one lag at a time:
+        ##
+        ##     x̄[1:n−d+1] += w[d] · ȳ[d:n]
+        ##     w̄[d]       += ȳ[d:n] · x[1:n−d+1]
+        ##
+        ## `x̄` gathers into a contiguous buffer first, since `x` may be a
+        ## strided matrix row.
+        n = length(xp)
+        Δx = zeros(eltype(x̄), n)
+        for d in 1:min(length(dp), n)
+            ȳd = view(ȳ, d:n)
+            axpy!(dp[d], ȳd, view(Δx, 1:(n - d + 1)))
+            d̄[d] += dot(ȳd, view(xp, 1:(n - d + 1)))
+        end
         x̄ .+= Δx
-        d̄ .+= Δd
         return NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), convolve_delay_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(convolve_survival)},
-        x::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        los::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    xp = primal(x)
-    lp = primal(los)
-    x̄ = tangent(x)
-    l̄ = tangent(los)
-    surv = survival_weights(lp)
-    y = convolve_delay(xp, surv)
-    ȳ = zero(y)
-    function convolve_survival_pullback!!(::NoRData)
-        Δx, s̄ = _convolve_delay_adjoint(ȳ, xp, surv)
-        x̄ .+= Δx
-        ## `surv[i] = Σ_{j ≥ i} los[j]`, so `los[j]` feeds every survival
-        ## weight at or below `j`: the adjoint is the forward cumulative
-        ## sum of the survival adjoint.
-        run = zero(eltype(s̄))
-        @inbounds for j in eachindex(s̄)
-            run += s̄[j]
-            l̄[j] += run
-        end
-        return NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), convolve_survival_pullback!!
 end
 
 function Mooncake.rrule!!(
@@ -160,13 +120,15 @@ function Mooncake.rrule!!(
     y = convolve_pmf(ap, bp)
     ȳ = zero(y)
     function convolve_pmf_pullback!!(::NoRData)
+        ## `y[j:j+na−1]` holds `b[j] · a` for each `j`, so
+        ##
+        ##     ā    += b[j] · ȳ[j:j+na−1]
+        ##     b̄[j] += ȳ[j:j+na−1] · a
         na = length(ap)
-        nb = length(bp)
-        @inbounds for i in 1:na, j in 1:nb
-
-            g = ȳ[i + j - 1]
-            ā[i] += g * bp[j]
-            b̄[j] += g * ap[i]
+        for j in eachindex(bp)
+            ȳj = view(ȳ, j:(j + na - 1))
+            axpy!(bp[j], ȳj, ā)
+            b̄[j] += dot(ȳj, ap)
         end
         return NoRData(), NoRData(), NoRData()
     end
@@ -194,14 +156,7 @@ function Mooncake.rrule!!(
         end
         Tf = eltype(ō)
         @inbounds for t in 1:np
-            b = 1
-            while b < nb - 1 && t > dayp[b + 1]
-                b += 1
-            end
-            d0 = dayp[b]
-            d1 = dayp[b + 1]
-            frac = d1 == d0 ? zero(Tf) :
-                clamp(Tf(t - d0) / Tf(d1 - d0), zero(Tf), one(Tf))
+            b, frac = _knot_bracket(dayp, t, Tf)
             g = ō[t]
             k̄[b] += (one(Tf) - frac) * g
             k̄[b + 1] += frac * g
@@ -506,83 +461,6 @@ Mooncake.@is_primitive(
     },
 )
 
-## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
-## Ties go to the second argument of `max` and to the bound of `clamp`,
-## lower bound first, the sides Mooncake's own rules for them take.
-const _OCC_UNCONF = 0x01
-const _OCC_DENOM = 0x02
-const _OCC_BVD = 0x04
-const _OCC_BG = 0x08
-const _OCC_CONF_X = 0x10
-const _OCC_CONF_HI = 0x20
-const _OCC_SUSP = 0x40
-
-## The forward balance of `accumulate_occupancy`, also recording the
-## non-case stock and which side of each `max` and `clamp` was taken.
-function _accumulate_occupancy_taped(
-        A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
-    )
-    n = length(A_bvd)
-    T = promote_type(
-        eltype(A_bvd), eltype(A_bg), eltype(deaths),
-        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
-    )
-    demand = Vector{T}(undef, n)
-    O_bvd = Vector{T}(undef, n)
-    O_conf = Vector{T}(undef, n)
-    O_susp = Vector{T}(undef, n)
-    abscond = Vector{T}(undef, n)
-    O_bg = Vector{T}(undef, n)
-    flags = Vector{UInt8}(undef, n)
-    z = zero(T)
-    Obvd_prev = z
-    Obg_prev = z
-    Oconf_prev = z
-    Osusp_prev = z
-    ε = eps(T)
-    @inbounds for t in 1:n
-        bvd_out = deaths[t] + recover[t]
-        ab = κ * Osusp_prev
-        x_u = Obvd_prev - Oconf_prev
-        unconf = max(x_u, z)
-        denom = max(Osusp_prev, ε)
-        ab_bvd = ab * (unconf / denom)
-        ab_bg = ab * (Obg_prev / denom)
-        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
-        Obvd_t = max(x_bvd, z)
-        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
-        Obg_t = max(x_bg, z)
-        Dt = Obvd_t + Obg_t
-        conf_in = conf_hazard[t] * unconf
-        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        x_conf = Oconf_prev + conf_in - bvd_out * share
-        Oconf_t = clamp(x_conf, z, Obvd_t)
-        x_susp = Dt - Oconf_t
-        Osusp_t = max(x_susp, z)
-        f = 0x00
-        x_u > z && (f |= _OCC_UNCONF)
-        Osusp_prev > ε && (f |= _OCC_DENOM)
-        x_bvd > z && (f |= _OCC_BVD)
-        x_bg > z && (f |= _OCC_BG)
-        if x_conf > z
-            f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
-        end
-        x_susp > z && (f |= _OCC_SUSP)
-        demand[t] = Dt
-        O_bvd[t] = Obvd_t
-        O_conf[t] = Oconf_t
-        O_susp[t] = Osusp_t
-        abscond[t] = ab
-        O_bg[t] = Obg_t
-        flags[t] = f
-        Obvd_prev = Obvd_t
-        Obg_prev = Obg_t
-        Oconf_prev = Oconf_t
-        Osusp_prev = Osusp_t
-    end
-    return (; demand, O_bvd, O_conf, O_susp, abscond), O_bg, flags
-end
-
 function Mooncake.rrule!!(
         ::CoDual{typeof(accumulate_occupancy)},
         A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
@@ -603,8 +481,9 @@ function Mooncake.rrule!!(
     r̄ = tangent(recover)
     ō = tangent(ruleout)
     h̄ = tangent(conf_hazard)
-    y, O_bg, flags = _accumulate_occupancy_taped(
-        primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp, hp
+    y, O_bg, flags = _accumulate_occupancy(
+        Val(true), primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp,
+        hp
     )
     ȳ = map(zero, y)
     function accumulate_occupancy_pullback!!(::NoRData)
@@ -696,6 +575,67 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), accumulate_occupancy_pullback!!
 end
 
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(incare_census), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat, Array{<:Mooncake.IEEEFloat},
+    },
+)
+
+## Adjoint of the in-care census. Per day, with `c = clamp(x, 0, O_bvd)`,
+## `u = max(D − c, 0)` and `s = max(D + Δ − c, 0)`,
+##
+##     c̄ = ȳ_conf − s̄ [s side] − ū [u side],   ū = κ · ā[t + 1],
+##     D̄ += s̄ [s side] + ū [u side],   Δ̄ += s̄ [s side] + t̄ot,
+##     D̄ += t̄ot,   κ̄ += ā[t + 1] · u,
+##
+## and `c̄` goes to `x` or to `O_bvd` by the side the clamp took.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(incare_census)},
+        demand::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        O_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        O_conf_raw::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        κ::CoDual{<:Mooncake.IEEEFloat},
+        offset::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    κp = primal(κ)
+    D̄ = tangent(demand)
+    B̄ = tangent(O_bvd)
+    X̄ = tangent(O_conf_raw)
+    Δ̄ = tangent(offset)
+    y, unconf, flags = _incare_census(
+        Val(true), primal(demand), primal(O_bvd), primal(O_conf_raw), κp,
+        primal(offset)
+    )
+    ȳ = map(zero, y)
+    function incare_census_pullback!!(::NoRData)
+        Tf = eltype(y.total)
+        κ̄ = zero(Tf)
+        n = length(flags)
+        @inbounds for t in 1:n
+            f = flags[t]
+            gs = f & _CEN_SUSP != 0 ? ȳ.suspect[t] : zero(Tf)
+            ā = t < n ? ȳ.abscond[t + 1] : zero(Tf)
+            κ̄ += ā * unconf[t]
+            gu = f & _CEN_UNCONF != 0 ? κp * ā : zero(Tf)
+            gtot = ȳ.total[t] + gs
+            D̄[t] += gtot + gu
+            Δ̄[t] += gtot
+            gc = ȳ.confirmed[t] - gs - gu
+            if f & _CEN_CONF_X != 0
+                X̄[t] += gc
+            elseif f & _CEN_CONF_HI != 0
+                B̄[t] += gc
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(),
+            convert(typeof(κp), κ̄), NoRData()
+    end
+    return CoDual(y, ȳ), incare_census_pullback!!
+end
+
 # Onset-reporting kernels from `models/observations.jl`. Each is a loop over
 # the (delay, onset date) grid or the scored cells, so the derived rule tapes
 # every logistic, product and division in it.
@@ -726,41 +666,21 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(onset_report_expected_total), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat}, Integer,
-        Array{<:Mooncake.IEEEFloat}, Integer,
+        typeof(onset_scanned_cells), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Array{<:Integer}, Array{<:Integer}, Array{<:Integer},
+        Mooncake.IEEEFloat,
     },
 )
 
 ## Derivative of `safe_rate`: the identity above its floor, flat on it.
-_safe_rate_slope(x) = (isfinite(x) && x > eps(typeof(x))) ? one(x) : zero(x)
+_safe_rate_slope(x) = _safe_rate_on(x) ? one(x) : zero(x)
 
-## Hazards and survival products of one onset date's delay column, as the
-## forward loop builds them. `surv[j + 1]` is the product up to and
-## including delay `j`.
-function _onset_column!(
-        h::AbstractVector, surv::AbstractVector,
-        logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
-        grid_start::Integer
-    )
-    D = length(logit_h0)
-    ng = length(γ)
-    T = eltype(surv)
-    s = one(T)
-    @inbounds for j in 0:(D - 1)
-        gi = clamp(u + j - grid_start + 1, 1, ng)
-        hj = logistic(logit_h0[j + 1] + γ[gi])
-        s *= (one(T) - hj)
-        h[j + 1] = hj
-        surv[j + 1] = s
-    end
-    return nothing
-end
-
-## `1 - surv[j]` has derivative `surv[j] · h[i]` in the logit `x_i` for every
-## `i ≤ j`, so a column's adjoint is `x̄_i = h_i · Σ_{j ≥ i} c̄_j surv_j`, one
-## backward running sum. Each `x̄_i` lands on `logit_h0[i]` and on the
-## (clamped) calendar day it read from `γ`.
+## Adjoint of one `_onset_columns!` column, with `c̄` the cotangent of
+## `1 - surv`. `1 - surv[j]` has derivative `surv[j] · h[i]` in the logit
+## `x_i` for every `i ≤ j`, so a column's adjoint is
+## `x̄_i = h_i · Σ_{j ≥ i} c̄_j surv_j`, one backward running sum. Each `x̄_i`
+## lands on `logit_h0[i]` and on the (clamped) calendar day it read from `γ`.
 function _onset_column_adjoint!(
         l̄::AbstractVector, γ̄::AbstractVector, c̄::AbstractVector,
         h::AbstractVector, surv::AbstractVector, u::Integer,
@@ -798,9 +718,7 @@ function Mooncake.rrule!!(
     T = promote_type(eltype(lp), eltype(γp))
     H = Matrix{T}(undef, D, nu)
     S = Matrix{T}(undef, D, nu)
-    @inbounds for k in 1:nu
-        _onset_column!(view(H, :, k), view(S, :, k), lp, γp, lo + k - 1, gs)
-    end
+    _onset_columns!(H, S, lp, γp, gs, lo)
     table = one(T) .- S
     out = Mooncake.zero_fcodual(table)
     t̄ = tangent(out)
@@ -906,8 +824,8 @@ function Mooncake.rrule!!(
             α = alp[ia]
             δc = ci[i] - u
             δp = pri[i] - u
-            jc = (δc < 0 || D == 0) ? 0 : min(Int(δc), D - 1) + 1
-            jp = (δp < 0 || D == 0) ? 0 : min(Int(δp), D - 1) + 1
+            jc = _onset_delay_row(δc, D)
+            jp = _onset_delay_row(δp, D)
             num_c = jc == 0 ? zero(T) : cp[jc, k]
             num_p = jp == 0 ? zero(T) : cp[jp, k]
             cD = D > 0 ? cp[D, k] : zero(T)
@@ -929,70 +847,54 @@ function Mooncake.rrule!!(
 end
 
 function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_expected_total)},
-        onsets::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        logit_h0::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        γ::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        grid_start::CoDual{<:Integer},
-        alpha::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        as_of::CoDual{<:Integer}
+        ::CoDual{typeof(onset_scanned_cells)},
+        level_cur::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        level_prev::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        scan_level::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        vintage_idx::CoDual{<:Array{<:Integer}},
+        prev_vintage_idx::CoDual{<:Array{<:Integer}},
+        prev_report_idx::CoDual{<:Array{<:Integer}},
+        pixel_sd::CoDual{<:Mooncake.IEEEFloat}
     )
-    op = primal(onsets)
-    lp = primal(logit_h0)
-    γp = primal(γ)
-    gs = Int(primal(grid_start))
-    alp = primal(alpha)
-    t = Int(primal(as_of))
-    ō = tangent(onsets)
-    l̄ = tangent(logit_h0)
-    γ̄ = tangent(γ)
-    ᾱ = tangent(alpha)
-    ## Each term is `onsets[u] · α_u · G_u` with `G = (1 - surv_jn) / den`
-    ## and `den = safe_rate(1 - surv_{D-1})`: the numerator's column adjoint
-    ## is the cotangent at `jn`, the denominator's at `D - 1`. The forward
-    ## pass keeps each onset date's column for the pullback.
-    D = length(lp)
-    n = length(op)
-    na = length(alp)
-    T = promote_type(eltype(op), eltype(lp), eltype(γp), eltype(alp))
-    ge = min(t, n)
-    H = Matrix{T}(undef, D, max(ge, 0))
-    S = Matrix{T}(undef, D, max(ge, 0))
-    total = zero(T)
-    @inbounds for u in 1:ge
-        _onset_column!(view(H, :, u), view(S, :, u), lp, γp, u, gs)
-        δ = t - u
-        α = alp[clamp(u - gs + 1, 1, na)]
-        jn = min(δ, D - 1)
-        num = (δ < 0 || D == 0) ? zero(T) : one(T) - S[jn + 1, u]
-        den = one(T) - (D == 0 ? one(T) : S[D, u])
-        total += op[u] * (α * (num / safe_rate(den)))
-    end
-    function onset_report_expected_total_pullback!!(ȳ::Mooncake.IEEEFloat)
-        D == 0 && return ntuple(_ -> NoRData(), 7)
-        c̄ = zeros(T, D)
-        @inbounds for u in 1:ge
-            δ = t - u
-            ia = clamp(u - gs + 1, 1, na)
-            α = alp[ia]
-            jn = min(δ, D - 1)
-            num = δ < 0 ? zero(T) : one(T) - S[jn + 1, u]
-            cD = one(T) - S[D, u]
-            sden = safe_rate(cD)
-            G = num / sden
-            ō[u] += ȳ * α * G
-            ᾱ[ia] += ȳ * op[u] * G
-            w = ȳ * op[u] * α / sden
-            fill!(c̄, zero(T))
-            δ >= 0 && (c̄[jn + 1] += w)
-            c̄[D] -= w * G * _safe_rate_slope(cD)
-            _onset_column_adjoint!(
-                l̄, γ̄, c̄, view(H, :, u), view(S, :, u), u, gs
-            )
+    lc = primal(level_cur)
+    lp = primal(level_prev)
+    c = primal(scan_level)
+    vi = primal(vintage_idx)
+    pvi = primal(prev_vintage_idx)
+    pri = primal(prev_report_idx)
+    px = primal(pixel_sd)
+    l̄c = tangent(level_cur)
+    l̄p = tangent(level_prev)
+    c̄ = tangent(scan_level)
+    y = onset_scanned_cells(lc, lp, c, vi, pvi, pri, px)
+    ȳ = map(zero, y)
+    function onset_scanned_cells_pullback!!(::NoRData)
+        ## With `μ = lc · c_s − lp · c_p` and
+        ## `σ = sqrt(max(μ, 0) + px² r)`, each cell gives
+        ##
+        ##     μ̄ = m̄ + [μ > 0] σ̄ / 2σ,    p̄x += σ̄ px r / σ,
+        ##     l̄c += μ̄ c_s,  l̄p −= μ̄ c_p,  c̄_s += μ̄ lc,  c̄_p −= μ̄ lp,
+        ##
+        ## with the scan terms only for an index inside `1:length(c)`. At
+        ## `μ ≤ 0`, `max(μ, 0)` passes no derivative, as the primal does.
+        T = eltype(y.scales)
+        p̄x = zero(T)
+        @inbounds for i in eachindex(lc)
+            σ = y.scales[i]
+            g = ȳ.scales[i] / (2 * σ)
+            r = pri[i] > 0 ? 2 : 1
+            μ̄ = ȳ.means[i] + (y.means[i] > 0 ? g : zero(T))
+            p̄x += g * 2 * px * r
+            s, p = vi[i], pvi[i]
+            l̄c[i] += μ̄ * _scan_multiplier(c, s)
+            l̄p[i] -= μ̄ * _scan_multiplier(c, p)
+            _scan_in_range(c, s) && (c̄[s] += μ̄ * lc[i])
+            _scan_in_range(c, p) && (c̄[p] -= μ̄ * lp[i])
         end
-        return ntuple(_ -> NoRData(), 7)
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
+            NoRData(), NoRData(), convert(typeof(px), p̄x)
     end
-    return CoDual(total, NoFData()), onset_report_expected_total_pullback!!
+    return CoDual(y, ȳ), onset_scanned_cells_pullback!!
 end
 
 function Mooncake.rrule!!(
@@ -1021,11 +923,7 @@ function Mooncake.rrule!!(
     I = y.infections
     function patch_infections_pullback!!(::NoRData)
         Tf = eltype(I)
-        outflow = zeros(Tf, np)
-        @inbounds for q in 1:np, r in 1:np
-            r == q && continue
-            outflow[q] += Kp[r, q]
-        end
+        outflow = _patch_outflow(Tf, Kp, np)
         ## Each day's force and generated infections are rebuilt from the
         ## forward infections rather than stored. The walk runs backwards so
         ## a day's adjoint is complete before it is pushed onto earlier days,
@@ -1038,10 +936,7 @@ function Mooncake.rrule!!(
         @inbounds for t in n:-1:(L + 1)
             kmax = min(t - 1, length(gp))
             for p in 1:np
-                f = zero(Tf)
-                for s in 1:kmax
-                    f += I[p, t - s] * gp[s]
-                end
+                f = _patch_force(I, gp, p, t)
                 force[p] = f
                 gen[p] = Rp[p, t] * f
                 ḡen[p] = zero(Tf)
@@ -1082,62 +977,209 @@ function Mooncake.rrule!!(
     return out, patch_infections_pullback!!
 end
 
-## Value and gradient of `nbinomial_loglik` in one pass. With `r = k` and
+# Log densities of the vector observation distributions in
+# `models/observation_distributions.jl`. Each rule takes the distribution
+# itself: the tangent of an array field is read from the distribution's
+# fdata and accumulated in place, and the cotangent of a scalar field goes
+# back in its rdata.
+
+## `logpdf(NegBinomialVector(k, μ), x)` in one pass. With `r = k` and
 ## `p = r / (r + μ)` each count `x` contributes
 ##
 ##     ∂ℓ/∂r = log p + ψ(r + x) − ψ(r),    ∂ℓ/∂p = r / p − x / (1 − p),
 ##
-## chained through `p` to `μ` and `k`. The guards in `safe_rate` and
-## `safe_nbinomial` are mirrored: a floored `k` or `μ`, or a clamped `p`,
+## chained through `p` to `μ` and `k`. The guards are the ones `safe_rate`
+## and `safe_nbinomial` apply: a floored `k` or `μ`, or a clamped `p`,
 ## passes no derivative. A term that is not finite adds none either.
-function _nbinomial_loglik_grad(
+function _negbinomial_vector_grad(
         k::T, modelled::AbstractVector,
         obs::AbstractVector
     ) where {T}
-    lo = eps(T)
-    hi = one(T) - lo
-    k_on = isfinite(k) && k > zero(k)
-    r = k_on ? k : lo
+    _, k_on = _positive_or(k, eps(T))
     s = zero(T)
     dk = zero(T)
     dμ = zeros(T, length(modelled))
     @inbounds for i in eachindex(modelled, obs)
         μ = modelled[i]
         x = obs[i]
-        μ_on = isfinite(μ) && μ > lo
-        m = μ_on ? μ : lo
-        p_raw = r / (r + m)
-        p = isfinite(p_raw) ? clamp(p_raw, lo, hi) : lo
+        (; r, m, p, p_on) = _nbinomial_params(k, safe_rate(μ))
         ℓ = logpdf(NegativeBinomial(r, p), x)
         s += ℓ
         isfinite(ℓ) || continue
         ∂r = iszero(x) ? log(p) : log(p) + digamma(r + x) - digamma(r)
-        if isfinite(p_raw) && !(p_raw > hi) && !(p_raw < lo)
+        if p_on
             ∂p = r / p - x / (one(T) - p)
             den = (r + m)^2
             ∂r += ∂p * m / den
-            μ_on && (dμ[i] = -∂p * r / den)
+            _safe_rate_on(μ) && (dμ[i] = -∂p * r / den)
         end
         dk += ∂r
     end
     return s, (k_on ? dk : zero(T)), dμ
 end
 
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(Distributions._logpdf),
+        NegBinomialVector{<:Mooncake.IEEEFloat, <:_FloatArray},
+        Array{<:Integer},
+    },
+)
+
 function Mooncake.rrule!!(
-        ::CoDual{typeof(nbinomial_loglik)},
-        k::CoDual{<:Mooncake.IEEEFloat},
-        modelled::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:NegBinomialVector{<:Mooncake.IEEEFloat, <:_FloatArray}},
         obs::CoDual{<:Array{<:Integer}}
     )
-    s, dk, dμ = _nbinomial_loglik_grad(
-        primal(k), primal(modelled), primal(obs)
-    )
-    μ̄ = tangent(modelled)
-    ## `k` is a scalar, so its adjoint goes back as rdata rather than into
-    ## a tangent buffer.
-    function nbinomial_loglik_pullback!!(s̄)
+    dist = primal(d)
+    s, dk, dμ = _negbinomial_vector_grad(dist.k, dist.μ, primal(obs))
+    μ̄ = tangent(d).data.μ
+    function negbinomial_vector_pullback!!(s̄)
         μ̄ .+= s̄ .* dμ
-        return NoRData(), s̄ * dk, NoRData(), NoRData()
+        return NoRData(), Mooncake.RData((k = s̄ * dk, μ = NoRData())),
+            NoRData()
     end
-    return CoDual(s, NoFData()), nbinomial_loglik_pullback!!
+    return CoDual(s, NoFData()), negbinomial_vector_pullback!!
+end
+
+## The increments a `StudentTVector` scores: counts in the package data,
+## floats in simulated triangles. Float increments take the adjoint
+## `−∂ℓ/∂μ`.
+const _StudentTObs = Union{Array{<:Integer}, _FloatArray}
+const _StudentTVec = StudentTVector{
+    <:_FloatArray, <:_FloatArray, <:Mooncake.IEEEFloat,
+}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(Distributions._logpdf), _StudentTVec, _StudentTObs},
+)
+
+## `logpdf(StudentTVector(μ, σ, ν), x)` in one pass. With
+## `z = (x − μ) / σ` and `g = (ν + 1) z / (ν + z²)` each cell contributes
+##
+##     ∂ℓ/∂μ = g / σ,    ∂ℓ/∂σ = (g z − 1) / σ,
+##     ∂ℓ/∂ν = (ψ((ν + 1)/2) − ψ(ν/2) − 1/ν
+##              − log1p(z²/ν) + g z / ν) / 2,
+##
+## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards are `safe_studentt`'s: a floored `σ`
+## or a defaulted `ν` passes no derivative. A cell whose term is not finite
+## adds none either.
+function _studentt_vector_grad(
+        means::AbstractVector, sds::AbstractVector,
+        obs::AbstractVector, ν::Real
+    )
+    T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
+    νc, ν_on = _studentt_dof(ν)
+    νp12 = (νc + 1) / 2
+    c = logpdf(TDist(νc), zero(T))
+    ∂ν_c = (digamma(νp12) - digamma(νc / 2) - 1 / νc) / 2
+    s = zero(T)
+    dν = zero(T)
+    dμ = zeros(T, length(means))
+    dσ = zeros(T, length(means))
+    @inbounds for i in eachindex(means, sds, obs)
+        (; ℓ, z, l1, σc, σ_on) = _studentt_cell(
+            c, νp12, νc, means[i], sds[i], obs[i]
+        )
+        s += ℓ
+        isfinite(ℓ) || continue
+        g = (νc + 1) * z / (νc + z^2)
+        dμ[i] = g / σc
+        σ_on && (dσ[i] = (g * z - 1) / σc)
+        dν += ∂ν_c - l1 / 2 + g * z / (2 * νc)
+    end
+    return s, (ν_on ? dν : zero(T)), dμ, dσ
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:_StudentTVec},
+        obs::CoDual{<:_StudentTObs}
+    )
+    dist = primal(d)
+    s, dν, dμ, dσ = _studentt_vector_grad(
+        dist.μ, dist.σ, primal(obs), dist.ν
+    )
+    μ̄ = tangent(d).data.μ
+    σ̄ = tangent(d).data.σ
+    x̄ = tangent(obs)
+    ## Integer increments carry no tangent.
+    function studentt_vector_pullback!!(s̄)
+        μ̄ .+= s̄ .* dμ
+        σ̄ .+= s̄ .* dσ
+        x̄ isa _FloatArray && (x̄ .-= s̄ .* dμ)
+        d̄ = Mooncake.RData((μ = NoRData(), σ = NoRData(), ν = s̄ * dν))
+        return NoRData(), d̄, NoRData()
+    end
+    return CoDual(s, NoFData()), studentt_vector_pullback!!
+end
+
+const _BetaBinomialVec = BetaBinomialVector{
+    <:AbstractVector{<:Integer}, <:_FloatArray, <:Mooncake.IEEEFloat,
+}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(Distributions._logpdf), _BetaBinomialVec,
+        AbstractVector{<:Integer},
+    },
+)
+
+## `logpdf(BetaBinomialVector(n, p, ρ), x)` in one pass. With
+## concentration `c = (1 − ρ) / ρ`, `α = c·p` and `β = c·(1 − p)`, each
+## count `x` of `n` trials contributes
+##
+##     ∂ℓ/∂α = ψ(x + α) − ψ(α) + ψ(α + β) − ψ(n + α + β),
+##     ∂ℓ/∂β = ψ(n − x + β) − ψ(β) + ψ(α + β) − ψ(n + α + β),
+##
+## chained through `α` and `β` to `p` and `c`, and through `c` to `ρ`. The
+## guards are `safe_betabinomial`'s: a clamped `p` or `ρ`, or an `α` or `β`
+## held at its floor, passes no derivative. A term that is not finite adds
+## none either.
+function _betabinomial_vector_grad(
+        trials::AbstractVector, p::AbstractVector, ρ, obs::AbstractVector
+    )
+    T = float(promote_type(eltype(p), typeof(ρ)))
+    conc = _betabinomial_concentration(T, ρ)
+    c = conc.s
+    s = zero(T)
+    dc = zero(T)
+    dp = zeros(T, length(p))
+    @inbounds for i in eachindex(trials, p, obs)
+        n = trials[i]
+        x = obs[i]
+        (; α, β, pc, p_on, α_on, β_on) = _betabinomial_shapes(p[i], c)
+        ℓ = logpdf(BetaBinomial(n, α, β), x)
+        s += ℓ
+        isfinite(ℓ) || continue
+        ψ_ab = digamma(α + β) - digamma(n + α + β)
+        ∂α = α_on ? digamma(x + α) - digamma(α) + ψ_ab : zero(T)
+        ∂β = β_on ? digamma(n - x + β) - digamma(β) + ψ_ab : zero(T)
+        p_on && (dp[i] = c * (∂α - ∂β))
+        dc += ∂α * pc + ∂β * (one(T) - pc)
+    end
+    return s, (conc.ρ_on ? -dc / conc.ρc^2 : zero(T)), dp
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:_BetaBinomialVec},
+        obs::CoDual{<:AbstractVector{<:Integer}}
+    )
+    dist = primal(d)
+    ## The gradient is taken in the forward pass, since a caller may
+    ## overwrite `p` in place before the pullback runs.
+    s, dρ, dp = _betabinomial_vector_grad(
+        dist.trials, dist.p, dist.ρ, primal(obs)
+    )
+    p̄ = tangent(d).data.p
+    function betabinomial_vector_pullback!!(s̄)
+        p̄ .+= s̄ .* dp
+        d̄ = Mooncake.RData((trials = NoRData(), p = NoRData(), ρ = s̄ * dρ))
+        return NoRData(), d̄, NoRData()
+    end
+    return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end

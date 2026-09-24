@@ -414,6 +414,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         cfr = cfr_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
+        ## Built once, with the model, and passed to `treatment`.
+        treatment_defaults = treatment_flow_defaults(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
@@ -459,7 +461,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
             confirmed_incare_history = treatment_confirmed_incare_history,
             suspect_incare_history = treatment_suspect_incare_history,
             occupancy_break_days = occupancy_break_days,
-            conf_hazard_daily = conf_hazard_daily, ckw...
+            conf_hazard_daily = conf_hazard_daily,
+            defaults = treatment_defaults, ckw...
         )
     )
     if forecast !== nothing
@@ -512,10 +515,14 @@ level (see [`forecast_stream`](@ref)).
     onset_report_state ~ to_submodel(
         onset_report(onset_curve_history, latent.onsets)
     )
-    expected_onset_reported_T := onset_report_expected_total(
-        latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n
-    )
+    ## Reported only, so built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        expected_onset_reported_T := onset_report_expected_total(
+            latent.onsets,
+            onset_report_state.logit_h0, onset_report_state.γ,
+            onset_report_state.grid_start, onset_report_state.alpha, n
+        )
+    end
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
     if forecast !== nothing && !isempty(onset_curve_history.onset_days)
@@ -727,10 +734,14 @@ end
             importation_kernel, fkw...
         ), false
     )
-    onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
+    ## Summed over the patches with one matrix-vector product.
+    onsets_total = transpose(patch_state.onsets_matrix) *
+        ones(eltype(patch_state.onsets_matrix), n_patches)
     cumulative_infections := patch_state.cumulative_total
     C_T := patch_state.C_T
-    cumulative_onsets := cumsum(onsets_total)
+    if _reporting(__varinfo__)
+        cumulative_onsets := cumsum(onsets_total)
+    end
     ## Past the cut-off the national reproduction number is read off the
     ## summed infections, as `R_T` is at the cut-off.
     if forecast !== nothing
@@ -824,14 +835,15 @@ function _patch_confirmed_increments(
     )
     np = size(onsets_matrix, 1)
     nv = length(province_days)
-    first_daily = s_test .* convolve_delay(
-        vec(@view onsets_matrix[1, :]), kernel
+    scaled_kernel = s_test .* kernel
+    first_daily = convolve_delay(
+        vec(@view onsets_matrix[1, :]), scaled_kernel
     )
     out = Matrix{eltype(first_daily)}(undef, np, nv)
     @inbounds out[1, :] = bin_increments(first_daily, province_days)
     @inbounds for p in 2:np
-        daily = s_test .* convolve_delay(
-            vec(@view onsets_matrix[p, :]), kernel
+        daily = convolve_delay(
+            vec(@view onsets_matrix[p, :]), scaled_kernel
         )
         out[p, :] = bin_increments(daily, province_days)
     end
@@ -1038,6 +1050,13 @@ density there, is the fitted model's.
         tmrca_days_sd::Real = 16.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
         rt_walk_lead::Integer = RT_WALK_LEAD,
+        ## Days the suspected-case background starts before the first
+        ## reported case: the support of the default report-to-receipt
+        ## kernel, so the convolution into the analysed volume is fully
+        ## formed by that report.
+        background_onset_lead::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0)),
+        ## Built once, with the model, and passed to `treatment`.
+        treatment_defaults = treatment_flow_defaults(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
 
@@ -1080,9 +1099,8 @@ density there, is the fitted model's.
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
     bg_onset = isempty(reported_history.days) ? 1 :
-        clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
+        clamp(Int(reported_history.days[1]) - background_onset_lead, 1, n)
 
     ## `nothing` holds the non-BVD background at the constant rate the
     ## testing submodel samples. An injected pooling submodel gives it a
@@ -1170,7 +1188,8 @@ density there, is the fitted model's.
             suspect_incare_history = treatment_suspect_incare_history,
             occupancy_break_days = occupancy_break_days,
             conf_hazard_daily = conf_hazard_daily,
-            k_external = k_isolation, ckw...
+            k_external = k_isolation,
+            defaults = treatment_defaults, ckw...
         )
     )
 
@@ -1185,16 +1204,10 @@ density there, is the fitted model's.
     export_pressure_state ~ to_submodel(export_pressure(n_patches))
     export_weight := export_pressure_state.weights
     export_pressure_sd := export_pressure_state.pooling_sd
-    ## Built in one pass into a preallocated vector, so the submodel call
-    ## below cannot box a rebound local.
-    _wts = export_pressure_state.weights
-    Tw = promote_type(eltype(patch_state.infections_matrix), eltype(_wts))
-    ng = length(onsets)
-    export_infections = zeros(Tw, ng)
-    @inbounds for p in 1:n_patches, t in 1:ng
-
-        export_infections[t] += _wts[p] * patch_state.infections_matrix[p, t]
-    end
+    ## The patches' infections weighted by export propensity, one
+    ## matrix-vector product, over the grid past the cut-off when forecasting.
+    export_infections = transpose(patch_state.infections_matrix) *
+        export_pressure_state.weights
     exports_state ~ to_submodel(
         exports(
             exported_cases, export_infections, p_uganda;
@@ -1273,25 +1286,29 @@ density there, is the fitted model's.
         province_cfr_sd := death_composition_state.severity_sd
     end
 
-    cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
-
-    cumulative_confirmed := _cumulative_confirmed(
-        confirmed_state.confirmed_daily, confirmed_history, n
-    )
-    ## Each of the remaining count streams sums to its own cut-off expected
-    ## total, so none needs the baseline re-add the confirmed path takes.
-    cumulative_reports := cumsum(cases_state.reports_daily)
-    cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
-    cumulative_confirmed_deaths := cumsum(
-        confirmed_deaths_state.confirmed_death_daily
-    )
-    cumulative_recovered := cumsum(recovered_state.recovered_daily)
-    onset_to_confirmation_pmf := convolve_pmf(
-        cases_state.report_pmf, confirmed_state.receipt_pmf
-    )
-    onset_to_death_confirmation_pmf := convolve_pmf(
-        deaths_state.od_pmf, confirmed_state.receipt_pmf
-    )
+    ## The cumulative series and the combined delay PMFs below are reported
+    ## only, so they are built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
+        cumulative_confirmed := _cumulative_confirmed(
+            confirmed_state.confirmed_daily, confirmed_history, n
+        )
+        ## Each of the remaining count streams sums to its own cut-off
+        ## expected total, so none needs the baseline re-add the confirmed
+        ## path takes.
+        cumulative_reports := cumsum(cases_state.reports_daily)
+        cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
+        cumulative_confirmed_deaths := cumsum(
+            confirmed_deaths_state.confirmed_death_daily
+        )
+        cumulative_recovered := cumsum(recovered_state.recovered_daily)
+        onset_to_confirmation_pmf := convolve_pmf(
+            cases_state.report_pmf, confirmed_state.receipt_pmf
+        )
+        onset_to_death_confirmation_pmf := convolve_pmf(
+            deaths_state.od_pmf, confirmed_state.receipt_pmf
+        )
+    end
 
     onset_to_sample_mean := cases_state.report_mean +
         confirmed_state.receipt_mean
@@ -1371,11 +1388,15 @@ density there, is the fitted model's.
     ## ascertainment level and the fitted per-vintage scan level, off the
     ## same fitted hazard and ascertainment walk. See
     ## [`onset_reporting_model`](@ref) for what the vintage structure does
-    ## and does not separate here.
-    expected_onset_reported_T := onset_report_expected_total(
-        onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.alpha, n
-    )
+    ## and does not separate here. The total is reported only, so it is
+    ## built only when `:=` values are recorded.
+    if _reporting(__varinfo__)
+        expected_onset_reported_T := onset_report_expected_total(
+            onsets,
+            onset_report_state.logit_h0, onset_report_state.γ,
+            onset_report_state.grid_start, onset_report_state.alpha, n
+        )
+    end
     onset_ascertainment := onset_report_state.alpha
     onset_scan_level := onset_report_state.scan_level
     expected_isolation_T := treatment_state.expected_isolation
