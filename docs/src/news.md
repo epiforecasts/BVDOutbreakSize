@@ -59,7 +59,7 @@ Changes since v2.1.0.
   The modelled split is each patch's BVD suspects plus its share of the non-BVD background, a partially pooled simplex centred on population share (`background_split_model`).
   The BVD suspects carry the case composition's relative ascertainment, so the two compositions agree on how many of a patch's cases reach the laboratory.
   The testing fraction stays national and the per-province positives remain unfitted.
-  The headline fit drops the per-head testing covariate from the ascertainment prior, since the same series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
+  The per-head testing covariate on the ascertainment prior is removed, with `province_testing_covariate` and the `province_testing_covariate` keyword, since the same laboratory series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
 - Province isolation occupancy and bed counts enter the treatment-flow stream as splits of the printed sum of the provinces present each day (#784).
   The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and per-patch shares of the national capacity walk.
   The occupancy split is scored weekly and the bed split on days a province's count changes, since a stock reprinted daily is not a fresh draw of the split.
@@ -67,6 +67,9 @@ Changes since v2.1.0.
   Occupancy is split on the uncapped per-patch demand, since a province can print more patients than beds where patients are held outside the counted structures.
   The fit reports beds, demand, utilisation and shortfall by province at the cut-off.
 - A pooled patch's occupancy or bed count is used on a day only when every member that has printed before prints that day, so a silent member is never read as an empty ward (#784).
+- The province case-fatality contrast scale prior is half-normal with sd 0.1 rather than 0.3 (#784).
+  At 0.3 a tenth of the prior mass had provinces differing by more than 60% in their case-fatality ratio, and the 23 September fits on #784 left the posterior on the prior (median 0.19 to 0.27) while its chains moved between a scale near zero and one near 0.3, with the whole death-confirmation block frozen at an effective sample size of 4 in the chain that sat near zero.
+  The fitted contrasts were within 15% of one, which the tighter prior covers at one standard deviation.
 
 ### Data
 

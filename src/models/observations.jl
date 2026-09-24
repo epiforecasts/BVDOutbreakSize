@@ -4128,13 +4128,6 @@ zones). `ρ → 0` recovers a plain Multinomial split.
 - `ascertainment_sd_prior`: prior on the pooling scale of the per-patch
   ascertainment contrast. `nothing` turns the contrast off, so the shares
   are the modelled split alone; the laboratory composition passes that.
-- `testing_covariate`: per-patch logged per-capita laboratory throughput,
-  centred to mean zero ([`province_testing_covariate`](@ref)). Defaults to
-  zeros, which leaves the ascertainment prior as the pooled deviation alone
-  and samples no coefficient.
-- `testing_coefficient_prior`: prior on the coefficient of that covariate,
-  an elasticity of relative ascertainment on tests per head. Sampled only
-  when the covariate is not all zeros, and reported as zero otherwise.
 
 `severity_sd_prior` optionally adds a second sum-to-zero log multiplier on
 the shares, partially pooled toward equality. The death composition uses it
@@ -4143,7 +4136,7 @@ for the per-province case-fatality ratio; the case composition leaves it
 the two multipliers, so their priors are what separates them.
 
 Returns `(; shares, rho, obs_increments, province_ascertainment,
-ascertainment_sd, testing_coefficient, province_severity, severity_sd)`
+ascertainment_sd, province_severity, severity_sd)`
 where `shares[p, i]` is the modelled expected share of patch `p` at vintage
 `i`.
 """
@@ -4154,10 +4147,6 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         ascertainment_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         severity_sd_prior = nothing,
         ascertainment_offset_prior = Normal(0, 1),
-        testing_covariate::AbstractVector{<:Real} = zeros(
-            size(modelled_confirmed, 1)
-        ),
-        testing_coefficient_prior = Normal(0, 0.5),
         basis = sum_to_zero_basis(size(modelled_confirmed, 1))
     )
     np, nv = size(modelled_confirmed)
@@ -4193,46 +4182,19 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## equal-ascertainment model. The pooling prior is what identifies
     ## `asc_p`, so the per-patch results are correspondingly wider.
     ##
-    ## `testing_covariate` carries the part of that contrast the laboratory
-    ## series measures, each patch's logged tests per head of population,
-    ## centred (see [`province_testing_covariate`](@ref)). `β_asc` is its
-    ## elasticity. One takes ascertainment proportional to tests per head,
-    ## zero takes it unrelated to them. The covariate enters the prior and not
-    ## the likelihood, so `β_asc` moves only as far as the compositions pull
-    ## it. With a covariate of zeros the coefficient is not sampled, so a
-    ## caller with no laboratory data keeps the pooled deviation on its own
-    ## rather than gaining a dimension the likelihood never sees. The death
-    ## composition is such a caller.
     ## `ascertainment_sd_prior = nothing` turns the contrast off and the
     ## shares are the modelled split alone. The laboratory composition uses
     ## that, since its split is carried by the background shares
     ## ([`background_split_model`](@ref)) and a second free contrast would be
     ## confounded with them.
-    length(testing_covariate) == np || error(
-        "province_composition_model: $(length(testing_covariate)) testing " *
-            "covariate entries for $(np) patches."
-    )
     τ_asc = 0.0
-    β_asc = 0.0
     asc = ones(np)
     if ascertainment_sd_prior !== nothing
         τ_asc ~ ascertainment_sd_prior
         z_asc ~ product_distribution(
             fill(ascertainment_offset_prior, np - 1)
         )
-        if any(!iszero, testing_covariate)
-            β_asc ~ testing_coefficient_prior
-        end
-        ## Read through a local, as `ρ` is above: the tilde assigns `β_asc`
-        ## on one path and the literal on another, so the fused broadcast
-        ## below would box it if it captured `β_asc` itself.
-        beta = β_asc
-        ## The covariate term is centred here so the whole log multiplier
-        ## sums to zero whatever covariate is passed.
-        cov_centred = testing_covariate .- (sum(testing_covariate) / np)
-        log_asc = beta .* cov_centred .+
-            sum_to_zero(sum_to_zero_factor(basis, τ_asc), z_asc)
-        asc = exp.(log_asc)
+        asc = exp.(sum_to_zero(sum_to_zero_factor(basis, τ_asc), z_asc))
     end
     ## Optional second multiplier, per-province severity. The death
     ## composition uses it for the per-province case-fatality ratio, partially
@@ -4270,7 +4232,6 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     return (;
         shares, rho = ρ, obs_increments = split_state.obs_increments,
         province_ascertainment = asc, ascertainment_sd = τ_asc,
-        testing_coefficient = β_asc,
         province_severity = sev, severity_sd = τ_sev,
     )
 end

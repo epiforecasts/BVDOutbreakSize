@@ -1022,12 +1022,7 @@ are skipped. The case composition identifies only the product of a
 province's incidence and its case-finding. The death composition
 identifies the incidence split, since the case-fatality ratio and the
 death-confirmation probability are national, and the case composition then
-identifies the relative case ascertainment as the residual. The
-`province_testing_covariate` keyword can put each patch's logged tests per
-head ([`province_testing_covariate`](@ref)) on the prior for that
-ascertainment; the production fit leaves it at zero, since the same
-laboratory series is scored by the composition below and would otherwise
-enter twice. The death composition takes no covariate.
+identifies the relative case ascertainment as the residual.
 
 A third composition scores the per-province analysed-specimen volume
 conditional on the national daily total. The modelled split is each
@@ -1119,7 +1114,6 @@ density there, is the fitted model's.
             Missing, AbstractMatrix{<:Integer},
         } = missing,
         province_days::AbstractVector{<:Integer} = Int[],
-        province_testing_covariate::AbstractVector{<:Real} = zeros(n_patches),
         province_lab_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1137,7 +1131,7 @@ density there, is the fitted model's.
         death_ascertainment_sd_prior = truncated(
             Normal(0, 0.1); lower = 0
         ),
-        province_cfr_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        province_cfr_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         export_pressure = province_export_pressure_model,
         exports = exports_model,
         deaths = deaths_model,
@@ -1305,10 +1299,7 @@ density there, is the fitted model's.
             confirmed_carried, confirmed_state.s_test, province_days
         )
         composition_state ~ to_submodel(
-            composition(
-                province_increments, modelled_prov;
-                testing_covariate = province_testing_covariate
-            )
+            composition(province_increments, modelled_prov)
         )
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
@@ -1319,9 +1310,6 @@ density there, is the fitted model's.
         ## death composition below separates them.
         province_ascertainment := composition_state.province_ascertainment
         province_ascertainment_sd := composition_state.ascertainment_sd
-        ## Elasticity of relative ascertainment on each patch's logged tests
-        ## per head, the covariate on its prior.
-        province_testing_coefficient := composition_state.testing_coefficient
     end
 
     ## Relative case ascertainment by patch, shared by every stream that is
