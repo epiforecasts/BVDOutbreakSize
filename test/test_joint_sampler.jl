@@ -35,7 +35,8 @@ end
     src = read(
         joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"), String
     )
-    @test count("joint_sampler_args()...", src) == 4
+    @test count("joint_sampler_args()...", src) == 3
+    @test count("budget = patches ? joint_sampler_args()", src) == 1
     @test count("n_adapts = joint_warmup(", src) == 1
 end
 
