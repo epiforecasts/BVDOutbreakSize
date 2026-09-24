@@ -37,6 +37,9 @@ Changes since v2.1.0.
 
 ### Model
 
+- The weekly log-Rt walk is sampled in centred form: each knot level is drawn about the one before it and stored as `rt_state.log_R`, replacing the scaled standard-normal innovations `rt_state.z`.
+  With the onset curve fitted the non-centred form held the sampler at its tree-depth cap with divergences.
+  The prior is unchanged, so fitted values move only through the sampling.
 - Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
   Fixing the future variables leaves the fitted density unchanged to within floating-point rounding, which the tests check on every composer and on the live patch joint.
 - The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` sum-to-zero directions rather than as `n` draws then centred, with a Wishart prior on the Rt deviation covariance that province forecasts now also use (#855).
@@ -152,6 +155,7 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit.
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
 - A test compares the production joint's log density and gradient with the rules loaded and with the `mooncake_rules` preference off, and property tests check the kernels the rules cover (#856).

@@ -2185,10 +2185,9 @@ Reconstruct each posterior draw's daily reproduction-number trajectory
 `ndraws × n` matrix masked to each draw's established window (`missing`
 before `rt_start`). The saved chain stores only the cut-off `R_T`, so each
 draw's daily `Rt` is rebuilt by mirroring [`rt_walk_model`](@ref): weekly
-knots ([`knot_days`](@ref)) from `rt_walk_start` follow a non-centred
-Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
-`rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
-([`interpolate_knots`](@ref)) and shifted by the sampled
+knots ([`knot_days`](@ref)) from `rt_walk_start` at the sampled levels
+(`rt_state.log_R0` followed by `rt_state.log_R`), linearly interpolated
+to the day grid ([`interpolate_knots`](@ref)) and shifted by the sampled
 `rt_state.intervention_effect` along a logistic ramp
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
@@ -2199,25 +2198,25 @@ function reconstruct_rt(
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
     )
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
-    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
-    ## `rt_state.z` is vector-valued: one standard-normal innovation vector
-    ## per draw. Pull each draw's full vector from the chain slice.
-    zmat = chn[Symbol("rt_state.z")]
-    zrows = [collect(z) for z in vec(collect(zmat))]
+    ## `rt_state.log_R` is vector-valued: one vector of knot levels after
+    ## the first knot per draw. Pull each draw's full vector from the chain
+    ## slice.
+    kmat = chn[Symbol("rt_state.log_R")]
+    krows = [collect(k) for k in vec(collect(kmat))]
 
     ## The knot grid is built from the model's walk start `rt_walk_start`
     ## (the breakpoint grid day), which is decoupled from `rt_start` (the
-    ## established-window start used for the mask below). The innovation
-    ## vector length is fixed by that walk start, so a mismatching one fails
-    ## here rather than as a downstream bounds error.
+    ## established-window start used for the mask below). The knot vector
+    ## length is fixed by that walk start, so a mismatching one fails here
+    ## rather than as a downstream bounds error.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    if !isempty(zrows) && length(zrows[1]) != nb - 1
+    if !isempty(krows) && length(krows[1]) != nb - 1
         error(
             "reconstruct_rt: rt_walk_start = $rt_walk_start gives " *
                 "$(nb - 1) random-walk steps but the chain has " *
-                "$(length(zrows[1])); pass the same walk start the model used " *
+                "$(length(krows[1])); pass the same walk start the model used " *
                 "(the breakpoint grid day, n - who_first_sitrep_days)."
         )
     end
@@ -2228,9 +2227,7 @@ function reconstruct_rt(
     ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
     rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
     for i in 1:ndraws
-        z = zrows[i]
-        steps = sigma[i] .* z[1:(nb - 1)]
-        log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
+        log_R = vcat(log_R0[i], krows[i][1:(nb - 1)])
         walk = interpolate_knots(log_R, days, n)
         ## Days before the renewal start clamp to the established R0, the
         ## walk base. The model fills them with the analytic cryptic
