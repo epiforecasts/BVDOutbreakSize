@@ -49,6 +49,8 @@ Changes since v2.1.0.
 - The joint's reported-only `:=` quantities, the cumulative series, the combined delay PMFs and the expected onset-reported total, are computed only when `:=` values are recorded, so the gradient skips them (#856).
   The patch model's national totals and headline quantities, its daily deviations and its correlation matrix are returned by a submodel, so they are built behind a zero-derivative barrier, `_detached`.
   Keys and values are unchanged, and a test checks that the joint's log density and gradient are the same with and without the barrier.
+- `test/test_model_fixture.jl` checks the headline joint's log density, gradient and recorded `:=` quantities against `test/model_fixture/joint.toml`, written from `main`'s code at three parameter points on the data as of 2026-09-10 (#856).
+  `test/model_fixture/generate.jl` regenerates it.
 - The national onsets and the export-weighted infections sum the patches with one matrix-vector product each (#856).
 - Observed late confirmed days in `late_confirmed_model` are scored as one `SplitCountVector`, a summed BetaBinomial term over the days with a 24h analysed count plus a summed NegativeBinomial term over the rest, each through its rule (#856).
   A vector with `missing` entries is still scored one day at a time, so the predictive keys are unchanged.
