@@ -51,6 +51,7 @@ end
             "cases_state.reported_increments.increments[2]" => 5,
             "cases_state.reported_increments.increments[1]" => 3,
             "confirmed_state.confirmed_positives.positives[1]" => 7,
+            "treatment_state.bed_capacity.increments" => [4, 6, 8],
             "onset_report_state.increments[2]" => 1.5,
             "onset_report_state.increments[1]" => 0.5,
             "composition_state.obs_increments[2, :]" => [1, 2],
@@ -59,7 +60,14 @@ end
     )
     @test g.in_order(g.streams[:cases_state][:reported_increments]) == [3, 5]
     @test g.in_order(g.streams[:confirmed_state][:confirmed_positives]) == [7]
+    ## A stream drawn as one vector keeps its order.
+    @test g.in_order(g.streams[:treatment_state][:bed_capacity]) == [4, 6, 8]
     @test g.onsets == [0.5, 1.5]
+    ## The onset triangle drawn as one vector.
+    whole = BVDOutbreakSize._grouped_observations(
+        Dict("onset_report_state.increments" => [2.0, 3.0])
+    )
+    @test whole.onsets == [2.0, 3.0]
     rows = g.in_order(g.rows[:composition_state])
     @test rows == [[3, 4], [1, 2]]
     ## The last province is the remainder of the recorded totals.

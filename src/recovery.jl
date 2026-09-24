@@ -291,17 +291,31 @@ function _grouped_observations(data::AbstractDict)
             )
             continue
         end
-        m = match(r"^onset_report_state\.increments\[(\d+)\]$", name)
+        m = match(r"^onset_report_state\.increments(?:\[(\d+)\])?$", name)
         if m !== nothing
-            push!(onsets, (parse(Int, m[1]), v))
+            ## Element by element, or the whole triangle as one vector.
+            m[1] === nothing ? append!(onsets, collect(enumerate(v))) :
+                push!(onsets, (parse(Int, m[1]), v))
             continue
         end
         m = match(r"^(\w+)\.(\w+)\.\w+\[(\d+)\]$", name)
+        if m !== nothing
+            obs = get!(
+                streams, Symbol(m[1]), Dict{Symbol, Vector{Tuple{Int, Any}}}()
+            )
+            push!(
+                get!(obs, Symbol(m[2]), Tuple{Int, Any}[]),
+                (parse(Int, m[3]), v)
+            )
+            continue
+        end
+        ## A stream drawn as one whole vector rather than element by element.
+        m = match(r"^(\w+)\.(\w+)\.\w+$", name)
         m === nothing && throw(
             ArgumentError("no rule for the simulated observation `$name`.")
         )
         obs = get!(streams, Symbol(m[1]), Dict{Symbol, Vector{Tuple{Int, Any}}}())
-        push!(get!(obs, Symbol(m[2]), Tuple{Int, Any}[]), (parse(Int, m[3]), v))
+        append!(get!(obs, Symbol(m[2]), Tuple{Int, Any}[]), collect(enumerate(v)))
     end
     in_order(xs) = [v for (_, v) in sort(xs; by = first)]
     return (; streams, onsets = in_order(onsets), rows, in_order)
