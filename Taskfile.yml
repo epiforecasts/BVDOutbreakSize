@@ -298,7 +298,9 @@ tasks:
   # references re-renders without refitting anything.
   paper:
     desc: Render the preprint to PDF and HTML
-    deps: [paper-html, paper-pdf]
+    cmds:
+      - task: paper-html
+      - task: paper-pdf
 
   paper-pdf:
     desc: Render the preprint to PDF only
