@@ -44,6 +44,11 @@ Changes since v2.1.0.
 - The pooled background is set with `background_pooling = background_pooling_model` rather than `background_re = true` (#791).
   Results are unchanged.
 
+### Data
+
+- The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2% of it (#875).
+- `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
+
 ### Report
 
 - The National page shows a one-line fit verdict and a count of the streams still reporting, with the diagnostics and data currency tables in dropdowns (#868).
