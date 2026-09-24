@@ -12,12 +12,14 @@
 # written per run of days:
 #   blind_<sr>_<k>.png  the crop and rulers only, for a blind read
 #   check_<sr>_<k>.png  the same crop with the digitised total (green) and
-#                       alive (magenta) tops drawn per day and the total
+#                       alive (magenta) tops drawn across the columns the
+#                       reader took each day's height from, and the total
 #                       printed above each bar
-# The figure is extracted from the SitRep PDF and calibrated exactly as
+# The figure is extracted from the SitRep PDF and read exactly as
 # scripts/digitize_onset_curve.py does, so the rulers show where the
-# digitiser placed each day and each count. The digitised block comes
-# from data/onset_curve_scanned.csv.
+# digitiser placed each day and each count and each drawn span is the
+# reader's own window for that day. The digitised counts come from
+# data/onset_curve_scanned.csv.
 #
 # Usage:
 #   uv run scripts/onset_check_panels.py SR [--days 12] [--scale 8]
@@ -68,6 +70,7 @@ def main():
     if im is None:
         sys.exit(f"no onset curve found in {pdf}")
     cal = d.calibrate(im, d.Y_AXIS_STEP.get(sr, 20))
+    _, windows = d.digitize_windows(im, d.CONFIG[sr][1], d.Y_AXIS_STEP.get(sr, 20))
     rows = digitised_block(a.csv, sr)
     if not rows:
         sys.exit(f"no digitised rows for {sr} in {a.csv}")
@@ -107,10 +110,12 @@ def main():
                 dr.text((X - 6, ch + 8), f"{date.day:02d}", fill=(0, 0, 0))
                 if date.day == 1 or off == off0:
                     dr.text((X - 10, ch + 22), date.strftime("%b"), fill=(0, 0, 0))
-                if mode == "check" and date.isoformat() in rows:
+                if mode == "check" and date.isoformat() in rows and date in windows:
                     alive, dead = rows[date.isoformat()]
-                    lo = (cx - ppd * 0.45 - x0) * scale + pad_l
-                    hi = (cx + ppd * 0.45 - x0) * scale + pad_l
+                    # the reader's 1-based column span, drawn edge to edge
+                    wlo, whi = windows[date]
+                    lo = (wlo - 1 - x0) * scale + pad_l
+                    hi = (whi - x0) * scale + pad_l
                     yt = (base - (alive + dead) * ppc - y0) * scale
                     ya = (base - alive * ppc - y0) * scale
                     dr.line([(lo, yt), (hi, yt)], fill=(0, 200, 0), width=2)
