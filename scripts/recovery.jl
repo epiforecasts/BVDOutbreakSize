@@ -13,8 +13,11 @@
 #   BVD_RECOVERY_SAMPLES (200), BVD_RECOVERY_WARMUP (200),
 #   BVD_RECOVERY_CHAINS (2), BVD_RECOVERY_MAX_DEPTH (8),
 #   BVD_RECOVERY_HORIZON (14)
+#   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
+#   fit
 
 using BVDOutbreakSize, CSV, DataFrames
+using Statistics: median
 using BVDOutbreakSize: _draws, _draw_vectors
 
 seed = parse(Int, get(ARGS, 1, "1"))
@@ -33,15 +36,19 @@ const PER_PROVINCE = ["C_T_patch", "R_T_patch", "CFR_patch", "province_ascertain
 ## Forecast columns scored, with the in-window stream each one's persistence
 ## baseline is read from: the data variable names and the observation days.
 const FORECASTS = [
-    (; column = "confirmed_new",
+    (;
+        column = "confirmed_new",
         prefixes = [
             "confirmed_state.early_increments.increments",
             "confirmed_state.late_increments.increments",
         ],
-        history = :confirmed_history),
-    (; column = "confirmed_deaths_new",
+        history = :confirmed_history,
+    ),
+    (;
+        column = "confirmed_deaths_new",
         prefixes = ["confirmed_deaths_state.cdeath_increments.increments"],
-        history = :confirmed_deaths_history),
+        history = :confirmed_deaths_history,
+    ),
 ]
 
 obs = load_observations()
@@ -63,9 +70,16 @@ t0 = time()
 sim = simulate_recovery(
     generator, observed; seed, horizon, accept = plausible
 )
+model = generator_joint(obs; breakpoint, simulated = recovery_data(sim))
+density = recovery_density_check(generator, model, sim.truth)
+println(
+    "seed $seed: simulated in ", round(time() - t0; digits = 1),
+    " s; log joint ", density.from_generator, " (generator) and ",
+    density.from_data, " (rebuilt with the simulated data)"
+)
+get(ENV, "BVD_RECOVERY_DRY_RUN", "false") == "true" && exit(0)
 fit = recovery_fit(
-    generator, sim; samples, n_adapts = warmup, chains, max_depth,
-    seed = seed + 1
+    model; samples, n_adapts = warmup, chains, max_depth, seed = seed + 1
 )
 fit_minutes = round((time() - t0) / 60; digits = 1)
 
@@ -97,8 +111,14 @@ CSV.write(joinpath(out_dir, "recovery_$(seed).csv"), params)
 function stream_values(data, prefix)
     hits = [
         (parse(Int, m[1]), v) for (vn, v) in data
-            for m in (match(Regex("^" * replace(prefix, "." => "\\.") *
-                "\\[(\\d+)\\]\$"), string(vn)),) if m !== nothing
+            for m in (
+                match(
+                    Regex(
+                        "^" * replace(prefix, "." => "\\.") *
+                        "\\[(\\d+)\\]\$"
+                    ), string(vn)
+                ),
+            ) if m !== nothing
     ]
     return [v for (_, v) in sort(hits; by = first)]
 end
@@ -107,12 +127,16 @@ function persistence(spec, h)
     values = reduce(vcat, [stream_values(sim.data, p) for p in spec.prefixes])
     days = getproperty(obs, spec.history).days
     length(values) == length(days) || return nothing
-    return sum(v for (v, d) in zip(values, days) if obs.n - h < d <= obs.n;
-        init = 0)
+    return sum(
+        v for (v, d) in zip(values, days) if obs.n - h < d <= obs.n;
+        init = 0
+    )
 end
 pp = forecast_draws(fit.model, fit.chain; horizon, seed = seed + 2)
-zero_kw = (; obs_cases = 0, obs_deaths = 0, obs_confirmed = 0,
-    obs_confirmed_deaths = 0)
+zero_kw = (;
+    obs_cases = 0, obs_deaths = 0, obs_confirmed = 0,
+    obs_confirmed_deaths = 0,
+)
 forecast_rows = DataFrame[]
 for h in unique([7, horizon])
     h <= horizon || continue
@@ -140,6 +164,18 @@ forecasts.seed .= seed
 CSV.write(joinpath(out_dir, "forecast_recovery_$(seed).csv"), forecasts)
 
 verdict = recovery_verdict(params)
+## One line per seed for the report job: the verdict, then the summary.
+skill = isempty(forecasts) ? "no forecast scored" :
+    "median relative CRPS " *
+    string(round(median(forecasts.relative_crps); digits = 2))
+write(
+    joinpath(out_dir, "verdict_$(seed).txt"),
+    (verdict.pass ? "pass" : "fail") * "\t" *
+        "seed $seed: 90% coverage $(round(verdict.coverage_90; digits = 2)), " *
+        "outside the 99% interval: " *
+        (isempty(verdict.outside) ? "none" : join(verdict.outside, ", ")) *
+        "; forecasts $skill; fit $fit_minutes min\n"
+)
 println(
     "seed $seed: recovery ", verdict.pass ? "passes" : "FAILS",
     " (90% coverage ", round(verdict.coverage_90; digits = 2),

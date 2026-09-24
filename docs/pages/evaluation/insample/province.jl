@@ -351,6 +351,33 @@ province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 #md # ```
 
 province_pairs_fig #hide
+# ## Province parameter recovery
+#
+# Whether the model recovers each province's values when fitted to data it simulated itself, from the same runs as the national [parameter recovery](@ref "Parameter recovery").
+
+#md # ```@raw html
+#md # <details><summary>Province quantities recovered from simulated data</summary>
+#md # ```
+
+province_recovery = let r = recovery_results().params
+    isempty(r) ? DataFrame() :
+        r[
+            occursin.("[", r.quantity), [
+                :seed, :quantity, :truth, :median, :lower_90, :upper_90,
+                :covered_90,
+            ],
+        ]
+end;
+
+province_recovery_display = isempty(province_recovery) ?
+    Markdown.parse("No parameter-recovery run is available for this build.") : MarkdownTable(province_recovery);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_recovery_display #hide
+
 # ## Saving province in-sample outputs
 
 #md # ```@raw html

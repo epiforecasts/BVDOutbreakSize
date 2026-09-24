@@ -3,8 +3,6 @@
 ## samples when its data are `missing` (the generator path).
 @testsnippet RecoveryToy begin
     using BVDOutbreakSize, Turing, Distributions, DataFrames
-    using Turing.DynamicPPL: VarInfo, getlogjoint, init!!, InitFromVector,
-        LogDensityFunction, condition
     @model function toy_obs(mu, y)
         if ismissing(y)
             y = Vector{Union{Missing, Float64}}(missing, 3)
@@ -28,22 +26,14 @@ end
         ["obs_state.y[1]", "obs_state.y[2]", "obs_state.y[3]"]
 end
 
-@testitem "simulate_recovery keeps the truth and conditions like the fit" setup = [RecoveryToy] begin
+@testitem "simulate_recovery keeps the truth with the data" setup = [RecoveryToy] begin
     gen = toy(missing)
     observed = recovery_observed_varnames(gen, toy([0.1, 0.2, 0.3]))
     sim = simulate_recovery(gen, observed; seed = 3, horizon = 0)
     mu = only(BVDOutbreakSize._draws(sim.truth, :mu))
     @test only(BVDOutbreakSize._draws(sim.truth, :total)) ≈ 2 * mu
-    y = [sim.data[vn] for vn in sort(collect(keys(sim.data)); by = string)]
-    @test length(y) == 3
-    ## Conditioning the generator on the simulated data scores the same log
-    ## joint as the model built with those data, at any parameter value.
-    cond = condition(gen, sim.data)
-    direct = toy(Float64.(y))
-    for m in (0.0, mu, -1.3)
-        @test getlogjoint(last(init!!(cond, VarInfo(), InitFromVector([m], LogDensityFunction(cond))))) ≈
-            getlogjoint(last(init!!(direct, VarInfo(), InitFromVector([m], LogDensityFunction(direct)))))
-    end
+    @test length(sim.data) == 3
+    @test all(v isa Real for v in values(sim.data))
     ## A fixed seed gives the same dataset.
     again = simulate_recovery(gen, observed; seed = 3, horizon = 0)
     @test only(BVDOutbreakSize._draws(again.truth, :mu)) == mu
@@ -51,6 +41,34 @@ end
     @test_throws ErrorException simulate_recovery(
         gen, observed; seed = 3, horizon = 0, accept = _ -> false,
         attempts = 2
+    )
+end
+
+@testitem "simulated observations group by stream" begin
+    using BVDOutbreakSize
+    g = BVDOutbreakSize._grouped_observations(
+        Dict(
+            "cases_state.reported_increments.increments[2]" => 5,
+            "cases_state.reported_increments.increments[1]" => 3,
+            "confirmed_state.confirmed_positives.positives[1]" => 7,
+            "onset_report_state.increments[2]" => 1.5,
+            "onset_report_state.increments[1]" => 0.5,
+            "composition_state.obs_increments[2, :]" => [1, 2],
+            "composition_state.obs_increments[1, :]" => [3, 4],
+        )
+    )
+    @test g.in_order(g.streams[:cases_state][:reported_increments]) == [3, 5]
+    @test g.in_order(g.streams[:confirmed_state][:confirmed_positives]) == [7]
+    @test g.onsets == [0.5, 1.5]
+    rows = g.in_order(g.rows[:composition_state])
+    @test rows == [[3, 4], [1, 2]]
+    ## The last province is the remainder of the recorded totals.
+    m = BVDOutbreakSize._composition_matrix(rows, [10.0, 9.0])
+    @test m == [3 4; 1 2; 6 3]
+    @test vec(sum(m; dims = 1)) == [10, 9]
+    ## An observation with no rule is an error, not a silent drop.
+    @test_throws ArgumentError BVDOutbreakSize._grouped_observations(
+        Dict("oddly_named" => 1)
     )
 end
 

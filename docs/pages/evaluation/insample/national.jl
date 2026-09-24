@@ -665,6 +665,54 @@ stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
 #md # ```
 
 stream_pairs_fig #hide
+# ## Parameter recovery
+#
+# Whether the model recovers known values when fitted to data it simulated itself.
+# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with a short run of the sampler.
+# A quantity is recovered when its true value falls inside the posterior interval, and the forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
+
+#md # ```@raw html
+#md # <details><summary>National quantities recovered from simulated data</summary>
+#md # ```
+
+recovery = recovery_results()
+recovery_national = isempty(recovery.params) ? DataFrame() :
+    recovery.params[
+        .!occursin.("[", recovery.params.quantity), [
+            :seed, :quantity, :truth, :median, :lower_90, :upper_90, :covered_90,
+        ],
+    ];
+
+recovery_national_display = isempty(recovery_national) ?
+    Markdown.parse("No parameter-recovery run is available for this build.") : MarkdownTable(recovery_national);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+recovery_national_display #hide
+
+#md # ```@raw html
+#md # <details><summary>Forecasts from the recovery fits</summary>
+#md # ```
+
+recovery_forecasts = isempty(recovery.forecasts) ? DataFrame() :
+    recovery.forecasts[
+        :, [
+            :seed, :horizon, :quantity, :truth, :baseline, :crps, :baseline_crps,
+            :relative_crps, :covered_90,
+        ],
+    ];
+
+recovery_forecasts_display = isempty(recovery_forecasts) ?
+    Markdown.parse("No recovery forecast is available for this build.") : MarkdownTable(recovery_forecasts);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+recovery_forecasts_display #hide
+
 # ## Saving in-sample outputs
 
 #md # ```@raw html

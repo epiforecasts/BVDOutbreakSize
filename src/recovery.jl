@@ -1,10 +1,9 @@
 # Parameter recovery and simulated forecasts for the headline joint. A
-# dataset is drawn from the model itself: fixed-seed parameters from the
-# prior, then one draw of the model run past its cut-off with those
-# parameters fixed, which gives the in-window observations and the future
-# they lead to from one latent path. The model conditioned on the in-window
-# observations is then fitted, and its estimates and forecasts are scored
-# against the values that generated the data.
+# dataset is one fixed-seed prior draw of the model run past its cut-off,
+# which gives the parameters, the in-window observations and the future
+# they lead to from one latent path. The same model built with those
+# in-window observations as its data is then fitted, and its estimates and
+# forecasts are scored against the values that generated the data.
 
 """
 $(TYPEDSIGNATURES)
@@ -20,8 +19,14 @@ counts: they define the confirmed windows, the positivity random effect and
 the published break discrepancies, while the `missing` cut-off totals gate
 their generator paths. The onset triangle and the province compositions
 keep their cell grids with `missing` increments.
+
+With `simulated` (a [`recovery_data`](@ref) result) the same model is built
+with that simulated dataset in place of each `missing` observation: each
+stream's counts through `simulated_data`, and the onset triangle and the
+province compositions as their own arguments. Its structure is unchanged,
+so its density at the simulated data is the generator's.
 """
-function generator_joint(obs; breakpoint)
+function generator_joint(obs; breakpoint, simulated = nothing)
     days_only(h) = (; days = h.days, counts = Int[])
     prov_cases = province_increment_matrix(
         obs.province_confirmed_history, PROVINCE_NAMES,
@@ -67,19 +72,22 @@ function generator_joint(obs; breakpoint)
             onset_days = obs.onset_curve_history.onset_days,
             report_days = obs.onset_curve_history.report_days,
             prev_report_days = obs.onset_curve_history.prev_report_days,
-            increments = missing,
+            increments = simulated === nothing ? missing : simulated.onsets,
         ),
         breakpoint = breakpoint,
         background_pooling = background_pooling_model,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days,
         n_patches = length(PROVINCE_NAMES),
-        province_increments = missing,
+        province_increments =
+            simulated === nothing ? missing : simulated.province_cases,
         province_days = prov_cases.days,
         province_testing_covariate =
             province_testing_covariate(obs.province_lab_daily_history),
-        province_death_increments = missing,
-        province_death_days = prov_deaths.days
+        province_death_increments =
+            simulated === nothing ? missing : simulated.province_deaths,
+        province_death_days = prov_deaths.days,
+        simulated_data = simulated === nothing ? nothing : simulated.streams
     )
 end
 
@@ -183,7 +191,7 @@ $(TYPEDSIGNATURES)
 
 The variables `generator` samples that `fitted` observes: the names in a
 draw of the generator that a draw of the fitted model does not carry. These
-are the simulated data a recovery fit is conditioned on.
+are the simulated data a recovery fit is fitted to.
 """
 function recovery_observed_varnames(generator::Model, fitted::Model)
     rng = MersenneTwister(1)
@@ -203,8 +211,8 @@ observations and the future counts, all from one latent path.
 
 Returns `(; truth, data)`: the draw as a one-draw chain, which the chain
 readers and [`forecast_reported`](@ref) read like a fitted chain, and its
-in-window observations (the names in `observed`) keyed by `VarName`, ready
-for `condition`.
+in-window observations (the names in `observed`) keyed by `VarName`,
+which [`recovery_data`](@ref) arranges for [`generator_joint`](@ref).
 """
 function simulate_recovery(
         generator::Model, observed::AbstractVector;
@@ -226,23 +234,121 @@ function simulate_recovery(
     )
 end
 
+## The simulated values of the draw by name: `(stream, observation) =>`
+## the values in index order, and the whole-row composition draws by row.
+function _grouped_observations(data::AbstractDict)
+    streams = Dict{Symbol, Dict{Symbol, Vector{Tuple{Int, Any}}}}()
+    onsets = Tuple{Int, Any}[]
+    rows = Dict{Symbol, Vector{Tuple{Int, Any}}}()
+    for (vn, v) in data
+        name = string(vn)
+        m = match(r"^(\w+)\.obs_increments\[(\d+), :\]$", name)
+        if m !== nothing
+            push!(
+                get!(rows, Symbol(m[1]), Tuple{Int, Any}[]),
+                (parse(Int, m[2]), v)
+            )
+            continue
+        end
+        m = match(r"^onset_report_state\.increments\[(\d+)\]$", name)
+        if m !== nothing
+            push!(onsets, (parse(Int, m[1]), v))
+            continue
+        end
+        m = match(r"^(\w+)\.(\w+)\.\w+\[(\d+)\]$", name)
+        m === nothing && throw(
+            ArgumentError("no rule for the simulated observation `$name`.")
+        )
+        obs = get!(streams, Symbol(m[1]), Dict{Symbol, Vector{Tuple{Int, Any}}}())
+        push!(get!(obs, Symbol(m[2]), Tuple{Int, Any}[]), (parse(Int, m[3]), v))
+    end
+    in_order(xs) = [v for (_, v) in sort(xs; by = first)]
+    return (; streams, onsets = in_order(onsets), rows, in_order)
+end
+
+## A composition's simulated counts as the full province-by-vintage matrix:
+## the drawn rows, then the last province as the remainder of the recorded
+## totals, which is how the predictive path fills it in.
+function _composition_matrix(rows, totals)
+    drawn = reduce(vcat, [reshape(Int.(round.(collect(r))), 1, :) for r in rows])
+    last_row = reshape(
+        max.(Int.(round.(totals)) .- vec(sum(drawn; dims = 1)), 0), 1, :
+    )
+    return vcat(drawn, last_row)
+end
+
 """
 $(TYPEDSIGNATURES)
 
-Fit `generator` conditioned on a [`simulate_recovery`](@ref) dataset's
-in-window observations. Returns `(; model, chain)`: the conditioned model,
-which [`forecast_draws`](@ref) runs past the cut-off, and its NUTS chain.
-The sampler settings default to a short run (two chains of 200 draws after
-200 warmup steps, tree depth at most 8), enough to check recovery without
-the cost of the headline fit. Other keywords pass to
-[`nuts_sample`](@ref).
+The observations of a [`simulate_recovery`](@ref) dataset in the form
+[`generator_joint`](@ref) takes them: each stream's counts by observation
+name (`streams`), the onset triangle increments (`onsets`) and the province
+case and death compositions as province-by-vintage count matrices
+(`province_cases`, `province_deaths`). Each composition's last province is
+the remainder of its recorded totals, as the predictive path fills it in.
+"""
+function recovery_data(sim)
+    g = _grouped_observations(sim.data)
+    streams = Dict{Symbol, Any}(
+        state => NamedTuple(
+            name => Int.(round.(g.in_order(xs))) for (name, xs) in obs
+        )
+            for (state, obs) in g.streams
+    )
+    composition(state) = haskey(g.rows, state) ? _composition_matrix(
+            g.in_order(g.rows[state]),
+            only(_draw_vectors(sim.truth, Symbol("$(state).composition_totals")))
+        ) : missing
+    return (;
+        streams, onsets = isempty(g.onsets) ? missing : Float64.(g.onsets),
+        province_cases = composition(:composition_state),
+        province_deaths = composition(:death_composition_state),
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Check that `model`, the generator rebuilt with a simulated dataset
+([`generator_joint`](@ref) with `simulated`), scores the true draw `truth`
+exactly as `generator` does. The generator's log joint at the true draw
+counts the simulated observations as draws; the rebuilt model counts them
+as data. The two agree only when every simulated observation reached the
+stream it came from, so a mismatch throws rather than letting a recovery
+fit run on data the model did not simulate. Returns the two log joints.
+"""
+function recovery_density_check(
+        generator::Model, model::Model, truth; rtol::Real = 1.0e-8
+    )
+    from_generator = only(logjoint(generator, truth))
+    from_data = only(logjoint(model, truth))
+    isapprox(from_generator, from_data; rtol) || throw(
+        ErrorException(
+            "the rebuilt model scores the true draw at $from_data, not the " *
+                "generator's $from_generator: a simulated observation is " *
+                "not reaching its stream."
+        )
+    )
+    return (; from_generator, from_data)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Fit the headline joint to a [`simulate_recovery`](@ref) dataset with NUTS:
+`model` is the generator rebuilt with the simulated observations
+([`generator_joint`](@ref) with `simulated = recovery_data(sim)`), after
+[`recovery_density_check`](@ref). Returns `(; model, chain)`;
+[`forecast_draws`](@ref) runs the model past its cut-off. The sampler
+settings default to a short run (two chains of 200 draws after 200 warmup
+steps, tree depth at most 8), enough to check recovery without the cost of
+the headline fit. Other keywords pass to [`nuts_sample`](@ref).
 """
 function recovery_fit(
-        generator::Model, sim; samples::Integer = 200,
-        n_adapts::Integer = 200, chains::Integer = 2,
-        max_depth::Integer = 8, seed::Integer = 20260518, kwargs...
+        model::Model; samples::Integer = 200, n_adapts::Integer = 200,
+        chains::Integer = 2, max_depth::Integer = 8,
+        seed::Integer = 20260518, kwargs...
     )
-    model = condition(generator, sim.data)
     chain = nuts_sample(
         model; samples, n_adapts, chains, max_depth, seed, kwargs...
     )

@@ -392,6 +392,30 @@ if !@isdefined(_BVD_SETUP_LOADED)
         _joint_pp_cache[] = pp
         return pp
     end
+    ## The parameter-recovery results the `recovery` CI job writes
+    ## (`scripts/recovery.jl`): one table of recovered quantities and one of
+    ## forecasts, over every seed found, or empty tables when no run is
+    ## available.
+    function recovery_results()
+        dir = joinpath(
+            get(ENV, "BVD_OUTPUT_DIR", joinpath(pkgdir(BVDOutbreakSize), "output")),
+            "recovery"
+        )
+        read_all(prefix) = begin
+            files = isdir(dir) ? sort(
+                    filter(
+                        f -> startswith(f, prefix) && endswith(f, ".csv"),
+                        readdir(dir)
+                    )
+                ) : String[]
+            isempty(files) ? DataFrame() :
+                reduce(vcat, [CSV.read(joinpath(dir, f), DataFrame) for f in files])
+        end
+        return (;
+            params = read_all("recovery_"),
+            forecasts = read_all("forecast_recovery_"),
+        )
+    end
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
     ## nested submodels stay distinct; this map only relabels them for display.

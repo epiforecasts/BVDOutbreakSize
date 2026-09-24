@@ -13,7 +13,7 @@ using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
     to_submodel, predict, returned
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-    Model, VarInfo, condition, contextualize, getlogjoint, init!!
+    Model, VarInfo, contextualize, getlogjoint, init!!, logjoint
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -114,7 +114,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     seed_at_renewal_start,
     knot_days, future_knot_days, ForecastHorizon, horizon_days,
     with_horizon, forecast_days, generator_joint, recovery_observed_varnames,
-    simulate_recovery, recovery_fit, recovery_table, recovery_verdict,
+    simulate_recovery, recovery_data, recovery_density_check, recovery_fit,
+    recovery_table, recovery_verdict,
     forecast_recovery_table,
     interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
     safe_rate,
