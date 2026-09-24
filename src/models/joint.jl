@@ -1096,6 +1096,12 @@ reproduction number implied by the summed patch infections.
 
     region_sd := patch_state.σ_level
     region_drift_sd := patch_state.σ_δ
+    ## The loading matrix from standard-normal draws to one knot's
+    ## deviation innovations, flattened column-major, which the provincial
+    ## forecast continues the deviations with.
+    if n_patches > 1
+        region_drift_factor := vec(patch_state.drift_factor)
+    end
 
     region_halflife := patch_state.δ_halflife
 

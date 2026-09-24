@@ -2852,7 +2852,8 @@ The grey reference is the reproduction number implied by the summed
 provinces, the incidence-weighted mean of the panels rather than any one
 province or the central trend they pool toward. A panel tracking the grey
 band says that province moves with the country. Separation between panels is
-the spatial signal, and its scale is what `region_drift_sd` estimates.
+the spatial signal, and `region_drift_sd`, the sd of each province's
+weekly deviation innovation, measures it.
 """
 function plot_rt_patches(
         chn; n::Integer, breakpoint::Real,
@@ -3167,7 +3168,7 @@ function plot_patch_summary(
     ]
     optional = [
         (:log_rt_contrast, "log-Rt vs primary patch", 0.0),
-        (:region_drift_sd, "Rt deviation drift", nothing),
+        (:region_drift_sd, "Rt deviation innovation sd", nothing),
         (:province_ascertainment, "Relative case ascertainment", 1.0),
     ]
     for o in optional

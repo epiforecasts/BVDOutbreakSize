@@ -4050,7 +4050,8 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         testing_covariate::AbstractVector{<:Real} = zeros(
             size(modelled_confirmed, 1)
         ),
-        testing_coefficient_prior = Normal(0, 0.5)
+        testing_coefficient_prior = Normal(0, 0.5),
+        basis = sum_to_zero_basis(size(modelled_confirmed, 1))
     )
     np, nv = size(modelled_confirmed)
     ismissing(obs_increments) || size(obs_increments) == (np, nv) || error(
@@ -4078,7 +4079,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## So `asc_p` is sampled, partially pooled toward equality on the log
     ## scale, and constrained to sum to zero, since only relative
     ## ascertainment enters a composition and the overall level belongs to
-    ## the national ascertainment. `tau_asc -> 0` recovers the
+    ## the national ascertainment. The pooled deviation takes `np - 1` draws
+    ## on the sum-to-zero directions ([`sum_to_zero_basis`](@ref)), the
+    ## distribution of `np` independent `N(0, τ_asc²)` draws centred, with
+    ## no direction the composition cannot see. `tau_asc -> 0` recovers the
     ## equal-ascertainment model. The pooling prior is what identifies
     ## `asc_p`, so the per-patch results are correspondingly wider.
     ##
@@ -4093,7 +4097,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## rather than gaining a dimension the likelihood never sees. The death
     ## composition is such a caller.
     τ_asc ~ ascertainment_sd_prior
-    z_asc ~ product_distribution(fill(ascertainment_offset_prior, np))
+    z_asc ~ product_distribution(fill(ascertainment_offset_prior, np - 1))
     length(testing_covariate) == np || error(
         "province_composition_model: $(length(testing_covariate)) testing " *
             "covariate entries for $(np) patches."
@@ -4106,8 +4110,11 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## one path and the literal on another, so the fused broadcast below
     ## would box it if it captured `β_asc` itself.
     beta = β_asc
-    log_asc_raw = beta .* testing_covariate .+ τ_asc .* z_asc
-    log_asc = log_asc_raw .- (sum(log_asc_raw) / np)
+    ## The covariate term is centred here so the whole log multiplier sums
+    ## to zero whatever covariate is passed.
+    cov_centred = testing_covariate .- (sum(testing_covariate) / np)
+    log_asc = beta .* cov_centred .+
+        sum_to_zero(sum_to_zero_factor(basis, τ_asc), z_asc)
     asc = exp.(log_asc)
     ## Optional second multiplier, per-province severity. The death
     ## composition uses it for the per-province case-fatality ratio, partially
@@ -4127,9 +4134,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     sev = ones(np)
     if severity_sd_prior !== nothing
         τ_sev ~ severity_sd_prior
-        z_sev ~ product_distribution(fill(ascertainment_offset_prior, np))
-        log_sev_raw = τ_sev .* z_sev
-        sev = exp.(log_sev_raw .- (sum(log_sev_raw) / np))
+        z_sev ~ product_distribution(
+            fill(ascertainment_offset_prior, np - 1)
+        )
+        sev = exp.(sum_to_zero(sum_to_zero_factor(basis, τ_sev), z_sev))
     end
     ## Expected share of each patch at each vintage. `safe_rate` floors the
     ## modelled increments away from zero so an early vintage with no

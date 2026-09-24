@@ -916,9 +916,9 @@ function patch_summary_table(
     ## Absent on a chain fitted without the per-province compositions.
     asc = _has_key(chn, :province_ascertainment) ?
         per_patch(:province_ascertainment) : nothing
-    ## The deviation-walk scale is per patch, so it belongs here rather than
-    ## with the scalar hyperparameters. Near zero means that province's Rt
-    ## tracks the national trend.
+    ## The sd of each province's deviation innovation is per patch, so it
+    ## belongs here rather than with the scalar hyperparameters. Near zero
+    ## means that province's Rt tracks the national trend.
     drift = _has_key(chn, :region_drift_sd) ?
         per_patch(:region_drift_sd) : nothing
     contrast = _has_key(chn, :log_rt_contrast) ?
@@ -939,7 +939,7 @@ function patch_summary_table(
         contrast === nothing ||
             push!(rows, ("log-Rt vs primary patch", contrast[p], digits))
         drift === nothing ||
-            push!(rows, ("Rt deviation drift", drift[p], 3))
+            push!(rows, ("Rt deviation innovation sd", drift[p], 3))
         asc === nothing ||
             push!(rows, ("Relative case ascertainment", asc[p], digits))
         for (label, draws, dg) in rows

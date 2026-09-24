@@ -787,6 +787,35 @@ function _knot_interp(ks, d::Integer, week::Integer)
     return (1 - w) * ks[j + 1] + w * ks[j + 2]
 end
 
+## Per-draw loading matrices `(np × k)` from standard-normal draws to one
+## knot's provincial deviation innovations. A chain carrying
+## `region_drift_factor` gives the fitted one. Otherwise each province's
+## `region_drift_sd` scales an independent draw and the vector is centred,
+## the same matrix `(I - J / np) diag(σ_δ)` applied to `np` draws, over the
+## first `np` of the chain's patches. The fitted factor sums to zero only
+## over all of the chain's patches, so it needs `np` to be all of them.
+function _drift_factors(chn, np::Integer)
+    sds = _draw_vectors(chn, :region_drift_sd)
+    if _has_key(chn, :region_drift_factor)
+        npc = length(first(sds))
+        npc == np || throw(
+            ArgumentError(
+                "forecast_provinces: the chain has $npc patches but " *
+                    "$np were asked for; the fitted drift factor sums " *
+                    "to zero only over all of them"
+            )
+        )
+        return [
+            reshape(collect(v), np, :)
+                for v in _draw_vectors(chn, :region_drift_factor)
+        ]
+    end
+    return [
+        [((i == j) - 1 / np) * σ[j] for i in 1:np, j in 1:np]
+            for σ in sds
+    ]
+end
+
 """
     forecast_provinces(chn; horizon = 7, n_patches, patch_labels, seed)
         -> DataFrame
@@ -808,10 +837,11 @@ cut-off value `R_T_patch` moved by two walks, continued as
   size `rt_state.sigma_rw`, shared by every province, as
   [`forecast_reported`](@ref) continues it.
 - Each province's deviation from it reverts toward zero with the fitted
-  half-life `region_halflife` and takes fresh weekly innovations at its own
-  scale `region_drift_sd`, centred across the provinces so they still sum to
-  zero. The innovations are drawn independently, without the fitted
-  cross-province correlation.
+  half-life `region_halflife` and takes fresh weekly innovations through
+  the fitted loading matrix `region_drift_factor`, so they carry the fitted
+  cross-province covariance and sum to zero. A chain without it draws
+  independent innovations at each province's `region_drift_sd` and centres
+  them.
 
 The cut-off is treated as a knot. The last generation-interval's worth of
 each province's fitted daily infections (`infections_patch`) seeds
@@ -847,7 +877,7 @@ function forecast_provinces(
     h = Int(horizon)
     R_T = _draw_vectors(chn, :R_T_patch)
     δ_T = _draw_vectors(chn, :delta_patch)
-    σ_δ = _draw_vectors(chn, :region_drift_sd)
+    drift_factor = _drift_factors(chn, np)
     halflife = _draws(chn, :region_halflife)
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     α = _draws(chn, Symbol("gi_state.α"))
@@ -899,9 +929,9 @@ function forecast_provinces(
         φ = exp2(-week / halflife[i])
         δ = zeros(np, nknots + 1)
         δ[:, 1] = δ_T[i][1:np]
+        F = drift_factor[i]
         for kk in 2:(nknots + 1)
-            innov = σ_δ[i][1:np] .* randn(rng, np)
-            innov .-= sum(innov) / np
+            innov = sum_to_zero(F, randn(rng, size(F, 2)))
             δ[:, kk] = φ .* δ[:, kk - 1] .+ innov
         end
         Rt = zeros(np, L + h)
