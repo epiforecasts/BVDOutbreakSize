@@ -640,7 +640,7 @@ ascertainment and the background CFR for reuse by
     asc_state ~ to_submodel(ascertainment)
     CFR = cfr_state.CFR
     p_death = asc_state.p_death
-    bvd_deaths_daily = (p_death * CFR) .* convolve_delay(onsets, od_state.pmf)
+    bvd_deaths_daily = convolve_delay(onsets, (p_death * CFR) .* od_state.pmf)
 
     n = length(bvd_deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
@@ -649,7 +649,7 @@ ascertainment and the background CFR for reuse by
     if case_bg_daily !== nothing
         bgcfr_state ~ to_submodel(background_cfr)
         cfr_bg = bgcfr_state.cfr_bg
-        bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
+        bg_death_daily = convolve_delay(case_bg_daily, cfr_bg .* od_state.pmf)
         λ_bg_death = sum(bg_death_daily) / n
         bg_death_sigma = zero(CFR)
     else
@@ -1663,7 +1663,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
     ## Per-day expected export-death increment. Its running sum is the
     ## cumulative export-death intensity `Λ_d`.
-    death_daily = CFR .* convolve_delay(travelled_prevalence, fd_pmf)
+    death_daily = convolve_delay(travelled_prevalence, CFR .* fd_pmf)
 
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
@@ -2879,9 +2879,9 @@ the daily recovered series and the cut-off total.
 
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
     ## delay.
-    recovered_daily = p_recover .* convolve_delay(
+    recovered_daily = convolve_delay(
         confirmed_daily,
-        delay_state.pmf
+        p_recover .* delay_state.pmf
     )
 
     n = length(confirmed_daily)

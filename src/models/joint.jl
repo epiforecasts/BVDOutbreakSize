@@ -599,14 +599,15 @@ function _patch_confirmed_increments(
     )
     np = size(onsets_matrix, 1)
     nv = length(province_days)
-    first_daily = s_test .* convolve_delay(
-        vec(@view onsets_matrix[1, :]), kernel
+    scaled_kernel = s_test .* kernel
+    first_daily = convolve_delay(
+        vec(@view onsets_matrix[1, :]), scaled_kernel
     )
     out = Matrix{eltype(first_daily)}(undef, np, nv)
     @inbounds out[1, :] = bin_increments(first_daily, province_days)
     @inbounds for p in 2:np
-        daily = s_test .* convolve_delay(
-            vec(@view onsets_matrix[p, :]), kernel
+        daily = convolve_delay(
+            vec(@view onsets_matrix[p, :]), scaled_kernel
         )
         out[p, :] = bin_increments(daily, province_days)
     end
