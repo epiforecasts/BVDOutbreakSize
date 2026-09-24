@@ -135,19 +135,20 @@ end
     )
 end
 
-@testitem "_composition_predictive: fixed-seed draws are pinned" begin
+@testitem "_composition_predictive: a fixed seed redraws the same band" begin
     using BVDOutbreakSize: _composition_predictive
 
-    ## Rebuilt reports must redraw the same composition band, so the draws
-    ## for a fixed seed are pinned exactly.
+    ## Rebuilt reports must redraw the same composition band. The random
+    ## stream differs between Julia versions, so the check is that a seed
+    ## repeats itself and that another seed does not, not a pinned draw.
     shares = [0.6 0.5; 0.3 0.35; 0.1 0.15]
     ms = [shares for _ in 1:5]
     totals = [200, 300]
-    preds = _composition_predictive(ms, fill(0.05, 5), totals, 2)
-    counts = [round.(Int, preds[p][d] .* totals) for p in 1:3 for d in 1:2]
-    @test counts == [
-        [104, 123], [105, 167], [73, 107], [69, 117], [23, 70], [26, 16],
-    ]
+    draw(seed) = _composition_predictive(
+        ms, fill(0.05, 5), totals, 2; seed
+    )
+    @test draw(1) == draw(1)
+    @test draw(1) != draw(2)
 end
 
 @testitem "province_count_panels: splits each draw's national total" begin
