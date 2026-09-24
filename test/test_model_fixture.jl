@@ -46,9 +46,13 @@
         @test isempty(grad_off)
         reported, stats = reported_values(ldf, x, sampled)
         @test isapprox(stats.logjoint, p["logjoint"]; rtol)
-        ## Every quantity main records, to `rtol`.
+        ## Every quantity main records, to `rtol`. A vector is stored as its
+        ## sum, which is near zero for a centred one, hence the floor.
         reported_off = filter(collect(keys(p["reported"]))) do k
-            !isapprox(get(reported, k, NaN), p["reported"][k]; rtol, nans = true)
+            !isapprox(
+                get(reported, k, NaN), p["reported"][k];
+                rtol, atol = 1.0e-10, nans = true
+            )
         end
         @test isempty(reported_off)
     end
