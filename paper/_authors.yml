@@ -6,14 +6,6 @@ authors:
     orcid: "0000-0001-8057-8037"
     attributes:
       corresponding: true
-  - name: "Katharine Sherratt"
-    affiliations:
-      - ref: lshtm
-  - name: "Samuel P. C. Brand"
-    affiliations:
-      - ref: cfa
-      - ref: goldbelt
-    orcid: "0000-0003-0645-5367"
   - name: "Sebastian Funk"
     affiliations:
       - ref: lshtm
@@ -22,7 +14,3 @@ authors:
 affiliations:
   - id: lshtm
     name: "Centre for Mathematical Modelling of Infectious Diseases, London School of Hygiene & Tropical Medicine, London, United Kingdom"
-  - id: cfa
-    name: "Center for Forecasting and Outbreak Analytics, Centers for Disease Control and Prevention, United States of America"
-  - id: goldbelt
-    name: "Goldbelt Professional Services LLC, United States of America"

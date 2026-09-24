@@ -40,7 +40,16 @@ Dates and durations: never in prose; they live in @tbl-models and @fig-timeline.
 Supporting Information: the report site archived with the release (site.zip from v2.2.0; the offline analysis.html before that), whose Methods page carries the full model; the main text points to it by italic page or section title.
 Terms: "the joint model" for the method, "the joint estimate" for its output, "single-stream fits" for the comparators, "release" not "vintage", "province" not "patch", "random walk" not "walk".
 Methods and Results subsection names mirror each other.
-Style: paper/.notes/pc-style.md section 10.
+Style: paper/.notes/pc-style.md section 10, and the composable-models paper (~/code/EpiAware/ComposableProbabilisticIDModels/index.qmd) for a second exemplar.
+Authors: Sam Abbott and Sebastian Funk; Katharine Sherratt and Samuel Brand in the Acknowledgements (author decision, 24 Sep; issue 775 stays open for their reply).
+
+FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and the GitHub record; scripts under paper/scripts/, outputs under paper/figures/ committed as pdf and png).
+@fig-model      Figure 1. Where the work started: the first model's outputs. Panels: (A) the McCabe et al. scenario estimates against the v1.0.0 joint posterior of cumulative infections at the 18 May cut-off; (B) the four streams fitted then, observed and posterior predictive; (C) the constant-growth latent curve. Source: the v1.0.0 results release and released_estimates.csv.
+@fig-estimates  Figure 2. Where the work is now: the current model's outputs. Panels: (A) national infections, deaths and the reproduction number over time with the data streams; (B) provincial reproduction numbers and infections, with the health-zone stratum if merged; (C) ascertainment by stream against its prior; (D) one-week-ahead forecast against what was reported. Source: the pinned results release (posterior_draws.csv, stream_draws.csv, forecast.csv, province_forecast.csv).
+@fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) joint fit wall-clock and gradient time per release where recorded. Source: git log, gh api, released_estimates.csv, the benchmark job records.
+@fig-evaluation Figure 4. Evaluation. (A) forecast skill against the persistence baseline by stream and release; (B) outbreak size by single-stream fit against the joint; (C) comparison with McCabe et al. at matched cut-offs. Source: forecast_scores.csv, size_by_release_by_stream.csv, frozen_matched_cutoffs.csv.
+@tbl-streams    Streams fitted: stream, what it observes, observation model, first and last fitted report, break dates.
+@tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change.
 -->
 
 ## Introduction
@@ -123,7 +132,7 @@ Style: paper/.notes/pc-style.md section 10.
 - We first score each release's forecasts against the data that arrived next, then compare the joint estimate with single-stream fits and published estimates, and finally report convergence.
   - Every release forecasts each still-reported stream one week ahead, and the forecast is scored once the next reports arrive.
   - The continuous ranked probability score, where lower is better, with the 50% and 90% interval coverage and the sample-based bias statistic [@gneiting2007; @bosse2022scoringutils]. <!-- confirm which package computes the scores -->
-  - The persistence baseline carries the last observed increment forward and was checked to see only the past.
+  - The persistence baseline carries the last observed increment forward and was checked to see only the past, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
   - Streams no longer reported are excluded because their truth is zero by construction, which favours neither model.
   - Fits fixed at each release date are scored on one scale across reporting breaks.
 
@@ -144,7 +153,7 @@ Style: paper/.notes/pc-style.md section 10.
 
 - The model is written in Julia with Turing, sampled with NUTS and differentiated with Mooncake [@ge2018turing; @hoffman2014nuts; @mooncake_jl].
   - The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against finite differences and against the backend's own derivation of an unregistered copy, which cut the joint gradient by about a fifth and the delay-heavy kernels by several fold. <!-- {{ meta }} from PRs 810, 837, 856; author statement: not something the lead author could have written without the agent -->
-  - A precompile workload covering the fit the report runs cuts the cold build to a quarter.
+  - Agents ran wide searches over parameterisations, samplers and gradient backends, most of which measured as null and were not merged, and a precompile workload covering the fit the report runs cuts the cold build to a quarter. <!-- cite the benchmark PRs; author steer: "very wider performance searches" -->
   - Each data update refits every affected model in continuous integration, renders the report, and publishes a versioned release with the model definition, thinned draws and forecasts; only the jobs a change can reach run, and a release is cut from a comment.
   - Model code, priors and analysis text were drafted by a language-model agent from the McCabe et al. report and the delay reanalysis and were reviewed and revised by the authors, with convergence and fit to data as the gate on every change.
   - Code, data transcriptions, per-release draws and forecasts, and the archived report site are available [@bvdoutbreaksize-github; @bvdoutbreaksize-zenodo].
@@ -221,6 +230,13 @@ Style: paper/.notes/pc-style.md section 10.
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
   - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
 
+- Several defects were of a kind a human author would be unlikely to write, and each was found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
+  - The forecast compounded the last random-walk innovation over the horizon, so the intervals widened with each release until coverage sat at one (issue 622).
+  - Reporting-break corrections were applied in the fit but not in the scoring, so frozen-fit forecasts scored an order of magnitude out (issue 623).
+  - The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short (v2.0.0 notes).
+  - A chain initialised from a fixed seed sat on a prior tail and produced the same R-hat on three different datasets (issue 671).
+  - Each defect passed the tests and the in-sample checks, and each was caught only where a forecast met the data that arrived next.
+
 <!-- Further work -->
 
 - Future work could resolve the health-zone structure, ground the delays on outbreak-specific data, and model the revision process directly.
@@ -235,11 +251,11 @@ Style: paper/.notes/pc-style.md section 10.
 
 ## Funding {.appendix}
 
-<!-- NIHR HPRU in Health Analytics and Modelling, grant NIHR207404, text from issue 179. CFA text for Samuel Brand from primarycensored-paper. Pending issue 775 on authorship. -->
+<!-- NIHR HPRU in Health Analytics and Modelling, grant NIHR207404, text from issue 179, in the form used in primarycensored-paper with its disclaimer sentence. -->
 
 ## Acknowledgements {.appendix}
 
-<!-- Neil Ferguson for the genetic bound suggestion; INSP and INRB-UMIE for the data; outside contributors on GitHub by name. -->
+<!-- Katharine Sherratt and Samuel P. C. Brand for their contributions to the early versions and their review; Neil Ferguson for the genetic bound suggestion; INSP and INRB-UMIE for the data; outside contributors on GitHub by name. -->
 
 ## Data and software availability {.appendix}
 
@@ -247,6 +263,6 @@ Style: paper/.notes/pc-style.md section 10.
 
 ## AI disclosure {.appendix}
 
-<!-- RECOLLECTION: level of detail. Which models, what they drafted, what the authors did, the review bot, that convergence and fit-to-data gated every merge, and that the first three releases were signed off by all authors on release issues and later releases were cut by the lead author. Flesh out with Sebastian per issue 503. -->
+<!-- One paragraph in the form of the primarycensored-paper disclosure: which models were used, that they drafted the model code, priors, analysis text and this manuscript, that the authors reviewed and revised all of it and take responsibility, and that an automated reviewer and convergence and fit-to-data gates checked every change. -->
 
 # References {.unnumbered}
