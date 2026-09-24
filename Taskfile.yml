@@ -65,6 +65,61 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_province_lab.jl {{.CLI_ARGS}}
 
+  onset-digitise:
+    desc: >
+      Digitise the symptom-onset epidemic-curve figure of every CONFIG
+      vintage into data/onset_curve_scanned.csv with the Julia reference
+      (scripts/digitize_onset_curve.jl). Incremental: opens only the PDFs
+      of vintages the file does not hold yet. Pass `-- --rebuild` after
+      changing the digitiser to re-read them all. Needs the PDFs
+      (`task download-sitreps`) and poppler.
+    cmds:
+      - julia scripts/digitize_onset_curve.jl data/sitrep_pdfs
+        data/onset_curve_scanned.csv {{.CLI_ARGS}}
+
+  onset-port-check:
+    desc: >
+      Rebuild the onset curve with both the Julia reference and the Python
+      port into a temporary directory and check that the two files and the
+      committed data/onset_curve_scanned.csv are byte-identical. Needs the
+      PDFs, poppler and uv.
+    cmds:
+      - |
+        set -e
+        tmp=$(mktemp -d)
+        julia scripts/digitize_onset_curve.jl data/sitrep_pdfs \
+          "$tmp/julia.csv" --rebuild
+        uv run --no-project scripts/digitize_onset_curve.py \
+          data/sitrep_pdfs "$tmp/python.csv" --rebuild
+        cmp "$tmp/julia.csv" "$tmp/python.csv"
+        cmp "$tmp/julia.csv" data/onset_curve_scanned.csv
+        rm -r "$tmp"
+        echo "reference, port and committed file are identical"
+
+  onset-cross-check:
+    desc: >
+      Compare every digitised onset block with the INRB-UMIE dashboard's
+      national onset curve from the snapshot nearest its report date
+      (data/onset_dashboard_history.csv). Prints one row per block with
+      the totals, the correlation and the mean absolute daily difference
+      on settled dates and on the last 14 days, and exits non-zero when a
+      settled-date difference exceeds 2 cases per day. Pass `-- --latest N`
+      for the N newest blocks.
+    cmds:
+      - uv run --no-project scripts/compare_onset_sources.py {{.CLI_ARGS}}
+
+  onset-audit:
+    desc: >
+      Audit the digitised onset curve against the figures it was read
+      from. Writes data/onset_curve_figures.csv (one row per vintage: the
+      figure's page, image size and md5, the pixel scales, the printed n,
+      the digitised total, the gap and any reprint) and
+      output/onset_curve_audit.md (the gap table, the settled-bar checks
+      between consecutive snapshots and the worst vintages). Needs the
+      PDFs (`task download-sitreps`), poppler and tesseract.
+    cmds:
+      - julia --project=scripts scripts/audit_onset_curve.jl {{.CLI_ARGS}}
+
   benchmark:
     desc: >
       Run the per-component AD gradient benchmark suite and save the results

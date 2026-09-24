@@ -16,36 +16,61 @@
 #
 # Method (per figure, all self-calibrated from the image):
 #   * baseline (count 0) = the widest dark horizontal row in the lower panel;
-#   * count scale = the y-axis tick marks (0/20/40/60), evenly spaced, giving
-#     pixels-per-count = tick-spacing / 20;
-#   * date scale = the weekly x-axis tick marks, anchored on the rightmost
-#     tick (whose date is in CONFIG, read off the axis) stepping back 7 days;
-#   * each daily bar height = the 75th-percentile column in a one-day window,
-#     flooded up from the baseline counting light-blue (Vivant) and crimson
-#     (Decede) pixels, bridging the anti-alias gap between the stacked
-#     segments but stopping at the wide white gap up to the floating label /
-#     dashed line above the bar.
+#   * count scale = the y-axis tick marks (0/20/40/60 or 0/25/50/75), evenly
+#     spaced, giving pixels-per-count = tick-spacing / y_step;
+#   * date scale = the weekly x-axis tick marks. Candidate tick rows come
+#     from a strict and a near-gray mask at several cuts, and the one whose
+#     regular chain from the rightmost tick is longest wins. Pixels per day
+#     is the least-squares slope over that chain and each day is anchored on
+#     the nearest chain tick at or before it, so a day 150 days back
+#     does not drift with the rounding of one spacing. The rightmost tick's
+#     date is in CONFIG, read off the axis;
+#   * each daily bar = the bar's own pixel columns: the interval between
+#     the two consecutive outline columns about a day apart whose midpoint
+#     is nearest the day's grid position, else the window
+#     [cx - ppd/2, cx + ppd/2] clipped to the nearest outline column on each
+#     side. Outline columns are those mostly dark over their run. Every
+#     column is read as the run of non-page pixels up from the baseline,
+#     bridging up to three page pixels when bar colour resumes (JPEG ringing
+#     between the stacked segments) and skipping neutral pixels on the tick
+#     rows and tick columns (gridlines). The run's top is its highest pixel
+#     darker than an anti-alias, which is the bar's outline; chroma-washed
+#     fill inside the run is crossed on the way up. The bar height is the
+#     height at least two of its interior columns agree on to within a
+#     pixel, or the tallest
+#     interior column when none do (a 3-4 px bar has one saturated column
+#     and one or two washed ones that read low). Half a pixel of
+#     outline is subtracted before dividing by pixels-per-count. The dead
+#     segment is the count of crimson pixels in the chosen column.
 #
-# Accuracy: the error is a few percent in either direction, per scan, and it is
-# independent between vintages. Against the printed `n` it ranges from -3.0%
-# (SitRep 069/070/071: 2260 vs n=2 329) to +1.6% (SitRep 068: 2344 vs n=2 308),
-# with SitRep 064 at -2.2% (2018 vs n=2 064) and 072 at +0.4% (2531 vs n=2 521).
-# Individual bars carry roughly +/-1-2 cases of pixel noise. Part of the
-# shortfall sits in the faded bars of the `donnees potentiellement incompletes`
-# band, whose lightened fill falls outside the colour masks, but that mechanism
-# is one-sided and does not explain the overshoots, so treat the sign as
-# unknown.
+# The Python port (scripts/digitize_onset_curve.py) must match every step
+# above pixel for pixel: the same pixel classes (page, neutral, light,
+# crimson, dark, saturated), the same run rule with its gap of three and gridline skip,
+# the same outline thresholds (dark fraction 0.25 strict with a floor of
+# six pixels, 0.1 soft with a floor of five, both only over runs taller
+# than four pixels, no saturated pixel in a tenth of the run, and three
+# bridged gaps), the same gap rule, the
+# same interval choice, the same mode-or-maximum rule with its support of
+# two, and the same
+# rounding. All of it is expressible on numpy arrays with cumulative sums
+# and per-column loops.
 #
-# The consequence that matters: the scans do not preserve a property the
-# underlying data has. Late reporting only ever adds cases, so an onset date's
-# count must be non-decreasing across vintages, yet on onset dates more than
-# three weeks before the earliest report date in the file (12 July, so onsets
-# before 21 June) the scanned totals move both ways between consecutive
-# snapshots - 064 -> 065 falls by a net 36 cases across 34 of 54 such days,
-# and every other consecutive pair falls somewhere too. So a
-# between-vintage increment of a few cases is at or below the noise floor, and
-# anything built on those increments (a reporting-delay estimate, say) has to
-# account for it.
+# Accuracy: against the printed `n` in every figure that carries one
+# (SitReps 064-130, read by OCR and checked by eye), the digitised total is
+# within 2.1% everywhere and within 0.5% on 43 of the 60 vintages. The
+# largest gaps are SitRep 126 at -2.1% (5650 against n = 5 771), SitRep 129
+# at -1.9% (5784 against n = 5 896) and SitRep 118 at -1.3% (5192 against
+# n = 5 263). Individual daily bars carry pixel rounding of about +/-1 case
+# at the small September renders (2.8 px per count) and less before. The
+# faded bars inside the `donnees potentiellement incompletes` band are read
+# like any other.
+#
+# Late reporting only ever adds cases, so an onset date's count must be
+# non-decreasing across vintages. On onset dates more than three weeks
+# before the earlier vintage's report date, consecutive distinct snapshots
+# differ by 0.40 cases per day on average (L1) and fall on 14% of such days,
+# almost always by a single case, so a between-vintage increment of one is
+# at the noise floor and anything larger is signal.
 #
 # The values are approximate and are not fitted by the model; they are captured
 # for later use (see data/README.md and #488).
@@ -71,7 +96,7 @@
 # Download the PDFs first with scripts/download_sitreps.jl.
 
 using Dates: Date, Day, value
-using Statistics: median, quantile
+using Statistics: median
 using Printf: @printf
 
 # Per-vintage anchors. `report_date` is the SitRep rapportage date;
@@ -372,13 +397,133 @@ function y_axis_ticks(dark, base, H, W)
     return best[2]
 end
 
+# Pixel classes. Page is white (with JPEG chroma noise) and the pink
+# `donnees potentiellement incompletes` band. Neutral is gridline gray.
+# Light is the pale, low-saturation pixel a bar's top edge leaves above
+# its outline: anti-aliasing, chroma noise, washed fill and gridlines;
+# saturated fill and the outline are not light. Dark is the outline.
+function pixel_classes(R, G, B)
+    lo = min.(R, min.(G, B))
+    hi = max.(R, max.(G, B))
+    spread = hi .- lo
+    page = ((lo .>= 228) .& (spread .<= 25)) .|
+        ((R .>= 238) .& (G .>= 200) .& (B .>= 200) .& (R .- G .>= 15))
+    neutral = (lo .>= 170) .& (spread .<= 12)
+    light = (hi .>= 190) .& (spread .< 60)
+    crimson = (R .- max.(G, B)) .>= 25
+    darkpx = (R .< 150) .& (G .< 150) .& (B .< 150)
+    saturated = spread .>= 30
+    return page, neutral, light, crimson, darkpx, saturated
+end
+
+# Per-column run of non-page pixels up from the baseline. Gridlines lie on
+# the tick rows and tick columns, so a neutral pixel there is page. Up to
+# `gap` page pixels are bridged when a non-page pixel follows (JPEG ringing
+# between the stacked segments), which still stops under the dashed
+# vertical line's 7 px gaps. The run's top is the highest pixel darker than
+# `light`: the bar's outline, never a stray anti-alias or noise pixel
+# above it, and chroma-washed fill inside the run is crossed on the way up.
+# Returns the run height (to the outline), the run's full non-page extent,
+# the crimson, dark and saturated counts and the number of page gaps
+# bridged per column (one at the segment junction; many up a dashed line).
+function column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, gridrows,
+        gridcols; gap = 3
+    )
+    H, W = size(page)
+    grid = falses(H, W)
+    for r in gridrows, d in -1:1
+        1 <= r + d <= H && (grid[r + d, :] .= true)
+    end
+    for c in gridcols, d in -1:1
+        1 <= c + d <= W && (grid[:, c + d] .= true)
+    end
+    h = zeros(Int, W)
+    hp = zeros(Int, W)
+    nr = zeros(Int, W)
+    nd = zeros(Int, W)
+    ns = zeros(Int, W)
+    nb = zeros(Int, W)
+    for x in 1:W
+        r = y0 - 1
+        miss = 0
+        top = y0
+        last = y0
+        rr = dd = ss = bb = 0
+        cr = cd = cs = cb = 0
+        while r >= 1
+            if !page[r, x] && !(grid[r, x] && neutral[r, x])
+                miss >= 2 && (bb += 1)
+                miss = 0
+                last = r
+                crimson[r, x] && (rr += 1)
+                darkpx[r, x] && (dd += 1)
+                saturated[r, x] && (ss += 1)
+                if !light[r, x]
+                    top = r
+                    cr, cd, cs, cb = rr, dd, ss, bb
+                end
+            else
+                miss += 1
+                miss > gap && break
+            end
+            r -= 1
+        end
+        h[x] = y0 - top
+        hp[x] = y0 - last
+        nr[x] = cr
+        nd[x] = cd
+        ns[x] = cs
+        nb[x] = cb
+    end
+    return h, hp, nr, nd, ns, nb
+end
+
+# The regular weekly chain ending on the rightmost tick, as (week index, x)
+# pairs. Walking left, a spacing of one or two weeks within 8% (at least
+# 2.5 px) of the median spacing continues the chain; anything else ends it,
+# which drops the y-axis line and label strokes that cluster as ticks at
+# the left, and a stray cluster right of the last tick leaves a chain of
+# one.
+function tick_chain(xt)
+    s = median(diff(xt))
+    ks = [0]
+    xs = [xt[end]]
+    for j in (length(xt) - 1):-1:1
+        d = xt[j + 1] - xt[j]
+        k = round(Int, d / s)
+        (1 <= k <= 2 && abs(d - k * s) <= max(2.5, 0.08 * s)) || break
+        pushfirst!(ks, ks[1] - k)
+        pushfirst!(xs, xt[j])
+    end
+    return ks, xs
+end
+
+# The value of `h` over `cols` that most columns agree with to within a
+# pixel, and how many do; ties go to the value nearest `cx` by column.
+function modal_height(h, cols, cx)
+    best = 0
+    bestkey = (-1, -Inf)
+    for u in unique(h[cols])
+        c = count(x -> abs(h[x] - u) <= 1, cols)
+        d = minimum(abs(x - cx) for x in cols if h[x] == u)
+        key = (c, -d)
+        if key > bestkey
+            best = u
+            bestkey = key
+        end
+    end
+    return best, bestkey[1]
+end
+
 function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
-    blue, red, dark = m.blue, m.red, m.dark
+    dark = m.dark
     base = baseline_row(R, G, B, H)       # count-0 baseline row
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
+    line = (R .< 180) .& (G .< 180) .& (B .< 180)
     yt = try
         y_axis_ticks(dark, base, H, W)
     catch e
@@ -387,94 +532,121 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         # and the axis line into the 120-180 near-gray range, below every
         # earlier vintage's border but still far darker than surrounding
         # text, so the strict <120 mask finds three of the four ticks but
-        # not the one sitting on the baseline itself. Same class of fix as
-        # the baseline/weekly-tick <180 fallback below, scoped the same
-        # way: only tried when the strict mask finds nothing, so every
-        # already-committed vintage (059-111) keeps digitising unchanged.
-        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        # not the one sitting on the baseline itself. Only tried when the
+        # strict mask finds nothing.
         y_axis_ticks(line, base, H, W)
     end
     ppc = median(diff(yt)) / float(y_step) # pixels per count
-    ytop, y0 = yt[1], yt[end]
-    # x scale from the weekly tick marks below the baseline. The tick marks
-    # are only a few pixels tall and shrink with the embedded figure
-    # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
-    # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
-    # cut down until a full weekly row of ticks resolves instead of fixing
-    # it at 4 and losing the axis entirely on the smaller figures. They sit
-    # just below the baseline (2-6 rows) and, on the faint JPEG-compressed
-    # figures (SitRep 081), can be only 1px tall, so cut must come all the
-    # way down to 1 to resolve them; the window stops at base+6 so a wide
-    # low-cut scan cannot pick up the x-axis date labels further down. Step
-    # down through the cuts and keep the most complete regular weekly tick
-    # row (the true axis has a fixed number of weekly ticks, so a too-strict
-    # cut silently drops every other tick rather than failing).
-    function weekly_ticks(mask)
+    y0 = yt[end]
+    # x scale from the weekly tick marks 2-6 rows below the baseline. The
+    # marks shrink with the render (down to 1 px tall on the JPEG figures)
+    # and the strict mask loses some of them on the small renders, so both
+    # masks are tried at every cut and the tick row whose regular weekly
+    # chain from the rightmost tick is longest wins. A mask that adds a
+    # stray cluster right of the last tick starts its chain at length one.
+    best_n = 0
+    xt = Int[]
+    for mask in (dark, line)
         band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
-        best_n = 0
-        found = Int[]
         for cut in (4, 3, 2, 1)
             cand = cluster([x for x in 1:W if band[x] >= cut])
             length(cand) >= 8 || continue
-            if length(cand) > best_n
-                best_n = length(cand)
-                found = cand
+            n = length(tick_chain(cand)[1])
+            if n > best_n
+                best_n = n
+                xt = cand
             end
         end
-        return found
     end
-    best = weekly_ticks(dark)
-    if isempty(best)
-        # Only fall back to the <180 near-gray mask when the strict mask
-        # finds nothing, so every already-committed vintage (059-107) keeps
-        # digitising under the original threshold.
-        line = (R .< 180) .& (G .< 180) .& (B .< 180)
-        best = weekly_ticks(line)
-    end
-    isempty(best) && error("no x-axis weekly tick row found")
-    xt = best
-    ppd = median(diff(xt)) / 7.0          # pixels per day
-    lastx = xt[end]                       # rightmost tick is always real
-    # per-column stacked bar height, flooded up from the baseline
-    bc = zeros(Int, W)
-    rc = zeros(Int, W)
-    for x in 1:W
-        r = y0 - 1
-        miss = b = rr = 0
-        while r > ytop - 2 && r >= 1
-            if blue[r, x]
-                b += 1
-                miss = 0
-            elseif red[r, x]
-                rr += 1
-                miss = 0
-            else
-                miss += 1
-                miss > 6 && break
-            end
-            r -= 1
-        end
-        bc[x] = b
-        rc[x] = rr
-    end
-    tot = bc .+ rc
-    nz = findall(>(2), tot)
+    isempty(xt) && error("no x-axis weekly tick row found")
+    ks, xs = tick_chain(xt)
+    n = length(xs)
+    n >= 2 || error("weekly tick chain too short")
+    w = 7.0 .* ks
+    ppd = (n * sum(w .* xs) - sum(w) * sum(xs)) /
+        (n * sum(w .^ 2) - sum(w)^2)   # pixels per day
+    page, neutral, light, crimson, darkpx, saturated = pixel_classes(R, G, B)
+    h, hp, nr, nd, ns, nb = column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt, xs
+    )
+    # outline columns are mostly dark over their run (a short bar's top
+    # and junction lines are a few dark pixels in every column, so the
+    # floor keeps its interior as interior), and a column with
+    # no saturated pixel is a gray line (the y-axis, the panel border and
+    # their anti-alias) rather than a bar, as is one that bridged three or
+    # more page gaps (the dashed first-positive-result line, whose gaps
+    # the small renders shrink inside the bridge); an outline drawn across
+    # two columns leaves a softer second column that still carries the
+    # neighbour's height, dropped when anything else is left
+    isborder = (h .> 4) .&
+        ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h) .| (nb .>= 3))
+    soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
+    nz = findall((h .> 2) .& .!isborder)
     barmin, barmax = minimum(nz), maximum(nz)
     rows = Tuple{Date, Int, Int}[]
-    for off in -105:3
-        cx = lastx + off * ppd
+    for off in (7 * ks[1] - 7):3
+        # anchor on the nearest chain tick at or before the day
+        j = findlast(k -> 7 * k <= off, ks)
+        j === nothing && (j = 1)
+        cx = xs[j] + (off - 7 * ks[j]) * ppd
         (cx < barmin - ppd || cx > barmax + ppd) && continue
-        lo = round(Int, cx - ppd * 0.45)
-        hi = round(Int, cx + ppd * 0.45)
-        cols = max(1, lo):min(W, hi)
-        bvals = Float64.(bc[cols])
-        rvals = Float64.(rc[cols])
-        maximum(bvals .+ rvals) < 1 && continue
-        alive = round(Int, quantile(bvals, 0.75) / ppc)
-        dead = round(Int, quantile(rvals, 0.75) / ppc)
-        push!(rows, (last_tick + Day(off), alive, dead))
+        lo = max(1, ceil(Int, cx - ppd / 2 + 0.5))
+        hi = min(W, floor(Int, cx + ppd / 2 - 0.5))
+        # the bar is the interval between two consecutive outline columns
+        # about a day apart whose midpoint is nearest cx; when the day grid
+        # lands on an outline that picks the right side of it. With no such
+        # pair (an outline the render lost) the window is clipped to the
+        # nearest outline on each side instead.
+        c = round(Int, cx)
+        reach = ceil(Int, ppd)
+        near = [x for x in max(1, c - reach):min(W, c + reach) if isborder[x]]
+        best = nothing
+        for i in 1:(length(near) - 1)
+            a, b = near[i], near[i + 1]
+            abs(b - a - ppd) <= 1.5 || continue
+            d = abs((a + b) / 2 - cx)
+            (best === nothing || d < best[1]) && (best = (d, a, b))
+        end
+        if best !== nothing && best[1] <= ppd / 2
+            lo, hi = best[2] + 1, best[3] - 1
+        else
+            bl = findlast(x -> isborder[x], max(1, c - reach):(c - 1))
+            bl === nothing || (lo = max(lo, max(1, c - reach) + bl))
+            br = findfirst(x -> isborder[x], (c + 1):min(W, c + reach))
+            br === nothing || (hi = min(hi, c + br - 1))
+        end
+        cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
+        isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
+        isempty(cols) && continue
+        # a day is empty when half or more of its columns are page from
+        # the baseline up (the baseline's own anti-alias apart); a column
+        # that is fill all the way but never shows an outline pixel
+        # (chroma-washed) abstains rather than reading 0
+        gaps = count(x -> h[x] == 0 && hp[x] <= 2 * ppc, cols)
+        2 * gaps >= length(cols) && continue
+        resolved = [x for x in cols if h[x] > 0]
+        if isempty(resolved)
+            # no outline pixel in any column: read the fill's extent where
+            # two columns agree on it, else it is a halo, not a bar
+            hb, support = modal_height(hp, cols, cx)
+            support >= 2 || continue
+            jb = cols[findfirst(x -> hp[x] == hb, cols)]
+        else
+            hb, support = modal_height(h, resolved, cx)
+            support >= 2 || (hb = maximum(h[resolved]))
+            jb = resolved[findfirst(x -> h[x] == hb, resolved)]
+        end
+        hb < 1 && continue
+        total = round(Int, max(0.0, hb - 0.5) / ppc)
+        dead = min(total, round(Int, max(0.0, nr[jb] - 0.5) / ppc))
+        push!(rows, (last_tick + Day(off), total - dead, dead))
     end
-    # drop trailing zero rows and isolated tiny strays past the curve tail
+    # drop leading and trailing zero rows (a stray anti-alias column near
+    # the y-axis or the band edge reads as a bar of height 0) and isolated
+    # tiny strays past the curve tail
+    while !isempty(rows) && rows[1][2] + rows[1][3] == 0
+        popfirst!(rows)
+    end
     while !isempty(rows) && rows[end][2] + rows[end][3] == 0
         pop!(rows)
     end

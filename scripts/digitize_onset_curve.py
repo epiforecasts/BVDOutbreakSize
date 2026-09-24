@@ -7,50 +7,49 @@
 # Digitise the "courbe epidemique par date de debut des symptomes (liste
 # lineaire DHIS2)" figure that the INSP analytique-format SitReps carry from
 # SitRep 059 onward. That figure is the only published source for confirmed
-# cases by symptom-onset date; it is a raster bar chart with no accompanying
-# data table, so the daily counts have to be recovered from the pixels.
+# cases by symptom-onset date; it is a raster bar chart with no data table,
+# so the daily counts are recovered from the figure pixels.
 #
-# Successive vintages redraw the same onset cohort at later report dates, so
-# the set of digitised curves forms a reporting triangle: recent onset dates
-# fill in (backfill) as more confirmations arrive. That is the signal used to
-# estimate a rough onset-to-report delay (see data/README.md).
+# This is the Python port of scripts/digitize_onset_curve.jl, for the
+# automated data-updater, which has Python (not Julia) access. The Julia
+# script is the reference and data/onset_curve_scanned.csv is its output;
+# this port must reproduce that file byte for byte, and
+# test/test_onset_digitiser.jl checks that it does whenever the PDFs are
+# present. Every function below is the reference's function of the same
+# name, with the same pixel classes, thresholds, tie-breaks and rounding.
+# The reference indexes pixels from 1, so the bar-window arithmetic is done
+# in that frame and converted to 0-based only at the point of indexing:
+# round-half-to-even is not translation-invariant, and a window edge on
+# exactly .5 would otherwise land one column off.
 #
 # Method (per figure, all self-calibrated from the image):
 #   * baseline (count 0) = the widest dark horizontal row in the lower panel;
-#   * count scale = the y-axis tick marks (0/20/40/60), evenly spaced, giving
-#     pixels-per-count = tick-spacing / 20;
-#   * date scale = the weekly x-axis tick marks; anchored on the rightmost
-#     tick (whose date is given per vintage in CONFIG, read off the axis)
-#     stepping back 7 days per tick;
-#   * each daily bar height = the 75th-percentile column in a one-day window,
-#     flooded up from the baseline counting light-blue (Vivant) and crimson
-#     (Decede) pixels, bridging the few-pixel anti-alias gap between the two
-#     stacked segments but stopping at the wide white gap up to the floating
-#     "premier resultat positif" label / dashed line above the bar.
-#
-# Accuracy: the error is a few percent in either direction, per scan, and
-# it is independent between vintages. Against the printed n it ranges from
-# -3.0% (SitRep 069/070/071: 2260 vs n=2 329) to +1.6% (SitRep 068: 2344 vs
-# n=2 308), with SitRep 064 at -2.2% (2018 vs n=2 064) and 072 at +0.4%
-# (2531 vs n=2 521). Individual daily bars carry roughly +/-1-2 cases of
-# pixel noise. Part of the shortfall sits in the faded bars of the `donnees
-# potentiellement incompletes` band, whose lightened fill falls outside the
-# colour masks, but that mechanism is one-sided and does not explain the
-# overshoots, so treat the sign as unknown.
-#
-# The consequence that matters: the scans do not preserve a property the
-# underlying data has. Late reporting only ever adds cases, so an onset
-# date's count must be non-decreasing across vintages, yet on onset dates
-# more than three weeks before the earliest report date in the file (12
-# July, so onsets before 21 June) the scanned totals move both ways between
-# consecutive snapshots - 064 -> 065 falls by a net 36 cases across 34 of 54
-# such days, and every other consecutive pair falls somewhere too. So a
-# between-vintage increment of a few cases is at or
-# below the noise floor, and anything built on those increments (a
-# reporting-delay estimate, say) has to account for it.
-#
-# The values are approximate and are not fitted by the model; they are
-# captured for later use. See #488.
+#   * count scale = the y-axis tick marks (0/20/40/60 or 0/25/50/75), evenly
+#     spaced, giving pixels-per-count = tick-spacing / y_step;
+#   * date scale = the weekly x-axis tick marks. Candidate tick rows come
+#     from a strict and a near-gray mask at several cuts, and the one whose
+#     regular chain from the rightmost tick is longest wins. Pixels per day
+#     is the least-squares slope over that chain and each day is anchored on
+#     the nearest chain tick at or before it. The rightmost tick's date is
+#     in CONFIG, read off the axis;
+#   * each daily bar = the bar's own pixel columns: the interval between
+#     the two consecutive outline columns about a day apart whose midpoint
+#     is nearest the day's grid position, else the window
+#     [cx - ppd/2, cx + ppd/2] clipped to the nearest outline column on each
+#     side. Outline columns are those mostly dark over their run, those
+#     with no saturated pixel (gray lines) and those that bridged three or
+#     more page gaps (the dashed line). Every column is read as the run of
+#     non-page pixels up from the baseline, bridging up to three page
+#     pixels when bar colour resumes and skipping neutral pixels on the
+#     tick rows and tick columns (gridlines). The run's top is its highest
+#     pixel darker than an anti-alias, which is the bar's outline. A day
+#     whose columns are mostly page from the baseline up is empty. The bar
+#     height is the height at least two of its interior columns agree on to
+#     within a pixel, or the tallest interior column when none do; with no
+#     outline pixel in any column the fill's own extent is read where two
+#     columns agree on it. Half a pixel of outline is subtracted before
+#     dividing by pixels-per-count. The dead segment is the count of
+#     crimson pixels in the chosen column.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -63,17 +62,13 @@
 # poppler must be on PATH either way (apt install poppler-utils /
 # brew install poppler). See scripts/README.md.
 #
-# Incremental by default. Digitising a vintage means extracting the figure
-# and walking it pixel by pixel, and a data update adds one or two vintages
-# to a file that already holds every earlier one. So a run reuses the rows
-# out_csv already carries and opens the PDF only for the CONFIG vintages
-# missing from it. The rows are written back in the same order either way,
-# so an incremental run and a full one produce the same file.
-#
-# A change to the digitiser itself does not invalidate those reused rows, so
-# re-run with --rebuild after touching the digitising code, which re-reads
-# every vintage. Each run prints how many vintages it reused and how many it
-# read, so a run that should have re-read everything and did not is visible.
+# Incremental by default. A run reuses the rows out_csv already carries and
+# opens the PDF only for the CONFIG vintages missing from it. The rows are
+# written back in CONFIG order either way, so an incremental run and a full
+# one produce the same file. A change to the digitiser itself does not
+# invalidate those reused rows, so re-run with --rebuild after touching the
+# digitising code, which re-reads every vintage. Each run prints how many
+# vintages it reused and how many it read.
 #
 # Usage:
 #   python3 scripts/digitize_onset_curve.py [pdf_dir] [out_csv] [--rebuild]
@@ -82,6 +77,7 @@
 
 import csv
 import datetime as dt
+import math
 import os
 import subprocess
 import sys
@@ -181,16 +177,12 @@ CONFIG = {
     "130": ("2026-09-21", "2026-09-21"),
 }
 
-# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
-# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
-# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
-# the printed tick labels directly - the pixel geometry is otherwise
-# indistinguishable, so this cannot be self-calibrated any more than
-# `last_tick` can). Applying the old /20 divisor to a 25-count grid
-# undercounts every bar by a scale-dependent amount and was caught only
-# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
-# read 26; the same date misread through the old divisor came out as 8).
-# Override per vintage here; anything absent keeps the historical 20.
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
+# From SitRep 087 the brief-format figure switched to a 0/25/50/75 grid
+# (confirmed by reading the printed tick labels directly - the pixel
+# geometry is otherwise indistinguishable, so this cannot be
+# self-calibrated any more than `last_tick` can). Override per vintage
+# here; anything absent keeps the historical 20.
 Y_AXIS_STEP = {
     "087": 25,
     "088": 25,
@@ -251,24 +243,12 @@ def _is_onset_curve(im):
     # (the age/sex pyramids use orange; the notification-week chart uses a
     # darker steel blue and prints value labels). The tests are pixel
     # fractions, not counts, because INSP re-renders the figure at whatever
-    # size the layout needs and an absolute threshold silently flips as the
-    # size moves: the blue floor already had to be lowered once when the
-    # figure shrank to 1009x583, and SitRep 072's larger 1277x799
-    # rendering then pushed the crimson/pink-band anti-aliasing to 631
-    # orange pixels, past a 500 cut.
-    #
-    # Measured over SitReps 059-080, on the caption page and its immediate
-    # neighbours (the page-fallback in extract_onset_image widens the search
-    # there, which brings the provincial case map into the candidate pool -
-    # it is blue-heavy too, from the lake/river fill and legend swatches):
+    # size the layout needs. Measured over SitReps 059-080, on the caption
+    # page and its immediate neighbours (which brings the provincial case
+    # map into the candidate pool):
     #   blue fraction    onset 0.066-0.125   province map 0.045-0.047
     #   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
-    #   red fraction     onset >= 0.046      (a floor, not a discriminator:
-    #                                        the notification-week chart is
-    #                                        also crimson-heavy)
-    # The map's blue fraction sits clear below every onset chart seen so far,
-    # so 0.055 (roughly the midpoint of the two clusters) discriminates with
-    # margin on both sides without needing a caption-text match.
+    #   red fraction     onset >= 0.046      (a floor, not a discriminator)
     blue, red, orange, _ = _masks(im)
     npx = im.shape[0] * im.shape[1]
     return (blue.sum() / npx > 0.055 and orange.sum() / npx < 0.01
@@ -293,14 +273,17 @@ def _onset_page(pdf):
 
 
 def _best_onset_image(pdf, page, workdir):
+    # pdfimages writes PPM (P6) for RGB images by default, which is what the
+    # reference parses; Pillow reads the same file, so both see the same
+    # bytes.
     subprocess.run(
-        ["pdfimages", "-png", "-f", str(page), "-l", str(page), pdf,
+        ["pdfimages", "-f", str(page), "-l", str(page), pdf,
          os.path.join(workdir, "p")],
         check=True, capture_output=True,
     )
     best = None
     for name in sorted(os.listdir(workdir)):
-        if not name.endswith(".png"):
+        if not name.endswith(".ppm"):
             continue
         im = np.asarray(Image.open(os.path.join(workdir, name)).convert("RGB"))
         im = im.astype(int)
@@ -342,30 +325,30 @@ def _longest_run(colmask):
 
 
 def _cluster(idx, gap=3):
+    # Cluster nearly-adjacent indices, returning the floored mean of each
+    # cluster. The floor commutes with the 1-based shift of the reference.
     out, cl = [], []
     for i in idx:
         if cl and i - cl[-1] <= gap:
             cl.append(i)
         else:
             if cl:
-                out.append(int(np.mean(cl)))
+                out.append(sum(cl) // len(cl))
             cl = [i]
     if cl:
-        out.append(int(np.mean(cl)))
+        out.append(sum(cl) // len(cl))
     return out
 
 
 def _baseline_row(im, H):
     # The count-0 baseline is the plot's bottom border: a solid line running
     # almost the full chart width. Score rows by their longest contiguous run
-    # under a near-gray threshold (<180); a run-length ranking under that
-    # threshold correctly finds the border in every vintage, including
-    # tighter-anti-aliased renders, unlike a per-row pixel sum.
+    # under a near-gray threshold (<180), searched over the lower 60% of the
+    # image; the first row with the longest run wins.
     R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
     line = (R < 180) & (G < 180) & (B < 180)
-    line[: int(H * 0.4)] = False
-    best_row, best_run = 0, 0
-    for r in range(H):
+    best_row, best_run = int(H * 0.4), 0
+    for r in range(int(H * 0.4), H):
         run = _longest_run(line[r])
         if run > best_run:
             best_run, best_row = run, r
@@ -379,13 +362,11 @@ def _y_axis_ticks(dark, base, W):
     # of the vertical axis line. Candidate strips are scored by the longest
     # dark vertical run (the axis line itself), but only among strips whose
     # rows form a plausible axis: at least three clusters, evenly spaced,
-    # with the last one (the 0 tick) on the baseline. Taking the longest run
-    # alone is not enough - in SitRep 067 a glyph stroke outruns the real
-    # axis line and yields a scale that halves every count.
-    # Slice bounds are the 0-based images of the reference's 1-based ranges:
-    # candidate columns 30..floor(W*0.13), the label strip being the ten
-    # columns immediately left of the candidate, and rows running down to
-    # three past the baseline.
+    # with the last one (the 0 tick) on the baseline. Slice bounds are the
+    # 0-based images of the reference's 1-based ranges: candidate columns
+    # 30..floor(W*0.13), the label strip being the ten columns immediately
+    # left of the candidate, and rows running down to three past the
+    # baseline.
     best = None
     for x in range(29, int(W * 0.13)):
         seg = dark[: base + 4, max(0, x - 10):x].sum(axis=1)
@@ -403,120 +384,297 @@ def _y_axis_ticks(dark, base, W):
     return best[1]
 
 
-def digitize(im, last_tick_date, y_step=20):
+def _pixel_classes(im):
+    # Page is white (with JPEG chroma noise) and the pink `donnees
+    # potentiellement incompletes` band. Neutral is gridline gray. Light is
+    # the pale, low-saturation pixel a bar's top edge leaves above its
+    # outline; saturated fill and the outline are not light. Dark is the
+    # outline.
+    R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    lo = np.minimum(R, np.minimum(G, B))
+    hi = np.maximum(R, np.maximum(G, B))
+    spread = hi - lo
+    page = (((lo >= 228) & (spread <= 25))
+            | ((R >= 238) & (G >= 200) & (B >= 200) & (R - G >= 15)))
+    neutral = (lo >= 170) & (spread <= 12)
+    light = (hi >= 190) & (spread < 60)
+    crimson = (R - np.maximum(G, B)) >= 25
+    darkpx = (R < 150) & (G < 150) & (B < 150)
+    saturated = spread >= 30
+    return page, neutral, light, crimson, darkpx, saturated
+
+
+def _column_runs(page, neutral, light, crimson, darkpx, saturated, y0,
+                 gridrows, gridcols, gap=3):
+    # Per-column run of non-page pixels up from the baseline. Gridlines lie
+    # on the tick rows and tick columns, so a neutral pixel there is page.
+    # Up to `gap` page pixels are bridged when a non-page pixel follows. The
+    # run's top is the highest pixel darker than `light`. Returns the run
+    # height (to the outline), the run's full non-page extent, the crimson,
+    # dark and saturated counts and the number of page gaps of two or more
+    # pixels bridged per column, each counted over the non-page pixels from
+    # the baseline up to that top.
+    #
+    # The reference walks each column with a miss counter; here every
+    # column is walked at once. Upward index i is image row y0 - 1 - i.
+    H, W = page.shape
+    grid = np.zeros((H, W), dtype=bool)
+    for r in gridrows:
+        grid[max(0, r - 1):r + 2, :] = True
+    for c in gridcols:
+        grid[:, max(0, c - 1):c + 2] = True
+    ok = ~page & ~(grid & neutral)
+    up = ok[:y0][::-1]
+    n = up.shape[0]
+    idx = np.arange(n)[:, None]
+    # consecutive misses ending at each upward index; the walk stops at the
+    # first index whose miss run exceeds `gap`, and reads nothing above it
+    last_ok = np.maximum.accumulate(np.where(up, idx, -1), axis=0)
+    brk = (idx - last_ok) > gap
+    stop = np.where(brk.any(axis=0), brk.argmax(axis=0), n)
+    seen = up & (idx < stop)
+    cand = seen & ~light[:y0][::-1]
+    top = np.where(cand.any(axis=0), n - 1 - cand[::-1].argmax(axis=0), -1)
+    counted = seen & (idx <= top)
+    h = top + 1
+    last = np.where(seen.any(axis=0), n - 1 - seen[::-1].argmax(axis=0), -1)
+    hp = last + 1
+    # misses immediately below each pixel: its index less the previous
+    # non-page index less one
+    prev_ok = np.vstack([np.full((1, W), -1), last_ok[:-1]])
+    bridged = counted & ((idx - prev_ok - 1) >= 2)
+    nr = (counted & crimson[:y0][::-1]).sum(axis=0)
+    nd = (counted & darkpx[:y0][::-1]).sum(axis=0)
+    ns = (counted & saturated[:y0][::-1]).sum(axis=0)
+    nb = bridged.sum(axis=0)
+    return h, hp, nr, nd, ns, nb
+
+
+def _tick_chain(xt):
+    # The regular weekly chain ending on the rightmost tick, as (week index,
+    # x) pairs. Walking left, a spacing of one or two weeks within 8% (at
+    # least 2.5 px) of the median spacing continues the chain; anything else
+    # ends it.
+    s = float(np.median(np.diff(xt)))
+    ks = [0]
+    xs = [xt[-1]]
+    for j in range(len(xt) - 2, -1, -1):
+        d = xt[j + 1] - xt[j]
+        k = round(d / s)
+        if not (1 <= k <= 2 and abs(d - k * s) <= max(2.5, 0.08 * s)):
+            break
+        ks.insert(0, ks[0] - k)
+        xs.insert(0, xt[j])
+    return ks, xs
+
+
+def _modal_height(h, cols, cx):
+    # The value of `h` over `cols` that most columns agree with to within
+    # a pixel, and how many do; ties go to the value nearest `cx` by
+    # column, then to the value seen first. `h` and `cols` share one index
+    # frame.
+    best = 0
+    bestkey = (-1, -math.inf)
+    for u in dict.fromkeys(h[x] for x in cols):
+        c = sum(1 for x in cols if abs(h[x] - u) <= 1)
+        d = min(abs(x - cx) for x in cols if h[x] == u)
+        key = (c, -d)
+        if key > bestkey:
+            best = u
+            bestkey = key
+    return best, bestkey[0]
+
+
+def calibrate(im, y_step=20):
+    """Axis calibration of one figure: the count-0 baseline row `base`, the
+    y-axis tick rows `yt`, pixels per count `ppc`, the weekly tick chain
+    `ks` (week index) and `xs` (1-based column), and pixels per day `ppd`.
+    All rows and columns are 0-based except `xs`."""
     H, W, _ = im.shape
-    blue, red, _, dark = _masks(im)
+    _, _, _, dark = _masks(im)
     base = _baseline_row(im, H)  # count-0 baseline row
+    R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    line = (R < 180) & (G < 180) & (B < 180)
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     try:
         yt = _y_axis_ticks(dark, base, W)
     except ValueError:
         # SitRep 112's smaller render (771x433) anti-aliases the tick marks
-        # and the axis line into the 120-180 near-gray range, below every
-        # earlier vintage's border but still far darker than surrounding
-        # text, so the strict <120 mask finds three of the four ticks but
-        # not the one sitting on the baseline itself. Same class of fix as
-        # the baseline/weekly-tick <180 fallback above, scoped the same
-        # way: only tried when the strict mask finds nothing, so every
-        # already-committed vintage (059-111) keeps digitising unchanged.
-        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
-        line = (R < 180) & (G < 180) & (B < 180)
+        # and the axis line into the 120-180 near-gray range, so the strict
+        # <120 mask finds three of the four ticks but not the one sitting on
+        # the baseline itself. Only tried when the strict mask finds nothing.
         yt = _y_axis_ticks(line, base, W)
-    ppc = np.median(np.diff(yt)) / float(y_step)
-    ytop, y0 = yt[0], yt[-1]
-    # x scale from the weekly tick marks below the baseline. The tick marks
-    # are only a few pixels tall and shrink with the embedded figure
-    # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
-    # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
-    # cut down until a full weekly row of ticks resolves instead of fixing
-    # it at 4 and losing the axis entirely on the smaller figures.
-    # They sit just below the baseline (a few px) and, on the faint
-    # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
-    # come all the way down to 1 to resolve them; the window stops at base+7
-    # so a wide low-cut scan cannot pick up the x-axis date labels further
-    # down. Step down through the cuts and keep the most complete weekly tick
-    # row (the true axis has a fixed number of weekly ticks, so a too-strict
-    # cut silently drops every other tick rather than failing).
-    def _weekly_ticks(mask):
+    ppc = float(np.median(np.diff(yt))) / float(y_step)
+    # x scale from the weekly tick marks 2-6 rows below the baseline. Both
+    # masks are tried at every cut and the tick row whose regular weekly
+    # chain from the rightmost tick is longest wins.
+    best_n = 0
+    xt = []
+    for mask in (dark, line):
         band = mask[base + 2:base + 7, :].sum(axis=0)
-        best_n, best = 0, np.array([])
         for cut in (4, 3, 2, 1):
-            cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
-            if len(cand) >= 8 and len(cand) > best_n:
-                best_n = len(cand)
-                best = cand
-        return best
-
-    best = _weekly_ticks(dark)
-    if len(best) == 0:
-        # Only fall back to the <180 near-gray mask when the strict mask
-        # finds nothing, so every already-committed vintage (059-107) keeps
-        # digitising under the original threshold.
-        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
-        line = (R < 180) & (G < 180) & (B < 180)
-        best = _weekly_ticks(line)
-    if len(best) == 0:
+            cand = _cluster([x for x in range(W) if band[x] >= cut])
+            if len(cand) < 8:
+                continue
+            n = len(_tick_chain(cand)[0])
+            if n > best_n:
+                best_n = n
+                xt = cand
+    if not xt:
         raise ValueError("no x-axis weekly tick row found")
-    xt = best
-    ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
-    # The daily bar windows are laid out in the 1-based pixel frame the
-    # Julia reference uses, and converted back to 0-based only at the point
-    # of indexing. Both languages round half to even, but that rule is not
-    # translation-invariant: a window edge landing exactly on .5 rounds down
-    # in one frame and up in the other, so a 0-based layout reads windows
-    # one column apart from the reference. A dropped column changes which
-    # bar the 75th percentile lands on, so the error is a whole segment, not
-    # a count or two.
-    lastx = xt[-1] + 1                   # rightmost tick is always real
+    ks, xs0 = _tick_chain(xt)
+    n = len(xs0)
+    if n < 2:
+        raise ValueError("weekly tick chain too short")
+    # pixels per day by least squares over the chain; every term is an
+    # integer-valued float, so the sums are exact in any order
+    xs = [x + 1 for x in xs0]  # 1-based, the frame the bar windows use
+    w = [7.0 * k for k in ks]
+    swx = sum(a * b for a, b in zip(w, xs))
+    sw = sum(w)
+    sx = sum(xs)
+    sww = sum(a * a for a in w)
+    ppd = (n * swx - sw * sx) / (n * sww - sw * sw)
+    return {"H": H, "W": W, "base": base, "yt": yt, "ppc": ppc,
+            "y0": yt[-1], "ks": ks, "xs": xs, "ppd": ppd}
+
+
+def day_column(cal, off):
+    """1-based x of the day `off` days from the rightmost tick, anchored on
+    the nearest chain tick at or before it."""
+    ks, xs = cal["ks"], cal["xs"]
+    js = [i for i, k in enumerate(ks) if 7 * k <= off]
+    j = js[-1] if js else 0
+    return xs[j] + (off - 7 * ks[j]) * cal["ppd"]
+
+
+def digitize(im, last_tick_date, y_step=20):
+    return digitize_windows(im, last_tick_date, y_step)[0]
+
+
+def digitize_windows(im, last_tick_date, y_step=20):
+    """The rows `digitize` returns and, for each row's date, the 1-based
+    column span `(lo, hi)` of the columns its height was read from, so the
+    check panels draw the span the reader used."""
+    cal = calibrate(im, y_step)
+    W, yt, ppc, y0 = cal["W"], cal["yt"], cal["ppc"], cal["y0"]
+    ks, xs, ppd = cal["ks"], cal["xs"], cal["ppd"]
     lastdate = dt.date.fromisoformat(last_tick_date)
-    # per-column stacked bar height, flooded up from the baseline
-    bc = np.zeros(W)
-    rc = np.zeros(W)
-    for x in range(W):
-        r, miss, b, rr = y0 - 1, 0, 0, 0
-        while r > ytop - 2 and r >= 0:
-            if blue[r, x]:
-                b += 1
-                miss = 0
-            elif red[r, x]:
-                rr += 1
-                miss = 0
-            else:
-                miss += 1
-                if miss > 6:
-                    break
-            r -= 1
-        bc[x], rc[x] = b, rr
-    tot = bc + rc
-    nz = np.where(tot > 2)[0] + 1        # 1-based, matching lastx
-    barmin, barmax = nz.min(), nz.max()
+    page, neutral, light, crimson, darkpx, saturated = _pixel_classes(im)
+    h0, hp0, nr0, nd0, ns0, nb0 = _column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt,
+        [x - 1 for x in xs]
+    )
+    # The bar windows are laid out in the reference's 1-based column frame,
+    # so pad each per-column array with a leading dummy and index it with
+    # the 1-based column directly.
+    pad = np.zeros(1, dtype=h0.dtype)
+    h = np.concatenate([pad, h0])
+    hp = np.concatenate([pad, hp0])
+    nr = np.concatenate([pad, nr0])
+    nd = np.concatenate([pad, nd0])
+    ns = np.concatenate([pad, ns0])
+    nb = np.concatenate([pad, nb0])
+    # outline columns are mostly dark over their run (a short bar's top
+    # and junction lines are a few dark pixels in every column, so the
+    # floor keeps its interior as interior), and a column with no
+    # saturated pixel is a gray line (the y-axis, the panel border and
+    # their anti-alias) rather than a bar, as is one that bridged three or
+    # more page gaps (the dashed first-positive-result line, whose gaps
+    # the small renders shrink inside the bridge); an outline drawn across
+    # two columns leaves a softer second column that still carries the
+    # neighbour's height, dropped when anything else is left
+    isborder = (h > 4) & ((nd >= np.maximum(0.25 * h, 6)) | (ns < 0.1 * h)
+                          | (nb >= 3))
+    soft = (h > 4) & (nd >= np.maximum(0.1 * h, 5))
+    nz = np.flatnonzero((h > 2) & ~isborder)
+    barmin, barmax = int(nz.min()), int(nz.max())
     rows = []
-    for off in range(-105, 4):
-        cx = lastx + off * ppd
+    windows = {}
+    for off in range(7 * ks[0] - 7, 4):
+        # anchor on the nearest chain tick at or before the day
+        cx = day_column(cal, off)
         if cx < barmin - ppd or cx > barmax + ppd:
             continue
-        lo, hi = int(round(cx - ppd * 0.45)), int(round(cx + ppd * 0.45))
-        cols = range(max(1, lo) - 1, min(W, hi))
-        bvals = [bc[c] for c in cols]
-        rvals = [rc[c] for c in cols]
-        if max(b + r for b, r in zip(bvals, rvals)) < 1:
+        lo = max(1, math.ceil(cx - ppd / 2 + 0.5))
+        hi = min(W, math.floor(cx + ppd / 2 - 0.5))
+        # the bar is the interval between two consecutive outline columns
+        # about a day apart whose midpoint is nearest cx; when the day grid
+        # lands on an outline that picks the right side of it. With no such
+        # pair (an outline the render lost) the window is clipped to the
+        # nearest outline on each side instead.
+        c = round(cx)
+        reach = math.ceil(ppd)
+        near = [x for x in range(max(1, c - reach), min(W, c + reach) + 1)
+                if isborder[x]]
+        best = None
+        for i in range(len(near) - 1):
+            a, b = near[i], near[i + 1]
+            if abs(b - a - ppd) > 1.5:
+                continue
+            d = abs((a + b) / 2 - cx)
+            if best is None or d < best[0]:
+                best = (d, a, b)
+        if best is not None and best[0] <= ppd / 2:
+            lo, hi = best[1] + 1, best[2] - 1
+        else:
+            left = [x for x in range(max(1, c - reach), c) if isborder[x]]
+            if left:
+                lo = max(lo, left[-1] + 1)
+            right = [x for x in range(c + 1, min(W, c + reach) + 1)
+                     if isborder[x]]
+            if right:
+                hi = min(hi, right[0] - 1)
+        cols = [x for x in range(lo, hi + 1)
+                if not soft[x] and not isborder[x]]
+        if not cols:
+            cols = [x for x in range(lo, hi + 1) if not isborder[x]]
+        if not cols:
             continue
-        alive = round(float(np.percentile(bvals, 75)) / ppc)
-        dead = round(float(np.percentile(rvals, 75)) / ppc)
+        # a day is empty when half or more of its columns are page from
+        # the baseline up (the baseline's own anti-alias apart); a column
+        # that is fill all the way but never shows an outline pixel
+        # (chroma-washed) abstains rather than reading 0
+        gaps = sum(1 for x in cols if h[x] == 0 and hp[x] <= 2 * ppc)
+        if 2 * gaps >= len(cols):
+            continue
+        resolved = [x for x in cols if h[x] > 0]
+        if not resolved:
+            # no outline pixel in any column: read the fill's extent where
+            # two columns agree on it, else it is a halo, not a bar
+            hb, support = _modal_height(hp, cols, cx)
+            if support < 2:
+                continue
+            jb = next(x for x in cols if hp[x] == hb)
+        else:
+            hb, support = _modal_height(h, resolved, cx)
+            if support < 2:
+                hb = max(int(h[x]) for x in resolved)
+            jb = next(x for x in resolved if h[x] == hb)
+        if hb < 1:
+            continue
+        total = round(max(0.0, hb - 0.5) / ppc)
+        dead = min(total, round(max(0.0, float(nr[jb]) - 0.5) / ppc))
         date = lastdate + dt.timedelta(days=off)
-        rows.append((date.isoformat(), alive, dead))
-    # drop trailing zero rows and isolated tiny strays past the curve tail
+        rows.append((date, total - dead, dead))
+        read_from = resolved or cols
+        windows[date] = (min(read_from), max(read_from))
+    # drop leading and trailing zero rows (a stray anti-alias column near
+    # the y-axis or the band edge reads as a bar of height 0) and isolated
+    # tiny strays past the curve tail
+    while rows and (rows[0][1] + rows[0][2]) == 0:
+        rows.pop(0)
     while rows and (rows[-1][1] + rows[-1][2]) == 0:
         rows.pop()
     while len(rows) >= 2:
-        gap = (dt.date.fromisoformat(rows[-1][0])
-               - dt.date.fromisoformat(rows[-2][0])).days
+        gap = (rows[-1][0] - rows[-2][0]).days
         if gap > 1 and (rows[-1][1] + rows[-1][2]) <= 2:
             rows.pop()
         else:
             break
-    return rows
+    kept = {r[0] for r in rows}
+    return rows, {d: w for d, w in windows.items() if d in kept}
 
 
 HEADER = ["sitrep", "report_date", "onset_date",
@@ -553,11 +711,10 @@ def main():
     reused = 0
     read_now = 0
     out_rows = []
-    for sr in sorted(CONFIG):
-        report_date, last_tick = CONFIG[sr]
+    for sr, (report_date, last_tick) in CONFIG.items():
         # Already digitised, so its rows are carried through untouched. They
-        # are written in the same sorted order as any other, so reusing them
-        # cannot reorder the file.
+        # are written in CONFIG order like any other, so reusing them cannot
+        # reorder the file.
         if sr in cached:
             out_rows.extend(cached[sr])
             reused += 1
@@ -581,19 +738,22 @@ def main():
         # drop those here rather than loosen the invariant
         # test/test_onset_digitiser.jl checks.
         cutoff = dt.date.fromisoformat(report_date) + dt.timedelta(days=1)
-        rows = [r for r in rows if dt.date.fromisoformat(r[0]) <= cutoff]
+        rows = [r for r in rows if r[0] <= cutoff]
         total = sum(a + d for _, a, d in rows)
         print(f"SitRep {sr} ({report_date}): {len(rows)} onset days, "
               f"total {total} confirmed")
         for onset, alive, dead in rows:
-            out_rows.append((sr, report_date, onset, alive, dead, alive + dead))
+            out_rows.append(
+                (sr, report_date, onset.isoformat(), alive, dead,
+                 alive + dead)
+            )
         read_now += 1
     with open(out_csv, "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")  # LF, matching the Julia ref
         w.writerow(HEADER)
         w.writerows(out_rows)
-    print(f"wrote {len(out_rows)} rows to {out_csv}: "
-          f"{read_now} vintages read, {reused} reused from the existing file")
+    print(f"wrote {out_csv}: {read_now} vintages read, "
+          f"{reused} reused from the existing file")
     if reused:
         print("re-run with --rebuild to re-read every vintage after "
               "changing the digitiser")
