@@ -195,6 +195,41 @@ end
     @test binned[:, 2] ≈ flat[:, 3]
 end
 
+@testitem "the per-head testing covariate is gone" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## The province laboratory volumes are scored by the lab composition, so
+    ## no covariate built from the same series sits on the ascertainment
+    ## prior, and the model has no coefficient for one.
+    @test !isdefined(BVDOutbreakSize, :province_testing_covariate)
+    obs = load_observations()
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    ks = Set(string(k) for k in keys(vi))
+    @test !any(k -> occursin("β_asc", k), ks)
+    @test !any(k -> occursin("testing_coefficient", k), ks)
+end
+
+@testitem "province case-fatality contrasts pool with a scale of 0.1" begin
+    using BVDOutbreakSize
+    using Turing: Prior, sample
+    using Random: Xoshiro
+    using Statistics: median
+
+    ## The scale prior is half-normal with sd 0.1, so a typical province sits
+    ## within about ten percent of the national case-fatality ratio; the
+    ## previous 0.3 let a tenth of the prior mass put provinces sixty percent
+    ## apart and left the scale free to collapse to zero mid-chain. A
+    ## half-normal with sd 0.1 has median 0.0674.
+    obs = load_observations()
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
+    chn = sample(Xoshiro(3), m, Prior(), 400; progress = false)
+    τ = vec(Array(chn[:province_cfr_sd]))
+    @test 0.05 < median(τ) < 0.09
+end
+
 @testitem "patch fit arguments: the lab series enters once, through the composition" begin
     using BVDOutbreakSize
     using BVDOutbreakSize: patch_fit_args
