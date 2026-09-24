@@ -649,7 +649,11 @@ def digitize(im, last_tick_date, y_step=20):
         total = round(max(0.0, hb - 0.5) / ppc)
         dead = min(total, round(max(0.0, float(nr[jb]) - 0.5) / ppc))
         rows.append((lastdate + dt.timedelta(days=off), total - dead, dead))
-    # drop trailing zero rows and isolated tiny strays past the curve tail
+    # drop leading and trailing zero rows (a stray anti-alias column near
+    # the y-axis or the band edge reads as a bar of height 0) and isolated
+    # tiny strays past the curve tail
+    while rows and (rows[0][1] + rows[0][2]) == 0:
+        rows.pop(0)
     while rows and (rows[-1][1] + rows[-1][2]) == 0:
         rows.pop()
     while len(rows) >= 2:
