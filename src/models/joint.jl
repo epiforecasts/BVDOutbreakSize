@@ -32,11 +32,6 @@
     )
 end
 
-## Days the suspected-case background starts before the first reported
-## case: the support of the default report-to-receipt kernel, so the
-## convolution into the analysed volume is fully formed by that report.
-const BACKGROUND_ONSET_LEAD = cdf_nmax(lognormal_meansd(4.5, 4.0))
-
 ## Cumulative confirmed-case trajectory on the observed scale, shared by the
 ## joint and the confirmed-only composer. The first confirmed vintage is the
 ## initial condition and is not scored, so the reconstruction counts only the
@@ -242,7 +237,9 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment = treatment_flow_model,
         cfr = cfr_model(),
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model()
+        ascertainment = pooled_ascertainment_model(),
+        ## Built once, with the model, and passed to `treatment`.
+        treatment_defaults = treatment_flow_defaults()
     )
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false
@@ -286,7 +283,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
             confirmed_incare_history = treatment_confirmed_incare_history,
             suspect_incare_history = treatment_suspect_incare_history,
             occupancy_break_days = occupancy_break_days,
-            conf_hazard_daily = conf_hazard_daily
+            conf_hazard_daily = conf_hazard_daily,
+            defaults = treatment_defaults
         )
     )
 end
@@ -804,7 +802,14 @@ reproduction number implied by the summed patch infections.
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 16.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
-        rt_walk_lead::Integer = RT_WALK_LEAD
+        rt_walk_lead::Integer = RT_WALK_LEAD,
+        ## Days the suspected-case background starts before the first
+        ## reported case: the support of the default report-to-receipt
+        ## kernel, so the convolution into the analysed volume is fully
+        ## formed by that report.
+        background_onset_lead::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0)),
+        ## Built once, with the model, and passed to `treatment`.
+        treatment_defaults = treatment_flow_defaults()
     )
 
     if n_patches == 1 &&
@@ -844,7 +849,7 @@ reproduction number implied by the summed patch infections.
     p_uganda = asc_state.p_uganda
 
     bg_onset = isempty(reported_history.days) ? 1 :
-        clamp(Int(reported_history.days[1]) - BACKGROUND_ONSET_LEAD, 1, n)
+        clamp(Int(reported_history.days[1]) - background_onset_lead, 1, n)
 
     ## `nothing` holds the non-BVD background at the constant rate the
     ## testing submodel samples. An injected pooling submodel gives it a
@@ -927,7 +932,8 @@ reproduction number implied by the summed patch infections.
             suspect_incare_history = treatment_suspect_incare_history,
             occupancy_break_days = occupancy_break_days,
             conf_hazard_daily = conf_hazard_daily,
-            k_external = k_isolation
+            k_external = k_isolation,
+            defaults = treatment_defaults
         )
     )
 

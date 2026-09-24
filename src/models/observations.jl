@@ -2176,48 +2176,58 @@ function admission_headroom(
     return head
 end
 
-## Default priors and delay submodels of [`treatment_flow_model`](@ref),
-## built once at load time rather than on every model evaluation.
-const TREATMENT_DEFAULTS = (;
-    admission = isolation_admission_model(),
-    severity = isolation_severity_model(),
-    dispersion = surveillance_dispersion_model(),
-    ## In-care fatality modifier prior: β_iso on the infection CFR.
-    cfr_modifier_prior = Normal(0.0, 0.5),
-    ## Small abscond / loss-to-follow-up fraction of occupancy per day.
-    abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
-    ## In-care confirmation-rate modifier prior (log scale): γ_conf scales
-    ## the borrowed community hazard to the effective in-care rate
-    ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the split.
-    incare_confirm_log_prior = Normal(0.0, 0.5),
-    ## Short suspected→admission delay (report → reaching a bed: triage,
-    ## transport, bed-wait), distinct from the report→lab receipt delay.
-    admission_delay = censored_delay_model(
-        cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
-        mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
-        sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
-    ),
-    ## Outcome-mixture BVD bed stay: admission→death (the admission→death
-    ## atomic delay the onset→death convolution also uses, mean ≈ 8.4 d) and
-    ## the longer admission→recovery stay (mean ≈ 14 d). Built to a common
-    ## nmax so the two PMFs align for the elementwise mixture.
-    death_los = gamma_delay_model(
-        cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-        alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-        theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
-    ),
-    recovery_los = censored_delay_model(
-        cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-        mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-        sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
-    ),
-    ## Non-BVD rule-out stay (report→receipt turnaround plus sign-off).
-    ruleout_los = censored_delay_model(
-        cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
-        mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-        sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
-    ),
-)
+"""
+Default priors and delay submodels of [`treatment_flow_model`](@ref), as
+one named tuple. A composer builds it once, when its model is constructed,
+and passes it as `treatment_flow_model`'s `defaults`, so it is not rebuilt
+on every evaluation.
+"""
+function treatment_flow_defaults()
+    return (;
+        admission = isolation_admission_model(),
+        severity = isolation_severity_model(),
+        dispersion = surveillance_dispersion_model(),
+        ## In-care fatality modifier prior: β_iso on the infection CFR.
+        cfr_modifier_prior = Normal(0.0, 0.5),
+        ## Small abscond / loss-to-follow-up fraction of occupancy per day.
+        abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
+        ## In-care confirmation-rate modifier prior (log scale): γ_conf
+        ## scales the borrowed community hazard to the effective in-care
+        ## rate ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets
+        ## the split.
+        incare_confirm_log_prior = Normal(0.0, 0.5),
+        ## Short suspected→admission delay (report → reaching a bed:
+        ## triage, transport, bed-wait), distinct from the report→lab
+        ## receipt delay.
+        admission_delay = censored_delay_model(
+            cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
+            mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
+            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
+        ),
+        ## Outcome-mixture BVD bed stay: admission→death (the
+        ## admission→death atomic delay the onset→death convolution also
+        ## uses, mean ≈ 8.4 d) and the longer admission→recovery stay (mean
+        ## ≈ 14 d). Built to a common nmax so the two PMFs align for the
+        ## elementwise mixture.
+        death_los = gamma_delay_model(
+            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
+            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+        ),
+        recovery_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
+            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+        ),
+        ## Non-BVD rule-out stay (report→receipt turnaround plus
+        ## sign-off).
+        ruleout_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
+            mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
+        ),
+    )
+end
 
 """
 DRC treatment-centre patient-flow likelihood. Occupancy is built as a running
@@ -2306,20 +2316,22 @@ series for forecasting and replication.
         ## sub-stock stays empty and the suspect sub-stock carries the whole
         ## occupancy.
         conf_hazard_daily::Union{Nothing, AbstractVector} = nothing,
-        admission = TREATMENT_DEFAULTS.admission,
-        severity = TREATMENT_DEFAULTS.severity,
+        ## The priors and delay submodels the keywords below default to.
+        defaults = treatment_flow_defaults(),
+        admission = defaults.admission,
+        severity = defaults.severity,
         capacity = bed_capacity_walk_model,
-        dispersion = TREATMENT_DEFAULTS.dispersion,
+        dispersion = defaults.dispersion,
         ## Occupancy / flow dispersion can be injected from the joint composer's
         ## pooled set (`k_external`). Standalone it samples its own.
         k_external::Union{Nothing, Real} = nothing,
-        cfr_modifier_prior = TREATMENT_DEFAULTS.cfr_modifier_prior,
-        abscond_prior = TREATMENT_DEFAULTS.abscond_prior,
-        incare_confirm_log_prior = TREATMENT_DEFAULTS.incare_confirm_log_prior,
-        admission_delay = TREATMENT_DEFAULTS.admission_delay,
-        death_los = TREATMENT_DEFAULTS.death_los,
-        recovery_los = TREATMENT_DEFAULTS.recovery_los,
-        ruleout_los = TREATMENT_DEFAULTS.ruleout_los,
+        cfr_modifier_prior = defaults.cfr_modifier_prior,
+        abscond_prior = defaults.abscond_prior,
+        incare_confirm_log_prior = defaults.incare_confirm_log_prior,
+        admission_delay = defaults.admission_delay,
+        death_los = defaults.death_los,
+        recovery_los = defaults.recovery_los,
+        ruleout_los = defaults.ruleout_los,
         ## Opt-in occupancy reclassification-break days (grid indices). A level
         ## step is fitted into the modelled total at each, absorbing a
         ## measurement-basis discontinuity in the isolation series. See
