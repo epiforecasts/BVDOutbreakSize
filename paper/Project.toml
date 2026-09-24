@@ -1,0 +1,19 @@
+# Environment for the paper's figure and number scripts (paper/scripts/).
+# Run them with `julia --project=paper paper/scripts/<script>.jl` from the
+# repository root. Versions are pinned to those the root environment
+# resolves so the two share compiled caches.
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[compat]
+CSV = "=1.1.0"
+CairoMakie = "=0.15.15"
+DataFrames = "=1.8.2"
+Distributions = "=0.25.131"
+julia = "1.10"
