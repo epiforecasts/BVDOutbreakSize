@@ -34,6 +34,8 @@ Changes since v2.1.0.
 
 ### Model
 
+- Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#PRNUM).
+  Fixing the future variables leaves the fitted density unchanged, which the tests check exactly on every composer and on the live patch joint.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
   Fitted values change.
@@ -46,8 +48,10 @@ Changes since v2.1.0.
 
 ### Report
 
-- The province forecast continues the fitted patch model as it generates the data: correlated provincial deviations, the fitted delays and ascertainment, and the fitted composition splitting the national forecast, so the provinces add up to it (#845).
-  Its archive method is now `projection-v2`, and only that method is scored.
+- Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#PRNUM).
+  The national forecast now carries the renewal, each stream's delays and ascertainment and its own likelihood past the cut-off.
+  The province forecast splits each week of it by the fitted compositions, so the provinces add up to it.
+  The province archive method is now `predict`, and only that method is scored.
 - The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
   Its summary gives the count-scale coverage overall and per province.
 - The offline `analysis.html` is gone (#839).
