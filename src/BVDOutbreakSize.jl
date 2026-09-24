@@ -178,9 +178,16 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_composition_model
 
 ## Vector observation distributions a submodel writes on the right of `~`.
-## Public, not exported.
-public NegBinomialVector, CensoredNegBinomialVector, StudentTVector,
-    BetaBinomialVector, SplitCountVector
+## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
+## there and Julia 1.10 still loads the package.
+@static if VERSION >= v"1.11.0-DEV.469"
+    eval(
+        Meta.parse(
+            "public NegBinomialVector, CensoredNegBinomialVector, " *
+                "StudentTVector, BetaBinomialVector, SplitCountVector"
+        )
+    )
+end
 
 include("docstrings.jl")
 include("constants.jl")
