@@ -10,7 +10,7 @@
         @test s.samples == 1000
         @test s.n_adapts == 500
         @test s.target_accept == 0.8
-        @test s.max_depth == 11
+        @test s.max_depth == 10
     end
     withenv(
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
