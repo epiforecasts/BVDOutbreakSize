@@ -51,6 +51,12 @@ Changes since v2.1.0.
   These are the cumulative series, the combined delay PMFs, the patch model's national totals and headline quantities, its daily deviations and its correlation matrix.
   Keys and values are unchanged, and a test checks that the joint's log density and gradient are the same with and without the barrier.
 - The national onsets and the export-weighted infections sum the patches with one matrix-vector product each (#856).
+- Observed late confirmed days in `late_confirmed_model` are scored as one `SplitCountVector`, a summed BetaBinomial term over the days with a 24h analysed count plus a summed NegativeBinomial term over the rest, each through its rule (#856).
+  A vector with `missing` entries is still scored one day at a time, so the predictive keys are unchanged.
+- `onset_scanned_cells` applies the per-scan levels and builds the per-cell observation scales in one call, with its own rule (#856).
+- `onset_report_expected_total` builds delay columns only for the onset dates within the delay support of the cut-off, and the joint and the onset composer compute it behind `_detached` (#856).
+  Its rule is removed.
+  An earlier date counts in full, which differs from the old value only where that date's total report probability sat on the `safe_rate` floor.
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
