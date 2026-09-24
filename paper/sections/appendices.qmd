@@ -1,0 +1,22 @@
+## Funding {.appendix}
+
+This study is funded by the National Institute for Health and Care Research (NIHR) Health Protection Research Unit in Health Analytics & Modelling, a partnership between the UK Health Security Agency, Imperial College London and the London School of Hygiene & Tropical Medicine (grant code NIHR207404).
+The views expressed are those of the authors and not necessarily those of the NIHR, UK Health Security Agency or the Department of Health and Social Care.
+
+## Acknowledgements {.appendix}
+
+We thank Katharine Sherratt and Samuel P. C. Brand for their contributions to the early versions of this work and their review of it, Neil Ferguson for suggesting the genetic bound on the seeding time, the Institut National de Santé Publique for publishing the situation reports and the INRB-UMIE team for their transcription, and the contributors who raised issues on the repository.
+<!-- Names of outside contributors on GitHub to be listed once confirmed: Cornelius Roemer, Kaitlyn Johnson, Nicholas Davies, Simon Frost, Toshiaki Asakura, Hong Ge. -->
+
+## Data and software availability {.appendix}
+
+All code, the transcribed data, every release with its draws and forecasts, and the rendered report are available at the BVDOutbreakSize repository [@bvdoutbreaksize-github] and archived on Zenodo [@bvdoutbreaksize-zenodo].
+The release analysed here is {{< meta release_tag >}}, and its archived report site is the Supporting Information.
+
+## AI disclosure {.appendix}
+
+Claude Code sessions (https://www.anthropic.com/claude) drafted the model code, priors, tests, analysis text and this manuscript, transcribed the situation reports, and reviewed pull requests through an automated reviewer.
+The commit trailers record Claude Sonnet 4.6, Opus 4.8, Fable 5, Opus 5, Sonnet 5, Fable 5.1 and Opus 5.5, and the model behind the automated reviewer is not recorded.
+The authors set the modelling decisions, reviewed and revised all of it, and take responsibility for the content.
+Convergence and fit to the data gated every merge, by review of the diagnostics and, from 21 September, by a check in continuous integration.
+Every quoted number is read from a released output or from the pull request that recorded it, rather than typed.

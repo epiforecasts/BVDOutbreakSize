@@ -1,0 +1,123 @@
+## Methods
+
+<!--
+Meta keys used in this section, to be written to paper/generated/numbers.yml from the release analysed:
+sampler_chains                    NUTS chains per joint fit
+sampler_draws                     post-warmup draws per chain for the joint fit
+sampler_adaptation                    adaptation steps per chain for the joint fit
+sampler_max_depth                 NUTS maximum tree depth
+sampler_target_accept             NUTS target acceptance probability for the joint fit
+convergence_fail_rhat             R-hat above which the build fails
+convergence_fail_ess_bulk         bulk effective sample size below which the build fails
+convergence_fail_divergent_fraction  divergent fraction above which the build fails
+gradient_speedup_joint_percent    percentage cut in the joint gradient time from the hand-written rules
+gradient_speedup_kernels_min      smallest per-kernel speed-up factor from the hand-written rules
+gradient_speedup_kernels_max      largest per-kernel speed-up factor from the hand-written rules
+precompile_cold_build_factor      factor by which the precompile workload cuts the joint fit's cold build
+-->
+
+### Data
+
+The release analysed is {{< meta release_tag >}}, with data to {{< meta data_cutoff >}}, and every current-model result below comes from its fits.
+DRC counts come from the daily situation reports of the Institut National de Santé Publique, except the 18 to 22 May suspected totals, which come from the WHO AFRO joint report [@insp_sitrep_2026; @who_afro_sitrep01_2026].
+Each value is read from the report PDFs by a language-model agent and re-read independently by a second agent, with disagreements settled against the source.
+The INRB-UMIE transcription is used only when the primary source is not publishing [@inrb_umie_2026].
+Exported cases enter as three dated detections and one dated death, frozen at the cut-off of the first situation-report model, and a fourth export reported afterwards is deliberately not fitted [@who_don_2026_602].
+The curve of confirmed cases by symptom-onset date is digitised from the figure the later reports carry, and each figure carries its own level error.
+Genetic estimates of the time to the most recent common ancestor and of the early doubling time enter as priors, referred to below as the genetic bound [@virological2026; @mbalaplacide2026].
+Each stream is listed with its observation model, its first and last fitted report and the dates at which its reporting changed or was absent in @tbl-streams.
+
+The cumulative streams are fitted as the increments between successive reports, with a fitted level offset at each documented reclassification or harmonisation date.
+The other streams take their own forms, among them dated Poisson counts for the exports, a censored level for isolation occupancy and triangle cells for the onset curve.
+A stream that stops being published is frozen at its last report and stays in the likelihood.
+
+### Model development
+
+The first model reproduced the approach of McCabe et al. [@mccabe2026] as one posterior rather than a set of scenarios, fitting the four streams listed in @tbl-models with an ascertainment component.
+It kept their continuous-time constant-growth latent process, replaced their two closed-form approximations with exact convolutions and gave every fixed quantity a prior [@bdbv_linelist_analysis_2026].
+The national situation reports then became the data source, and they publish running totals that are revised and reclassified between reports.
+
+The second model fitted the per-report increments of those totals and added the confirmed series through a model of the laboratory queue.
+The throughput counts did not identify the parameters the laboratory model added, so both the latent process and the confirmed-case pipeline were replaced.
+
+The renewal model kept the observation streams and replaced the latent process with a discrete daily renewal equation and a time-varying reproduction number [@fraser2007; @cori2013].
+We prototyped five latent processes, an explicit convolution, a deterministic renewal, a stochastic renewal, a particle-filtered state space and a compartmental model, and kept the deterministic renewal because the compartmental model was not viable under the model and data constraints and the stochastic variants were closed once it had been chosen.
+Every remaining published stream was then added with its own observation model, and the reports began to carry counts by province that a single national process could not use.
+Divergent transitions in the occupancy stream and funnels in the pooled dispersion, background and bed-capacity random walks were reduced by censoring occupancy at the recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015]. <!-- VERIFY: diagnosis and fixes rest on agent PRs 319, 352, 358, 743 and 745 -->
+
+The provincial model runs one renewal process per province so that those counts enter the likelihood directly, and it adds the province compositions as a stream.
+It is the version fitted at the release analysed, and its definition follows.
+
+### Current model
+
+The full model definition and every prior are given in the Supporting Information (*Methods*).
+The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces.
+The provinces are coupled by a gravity kernel with same-day transfer, and every national stream is fitted against the sum over provinces.
+Each province $p$ generates infections from its reproduction number $R_{p,t}$ and the generation interval $g$, with the log reproduction number the national trend plus a province deviation that sums to zero across provinces
+
+$$
+G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+\log R_{p,t} = \log R^{\text{trend}}_t + \delta_{p,t}, \qquad
+\sum_p \delta_{p,t} = 0.
+$$ {#eq-renewal}
+
+The deviations revert toward zero at each weekly knot, with a half-normal scale for each province and an LKJ prior on the correlation between their innovations.
+The deviations are scored through the per-province compositions of confirmed cases and deaths.
+A single import grows through a cryptic phase to the renewal start, with the genetic bound flooring the outbreak age and the number of cryptic generations given a prior.
+Importation relocates a share of what each province generates, with $K$ the gravity kernel and $\varepsilon_{q,t}$ the share leaving origin $q$, and national infections $I_t$ are the sum over provinces
+
+$$
+I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+        + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \qquad
+I_t = \sum_p I_{p,t}.
+$$ {#eq-province}
+
+National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves the onsets with its own delay, scales them by its ascertainment and adds any stream-specific term.
+Every delay is sampled and discretised with double interval censoring [@charniga2024].
+The daily analysed laboratory volume anchors test positivity, and the recovered counts follow the form of the secondary-observation model of EpiNow2 [@epinow2].
+Isolation occupancy is a running balance of admissions, discharges and abscondings, censored at the recorded bed capacity, which itself follows a random walk on the log scale.
+The treatment-centre flows carry an in-care case-fatality ratio, and the digitised onset curve is a reporting triangle with time-varying ascertainment.
+
+For the suspected cases the delay is the onset-to-report distribution $f_{\text{rep}}$, the ascertainment is $p_{\text{DRC}}$ and the added term is a non-BVD background rate $\lambda_{\text{bg},t}$ on a weekly random walk.
+The increment between the reports on days $d_{i-1}$ and $d_i$ is scored with a negative binomial whose dispersion $k_s$ is partially pooled across the four passive-surveillance streams
+
+$$
+c_t = p_{\text{DRC}} \sum_{s \ge 0} o_{t-s}\, f_{\text{rep},s} + \lambda_{\text{bg},t}, \qquad
+Y_i - Y_{i-1} \sim \mathrm{NegBinomial}\Bigl(\sum_{t = d_{i-1}+1}^{d_i} c_t,\ k_s\Bigr).
+$$ {#eq-stream}
+
+The model estimates infections and deaths to date, the reproduction number by province, the national doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
+
+### Forecast evaluation
+
+Every release forecasts each still-reported stream one to four weeks ahead, and we score the one-week horizon once the next reports arrive.
+Each province is forecast by its own renewal process, and each national stream is projected from its rate at the cut-off under the continued reproduction-number walk and replicated through its fitted dispersion.
+We score with the continuous ranked probability score, where lower is better, on the count scale and on a log scale that stops the largest counts dominating [@gneiting2007; @bosse2023transformed].
+We also report coverage of the 50% and 90% predictive intervals and the sample-based bias statistic, which runs from $-1$ for forecasts below the observation to $1$ for those above it [@bosse2022scoringutils].
+
+The persistence baseline carries the increment over the preceding window forward, with a spread drawn from the stream's own past differences.
+It was checked to read only the reports available on the day the forecast was made, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
+Streams no longer reported are excluded because their truth is zero by construction, which favours neither the model nor the baseline.
+Fits fixed at each release date are scored on one scale across reporting breaks, with the harmonisation step subtracted from the observed counts and the windows holding a reclassification dropped.
+
+### Comparison with single-stream fits and published estimates
+
+The joint estimate is set against the same model fitted to one stream at a time with a single likelihood term, against the estimate of every earlier release, and against the published estimates.
+The estimate of each earlier release is read from that release's published outputs.
+McCabe et al. are matched at their cut-offs by fits fixed at those dates, and Chamla et al. by a projection from a fit fixed at their calibration date [@mccabe2026; @mccabe2026lancet; @chamla2026].
+
+### Convergence
+
+Each fit reports R-hat, bulk effective sample size and the number of divergent transitions for every parameter [@gelman1992; @vehtari2021].
+We sample with the No-U-Turn sampler (NUTS), with {{< meta sampler_chains >}} chains of {{< meta sampler_draws >}} draws after {{< meta sampler_adaptation >}} adaptation steps, a maximum tree depth of {{< meta sampler_max_depth >}} and a target acceptance probability of {{< meta sampler_target_accept >}} [@hoffman2014nuts].
+Each chain starts from the first of a batch of prior draws whose log density is at or above the batch median, since a start in the prior tail can trap a chain.
+The build fails if the joint fit exceeds an R-hat of {{< meta convergence_fail_rhat >}} or a divergent fraction of {{< meta convergence_fail_divergent_fraction >}}, or falls below a bulk or tail effective sample size of {{< meta convergence_fail_ess_bulk >}}, and it warns at a tighter tier.
+
+### Implementation
+
+The model is written in Julia with `Turing` and differentiated with `Mooncake` [@ge2018turing; @mooncake_jl].
+The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against central finite differences and against the backend's own derivation of an unregistered copy.
+The benchmarks recorded with those rules give a cut of about {{< meta gradient_speedup_joint_percent >}}% in the joint gradient time, and the treatment-flow, occupancy and onset-reporting kernels run {{< meta gradient_speedup_kernels_min >}} to {{< meta gradient_speedup_kernels_max >}} times faster when timed on their own.
+Language-model agents ran wide searches over parameterisations, samplers and gradient backends, most of them null results that were not merged.
+A precompile workload that compiles the fit the report runs cuts the cold build of the joint fit by a factor of {{< meta precompile_cold_build_factor >}} in the same records.
+Each data update refits every affected model in continuous integration, renders the report and publishes a versioned release with the model definition, thinned draws and forecasts.

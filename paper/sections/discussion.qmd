@@ -1,0 +1,69 @@
+## Discussion
+
+In this paper we have presented a joint model of the size of the 2026 Bundibugyo virus outbreak fitted to every count the national situation reports publish.
+At the release analysed the joint estimate sat at the low end of the range spanned by the single-stream fits.
+The one-week-ahead forecasts rarely beat a persistence baseline, and the onset reports were the only stream on which they beat it at most releases.
+
+<!-- Strengths and limitations -->
+
+The approach has several strengths.
+First, one posterior over every published stream shows where the streams agree and where they disagree, and resolves that disagreement inside the model.
+Under the renewal model that disagreement appears to be absorbed by the ascertainment and background terms, while under the laboratory model it inflated the size estimate above every single stream.
+Second, fitting the cumulative counts as increments with a level offset at each documented change handles revisions and format changes rather than ignoring them.
+Third, each release with a scored successor was tested against the data that arrived next, so those forecasts met a test outside the window they were fitted to.
+Finally, the whole model definition lives in one versioned document that others can review and adapt, and it is refit and released with each data update.
+
+The main limitation is that the delays, the case-fatality ratio and the laboratory parameters rest on priors from other outbreaks or from judgement.
+The data do little to move them, so the size interval inherits their width and any error in them moves the estimate the same way.
+Almost every count is report-dated, so the timing of the epidemic is recovered through those assumed delays rather than observed.
+The reproduction of the first model has not been checked against the original authors' code.
+The data are aggregate national and provincial counts, with no line list in the released model.
+
+The streams share one case pool but are treated as conditionally independent given the latent infections, which may understate the uncertainty in the joint estimate.
+The fitted streams may look sub-exponential while the reproduction number sits above one, so the model may misstate growth over the window. <!-- Sebastian, issue 243 -->
+The forecast intervals covered nearly every observation, so they are too wide to separate one plausible week from another.
+However, the aggregate design still supports the per-stream ascertainment and the forecast evaluation reported here.
+
+<!-- Comparison to the literature -->
+
+Each published estimate answers a different question from a different subset of the published counts.
+The reproduction of the method of McCabe et al. [@mccabe2026] at their own fixed inputs recovers their headline estimate, and the joint posterior sits above both of their headline scenarios and above their back-calculation scenarios at the matched cut-off.
+What the joint model adds is the streams that inform ascertainment, which their fixed assumptions leave outside the posterior.
+It adds to the projection of Chamla et al. [@chamla2026] a forecast drawn from every stream rather than from the confirmed series alone.
+The confirmed cases that followed ran above their central projection and just below the lower bound of the joint forecast.
+Genomic estimates bound the outbreak age and the early growth rate, and they enter the joint model as priors that the surveillance data then update [@mbalaplacide2026].
+More generally, the model belongs to the class of multi-stream renewal models with nowcasting components, applied here to report-dated aggregates rather than to line lists [@epinow2; @lison2024nowcast].
+
+<!-- Lessons -->
+
+Changes in reporting were the main source of change to the model, and most of them were absorbed without a change to the latent process. <!-- RECOLLECTION: tick, strike or add -->
+The disagreement between streams is itself the result to report, because the size estimate follows from how that disagreement is resolved.
+Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation.
+The agent workflow also made engineering feasible that we would not have attempted alone, the hand-written adjoints, the wide performance searches and the release tooling. <!-- author statement, 24 Sep -->
+
+Several defects were of a kind a human author would be unlikely to write.
+Two were found by the prospective evaluation of a release and the others in review of the pull request that carried them.
+The forecast extrapolated the last random-walk innovation as a fixed slope, so its intervals widened with the horizon and covered every observation. <!-- issue 606 (Sam), issue 622 (Sam), news v1.15.0 -->
+Reporting-break corrections were applied in the fit but not in the scoring, so forecasts from fits fixed at each release date scored an order of magnitude out. <!-- issue 623 (Sam) -->
+The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short while the background-driven streams were unaffected. <!-- news v2.0.0 Fixed; how it was found is not recorded -->
+A chain initialised from a fixed seed sat on a prior tail and returned the same R-hat on successive datasets. <!-- issue 671 and news v2.0.0; Sam raised the R-hat on PR 661 -->
+Each passed the tests and the in-sample checks of the release that carried it.
+
+<!-- Further work -->
+
+Future work could resolve the health-zone structure, ground the delays on outbreak-specific data and model the revision process directly.
+A health-zone model conditioned on the provincial posterior is in development. <!-- PR 779 -->
+Outbreak-specific delays could be estimated from a line list, following Akilimali et al. [@akilimali2026].
+Revision could be treated as an observation process rather than as a break. <!-- CITE: revision modelling reference; the plan's placeholder key is not in refs.bib -->
+A retrospective evaluation against the final counts could follow once the outbreak has ended.
+
+The model has kept expanding and the experiments that shaped it were ad hoc, so future work could run formal experiments across settings and outbreaks. <!-- author statement, 24 Sep -->
+Our own infectious disease modelling workflow [@abbott_workflow] could be applied more deliberately to test whether it improves the efficiency of agent work, measured as token use per accepted change. <!-- author statement, 24 Sep -->
+How agent-driven modelling should be directed, and how a team may share work that changes this much between releases, is open. <!-- author statement, 24 Sep -->
+
+<!-- Conclusions -->
+
+A joint estimate of outbreak size can be produced in real time from published situation reports alone.
+Its value lies in making the agreement and the conflict between surveillance streams explicit rather than in any one number.
+Scoring releases against the data that arrived next found defects that review and tests did not.
+We aim to support real-time size estimation from published surveillance in future outbreaks.
