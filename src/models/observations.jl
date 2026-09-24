@@ -1091,7 +1091,7 @@ end
 ## Enzyme's reverse mode cannot differentiate through, and a `map(...) do i`
 ## leaves an anonymous-closure shadow Enzyme cannot construct.
 function composition_positivity(
-        window_days, bvd_window, bg_window,
+        window_days, bvd_window, pool_window,
         c_window, δ0, dscale, s_test, spec, lo, hi
     )
     Tt = eltype(bvd_window)
@@ -1100,11 +1100,10 @@ function composition_positivity(
     nw = length(window_days)
     p_pos = Vector{Tt}(undef, nw)
     @inbounds for i in 1:nw
-        ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
-        ## window, guarded against a zero/negative denominator.
-        num = bvd_window[i]
-        den = bvd_window[i] + bg_window[i]
-        ratio = num / (den + lo)
+        ## Pool composition φ = (p_drc·BVD) / pool over the window, with
+        ## pool = p_drc·BVD + λ_bg, guarded against a zero/negative
+        ## denominator.
+        ratio = bvd_window[i] / (pool_window[i] + lo)
         φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
         δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
         ## Severity-enriched tested BVD share, then the assay
@@ -1228,8 +1227,10 @@ quantities.
     ## report-to-analysed delay and thinned by the tested fraction. `bg_daily`
     ## is the per-day non-BVD background.
     receipt_state ~ to_submodel(receipt)
-    suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
-    carried = convolve_delay(suspected_daily, receipt_state.pmf)
+    bvd_suspected_daily = p_drc .* bvd_reports_daily
+    carried = convolve_delay(
+        bvd_suspected_daily .+ bg_daily, receipt_state.pmf
+    )
     κ_test = if specimen_intensity === nothing
         nothing
     else
@@ -1302,29 +1303,29 @@ quantities.
     ## Suspect-pool composition over each window, carried through the
     ## report-to-analysed delay so it reflects the specimens actually
     ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
-    ## so it is omitted here.
+    ## so it is omitted here. The pool total is the carried suspected
+    ## series, BVD plus background.
     analysed_bvd_daily = convolve_delay(
-        p_drc .* bvd_reports_daily,
-        receipt_state.pmf
+        bvd_suspected_daily, receipt_state.pmf
     )
-    analysed_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
+    analysed_pool_daily = carried
     if eltype(analysed_bvd_daily) === Any
         analysed_bvd_daily = convert(
             Vector{typeof(τ_test)},
             analysed_bvd_daily
         )
-        analysed_bg_daily = convert(
+        analysed_pool_daily = convert(
             Vector{typeof(τ_test)},
-            analysed_bg_daily
+            analysed_pool_daily
         )
     end
     ## Gate the tested composition to the testing window too, so the
     ## composition clock and the per-window BVD share start at the testing
     ## onset rather than rolling the cryptic phase.
     analysed_bvd_daily = gate_before(analysed_bvd_daily, cap_start)
-    analysed_bg_daily = gate_before(analysed_bg_daily, cap_start)
+    analysed_pool_daily = gate_before(analysed_pool_daily, cap_start)
     bvd_window = bin_increments(analysed_bvd_daily, window_days)
-    bg_window = bin_increments(analysed_bg_daily, window_days)
+    pool_window = bin_increments(analysed_pool_daily, window_days)
     Tt = eltype(bvd_window)
     ## Testing clock: cumulative modelled analysed volume at each window.
     vol_window = bin_increments(analysed_daily, window_days)
@@ -1335,7 +1336,7 @@ quantities.
     ## the clock ratio `0/0` and break the downstream Binomial.
     dscale = max(convert(Tt, decay_scale), one(Tt))
     p_pos = composition_positivity(
-        window_days, bvd_window, bg_window,
+        window_days, bvd_window, pool_window,
         c_window, δ0, dscale, s_test, spec, lo, hi
     )
 

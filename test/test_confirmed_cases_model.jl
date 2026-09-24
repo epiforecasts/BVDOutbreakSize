@@ -175,3 +175,19 @@ end
     ## bounded away from zero by the non-BVD share, identifying λ_bg.
     @test all(st.p_pos .> 0.05)
 end
+
+@testitem "composition_positivity reads the BVD share of the pool window" begin
+    using BVDOutbreakSize: composition_positivity
+
+    ## With no enrichment and a perfect assay the positivity is the pool
+    ## composition φ = BVD / pool, clamped to [lo, hi].
+    bvd = [2.0, 0.0, 5.0, 1.0]
+    pool = [8.0, 3.0, 5.0, 0.0]
+    lo, hi = 1.0e-8, 1 - 1.0e-8
+    p = composition_positivity(
+        1:4, bvd, pool, zeros(4), 0.0, 1.0, 1.0, 1.0, lo, hi
+    )
+    @test p ≈ clamp.(bvd ./ (pool .+ lo), lo, hi)
+    @test p[1] ≈ 0.25
+    @test p[4] == hi
+end
