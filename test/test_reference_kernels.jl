@@ -6,7 +6,7 @@
     ADRuleCases,
 ] begin
     using BVDOutbreakSize: renewal_infections_with_force,
-        onset_report_expected_total
+        onset_report_expected_total, stick_breaking_loglik
     include(joinpath(@__DIR__, "reference_kernels.jl"))
 
     agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))

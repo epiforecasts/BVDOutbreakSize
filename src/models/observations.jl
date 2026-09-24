@@ -4132,31 +4132,20 @@ less the counts before it in the group, with the overdispersion `ρ` and the
 conditional share `share_r / tail_r` clamped into `[0, 1]`. The running
 tail `tail_r = 1 − Σ_{q < r} share_q` is floored at 1e-10. The last row of
 a group is the remainder and adds nothing, so a one-row group adds nothing.
-`src/ad_rules.jl` gives it a closed-form Mooncake rule.
+The rows are scored as one [`betabinomial_loglik`](@ref), through its
+Mooncake rule.
 """
 function stick_breaking_loglik(
         groups::AbstractVector{<:Integer}, counts::AbstractVector{<:Integer},
         shares::AbstractVector, ρ::Real
     )
-    cells = _stick_breaking_cells(Val(false), groups, counts, shares)
+    cells = _stick_breaking_cells(groups, counts, shares)
     return betabinomial_loglik(cells.trials, cells.p, ρ, cells.obs)
 end
 
-## Branch flags of one scored row: the conditional share inside its clamp
-## (a tie passes the derivative), the next tail above its floor (a tie goes
-## to the floor), and the first row of a group, whose tail is the constant
-## one.
-const _SB_P = 0x01
-const _SB_TAIL = 0x02
-const _SB_FIRST = 0x04
-
 ## The scored rows of `stick_breaking_loglik`, each a trial count, a
-## conditional share and an observed count. With `Val(true)` it also
-## returns each row's index, tail and branch flags, which the Mooncake rule
-## in `src/ad_rules.jl` reads.
-function _stick_breaking_cells(
-        ::Val{record}, groups, counts, shares
-    ) where {record}
+## conditional share and an observed count.
+function _stick_breaking_cells(groups, counts, shares)
     T = float(eltype(shares))
     m = length(groups)
     ## Every row but the last of each group is scored.
@@ -4164,9 +4153,6 @@ function _stick_breaking_cells(
     trials = Vector{Int}(undef, nc)
     p = Vector{T}(undef, nc)
     obs = Vector{Int}(undef, nc)
-    rows = record ? Vector{Int}(undef, nc) : nothing
-    tails = record ? Vector{T}(undef, nc) : nothing
-    flags = record ? Vector{UInt8}(undef, nc) : nothing
     tail_floor = T(1.0e-10)
     k = 0
     i = 1
@@ -4181,26 +4167,15 @@ function _stick_breaking_cells(
         tail = one(T)
         for r in i:(j - 1)
             k += 1
-            q = shares[r] / tail
             trials[k] = max(remaining, 0)
-            p[k] = clamp(q, zero(T), one(T))
+            p[k] = clamp(shares[r] / tail, zero(T), one(T))
             obs[k] = counts[r]
-            x_tail = tail - shares[r]
-            if record
-                f = r == i ? _SB_FIRST : 0x00
-                !(q > one(T)) && !(q < zero(T)) && (f |= _SB_P)
-                x_tail > tail_floor && (f |= _SB_TAIL)
-                rows[k] = r
-                tails[k] = tail
-                flags[k] = f
-            end
             remaining -= counts[r]
-            tail = max(x_tail, tail_floor)
+            tail = max(tail - shares[r], tail_floor)
         end
         i = j + 1
     end
-    y = (; trials, p, obs)
-    return record ? (y, rows, tails, flags) : y
+    return (; trials, p, obs)
 end
 
 """
@@ -4419,9 +4394,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         ## trial count is what the patches before it left behind. The last
         ## patch takes the remainder.
         p_cond = reshape(
-            _stick_breaking_cells(
-                Val(false), groups, zeros(Int, np * nv), vec(shares)
-            ).p,
+            _stick_breaking_cells(groups, zeros(Int, np * nv), vec(shares)).p,
             np - 1, nv
         )
         remaining = copy(totals)
@@ -4433,7 +4406,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         end
         obs_increments[np, :] .= max.(remaining, 0)
     else
-        ## One summed term through its Mooncake rule.
+        ## One summed term through the BetaBinomial rule.
         @addlogprob! stick_breaking_loglik(
             groups, vec(obs_increments), vec(shares), rho
         )

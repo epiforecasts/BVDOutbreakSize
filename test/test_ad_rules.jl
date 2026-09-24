@@ -21,8 +21,7 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, studentt_loglik,
-        betabinomial_loglik, stick_breaking_loglik, onset_vintage_indices,
-        censoring_cap,
+        betabinomial_loglik, onset_vintage_indices, censoring_cap,
         admission_headroom, onset_scanned_cells
 
     ## A positive PMF of length `L` with total mass `mass`.
@@ -405,29 +404,6 @@
             [rand(rng, 0:t) for t in nb]; perf = true
         )
 
-        ## Groups of one to four rows, a group with no counts, and each
-        ## share's clamp and tail floor: in the last group the second share
-        ## exceeds the tail the first leaves, so its conditional share clamps
-        ## at one, the tail after it sits on its floor, and the next share
-        ## clamps against that floor.
-        add!(
-            "ragged groups", stick_breaking_loglik,
-            stick_args(rng, [1, 2, 3, 4, 3])...
-        )
-        g, y, sh, _ = stick_args(rng, [4, 4, 4])
-        y[1:4] .= 0
-        sh[9:12] .= (0.6, 0.7, 0.2, 0.1)
-        add!("clamp and floor", stick_breaking_loglik, g, y, sh, 0.3)
-        add!(
-            "ρ below its floor", stick_breaking_loglik,
-            stick_args(rng, [4, 4]; ρ = -0.5)...
-        )
-        add!("no rows", stick_breaking_loglik, Int[], Int[], Float64[], 0.05)
-        add!(
-            "4 patches × 91 vintages", stick_breaking_loglik,
-            stick_args(rng, fill(4, 91))...; perf = true
-        )
-
         ## The data-only helpers pass no derivative. Their inputs are the
         ## integer day indices and counts the histories carry, including a
         ## `missing` observation vector and a capacity history with no
@@ -463,7 +439,7 @@ end
     using Mooncake: Mooncake, ReverseMode
     using Mooncake.TestUtils: test_rule
     using BVDOutbreakSize: abscond_thinned_flow, clinical_stay_survival,
-        two_clock_confirmed
+        two_clock_confirmed, stick_breaking_loglik
 
     rng = Xoshiro(20260923)
     for c in rule_cases(rng)
@@ -495,6 +471,26 @@ end
         pmf(rng, 12; mass = 0.98), 0.37;
         is_primitive = false, mode = ReverseMode, rtol = 1.0e-6, atol = 1.0e-8
     )
+
+    ## The stick-breaking composition, derived around the BetaBinomial rule:
+    ## groups of one to four rows, a group with no counts, and each share's
+    ## clamp and tail floor. In the last group the second share exceeds the
+    ## tail the first leaves, so its conditional share clamps at one, the
+    ## tail after it sits on its floor, and the next share clamps against
+    ## that floor.
+    g, y, sh, _ = stick_args(rng, [4, 4, 4])
+    y[1:4] .= 0
+    sh[9:12] .= (0.6, 0.7, 0.2, 0.1)
+    for args in (
+            stick_args(rng, [1, 2, 3, 4, 3]), (g, y, sh, 0.3),
+            stick_args(rng, [4, 4]; ρ = -0.5), (Int[], Int[], Float64[], 0.05),
+        )
+        test_rule(
+            rng, stick_breaking_loglik, args...;
+            is_primitive = false, mode = ReverseMode, rtol = 1.0e-6,
+            atol = 1.0e-8
+        )
+    end
 end
 
 @testitem "AD rules: each rule beats Mooncake's own derivation" tags = [
@@ -676,13 +672,14 @@ end
     )
 end
 
-@testitem "AD rules: the onset rules fire at the joint's call signatures" tags = [
+@testitem "AD rules: the onset, census and composition rules fire at the joint's call signatures" tags = [
     :ad,
 ] begin
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
     using BVDOutbreakSize: load_observations, joint_fit_args,
-        default_breakpoint, onset_vintage_indices, onset_scanned_cells,
-        onset_report_expected_total, _detached
+        default_breakpoint, onset_vintage_indices,
+        onset_scanned_cells, onset_report_expected_total, _detached,
+        incare_census, betabinomial_loglik
 
     ## The argument types `onset_reporting_model` passes on the production
     ## data: float vectors from the moments and the scan levels, the
@@ -708,6 +705,13 @@ end
             typeof(_detached), typeof(onset_report_expected_total), F, F, F,
             Int, F, Int,
         }
+    )
+    ## The treatment model's census takes its stocks and offset as float
+    ## vectors. The composition's scored rows reach the BetaBinomial rule as
+    ## the vectors `stick_breaking_loglik` builds.
+    @test fires(Tuple{typeof(incare_census), F, F, F, Float64, F})
+    @test fires(
+        Tuple{typeof(betabinomial_loglik), Vector{Int}, F, Float64, Vector{Int}}
     )
 end
 
