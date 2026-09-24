@@ -4181,19 +4181,13 @@ function _stick_breaking_cells(groups, counts, shares)
 end
 
 """
-Per-vintage totals a province composition is conditioned on: the observed
-column sums where the increments are observed, and the modelled column sums
-on the predictive path, where there is no observed total to condition on.
+Per-vintage totals a predictive province composition allocates: the
+modelled column sums, rounded to whole cases.
 """
-function _composition_totals(obs_increments, modelled_confirmed)
-    nv = size(modelled_confirmed, 2)
-    ismissing(obs_increments) || return [
-        sum(@view obs_increments[:, i])
-            for i in 1:nv
-    ]
+function _composition_totals(modelled_confirmed)
     return [
         round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
-            for i in 1:nv
+            for i in axes(modelled_confirmed, 2)
     ]
 end
 
@@ -4376,13 +4370,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             shares[p, i] /= tot
         end
     end
-    ## The totals are conditioned on, not scored: they are already in the
-    ## joint density through the national confirmed stream. They are built in
-    ## a helper rather than in a branch here, because `obs_increments` is
-    ## rebound just below and a local a closure reads and the body reassigns
-    ## is boxed.
     predictive = ismissing(obs_increments)
-    totals = _composition_totals(obs_increments, modelled_confirmed)
     if predictive
         obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
     end
@@ -4399,7 +4387,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             _stick_breaking_cells(groups, zeros(Int, np * nv), vec(shares)).p,
             np - 1, nv
         )
-        remaining = copy(totals)
+        remaining = _composition_totals(modelled_confirmed)
         for p in 1:(np - 1)
             obs_increments[p, :] ~ BetaBinomialVector(
                 max.(remaining, 0), p_cond[p, :], rho
