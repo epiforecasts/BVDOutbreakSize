@@ -182,28 +182,37 @@ fit_diagnostics_table = diagnostics_table(
 
 ## Only the joint fit is held to the convergence thresholds.
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "convergence.jl"))
-fit_diagnostics_summary_md = let t = fit_diagnostics_table,
-        worst = argmax(t.max_rhat),
-        least = argmin(t.min_ess_bulk)
+fit_convergence_summary = convergence_summary(
+    "joint", fit_diagnostics(chn_joint)
+)
+fit_diagnostics_detail_md = let t = fit_diagnostics_table,
+        rhat = filter(r -> isfinite(r.max_rhat), t),
+        ess = filter(r -> isfinite(r.min_ess_bulk), t),
+        worst = rhat[argmax(rhat.max_rhat), :],
+        least = ess[argmin(ess.min_ess_bulk), :]
 
-    convergence_summary("joint", fit_diagnostics(chn_joint)) * "\n\n" *
-        "Across all $(length(t.fit)) fits the worst R-hat is " *
-        "$(t.max_rhat[worst]), in the $(t.fit[worst]) fit. " *
+    fit_convergence_summary.detail * "\n\n" *
+        "Across all $(size(t, 1)) fits the worst R-hat is " *
+        "$(fmt_value(worst.max_rhat)), in the $(worst.fit) fit. " *
         "The lowest bulk effective sample size is " *
-        "$(fmt_count(t.min_ess_bulk[least])), in the $(t.fit[least]) fit. " *
+        "$(fmt_count(least.min_ess_bulk)), in the $(least.fit) fit. " *
         "Only the joint fit is held to the thresholds above."
 end
-fit_diagnostics_summary = Markdown.parse(fit_diagnostics_summary_md);
+fit_diagnostics_detail = Markdown.parse(fit_diagnostics_detail_md);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-fit_diagnostics_summary #hide
+Markdown.parse(fit_convergence_summary.verdict) #hide
 
 #md # ```@raw html
 #md # <details><summary>Fit diagnostics table</summary>
 #md # ```
+
+fit_diagnostics_detail #hide
+
+#-
 
 fit_diagnostics_table #hide
 
@@ -214,7 +223,6 @@ fit_diagnostics_table #hide
 # #### Data currency
 #
 # The cut-off is the last date any stream reports.
-# Streams that stopped before it are carried frozen.
 
 #md # ```@raw html
 #md # <details><summary>Build the data currency table</summary>
@@ -1635,10 +1643,11 @@ end
 ## so the dashboard reports how the fit behind its numbers sampled without
 ## building a second table.
 open(joinpath(dashboard_dir, "diagnostics.md"), "w") do io
+    print(io, fit_diagnostics_detail_md, "\n\n")
     print(io, markdown_table(fit_diagnostics_table))
 end
 open(joinpath(dashboard_dir, "diagnostics_summary.md"), "w") do io
-    print(io, fit_diagnostics_summary_md)
+    print(io, fit_convergence_summary.verdict)
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.
