@@ -223,7 +223,7 @@ Each chart is an inline SVG with exact bar heights, stacked into cases with an o
 The basis is the INSP/INRB laboratory line list, not the DHIS2 line list behind the SitRep figure, and there is no alive/dead split.
 The two sources differ: on 23 September the dashboard has 6018 observed plus 1175 imputed cases where the SitRep 130 figure prints n = 5 944.
 The dashboard's observed total tracks the printed figure n to within about 5% in every vintage.
-Against the scanned SitRep curve the observed series agrees closely through August (Pearson r above 0.9 on common onset days, mean absolute difference 2 to 5 cases a day) and diverges from September as the scan's own noise rises.
+Against the scanned SitRep curve the observed series agrees in every vintage (Pearson r 0.96 to 0.998 on common onset days, mean absolute difference 0.6 to 3.7 cases a day).
 
 The page is rebuilt by CI and committed to <https://github.com/INRB-UMIE/BDBV2026-Epidemic_Dashboard>, so the git history of `trends.html` is the vintage archive.
 `scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the bars back through each chart's own axis labels, and keeps one snapshot per distinct data version.
