@@ -1048,10 +1048,10 @@ function score_release(
     )
 end
 
-## The method whose province forecasts are scored. Archives written before
-## the per-province projection split the national forecast by share and
-## carry no `method` column, and are not scored.
-const PROVINCE_FORECAST_METHOD = "projection"
+## The method whose province forecasts are scored is the package's
+## `PROVINCE_FORECAST_METHOD`, the one `province_forecast_archive` writes.
+## Archives of an earlier method, or with no `method` column, are not scored.
+using BVDOutbreakSize: PROVINCE_FORECAST_METHOD
 
 ## Score one release's per-province forecast archive: `nothing` when the
 ## release does not carry one, and `:no_projection` when its archive holds

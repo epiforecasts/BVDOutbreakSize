@@ -502,6 +502,48 @@ function knot_days(n::Integer; week::Integer = 7, start::Integer = 1)
 end
 
 """
+    ForecastHorizon(days)
+
+The number of days a model runs past its cut-off to forecast. Passed as a
+composer's `forecast` keyword (see [`with_horizon`](@ref)). The latent grid
+then runs to day `n + days`, the walks draw fresh innovations for the
+future knots, and each stream draws its future counts as `missing`
+observations for `predict` to generate. The default `forecast = nothing`
+is the fitted model. It is a type rather than an integer so the fitted
+model compiles with no forecast code in it.
+"""
+struct ForecastHorizon
+    days::Int
+    function ForecastHorizon(days::Integer)
+        days >= 1 || throw(
+            ArgumentError("a forecast horizon needs at least one day, got $days")
+        )
+        return new(Int(days))
+    end
+end
+
+"Days a model runs past its cut-off: `0` for the fitted model."
+horizon_days(::Nothing) = 0
+horizon_days(f::ForecastHorizon) = f.days
+
+"""
+Knot days after the cut-off `n` for a forecast of `horizon` days: one every
+`week` days and one on the last day. [`knot_days`](@ref) pins a knot to the
+cut-off, so these continue the fitted knots without moving any of them.
+They are also the future vintages the weekly forecast quantities are
+binned to. Empty when `horizon` is zero.
+"""
+function future_knot_days(n::Integer, horizon::Integer; week::Integer = 7)
+    horizon <= 0 && return Int[]
+    days = collect((n + week):week:(n + horizon))
+    (isempty(days) || days[end] != n + horizon) && push!(days, n + horizon)
+    return days
+end
+
+"The first `n` entries of `x`, or `x` itself when it has no more."
+upto(x::AbstractVector, n::Integer) = length(x) <= n ? x : x[1:n]
+
+"""
 Smooth intervention ramp over an `n`-day grid: the logistic curve
 `1 / (1 + e^{−(t − day) / ramp})` for each day `t`, rising from ≈0 well
 before `day` to ≈1 well after, with `ramp` setting the transition width

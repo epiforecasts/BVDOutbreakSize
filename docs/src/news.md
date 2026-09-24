@@ -40,6 +40,8 @@ Changes since v2.1.0.
 - The weekly log-Rt walk is sampled in centred form: each knot level is drawn about the one before it and stored as `rt_state.log_R`, replacing the scaled standard-normal innovations `rt_state.z`.
   With the onset curve fitted the non-centred form held the sampler at its tree-depth cap with divergences.
   The prior is unchanged, so fitted values move only through the sampling.
+- Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
+  Fixing the future variables leaves the fitted density unchanged to within floating-point rounding, which the tests check on every composer and on the live patch joint.
 - The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` sum-to-zero directions rather than as `n` draws then centred, with a Wishart prior on the Rt deviation covariance that province forecasts now also use (#855).
   Fitted values change.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
@@ -59,6 +61,10 @@ Changes since v2.1.0.
 
 ### Report
 
+- Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#867).
+  The national forecast now carries the renewal, each stream's delays and ascertainment and its own likelihood past the cut-off.
+  The province forecast splits each week of it by the fitted compositions, so the provinces add up to it.
+  The province archive method is now `predict`, and only that method is scored.
 - The National page shows a one-line fit verdict and a count of the streams still reporting, with the diagnostics and data currency tables in dropdowns (#868).
   The summary dashboard shows the same verdict.
 - The onset snapshot nowcasts move to the national in-sample page, and the province case-fatality ratios to the Provinces page (#868).

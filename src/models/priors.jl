@@ -229,6 +229,11 @@ finding, isolation, vaccination) can only reduce transmission or leave it
 unchanged. The half-normal admits anything from no effect (mode) to a
 substantial decline.
 
+With `forecast` a [`ForecastHorizon`](@ref) the walk runs past `n` on
+knots a week apart ([`future_knot_days`](@ref)), with standard-normal
+innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
+on. `Rt` then covers the horizon too.
+
 Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
 with `log_R` the full knot series including the first knot at `log_R0`.
 """
@@ -239,7 +244,8 @@ with `log_R` the full knot series including the first knot at `log_R0`.
         rt_start::Integer = 1,
         ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
-        effect_prior = truncated(Normal(0, 0.4); upper = 0)
+        effect_prior = truncated(Normal(0, 0.4); upper = 0),
+        forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
@@ -253,8 +259,18 @@ with `log_R` the full knot series including the first knot at `log_R0`.
     log_R ~ RandomWalkVector(log_R0, sigma_rw, max(nb - 1, 1))
     intervention_effect ~ effect_prior
     knots = vcat(log_R0, log_R[1:(nb - 1)])
-    log_Rt = interpolate_knots(knots, days, n)
-    log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(n, breakpoint; ramp)
+    ## Past the cut-off the walk continues from its last fitted knot, one
+    ## knot a week, with innovations of its own step size. They are a new
+    ## variable, so the fitted knots and their density are untouched.
+    ng = n + horizon_days(forecast)
+    if forecast !== nothing
+        fdays = future_knot_days(n, horizon_days(forecast); week)
+        z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
+        knots = vcat(knots, knots[end] .+ cumsum(sigma_rw .* z_future))
+        days = vcat(days, fdays)
+    end
+    log_Rt = interpolate_knots(knots, days, ng)
+    log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(ng, breakpoint; ramp)
     Rt = exp.(log_Rt)
     return (; Rt, log_R = knots, days, sigma_rw, log_R0, intervention_effect)
 end
@@ -379,6 +395,10 @@ where `r`/`doubling_time` are the current growth derived from the cut-off
 reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
 sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
 implied by `R0`, and `seeding_age` is diagnostic only.
+
+With `forecast` a [`ForecastHorizon`](@ref) the walk and the renewal run
+past the cut-off `n` and `infections`, `cumulative` and `Rt` cover the
+horizon. Every quantity named for the cut-off is still read at day `n`.
 """
 @model function infection_model(
         n::Integer;
@@ -388,7 +408,8 @@ implied by `R0`, and `seeding_age` is diagnostic only.
         rt = rt_walk_model,
         gi = generation_interval_model,
         growth = exponential_growth_model,
-        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65))
+        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
@@ -404,7 +425,10 @@ implied by `R0`, and `seeding_age` is diagnostic only.
     ## situation report, because before any case or death surveillance the
     ## dynamics are unidentified and a free walk there only adds unsupported
     ## drift. `rt_walk_start` defaults to `rt_start`.
-    rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
+    fkw = forecast === nothing ? (;) : (; forecast)
+    rt_state ~ to_submodel(
+        rt(n, log(R0); breakpoint, rt_start = rt_walk_start, fkw...)
+    )
     Rt = rt_state.Rt
     ## The renewal-start seed is the daily incidence `C_T = exp(r·T)` reached
     ## after the cryptic phase's `m` generations. Grid days
@@ -433,7 +457,7 @@ implied by `R0`, and `seeding_age` is diagnostic only.
         doubling_time_initial = doubling_time(r_clock),
         T = T_total, C_T = cumulative[n],
         C_T_prior = growth_state.C_T, doubling_time = doubling_time(r),
-        seeding_age = seeding_age(cumulative, n),
+        seeding_age = seeding_age(upto(cumulative, n), n),
     )
 end
 
@@ -689,17 +713,25 @@ spacing. A single national capacity cannot represent local saturation, one
 province full while another has slack. Pass
 `baseline_prior` / `innovation_prior` to override. Returns
 `(; C, C0, σ_cap)` with `C` a length-`n` vector.
+
+With a `cutoff` before the grid end the fitted knots end at `cutoff` and
+the walk continues past it on knots a week apart, with future steps drawn
+at the same scale.
 """
 @model function bed_capacity_walk_model(
         n::Integer; start::Integer = 1,
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
-        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0)
+        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0),
+        cutoff::Union{Nothing, Integer} = nothing
     )
     C0 ~ baseline_prior
     σ_cap ~ innovation_prior
-    s = clamp(Int(start), 1, n)
-    days = knot_days(n; week = week, start = s)
+    ## The fitted knots end at the cut-off. A grid running past it continues
+    ## the walk on future knots a week apart with steps `steps_future`.
+    nc = something(cutoff, n)
+    s = clamp(Int(start), 1, nc)
+    days = knot_days(nc; week = week, start = s)
     nb = length(days)
     ## Non-negative innovations, so capacity is non-decreasing. Beds are
     ## added over the response and not taken away, so `C(t)` cannot drop
@@ -715,6 +747,17 @@ province full while another has slack. Pass
         max(nb - 1, 1)
     )
     log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
+    if cutoff !== nothing && n > nc
+        fdays = future_knot_days(nc, n - nc; week)
+        steps_future ~ product_distribution(
+            fill(
+                truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
+                length(fdays)
+            )
+        )
+        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(steps_future))
+        days = vcat(days, fdays)
+    end
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
@@ -841,18 +884,27 @@ suspected-case data support. Pass `baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
+
+With a `cutoff` before the grid end the fitted knots end at `cutoff` and
+the walk continues past it on knots a week apart, with future steps drawn
+at the same scale.
 """
 @model function background_walk_model(
         n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
         baseline_prior = truncated(Normal(0.0, 20.0); lower = 0),
-        centred::Bool = true
+        centred::Bool = true,
+        cutoff::Union{Nothing, Integer} = nothing
     )
-    t0 = clamp(Int(onset), 1, n)
+    ## The fitted knots end at the cut-off. A grid running past it continues
+    ## the walk on future knots a week apart, with steps `steps_future` (or
+    ## `z_future` when non-centred).
+    nc = something(cutoff, n)
+    t0 = clamp(Int(onset), 1, nc)
     nw = n - t0 + 1
     ## Weekly knots over the window, linearly interpolated to the daily grid
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
-    days = knot_days(n; week = week, start = t0)
+    days = knot_days(nc; week = week, start = t0)
     nb = length(days)
     ## Half-normal rather than lognormal. A log-scale level has a heavy right
     ## tail the background/outbreak-size degeneracy exploits to run away.
@@ -873,6 +925,21 @@ before `onset`).
     ## baseline, anchored there on the first knot. Interpolated to daily so a
     ## death background scaled from it is smooth.
     log_knots = vcat(zero(σ_rw), cumsum(walk_steps))
+    if cutoff !== nothing && n > nc
+        fdays = future_knot_days(nc, n - nc; week)
+        nf = length(fdays)
+        if centred
+            steps_future ~ product_distribution(
+                fill(Normal(0, σ_rw + eps(typeof(float(σ_rw)))), nf)
+            )
+            future_steps = steps_future
+        else
+            z_future ~ product_distribution(fill(Normal(0, 1), nf))
+            future_steps = σ_rw .* z_future
+        end
+        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(future_steps))
+        days = vcat(days, fdays)
+    end
     walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
     ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the
@@ -880,7 +947,7 @@ before `onset`).
     ## straight to `λ_mu` at the surveillance boundary and putting a one-day
     ## jump into the suspected-death trajectory scaled from it.
     ## `onset_ramp ≤ 1` gives a hard onset.
-    rr = clamp(Int(onset_ramp), 1, nw)
+    rr = clamp(Int(onset_ramp), 1, nc - t0 + 1)
     ramp = [min(i, rr) / rr for i in 1:nw]
     λ_window = ramp .* λ_window
     T = eltype(λ_window)
@@ -1190,6 +1257,27 @@ end
 
 ## --- Patch (multi-population) models -----------------------------------
 
+## One knot of the provincial deviations: the previous knot retained by
+## `φ`, plus innovations that are the scales `σ_δ` times the correlation
+## factor `L` times the standard normals `z[offset + 1 : offset + np]`,
+## centred so the patches sum to zero. Shared by the fitted knots and the
+## knots past the cut-off, so both follow one recursion.
+function _deviation_step!(knots, k, innov, L, σ_δ, z, offset, φ)
+    np = size(knots, 1)
+    @inbounds for i in 1:np
+        acc = zero(eltype(innov))
+        for j in 1:i
+            acc += L[i, j] * z[offset + j]
+        end
+        innov[i] = σ_δ[i] * acc
+    end
+    innov_bar = sum(innov) / np
+    @inbounds for i in 1:np
+        knots[i, k] = φ * knots[i, k - 1] + (innov[i] - innov_bar)
+    end
+    return knots
+end
+
 """
 Reproduction numbers for several spatial patches (Ituri, Nord-Kivu,
 Sud-Kivu): a common national trend plus per-patch deviations that are free
@@ -1295,6 +1383,11 @@ deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch innovation
 sds `σ_δ`, their correlation matrix `Ω` and the loading matrix
 `drift_factor` `(n_patches × (n_patches - 1))` that maps standard-normal
 draws to one knot's innovations.
+
+With `forecast` a [`ForecastHorizon`](@ref) the national walk and the
+deviations run past the cut-off `n` on knots a week apart, the deviations
+with fresh standard-normal draws `z_drift_future` through the same loading,
+and `Rt_matrix` covers the horizon.
 """
 @model function patch_rt_model(
         n::Integer, n_patches::Integer,
@@ -1308,7 +1401,8 @@ draws to one knot's innovations.
         region_drift_scale::Real = 0.05,
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
-        basis = sum_to_zero_basis(n_patches)
+        basis = sum_to_zero_basis(n_patches),
+        forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Common national trend, the single-patch walk unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
@@ -1318,14 +1412,17 @@ draws to one knot's innovations.
     ## `rt_state.intervention_effect`, the names the analysis and sensitivity
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
+    fkw = forecast === nothing ? (;) : (; forecast)
     rt_state ~ to_submodel(
-        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start)
+        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start, fkw...)
     )
     Rt_national = rt_state.Rt
     ## The deviations live on the same weekly knots as the national walk, so
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
+    ## Grid length, past the cut-off when forecasting.
+    ng = length(Rt_national)
     ## Single patch. The deviations are sum-to-zero across the patches, so
     ## with one patch delta is identically zero and the patch Rt is the
     ## national walk. Sampling the deviation machinery would then add
@@ -1334,9 +1431,9 @@ draws to one knot's innovations.
     ## single-population one.
     if n_patches == 1
         Tp1 = eltype(Rt_national)
-        δ_patch1 = zeros(Tp1, 1, n)
-        Rt_matrix1 = zeros(Tp1, 1, n)
-        @inbounds for t in 1:n
+        δ_patch1 = zeros(Tp1, 1, ng)
+        Rt_matrix1 = zeros(Tp1, 1, ng)
+        @inbounds for t in 1:ng
             Rt_matrix1[1, t] = Rt_national[t]
         end
         return (;
@@ -1406,17 +1503,37 @@ draws to one knot's innovations.
         end
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
-    Rt_matrix = zeros(Tp, n_patches, n)
+    ## Past the cut-off the deviations carry on reverting on knots a week
+    ## apart, with fresh standard-normal draws `z_drift_future` through the
+    ## same fitted loading, so the future innovations keep the fitted
+    ## sum-to-zero correlation. The fitted knots are kept as they are.
+    if forecast !== nothing
+        fdays = future_knot_days(n, horizon_days(forecast); week)
+        nf = length(fdays)
+        z_drift_future ~ product_distribution(
+            fill(region_offset_prior, nd * nf)
+        )
+        Tf = promote_type(Tp, eltype(z_drift_future))
+        knots_all = zeros(Tf, n_patches, nb + nf)
+        knots_all[:, 1:nb] .= δ_knots
+        innovations_f = F_drift * reshape(z_drift_future, nd, nf)
+        @inbounds for k in 1:nf, i in 1:n_patches
+            knots_all[i, nb + k] = φ * knots_all[i, nb + k - 1] +
+                innovations_f[i, k]
+        end
+        days_all = vcat(days, fdays)
+    else
+        knots_all = δ_knots
+        days_all = days
+    end
+    Rt_matrix = zeros(eltype(knots_all), n_patches, ng)
     @inbounds for p in 1:n_patches
-        ## A view, not a copy: `interpolate_knots` only reads its knots, and
-        ## the copy put one `getindex` per knot on the gradient tape.
-        δ_daily = interpolate_knots(view(δ_knots, p, :), days, n)
-        for t in 1:n
+        ## A view, not a copy: `interpolate_knots` only reads its knots.
+        δ_daily = interpolate_knots(view(knots_all, p, :), days_all, ng)
+        for t in 1:ng
             Rt_matrix[p, t] = Rt_national[t] * exp(δ_daily[t])
         end
     end
-    ## The daily deviations, and the per-patch innovation sds and their
-    ## correlation implied by the loading matrix, are reported only.
     δ_patch = _detached(_daily_deviations, δ_knots, days, n)
     drift_moments = _detached(sum_to_zero_moments, F_drift)
     σ_δ = drift_moments.sd
@@ -1507,6 +1624,10 @@ by inverting the renewal equation on the summed infections
 ([`implied_national_Rt_at`](@ref)) on the cut-off day alone.
 `importation_matrix` is the daily infections each province received from
 the others, which is what the imports figure on the analysis page draws.
+
+With `forecast` a [`ForecastHorizon`](@ref) the reproduction numbers, the
+importation intensities and the renewal run past the cut-off `n`, and every
+daily matrix covers the horizon. The cut-off quantities stay at day `n`.
 """
 @model function patch_infection_model(
         n::Integer, n_patches::Integer;
@@ -1530,8 +1651,12 @@ the others, which is what the imports figure on the analysis page draws.
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
             sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
         ),
-        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5))
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)),
+        forecast::Union{Nothing, ForecastHorizon} = nothing
     )
+    ## Grid length, past the cut-off `n` when forecasting.
+    ng = n + horizon_days(forecast)
+    fkw = forecast === nothing ? (;) : (; forecast)
     ## 1. Shared generation interval.
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
@@ -1545,7 +1670,7 @@ the others, which is what the imports figure on the analysis page draws.
     rt_state ~ to_submodel(
         rt(
             n, n_patches, log(R0);
-            breakpoint, rt_start, rt_walk_start
+            breakpoint, rt_start, rt_walk_start, fkw...
         ), false
     )
     Rt_matrix = rt_state.Rt_matrix
@@ -1624,17 +1749,17 @@ the others, which is what the imports figure on the analysis page draws.
     ##    the likelihood cannot see. Time-varying because the
     ##    outbreak being known changes movement, and the provinces that arrive
     ##    either side of the breakpoint are what separates `β_ε`.
-    ε_matrix = zeros(Tp, n_patches, n)
+    ε_matrix = zeros(Tp, n_patches, ng)
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
         z_ε ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         β_ε ~ importation_effect_prior
         log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
-        ramp = sigmoid_ramp(n, breakpoint)
+        ramp = sigmoid_ramp(ng, breakpoint)
         @inbounds for q in 1:n_patches
             lvl = ε_bar * exp(log_ε_dev[q])
-            for t in 1:n
+            for t in 1:ng
                 ## Capped at one: the origin cannot send away more than it
                 ## generates. The prior sits four orders of magnitude below
                 ## the cap, so this binds only in the far tail.
@@ -1663,7 +1788,7 @@ the others, which is what the imports figure on the analysis page draws.
     headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
-    onsets_matrix = zeros(Tp, n_patches, n)
+    onsets_matrix = zeros(Tp, n_patches, ng)
     @inbounds for p in 1:n_patches
         @views onsets_matrix[p, :] = convolve_delay(
             infections_matrix[p, :], inc_state.pmf
@@ -1707,13 +1832,15 @@ it as in [`infection_model`](@ref).
 function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)
     infections_total = vec(sum(infections_matrix; dims = 1))
     cumulative_total = cumsum(infections_total)
-    C_T_patch = vec(sum(infections_matrix; dims = 2))
+    ## Past the cut-off when forecasting, so the fitted quantities read the
+    ## grid up to the cut-off `n`.
+    C_T_patch = vec(sum(view(infections_matrix, :, 1:n); dims = 2))
     R_T = implied_national_Rt_at(infections_total, g, n)
     r = euler_lotka_r(R_T, g)
     return (;
         infections_total, cumulative_total, C_T_patch,
         C_T = cumulative_total[n], R_T, r, doubling_time = doubling_time(r),
-        seeding_age = seeding_age(cumulative_total, n),
+        seeding_age = seeding_age(upto(cumulative_total, n), n),
     )
 end
 

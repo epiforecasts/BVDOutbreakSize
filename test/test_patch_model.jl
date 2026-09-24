@@ -2048,3 +2048,49 @@ end
     ## One patch has nothing to seed either way.
     @test !has_frac(patch_infection_model(n, 1; breakpoint = bp, rt_start))
 end
+
+@testitem "forecast_provinces reads predict draws of a sampled patch chain" setup = [
+    PatchJointChain,
+] begin
+    using BVDOutbreakSize: forecast_provinces, forecast_reported,
+        forecast_draws
+
+    ## The key names the province forecast reads are the ones the patch
+    ## joint writes, on the live observations and a prior-sampled chain.
+    pp = forecast_draws(patch_model, patch_chain; horizon = 7)
+    fc = forecast_provinces(pp; n_patches = np)
+    national = forecast_reported(
+        pp; obs_cases = obs.reported_cases, obs_deaths = obs.total_deaths,
+        obs_confirmed = obs.confirmed_cases
+    )
+    @test size(fc, 1) == np * PATCH_DRAWS
+    @test all(isfinite, fc.infections_new)
+    @test all(isfinite, fc.rt_forecast)
+    ## The provinces split each draw's national forecast.
+    @test all(
+        d -> sum(fc.confirmed_new[fc.draw .== d]) == national.confirmed_new[d],
+        1:PATCH_DRAWS
+    )
+end
+
+@testitem "the live patch joint keeps its density with a horizon" setup = [
+    PatchJointChain,
+] begin
+    using BVDOutbreakSize: with_horizon
+    using Turing: logjoint, fix
+    using Random: Xoshiro
+
+    ## Every draw of the sampled chain on the live observations, which have
+    ## data shapes the fixtures in test_forecast_horizon.jl do not.
+    mh = with_horizon(patch_model, 28)
+    k0 = collect(keys(rand(Xoshiro(1), patch_model)))
+    θh = rand(Xoshiro(2), mh)
+    fut = filter(k -> !(k in k0), collect(keys(θh)))
+    @test all(k -> occursin(r"future|forecast", string(k)), fut)
+    ## To rounding: one of 100 prior draws differs in the last two bits, while
+    ## the fixtures in test_forecast_horizon.jl match to the bit.
+    @test isapprox(
+        logjoint(fix(mh, Dict(k => θh[k] for k in fut)), patch_chain),
+        logjoint(patch_model, patch_chain); rtol = 1.0e-12
+    )
+end

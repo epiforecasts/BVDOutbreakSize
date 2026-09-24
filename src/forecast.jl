@@ -1,717 +1,414 @@
-# One-week-ahead posterior-predictive forecast. Continues the fitted renewal
-# trajectory `horizon` days past the cut-off, letting the reproduction number
-# keep evolving over the horizon. Cumulative streams add the projected new
-# counts to the cut-off cumulative. Rate and prevalence streams scale by the
-# horizon growth factor. Each is replicated as an integer count per draw, so
-# the intervals carry both parameter and observation uncertainty.
+# Posterior-predictive forecasts drawn from the fitted models. Each fitted
+# model is rebuilt to run past its cut-off (`with_horizon`), and `predict`
+# on it with the fitted chain keeps every draw's parameters and draws the
+# future: the walks' future innovations, the renewal, every delay and
+# ascertainment, and each stream's future counts through its own
+# likelihood. The functions below only read those draws.
 
-## Floor on the reproduction number passed to `euler_lotka_r`. Its Newton
-## solve overflows to a non-finite growth rate below R ≈ 1e-3, which a draw
-## forecasting a steep decline can reach over the horizon. Below 1e-2 the
-## regime has already collapsed and the forecast need not resolve it.
-const _RT_EULER_FLOOR = 1.0e-2
+"""
+    with_horizon(model, horizon) -> DynamicPPL.Model
 
-function _nb_rand(rng, k, μ)
-    μs = max(μ, eps(typeof(μ)))
-    p = clamp(k / (k + μs), eps(typeof(k)), one(k) - eps(typeof(k)))
-    return rand(rng, NegativeBinomial(k, p))
-end
-
-## Per-day projected latent means over the horizon: the cut-off daily value
-## `daily_T` carried forward as `daily_T · Π_{j≤d} e^{rs[j]}`, one entry per
-## horizon day, under the per-day rate path `rs`. A chain that does not carry
-## the walk holds the cut-off rate `r` constant, which reduces the product to
-## the geometric `daily_T · e^{r d}`.
-function _daily_means(daily_T, rs, r, horizon::Integer)
-    means = Vector{Float64}(undef, horizon)
-    fac = 1.0
-    @inbounds for d in 1:horizon
-        fac *= exp(isnothing(rs) ? r : rs[d])
-        means[d] = daily_T * fac
-    end
-    return means
-end
-
-## Replicated new count over the horizon: one draw per projected day, summed.
-## The dispersion is fitted against single-day counts and between-vintage
-## increments spanning a day or three, so it belongs at that resolution
-## rather than on the horizon total.
-function _nb_new(rng, k, means)
-    total = 0
-    @inbounds for m in means
-        total += _nb_rand(rng, k, m)
-    end
-    return total
-end
-
-## Daily incidence at the cut-off implied by a cumulative total `C` under
-## exponential growth at rate `r` over an outbreak of age `T` days. Inverts
-## `C = ∫₀ᵀ i_T e^{r(t-T)} dt`, giving `i_T = C r / (1 - e^{-rT})`, with the
-## `r → 0` limit `C/T`. Always non-negative, even for `r < 0`. Used as the
-## daily-incidence proxy for observed streams whose cumulative trajectory the
-## chain does not carry.
-function _approx_daily(C, r, T)
-    (T <= 0 || !isfinite(T)) && return max(float(C), 0.0) * max(float(r), 0.0)
-    rt = r * T
-    daily = abs(rt) < 1.0e-6 ? C / T : C * r / (1 - exp(-rt))
-    return max(float(daily), 0.0)
-end
-
-## Log-Rt on horizon day `d` of the fitted weekly walk continued past the
-## cut-off from level `log_R`: the fresh weekly innovations `innov` (and their
-## running sums `cum_innov`) summed to the last whole week, plus the share of
-## the next week's innovation the day has reached. Daily log-Rt is the linear
-## interpolation between the weekly knots, as in [`rt_walk_model`](@ref).
-## Shared by the national and the per-province forecasts, so both continue
-## the walk the same way.
-function _walk_log_rt(log_R, innov, cum_innov, d::Integer, week::Integer)
-    weeks = d / week
-    j = floor(Int, weeks)
-    whole = j == 0 ? 0.0 : cum_innov[j]
-    part = j < length(innov) ? (weeks - j) * innov[j + 1] : 0.0
-    return log_R + whole + part
-end
-
-## Per-draw growth-rate path over the horizon. The fitted weekly walk is
-## continued past the cut-off with fresh innovations at its own step scale,
-## and the future Rt converted back to a daily growth rate through the
-## per-draw generation interval (Euler–Lotka). Returns one length-`horizon`
-## rate path per draw and the matching terminal reproduction numbers, or
-## `nothing` when the chain carries no walk and generation-interval
-## parameters, so the caller can fall back to the constant rate.
-## Single-stream fits carry the walk but not the cut-off `R_T`, which only
-## the joint exposes un-prefixed. Pass their reconstructed `R_T` draws as
-## `R_T` so they take the same evolving path as the joint.
-function _evolving_rates(
-        chn, horizon::Integer;
-        R_T::Union{Nothing, AbstractVector} = nothing,
-        rng::AbstractRNG = MersenneTwister(20260520),
-        week::Integer = 7
-    )
-    has(k) =
-    try
-        chn[k]
-        true
-    catch
-        false
-    end
-    (
-        has(Symbol("rt_state.sigma_rw")) && has(Symbol("gi_state.α")) &&
-            has(Symbol("gi_state.θ")) &&
-            (!isnothing(R_T) || has(:R_T))
-    ) || return nothing
-
-    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
-    R_T = isnothing(R_T) ? _draws(chn, :R_T) : R_T
-    α = _draws(chn, Symbol("gi_state.α"))
-    θ = _draws(chn, Symbol("gi_state.θ"))
-    nd = length(R_T)
-    nknots = cld(horizon, week)
-
-    paths = Vector{Vector{Float64}}(undef, nd)
-    rt_term = Vector{Float64}(undef, nd)
-    @inbounds for i in 1:nd
-        ## The fitted walk sits on weekly knots with innovations of SD
-        ## `sigma_rw`, and daily log-Rt is the linear interpolation between
-        ## them ([`rt_walk_model`](@ref)). The horizon draws fresh weekly
-        ## innovations from the cut-off level and interpolates across the days
-        ## between, so the log-Rt spread grows as the square root of the
-        ## horizon, as the fitted walk's does.
-        innov = sigma[i] .* randn(rng, nknots)
-        cum_innov = cumsum(innov)
-        ## Generation-interval PMF for this draw (lag-1 indexed), matching the
-        ## model's discretisation, so Rt maps to a growth rate as the fit does.
-        g = _gi_pmf(α[i], θ[i])
-        rs = Vector{Float64}(undef, horizon)
-        log_R = log(max(R_T[i], 1.0e-6))
-        log_rt = log_R
-        for d in 1:horizon
-            log_rt = _walk_log_rt(log_R, innov, cum_innov, d, week)
-            rt_d = exp(log_rt)
-            rs[d] = euler_lotka_r(max(rt_d, _RT_EULER_FLOOR), g)
-        end
-        paths[i] = rs
-        rt_term[i] = exp(log_rt)
-    end
-    return (; paths, rt_term)
-end
-
-## Generation-interval PMF (lag-1 indexed, renormalised) for a Gamma with
-## shape `α` and scale `θ`, mirroring `generation_interval_model`.
-function _gi_pmf(α, θ; nmax::Integer = 30)
-    pmf = discretise_censored(Gamma(α, θ), nmax)
-    return pmf[2:end] ./ sum(pmf[2:end])
-end
-
-## Per-draw daily latent value at the cut-off from a cumulative-trajectory
-## deterministic (the last increment of the cumulative vector). The chain
-## stores each trajectory as an iter×chain matrix of per-draw vectors.
-## Returns `nothing` when the trajectory is not carried by the chain, so the
-## caller can fall back to a scalar daily proxy.
-function _daily_at_cutoff(chn, key)
-    mat = try
-        chn[key]
-    catch
-        return nothing
-    end
-    trajs = [collect(v) for v in vec(collect(mat))]
-    return Float64[
-        length(t) < 2 ? t[end] : t[end] - t[end - 1]
-            for t in trajs
-    ]
+The fitted `model` rebuilt to run `horizon` days past its cut-off: the same
+arguments and keywords with `forecast = ForecastHorizon(horizon)`, or the
+fitted model itself (`forecast = nothing`) for a horizon of zero. The
+extended model keeps every fitted variable and adds only the future ones,
+so `predict` on it with the fitted chain keeps each draw's parameters and
+draws the future (see [`ForecastHorizon`](@ref)). Any conditioning or fixing
+on `model` is kept.
+"""
+function with_horizon(model::Model, horizon::Integer)
+    forecast = horizon > 0 ? ForecastHorizon(horizon) : nothing
+    extended = model.f(values(model.args)...; model.defaults..., forecast)
+    return contextualize(extended, model.context)
 end
 
 """
-One-week-ahead (default `horizon = 7` days) posterior-predictive forecast.
-For each draw, continue the reproduction number over the horizon, project the
-new counts each stream adds from its cut-off daily incidence, add them to the
-cut-off cumulative and replicate. Each count stream is replicated day by day
-through its own fitted dispersion and the daily replicates summed, matching
-the resolution the dispersion was fitted at. Returns a `DataFrame` with one
-row per draw and columns:
+    forecast_draws(model, chn; horizon = 28, seed = 20260520)
 
-- `:cases_cum`, `:deaths_cum`: replicated cumulative suspected reported cases
-  and deaths by the cut-off plus the horizon, the observed cut-off cumulative
-  plus the replicated new counts. The cumulative never falls below the cut-off
-  even when the reproduction number is below one. The cut-off daily incidence
-  is the last increment of the stream's cumulative trajectory when the chain
-  carries it, otherwise inferred from the cut-off cumulative total under
-  exponential growth.
-- `:confirmed_cum`, `:confirmed_deaths_cum`: laboratory-confirmed case and
-  confirmed-death counterparts, present when `obs_confirmed` and
-  `obs_confirmed_deaths` are supplied. `:confirmed_deaths_cum` is not bounded
-  by `:deaths_cum`, and nothing imposes that relationship: the two are
-  independent replicates off different observed baselines, so either reported
-  cumulative can stall while the other accrues. In the joint the death
-  analysed volume is specimens rather than persons and carries no cap against
-  the suspected-death pool either; the death-only composer does bound it
-  ([`confirmed_deaths_model`](@ref)).
-- `:cases_new`, … `:confirmed_deaths_new`: new counts over the coming week
-  (`*_cum` minus the corresponding observed count at the cut-off, floored at
-  zero).
-- `:bed_demand`, `:isolation_level`, `:bed_shortfall`: the projected
-  isolation/treatment-bed demand (need under unconstrained supply), the
-  occupancy that demand produces as it is reported, and the unmet demand, all
-  at the horizon, present when the chain carries `expected_bed_demand_T` and
-  `bed_capacity`. The demand grows by the horizon factor like the inflow. The
-  occupancy is that demand shifted by the fitted reclassification offset Δ
-  standing at the cut-off and capped at the capacity, `min(demand + Δ, C)`,
-  the quantity the occupancy likelihood scores against the reported series
-  (see [`cumulative_occupancy_offset`](@ref)). The shortfall is
-  `max(demand − C, 0)`, taken against the capacity rather than as
-  `bed_demand − isolation_level`, since Δ is a change of reporting basis and
-  not a bed. Replicated with the isolation stream's own dispersion.
-- `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the projected
-  one-week-ahead daily isolation/treatment flows (new admissions, in-care
-  deaths and rule-outs), present when the chain carries
-  `expected_admissions_T`, `expected_incare_deaths_T` and
-  `expected_ruleouts_T`. Each cut-off daily flow grows by the horizon factor
-  and is replicated through the isolation stream's dispersion.
-- `:recovered_cum`, `:recovered_new`: cumulative recovered-among-confirmed by
-  the horizon and the new this week, present when the chain carries
-  `expected_recovered_T`. The cut-off cumulative is `obs_recovered` when
-  supplied, otherwise the fitted `expected_recovered_T`.
+Posterior-predictive draws past the cut-off from a fitted `model` and its
+chain `chn`: `predict` on [`with_horizon`](@ref)`(model, horizon)`. Each
+draw keeps its fitted parameters. The future walk innovations, the future
+latent series and every stream's future counts are drawn from the model.
+The result is a chain with one draw per fitted draw, which
+[`forecast_reported`](@ref), [`forecast_stream`](@ref),
+[`forecast_onsets`](@ref) and [`forecast_provinces`](@ref) read at any
+horizon up to `horizon`. `seed` fixes the draws, so the national and the
+province forecasts read one set of draws.
+"""
+function forecast_draws(
+        model::Model, chn; horizon::Integer = 28,
+        seed::Integer = 20260520
+    )
+    return predict(MersenneTwister(seed), with_horizon(model, horizon), chn)
+end
+
+## Per-draw vectors of a forecast key, or `nothing` when the draws do not
+## carry it (the fit has no such stream).
+function _forecast_vectors(pp, key::AbstractString)
+    k = Symbol(key)
+    _has_key(pp, k) || return nothing
+    return _draw_vectors(pp, k)
+end
+
+## Days the draws run past the cut-off, read off the future infections every
+## composer tracks.
+function _forecast_horizon(pp)
+    v = _forecast_vectors(pp, "forecast_infections")
+    isnothing(v) && throw(
+        ArgumentError(
+            "these draws carry no forecast; draw them with `forecast_draws`."
+        )
+    )
+    return length(first(v))
+end
+
+function _check_horizon(pp, h::Integer)
+    H = _forecast_horizon(pp)
+    1 <= h <= H || throw(
+        ArgumentError("horizon $h is outside the $H days the draws cover.")
+    )
+    return H
+end
+
+## Sum of each draw's first `h` future values, or `nothing`.
+function _forecast_new(pp, key, h)
+    v = _forecast_vectors(pp, key)
+    isnothing(v) && return nothing
+    return [sum(x[1:h]) for x in v]
+end
+
+## Each draw's value on future day `h`, or `nothing`.
+function _forecast_at(pp, key, h)
+    v = _forecast_vectors(pp, key)
+    isnothing(v) && return nothing
+    return [x[h] for x in v]
+end
+
+## Index of the future vintage `h` days past the cut-off among the weekly
+## vintages of a forecast `H` days long, or `nothing` when `h` is not one.
+_vintage_index(h, H) = findfirst(==(h), future_knot_days(0, H))
+
+"""
+    forecast_reported(pp; horizon = 7, obs_cases, obs_deaths, ...) -> DataFrame
+
+The national forecast `horizon` days past the cut-off, one row per draw,
+read from the posterior-predictive draws `pp` of the joint
+([`forecast_draws`](@ref)). Every count is a draw of the fitted model's own
+future observations: the renewal run on, each stream's delays and
+ascertainment, and each stream's own likelihood. Columns:
+
+- `:cases_cum`, `:deaths_cum`: cumulative suspected reported cases and
+  deaths by the cut-off plus the horizon, the observed cut-off cumulative
+  plus the drawn new counts.
+- `:confirmed_cum`, `:confirmed_deaths_cum`: the laboratory-confirmed
+  counterparts, present when `obs_confirmed` and `obs_confirmed_deaths` are
+  supplied.
+- `:cases_new`, … `:confirmed_deaths_new`: new counts over the horizon.
+- `:isolation_level`: the reported isolation occupancy on the last day, the
+  censored negative binomial around the modelled demand plus the
+  reclassification offset. `:bed_demand` is the modelled demand that day
+  and `:bed_shortfall` its excess over the modelled bed capacity.
+- `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the daily
+  isolation flows on the last day.
+- `:recovered_cum`, `:recovered_new`: recovered among confirmed. The
+  cut-off cumulative is `obs_recovered` when supplied, otherwise the fitted
+  `expected_recovered_T`, and `recovered_new` needs `obs_recovered`.
 - `:infections_new`, `:onsets_new`, `:deaths_latent_new`: new latent
-  infections, symptom onsets and deaths projected over the horizon
-  (deterministic per-draw quantities, so they carry parameter uncertainty
-  only).
-- `:rt_forecast`: the reproduction number at the end of the horizon, the
-  fitted weekly walk continued past the cut-off.
-- the [`forecast_onsets`](@ref) columns (`onsets_to_date`,
-  `onsets_unreported`, `onset_reports_backfill`, `onset_reports_new`, …),
-  present when `onset_grid_start` and `onset_grid_end` are supplied and the
-  chain carries the fitted reporting hazard. Of them only `onset_reports_new`
-  is archived and scored, since it is the one the triangle gives an
-  observation for. The model cut-off grid day goes in as `grid_n` rather than
-  `n`, which is already the draw count here.
-
-Reads `:r`, `:T`, `:expected_reports_T`, `:expected_deaths_T`,
-`:expected_infections_T`, `:R_T`, the per-stream dispersions (`:k_cases`,
-`:k_deaths`, `:k_confirmed`, `:k_confirmed_deaths`, falling back to the
-population-mean `:k`), the reproduction-number walk and generation-interval
-parameters, the cumulative-onset and cumulative-death trajectories and (for
-the laboratory streams) `:expected_confirmed_T` and
-`:expected_confirmed_deaths_T` from `chn`. Each observed stream's daily
-incidence at the cut-off is the last increment of its own cumulative
-trajectory (`:cumulative_reports`, `:cumulative_deaths_total`,
-`:cumulative_confirmed`, `:cumulative_confirmed_deaths`,
-`:cumulative_recovered`), otherwise inferred from the cut-off cumulative
-total and `:T`. When the walk parameters are not carried (single-stream fits)
-the cut-off growth rate is held constant instead.
-
-Exports are not forecast, since cross-border travel is unlikely to continue
-at the baseline rate the export model relies on. The reproduction number is
-allowed to keep evolving over the horizon, but no further interventions and
-no saturation are imposed.
+  infections, symptom onsets and deaths over the horizon, which carry
+  parameter uncertainty only.
+- `:rt_forecast`: the reproduction number on the last day.
+- the [`forecast_onsets`](@ref) columns, when the fit carries the onset
+  triangle and `horizon` is a whole number of weeks.
 """
 function forecast_reported(
-        chn;
-        horizon::Real = 7,
+        pp;
+        horizon::Integer = 7,
         obs_cases::Real,
         obs_deaths::Real,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_confirmed_deaths::Union{Real, Missing} = missing,
-        obs_recovered::Union{Real, Missing} = missing,
-        onset_grid_start::Union{Nothing, Integer} = nothing,
-        onset_grid_end::Union{Nothing, Integer} = nothing,
-        grid_n::Union{Nothing, Integer} = nothing,
-        seed::Integer = 20260520
+        obs_recovered::Union{Real, Missing} = missing
     )
-    r = _draws(chn, :r)
-    cases_T = _draws(chn, :expected_reports_T)
-    deaths_T = _draws(chn, :expected_deaths_T)
-    infections_T = _draws(chn, :expected_infections_T)
-    ## Daily latent onset and death incidence at the cut-off, from the last
-    ## increment of the cumulative-trajectory deterministics. A chain that
-    ## does not carry the trajectories falls back to the cut-off cumulative
-    ## reported cases and deaths as a daily-incidence proxy.
-    onsets_T = something(
-        _daily_at_cutoff(chn, :cumulative_onsets), cases_T
-    )
-    deaths_daily_T = something(
-        _daily_at_cutoff(chn, :cumulative_expected_deaths), deaths_T
-    )
-    ## The rate paths and the observation replicates below draw from one
-    ## seeded stream, so the whole forecast is reproducible.
-    nh = Int(horizon)
-    rng = MersenneTwister(seed)
-    evolving = _evolving_rates(chn, nh; rng = rng)
-    rt_forecast = isnothing(evolving) ? _draws(chn, :R_T) : evolving.rt_term
-    ## Per-stream dispersions, resolved from the same keys `forecast_stream`
-    ## uses so the two forecasters agree. `k` is the population-mean
-    ## dispersion and the fallback for a chain carrying no per-stream alias.
-    k = _draws(chn, :k)
-    _stream_k(stream) = begin
-        d = _resolve_draws(chn, _STREAM_SPEC[stream].dispersion)
-        (isnothing(d) || length(d) != length(k)) ? k : d
-    end
-    k_cases = _stream_k(:reported_cases)
-    k_deaths = _stream_k(:suspected_deaths)
-    k_conf = _stream_k(:confirmed_cases)
-    k_conf_deaths = _stream_k(:confirmed_deaths)
-    has_conf = obs_confirmed !== missing
-    has_conf_deaths = obs_confirmed_deaths !== missing
-    conf_T = has_conf ? _draws(chn, :expected_confirmed_T) : nothing
-    conf_deaths_T = has_conf_deaths ?
-        _draws(chn, :expected_confirmed_deaths_T) : nothing
-    ## Isolation beds and recovered-among-confirmed, forecast when the chain
-    ## carries them and using each stream's own dispersion.
-    _has(key) =
-    try
-        chn[key]
-        true
-    catch
-        false
-    end
-    has_iso = _has(:expected_bed_demand_T) && _has(:bed_capacity) &&
-        _has(:isolation_dispersion)
-    has_rec = _has(:expected_recovered_T) && _has(:recovered_dispersion)
-    ## The three daily treatment flows (admissions, in-care deaths, rule-outs)
-    ## share the isolation dispersion, so they need it carried too.
-    has_flows = _has(:expected_admissions_T) && _has(:expected_incare_deaths_T) &&
-        _has(:expected_ruleouts_T) && _has(:isolation_dispersion)
-    demand_T = has_iso ? _draws(chn, :expected_bed_demand_T) : nothing
-    cap = has_iso ? _draws(chn, :bed_capacity) : nothing
-    occ_offset = has_iso ? _occupancy_offset(chn, length(r)) : nothing
-    k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
-    rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
-    k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
-    admit_T = has_flows ? _draws(chn, :expected_admissions_T) : nothing
-    incare_deaths_T = has_flows ? _draws(chn, :expected_incare_deaths_T) :
-        nothing
-    ruleout_T = has_flows ? _draws(chn, :expected_ruleouts_T) : nothing
-    k_flow = has_flows ? _draws(chn, :isolation_dispersion) : nothing
-
-    ## Daily incidence at the cut-off for each observed cumulative stream.
-    ## Prefer the last increment of the stream's cumulative trajectory when
-    ## the chain carries it, otherwise infer the daily rate from the
-    ## cumulative total under exponential growth at the cut-off rate over the
-    ## outbreak age `T`.
-    T_age = _has(:T) ? _draws(chn, :T) : fill(Inf, length(r))
-    _approx(C) = _approx_daily.(C, r, T_age)
-    cases_daily = something(
-        _daily_at_cutoff(chn, :cumulative_reports),
-        _approx(cases_T)
-    )
-    deaths_daily_obs = something(
-        _daily_at_cutoff(chn, :cumulative_deaths_total),
-        _approx(deaths_T)
-    )
-    conf_daily = has_conf ?
-        something(
-            _daily_at_cutoff(chn, :cumulative_confirmed),
-            _approx(conf_T)
-        ) : nothing
-    conf_deaths_daily = has_conf_deaths ?
-        something(
-            _daily_at_cutoff(chn, :cumulative_confirmed_deaths),
-            _approx(conf_deaths_T)
-        ) : nothing
-    rec_daily = has_rec ?
-        something(
-            _daily_at_cutoff(chn, :cumulative_recovered),
-            _approx(rec_T)
-        ) : nothing
-
-    n = length(r)
-    cases_cum = Vector{Int}(undef, n)
-    deaths_cum = Vector{Int}(undef, n)
-    infections_new = Vector{Float64}(undef, n)
-    onsets_new = Vector{Float64}(undef, n)
-    deaths_latent_new = Vector{Float64}(undef, n)
-    confirmed_cum = has_conf ? Vector{Int}(undef, n) : nothing
-    confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
-    bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
-    isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
-    bed_shortfall = has_iso ? Vector{Int}(undef, n) : nothing
-    recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
-    admissions_fc = has_flows ? Vector{Int}(undef, n) : nothing
-    incare_deaths_fc = has_flows ? Vector{Int}(undef, n) : nothing
-    ruleouts_fc = has_flows ? Vector{Int}(undef, n) : nothing
-
-    @inbounds for i in 1:n
-        ## Growth factor over the whole horizon: the product of the daily
-        ## evolving factors, else the constant cut-off rate compounded.
-        rs = isnothing(evolving) ? nothing : evolving.paths[i]
-        grow = isnothing(rs) ? exp(r[i] * horizon) :
-            prod(exp, rs)
-        _means(daily) = _daily_means(daily, rs, r[i], nh)
-        _new_h(daily) = sum(_means(daily))
-        ## Observed cumulative streams: project new counts over the horizon
-        ## and add them to the cut-off cumulative, so the projected cumulative
-        ## never falls below the cut-off. Scaling the cumulative stock by
-        ## `grow` would shrink it whenever the growth rate is negative.
-        cases_cum[i] = round(Int, obs_cases) +
-            _nb_new(rng, k_cases[i], _means(cases_daily[i]))
-        deaths_cum[i] = round(Int, obs_deaths) +
-            _nb_new(rng, k_deaths[i], _means(deaths_daily_obs[i]))
-        ## Latent streams, so these carry parameter uncertainty across draws
-        ## and no observation uncertainty.
-        infections_new[i] = _new_h(infections_T[i])
-        onsets_new[i] = _new_h(onsets_T[i])
-        deaths_latent_new[i] = _new_h(deaths_daily_T[i])
-        has_conf && (
-            confirmed_cum[i] = round(Int, obs_confirmed) +
-                _nb_new(rng, k_conf[i], _means(conf_daily[i]))
+    h = Int(horizon)
+    _check_horizon(pp, h)
+    new(key) = _forecast_new(pp, key, h)
+    at(key) = _forecast_at(pp, key, h)
+    cases_new = new("forecast_reports.increments")
+    deaths_new = new("forecast_deaths.increments")
+    (isnothing(cases_new) || isnothing(deaths_new)) && throw(
+        ArgumentError(
+            "forecast_reported reads the joint's draws; for a single-stream " *
+                "fit use `forecast_stream`."
         )
-        ## Confirmed deaths carry no cap against the suspected-death
-        ## cumulative. The two reported series are separate counts on a
-        ## shared latent pool, drawn off different observed baselines with
-        ## their own dispersions, so neither bounds the other whatever the
-        ## model did. Capping here would clamp the replicate below its own
-        ## origin: the suspected total froze at 246 on 26 May and the
-        ## confirmed-death cumulative passed it three weeks later. In the
-        ## joint the latent volume is uncapped too, since it counts
-        ## specimens rather than persons ([`confirmed_deaths_model`](@ref)).
-        if has_conf_deaths
-            confirmed_deaths_cum[i] = round(Int, obs_confirmed_deaths) +
-                _nb_new(
-                rng, k_conf_deaths[i],
-                _means(conf_deaths_daily[i])
-            )
-        end
-        ## The demand replicate carries the dispersion. The occupancy is that
-        ## same replicate shifted by the fitted reclassification offset and
-        ## capped at the capacity, `min(demand + Δ, C)`, which the censored
-        ## occupancy likelihood scores against the reported series. The
-        ## shortfall is taken against the capacity, so a change of reporting
-        ## basis is not counted as unmet demand.
-        if has_iso
-            d = _nb_rand(rng, k_iso[i], demand_T[i] * grow)
-            bed_demand[i] = d
-            isolation_level[i] = _reported_occupancy(d, occ_offset[i], cap[i])
-            bed_shortfall[i] = max(d - round(Int, cap[i]), 0)
-        end
-        if has_rec
-            base_rec = obs_recovered === missing ? round(Int, rec_T[i]) :
-                round(Int, obs_recovered)
-            recovered_cum[i] = base_rec +
-                _nb_new(rng, k_rec[i], _means(rec_daily[i]))
-        end
-        if has_flows
-            admissions_fc[i] = _nb_rand(rng, k_flow[i], admit_T[i] * grow)
-            incare_deaths_fc[i] = _nb_rand(
-                rng, k_flow[i],
-                incare_deaths_T[i] * grow
-            )
-            ruleouts_fc[i] = _nb_rand(rng, k_flow[i], ruleout_T[i] * grow)
-        end
-    end
-
-    _new(cum, obs) = max.(cum .- round(Int, obs), 0)
+    )
     df = DataFrame(
-        cases_cum = cases_cum,
-        deaths_cum = deaths_cum,
-        cases_new = _new(cases_cum, obs_cases),
-        deaths_new = _new(deaths_cum, obs_deaths),
-        infections_new = infections_new,
-        onsets_new = onsets_new,
-        deaths_latent_new = deaths_latent_new,
-        rt_forecast = rt_forecast
+        cases_cum = round(Int, obs_cases) .+ cases_new,
+        deaths_cum = round(Int, obs_deaths) .+ deaths_new,
+        cases_new = cases_new,
+        deaths_new = deaths_new,
+        infections_new = new("forecast_infections"),
+        onsets_new = new("forecast_onsets"),
+        deaths_latent_new = new("forecast_latent_deaths"),
+        rt_forecast = at("forecast_rt")
     )
-    if has_conf
-        df.confirmed_cum = confirmed_cum
-        df.confirmed_new = _new(confirmed_cum, obs_confirmed)
+    conf = new("forecast_confirmed.increments")
+    if obs_confirmed !== missing && !isnothing(conf)
+        df.confirmed_cum = round(Int, obs_confirmed) .+ conf
+        df.confirmed_new = conf
     end
-    if has_conf_deaths
-        df.confirmed_deaths_cum = confirmed_deaths_cum
-        df.confirmed_deaths_new = _new(
-            confirmed_deaths_cum,
-            obs_confirmed_deaths
+    conf_deaths = new("forecast_confirmed_deaths.increments")
+    if obs_confirmed_deaths !== missing && !isnothing(conf_deaths)
+        df.confirmed_deaths_cum = round(Int, obs_confirmed_deaths) .+
+            conf_deaths
+        df.confirmed_deaths_new = conf_deaths
+    end
+    iso = at("forecast_isolation.obs")
+    if !isnothing(iso)
+        ## The modelled demand and capacity are latent means, so they stay
+        ## floats: a prior draw far in the tail can overflow an integer.
+        df.bed_demand = round.(at("forecast_bed_demand"))
+        df.isolation_level = round.(Int, iso)
+        df.bed_shortfall = max.(
+            df.bed_demand .- round.(at("forecast_bed_capacity")), 0.0
         )
+        df.admissions_fc = round.(Int, at("forecast_admissions.obs"))
+        df.incare_deaths_fc = at("forecast_incare_deaths.increments")
+        df.ruleouts_fc = at("forecast_ruleouts.increments")
     end
-    if has_iso
-        df.bed_demand = bed_demand
-        df.isolation_level = isolation_level
-        df.bed_shortfall = bed_shortfall
+    rec = new("forecast_recovered.increments")
+    if !isnothing(rec)
+        base = obs_recovered === missing ?
+            round.(Int, _draws(pp, :expected_recovered_T)) :
+            round(Int, obs_recovered)
+        df.recovered_cum = base .+ rec
+        obs_recovered !== missing && (df.recovered_new = rec)
     end
-    if has_flows
-        df.admissions_fc = admissions_fc
-        df.incare_deaths_fc = incare_deaths_fc
-        df.ruleouts_fc = ruleouts_fc
-    end
-    if has_rec
-        df.recovered_cum = recovered_cum
-        obs_recovered !== missing &&
-            (df.recovered_new = _new(recovered_cum, obs_recovered))
-    end
-    ## Symptom-onset nowcast and forecast, attached when the caller supplies
-    ## the fitted triangle's grid (data, not chain contents) and the chain
-    ## carries the reporting hazard.
-    if !isnothing(onset_grid_start) && !isnothing(onset_grid_end) &&
-            !isnothing(grid_n) &&
-            _has_key(chn, Symbol("onset_report_state.σ_mult"))
-        onset_fc = forecast_onsets(
-            chn; grid_start = onset_grid_start,
-            grid_end = onset_grid_end, n = grid_n, horizon = horizon,
-            seed = seed
-        )
-        ## `onsets_new` is already a column here, built from the same cut-off
-        ## daily onset rate and the same evolving growth path. The existing
-        ## one is kept rather than overwritten, so a divergence between the
-        ## two would show rather than being hidden.
-        for col in propertynames(onset_fc)
+    onsets = forecast_onsets(pp; horizon = h, strict = false)
+    if !isnothing(onsets)
+        for col in propertynames(onsets)
             col in propertynames(df) && continue
-            df[!, col] = onset_fc[!, col]
+            df[!, col] = onsets[!, col]
         end
     end
     return df
 end
 
-## Per-draw daily symptom-onset series over `1:n`, the increments of the
-## chain's `cumulative_onsets` trajectory (the model stores the running sum,
-## not the daily series). Returns `nothing` when the chain does not carry
-## the trajectory, so the caller can say the fit has no onset stream.
-function _onset_daily_series(chn)
-    mat = try
-        chn[:cumulative_onsets]
-    catch
-        return nothing
-    end
-    return [
-        (v = collect(t); vcat(v[1], diff(v)))
-            for t in vec(collect(mat))
-    ]
-end
-
 """
-    forecast_onsets(chn; grid_start, grid_end, n, horizon = 7, ...)
+    forecast_onsets(pp; horizon = 7, obs_value = missing, strict = true)
         -> DataFrame
 
 Nowcast and forecast of symptom onsets and of the reporting triangle that
-observes them, one row per posterior draw. It separates the two things a
-reporting triangle can tell apart: cases that have already had their onset
-but have not yet been reported, and cases whose onset has not yet happened.
+observes them, one row per draw, read from the posterior-predictive draws
+`pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
+separates cases that have had their onset but are not yet reported from
+cases whose onset has not happened. The model runs the fitted reporting
+hazard, ascertainment and scan noise forward to a future vintage
+`horizon` days past the cut-off, which must be a whole number of weeks
+(see [`onset_forecast_model`](@ref)). Columns, all per draw:
 
-The reported total as of grid day `a` is
-[`onset_report_expected_total`](@ref)'s `Σ_u onsets[u] · F(u, a - u)`, with
-`F(u, δ) = α(u) · G(u, δ)` ([`onset_report_F`](@ref)) the fitted delay
-hazard's cumulative reported proportion and `α(u)` the fitted ascertainment
-level. Splitting that sum at the cut-off `n` and differencing it between `n`
-and `n + h` gives the columns below. Onsets after the cut-off are projected
-by carrying the cut-off daily onset rate forward under the same evolving
-growth-rate path every other forecast uses (see
-[`forecast_reported`](@ref)). The calendar-time effect `γ` and the
-ascertainment level `α` are both held flat at their last fitted value over
-the horizon ([`onset_report_F`](@ref) already does this, see
-[`onset_report_G`](@ref)), the same assumption a nowcast makes.
-
-Columns, all per draw:
-
-  - `onsets_to_date`: symptom onsets that have already happened by the
-    cut-off, `Σ_{u ≤ n} onsets[u]`. The nowcast, free of reporting delay
-    and of the ascertainment level `α`.
+  - `onsets_to_date`: symptom onsets that have happened by the cut-off.
   - `onset_reports_to_date`: of those, the number the triangle should
-    already have printed, `Σ_{u ≤ n} onsets[u] · F(u, n - u)`. The
-    quantity the digitised total is an observation of.
-  - `onsets_unreported`: their difference, onsets that have happened but
-    are not yet reported. `F` does not tend to one, so this carries both
-    the reporting backlog and the cases ascertainment will never pick up.
-  - `onsets_new`: onsets over the horizon, `Σ_{n < u ≤ n+h} onsets[u]`,
-    what has not yet happened.
-  - `onset_reports_backfill`: reports arriving over the horizon for
-    onsets on or before the cut-off, the part of `onsets_unreported` the
-    triangle should fill in this week.
-  - `onset_reports_future`: reports arriving over the horizon for onsets
+    already have printed.
+  - `onsets_unreported`: their difference, the reporting backlog and the
+    cases ascertainment will never pick up.
+  - `onsets_new`: onsets over the horizon.
+  - `onset_reports_backfill`: reports arriving over the horizon of onsets
+    on or before the cut-off.
+  - `onset_reports_future`: reports arriving over the horizon of onsets
     after the cut-off.
-  - `onset_reports_new`: their sum, the replicated new reported count
-    over the horizon, and the scored forecast. It is an increment rather
-    than a level because the digitised total is revised between vintages
-    (see [`forecast_archive`](@ref)). Floored at zero to match the
-    `max(new, 0)` convention the observed truth is built with.
-  - `onset_reports_cum`: `obs_value + onset_reports_new` when
-    `obs_value` (the triangle's own cumulative total at the cut-off) is
-    supplied, so the projection can be plotted on the observed scale.
+  - `onset_reports_new`: the drawn new reported count, the scored
+    forecast, rounded and floored at zero as the observed increment is.
+  - `onset_reports_cum`: `obs_value + onset_reports_new` when `obs_value`
+    (the triangle's own total at the cut-off) is supplied, so the forecast
+    can be plotted on the observed scale.
 
-`onset_reports_new` is replicated through the stream's own observation model
-rather than a negative binomial. The increment is scored under
-[`onset_report_scale`](@ref)'s three-term scale (counting variation,
-pixel-reading noise, per-scan level error), inflated by the fitted `σ_mult`,
-and perturbed by a Student-t with the same `ν` the likelihood uses. The scale
-is applied once to the whole projected total, so its scan-level term takes
-the fitted shared per-scan coefficient `σ_scan` rather than the whole
-measured per-bar error. At a total of a couple of thousand cases the per-scan
-level term dominates by an order of magnitude, so the interval on a weekly
-increment is mostly digitisation error rather than epidemic uncertainty. The
-forecast is therefore more useful as a check that the fitted delay and
-ascertainment reproduce the next vintage than as a case-count prediction.
-
-`grid_start` and `grid_end` are the fitted triangle's own onset/report-day
-grid (see [`reconstruct_onset_hazard`](@ref)). `n` is the model cut-off
-grid day and `breakpoint` the intervention breakpoint, needed only when
-the chain is a single-stream fit that does not carry `R_T`/`r`
-(see [`forecast_stream`](@ref)).
+With `strict = false` it returns `nothing` rather than erroring when the
+draws carry no onset forecast or `horizon` is not a future vintage.
 """
 function forecast_onsets(
-        chn;
-        grid_start::Integer,
-        grid_end::Integer,
-        n::Integer,
-        horizon::Real = 7,
-        obs_value::Union{Real, Missing} = missing,
-        week::Integer = 7,
-        ν::Real = 4.0,
-        pixel_sd::Real = 2.1,
-        scan_frac::Real = 0.04,
-        breakpoint::Union{Nothing, Real} = nothing,
-        rt_start::Integer = 1,
-        rt_walk_start::Integer = rt_start,
-        seed::Integer = 20260520
+        pp; horizon::Integer = 7, obs_value::Union{Real, Missing} = missing,
+        strict::Bool = true
     )
-    daily = _onset_daily_series(chn)
-    isnothing(daily) && throw(
-        ArgumentError(
-            "forecast_onsets: chain carries no `cumulative_onsets` trajectory, " *
-                "so the latent onset series cannot be recovered. This fit has no " *
-                "onset stream."
+    h = Int(horizon)
+    H = _check_horizon(pp, h)
+    draws = _forecast_vectors(pp, "forecast_onset_reports.increments")
+    j = _vintage_index(h, H)
+    if isnothing(draws) || isnothing(j)
+        strict || return nothing
+        throw(
+            ArgumentError(
+                isnothing(draws) ?
+                    "these draws carry no onset forecast; the fit has no " *
+                    "onset triangle." :
+                    "horizon $h is not a forecast vintage; the onset " *
+                    "forecast is drawn a whole number of weeks ahead."
+            )
         )
+    end
+    cum = _draw_vectors(pp, :cumulative_onsets)
+    to_date = [c[length(c) - H] for c in cum]
+    reported = _draws(pp, :forecast_onset_reports_to_date)
+    df = DataFrame(
+        onsets_to_date = to_date,
+        onset_reports_to_date = reported,
+        onsets_unreported = to_date .- reported,
+        onsets_new = _forecast_new(pp, "forecast_onsets", h),
+        onset_reports_backfill = [
+            x[j] for x in _draw_vectors(pp, :forecast_onset_reports_backfill)
+        ],
+        onset_reports_future = [
+            x[j] for x in _draw_vectors(pp, :forecast_onset_reports_future)
+        ],
+        onset_reports_new = [max(round(Int, x[j]), 0) for x in draws]
     )
-    hazard = reconstruct_onset_hazard(chn; grid_start, grid_end, week)
-    σ_mult = _draws(chn, Symbol("onset_report_state.σ_mult"))
-    ## A chain that does not sample the onset-report overdispersion falls
-    ## back to no quadratic term, which is that fit's own likelihood.
-    k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
-        _draws(chn, Symbol("onset_report_state.k_onset")) : nothing
-    ## Per-scan level error for the projected snapshot. The likelihood carries
-    ## this on the modelled level rather than in the per-cell scale (see
-    ## `onset_reporting_model`), but a projected total is scored against a
-    ## scan that has not happened yet, so its own level error has to enter the
-    ## scale here. A chain that does not sample it falls back to `scan_frac`.
-    σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
-        _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
+    obs_value === missing ||
+        (df.onset_reports_cum = round(Int, obs_value) .+ df.onset_reports_new)
+    return df
+end
 
-    R_T = _cutoff_rt(
-        chn; n = n, breakpoint = breakpoint,
-        rt_start = rt_start, rt_walk_start = rt_walk_start
-    )
-    r = _cutoff_r(chn, R_T)
-    isnothing(r) && throw(
+## The streams `forecast_stream` reads: the future-count key each composer
+## draws and whether the stream is a level read on the last day rather than
+## a count summed over the horizon.
+const _STREAM_FORECAST = Dict{Symbol, NamedTuple}(
+    :reported_cases => (key = "forecast_reports.increments", level = false),
+    :suspected_deaths => (key = "forecast_deaths.increments", level = false),
+    :confirmed_cases => (key = "forecast_confirmed.increments", level = false),
+    :confirmed_deaths => (
+        key = "forecast_confirmed_deaths.increments", level = false,
+    ),
+    :recovered => (key = "forecast_recovered.increments", level = false),
+    :exports => (key = "forecast_exports.counts", level = false),
+    :isolation_beds => (key = "forecast_isolation.obs", level = true),
+    :onset_reports => (key = "forecast_onset_reports.increments", level = false),
+)
+
+"""
+    forecast_stream(pp, stream; horizon = 7) -> Vector
+
+The forecast of one observed stream `horizon` days past the cut-off, one
+value per draw, from the posterior-predictive draws `pp` of either the joint
+or the stream's own single-stream fit ([`forecast_draws`](@ref)). Every
+composer draws its streams' future counts under the same names, so one
+reader serves both.
+
+`stream` is one of `:reported_cases`, `:suspected_deaths`,
+`:confirmed_cases`, `:confirmed_deaths`, `:recovered`, `:exports`,
+`:isolation_beds` and `:onset_reports`. The incident streams return the new
+count over the horizon, the convention [`forecast_archive`](@ref) scores.
+`:isolation_beds` returns the reported occupancy on the last day.
+`:onset_reports` returns the new count the triangle prints over the horizon
+([`forecast_onsets`](@ref)), which needs `horizon` to be a whole number of
+weeks.
+"""
+function forecast_stream(pp, stream::Symbol; horizon::Integer = 7)
+    spec = get(_STREAM_FORECAST, stream, nothing)
+    isnothing(spec) && throw(
         ArgumentError(
-            "forecast_onsets: chain carries neither `r` nor `R_T`, so the " *
-                "cut-off growth rate cannot be recovered. Pass `n` and " *
-                "`breakpoint` to rebuild them from the walk."
+            "forecast_stream: unknown stream `:$stream`; expected one of " *
+                join(sort!([":$s" for s in keys(_STREAM_FORECAST)]), ", ")
         )
     )
     h = Int(horizon)
-    rng = MersenneTwister(seed)
-    evolving = _evolving_rates(chn, h; R_T = R_T, rng = rng)
-
-    nd = length(daily)
-    onsets_to_date = Vector{Float64}(undef, nd)
-    reports_to_date = Vector{Float64}(undef, nd)
-    onsets_new = Vector{Float64}(undef, nd)
-    backfill = Vector{Float64}(undef, nd)
-    future = Vector{Float64}(undef, nd)
-    reports_new = Vector{Int}(undef, nd)
-
-    @inbounds for i in 1:nd
-        o = daily[i]
-        lh0 = hazard.logit_h0[i]
-        γ = hazard.γ[i]
-        α = hazard.alpha[i]
-        na = length(α)
-        ## Future daily onsets, built exactly as `forecast_reported` builds
-        ## its `onsets_new`.
-        rs = isnothing(evolving) ? nothing : evolving.paths[i]
-        daily_T = o[min(n, length(o))]
-        fut = _daily_means(daily_T, rs, r[i], h)
-
-        ## Reported totals at the cut-off and at the horizon, split by whether
-        ## the onset date is on or after the cut-off. `F` is evaluated with
-        ## the calendar walk and the ascertainment level both held flat
-        ## outside their fitted support.
-        past_now = 0.0
-        past_then = 0.0
-        ge = min(n, length(o))
-        for u in 1:ge
-            αu = α[clamp(u - grid_start + 1, 1, na)]
-            f_now = onset_report_F(n - u, lh0, γ, u, grid_start, αu)
-            f_then = onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
-            past_now += o[u] * f_now
-            past_then += o[u] * f_then
-        end
-        fut_then = 0.0
-        for d in 1:h
-            u = n + d
-            αu = α[clamp(u - grid_start + 1, 1, na)]
-            fut_then += fut[d] *
-                onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
-        end
-
-        onsets_to_date[i] = sum(@view o[1:ge])
-        reports_to_date[i] = past_now
-        onsets_new[i] = sum(fut)
-        backfill[i] = past_then - past_now
-        future[i] = fut_then
-
-        ## Replicate the projected increment through the same three-term
-        ## observation scale a scored correction cell carries: two reads
-        ## (`reads = 2`, this is a difference of two vintages), the levels
-        ## being the reported totals at the two ends of the horizon.
-        μ = backfill[i] + future[i]
-        base = onset_report_scale(
-            μ, past_then, past_now, 2;
-            pixel_sd, scan_sd = isnothing(σ_scan) ? scan_frac : σ_scan[i]
+    _check_horizon(pp, h)
+    stream === :onset_reports &&
+        return forecast_onsets(pp; horizon = h).onset_reports_new
+    _has_key(pp, Symbol(spec.key)) || throw(
+        ArgumentError(
+            "forecast_stream: these draws carry no `$(spec.key)`; the fit " *
+                "does not include `:$stream`."
         )
-        σ = σ_mult[i] * (
-            isnothing(k_onset) ? base :
-                sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64)))
-        )
-        reports_new[i] = max(round(Int, μ + σ * rand(rng, TDist(ν))), 0)
-    end
-
-    df = DataFrame(
-        onsets_to_date = onsets_to_date,
-        onset_reports_to_date = reports_to_date,
-        onsets_unreported = onsets_to_date .- reports_to_date,
-        onsets_new = onsets_new,
-        onset_reports_backfill = backfill,
-        onset_reports_future = future,
-        onset_reports_new = reports_new
     )
-    obs_value === missing ||
-        (df.onset_reports_cum = round(Int, obs_value) .+ reports_new)
-    return df
+    spec.level && return round.(Int, _forecast_at(pp, spec.key, h))
+    return _forecast_new(pp, spec.key, h)
+end
+
+"""
+    PROVINCE_FORECAST_METHOD
+
+The `method` [`province_forecast_archive`](@ref) records on each row, and the
+only one the release scoring scores. It names the version of
+[`forecast_provinces`](@ref), so archives of an earlier projection are never
+scored alongside it.
+"""
+const PROVINCE_FORECAST_METHOD = "predict"
+
+"""
+    forecast_provinces(pp; horizon = 7, n_patches, patch_labels) -> DataFrame
+
+The per-province forecast `horizon` days past the cut-off, read from the
+posterior-predictive draws `pp` of the patch joint
+([`forecast_draws`](@ref)). Each province's reproduction number continues
+the fitted national walk and the province's correlated, mean-reverting
+deviation, and each province renews with the fitted importation. Its
+confirmed cases and confirmed deaths are the national forecast counts split
+each week by the fitted province compositions, with the province's own
+delays, relative ascertainment and severity, so the provinces add up to the
+national forecast in every draw (see [`bvd_joint`](@ref)).
+
+Returns one row per province and draw, with columns `patch`, `province`
+(its label in `patch_labels`), `draw`, `infections_new`, `rt_forecast` (the
+province's reproduction number on the last day), and `confirmed_new` and
+`confirmed_deaths_new` when the fit carries the matching composition. The
+counts need `horizon` to be a whole number of weeks.
+"""
+function forecast_provinces(
+        pp;
+        horizon::Integer = 7,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    h = Int(horizon)
+    H = _check_horizon(pp, h)
+    np = min(n_patches, length(patch_labels))
+    inf = _forecast_vectors(pp, "forecast_infections_patch")
+    (isnothing(inf) || length(first(inf)) != n_patches * H) && throw(
+        ArgumentError(
+            "these draws carry no $(n_patches)-patch forecast; draw them " *
+                "from `bvd_joint` with $(n_patches) patches."
+        )
+    )
+    rt = _draw_vectors(pp, :forecast_rt_patch)
+    ## Weekly province counts, one column per future vintage, summed to
+    ## the vintage `h` days on.
+    j = _vintage_index(h, H)
+    function weekly(key)
+        v = _forecast_vectors(pp, key)
+        isnothing(v) && return nothing
+        isnothing(j) && throw(
+            ArgumentError(
+                "horizon $h is not a forecast vintage; the province " *
+                    "counts are split a whole number of weeks ahead."
+            )
+        )
+        return [vec(sum(reshape(x, n_patches, :)[:, 1:j]; dims = 2)) for x in v]
+    end
+    conf = weekly("forecast_province_confirmed")
+    conf_deaths = weekly("forecast_province_deaths")
+    nd = length(inf)
+    out = DataFrame(
+        patch = Int[], province = String[], draw = Int[],
+        infections_new = Float64[], rt_forecast = Float64[]
+    )
+    for i in 1:nd
+        I = reshape(inf[i], n_patches, :)
+        R = reshape(rt[i], n_patches, :)
+        for p in 1:np
+            push!(
+                out, (
+                    p, String(patch_labels[p]), i,
+                    sum(@view I[p, 1:h]), R[p, h],
+                )
+            )
+        end
+    end
+    isnothing(conf) ||
+        (out.confirmed_new = [conf[i][p] for i in 1:nd for p in 1:np])
+    isnothing(conf_deaths) || (
+        out.confirmed_deaths_new = [
+            conf_deaths[i][p] for i in 1:nd for p in 1:np
+        ]
+    )
+    return out
 end
 
 """
@@ -777,212 +474,19 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
     return out
 end
 
-## Piecewise-linear interpolation of knot values `ks` (knot 0 at the
-## cut-off, knot `j` at `j * week` days on) to horizon day `d`, for the
-## provincial deviations, which revert rather than accumulate.
-function _knot_interp(ks, d::Integer, week::Integer)
-    j = fld(d, week)
-    j >= length(ks) - 1 && return ks[end]
-    w = (d - j * week) / week
-    return (1 - w) * ks[j + 1] + w * ks[j + 2]
-end
-
-## Per-draw loading matrices `(np × k)` from standard-normal draws to one
-## knot's provincial deviation innovations. A chain carrying
-## `region_drift_factor` gives the fitted one. Otherwise each province's
-## `region_drift_sd` scales an independent draw and the vector is centred,
-## the same matrix `(I - J / np) diag(σ_δ)` applied to `np` draws, over the
-## first `np` of the chain's patches. The fitted factor sums to zero only
-## over all of the chain's patches, so it needs `np` to be all of them.
-function _drift_factors(chn, np::Integer)
-    sds = _draw_vectors(chn, :region_drift_sd)
-    if _has_key(chn, :region_drift_factor)
-        npc = length(first(sds))
-        npc == np || throw(
-            ArgumentError(
-                "forecast_provinces: the chain has $npc patches but " *
-                    "$np were asked for; the fitted drift factor sums " *
-                    "to zero only over all of them"
-            )
-        )
-        return [
-            reshape(collect(v), np, :)
-                for v in _draw_vectors(chn, :region_drift_factor)
-        ]
-    end
-    return [
-        [((i == j) - 1 / np) * σ[j] for i in 1:np, j in 1:np]
-            for σ in sds
-    ]
-end
-
 """
-    forecast_provinces(chn; horizon = 7, n_patches, patch_labels, seed)
-        -> DataFrame
-
-Per-province forward projection from a fitted patch chain: each province's
-renewal equation continued `horizon` days past the cut-off, the patches still
-coupled by importation. It uses the fitted chain as it is and needs no refit.
-Returns one row per province and draw, with columns `patch` (the patch
-index), `province` (its label in `patch_labels`), `draw`,
-`infections_new` (new latent infections over the horizon) and `rt_forecast`
-(the province's reproduction number at the horizon), plus `confirmed_new`
-and `confirmed_deaths_new` when the chain carries what they need.
-
-For each draw the province reproduction number over the horizon is its
-cut-off value `R_T_patch` moved by two walks, continued as
-[`patch_rt_model`](@ref) defines them.
-
-- The national log-Rt walk takes fresh weekly innovations at its fitted step
-  size `rt_state.sigma_rw`, shared by every province, as
-  [`forecast_reported`](@ref) continues it.
-- Each province's deviation from it reverts toward zero with the fitted
-  half-life `region_halflife` and takes fresh weekly innovations through
-  the fitted loading matrix `region_drift_factor`, so they carry the fitted
-  cross-province covariance and sum to zero. A chain without it draws
-  independent innovations at each province's `region_drift_sd` and centres
-  them.
-
-The cut-off is treated as a knot. The last generation-interval's worth of
-each province's fitted daily infections (`infections_patch`) seeds
-[`patch_infections`](@ref), which renews the provinces over the horizon with
-the generation interval, the importation kernel and the importation
-intensity at the cut-off (`importation_epsilon_patch`, zero when the chain
-was fitted uncoupled).
-
-The confirmed streams start from the national daily rate at the cut-off (the
-last increment of `cumulative_confirmed` or `cumulative_confirmed_deaths`)
-times the province's modelled share at the most recent spatial vintage
-(`province_shares`, and `province_death_shares` for the deaths where the
-chain carries it). Each day then grows with the
-province's own projected infections, `I_{p,n+d} / I_{p,n}`, with no delay
-between infection and report, as the national forecast grows its streams.
-Each day is replicated through the stream's fitted dispersion and the days
-are summed. The provinces are projected on their own, so they need not sum
-to the national forecast draw by draw.
-"""
-function forecast_provinces(
-        chn;
-        horizon::Integer = 7,
-        n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = PROVINCE_LABELS,
-        importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]
-        ),
-        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        week::Integer = 7,
-        seed::Integer = 20260521
-    )
-    np = min(n_patches, length(patch_labels))
-    h = Int(horizon)
-    R_T = _draw_vectors(chn, :R_T_patch)
-    δ_T = _draw_vectors(chn, :delta_patch)
-    drift_factor = _drift_factors(chn, np)
-    halflife = _draws(chn, :region_halflife)
-    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
-    α = _draws(chn, Symbol("gi_state.α"))
-    θ = _draws(chn, Symbol("gi_state.θ"))
-    I_flat = _draw_vectors(chn, :infections_patch)
-    ε = _has_key(chn, :importation_epsilon_patch) ?
-        _draw_vectors(chn, :importation_epsilon_patch) : nothing
-    nd = length(halflife)
-    n = length(first(I_flat)) ÷ np
-
-    ## A confirmed stream is projected when the chain carries its national
-    ## cut-off rate, its dispersion and its provincial shares. A chain with
-    ## no death composition splits the deaths by the case shares.
-    function stream(cum_key, share_keys, k_keys)
-        i = findfirst(k -> _has_key(chn, k), share_keys)
-        isnothing(i) && return nothing
-        share_key = share_keys[i]
-        daily = _daily_at_cutoff(chn, cum_key)
-        isnothing(daily) && return nothing
-        k = _resolve_draws(chn, k_keys)
-        isnothing(k) && return nothing
-        return (; daily, k, share = _per_patch_last_share(chn, share_key, np))
-    end
-    conf = stream(
-        :cumulative_confirmed, (:province_shares,),
-        _STREAM_SPEC[:confirmed_cases].dispersion
-    )
-    conf_deaths = stream(
-        :cumulative_confirmed_deaths,
-        (:province_death_shares, :province_shares),
-        _STREAM_SPEC[:confirmed_deaths].dispersion
-    )
-
-    rng = MersenneTwister(seed)
-    nknots = cld(h, week)
-    out = DataFrame(
-        patch = Int[], province = String[], draw = Int[],
-        infections_new = Float64[], rt_forecast = Float64[]
-    )
-    conf_new = Int[]
-    conf_deaths_new = Int[]
-    for i in 1:nd
-        g = _gi_pmf(α[i], θ[i]; nmax = gi_nmax)
-        L = min(length(g), n)
-        ## National walk: one path shared by every province.
-        nat_innov = sigma[i] .* randn(rng, nknots)
-        nat_cum = cumsum(nat_innov)
-        ## Provincial deviations: mean-reverting, centred at every knot.
-        φ = exp2(-week / halflife[i])
-        δ = zeros(np, nknots + 1)
-        δ[:, 1] = δ_T[i][1:np]
-        F = drift_factor[i]
-        for kk in 2:(nknots + 1)
-            innov = sum_to_zero(F, randn(rng, size(F, 2)))
-            δ[:, kk] = φ .* δ[:, kk - 1] .+ innov
-        end
-        Rt = zeros(np, L + h)
-        for p in 1:np, d in 1:h
-
-            shift = _walk_log_rt(0.0, nat_innov, nat_cum, d, week) +
-                _knot_interp(view(δ, p, :), d, week) - δ[p, 1]
-            Rt[p, L + d] = R_T[i][p] * exp(shift)
-        end
-        seeds = [I_flat[i][(t - 1) * np + p] for p in 1:np, t in (n - L + 1):n]
-        eps = isnothing(ε) ? zeros(np, L + h) :
-            repeat(ε[i][1:np], 1, L + h)
-        I = patch_infections(Rt, g, seeds, importation_kernel, eps).infections
-        for p in 1:np
-            I_T = I[p, L]
-            growth = [I_T > 0 ? I[p, L + d] / I_T : 0.0 for d in 1:h]
-            push!(
-                out, (
-                    p, String(patch_labels[p]), i,
-                    sum(@view I[p, (L + 1):(L + h)]), Rt[p, L + h],
-                )
-            )
-            for (s, dest) in ((conf, conf_new), (conf_deaths, conf_deaths_new))
-                isnothing(s) && continue
-                push!(
-                    dest,
-                    _nb_new(
-                        rng, s.k[i],
-                        s.daily[i] * s.share[p][i] .* growth
-                    )
-                )
-            end
-        end
-    end
-    isnothing(conf) || (out.confirmed_new = conf_new)
-    isnothing(conf_deaths) || (out.confirmed_deaths_new = conf_deaths_new)
-    return out
-end
-
-"""
-    province_forecast_archive(chn, fcs; made_date, thin = 1) -> DataFrame
+    province_forecast_archive(pp, fcs; made_date, thin = 1) -> DataFrame
 
 Long-format archive of one or more per-province forecasts made from a single
-cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column. `chn` is the
-patch chain the forecasts were made from, `fcs` an iterable of
-`(horizon, fc)` pairs and `made_date` the cut-off `Date`. Returns one row
-per `(province, stream, horizon, draw)` with columns `made_date`,
-`horizon`, `target_date`, `province`, `stream`, `draw`, `value` and
-`method`. `method` is `"projection"`, so scoring can tell these rows from
-older archives, which split the national forecast by share and carry no
-`method` column.
+cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column.
+`pp` is the patch joint's posterior-predictive draws
+([`forecast_draws`](@ref)), `fcs` an iterable of `(horizon, fc)` pairs and
+`made_date` the cut-off `Date`. Returns one row per
+`(province, stream, horizon, draw)` with columns `made_date`, `horizon`,
+`target_date`, `province`, `stream`, `draw`, `value` and `method`.
+`method` is [`PROVINCE_FORECAST_METHOD`](@ref), so scoring can tell these
+rows from earlier archives: the hand-written projection wrote
+`"projection"`, and the share split before it wrote no `method` column.
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`
@@ -991,14 +495,14 @@ key from [`PROVINCE_NAMES`](@ref), which [`PROVINCE_MEMBERS`](@ref) maps to
 the source provinces a patch pools, so a scorer can build each patch's truth
 from the per-province histories in the same release's `observations.toml`.
 
-Each province's values are the [`forecast_provinces`](@ref) projection from
-`chn` at that horizon. An `fc` that is already a projection is archived as it
-is. A national [`forecast_reported`](@ref) result is replaced by the
-projection, so the archive records the method the report shows. `thin` keeps
+Each province's values are the [`forecast_provinces`](@ref) forecast from
+`pp` at that horizon. An `fc` that is already a province forecast is
+archived as it is. A national [`forecast_reported`](@ref) result is replaced
+by the province forecast from the same draws. `thin` keeps
 every `thin`-th draw so the archive stays compact as a release asset.
 """
 function province_forecast_archive(
-        chn, fcs; made_date::Date,
+        pp, fcs; made_date::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_NAMES,
         thin::Integer = 1
@@ -1013,14 +517,14 @@ function province_forecast_archive(
         h = Int(horizon)
         target = made_date + Day(h)
         for (label, province, vals) in _province_forecast_draws(
-                chn, fc, np, patch_labels; horizon = h
+                pp, fc, np, patch_labels; horizon = h
             )
             for (d, i) in enumerate(1:thin:length(vals))
                 push!(
                     out,
                     (
                         made_date, h, target, province, label, d,
-                        Float64(vals[i]), "projection",
+                        Float64(vals[i]), PROVINCE_FORECAST_METHOD,
                     )
                 )
             end
@@ -1258,468 +762,6 @@ end
 function _resolve_draws(chn, candidates)
     for key in candidates
         _has_key(chn, key) && return _draws(chn, key)
-    end
-    return nothing
-end
-
-## Per-stream chain-key resolution for [`forecast_stream`](@ref). The joint
-## and the single-stream fits do not name these consistently, so the mapping
-## is spelled out per stream rather than derived from the stream name.
-##
-## - `expected`: the stream's cut-off expected count. The nested name comes
-##   first because both fit kinds carry it, with the un-prefixed joint alias
-##   as the fallback. The names differ in whether they carry a `_T` suffix
-##   (`deaths_state.expected_deaths_T` and `exports_state.expected_exports_T`
-##   do, `cases_state.expected_reports` does not). `:confirmed_cases` has no
-##   nested name at all, since [`confirmed_cases_model`](@ref) keeps its
-##   derived quantities on plain `=` rather than `:=` (a `:=` there builds a
-##   tracking closure over the boxed `p_pos` that Enzyme cannot
-##   differentiate through). Both [`bvd_joint`](@ref) and
-##   [`confirmed_only_model`](@ref) alias the cut-off count un-prefixed as
-##   `expected_confirmed_T` instead.
-## - `dispersion`: each fit's own dispersion, read as it stands. The two
-##   candidate sets are disjoint by fit kind. The joint carries only the
-##   per-stream aliases (`k_cases`, `isolation_dispersion`, …), since
-##   `pooled_dispersion_model` returns its pooled `k` vector rather than
-##   `:=`-exposing it and `treatment_flow_model` skips its own dispersion
-##   when the joint injects `k_external`. The single-stream fits carry only
-##   the nested scalar they sample. The joint alias is listed first so a
-##   pooled vector cannot be reached ahead of a stream's scalar, and
-##   `forecast_stream` guards on the resolved length as a backstop.
-## - `trajectory`: the stream's cumulative trajectory, whose last increment
-##   is the cut-off daily rate. The joint and the stream's own single-stream
-##   composer expose it under the same un-prefixed `:=` name, so one entry
-##   serves both. An empty list means neither fit carries one and the daily
-##   rate is inferred from the cut-off cumulative instead.
-## - `kind`: `:cumulative` streams report a total accrued to the cut-off, so
-##   the forecast is the new count over the horizon. `:level` streams report
-##   a prevalence, so the forecast is the level at the horizon.
-## - `noise`: the observation model the replicate is drawn through.
-##   Exports are Poisson ([`exports_model`](@ref)) and carry no dispersion.
-##   Every other stream is negative-binomial.
-const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
-    :reported_cases => (
-        expected = [
-            Symbol("cases_state.expected_reports"),
-            :expected_reports_T,
-        ],
-        dispersion = [:k_cases, Symbol("dispersion_state.k")],
-        trajectory = [:cumulative_reports],
-        kind = :cumulative, noise = :nb,
-    ),
-    :suspected_deaths => (
-        expected = [
-            Symbol("deaths_state.expected_deaths_T"),
-            :expected_deaths_T,
-        ],
-        dispersion = [:k_deaths, Symbol("dispersion_state.k")],
-        trajectory = [:cumulative_deaths_total],
-        kind = :cumulative, noise = :nb,
-    ),
-    :confirmed_cases => (
-        expected = [:expected_confirmed_T],
-        dispersion = [:k_confirmed, Symbol("dispersion_state.k")],
-        trajectory = [:cumulative_confirmed],
-        kind = :cumulative, noise = :nb,
-    ),
-    :confirmed_deaths => (
-        expected = [
-            Symbol("confirmed_deaths_state.expected_confirmed_deaths"),
-            :expected_confirmed_deaths_T,
-        ],
-        dispersion = [:k_confirmed_deaths, Symbol("dispersion_state.k")],
-        trajectory = [:cumulative_confirmed_deaths],
-        kind = :cumulative, noise = :nb,
-    ),
-    ## Recovered is forecast from the joint alone. The report runs no
-    ## single-stream recovered fit, so only the joint names are listed.
-    :recovered => (
-        expected = [:expected_recovered_T],
-        dispersion = [:recovered_dispersion],
-        trajectory = [:cumulative_recovered],
-        kind = :cumulative, noise = :nb,
-    ),
-    :exports => (
-        expected = [
-            Symbol("exports_state.expected_exports_T"),
-            :expected_exports_T,
-        ],
-        dispersion = Symbol[],
-        trajectory = Symbol[],
-        kind = :cumulative, noise = :poisson,
-    ),
-    :isolation_beds => (
-        expected = [
-            Symbol("treatment_state.expected_bed_demand"),
-            :expected_bed_demand_T,
-        ],
-        dispersion = [
-            :isolation_dispersion,
-            Symbol("treatment_state.disp_state.k"),
-        ],
-        trajectory = Symbol[],
-        kind = :level, noise = :nb,
-    ),
-    ## The onset stream does not fit this shape. Its forecast is a difference
-    ## of two reported totals under the fitted delay hazard rather than a
-    ## cut-off expectation grown by a horizon factor, and its noise is the
-    ## digitisation scale rather than a count dispersion. The entry exists so
-    ## `:onset_reports` is a recognised stream name. The `kind = :onset`
-    ## branch in `forecast_stream` hands it to [`forecast_onsets`](@ref)
-    ## rather than reading these fields.
-    :onset_reports => (
-        expected = [:expected_onset_reported_T],
-        dispersion = Symbol[],
-        trajectory = [:cumulative_onsets],
-        kind = :onset, noise = :onset,
-    )
-)
-
-## Cut-off bed capacity draws. The joint aliases it un-prefixed
-## (`bed_capacity := treatment_state.capacity`), but `capacity` is a return
-## field of [`treatment_flow_model`](@ref) rather than a `:=`, so a
-## standalone treatment fit carries no such key. Its capacity walk exposes
-## only its parameters (`cap_state.C0`, `cap_state.z`, `cap_state.σ_cap`).
-##
-## The capacity is instead recovered from the two deterministics the submodel
-## does expose, `expected_isolation := safe_rate(occ_T)` and
-## `bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)`. Their ratio is
-## `safe_rate(C_T)` exactly, since the occupancy cancels including its
-## [`safe_rate`](@ref) flooring. The cancellation holds because `safe_rate`
-## floors at `eps`, so the denominator is positive even at the near-zero
-## early occupancy where the division would otherwise be ill-posed. A
-## non-finite or non-positive result means that invariant has been broken
-## upstream. The isolation forecast is supply-limited, so a wrong capacity
-## would silently unbound the projected level and this fails loudly instead.
-function _bed_capacity(chn)
-    _has_key(chn, :bed_capacity) && return _draws(chn, :bed_capacity)
-    occ = Symbol("treatment_state.expected_isolation")
-    util = Symbol("treatment_state.bed_utilisation")
-    (_has_key(chn, occ) && _has_key(chn, util)) || return nothing
-    cap = _draws(chn, occ) ./ _draws(chn, util)
-    all(c -> isfinite(c) && c > 0, cap) || throw(
-        ArgumentError(
-            "forecast_stream: bed capacity recovered from " *
-                "`treatment_state.expected_isolation` / " *
-                "`treatment_state.bed_utilisation` is not finite and positive for " *
-                "every draw; the occupancy did not cancel as expected, so the " *
-                "supply limit cannot be trusted."
-        )
-    )
-    return cap
-end
-
-## Chain keys carrying the cumulative occupancy reclassification offset
-## standing at the cut-off, `Δ(n)` in [`cumulative_occupancy_offset`](@ref).
-## `treatment_flow_model` exposes it as the `occupancy_break` deterministic,
-## which both the joint and a standalone treatment fit carry under the
-## submodel prefix.
-const _OCCUPANCY_OFFSET_KEYS = [
-    Symbol("treatment_state.occupancy_break"),
-    :occupancy_break,
-]
-
-## Per-draw cut-off occupancy reclassification offset, or a zero vector for a
-## chain that carries none. A fit with no declared occupancy break day pins
-## the offset at zero, so both cases mean no reclassification to carry and
-## the occupancy is projected on the demand scale.
-function _occupancy_offset(chn, nd::Integer)
-    d = _resolve_draws(chn, _OCCUPANCY_OFFSET_KEYS)
-    (isnothing(d) || length(d) != nd) && return zeros(Float64, nd)
-    return d
-end
-
-## The reported occupancy a demand replicate implies: the demand shifted by
-## the cut-off reclassification offset and capped at the bed capacity, the
-## same `min(demand + Δ, C)` the censored occupancy likelihood scores against
-## the reported series. Floored at zero, since a reclassification that
-## revises the reported basis down cannot take the reported stock below it.
-function _reported_occupancy(demand::Integer, offset::Real, capacity::Real)
-    return clamp(demand + round(Int, offset), 0, round(Int, capacity))
-end
-
-## Cut-off reproduction-number draws. The joint exposes
-## `R_T := infection_state.Rt[n]`. Single-stream composers do not, since the
-## alias lives in `bvd_joint` rather than the shared `_latent` submodel, so
-## `R_T` is rebuilt from the walk parameters every chain carries. That needs
-## the grid length `n` and the intervention `breakpoint`, which are data
-## rather than chain contents, so it is only possible when the caller
-## supplies them.
-##
-## The intervention ramp is passed explicitly to match the model's own
-## default (`sigmoid_ramp` / `rt_walk_model`) rather than taking
-## `reconstruct_rt`'s lighter one. The cut-off `Rt[n]` is ramp-sensitive, and
-## at the model's own ramp the reconstruction reproduces the joint's `R_T`
-## exactly.
-function _cutoff_rt(chn; n, breakpoint, rt_start, rt_walk_start)
-    _has_key(chn, :R_T) && return _draws(chn, :R_T)
-    (isnothing(n) || isnothing(breakpoint)) && return nothing
-    rt = reconstruct_rt(
-        chn; n = n, breakpoint = breakpoint,
-        rt_start = rt_start, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP
-    )
-    return Float64[rt[i, n] for i in axes(rt, 1)]
-end
-
-## Cut-off growth-rate draws. The joint exposes `r := infection_state.r`.
-## Single-stream fits do not, so it is derived the way
-## [`infection_model`](@ref) itself derives it, forward Euler–Lotka from the
-## cut-off reproduction number through the draw's own generation interval,
-## which keeps `r < 0` exactly when `R_T < 1`. The chain's `growth_state.r`
-## is not this quantity. That is the cryptic clock rate the joint exposes as
-## `r0`, the early growth of the seeded phase rather than the growth at the
-## cut-off.
-##
-## The generation interval is discretised at the same truncation
-## `infection_model` uses (`cdf_nmax` of the prior centre, not `_gi_pmf`'s
-## lighter default), so the rate reconstructed here matches the `r` the joint
-## reads straight off its chain.
-function _cutoff_r(chn, R_T)
-    _has_key(chn, :r) && return _draws(chn, :r)
-    isnothing(R_T) && return nothing
-    α = _draws(chn, Symbol("gi_state.α"))
-    θ = _draws(chn, Symbol("gi_state.θ"))
-    nmax = cdf_nmax(Gamma(2.71, 5.65))
-    return Float64[
-        euler_lotka_r(
-            max(R_T[i], _RT_EULER_FLOOR),
-            _gi_pmf(α[i], θ[i]; nmax = nmax)
-        )
-            for i in eachindex(R_T)
-    ]
-end
-
-## Total outbreak-age draws at the cut-off. The joint exposes `T :=
-## infection_state.T`. Single-stream fits carry only `growth_state.T`, the
-## cryptic duration, to which [`infection_model`](@ref) adds the observed
-## span `n - rt_start` to reach the total. Falls back to an infinite age
-## (the `_approx_daily` limit) when neither is recoverable, matching
-## [`forecast_reported`](@ref).
-function _outbreak_age(chn, ndraws; n, rt_start)
-    _has_key(chn, :T) && return _draws(chn, :T)
-    key = Symbol("growth_state.T")
-    (_has_key(chn, key) && !isnothing(n)) || return fill(Inf, ndraws)
-    return _draws(chn, key) .+ (n - clamp(Int(rt_start), 1, n))
-end
-
-"""
-    forecast_stream(chn, stream; horizon, obs_value, n, breakpoint) -> Vector
-
-Posterior-predictive forecast of a single observed stream from either a
-single-stream fit or the joint, returning one replicate per draw. Where
-[`forecast_reported`](@ref) projects every stream the joint carries at once,
-this projects one named stream and resolves its chain keys for both fit
-kinds, so each single-stream fit can be scored on forecasting its own
-dataset against the joint and against a baseline.
-
-`stream` is one of `:reported_cases`, `:suspected_deaths`,
-`:confirmed_cases`, `:confirmed_deaths`, `:recovered`, `:isolation_beds`,
-`:exports` and `:onset_reports`. `:recovered` is carried by the joint
-alone, since the report runs no single-stream recovered fit. The incident
-streams (everything but `:isolation_beds`) return the new count accrued
-over the horizon, matching [`forecast_archive`](@ref)'s convention.
-`:isolation_beds` returns the reported occupancy level at the horizon, the
-projected demand replicate shifted by the fitted reclassification offset
-standing at the cut-off and capped at the bed capacity,
-`min(demand + Δ, C)` (see
-[`cumulative_occupancy_offset`](@ref)).
-
-`:onset_reports` is incident like the rest but projected differently. It is
-the new reported count the digitised triangle should add over the horizon,
-which [`forecast_onsets`](@ref) builds by differencing two reported totals
-under the fitted delay hazard rather than by growing a cut-off expectation.
-That needs the fitted triangle's own onset/report-day grid, so
-`onset_grid_start` and `onset_grid_end` must be passed for this stream. Of
-[`forecast_onsets`](@ref)'s quantities this returns only the scored one.
-
-`obs_value` is the stream's observed count at the cut-off, the cumulative
-total for the incident streams or the observed occupancy for
-`:isolation_beds`. No returned quantity depends on it: the incident streams
-return the increment their cut-off cumulative cancels out of, and the level
-stream is projected from the fitted stock. It is kept so a caller states the
-base each stream is being projected on top of, and so this signature reads
-against [`forecast_reported`](@ref)'s `obs_*` arguments, which do set that
-function's cumulative columns.
-
-The reproduction number keeps evolving over the horizon exactly as in
-[`forecast_reported`](@ref). The joint carries the cut-off `R_T`, `r` and `T`
-as un-prefixed deterministics. A single-stream fit carries none of them, so
-they are rebuilt from the reproduction-number walk ([`reconstruct_rt`](@ref))
-and the generation interval, which every chain does carry. That needs the
-grid length `n` and the intervention `breakpoint` (data rather than chain
-contents). Pass both for a single-stream chain, with `rt_start` /
-`rt_walk_start` if the fit used non-default ones. Without them a
-single-stream chain cannot be projected and an error says so. They are
-unnecessary for the joint, which is read directly.
-
-Exports are forecast here for completeness of the per-stream comparison, but
-the caveat [`forecast_reported`](@ref) documents still applies. The export
-projection assumes a baseline travel rate that cross-border movement is
-unlikely to keep once the outbreak is known.
-"""
-function forecast_stream(
-        chn, stream::Symbol;
-        horizon::Real = 7,
-        obs_value::Real,
-        n::Union{Nothing, Integer} = nothing,
-        breakpoint::Union{Nothing, Real} = nothing,
-        rt_start::Integer = 1,
-        rt_walk_start::Integer = rt_start,
-        onset_grid_start::Union{Nothing, Integer} = nothing,
-        onset_grid_end::Union{Nothing, Integer} = nothing,
-        seed::Integer = 20260520
-    )
-    spec = get(_STREAM_SPEC, stream, nothing)
-    isnothing(spec) && throw(
-        ArgumentError(
-            "forecast_stream: unknown stream `:$stream`; expected one of " *
-                join(sort!([":$s" for s in keys(_STREAM_SPEC)]), ", ")
-        )
-    )
-
-    ## The onset stream is projected through the fitted reporting hazard
-    ## rather than a growth factor, so it is handed straight to
-    ## `forecast_onsets` before any of the spec-driven resolution below.
-    if spec.kind === :onset
-        (isnothing(onset_grid_start) || isnothing(onset_grid_end)) &&
-            throw(
-            ArgumentError(
-                "forecast_stream: `:onset_reports` needs the fitted " *
-                    "triangle's own grid. Pass `onset_grid_start` and " *
-                    "`onset_grid_end` (the minimum onset day and maximum " *
-                    "report day of the scored cells)."
-            )
-        )
-        isnothing(n) && throw(
-            ArgumentError(
-                "forecast_stream: `:onset_reports` needs the grid length `n` " *
-                    "to know which onset dates are in the past."
-            )
-        )
-        fc = forecast_onsets(
-            chn; grid_start = onset_grid_start,
-            grid_end = onset_grid_end, n = n, horizon = horizon,
-            breakpoint = breakpoint, rt_start = rt_start,
-            rt_walk_start = rt_walk_start, seed = seed
-        )
-        return fc.onset_reports_new
-    end
-
-    expected_T = _resolve_draws(chn, spec.expected)
-    isnothing(expected_T) && throw(
-        ArgumentError(
-            "forecast_stream: chain carries no expected count for `:$stream` " *
-                "(tried " * join(["`$k`" for k in spec.expected], ", ") *
-                "); the fit does not include this stream."
-        )
-    )
-    nd = length(expected_T)
-
-    R_T = _cutoff_rt(
-        chn; n = n, breakpoint = breakpoint,
-        rt_start = rt_start, rt_walk_start = rt_walk_start
-    )
-    r = _cutoff_r(chn, R_T)
-    isnothing(r) && throw(
-        ArgumentError(
-            "forecast_stream: chain carries neither `r` nor `R_T`, so the " *
-                "cut-off growth rate cannot be recovered; pass `n` and " *
-                "`breakpoint` to rebuild them from the walk (a single-stream fit " *
-                "exposes neither)."
-        )
-    )
-
-    ## The rate paths and the replicates below draw from one seeded stream,
-    ## the same way `forecast_reported` does, so the two stay comparable.
-    nh = Int(horizon)
-    rng = MersenneTwister(seed)
-    evolving = _evolving_rates(chn, nh; R_T = R_T, rng = rng)
-
-    k = nothing
-    if spec.noise === :nb
-        k = _resolve_draws(chn, spec.dispersion)
-        isnothing(k) && throw(
-            ArgumentError(
-                "forecast_stream: chain carries no dispersion for `:$stream` " *
-                    "(tried " * join(["`$key`" for key in spec.dispersion], ", ") *
-                    ")."
-            )
-        )
-        ## The joint's nested `dispersion_state.k` is the pooled six-element
-        ## vector, so a flattened resolution would silently mismatch the
-        ## draws. Every candidate above should be per-draw scalar.
-        length(k) == nd || throw(
-            ArgumentError(
-                "forecast_stream: dispersion for `:$stream` resolved to " *
-                    "$(length(k)) values for $nd draws; expected a scalar per draw."
-            )
-        )
-    end
-
-    out = Vector{Int}(undef, nd)
-
-    ## Replicate a projected mean through the stream's observation model.
-    _replicate(i, μ) = spec.noise === :poisson ?
-        rand(rng, Poisson(safe_rate(float(μ)))) :
-        _nb_rand(rng, k[i], μ)
-    ## Incident streams are replicated day by day and summed. The dispersion
-    ## is fitted at daily and few-day resolution, so a single draw on the
-    ## summed mean would carry the overdispersion term at the wrong scale.
-    _replicate_new(i, means) = sum(_replicate(i, m) for m in means)
-
-    if spec.kind === :level
-        ## The capacity is held at its cut-off value, as `forecast_reported`
-        ## holds it, so the projected level is on the reported scale the
-        ## truth is read on.
-        cap = _bed_capacity(chn)
-        isnothing(cap) && throw(
-            ArgumentError(
-                "forecast_stream: chain carries no bed capacity (tried " *
-                    "`bed_capacity` and `treatment_state.expected_isolation` / " *
-                    "`treatment_state.bed_utilisation`)."
-            )
-        )
-        occ_offset = _occupancy_offset(chn, nd)
-        @inbounds for i in 1:nd
-            rs = isnothing(evolving) ? nothing : evolving.paths[i]
-            grow = isnothing(rs) ? exp(r[i] * horizon) : prod(exp, rs)
-            demand = _replicate(i, expected_T[i] * grow)
-            out[i] = _reported_occupancy(demand, occ_offset[i], cap[i])
-        end
-        return out
-    end
-
-    ## Cumulative: project the new count the stream adds over the horizon from
-    ## its cut-off daily rate. That rate is the last increment of the stream's
-    ## cumulative trajectory when the chain carries it, otherwise inferred
-    ## from the cut-off cumulative under exponential growth over the outbreak
-    ## age.
-    T_age = _outbreak_age(chn, nd; n = n, rt_start = rt_start)
-    daily = something(
-        _daily_at_cutoff_any(chn, spec.trajectory),
-        _approx_daily.(expected_T, r, T_age)
-    )
-    @inbounds for i in 1:nd
-        rs = isnothing(evolving) ? nothing : evolving.paths[i]
-        means = _daily_means(daily[i], rs, r[i], nh)
-        ## The new count over the horizon, as `forecast_reported` forms its
-        ## `*_new` columns: `obs_value + replicate` less `obs_value`, floored
-        ## at zero. `_replicate_new` sums non-negative count draws, so the
-        ## cut-off cumulative cancels exactly and the floor never binds. The
-        ## increment is taken directly rather than round-tripped through a
-        ## cumulative that is added and removed again.
-        out[i] = _replicate_new(i, means)
-    end
-    return out
-end
-
-## Cut-off daily rate from the first cumulative trajectory in `candidates`
-## the chain carries, or `nothing` when it carries none.
-function _daily_at_cutoff_any(chn, candidates)
-    for key in candidates
-        d = _daily_at_cutoff(chn, key)
-        isnothing(d) || return d
     end
     return nothing
 end
