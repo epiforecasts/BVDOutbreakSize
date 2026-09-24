@@ -698,11 +698,8 @@ function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
 end
 
 ## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,
-## 90% e–f`, from draws or from a `posterior_summary`. The National page's
-## headline writes its intervals with it too.
-function _interval_text(draws; digits::Integer = 2, unit::AbstractString = "")
-    return _interval_text(posterior_summary(draws); digits, unit)
-end
+## 90% e–f`, from a `posterior_summary`. The National page's headline writes
+## its intervals with it.
 function _interval_text(
         s::NamedTuple; digits::Integer = 2, unit::AbstractString = ""
     )
@@ -796,7 +793,7 @@ by draw, so it carries the correlation between provinces.
   (`importation_patch`), when the chain carries it.
 
 The ranges name the provinces with the lowest and highest posterior medians.
-[`patch_detail_headline`](@ref) gives each province's own intervals.
+[`patch_summary_table`](@ref) gives each province's own intervals.
 """
 function patch_headline(
         chn, n_patches::Integer = length(PROVINCE_NAMES);
@@ -858,52 +855,6 @@ function patch_headline(
         )
     end
     return join(bullets, "\n") * "\n"
-end
-
-"""
-Markdown summary of each province of the patch model: a bold lead per
-province, then a bullet each for its cumulative infections to date and its
-reproduction number at the cut-off and, when the chain carries them, its
-case-fatality ratio (`CFR_patch`, as a percentage) and its case
-ascertainment relative to the national average (`province_ascertainment`).
-Every quantity is written as its equal-tailed 30%, 60% and 90% credible
-intervals, as the National page's headline writes them.
-The same intervals for the infections, reproduction number and ascertainment
-are tabulated by [`patch_summary_table`](@ref), and the case-fatality ratio's
-by [`province_cfr_table`](@ref) as a median and 90% interval.
-
-The reproduction number and the relative ascertainment are identified only
-as a product by the case composition, so the two are given together.
-[`patch_headline`](@ref) compares the provinces.
-"""
-function patch_detail_headline(
-        chn, n_patches::Integer = length(PROVINCE_NAMES);
-        patch_labels::AbstractVector = PROVINCE_LABELS
-    )
-    np = min(n_patches, length(patch_labels))
-    d = _headline_draws(chn, np)
-    blocks = map(1:np) do p
-        lines = [
-            "**$(patch_labels[p])**",
-            "",
-            "- **Infections to date:** " *
-                _interval_text(d.C_T[p]; digits = 0) * ".",
-            "- **Reproduction number at the cut-off:** " *
-                _interval_text(d.R_T[p]) * ".",
-        ]
-        d.cfr === nothing || push!(
-            lines,
-            "- **Case-fatality ratio:** " *
-                _interval_text(100 .* d.cfr[p]; digits = 1, unit = "%") * "."
-        )
-        d.asc === nothing || push!(
-            lines,
-            "- **Case ascertainment relative to the national average:** " *
-                _interval_text(d.asc[p]) * "."
-        )
-        join(lines, "\n")
-    end
-    return join(blocks, "\n\n") * "\n"
 end
 
 """

@@ -177,6 +177,49 @@ end
     @test occursin("past the failure threshold 1.25", md)
 end
 
+@testitem "convergence_summary gives the verdict in plain prose" begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
+
+    clean = (
+        max_rhat = 1.01, min_ess_bulk = 800.0, min_ess_tail = 700.0,
+        n_divergent = 0, n_draws = 3200,
+    )
+    ok = convergence_summary("joint", clean)
+    @test ok.verdict == "The joint fit passes the convergence checks."
+    @test occursin("worst R-hat is 1.01", ok.detail)
+    @test occursin("sample size is 800,", ok.detail)
+    @test occursin("0 divergent transitions in 3200 draws", ok.detail)
+    @test occursin("at most 1.05,", ok.detail)
+    @test occursin("at least 100 and at most 1% of its draws", ok.detail)
+
+    borderline = (; clean..., max_rhat = 1.057, min_ess_bulk = 48.0)
+    @test convergence_summary("joint", borderline).verdict ==
+        "The joint fit passes the convergence checks with warnings."
+
+    stuck = (; clean..., max_rhat = 2.6, n_divergent = 252)
+    @test convergence_summary("joint", stuck).verdict ==
+        "The joint fit fails the convergence checks."
+
+    ## An undefined diagnostic is printed as such rather than as NaN.
+    @test occursin(
+        "worst R-hat is n/a",
+        convergence_summary("joint", (; clean..., max_rhat = NaN)).detail
+    )
+
+    ## The thresholds quoted are the ones handed in.
+    thresholds = (
+        fail = convergence_thresholds().fail,
+        warn = (
+            rhat = 1.2, ess_bulk = 40.0, ess_tail = 40.0,
+            divergent_fraction = 0.025,
+        ),
+    )
+    t = convergence_summary("joint", borderline; thresholds = thresholds)
+    @test t.verdict == "The joint fit passes the convergence checks."
+    @test occursin("at most 1.2,", t.detail)
+    @test occursin("at least 40 and at most 2.5% of its draws", t.detail)
+end
+
 @testitem "a malformed threshold variable names itself" begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
 

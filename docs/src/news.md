@@ -52,6 +52,11 @@ Changes since v2.1.0.
 
 ### Report
 
+- The National page shows a one-line fit verdict and a count of the streams still reporting, with the diagnostics and data currency tables in dropdowns (#868).
+  The summary dashboard shows the same verdict.
+- The onset snapshot nowcasts move to the national in-sample page, and the province case-fatality ratios to the Provinces page (#868).
+  The in-sample pages open each section with a one-line subtitle.
+- The Provinces page shows its summary figure and a table per province in place of the per-province bullets (#868).
 - The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
   Its summary gives the count-scale coverage overall and per province.
 - The offline `analysis.html` is gone (#839).
@@ -137,10 +142,9 @@ Changes since v2.1.0.
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
-- The joint NUTS tree depth cap rises from 10 to 12, since every iteration at depth 10 stopped at the cap rather than at a U-turn (#846).
-  `BVD_JOINT_MAX_DEPTH` overrides it.
+- `BVD_JOINT_MAX_DEPTH` overrides the joint fit's NUTS tree depth cap, which stays at 10 (#846, #865).
+  Depth 12 took the joint fit past the fit job's 350-minute timeout.
 - The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
-- The joint fit's NUTS tree depth cap rises from 10 to 12, and `BVD_JOINT_MAX_DEPTH` overrides it (#846).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).
