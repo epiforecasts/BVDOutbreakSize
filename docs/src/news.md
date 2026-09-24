@@ -25,43 +25,10 @@ Changes since v2.1.0.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
 - An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count (#837).
   The two submodels' gradients run 1.2 to 1.9 times faster.
-- The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule (#856).
-- An observed province composition in `province_composition_model` is scored as one stick-breaking term, `stick_breaking_loglik`, whose rows go through the BetaBinomial rule in one call (#856).
-  Its rows are grouped by vintage, and groups may differ in size.
-  It sums the vintages in a different order from the per-row terms, so the log density can differ in the last bits.
-  The predictive path draws each patch row through `BetaBinomialVector`, so its keys are unchanged.
-  An observed matrix of a different size from the modelled one is an error.
-- These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data (#856).
-  A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
-  These vector distributions and `SplitCountVector` are declared `public`, and documented with the observation models.
-- `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!` (#856).
-  Its rule's pullback is the matching per-lag `axpy!` and `dot`.
-  On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
-- The `convolve_pmf` rule's pullback is one `axpy!` and one `dot` per entry of the second PMF (#856).
-- `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval (#856).
-- `patch_infections` and its rule take each patch's daily force of infection from one shared inline loop (#856).
-  The loop may reassociate its sum, so values can differ from a sequential sum in the last bits.
-- The bed-capacity walk steps and the per-patch deviation scales are drawn through `filldist` rather than a `product_distribution` of copies of one truncated Normal (#856).
-  Values are unchanged.
-- `onset_vintage_indices`, `admission_headroom` and `censoring_cap` read only data and pass no derivative (#856).
-- The treatment-flow model's default priors and delay submodels are built once at load time rather than on every evaluation of the joint (#856).
-  The unread `confirmed_incare_deaths_daily` series is removed from its return value.
-- The joint's reported-only `:=` quantities, the cumulative series, the combined delay PMFs and the expected onset-reported total, are computed only when `:=` values are recorded, so the gradient skips them (#856).
-  The patch model's national totals and headline quantities, its daily deviations and its correlation matrix are returned by a submodel, so they are built behind a zero-derivative barrier, `_detached`.
-  Keys and values are unchanged, and a test checks that the joint's log density and gradient are the same with and without the barrier.
-- `test/test_model_fixture.jl` checks the headline joint's log density, gradient and recorded `:=` quantities against `test/model_fixture/joint.toml`, written from `main`'s code at three parameter points on the data as of 2026-09-10 (#856).
-  `test/model_fixture/generate.jl` regenerates it.
-- The national onsets and the export-weighted infections sum the patches with one matrix-vector product each (#856).
-- Observed late confirmed days in `late_confirmed_model` are scored as one `SplitCountVector`, a summed BetaBinomial term over the days with a 24h analysed count plus a summed NegativeBinomial term over the rest, each through its rule (#856).
-  A vector with `missing` entries is still scored one day at a time, so the predictive keys are unchanged.
-- `onset_scanned_cells` applies the per-scan levels and builds the per-cell observation scales in one call, with its own rule (#856).
-- `onset_report_expected_total` builds its delay columns in one pass, and its rule is removed since the gradient no longer computes it (#856).
-- `incare_census` builds the treatment-flow model's confirmed and suspect in-care census, its abscond flow and its offset total in one pass, with its own rule (#856).
-- `discretise_censored` evaluates each delay-CDF endpoint once for Gamma, LogNormal and Weibull delays, through CensoredDistributions' analytical CDF, rather than twice per boundary through the truncated interval-censored distribution (#856).
-  The PMFs match the library's own double-interval-censored `pdf` to within 1e-13, which a test checks.
-- The export at-risk prevalence is one convolution of the infections with the detection survival, rather than a convolution and two cumulative sums (#856).
-- The composition positivity takes its pool denominator from the carried suspected series the analysed volume already uses, so the separate background convolution is removed (#856).
-- Where a scalar scales a convolved series (deaths, background deaths, export deaths, recovered and per-patch confirmed), the delay kernel is scaled before the convolution instead (#856).
+- New Mooncake rules for the onset, late-confirmed, composition and treatment kernels, and BLAS forms of the convolution and renewal kernels (#856).
+- Observed vectors are scored through the public `NegBinomialVector`, `CensoredNegBinomialVector`, `StudentTVector`, `BetaBinomialVector` and `SplitCountVector`, each with a Mooncake rule on its `logpdf`, and a `missing` vector is sampled under one whole-vector key (#856).
+- Quantities that only feed the report are computed only when `:=` values are recorded, so the gradient skips them (#856).
+- Log densities and gradients match `main` to floating-point rounding, so the model is unchanged (#856).
 - The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
@@ -168,20 +135,14 @@ Changes since v2.1.0.
 
 ### Fixed
 
-- An isolation-occupancy count at its censoring ceiling now has a Mooncake gradient (#856).
-  The censored NegativeBinomial tail came from Rmath, which Mooncake cannot differentiate, so one such count would have stopped every gradient.
-  No isolation count in the current data sits at its ceiling, and an admissions count never can, since its ceiling is at least half a bed above it.
-  The tail now comes from `SpecialFunctions.beta_inc`.
+- A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 
 ### Infrastructure
 
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
-- `convolve_survival` and `survival_weights` are removed, along with the export and the reverse-mode rule (#856).
-  No model, page or script called them.
-- Every reverse-mode rule is tested through Mooncake's `test_rule`, over one table of cases with the argument types its call sites pass (#856).
-  The hand-written finite-difference and ForwardDiff comparisons are gone, and `FiniteDifferences` with them.
-  An `:ad_perf` item in the AD job times each rule against Mooncake's own derivation of the same kernel and fails unless the rule takes at most 0.8 of its time.
-  Test-only textbook loops pin the values of every kernel whose body was rewritten for speed.
+- The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against Mooncake's own derivation (#856).
+- `test/test_model_fixture.jl` checks the headline joint against values written from `main` (#856).
+- `convolve_survival` and `survival_weights` are removed (#856).
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.
