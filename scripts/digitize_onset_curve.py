@@ -32,18 +32,24 @@
 #     is the least-squares slope over that chain and each day is anchored on
 #     the nearest chain tick at or before it. The rightmost tick's date is
 #     in CONFIG, read off the axis;
-#   * each daily bar = the bar's own pixel columns, taken as the window
+#   * each daily bar = the bar's own pixel columns: the interval between
+#     the two consecutive outline columns about a day apart whose midpoint
+#     is nearest the day's grid position, else the window
 #     [cx - ppd/2, cx + ppd/2] clipped to the nearest outline column on each
-#     side. Outline columns are those mostly dark over their run. Every
-#     column is read as the run of non-page pixels up from the baseline,
-#     bridging up to three page pixels when bar colour resumes and skipping
-#     neutral pixels on the tick rows and tick columns (gridlines). The
-#     run's top is its highest pixel darker than an anti-alias, which is the
-#     bar's outline. The bar height is the height most of its interior
-#     columns agree on, or the tallest interior column when fewer than three
-#     agree. Half a pixel of outline is subtracted before dividing by
-#     pixels-per-count. The dead segment is the count of crimson pixels in
-#     the chosen column.
+#     side. Outline columns are those mostly dark over their run, those
+#     with no saturated pixel (gray lines) and those that bridged three or
+#     more page gaps (the dashed line). Every column is read as the run of
+#     non-page pixels up from the baseline, bridging up to three page
+#     pixels when bar colour resumes and skipping neutral pixels on the
+#     tick rows and tick columns (gridlines). The run's top is its highest
+#     pixel darker than an anti-alias, which is the bar's outline. A day
+#     whose columns are mostly page from the baseline up is empty. The bar
+#     height is the height at least two of its interior columns agree on to
+#     within a pixel, or the tallest interior column when none do; with no
+#     outline pixel in any column the fill's own extent is read where two
+#     columns agree on it. Half a pixel of outline is subtracted before
+#     dividing by pixels-per-count. The dead segment is the count of
+#     crimson pixels in the chosen column.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -394,17 +400,20 @@ def _pixel_classes(im):
     light = (hi >= 190) & (spread < 60)
     crimson = (R - np.maximum(G, B)) >= 25
     darkpx = (R < 150) & (G < 150) & (B < 150)
-    return page, neutral, light, crimson, darkpx
+    saturated = spread >= 30
+    return page, neutral, light, crimson, darkpx, saturated
 
 
-def _column_runs(page, neutral, light, crimson, darkpx, y0, gridrows,
-                 gridcols, gap=3):
+def _column_runs(page, neutral, light, crimson, darkpx, saturated, y0,
+                 gridrows, gridcols, gap=3):
     # Per-column run of non-page pixels up from the baseline. Gridlines lie
     # on the tick rows and tick columns, so a neutral pixel there is page.
     # Up to `gap` page pixels are bridged when a non-page pixel follows. The
     # run's top is the highest pixel darker than `light`. Returns the run
-    # height, the crimson count and the dark count per column, each counted
-    # over the non-page pixels from the baseline up to that top.
+    # height (to the outline), the run's full non-page extent, the crimson,
+    # dark and saturated counts and the number of page gaps of two or more
+    # pixels bridged per column, each counted over the non-page pixels from
+    # the baseline up to that top.
     #
     # The reference walks each column with a miss counter; here every
     # column is walked at once. Upward index i is image row y0 - 1 - i.
@@ -428,9 +437,17 @@ def _column_runs(page, neutral, light, crimson, darkpx, y0, gridrows,
     top = np.where(cand.any(axis=0), n - 1 - cand[::-1].argmax(axis=0), -1)
     counted = seen & (idx <= top)
     h = top + 1
+    last = np.where(seen.any(axis=0), n - 1 - seen[::-1].argmax(axis=0), -1)
+    hp = last + 1
+    # misses immediately below each pixel: its index less the previous
+    # non-page index less one
+    prev_ok = np.vstack([np.full((1, W), -1), last_ok[:-1]])
+    bridged = counted & ((idx - prev_ok - 1) >= 2)
     nr = (counted & crimson[:y0][::-1]).sum(axis=0)
     nd = (counted & darkpx[:y0][::-1]).sum(axis=0)
-    return h, nr, nd
+    ns = (counted & saturated[:y0][::-1]).sum(axis=0)
+    nb = bridged.sum(axis=0)
+    return h, hp, nr, nd, ns, nb
 
 
 def _tick_chain(xt):
@@ -452,13 +469,14 @@ def _tick_chain(xt):
 
 
 def _modal_height(h, cols, cx):
-    # Most common value of `h` over `cols` and how many columns carry it;
-    # ties go to the value nearest `cx` by column, then to the value seen
-    # first. `h` and `cols` share one index frame.
+    # The value of `h` over `cols` that most columns agree with to within
+    # a pixel, and how many do; ties go to the value nearest `cx` by
+    # column, then to the value seen first. `h` and `cols` share one index
+    # frame.
     best = 0
     bestkey = (-1, -math.inf)
     for u in dict.fromkeys(h[x] for x in cols):
-        c = sum(1 for x in cols if h[x] == u)
+        c = sum(1 for x in cols if abs(h[x] - u) <= 1)
         d = min(abs(x - cx) for x in cols if h[x] == u)
         key = (c, -d)
         if key > bestkey:
@@ -536,23 +554,33 @@ def digitize(im, last_tick_date, y_step=20):
     W, yt, ppc, y0 = cal["W"], cal["yt"], cal["ppc"], cal["y0"]
     ks, xs, ppd = cal["ks"], cal["xs"], cal["ppd"]
     lastdate = dt.date.fromisoformat(last_tick_date)
-    page, neutral, light, crimson, darkpx = _pixel_classes(im)
-    h0, nr0, nd0 = _column_runs(
-        page, neutral, light, crimson, darkpx, y0, yt, [x - 1 for x in xs]
+    page, neutral, light, crimson, darkpx, saturated = _pixel_classes(im)
+    h0, hp0, nr0, nd0, ns0, nb0 = _column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt,
+        [x - 1 for x in xs]
     )
     # The bar windows are laid out in the reference's 1-based column frame,
     # so pad each per-column array with a leading dummy and index it with
     # the 1-based column directly.
     pad = np.zeros(1, dtype=h0.dtype)
     h = np.concatenate([pad, h0])
+    hp = np.concatenate([pad, hp0])
     nr = np.concatenate([pad, nr0])
     nd = np.concatenate([pad, nd0])
-    # outline columns are mostly dark over their run (a one-count bar is
-    # all outline, so the floor keeps it as interior); an outline drawn
-    # across two columns leaves a softer second column that still carries
-    # the neighbour's height, dropped when anything else is left
-    isborder = (h > 4) & (nd >= 0.3 * h)
-    soft = (h > 4) & (nd >= np.maximum(0.1 * h, 3))
+    ns = np.concatenate([pad, ns0])
+    nb = np.concatenate([pad, nb0])
+    # outline columns are mostly dark over their run (a short bar's top
+    # and junction lines are a few dark pixels in every column, so the
+    # floor keeps its interior as interior), and a column with no
+    # saturated pixel is a gray line (the y-axis, the panel border and
+    # their anti-alias) rather than a bar, as is one that bridged three or
+    # more page gaps (the dashed first-positive-result line, whose gaps
+    # the small renders shrink inside the bridge); an outline drawn across
+    # two columns leaves a softer second column that still carries the
+    # neighbour's height, dropped when anything else is left
+    isborder = (h > 4) & ((nd >= np.maximum(0.25 * h, 6)) | (ns < 0.1 * h)
+                          | (nb >= 3))
+    soft = (h > 4) & (nd >= np.maximum(0.1 * h, 5))
     nz = np.flatnonzero((h > 2) & ~isborder)
     barmin, barmax = int(nz.min()), int(nz.max())
     rows = []
@@ -563,29 +591,61 @@ def digitize(im, last_tick_date, y_step=20):
             continue
         lo = max(1, math.ceil(cx - ppd / 2 + 0.5))
         hi = min(W, math.floor(cx + ppd / 2 - 0.5))
-        # clip the window to the nearest outline column on each side: the
-        # window starts after the left outline and ends on the right one,
-        # as in the reference
+        # the bar is the interval between two consecutive outline columns
+        # about a day apart whose midpoint is nearest cx; when the day grid
+        # lands on an outline that picks the right side of it. With no such
+        # pair (an outline the render lost) the window is clipped to the
+        # nearest outline on each side instead.
         c = round(cx)
         reach = math.ceil(ppd)
-        left = [x for x in range(max(1, c - reach), c) if isborder[x]]
-        if left:
-            lo = max(lo, left[-1] + 1)
-        right = [x for x in range(c + 1, min(W, c + reach) + 1)
-                 if isborder[x]]
-        if right:
-            hi = min(hi, right[0])
-        cols = [x for x in range(lo, hi + 1) if not soft[x]]
+        near = [x for x in range(max(1, c - reach), min(W, c + reach) + 1)
+                if isborder[x]]
+        best = None
+        for i in range(len(near) - 1):
+            a, b = near[i], near[i + 1]
+            if abs(b - a - ppd) > 1.5:
+                continue
+            d = abs((a + b) / 2 - cx)
+            if best is None or d < best[0]:
+                best = (d, a, b)
+        if best is not None and best[0] <= ppd / 2:
+            lo, hi = best[1] + 1, best[2] - 1
+        else:
+            left = [x for x in range(max(1, c - reach), c) if isborder[x]]
+            if left:
+                lo = max(lo, left[-1] + 1)
+            right = [x for x in range(c + 1, min(W, c + reach) + 1)
+                     if isborder[x]]
+            if right:
+                hi = min(hi, right[0] - 1)
+        cols = [x for x in range(lo, hi + 1)
+                if not soft[x] and not isborder[x]]
         if not cols:
             cols = [x for x in range(lo, hi + 1) if not isborder[x]]
         if not cols:
             continue
-        hb, support = _modal_height(h, cols, cx)
-        if support < 3:
-            hb = max(int(h[x]) for x in cols)
+        # a day is empty when half or more of its columns are page from
+        # the baseline up (the baseline's own anti-alias apart); a column
+        # that is fill all the way but never shows an outline pixel
+        # (chroma-washed) abstains rather than reading 0
+        gaps = sum(1 for x in cols if h[x] == 0 and hp[x] <= 2 * ppc)
+        if 2 * gaps >= len(cols):
+            continue
+        resolved = [x for x in cols if h[x] > 0]
+        if not resolved:
+            # no outline pixel in any column: read the fill's extent where
+            # two columns agree on it, else it is a halo, not a bar
+            hb, support = _modal_height(hp, cols, cx)
+            if support < 2:
+                continue
+            jb = next(x for x in cols if hp[x] == hb)
+        else:
+            hb, support = _modal_height(h, resolved, cx)
+            if support < 2:
+                hb = max(int(h[x]) for x in resolved)
+            jb = next(x for x in resolved if h[x] == hb)
         if hb < 1:
             continue
-        jb = next(x for x in cols if h[x] == hb)
         total = round(max(0.0, hb - 0.5) / ppc)
         dead = min(total, round(max(0.0, float(nr[jb]) - 0.5) / ppc))
         rows.append((lastdate + dt.timedelta(days=off), total - dead, dead))

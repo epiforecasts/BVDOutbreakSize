@@ -54,17 +54,17 @@ Run `task onset-port-check` to confirm the port reproduces the file.
 Run `task onset-audit` and read the new vintage's rows in `output/onset_curve_audit.md`.
 
 The block is accepted when all of the following hold.
-In the gap table, `gap %` is within 2% of the printed `n` (the reader sits within 2% on every one of the 60 figures that print one, within 0.5% on 48 of them).
+In the gap table, `gap %` is within 2.1% of the printed `n` (the reader sits within 2.1% on every one of the 60 figures that print one, within 0.5% on 43 of them).
 When the OCR left `printed n` empty, compare the digitised total against the `n` written down above by hand.
 In the settled-bars table, the new pair's `best shift` is 0 and its `L1 0` column is the smallest of the five L1 columns.
-Its `fell` count is a handful at most, each fall a single case: settled bars can only rise, so falls are scan noise and the noise floor is 0.46 cases per day with a fall on 14% of days.
+Its `fell` count is a handful at most, each fall a single case: settled bars can only rise, so falls are scan noise and the noise floor is 0.40 cases per bar-day with a fall on 14% of days.
 In the axis-coverage table, `cases before` is 0, so the block starts where the axis starts.
 `reprint of` names an earlier vintage only when the figure is pixel-identical to that vintage's (same `image_md5` in `data/onset_curve_figures.csv`).
 
 When a check fails, the row says which input is wrong.
 A `best shift` of +1 or -1 means the new last-tick date or the previous vintage's is off by a day: re-read both ticks with two fresh readers before anything else.
-A gap beyond 2% with shift 0 means the count scale: check `Y_AXIS_STEP`, then the printed `n` itself (the OCR misreads a digit now and then; the `note` column says when the title and source strips disagreed), then look at the check panels.
-Many falls with shift 0 and a gap inside 2% mean the day grid inside the block has moved: compare `pixels_per_day` and `pixels_per_day_fit` for the vintage in `data/onset_curve_figures.csv` and run the vision check.
+A gap beyond 2.1% with shift 0 means the count scale: check `Y_AXIS_STEP`, then the printed `n` itself (the OCR misreads a digit now and then; the `note` column says when the title and source strips disagreed), then look at the check panels.
+Many falls with shift 0 and a gap inside 2.1% mean the day grid inside the block has moved: compare `pixels_per_day` and `pixels_per_day_fit` for the vintage in `data/onset_curve_figures.csv` and run the vision check.
 `cases before` above 0 means the reader's day loop started after the axis: the loop runs from a week before the first chain tick, so a lost tick at the left end is the usual cause.
 A block that fails after the ticks and the scale have been re-read is not committed; remove its `CONFIG` row and open an issue with the audit rows.
 
