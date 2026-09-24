@@ -570,7 +570,7 @@ surveillance_pair_fig #hide
 ## Every posterior draw's `logit_h0` (the baseline delay hazard), `γ` (the
 ## report-date calendar walk) and ascertainment level, read off the fitted
 ## model's own onset-reporting state at each draw.
-_onset_hazard = fitted_onset_hazard(_fit_models["joint"](), chn_joint)
+_onset_hazard = fitted_onset_hazard(fit_model("joint"), chn_joint)
 
 ## A representative onset day (the median scored onset date), so the 7-day
 ## fraction below reflects a typical, not an edge, calendar day.

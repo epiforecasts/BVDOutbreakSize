@@ -239,6 +239,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## The model each fit sampled, rebuilt to forecast from it.
     _fit_models = Dict(s.id => s.model for s in _fit_specs if haskey(s, :model))
+    fit_model(id::AbstractString) = _fit_models[id]()
 
     ## Days past the cut-off every forecast is drawn to. The pages read the
     ## one-week forecast and the release archive the four weekly horizons.
@@ -251,7 +252,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         return get!(_forecast_cache, id) do
             r = load_fit(id)
             chn = r isa NamedTuple ? r.chn : r
-            forecast_draws(_fit_models[id](), chn; horizon = FORECAST_HORIZON)
+            forecast_draws(fit_model(id), chn; horizon = FORECAST_HORIZON)
         end
     end
 
