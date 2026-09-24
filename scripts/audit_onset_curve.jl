@@ -36,7 +36,10 @@
 #
 # Usage:
 #   julia scripts/audit_onset_curve.jl [pdf_dir] [scanned_csv] [figures_csv]
-#       [audit_md]
+#       [audit_md] [--crops=DIR]
+# `--crops=DIR` keeps the upscaled title and source strips each n was read
+# from, as `<sitrep>_title.ppm` and `<sitrep>_source.ppm`, for a second
+# reader. A full run over 64 vintages takes about a minute.
 # Defaults: data/sitrep_pdfs, data/onset_curve_scanned.csv,
 #           data/onset_curve_figures.csv, output/onset_curve_audit.md
 
@@ -95,9 +98,12 @@ function write_ppm_crop(path, R, G, B, rows; scale = 3)
     return path
 end
 
-function ocr_rows(R, G, B, rows)
+# OCR of `rows` of the image. With `keep` set, the upscaled crop is left at
+# that path so a second reader can check the digits by eye.
+function ocr_rows(R, G, B, rows; keep = nothing)
     return mktempdir() do wd
-        img = write_ppm_crop(joinpath(wd, "crop.ppm"), R, G, B, rows)
+        path = keep === nothing ? joinpath(wd, "crop.ppm") : keep
+        img = write_ppm_crop(path, R, G, B, rows)
         read(pipeline(`tesseract $img stdout --psm 6`; stderr = devnull), String)
     end
 end
@@ -106,7 +112,7 @@ end
 The n printed on the onset figure of `pdf`, as `(n, source, note)`. `n` is
 `nothing` when no reading was found; `source` names where it came from.
 """
-function printed_n(pdf, page, R, G, B)
+function printed_n(pdf, page, R, G, B; crop_dir = nothing, sr = "")
     txt = read(`pdftotext -layout -f $page -l $page $pdf -`, String)
     found = parse_printed_n(txt)
     isempty(found) || return (found[1], "text layer", "")
@@ -114,8 +120,14 @@ function printed_n(pdf, page, R, G, B)
         return (nothing, "", "not in the text layer; tesseract not on PATH")
     end
     H = size(R, 1)
-    title = parse_printed_n(ocr_rows(R, G, B, 1:round(Int, 0.12H)))
-    source = parse_printed_n(ocr_rows(R, G, B, round(Int, 0.86H):H))
+    crop(name) = crop_dir === nothing ? nothing :
+        joinpath(crop_dir, "$(sr)_$(name).ppm")
+    title = parse_printed_n(
+        ocr_rows(R, G, B, 1:round(Int, 0.12H); keep = crop("title"))
+    )
+    source = parse_printed_n(
+        ocr_rows(R, G, B, round(Int, 0.86H):H; keep = crop("source"))
+    )
     if isempty(title) && isempty(source)
         return (
             nothing, "", "not in the text layer; OCR of the title " *
@@ -201,7 +213,8 @@ the pitch. Each mark is indexed by rounding its distance from the last one
 to whole weeks, so a missed mark leaves a gap of two or more and a stray
 well off the grid is dropped. The pitch is refined and the indexing
 repeated, so marks far from the last one are not lost to the guess's
-rounding. Returns `(pixels_per_week, points)`.
+rounding. Returns `(pixels_per_week, points, weeks)`, `weeks` being how
+many weeks before the last mark the earliest indexed mark sits.
 """
 function fit_week(xs, week)
     fit = week
@@ -217,11 +230,11 @@ function fit_week(xs, week)
             push!(idx, k)
             push!(cols, x)
         end
-        length(idx) < 3 && return (NaN, length(idx))
+        length(idx) < 3 && return (NaN, length(idx), 0)
         kbar, xbar = sum(idx) / length(idx), sum(cols) / length(cols)
         fit = -sum((idx .- kbar) .* (cols .- xbar)) / sum((idx .- kbar) .^ 2)
     end
-    return (fit, length(idx))
+    return (fit, length(idx), maximum(idx))
 end
 
 """
@@ -288,7 +301,7 @@ function calibration(R, G, B, y_step; span_days = 100)
     pixels_per_day = week / 7
     ticks = fit_week(xt, week)
     labels = fit_week(label_centroids(R, G, B, base), week)
-    (fit, fit_points), fit_source = labels[2] > ticks[2] ?
+    (fit, fit_points, weeks_seen), fit_source = labels[2] > ticks[2] ?
         (labels, "labels") : (ticks, "ticks")
     pixels_per_day_fit = fit / 7
     drift_days = span_days * (pixels_per_day_fit - pixels_per_day) /
@@ -296,7 +309,7 @@ function calibration(R, G, B, y_step; span_days = 100)
     return (;
         pixels_per_count = median(diff(yt)) / y_step,
         pixels_per_day, pixels_per_day_fit, fit_source, fit_points,
-        drift_days,
+        weeks_seen, drift_days,
     )
 end
 
@@ -357,7 +370,8 @@ const FIGURES_HEADER = join(
         "pixels_per_day_fit", "fit_source", "fit_points", "drift_days",
         "last_tick",
         "printed_n", "printed_n_source", "digitised_total",
-        "gap_pct", "reprint_of", "note",
+        "gap_pct", "reprint_of", "axis_start", "loop_start", "first_onset",
+        "cases_before_first_onset", "note",
     ), ","
 )
 
@@ -365,10 +379,20 @@ fmt(x::Nothing) = ""
 fmt(x::AbstractFloat) = @sprintf("%.4f", x)
 fmt(x) = string(x)
 
-function figure_row(sr, scanned, config, reprint_of, pdf_dir)
+# The digitiser walks days from 105 before the last tick, so a block cannot
+# start earlier than that whatever the axis shows. `peak` is the largest
+# count any vintage read for each onset date, a floor on what the loop
+# start leaves unread.
+function figure_row(
+        sr, scanned, config, reprint_of, pdf_dir, peak;
+        crop_dir = nothing
+    )
     report_date = scanned.report_date[sr]
-    total = block_total(scanned.blocks[sr])
+    block = scanned.blocks[sr]
+    total = block_total(block)
     last_tick = haskey(config, sr) ? config[sr] : nothing
+    first_onset = isempty(block) ? nothing : minimum(keys(block))
+    loop_start = last_tick === nothing ? nothing : last_tick - Day(105)
     y_step = get(Y_AXIS_STEP, sr, 20)
     row = Dict{String, Any}(
         "sitrep" => sr, "report_date" => report_date,
@@ -380,7 +404,9 @@ function figure_row(sr, scanned, config, reprint_of, pdf_dir)
         "pixels_per_day_fit" => nothing, "fit_source" => "",
         "fit_points" => nothing, "drift_days" => nothing,
         "printed_n" => nothing, "printed_n_source" => "",
-        "gap_pct" => nothing, "note" => "",
+        "gap_pct" => nothing, "axis_start" => nothing,
+        "loop_start" => loop_start, "first_onset" => first_onset,
+        "cases_before_first_onset" => nothing, "note" => "",
     )
     name = "SitRep_MVE_$(sr)_2026.pdf"
     pdf = joinpath(pdf_dir, name)
@@ -405,11 +431,21 @@ function figure_row(sr, scanned, config, reprint_of, pdf_dir)
         row["fit_source"] = cal.fit_source
         row["fit_points"] = cal.fit_points
         row["drift_days"] = cal.drift_days
+        if last_tick !== nothing && first_onset !== nothing
+            axis_start = last_tick - Day(7 * cal.weeks_seen)
+            row["axis_start"] = axis_start
+            row["cases_before_first_onset"] = sum(
+                (n for (d, n) in peak if axis_start <= d < first_onset);
+                init = 0
+            )
+        end
     catch e
         e isa ErrorException || rethrow()
         row["note"] = "calibration failed: " * e.msg
     end
-    n, src, note = printed_n(pdf, fig.page, fig.R, fig.G, fig.B)
+    n, src, note = printed_n(
+        pdf, fig.page, fig.R, fig.G, fig.B; crop_dir, sr
+    )
     row["printed_n"] = n
     row["printed_n_source"] = src
     if n !== nothing
@@ -567,6 +603,38 @@ function write_audit(io, rows, pairs)
     )
     println(io)
 
+    println(io, "## Axis coverage\n")
+    println(
+        io, "axis start is the earliest weekly mark found on the axis; ",
+        "loop start is 105 days before the last tick, where the ",
+        "digitiser's day loop begins; first onset is the first date in ",
+        "the committed block. cases before is the largest count any ",
+        "vintage read on the dates between axis start and first onset, a ",
+        "floor on what the block leaves unread; gap+ adds them back.\n"
+    )
+    with_axis = [r for r in rows if r["axis_start"] !== nothing]
+    md_table(
+        io,
+        (
+            "sitrep", "axis start", "loop start", "first onset", "cases before",
+            "gap %", "gap+ %",
+        ),
+        [
+            (
+                r["sitrep"], r["axis_start"], r["loop_start"],
+                r["first_onset"], r["cases_before_first_onset"],
+                pct(r["gap_pct"]),
+                r["printed_n"] === nothing ? "" : pct(
+                        100 * (
+                            r["digitised_total"] +
+                            r["cases_before_first_onset"] - r["printed_n"]
+                        ) / r["printed_n"]
+                    ),
+            )
+                for r in with_axis
+        ]
+    )
+
     println(io, "## Day-scale drift\n")
     println(
         io, "pixels_per_day is the digitiser's median tick spacing over 7; ",
@@ -624,14 +692,22 @@ function main(
         pdf_dir = "data/sitrep_pdfs",
         scanned_csv = "data/onset_curve_scanned.csv",
         figures_csv = "data/onset_curve_figures.csv",
-        audit_md = "output/onset_curve_audit.md"
+        audit_md = "output/onset_curve_audit.md";
+        crop_dir = nothing
     )
     scanned = read_scanned(scanned_csv)
     reprint_of = reprints(scanned)
     config = Dict(sr => last_tick for (sr, _, last_tick) in CONFIG)
+    peak = Dict{Date, Int}()
+    for block in values(scanned.blocks), (d, (a, dd)) in block
+        peak[d] = max(get(peak, d, 0), a + dd)
+    end
+    crop_dir === nothing || mkpath(crop_dir)
     rows = Dict{String, Any}[]
     for sr in scanned.order
-        row = figure_row(sr, scanned, config, reprint_of[sr], pdf_dir)
+        row = figure_row(
+            sr, scanned, config, reprint_of[sr], pdf_dir, peak; crop_dir
+        )
         push!(rows, row)
         @printf(
             "%s %s n=%-6s digitised=%-5d gap=%-7s %s %s\n", sr,
@@ -654,5 +730,9 @@ function main(
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(ARGS...)
+    crops = filter(a -> startswith(a, "--crops="), ARGS)
+    main(
+        filter(a -> !startswith(a, "--crops="), ARGS)...;
+        crop_dir = isempty(crops) ? nothing : last(split(crops[end], "=", limit = 2))
+    )
 end

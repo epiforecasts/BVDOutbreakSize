@@ -38,6 +38,7 @@
         ## block, pointing at the earliest vintage that carries it.
         @test r["reprint_of"] == reprint_of[sr]
         @test r["last_tick"] == string(last_tick[sr])
+        @test Date(r["first_onset"]) == minimum(keys(scanned.blocks[sr]))
         if isempty(r["printed_n"])
             @test isempty(r["gap_pct"])
         else
