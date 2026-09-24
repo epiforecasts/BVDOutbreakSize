@@ -177,6 +177,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_export_pressure_model,
     province_composition_model
 
+## Vector observation distributions a submodel writes on the right of `~`.
+## Public, not exported.
+public NegBinomialVector, CensoredNegBinomialVector, StudentTVector,
+    BetaBinomialVector, SplitCountVector
+
 include("docstrings.jl")
 include("constants.jl")
 include("data.jl")
