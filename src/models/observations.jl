@@ -3948,7 +3948,8 @@ end
 Log-density of per-province counts as a split of the printed sum of the
 provinces present each day: the stick-breaking BetaBinomial of
 [`province_composition_model`](@ref) over whichever patches print a figure
-that day. `days`, `patches` and `counts` are one row per printed figure,
+that day, scored through [`stick_breaking_loglik`](@ref) with each day as
+one group. `days`, `patches` and `counts` are one row per printed figure,
 sorted by day (see `province_care_observations`); `level[p, d]` is the
 modelled level of patch `p` on grid day `d`, up to a factor common to all
 patches; `ρ` is the overdispersion. A day with one patch printed carries
@@ -3961,40 +3962,29 @@ function province_split_logpdf(
         counts::AbstractVector{<:Integer}, level::AbstractMatrix, ρ::Real
     )
     T = promote_type(eltype(level), typeof(float(ρ)))
-    lp = zero(T)
     m = length(days)
-    m == 0 && return lp
+    m == 0 && return zero(T)
     nd = size(level, 2)
+    ## Each row's share of its day: the patch's floored level over the sum
+    ## across the patches printed that day.
+    shares = Vector{T}(undef, m)
     i = 1
     @inbounds while i <= m
-        d = days[i]
         j = i
-        while j < m && days[j + 1] == d
+        while j < m && days[j + 1] == days[i]
             j += 1
         end
-        if j > i
-            dd = clamp(Int(d), 1, nd)
-            tot = zero(T)
-            remaining = 0
-            for r in i:j
-                tot += safe_rate(level[patches[r], dd])
-                remaining += counts[r]
-            end
-            tail = one(T)
-            for r in i:(j - 1)
-                share = safe_rate(level[patches[r], dd]) / tot
-                p_cond = clamp(share / tail, 0.0, 1.0)
-                lp += logpdf(
-                    safe_betabinomial(max(remaining, 0), p_cond, ρ),
-                    counts[r]
-                )
-                remaining -= counts[r]
-                tail = max(tail - share, 1.0e-10)
-            end
+        dd = clamp(Int(days[i]), 1, nd)
+        tot = zero(T)
+        for r in i:j
+            tot += safe_rate(level[patches[r], dd])
+        end
+        for r in i:j
+            shares[r] = safe_rate(level[patches[r], dd]) / tot
         end
         i = j + 1
     end
-    return lp
+    return stick_breaking_loglik(days, counts, shares, ρ)
 end
 
 """
