@@ -380,102 +380,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
     function joint_posterior_predictive()
         cached = _joint_pp_cache[]
         cached !== nothing && return cached
-        ## Drop the increment counts but keep each stream's vintage day grid, so
-        ## `predict` resamples the per-vintage increments rather than holding
-        ## them at the observed values. The confirmed-case windows and the
-        ## per-window positivity random effect are defined by the confirmed and
-        ## laboratory histories, so those are passed with their counts intact
-        ## (only the cut-off scalars are set to `missing`) to keep the
-        ## generator's latent dimensions identical to the fitted chain.
-        _days_only(h) = (; days = h.days, counts = Int[])
+        ## The headline patch joint with each stream's counts dropped but its
+        ## observation grid kept (`generator_joint`), so `predict` resamples
+        ## every stream over the real cells from each fitted draw.
         chn_joint = load_fit("joint")
         t0 = time()
         pp = predict(
-            bvd_joint(
-                obs.n, missing, missing, missing, missing, missing, missing;
-                confirmed_deaths = missing,
-                recovered_cases = missing,
-                deaths_history = _days_only(obs.deaths_history),
-                reported_history = _days_only(obs.reported_history),
-                suspected_daily_history = _days_only(obs.suspected_daily_history),
-                suspected_daily_deaths_history =
-                    _days_only(obs.suspected_daily_deaths_history),
-                isolation_history = _days_only(obs.isolation_history),
-                bed_capacity_history = _days_only(obs.bed_capacity_history),
-                ## Kept so the generator's occupancy-break dimension matches the
-                ## fitted chain (the offset step on the
-                ## `[occupancy_break_dates]` days).
-                occupancy_break_days = obs.occupancy_break_days,
-                recovered_history = _days_only(obs.recovered_history),
-                treatment_admissions_history =
-                    _days_only(obs.treatment_admissions_history),
-                treatment_deaths_history = _days_only(obs.treatment_deaths_history),
-                treatment_ruleout_history = _days_only(obs.treatment_ruleout_history),
-                treatment_absconded_history =
-                    _days_only(obs.treatment_absconded_history),
-                treatment_confirmed_incare_history =
-                    _days_only(obs.treatment_confirmed_incare_history),
-                treatment_suspect_incare_history =
-                    _days_only(obs.treatment_suspect_incare_history),
-                confirmed_history = obs.confirmed_history,
-                ## Counts kept, like the confirmed cases above: the cut-off
-                ## scalar (`confirmed_deaths = missing`) is this stream's
-                ## generator gate, so `predict` still resamples the increments
-                ## while the dated history supplies both the vintage grid and
-                ## the published break discrepancy the step is centred on.
-                ## Differencing an emptied history cannot recover that
-                ## discrepancy, which would leave the harmonised vintage
-                ## replicated as a day of real deaths.
-                confirmed_deaths_history = obs.confirmed_deaths_history,
-                lab_history = obs.lab_history,
-                lab_daily_history = obs.lab_daily_history,
-                ## Kept, like the occupancy break above, so the generator's
-                ## confirmed break dimension matches the fitted chain (the level
-                ## step and the de-anchored positivity denominator on the
-                ## `[confirmed_break_dates]` days). Without them the harmonised
-                ## vintage is replicated as though its whole increment were one
-                ## day of incidence, so 22 July plots as a gross outlier against
-                ## a chain that fitted it as mostly backlog, and the
-                ## `confirmed_step` columns go unused.
-                confirmed_break_days = obs.confirmed_break_days,
-                confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
-                confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
-                export_case_days = obs.export_case_days,
-                export_death_days = obs.export_death_days,
-                ## Kept with its real cell grid (`onset_days`/`report_days`/
-                ## `prev_report_days`) but `increments = missing`, so `predict`
-                ## resamples the reporting-triangle increments over the actual
-                ## scored cells rather than the default empty grid.
-                onset_curve_history = (;
-                    onset_days = obs.onset_curve_history.onset_days,
-                    report_days = obs.onset_curve_history.report_days,
-                    prev_report_days = obs.onset_curve_history.prev_report_days,
-                    increments = missing,
-                ),
-                breakpoint = _BREAKPOINT,
-                background_pooling = background_pooling_model,
-                genetic = genetic_seeding_model,
-                tmrca_days = obs.tmrca_days,
-                ## The generator must be the model that was fitted. `n_patches`
-                ## defaults to one, so leaving these out regenerates every
-                ## stream from a single well-mixed population while the chain
-                ## carries a four-patch fit: the draws still apply, the latent
-                ## trajectory they are replayed through does not, and every
-                ## stream driven by BVD cases comes out short by the difference.
-                ## The province grids are kept with `missing` increments, like
-                ## the onset triangle above, so `predict` resamples the
-                ## compositions over the real cells. Their totals are the
-                ## unscaled modelled increments, not counts, so the province
-                ## page splits the national replicates instead
-                ## (`province_count_panels`).
-                n_patches = N_PATCHES,
-                province_increments = missing,
-                province_days = province_cases.days,
-                province_testing_covariate = province_testing,
-                province_death_increments = missing,
-                province_death_days = province_deaths.days
-            ),
-            chn_joint
+            generator_joint(obs; breakpoint = _BREAKPOINT), chn_joint
         )
         _render_log("joint posterior predictive: $(_since(t0))")
         _joint_pp_cache[] = pp
