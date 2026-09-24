@@ -806,7 +806,16 @@ jobs:
     # Dependabot-triggered workflows run with a read-only GITHUB_TOKEN, so
     # the deploy-and-comment steps below would all fail. Skip the job
     # entirely; dependabot PRs only need the test results, not a docs preview.
-    if: github.actor != 'dependabot[bot]'
+    # A condition with no status function gets an implicit `success()`, which
+    # is false whenever any ancestor was skipped. `fit_sensitivity` is skipped
+    # on pull requests, so check the five renders directly instead.
+    if: >-
+      ${{ !cancelled() && github.actor != 'dependabot[bot]' &&
+      needs.render_methods.result == 'success' &&
+      needs.render_joint.result == 'success' &&
+      needs.render_joint_overlays.result == 'success' &&
+      needs.render_validation.result == 'success' &&
+      needs.render_all.result == 'success' }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
