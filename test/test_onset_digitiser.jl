@@ -119,7 +119,7 @@ end
 
 ## --- Committed CSV: L1 date alignment -------------------------------------
 
-@testitem "onset curve L1 alignment lands on shift 0 bar the documented pairs" begin
+@testitem "onset curve L1 alignment lands on shift 0 for every consecutive pair" begin
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Day
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
@@ -131,56 +131,11 @@ end
         )
     )
 
-    ## Consecutive pairs where the check does not land on shift 0. Every one
-    ## is investigated and recorded in data/README.md's onset-curve section:
-    ## the rightmost axis tick was read off the rendered figure directly,
-    ## and a verified direct read outweighs this heuristic when the two
-    ## conflict. They disagree in alternating directions rather than showing
-    ## a systematic offset, so none of them can be a misread tick. (115->116
-    ## and 116->117 both prefer shift +1, the first same-direction
-    ## consecutive pair this stream has seen, but two instances do not
-    ## establish a systematic offset. 119->120 prefers shift -1 and
-    ## 120->121 prefers shift +1, again opposite directions. 121->122 is a
-    ## new shape again: full-range prefers shift +1 (1085 against 1108 at 0
-    ## and 1119 at -1) while the stable region prefers shift -1 (895 against
-    ## 930 at 0 and 931 at +1) - the two ranges disagree with each other, not
-    ## just with shift 0, and every value is within a few percent of the
-    ## others, consistent with this stream's own digitisation noise rather
-    ## than a misread tick.) 122->123 splits the same way round: full-range
-    ## prefers shift +1 by about a percent (1298 against 1313 at 0 and 1329
-    ## at -1) while the stable region lands on 0 (910 against 1003/933).
-    ## 123->124 is the sharpest pair since 102->103, both ranges preferring
-    ## +1 by a wide margin (full 756 against 988 at 0 and 1178 at -1; stable
-    ## 597 against 879/1017). An axis error cannot explain it: 123 and 124
-    ## print the same first tick (06 avr 2026) and the same last tick (14
-    ## sept 2026), both read off 12x crops of the embedded figures, so the
-    ## two axes are calibrated identically and no one-day offset between
-    ## them is possible. 125->126 and 126->127 both prefer shift -1 (full
-    ## 724 against 831 at 0 and 1146 at +1 for 125->126; 600 against 647 at
-    ## 0 and 1047 at +1 for 126->127; stable region agrees in both cases).
-    ## 125, 126 and 127 all print the same first tick (06 avr 2026) and the
-    ## same last tick (14 sept 2026), each read directly and agreed by two
-    ## blind readers with zero disagreements, so again no axis miscalibration
-    ## is possible between them. 127->128 prefers shift -1 too, but only
-    ## marginally (full 1123 against 1159 at 0 and 1203 at +1; stable region
-    ## 918 against 988 at 0 and 978 at +1) - 127 and 128 print the same 14
-    ## sept 2026 last tick, so no axis miscalibration explains it either.
-    ## 129->130 also prefers shift -1 (full 1351 against 1458 at 0 and 1515
-    ## at +1; stable region, cutoff 31 August, 968 against 1012 at 0 and
-    ## 1060 at +1) despite both vintages printing the identical, directly
-    ## and independently verified 21 September last tick (see the SitRep
-    ## 129/130 paragraph above), so again no axis miscalibration explains
-    ## it - the sixteenth such documented exception in this stream.
-    documented = Dict(
-        "093" => "094", "096" => "097", "099" => "100",
-        "102" => "103", "112" => "113", "115" => "116", "116" => "117",
-        "119" => "120", "120" => "121", "121" => "122", "122" => "123",
-        "123" => "124", "125" => "126", "126" => "127", "127" => "128",
-        "129" => "130"
-    )
-
-    unexpected = Tuple{String, String, Int, Int}[]
-    resolved = String[]
+    ## Each vintage's rightmost tick is read off the rendered figure and
+    ## recorded in the digitiser's CONFIG. A pair whose L1 distance is
+    ## smaller with the later block moved a day either way means one of
+    ## the two ticks, or the day scale between them, is wrong.
+    misaligned = Tuple{String, String, Int, Int}[]
     for i in 2:length(csv.order)
         p, q = csv.order[i - 1], csv.order[i]
         a, b = csv.onsets[p], csv.onsets[q]
@@ -189,20 +144,10 @@ end
         stable = [_l1_shift(a, b, s; cut = cut) for s in (-1, 0, 1)]
         best_full = (-1, 0, 1)[argmin(full)]
         best_stable = (-1, 0, 1)[argmin(stable)]
-        clean = best_full == 0 && best_stable == 0
-        if get(documented, p, nothing) == q
-            clean && push!(resolved, "$p->$q")
-        elseif !clean
-            push!(unexpected, (p, q, best_full, best_stable))
-        end
+        (best_full == 0 && best_stable == 0) ||
+            push!(misaligned, (p, q, best_full, best_stable))
     end
-    ## A new pair failing the check means that vintage's rightmost tick
-    ## needs reading off the figure and recording before its block is
-    ## accepted.
-    @test isempty(unexpected)
-    ## A documented pair that starts passing means the note describing it is
-    ## stale.
-    @test isempty(resolved)
+    @test isempty(misaligned)
 end
 
 ## --- digitize on a synthetic figure ---------------------------------------

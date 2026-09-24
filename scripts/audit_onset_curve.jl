@@ -190,20 +190,29 @@ function onset_figure(pdf)
     return nothing
 end
 
-# The weekly x-axis tick columns, as `digitize` finds them.
-function weekly_tick_columns(mask, base, H, W)
-    band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
+# The weekly x-axis tick clusters, found as `digitize` finds them: both
+# masks at every cut, keeping the row whose regular weekly chain from the
+# rightmost tick is longest.
+function reader_ticks(R, G, B, base)
+    H, W = size(R)
+    m = masks(R, G, B)
+    line = (R .< 180) .& (G .< 180) .& (B .< 180)
     best_n = 0
-    found = Int[]
-    for cut in (4, 3, 2, 1)
-        cand = cluster([x for x in 1:W if band[x] >= cut])
-        length(cand) >= 8 || continue
-        if length(cand) > best_n
-            best_n = length(cand)
-            found = cand
+    xt = Int[]
+    for mask in (m.dark, line)
+        band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
+        for cut in (4, 3, 2, 1)
+            cand = cluster([x for x in 1:W if band[x] >= cut])
+            length(cand) >= 8 || continue
+            n = length(tick_chain(cand)[1])
+            if n > best_n
+                best_n = n
+                xt = cand
+            end
         end
     end
-    return found
+    isempty(xt) && error("no x-axis weekly tick row found")
+    return xt
 end
 
 """
@@ -271,17 +280,15 @@ end
 
 """
 The pixel scales `digitize` calibrates on this figure: pixels per count
-from the y-axis tick spacing over `y_step`, and pixels per day from the
-weekly x-axis ticks, with the same near-grey fallbacks the digitiser uses.
+from the y-axis tick spacing over `y_step`, and pixels per day as the
+least-squares pitch through the reader's weekly tick chain.
 
-`pixels_per_day` is the digitiser's value, the median tick spacing over 7.
-Tick columns are integers, so on a figure whose true spacing is not a whole
-number of pixels the median lands on one of the two neighbouring integers
-and the day grid stepped back from the last tick drifts away from the
-drawn bars. `pixels_per_day_fit` is the least-squares pitch through the
-weekly marks (`fit_source` says whether the tick marks or the x-axis
-labels gave more points, `fit_points` how many), and `drift_days` is how
-many days the digitiser's grid is off at `span_days` before the last tick.
+`pixels_per_day_fit` is an independent pitch through the x-axis labels,
+which sit centred under their ticks, or through the tick clusters when
+those give more points (`fit_source`, `fit_points`). `drift_days` is how
+far the two scales disagree at `span_days` before the last tick, in days.
+`chain_weeks` is how many weeks the tick chain reaches back and
+`loop_offset` the day the reader's walk starts, relative to the last tick.
 """
 function calibration(R, G, B, y_step; span_days = 100)
     H, W = size(R)
@@ -294,11 +301,14 @@ function calibration(R, G, B, y_step; span_days = 100)
         e isa ErrorException || rethrow()
         y_axis_ticks(line, base, H, W)
     end
-    xt = weekly_tick_columns(m.dark, base, H, W)
-    isempty(xt) && (xt = weekly_tick_columns(line, base, H, W))
-    isempty(xt) && error("no x-axis weekly tick row found")
+    xt = reader_ticks(R, G, B, base)
+    ks, xs = tick_chain(xt)
+    n = length(xs)
+    n >= 2 || error("weekly tick chain too short")
+    w = 7.0 .* ks
+    pixels_per_day = (n * sum(w .* xs) - sum(w) * sum(xs)) /
+        (n * sum(w .^ 2) - sum(w)^2)
     week = median(diff(xt))
-    pixels_per_day = week / 7
     ticks = fit_week(xt, week)
     labels = fit_week(label_centroids(R, G, B, base), week)
     (fit, fit_points, weeks_seen), fit_source = labels[2] > ticks[2] ?
@@ -309,7 +319,8 @@ function calibration(R, G, B, y_step; span_days = 100)
     return (;
         pixels_per_count = median(diff(yt)) / y_step,
         pixels_per_day, pixels_per_day_fit, fit_source, fit_points,
-        weeks_seen, drift_days,
+        weeks_seen = max(weeks_seen, -ks[1]), chain_weeks = -ks[1],
+        loop_offset = 7 * ks[1] - 7, drift_days,
     )
 end
 
@@ -379,10 +390,10 @@ fmt(x::Nothing) = ""
 fmt(x::AbstractFloat) = @sprintf("%.4f", x)
 fmt(x) = string(x)
 
-# The digitiser walks days from 105 before the last tick, so a block cannot
-# start earlier than that whatever the axis shows. `peak` is the largest
-# count any vintage read for each onset date, a floor on what the loop
-# start leaves unread.
+# The digitiser walks days from a week before the first tick in its chain,
+# so a block cannot start earlier than that whatever the axis shows.
+# `peak` is the largest count any vintage read for each onset date, a
+# floor on what the loop start leaves unread.
 function figure_row(
         sr, scanned, config, reprint_of, pdf_dir, peak;
         crop_dir = nothing
@@ -392,7 +403,6 @@ function figure_row(
     total = block_total(block)
     last_tick = haskey(config, sr) ? config[sr] : nothing
     first_onset = isempty(block) ? nothing : minimum(keys(block))
-    loop_start = last_tick === nothing ? nothing : last_tick - Day(105)
     y_step = get(Y_AXIS_STEP, sr, 20)
     row = Dict{String, Any}(
         "sitrep" => sr, "report_date" => report_date,
@@ -405,7 +415,7 @@ function figure_row(
         "fit_points" => nothing, "drift_days" => nothing,
         "printed_n" => nothing, "printed_n_source" => "",
         "gap_pct" => nothing, "axis_start" => nothing,
-        "loop_start" => loop_start, "first_onset" => first_onset,
+        "loop_start" => nothing, "first_onset" => first_onset,
         "cases_before_first_onset" => nothing, "note" => "",
     )
     name = "SitRep_MVE_$(sr)_2026.pdf"
@@ -432,6 +442,7 @@ function figure_row(
         row["fit_points"] = cal.fit_points
         row["drift_days"] = cal.drift_days
         if last_tick !== nothing && first_onset !== nothing
+            row["loop_start"] = last_tick + Day(cal.loop_offset)
             axis_start = last_tick - Day(7 * cal.weeks_seen)
             row["axis_start"] = axis_start
             row["cases_before_first_onset"] = sum(
@@ -606,8 +617,8 @@ function write_audit(io, rows, pairs)
     println(io, "## Axis coverage\n")
     println(
         io, "axis start is the earliest weekly mark found on the axis; ",
-        "loop start is 105 days before the last tick, where the ",
-        "digitiser's day loop begins; first onset is the first date in ",
+        "loop start is a week before the first tick in the reader's ",
+        "chain, where its day loop begins; first onset is the first date in ",
         "the committed block. cases before is the largest count any ",
         "vintage read on the dates between axis start and first onset, a ",
         "floor on what the block leaves unread; gap+ adds them back.\n"
@@ -637,12 +648,12 @@ function write_audit(io, rows, pairs)
 
     println(io, "## Day-scale drift\n")
     println(
-        io, "pixels_per_day is the digitiser's median tick spacing over 7; ",
-        "fit is the least-squares pitch through the weekly tick marks or the ",
-        "x-axis labels, whichever gives more points. ",
-        "drift_days is how far the digitiser's day grid is from the drawn ",
-        "bars 100 days before the last tick, in days: past 0.5 the oldest ",
-        "bars are read into neighbouring days.\n"
+        io, "pixels_per_day is the reader's least-squares pitch through ",
+        "its weekly tick chain; fit is an independent pitch through the ",
+        "x-axis labels or the tick clusters, whichever gives more points. ",
+        "drift_days is how far the two disagree 100 days before the last ",
+        "tick, in days: past 0.5 the oldest bars would be read into ",
+        "neighbouring days.\n"
     )
     with_cal = [r for r in rows if r["drift_days"] !== nothing]
     md_table(
