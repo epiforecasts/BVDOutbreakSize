@@ -331,7 +331,8 @@ level (see [`forecast_stream`](@ref)).
     )
     ## Reported only, so built behind `_detached`.
     expected_onset_reported_T := _detached(
-        onset_report_expected_total, latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_expected_total, latent.onsets,
+        onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n
     )
     onset_ascertainment := onset_report_state.alpha
@@ -1125,7 +1126,8 @@ reproduction number implied by the summed patch infections.
     ## and does not separate here. The total is reported only, so it is
     ## built behind `_detached`.
     expected_onset_reported_T := _detached(
-        onset_report_expected_total, onsets, onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_expected_total, onsets,
+        onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n
     )
     onset_ascertainment := onset_report_state.alpha

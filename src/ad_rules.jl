@@ -609,7 +609,6 @@ Mooncake.@is_primitive(
         Array{<:Integer},
     },
 )
-
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
