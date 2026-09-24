@@ -58,7 +58,7 @@ end
     end
     withenv(
         "BVD_JOINT_SAMPLES" => "1000", "BVD_JOINT_WARMUP" => "500",
-        "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "12"
+        "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "11"
     ) do
         @test fit_key("joint") == base["joint"]
         @test fit_key("sens_no_patches") == base["sens_no_patches"]
@@ -67,7 +67,7 @@ end
     ## Each override moves both joint keys and leaves the other fits alone.
     overrides = (
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
-        "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "11",
+        "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "12",
     )
     for ov in overrides
         withenv(unset..., ov) do
