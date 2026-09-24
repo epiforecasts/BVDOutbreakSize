@@ -11,12 +11,12 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel,
-    predict, returned
+using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
+    to_submodel, predict, returned
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
-    is_extracting_colon_eq_values
+    is_extracting_colon_eq_values, logjoint
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -119,7 +119,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     confirmed_break_correction,
     seed_at_renewal_start,
     knot_days, future_knot_days, ForecastHorizon, horizon_days,
-    with_horizon, forecast_days,
+    with_horizon, forecast_days, generator_joint, recovery_observed_varnames,
+    simulate_recovery, recovery_data, recovery_density_check, recovery_fit,
+    recovery_table, recovery_verdict,
+    forecast_recovery_table,
     interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
     safe_rate,
     # prior / latent submodels
@@ -213,6 +216,7 @@ include("models/observation_distributions.jl")
 include("models/observations.jl")
 include("models/joint.jl")
 include("models/fit_args.jl")
+include("recovery.jl")
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:
 ##   set_preferences!(BVDOutbreakSize, "mooncake_rules" => false)

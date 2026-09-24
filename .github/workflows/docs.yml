@@ -342,6 +342,100 @@ jobs:
   # parallel with the fits. Nothing here reads this run's fits: the scoring
   # compares past releases' saved forecasts against the current data, so it
   # can start as soon as the environment is resolved.
+  # Parameter recovery: a few datasets simulated from the headline joint at
+  # fixed seeds, each fitted with short sampler settings and scored against
+  # the values that generated it, with its forecasts scored against the
+  # simulated future (`scripts/recovery.jl`). It runs beside the headline
+  # fits, which take longer, so it adds no wall time, and it is cached on
+  # the fit hash plus the recovery code, so an unchanged model reruns
+  # nothing.
+  recovery:
+    name: Recovery seed ${{ matrix.seed }}
+    needs: list
+    runs-on: ubuntu-latest
+    # Each seed is fitted with the headline joint's sampler settings, so it
+    # takes about as long as the joint and gets the same headroom.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+          save-always: false
+          include-matrix: false
+      - name: Restore recovery cache
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: output/recovery
+          key: >-
+            recovery-${{ matrix.seed }}-${{ needs.list.outputs.fit_hash }}-${{
+            hashFiles('src/recovery.jl', 'scripts/recovery.jl') }}
+      - name: Pin the resolved manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: .
+      - name: Restore the compiled package from `list`
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
+      - name: Simulate, fit and score seed ${{ matrix.seed }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          JULIA_NUM_THREADS: '4'
+        run: |
+          set -euo pipefail
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          julia --project=docs scripts/recovery.jl ${{ matrix.seed }} \
+            output/recovery
+      - uses: actions/upload-artifact@v7
+        with:
+          name: recovery-${{ matrix.seed }}
+          path: output/recovery/*_${{ matrix.seed }}.*
+          if-no-files-found: error
+          retention-days: 3
+
+  # Summarise the recovery runs. On main, keep a tracking issue in step with
+  # the verdict: comment when recovery fails badly, close it once it passes.
+  recovery_report:
+    name: Report parameter recovery
+    needs: recovery
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: recovery-*
+          path: output/recovery
+          merge-multiple: true
+      - name: Summarise, and flag failures on main or the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          post=""
+          if [ "${{ github.event_name }}" = "push" ] &&
+             [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            post=post
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            post=pr
+          fi
+          scripts/recovery_report.sh output/recovery $post
+
   overlays:
     name: Refresh release overlays
     needs: [changes, list]
@@ -616,6 +710,7 @@ jobs:
             slug: methods
             fits: ''
             overlays: false
+            recovery: false
     steps: &render-steps
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -663,6 +758,14 @@ jobs:
         with:
           name: overlays
           path: data
+      - name: Collect the parameter-recovery results
+        if: matrix.recovery
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: recovery-*
+          path: output/recovery
+          merge-multiple: true
       - name: Render ${{ matrix.id }}
         env:
           BVD_DOC_PAGE: ${{ matrix.id }}
@@ -689,7 +792,11 @@ jobs:
 
   render_joint:
     name: Render ${{ matrix.id }}
-    needs: fit_joint
+    # The in-sample pages show the parameter recovery, which finishes well
+    # before the joint; a failed recovery run leaves that section empty
+    # rather than blocking the pages.
+    needs: [fit_joint, recovery]
+    if: ${{ !cancelled() && needs.fit_joint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -700,18 +807,22 @@ jobs:
             slug: estimates-province
             fits: fit-joint
             overlays: false
+            recovery: false
           - id: forecasts/national
             slug: forecasts-national
             fits: fit-joint
             overlays: false
+            recovery: false
           - id: evaluation/insample/national
             slug: evaluation-insample-national
             fits: fit-joint
             overlays: false
+            recovery: true
           - id: evaluation/insample/province
             slug: evaluation-insample-province
             fits: fit-joint
             overlays: false
+            recovery: true
     steps: *render-steps
 
   render_joint_overlays:
@@ -727,6 +838,7 @@ jobs:
             slug: forecasts-province
             fits: fit-joint
             overlays: true
+            recovery: false
     steps: *render-steps
 
   render_validation:
@@ -742,10 +854,12 @@ jobs:
             slug: evaluation-forecast-national
             fits: fit-{joint,frozen_validation*}
             overlays: true
+            recovery: false
           - id: evaluation/forecast/province
             slug: evaluation-forecast-province
             fits: fit-frozen_validation
             overlays: true
+            recovery: false
     steps: *render-steps
 
   # These two pages read every group. The sensitivity group is skipped on
@@ -771,10 +885,12 @@ jobs:
             slug: estimates-national
             fits: fit-*
             overlays: false
+            recovery: false
           - id: sensitivity
             slug: sensitivity
             fits: fit-*
             overlays: true
+            recovery: false
     steps: *render-steps
 
   # Assemble the Vitepress site from both pre-rendered pages (a single

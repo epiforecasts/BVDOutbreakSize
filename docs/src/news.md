@@ -152,6 +152,10 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The docs build fits the headline joint to three datasets it simulates itself and checks it recovers the values and the future that generated them (#PRNUM).
+  A density check first confirms the simulated data reach the right streams.
+  A failing recovery comments on a tracking issue on main and on the pull request.
+
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
 - A test compares the production joint's log density and gradient with the rules loaded and with the `mooncake_rules` preference off, and property tests check the kernels the rules cover (#856).
