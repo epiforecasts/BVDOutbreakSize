@@ -7,86 +7,6 @@
 # them against the observed increments.
 
 """
-NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean `μ`
-and dispersion `k`, with clamping on the success probability so extreme
-NUTS proposals during warmup do not trip the distribution domain check.
-Shared by the count-stream observation submodels.
-"""
-function safe_nbinomial(k, μ)
-    ## Guard the dispersion `r`, not just `p`: `NegativeBinomial(0, p)`
-    ## throws `DomainError: r > 0`, which aborts a gradient rather than
-    ## rejecting the step.
-    r = (isfinite(k) && k > zero(k)) ? k : eps(typeof(k))
-    p_raw = r / (r + max(μ, eps(typeof(μ))))
-    p = isfinite(p_raw) ?
-        clamp(p_raw, eps(typeof(r)), one(r) - eps(typeof(r))) :
-        eps(typeof(r))
-    return NegativeBinomial(r, p)
-end
-
-"""
-Summed log-likelihood of the counts `obs` under one
-[`safe_nbinomial`](@ref) per entry, about the [`safe_rate`](@ref) of the
-matching mean in `modelled` with the shared dispersion `k`. Equal to what
-one `~` per count accumulates, as a single term. `src/ad_rules.jl` gives it
-a closed-form Mooncake rule, so the backend does not tape each `logpdf`.
-"""
-function nbinomial_loglik(k, modelled::AbstractVector, obs::AbstractVector)
-    s = zero(float(promote_type(typeof(k), eltype(modelled))))
-    @inbounds for i in eachindex(modelled, obs)
-        s += logpdf(safe_nbinomial(k, safe_rate(modelled[i])), obs[i])
-    end
-    return s
-end
-
-"""
-Summed right-censored NegativeBinomial log-likelihood of the counts `obs`
-about the means `means`, each censored at the matching `ceilings`. A count
-below its ceiling scores the uncensored `logpdf`, so those go through
-[`nbinomial_loglik`](@ref) together. Only the counts at the ceiling take
-the censored tail. Equal to one `~ censored(...)` per count.
-"""
-function censored_nbinomial_loglik(k, means, ceilings, obs)
-    below = obs .< safe_rate.(ceilings)
-    s = nbinomial_loglik(k, means[below], obs[below])
-    @inbounds for i in findall(!, below)
-        s += logpdf(
-            censored(
-                safe_nbinomial(k, safe_rate(means[i]));
-                upper = safe_rate(ceilings[i])
-            ), obs[i]
-        )
-    end
-    return s
-end
-
-"""
-NaN / Inf-safe overdispersed `Binomial` (`BetaBinomial`) constructor
-parameterised by the trial count `n`, the mean positive probability `p`
-and an intra-window overdispersion `ρ ∈ (0, 1)`. With concentration
-`s = (1 − ρ)/ρ`, `α = s·p` and `β = s·(1 − p)`, the `BetaBinomial(n, α, β)`
-has mean `n·p` and variance `n·p·(1 − p)·(1 + (n − 1)·ρ)`, so `ρ → 0`
-recovers the plain `Binomial(n, p)` and larger `ρ` inflates the variance
-above it. This carries the day-to-day laboratory batching and within-window
-positivity heterogeneity a pooled per-window `p` does not. `ρ` is floored
-away from `0` and `p` clamped into `(0, 1)` so the distribution stays
-defined under extreme NUTS proposals. Shared by the confirmed-positives
-windows.
-"""
-function safe_betabinomial(n::Integer, p, ρ)
-    T = float(promote_type(typeof(p), typeof(ρ)))
-    lo = eps(T)
-    pc = isfinite(p) ? clamp(T(p), lo, one(T) - lo) : one(T) / 2
-    ## Floor ρ at 1e-6 (capping `s` at ≈1e6) so a near-zero draw stays a
-    ## well-conditioned near-Binomial, and cap below 1 so `s` stays positive.
-    ρc = isfinite(ρ) ? clamp(T(ρ), T(1.0e-6), one(T) - T(1.0e-6)) : T(1.0e-6)
-    s = (one(T) - ρc) / ρc
-    α = max(s * pc, lo)
-    β = max(s * (one(T) - pc), lo)
-    return BetaBinomial(n, α, β)
-end
-
-"""
 Modelled between-vintage increments of a daily series `daily`, summed
 directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
@@ -254,29 +174,22 @@ per-vintage increments `modelled` (see [`bin_increments`](@ref)) against
 the observed `increments` with one NegativeBinomial per vintage, sharing
 the dispersion `k`.
 
-`increments` is a model argument on the left of `~`, so a `missing`
-argument is sampled (the predictive-generator path). The indexed
-`increments[i]` keeps the predict keys (`<prefix>.increments[i]`)
-replicable. A supplied vector is scored as one summed term
-([`nbinomial_loglik`](@ref)) rather than a `~` per vintage. An empty
-vector (zero vintages) is a no-op.
+`increments` is a model argument on the left of `~`, so a supplied vector
+is observed data DynamicPPL conditions on and a `missing` argument is
+sampled (the predictive-generator path) under the whole-vector predict key
+`<prefix>.increments`. Both go through one [`NegBinomialVector`](@ref), so
+a supplied vector is scored as one summed term. An empty vector (zero
+vintages) adds no variable and nothing to the log density.
 """
 @model function vintage_increments_model(
         modelled::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Integer}},
         k::Real
     )
-    n = length(modelled)
-    if ismissing(increments)
-        increments = Vector{Union{Missing, Int}}(missing, n)
-        for i in 1:n
-            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
-        end
-    elseif n > 0
-        @addlogprob! (;
-            loglikelihood = nbinomial_loglik(k, modelled, increments),
-        )
-    end
+    ## No vintages: no variable, since a zero-length count vector would
+    ## still read as a sampled discrete latent.
+    isempty(modelled) && return (; modelled, increments = Int[])
+    increments ~ NegBinomialVector(k, modelled)
     return (; modelled, increments)
 end
 
@@ -286,30 +199,17 @@ is a NegBinomial around the latent bed demand `means[i]`, right-censored at
 the effective capacity `ceilings[i]`. The censored tail probability still
 depends on the demand above the ceiling, so demand stays identified when
 beds are full rather than the occupancy going flat in demand. A `missing`
-`obs` samples (the predictive path) under the `<prefix>.obs[i]` keys. A
-supplied vector is scored as one summed term
-([`censored_nbinomial_loglik`](@ref)). Shares the surveillance dispersion
-`k`.
+`obs` samples (the predictive path) under the `<prefix>.obs` key. Both go
+through one `censored` [`NegBinomialVector`](@ref), so a supplied vector
+is scored as one summed term. Shares the surveillance dispersion `k`.
 """
 @model function censored_occupancy_model(
         means::AbstractVector,
         ceilings::AbstractVector,
         obs::Union{Missing, AbstractVector{<:Integer}}, k::Real
     )
-    n = length(means)
-    if ismissing(obs)
-        obs = Vector{Union{Missing, Int}}(missing, n)
-        for i in 1:n
-            obs[i] ~ censored(
-                safe_nbinomial(k, safe_rate(means[i]));
-                upper = safe_rate(ceilings[i])
-            )
-        end
-    elseif n > 0
-        @addlogprob! (;
-            loglikelihood = censored_nbinomial_loglik(k, means, ceilings, obs),
-        )
-    end
+    isempty(means) && return (; means, ceilings, obs = Int[])
+    obs ~ censored(NegBinomialVector(k, means); upper = ceilings)
     return (; means, ceilings, obs)
 end
 
@@ -580,7 +480,7 @@ ascertainment and the background CFR for reuse by
     asc_state ~ to_submodel(ascertainment)
     CFR = cfr_state.CFR
     p_death = asc_state.p_death
-    bvd_deaths_daily = (p_death * CFR) .* convolve_delay(onsets, od_state.pmf)
+    bvd_deaths_daily = convolve_delay(onsets, (p_death * CFR) .* od_state.pmf)
 
     n = length(bvd_deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
@@ -589,7 +489,7 @@ ascertainment and the background CFR for reuse by
     if case_bg_daily !== nothing
         bgcfr_state ~ to_submodel(background_cfr)
         cfr_bg = bgcfr_state.cfr_bg
-        bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
+        bg_death_daily = convolve_delay(case_bg_daily, cfr_bg .* od_state.pmf)
         λ_bg_death = sum(bg_death_daily) / n
         bg_death_sigma = zero(CFR)
     else
@@ -785,10 +685,12 @@ so the posterior-predictive trajectory reconstructs without interleaving.
 
 `increments` is a model argument on the left of `~`, so a supplied vector
 is observed data and a `missing` argument is sampled (the
-predictive-generator path). A `Vector{Union{Missing, Int}}` with some
-entries `missing` scores only the present ones, used to observe the
-anchored days while leaving the unanchored days latent under the
-no-extrapolation probe.
+predictive-generator path). A supplied integer vector is scored as one
+[`SplitCountVector`](@ref), a summed BetaBinomial term over the anchored
+days plus a summed NegativeBinomial term over the rest. A
+`Vector{Union{Missing, Int}}` with some entries `missing` scores only the
+present ones, one `~` per day, used to observe the anchored days while
+leaving the unanchored days latent under the no-extrapolation probe.
 """
 @model function late_confirmed_model(
         increments::Union{Missing, AbstractVector},
@@ -796,6 +698,10 @@ no-extrapolation probe.
         p_pos::AbstractVector, k::Real, ρ::Real = 0.0
     )
     n = length(modelled)
+    if increments isa AbstractVector{<:Integer} && n > 0
+        increments ~ SplitCountVector(analysed, p_pos, ρ, k, modelled)
+        return (; modelled, increments)
+    end
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
     end
@@ -1025,7 +931,7 @@ end
 ## Enzyme's reverse mode cannot differentiate through, and a `map(...) do i`
 ## leaves an anonymous-closure shadow Enzyme cannot construct.
 function composition_positivity(
-        window_days, bvd_window, bg_window,
+        window_days, bvd_window, pool_window,
         c_window, δ0, dscale, s_test, spec, lo, hi
     )
     Tt = eltype(bvd_window)
@@ -1034,11 +940,10 @@ function composition_positivity(
     nw = length(window_days)
     p_pos = Vector{Tt}(undef, nw)
     @inbounds for i in 1:nw
-        ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
-        ## window, guarded against a zero/negative denominator.
-        num = bvd_window[i]
-        den = bvd_window[i] + bg_window[i]
-        ratio = num / (den + lo)
+        ## Pool composition φ = (p_drc·BVD) / pool over the window, with
+        ## pool = p_drc·BVD + λ_bg, guarded against a zero/negative
+        ## denominator.
+        ratio = bvd_window[i] / (pool_window[i] + lo)
         φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
         δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
         ## Severity-enriched tested BVD share, then the assay
@@ -1162,8 +1067,10 @@ quantities.
     ## report-to-analysed delay and thinned by the tested fraction. `bg_daily`
     ## is the per-day non-BVD background.
     receipt_state ~ to_submodel(receipt)
-    suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
-    carried = convolve_delay(suspected_daily, receipt_state.pmf)
+    bvd_suspected_daily = p_drc .* bvd_reports_daily
+    carried = convolve_delay(
+        bvd_suspected_daily .+ bg_daily, receipt_state.pmf
+    )
     κ_test = if specimen_intensity === nothing
         nothing
     else
@@ -1236,29 +1143,29 @@ quantities.
     ## Suspect-pool composition over each window, carried through the
     ## report-to-analysed delay so it reflects the specimens actually
     ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
-    ## so it is omitted here.
+    ## so it is omitted here. The pool total is the carried suspected
+    ## series, BVD plus background.
     analysed_bvd_daily = convolve_delay(
-        p_drc .* bvd_reports_daily,
-        receipt_state.pmf
+        bvd_suspected_daily, receipt_state.pmf
     )
-    analysed_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
+    analysed_pool_daily = carried
     if eltype(analysed_bvd_daily) === Any
         analysed_bvd_daily = convert(
             Vector{typeof(τ_test)},
             analysed_bvd_daily
         )
-        analysed_bg_daily = convert(
+        analysed_pool_daily = convert(
             Vector{typeof(τ_test)},
-            analysed_bg_daily
+            analysed_pool_daily
         )
     end
     ## Gate the tested composition to the testing window too, so the
     ## composition clock and the per-window BVD share start at the testing
     ## onset rather than rolling the cryptic phase.
     analysed_bvd_daily = gate_before(analysed_bvd_daily, cap_start)
-    analysed_bg_daily = gate_before(analysed_bg_daily, cap_start)
+    analysed_pool_daily = gate_before(analysed_pool_daily, cap_start)
     bvd_window = bin_increments(analysed_bvd_daily, window_days)
-    bg_window = bin_increments(analysed_bg_daily, window_days)
+    pool_window = bin_increments(analysed_pool_daily, window_days)
     Tt = eltype(bvd_window)
     ## Testing clock: cumulative modelled analysed volume at each window.
     vol_window = bin_increments(analysed_daily, window_days)
@@ -1269,7 +1176,7 @@ quantities.
     ## the clock ratio `0/0` and break the downstream Binomial.
     dscale = max(convert(Tt, decay_scale), one(Tt))
     p_pos = composition_positivity(
-        window_days, bvd_window, bg_window,
+        window_days, bvd_window, pool_window,
         c_window, δ0, dscale, s_test, spec, lo, hi
     )
 
@@ -1351,10 +1258,9 @@ quantities.
     late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support, unanchored days
-    ## the increment itself. The `Union{Missing, Int}` element type is kept so
-    ## the one submodel still handles the generator-mode `missing` below.
+    ## the increment itself.
     if have_data && n_late > 0
-        late_obs = Vector{Union{Missing, Int}}(undef, n_late)
+        late_obs = Vector{Int}(undef, n_late)
         for i in 1:n_late
             a = windows.late_analysed[i]
             late_obs[i] = a > 0 ?
@@ -1444,8 +1350,9 @@ with `C(s)` the cumulative infections and `detected(s)` the cumulative
 infections that have already completed the infection→detection delay by
 day `s`. The infection→detection delay is the sampled onset-to-detection
 delay convolved with the shared incubation PMF, so incubation sits inside
-it, keyed to infection like `C(s)`. `detected` is the running sum of
-`convolve_delay(infections, f_det)`. Summing the daily at-risk prevalence
+it, keyed to infection like `C(s)`. With `f_det` that delay's PMF, the
+prevalence is the infections convolved with its survival
+`P(delay > τ) = 1 − Σ_{u ≤ τ} f_det(u)`. Summing the daily at-risk prevalence
 is the discrete person-time integral. Summing `q · onsets` instead would
 charge each case only a single day of travel risk. The onset-to-detection
 prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
@@ -1507,9 +1414,9 @@ rate and the daily at-risk prevalence for reuse by
     ## Convolved with the incubation PMF so the survival clock runs from
     ## infection.
     f_det = convolve_pmf(incubation_pmf, detect_state.pmf)
-    detected_daily = convolve_delay(infections, f_det)
-    ## At-risk prevalence (person-days): infected but not yet detected.
-    prevalence = cumsum(infections) .- cumsum(detected_daily)
+    ## At-risk prevalence (person-days): infected but not yet detected. The
+    ## survival kernel stops at the end of `f_det`, which has unit mass.
+    prevalence = convolve_delay(infections, 1 .- cumsum(f_det))
     export_prevalence = p_uganda .* q .* prevalence
     n = length(export_prevalence)
 
@@ -1596,7 +1503,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
     ## Per-day expected export-death increment. Its running sum is the
     ## cumulative export-death intensity `Λ_d`.
-    death_daily = CFR .* convolve_delay(travelled_prevalence, fd_pmf)
+    death_daily = convolve_delay(travelled_prevalence, CFR .* fd_pmf)
 
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
@@ -1961,6 +1868,29 @@ function accumulate_occupancy(
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
     )
+    return _accumulate_occupancy(
+        Val(false), A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
+    )
+end
+
+## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
+## Ties go to the second argument of `max` and to the bound of `clamp`,
+## lower bound first, the sides Mooncake's own rules for them take.
+const _OCC_UNCONF = 0x01
+const _OCC_DENOM = 0x02
+const _OCC_BVD = 0x04
+const _OCC_BG = 0x08
+const _OCC_CONF_X = 0x10
+const _OCC_CONF_HI = 0x20
+const _OCC_SUSP = 0x40
+
+## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
+## returns the non-case stock `O_bg` and the branch flags for each day, which
+## the Mooncake rule in `src/mooncake_rules.jl` reads.
+function _accumulate_occupancy(
+        ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
+        conf_hazard
+    ) where {record}
     n = length(A_bvd)
     T = promote_type(
         eltype(A_bvd), eltype(A_bg), eltype(deaths),
@@ -1971,6 +1901,8 @@ function accumulate_occupancy(
     O_conf = Vector{T}(undef, n)
     O_susp = Vector{T}(undef, n)
     abscond = Vector{T}(undef, n)
+    O_bg = record ? Vector{T}(undef, n) : nothing
+    flags = record ? Vector{UInt8}(undef, n) : nothing
     z = zero(T)
     Obvd_prev = z
     Obg_prev = z
@@ -1982,28 +1914,47 @@ function accumulate_occupancy(
     @inbounds for t in 1:n
         bvd_out = deaths[t] + recover[t]
         ab = κ * Osusp_prev
-        unconf = max(Obvd_prev - Oconf_prev, z)
+        x_u = Obvd_prev - Oconf_prev
+        unconf = max(x_u, z)
         denom = max(Osusp_prev, ε)
         ab_bvd = ab * (unconf / denom)
         ab_bg = ab * (Obg_prev / denom)
-        Obvd_t = max(Obvd_prev + A_bvd[t] - bvd_out - ab_bvd, z)
-        Obg_t = max(Obg_prev + A_bg[t] - ruleout[t] - ab_bg, z)
+        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
+        Obvd_t = max(x_bvd, z)
+        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
+        Obg_t = max(x_bg, z)
         Dt = Obvd_t + Obg_t
         conf_in = conf_hazard[t] * unconf
         share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        Oconf_t = clamp(Oconf_prev + conf_in - bvd_out * share, z, Obvd_t)
-        Osusp_t = max(Dt - Oconf_t, z)
+        x_conf = Oconf_prev + conf_in - bvd_out * share
+        Oconf_t = clamp(x_conf, z, Obvd_t)
+        x_susp = Dt - Oconf_t
+        Osusp_t = max(x_susp, z)
         demand[t] = Dt
         O_bvd[t] = Obvd_t
         O_conf[t] = Oconf_t
         O_susp[t] = Osusp_t
         abscond[t] = ab
+        if record
+            f = 0x00
+            x_u > z && (f |= _OCC_UNCONF)
+            Osusp_prev > ε && (f |= _OCC_DENOM)
+            x_bvd > z && (f |= _OCC_BVD)
+            x_bg > z && (f |= _OCC_BG)
+            if x_conf > z
+                f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
+            end
+            x_susp > z && (f |= _OCC_SUSP)
+            O_bg[t] = Obg_t
+            flags[t] = f
+        end
         Obvd_prev = Obvd_t
         Obg_prev = Obg_t
         Oconf_prev = Oconf_t
         Osusp_prev = Osusp_t
     end
-    return (; demand, O_bvd, O_conf, O_susp, abscond)
+    y = (; demand, O_bvd, O_conf, O_susp, abscond)
+    return record ? (y, O_bg, flags) : y
 end
 
 """
@@ -2024,10 +1975,10 @@ S_\\text{clin}(d) = 1 - G(d) = \\Pr(\\text{still in a bed after day } d),
 so `S_clin[d+1]` is the probability the case has not yet been discharged by the
 end of day `d`. This is the per-cohort weight the running-balance BVD stock
 carries: with no absconds `O_bvd(t) = Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)`. The
-discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)` of
-[`convolve_survival`](@ref), keeps the two-clock confirmed sub-stock `≤ O_bvd`
-by construction. The two PMFs need not share a length. Each contributes zero
-beyond its support, so the result takes the longer length.
+discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)`,
+keeps the two-clock confirmed sub-stock `≤ O_bvd` by construction. The two
+PMFs need not share a length. Each contributes zero beyond its support, so
+the result takes the longer length.
 """
 function clinical_stay_survival(
         death_pmf::AbstractVector,
@@ -2078,8 +2029,8 @@ stock. The confirmed-and-present cohort is a subset of the present
 cohort, so `O_conf ≤ O_bvd` holds by construction, without the
 proportional split's mean-field approximation: a true case that dies
 before its test returns is never counted as confirmed. Returns the
-length-`n` confirmed-in-care sub-stock. The caller forms the suspect
-sub-stock as the demand remainder `D − O_conf`.
+length-`n` confirmed-in-care sub-stock. [`incare_census`](@ref) forms the
+suspect sub-stock as the demand remainder `D − O_conf`.
 """
 function two_clock_confirmed(
         A_bvd::AbstractVector, conf_hazard::AbstractVector,
@@ -2106,6 +2057,82 @@ function two_clock_confirmed(
         O_conf[t] = acc
     end
     return O_conf
+end
+
+"""
+    incare_census(demand, O_bvd, O_conf_raw, κ, offset)
+
+Confirmed and suspect in-care census of the treatment-flow model. The
+two-clock confirmed stock `O_conf_raw` ([`two_clock_confirmed`](@ref)) is
+clamped into `[0, O_bvd]`, and the suspect stock is the demand remainder
+`O_susp(t) = max(D(t) − O_conf(t), 0)`. Absconds drain the previous day's
+suspect stock, `κ · O_susp(t − 1)`, with none on day 1. The census total
+adds the reclassification offset to the demand, and the suspect census is
+`max(total − O_conf, 0)`.
+
+Returns `(; confirmed, suspect, abscond, total)`, each a length-`n` vector.
+"""
+function incare_census(
+        demand::AbstractVector, O_bvd::AbstractVector,
+        O_conf_raw::AbstractVector, κ::Real, offset::AbstractVector
+    )
+    return _incare_census(Val(false), demand, O_bvd, O_conf_raw, κ, offset)
+end
+
+## `x` as a vector of `ref`'s element type when a generator path has left it
+## untyped, and as it is otherwise.
+_typed_as(x, ref) = eltype(x) === Any ? convert(Vector{eltype(ref)}, x) : x
+
+## Branch flags of the census, one bit per `clamp`/`max` side. `clamp`
+## returns its argument on a tie with either bound, and `max` passes a tie to
+## its second argument, the zero floor.
+const _CEN_CONF_X = 0x01
+const _CEN_CONF_HI = 0x02
+const _CEN_UNCONF = 0x04
+const _CEN_SUSP = 0x08
+
+## The forward pass of `incare_census`. With `Val(true)` it also returns the
+## un-offset suspect stock and the branch flags for each day, which the
+## Mooncake rule in `src/mooncake_rules.jl` reads.
+function _incare_census(
+        ::Val{record}, demand, O_bvd, O_conf_raw, κ, offset
+    ) where {record}
+    n = length(demand)
+    T = promote_type(
+        eltype(demand), eltype(O_bvd), eltype(O_conf_raw), typeof(κ),
+        eltype(offset)
+    )
+    confirmed = Vector{T}(undef, n)
+    suspect = Vector{T}(undef, n)
+    abscond = Vector{T}(undef, n)
+    total = Vector{T}(undef, n)
+    unconf = record ? Vector{T}(undef, n) : nothing
+    flags = record ? Vector{UInt8}(undef, n) : nothing
+    z = zero(T)
+    susp_prev = z
+    @inbounds for t in 1:n
+        x = O_conf_raw[t]
+        hi = O_bvd[t]
+        c = clamp(x, z, hi)
+        x_u = demand[t] - c
+        u = max(x_u, z)
+        tot = demand[t] + offset[t]
+        x_s = tot - c
+        confirmed[t] = c
+        suspect[t] = max(x_s, z)
+        abscond[t] = t == 1 ? z : κ * susp_prev
+        total[t] = tot
+        if record
+            f = x > hi ? _CEN_CONF_HI : (x < z ? 0x00 : _CEN_CONF_X)
+            x_u > z && (f |= _CEN_UNCONF)
+            x_s > z && (f |= _CEN_SUSP)
+            unconf[t] = u
+            flags[t] = f
+        end
+        susp_prev = u
+    end
+    y = (; confirmed, suspect, abscond, total)
+    return record ? (y, unconf, flags) : y
 end
 
 """
@@ -2147,6 +2174,59 @@ function admission_headroom(
         head[i] = max(h, o + 0.5)
     end
     return head
+end
+
+"""
+Default priors and delay submodels of [`treatment_flow_model`](@ref), as
+one named tuple. A composer builds it once, when its model is constructed,
+and passes it as `treatment_flow_model`'s `defaults`, so it is not rebuilt
+on every evaluation.
+"""
+function treatment_flow_defaults()
+    return (;
+        admission = isolation_admission_model(),
+        severity = isolation_severity_model(),
+        dispersion = surveillance_dispersion_model(),
+        ## In-care fatality modifier prior: β_iso on the infection CFR.
+        cfr_modifier_prior = Normal(0.0, 0.5),
+        ## Small abscond / loss-to-follow-up fraction of occupancy per day.
+        abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
+        ## In-care confirmation-rate modifier prior (log scale): γ_conf
+        ## scales the borrowed community hazard to the effective in-care
+        ## rate ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets
+        ## the split.
+        incare_confirm_log_prior = Normal(0.0, 0.5),
+        ## Short suspected→admission delay (report → reaching a bed:
+        ## triage, transport, bed-wait), distinct from the report→lab
+        ## receipt delay.
+        admission_delay = censored_delay_model(
+            cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
+            mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
+            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
+        ),
+        ## Outcome-mixture BVD bed stay: admission→death (the
+        ## admission→death atomic delay the onset→death convolution also
+        ## uses, mean ≈ 8.4 d) and the longer admission→recovery stay (mean
+        ## ≈ 14 d). Built to a common nmax so the two PMFs align for the
+        ## elementwise mixture.
+        death_los = gamma_delay_model(
+            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
+            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+        ),
+        recovery_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
+            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+        ),
+        ## Non-BVD rule-out stay (report→receipt turnaround plus
+        ## sign-off).
+        ruleout_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
+            mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
+        ),
+    )
 end
 
 """
@@ -2236,49 +2316,22 @@ series for forecasting and replication.
         ## sub-stock stays empty and the suspect sub-stock carries the whole
         ## occupancy.
         conf_hazard_daily::Union{Nothing, AbstractVector} = nothing,
-        admission = isolation_admission_model(),
-        severity = isolation_severity_model(),
+        ## The priors and delay submodels the keywords below default to.
+        defaults = treatment_flow_defaults(),
+        admission = defaults.admission,
+        severity = defaults.severity,
         capacity = bed_capacity_walk_model,
-        dispersion = surveillance_dispersion_model(),
+        dispersion = defaults.dispersion,
         ## Occupancy / flow dispersion can be injected from the joint composer's
         ## pooled set (`k_external`). Standalone it samples its own.
         k_external::Union{Nothing, Real} = nothing,
-        ## In-care fatality modifier prior: β_iso on the infection CFR.
-        cfr_modifier_prior = Normal(0.0, 0.5),
-        ## Small abscond / loss-to-follow-up fraction of occupancy per day.
-        abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
-        ## In-care confirmation-rate modifier prior (log scale): γ_conf scales
-        ## the borrowed community hazard to the effective in-care rate
-        ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the
-        ## split.
-        incare_confirm_log_prior = Normal(0.0, 0.5),
-        ## Short suspected→admission delay (report → reaching a bed: triage,
-        ## transport, bed-wait), distinct from the report→lab receipt delay.
-        admission_delay = censored_delay_model(
-            cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
-            mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
-            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
-        ),
-        ## Outcome-mixture BVD bed stay: admission→death (the admission→death
-        ## atomic delay the onset→death convolution also uses, mean ≈ 8.4 d) and
-        ## the longer admission→recovery stay (mean ≈ 14 d). Built to a common
-        ## nmax so the two PMFs align for the elementwise mixture.
-        death_los = gamma_delay_model(
-            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
-        ),
-        recovery_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
-        ),
-        ## Non-BVD rule-out stay (report→receipt turnaround plus sign-off).
-        ruleout_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
-            mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
-        ),
+        cfr_modifier_prior = defaults.cfr_modifier_prior,
+        abscond_prior = defaults.abscond_prior,
+        incare_confirm_log_prior = defaults.incare_confirm_log_prior,
+        admission_delay = defaults.admission_delay,
+        death_los = defaults.death_los,
+        recovery_los = defaults.recovery_los,
+        ruleout_los = defaults.ruleout_los,
         ## Opt-in occupancy reclassification-break days (grid indices). A level
         ## step is fitted into the modelled total at each, absorbing a
         ## measurement-basis discontinuity in the isolation series. See
@@ -2431,44 +2484,21 @@ series for forecasting and replication.
     ## (and `O_susp = D − O_conf`) is replaced.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
-    ## `O_conf ≤ O_bvd` holds by construction; the clamp guards any prior
-    ## draw.
-    O_conf_c = map(
-        (c, b) -> clamp(c, zero(eltype(demand_raw)), b),
-        O_conf_raw, O_bvd
-    )
-    O_susp_raw = map(
-        (d, c) -> max(d - c, zero(eltype(demand_raw))),
-        demand_raw, O_conf_c
-    )
-    ## Abscond outflow off the two-clock suspect stock. Day 1 has no prior
-    ## stock.
-    abscond_daily_raw = [
-        t == 1 ? zero(eltype(demand_raw)) :
-            κ * O_susp_raw[t - 1]
-            for t in 1:n
-    ]
-    ## Assigned once each: the `map`s and the comprehension above capture
-    ## them, so reassigning them in a branch would box them.
-    _widened = eltype(demand_raw) === Any
-    demand = _widened ? convert(Vector{eltype(C)}, demand_raw) : demand_raw
-    O_conf = _widened ? convert(Vector{eltype(C)}, O_conf_c) : O_conf_c
-    O_susp = _widened ? convert(Vector{eltype(C)}, O_susp_raw) : O_susp_raw
-    abscond_daily = _widened ?
-        convert(Vector{eltype(C)}, abscond_daily_raw) :
-        abscond_daily_raw
-
-    ## Add the reclassification offset Δ(t) to the modelled total only.
+    demand = _typed_as(demand_raw, C)
+    ## Reclassification offset Δ(t), added to the modelled census total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
-    occ_offset = eltype(occ_break_offset) === Any ?
-        convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
-    ## Broadcasts, not `map(1:n) do t`: the `do`-block builds an anonymous
-    ## closure whose reverse-mode shadow Enzyme cannot construct.
-    occ_obs_total = demand .+ occ_offset
-
-    ## Confirmed and suspect census means, summing to the offset total.
-    conf_split = copy(O_conf)
-    susp_split = max.(occ_obs_total .- conf_split, zero(eltype(demand)))
+    occ_offset = _typed_as(occ_break_offset, C)
+    ## `O_conf ≤ O_bvd` holds by construction; the census clamps it to guard
+    ## any prior draw. Absconds drain the two-clock suspect stock, and the
+    ## confirmed and suspect census means sum to the offset total.
+    census = incare_census(
+        demand, _typed_as(O_bvd, C), _typed_as(O_conf_raw, C), κ,
+        occ_offset
+    )
+    abscond_daily = census.abscond
+    occ_obs_total = census.total
+    conf_split = census.confirmed
+    susp_split = census.suspect
 
     ## Occupancy likelihood: NegativeBinomial around the latent demand,
     ## right-censored at the implied-capacity bound. Days with a published
@@ -2518,16 +2548,6 @@ series for forecasting and replication.
             ], si_obs, k
         )
     )
-    ## Confirmed-in-care deaths, attributed as the death flow times the
-    ## confirmed share of the BVD stock. Exposed for the report, not
-    ## separately scored.
-    bvd_stock = acc.O_bvd
-    conf_share = [
-        bvd_stock[t] > zero(eltype(demand)) ?
-            O_conf[t] / bvd_stock[t] : zero(eltype(demand)) for t in 1:n
-    ]
-    confirmed_incare_deaths_daily = deaths_daily .* conf_share
-
     ## Optional daily Tableau 6 flow likelihoods, each a no-op on empty history.
     ## Admissions are right-censored at the recorded free-bed headroom.
     dth_days = deaths_history.days
@@ -2634,7 +2654,7 @@ series for forecasting and replication.
         break_grid_days,
         occupancy_break = break_T,
         confirmed_incare = conf_split, suspect_incare = susp_split,
-        confirmed_incare_deaths_daily, incare_confirm_modifier = ρ_conf,
+        incare_confirm_modifier = ρ_conf,
         expected_confirmed_incare = conf_incare_rate,
         expected_suspect_incare = susp_incare_rate,
         expected_isolation = isolation_T,
@@ -2711,9 +2731,9 @@ the daily recovered series and the cut-off total.
 
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
     ## delay.
-    recovered_daily = p_recover .* convolve_delay(
+    recovered_daily = convolve_delay(
         confirmed_daily,
-        delay_state.pmf
+        p_recover .* delay_state.pmf
     )
 
     n = length(confirmed_daily)
@@ -2744,29 +2764,6 @@ end
 # separate multiplicative factor.
 
 """
-    safe_studentt(μ, σ, ν)
-
-NaN / Inf-safe location-scale Student-t distribution `μ + σ · Tν`, built
-from `Distributions.TDist(ν)` via the affine-combination operators. `σ` is
-floored away from zero and non-finite values, mirroring
-[`safe_nbinomial`](@ref)'s domain guard. A non-positive or non-finite `ν`
-falls back to `4`, the caller's own default, rather than to the smallest
-value `TDist` accepts: `TDist(1)` is Cauchy, so a floor at the domain edge
-would turn a bad degrees-of-freedom argument into a likelihood with no mean
-or variance.
-
-Used by [`onset_reporting_model`](@ref) to score the reporting-triangle
-increments, which are frequently negative (a later scan reads fewer cases
-at some onset date than an earlier one, from digitisation noise rather than
-a real reporting reversal) and so cannot take a count distribution.
-"""
-function safe_studentt(μ::Real, σ::Real, ν::Real)
-    σc = (isfinite(σ) && σ > zero(σ)) ? σ : eps(typeof(float(σ)))
-    νc = (isfinite(ν) && ν > zero(ν)) ? ν : oftype(float(ν), 4)
-    return μ + σc * TDist(νc)
-end
-
-"""
     onset_increments_model(means, sds, increments, ν)
 
 Heavy-tailed likelihood for the reporting-triangle increment cells: cell `i`
@@ -2779,20 +2776,17 @@ observe-versus-assume from whether the tilde's symbol is in the enclosing
 model's argument names (`DynamicPPL.inargnames`), so a local variable on
 the left of `~` is treated as latent, silently dropping the likelihood.
 Same argument shape as [`vintage_increments_model`](@ref). A `missing`
-argument samples instead (the predictive-generator path).
+argument samples instead (the predictive-generator path) under the
+`<prefix>.increments` key. Both go through one [`StudentTVector`](@ref),
+so a supplied vector is scored as one summed term.
 """
 @model function onset_increments_model(
         means::AbstractVector,
         sds::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Real}}, ν::Real
     )
-    n = length(means)
-    if ismissing(increments)
-        increments = Vector{Union{Missing, Float64}}(missing, n)
-    end
-    for i in 1:n
-        increments[i] ~ safe_studentt(means[i], sds[i], ν)
-    end
+    isempty(means) && return (; means, sds, increments = Float64[])
+    increments ~ StudentTVector(means, sds, ν)
     return (; means, sds, increments)
 end
 
@@ -2875,15 +2869,23 @@ function onset_report_G(
     ## `min(δ, D - 1)`, so one walk over the delay support gives both.
     jn = min(Int(δ), D - 1)
     surv = one(T)
-    num = zero(T)
+    surv_n = one(T)
     @inbounds for j in 0:(D - 1)
         gi = clamp(u + j - grid_start + 1, 1, ng)
         surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
-        j == jn && (num = one(T) - surv)
+        j == jn && (surv_n = surv)
     end
-    δ < 0 && (num = zero(T))
-    return num / safe_rate(one(T) - surv)
+    δ < 0 && (surv_n = one(T))
+    return _onset_report_share(surv_n, surv)
 end
+
+## Share of an onset date's eventual reports in by a delay, from the
+## survival to that delay `surv_n` and to the end of the support `surv_D`:
+## `(1 − surv_n) / (1 − surv_D)`, with the denominator floored.
+## [`onset_report_G`](@ref) and [`onset_report_expected_total`](@ref) both
+## call it.
+@inline _onset_report_share(surv_n, surv_D) =
+    (one(surv_n) - surv_n) / safe_rate(one(surv_D) - surv_D)
 
 """
     onset_report_F(δ, logit_h0, γ, u, grid_start, α)
@@ -2958,21 +2960,38 @@ function onset_report_cdf_table(
         γ::AbstractVector, grid_start::Integer, u_lo::Integer,
         u_hi::Integer
     )
-    D = length(logit_h0)
-    ng = length(γ)
     T = promote_type(eltype(logit_h0), eltype(γ))
     nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
-    table = Matrix{T}(undef, D, nu)
-    @inbounds for k in 1:nu
+    table = Matrix{T}(undef, length(logit_h0), nu)
+    ## The survival products, then their complements in place.
+    _onset_columns!(nothing, table, logit_h0, γ, grid_start, u_lo)
+    @. table = one(T) - table
+    return table
+end
+
+## The survival recurrence of each onset date's delay column, the one walk
+## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
+## Mooncake rule share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
+## survival product up to and including delay `j`, and, unless `H` is
+## `nothing`, `H[j + 1, k]` is that delay's hazard.
+function _onset_columns!(
+        H::Union{Nothing, AbstractMatrix}, S::AbstractMatrix,
+        logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
+        u_lo::Integer
+    )
+    ng = length(γ)
+    T = eltype(S)
+    @inbounds for k in axes(S, 2)
         u = Int(u_lo) + k - 1
         surv = one(T)
-        for j in 0:(D - 1)
-            gi = clamp(u + j - grid_start + 1, 1, ng)
-            surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
-            table[j + 1, k] = one(T) - surv
+        for j in axes(S, 1)
+            hj = logistic(logit_h0[j] + γ[clamp(u + j - grid_start, 1, ng)])
+            surv *= (one(T) - hj)
+            S[j, k] = surv
+            H === nothing || (H[j, k] = hj)
         end
     end
-    return table
+    return nothing
 end
 
 """
@@ -3154,10 +3173,10 @@ function onset_report_moments(
         ## `F = α · num / den`, both numerators and the denominator read
         ## off this onset date's column. A negative delay is the
         ## right-truncation case and contributes exactly zero.
-        num_cur = (δ_cur < 0 || D == 0) ? zero(T) :
-            cdf_table[min(Int(δ_cur), D - 1) + 1, k]
-        num_prev = (δ_prev < 0 || D == 0) ? zero(T) :
-            cdf_table[min(Int(δ_prev), D - 1) + 1, k]
+        jc = _onset_delay_row(δ_cur, D)
+        jp = _onset_delay_row(δ_prev, D)
+        num_cur = jc == 0 ? zero(T) : cdf_table[jc, k]
+        num_prev = jp == 0 ? zero(T) : cdf_table[jp, k]
         sden = safe_rate(D > 0 ? cdf_table[D, k] : zero(T))
         level_cur[i] = onset_rate * (α * (num_cur / sden))
         level_prev[i] = onset_rate * (α * (num_prev / sden))
@@ -3165,6 +3184,11 @@ function onset_report_moments(
     end
     return (; means, level_cur, level_prev)
 end
+
+## The row of a `D`-row delay-CDF table column holding delay `δ`, capped at
+## the last row, or `0` for a negative delay or an empty table.
+@inline _onset_delay_row(δ, D) =
+    (δ < 0 || D == 0) ? 0 : min(Int(δ), D - 1) + 1
 
 """
     onset_vintage_indices(report_idx, prev_report_idx)
@@ -3241,18 +3265,20 @@ function onset_scan_adjust(
     means = Vector{T}(undef, m)
     lc = Vector{T}(undef, m)
     lp = Vector{T}(undef, m)
-    ns = length(scan_level)
     @inbounds for i in 1:m
-        s = vintage_idx[i]
-        p = prev_vintage_idx[i]
-        cs = (s >= 1 && s <= ns) ? scan_level[s] : one(T)
-        cp = (p >= 1 && p <= ns) ? scan_level[p] : one(T)
-        lc[i] = level_cur[i] * cs
-        lp[i] = level_prev[i] * cp
+        lc[i] = level_cur[i] * _scan_multiplier(scan_level, vintage_idx[i])
+        lp[i] = level_prev[i] *
+            _scan_multiplier(scan_level, prev_vintage_idx[i])
         means[i] = lc[i] - lp[i]
     end
     return (; means, level_cur = lc, level_prev = lp)
 end
+
+## Whether scan index `s` names a scan, and the multiplier a read off it
+## takes: that scan's level, or exactly one for the sentinel `0`.
+@inline _scan_in_range(scan_level, s) = s >= 1 && s <= length(scan_level)
+@inline _scan_multiplier(scan_level, s) =
+    _scan_in_range(scan_level, s) ? scan_level[s] : one(eltype(scan_level))
 
 """
     onset_report_scales(means, level_cur, level_prev, prev_report_idx;
@@ -3369,6 +3395,33 @@ function onset_report_scale(
 end
 
 """
+    onset_scanned_cells(level_cur, level_prev, scan_level, vintage_idx,
+        prev_vintage_idx, prev_report_idx, pixel_sd)
+
+Per-cell increment means and observation scales the onset likelihood
+scores: [`onset_scan_adjust`](@ref) applies each vintage's scan level, and
+[`onset_report_scales`](@ref) builds the scale from the adjusted levels
+with pixel noise `pixel_sd` and no scan-level term. Returns
+`(; means, scales)`. One call, so a Mooncake rule covers the pair.
+"""
+function onset_scanned_cells(
+        level_cur::AbstractVector, level_prev::AbstractVector,
+        scan_level::AbstractVector,
+        vintage_idx::AbstractVector{<:Integer},
+        prev_vintage_idx::AbstractVector{<:Integer},
+        prev_report_idx::AbstractVector{<:Integer}, pixel_sd::Real
+    )
+    scanned = onset_scan_adjust(
+        level_cur, level_prev, scan_level, vintage_idx, prev_vintage_idx
+    )
+    scales = onset_report_scales(
+        scanned.means, scanned.level_cur, scanned.level_prev,
+        prev_report_idx; pixel_sd
+    )
+    return (; scanned.means, scales)
+end
+
+"""
     onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
 
 Like [`onset_report_cdf`](@ref), but the calendar-time index into `γ` is
@@ -3427,7 +3480,8 @@ needed here.
 
 Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
 `length(γ) < D` case, because both indices are clamped rather than assumed
-in range. Pure, top-level, single indexed loop.
+in range. An empty delay support (`D = 0`) gives zero. Pure, top-level,
+single indexed loop.
 """
 function onset_report_expected_total(
         onsets::AbstractVector,
@@ -3435,17 +3489,20 @@ function onset_report_expected_total(
         grid_start::Integer, alpha::AbstractVector, as_of::Integer
     )
     T = promote_type(
-        eltype(onsets), eltype(logit_h0), eltype(γ),
-        eltype(alpha)
+        eltype(onsets), eltype(logit_h0), eltype(γ), eltype(alpha)
     )
-    total = zero(T)
-    n = length(onsets)
+    D = length(logit_h0)
+    D == 0 && return zero(T)
+    t = Int(as_of)
+    ge = max(min(t, length(onsets)), 0)
+    S = Matrix{T}(undef, D, ge)
+    _onset_columns!(nothing, S, logit_h0, γ, grid_start, 1)
     na = length(alpha)
-    ge = min(Int(as_of), n)
+    total = zero(T)
     @inbounds for u in 1:ge
-        δ = as_of - u
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
-        total += onsets[u] * onset_report_F(δ, logit_h0, γ, u, grid_start, α)
+        share = _onset_report_share(S[min(t - u, D - 1) + 1, u], S[D, u])
+        total += onsets[u] * (α * share)
     end
     return total
 end
@@ -3815,23 +3872,20 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         hazard_state.grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
-    scanned = onset_scan_adjust(
-        moments.level_cur, moments.level_prev,
-        scan_level, vintages.vintage_idx, vintages.prev_vintage_idx
-    )
-    scales = onset_report_scales(
-        scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd
+    scanned = onset_scanned_cells(
+        moments.level_cur, moments.level_prev, scan_level,
+        vintages.vintage_idx, vintages.prev_vintage_idx, prev_report_days,
+        pixel_sd
     )
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
     ## into a local here would make every cell latent and drop the likelihood
     ## silently (see `onset_increments_model`). Attached unprefixed so the
-    ## cells keep the flat `increments[i]` names the predictive path indexes.
+    ## cells keep the flat `increments` name the predictive path reads.
     increments_state ~ to_submodel(
         onset_increments_model(
-            scanned.means, σ_mult .* scales,
+            scanned.means, σ_mult .* scanned.scales,
             onset_curve_history.increments, ν
         ), false
     )
@@ -3848,19 +3902,70 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
 end
 
 """
-Per-vintage totals a province composition is conditioned on: the observed
-column sums where the increments are observed, and the modelled column sums
-on the predictive path, where there is no observed total to condition on.
+    stick_breaking_loglik(groups, counts, shares, ρ)
+
+Log-likelihood of counts split between the members of each group by
+stick-breaking. Rows are one per count, sorted by group, and a group is a
+run of equal `groups` entries, so groups may differ in size. `shares[r]` is
+row `r`'s share of its group, the shares of a group summing to one. The
+count in row `r` is a [`safe_betabinomial`](@ref) draw from the group total
+less the counts before it in the group, with the overdispersion `ρ` and the
+conditional share `share_r / tail_r` clamped into `[0, 1]`. The running
+tail `tail_r = 1 − Σ_{q < r} share_q` is floored at 1e-10. The last row of
+a group is the remainder and adds nothing, so a one-row group adds nothing.
+The rows are scored as one [`BetaBinomialVector`](@ref).
 """
-function _composition_totals(obs_increments, modelled_confirmed)
-    nv = size(modelled_confirmed, 2)
-    ismissing(obs_increments) || return [
-        sum(@view obs_increments[:, i])
-            for i in 1:nv
-    ]
+function stick_breaking_loglik(
+        groups::AbstractVector{<:Integer}, counts::AbstractVector{<:Integer},
+        shares::AbstractVector, ρ::Real
+    )
+    cells = _stick_breaking_cells(groups, counts, shares)
+    return logpdf(BetaBinomialVector(cells.trials, cells.p, ρ), cells.obs)
+end
+
+## The scored rows of `stick_breaking_loglik`, each a trial count, a
+## conditional share and an observed count.
+function _stick_breaking_cells(groups, counts, shares)
+    T = float(eltype(shares))
+    m = length(groups)
+    ## Every row but the last of each group is scored.
+    nc = m - count(r -> r == 1 || groups[r] != groups[r - 1], 1:m)
+    trials = Vector{Int}(undef, nc)
+    p = Vector{T}(undef, nc)
+    obs = Vector{Int}(undef, nc)
+    tail_floor = T(1.0e-10)
+    k = 0
+    i = 1
+    @inbounds while i <= m
+        j = i
+        total = Int(counts[i])
+        while j < m && groups[j + 1] == groups[i]
+            j += 1
+            total += counts[j]
+        end
+        remaining = total
+        tail = one(T)
+        for r in i:(j - 1)
+            k += 1
+            trials[k] = max(remaining, 0)
+            p[k] = clamp(shares[r] / tail, zero(T), one(T))
+            obs[k] = counts[r]
+            remaining -= counts[r]
+            tail = max(tail - shares[r], tail_floor)
+        end
+        i = j + 1
+    end
+    return (; trials, p, obs)
+end
+
+"""
+Per-vintage totals a predictive province composition allocates: the
+modelled column sums, rounded to whole cases.
+"""
+function _composition_totals(modelled_confirmed)
     return [
         round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
-            for i in 1:nv
+            for i in axes(modelled_confirmed, 2)
     ]
 end
 
@@ -3890,8 +3995,9 @@ totals are conditioned on, never scored, so nothing is counted twice.
 
 ### Likelihood
 
-The composition is scored by stick-breaking over the patches with the
-overdispersed Binomial [`safe_betabinomial`](@ref), the sequential form of
+The composition is scored by stick-breaking over the patches
+([`stick_breaking_loglik`](@ref)) with the overdispersed Binomial
+[`safe_betabinomial`](@ref), the sequential form of
 a Dirichlet-multinomial. For each vintage the observed count in patch `p`
 is drawn from the cases not yet allocated to patches `1 … p−1`, at the
 conditional share implied by the modelled per-patch confirmed increments:
@@ -3948,6 +4054,10 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         basis::AbstractMatrix = sum_to_zero_basis(size(modelled_confirmed, 1))
     )
     np, nv = size(modelled_confirmed)
+    ismissing(obs_increments) || size(obs_increments) == (np, nv) || error(
+        "province_composition_model: $(size(obs_increments)) observed " *
+            "increments for $(np) patches and $(nv) vintages."
+    )
     ρ ~ rho_prior
     ## Read through a local. The tilde assigns `ρ` on more than one path, so
     ## the comprehension below would box it if it captured `ρ` itself.
@@ -4046,60 +4156,36 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
             shares[p, i] /= tot
         end
     end
-    ## The totals are conditioned on, not scored: they are already in the
-    ## joint density through the national confirmed stream. They are built in
-    ## a helper rather than in a branch here, because `obs_increments` is
-    ## rebound just below and a local a closure reads and the body reassigns
-    ## is boxed.
     predictive = ismissing(obs_increments)
-    totals = _composition_totals(obs_increments, modelled_confirmed)
     if predictive
         obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
     end
     ## Stick-breaking: allocate each vintage's total across the patches. The
     ## final patch takes the remainder and carries no free draw, so the
-    ## composition has `np - 1` degrees of freedom per vintage.
-    ##
-    ## The loop runs over patches on the outside and scores every vintage in
-    ## one `~`, rather than a scalar `~` per (patch, vintage). Within a
-    ## vintage the patches are sequential, patch `p`'s trial count being what
-    ## patches `1 … p-1` left behind, but across vintages they are
-    ## independent, so the vintages vectorise. Each `~` puts DynamicPPL
-    ## bookkeeping on the Mooncake tape, and with two compositions over 20
-    ## vintages the scalar form emits 80 of them, enough to push the gradient
-    ## compile past an hour. The vectorised form emits `2 * (np - 1)`.
-    ##
-    ## The running state is allocated once and mutated rather than rebound
-    ## each time round the loop, since the comprehension below reads all
-    ## three and a local a closure reads and the body reassigns goes in a
-    ## `Core.Box` (see "Closures in model code" in the contributing guide).
-    remaining = copy(totals)
-    tail = ones(eltype(shares), nv)
-    p_cond = zeros(eltype(shares), nv)
-    trials = zeros(Int, nv)
-    for p in 1:(np - 1)
-        ## Conditional share of patch `p` among the patches not yet allocated.
-        for i in 1:nv
-            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
-            trials[i] = max(remaining[i], 0)
-        end
-        obs_increments[p, :] ~ product_distribution(
-            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv]
-        )
-        ## Guard the running tail against round-off driving it to zero or
-        ## negative on the last step.
-        for i in 1:nv
-            remaining[i] -= obs_increments[p, i]
-            tail[i] = max(tail[i] - shares[p, i], 1.0e-10)
-        end
-    end
-    ## The last patch is the remainder, not a free draw. Filled in only on the
-    ## predictive path. On the fitting path it is already the observed count
-    ## and must not be written over.
+    ## composition has `np - 1` degrees of freedom per vintage. The columns
+    ## are the groups, one per vintage.
+    groups = repeat(1:nv; inner = np)
     if predictive
-        for i in 1:nv
-            obs_increments[np, i] = max(remaining[i], 0)
+        ## One `~` per patch row, each drawing every vintage, since a patch's
+        ## trial count is what the patches before it left behind. The last
+        ## patch takes the remainder.
+        p_cond = reshape(
+            _stick_breaking_cells(groups, zeros(Int, np * nv), vec(shares)).p,
+            np - 1, nv
+        )
+        remaining = _composition_totals(modelled_confirmed)
+        for p in 1:(np - 1)
+            obs_increments[p, :] ~ BetaBinomialVector(
+                max.(remaining, 0), p_cond[p, :], rho
+            )
+            remaining .-= obs_increments[p, :]
         end
+        obs_increments[np, :] .= max.(remaining, 0)
+    else
+        ## One summed term through the BetaBinomial rule.
+        @addlogprob! stick_breaking_loglik(
+            groups, vec(obs_increments), vec(shares), rho
+        )
     end
     return (;
         shares, rho = ρ, obs_increments,

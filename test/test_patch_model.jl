@@ -561,7 +561,7 @@ end
     using Random: Xoshiro
 
     obs = load_observations()
-    n, np = obs.n, 3
+    n, np = obs.n, length(PROVINCE_NAMES)
 
     function build(pch)
         prov = province_increment_matrix(pch, PROVINCE_NAMES, np)

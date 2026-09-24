@@ -10,9 +10,11 @@ count. A plain `max(x, eps)` would propagate the NaN
 (`max(NaN, eps) = NaN`) and trip the Poisson / NegativeBinomial domain
 check.
 """
-@inline function safe_rate(x)
-    return isfinite(x) ? max(x, eps(typeof(x))) : eps(typeof(x))
-end
+@inline safe_rate(x) = _safe_rate_on(x) ? x : eps(typeof(x))
+
+## Whether `safe_rate` passes `x` through rather than flooring it, which is
+## where its slope is one.
+@inline _safe_rate_on(x) = isfinite(x) && x > eps(typeof(x))
 
 """
 LogNormal with the given `mean` and standard deviation `sd`, by moment
@@ -34,37 +36,60 @@ end
 Daily probability mass function for the continuous delay `dist` over lags
 `0, 1, …, nmax`, discretised by double interval censoring (uniform primary
 event over a one-day window, then unit-interval censoring of the secondary
-event) via `CensoredDistributions.double_interval_censored`. For a LogNormal
-primary the CDF differentiates cleanly under Mooncake, so this is AD-safe.
-Extreme warmup proposals that drive the quadrature to a non-finite or zero
-total fall back to a uniform PMF, so the downstream convolution stays finite
-(the proposal is still rejected through its low log-likelihood). Returns a
-vector whose element type follows the delay parameters.
+event, truncated at `nmax`), as `CensoredDistributions.double_interval_censored`
+defines it. The truncation holds the CDF at one from `nmax` on, so the lag
+`nmax` entry is zero. For a LogNormal or Gamma delay the CDF differentiates
+cleanly under Mooncake, so this is AD-safe. Extreme warmup proposals that
+drive the total to a non-finite or zero value fall back to a uniform PMF, so
+the downstream convolution stays finite (the proposal is still rejected
+through its low log-likelihood). Returns a vector whose element type follows
+the delay parameters.
 """
 function discretise_censored(dist, nmax::Integer)
-    dic = double_interval_censored(dist; interval = 1.0, upper = float(nmax))
-    return _pmf_from_dic(dic, dist, nmax)
+    return _pmf_from_cdfs(_primary_censored_cdfs(dist, nmax), dist, nmax)
 end
 
-## Function barrier: `double_interval_censored` returns a `Union` of solver
-## types, so it is inferred abstractly at the call site above. Isolating
-## the PMF loop in its own method lets it specialise on the concrete `dic`
-## type, making the ~`nmax` censored-CDF evaluations type-stable under AD.
-@inline function _pmf_from_dic(dic, dist, nmax::Integer)
-    ## The interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, so
-    ## evaluating the boundary CDFs once over `0:nmax+1` and differencing
-    ## adjacent entries halves the censored-CDF evaluations the Mooncake
-    ## reverse pass walks. Each CDF is the expensive part, a primary-censored,
-    ## truncation-normalised incomplete-gamma / Normal-CDF call.
-    ## `IntervalCensored`'s `cdf` floors to the interval, so at an integer
-    ## boundary it returns the same inner CDF a `pdf` pair reads.
-    ##
-    ## CensoredDistributions' batched `pdf(dic, 0:nmax)` is value-identical
-    ## but its `Dict` cache path is not Mooncake-differentiable, so the
-    ## gradient hot path stays on this plain-array CDF difference.
-    c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
-    z0 = zero(eltype(c))
-    raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
+## Delays with a closed-form primary-censored CDF under a uniform primary.
+const _AnalyticalDelay = Union{Gamma, LogNormal, Distributions.Weibull}
+
+## Primary-censored CDF `F₊(b)` at the boundaries `b = 1, …, nmax`, with a
+## `Uniform(0, 1)` primary event.
+##
+## For the analytical delays `F₊(b) = H(b) − H(b − 1)`, where
+## `H(t) = t·F(t) − M(t)` and `M` is the delay's partial first moment. The
+## analytical CDF under a `Uniform(0, t)` primary, evaluated at `t`, is
+## `H(t) / t`, so each `H` costs one delay-CDF endpoint and each boundary
+## reuses its neighbour's.
+function _primary_censored_cdfs(dist::_AnalyticalDelay, nmax::Integer)
+    solver = AnalyticalSolver()
+    pc = Vector{float(Distributions.partype(dist))}(undef, nmax)
+    H_prev = zero(eltype(pc))
+    for i in 1:nmax
+        t = float(i)
+        H = t * primarycensored_cdf(dist, Uniform(zero(t), t), t, solver)
+        pc[i] = H - H_prev
+        H_prev = H
+    end
+    return pc
+end
+
+function _primary_censored_cdfs(dist, nmax::Integer)
+    pc = primary_censored(dist, Uniform(0.0, 1.0))
+    return [cdf(pc, t) for t in 1.0:nmax]
+end
+
+## Lag masses from the boundary CDFs `F₊(1), …, F₊(nmax)`: lag `d < nmax`
+## has `F₊(d + 1) − F₊(d)` (with `F₊(0) = 0`) and lag `nmax` has zero, then
+## the masses are normalised by their sum, which is the truncation at `nmax`.
+function _pmf_from_cdfs(pc, dist, nmax::Integer)
+    z0 = zero(eltype(pc))
+    raw = Vector{eltype(pc)}(undef, nmax + 1)
+    pc_prev = z0
+    for i in 1:nmax
+        raw[i] = max(pc[i] - pc_prev, z0)
+        pc_prev = pc[i]
+    end
+    raw[nmax + 1] = z0
     s = sum(raw)
     if !isfinite(s) || s <= zero(s)
         z = zero(pdf(dist, oneunit(float(nmax))))
@@ -219,6 +244,9 @@ The renewal trajectory and the per-day force of infection it was built
 from, as `(infections, force)`. [`renewal_infections`](@ref) returns the
 first; the derivative rule needs the second, which it would otherwise
 have to rebuild from a copy of this loop.
+
+Each day's force is one `dot` of the most recent infections with the
+generation interval reversed, a single BLAS call on float arrays.
 """
 function renewal_infections_with_force(
         Rt::AbstractVector, g::AbstractVector,
@@ -226,18 +254,17 @@ function renewal_infections_with_force(
     )
     n = length(Rt)
     L = length(seed)
+    G = length(g)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
     I = zeros(Tp, n)
     force = zeros(Tp, n)
     @inbounds for j in 1:min(L, n)
         I[j] = seed[j]
     end
-    @inbounds for t in (L + 1):n
-        f = zero(Tp)
-        kmax = min(t - 1, length(g))
-        for s in 1:kmax
-            f += I[t - s] * g[s]
-        end
+    rg = reverse(g)
+    for t in (L + 1):n
+        k = min(t - 1, G)
+        f = dot(view(rg, (G - k + 1):G), view(I, (t - k):(t - 1)))
         force[t] = f
         I[t] = Rt[t] * f
     end
@@ -287,6 +314,18 @@ end
 ## origin and every day; a matrix carries one level per origin over time.
 @inline _eps(e::Real, q::Integer, t::Integer) = e
 @inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
+
+## Renewal force of patch `p` on day `t`, `Σ_{s ≥ 1} I[p, t − s] g[s]` over
+## the lags inside the grid. Shared by `patch_infections` and its rule.
+## `@simd` lets the sum reassociate, so it can differ from a sequential sum
+## in the last bits.
+@inline function _patch_force(I::AbstractMatrix, g::AbstractVector, p, t)
+    f = zero(eltype(I))
+    @inbounds @simd for s in 1:min(t - 1, length(g))
+        f += I[p, t - s] * g[s]
+    end
+    return f
+end
 
 """
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
@@ -354,14 +393,7 @@ function patch_infections(
     )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
-    ## What each origin sends away per unit of its own generated infections:
-    ## the kernel's column sums, constant in time.
-    outflow = zeros(Tp, np)
-    @inbounds for q in 1:np, r in 1:np
-
-        r == q && continue
-        outflow[q] += importation_kernel[r, q]
-    end
+    outflow = _patch_outflow(Tp, importation_kernel, np)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -371,12 +403,7 @@ function patch_infections(
     @inbounds for t in (L + 1):n
         ## What each patch generates today from its own renewal force.
         for p in 1:np
-            force = zero(Tp)
-            kmax = min(t - 1, length(g))
-            for s in 1:kmax
-                force += I[p, t - s] * g[s]
-            end
-            gen[p] = Rt_matrix[p, t] * force
+            gen[p] = Rt_matrix[p, t] * _patch_force(I, g, p, t)
         end
         ## Importation redistributes transmission rather than adding to it. A
         ## fraction `epsilon * K[p, q]` of what `q` generates is realised in
@@ -398,6 +425,19 @@ function patch_infections(
     return (; infections = I, importation = imports)
 end
 
+## What each of the first `np` origins sends away per unit of its own
+## generated infections: the importation kernel's off-diagonal column sums
+## over those patches, constant in time. The kernel may cover more patches
+## than the model runs, so `np` comes from the caller.
+function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
+    outflow = zeros(T, np)
+    @inbounds for q in 1:np, r in 1:np
+        r == q && continue
+        outflow[q] += K[r, q]
+    end
+    return outflow
+end
+
 """
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
@@ -405,59 +445,19 @@ delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
 over lags `d` that stay in range. Maps infections to onsets, onsets to
 deaths, onsets to reports and onsets to detected exports. Type-stable and
 AD-transparent.
+
+Each lag adds one scaled, shifted copy of `x` with `axpy!`, a single BLAS
+call on float arrays. BLAS skips a lag whose weight is exactly zero, so on
+float arrays an `Inf` or `NaN` in `x` does not reach the days that lag
+feeds; other element types add `0 · x` there and propagate it.
 """
 function convolve_delay(x::AbstractVector, delay::AbstractVector)
     n = length(x)
-    Tp = promote_type(eltype(x), eltype(delay))
-    y = zeros(Tp, n)
-    @inbounds for t in 1:n
-        acc = zero(Tp)
-        dmax = min(t - 1, length(delay) - 1)
-        for d in 0:dmax
-            acc += x[t - d] * delay[d + 1]
-        end
-        y[t] = acc
+    y = zeros(promote_type(eltype(x), eltype(delay)), n)
+    for d in 1:min(length(delay), n)
+        axpy!(delay[d], view(x, 1:(n - d + 1)), view(y, d:n))
     end
     return y
-end
-
-"""
-Reverse-cumulative tail sums of a length-of-stay PMF `los`, the survival
-weights `S(τ) = Σ_{j ≥ τ} los[j]` that [`convolve_survival`](@ref)
-convolves with. Split out so the derivative rule for `convolve_survival`
-weights with the same definition rather than a copy of it.
-"""
-function survival_weights(los::AbstractVector)
-    L = length(los)
-    surv = similar(los)
-    acc = zero(eltype(los))
-    @inbounds for i in L:-1:1
-        acc += los[i]
-        surv[i] = acc
-    end
-    return surv
-end
-
-"""
-Survival-weighted convolution for an occupancy (prevalence) stream. Given a
-daily admission series `x` and a length-of-stay PMF `los` (indexed from lag
-0, so `los[1] = P(LOS = 0)`), return the daily occupancy
-
-```math
-\\text{occupancy}(t) = \\sum_{\\tau \\ge 0} x_{t-\\tau}\\, S(\\tau),
-\\qquad S(\\tau) = P(\\text{LOS} \\ge \\tau),
-```
-
-so an admission on day `s` occupies a bed on days `s, s+1, …` until it is
-discharged. The admission day is always counted (`S(0) = 1`) and a stay of
-`LOS` days contributes to `LOS + 1` daily occupancies. The survival weights
-are the reverse-cumulative tail sums of the PMF (`S(τ) = Σ_{j ≥ τ} los[j]`),
-so for a normalised PMF `S(0) = 1`, and the occupancy is
-`convolve_delay(x, S)`. Type-stable and AD-transparent. The element type
-follows the inputs.
-"""
-function convolve_survival(x::AbstractVector, los::AbstractVector)
-    return convolve_delay(x, survival_weights(los))
 end
 
 """
@@ -477,7 +477,6 @@ function convolve_pmf(a::AbstractVector, b::AbstractVector)
     Tp = promote_type(eltype(a), eltype(b))
     y = zeros(Tp, na + nb - 1)
     @inbounds for i in 1:na, j in 1:nb
-
         y[i + j - 1] += a[i] * b[j]
     end
     return y
@@ -585,19 +584,28 @@ function interpolate_knots(
         return out
     end
     @inbounds for t in 1:n
-        b = 1
-        while b < nb - 1 && t > days[b + 1]
-            b += 1
-        end
-        d0 = days[b]
-        d1 = days[b + 1]
-        ## Clamp the fraction to `[0, 1]` so days outside the knot span hold
-        ## flat at the nearest knot instead of extrapolating the end segment.
-        frac = d1 == d0 ? zero(Tp) :
-            clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
+        b, frac = _knot_bracket(days, t, Tp)
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out
+end
+
+## The knot segment `b` that day `t` falls in, between `days[b]` and
+## `days[b + 1]`, and the fraction of the way along it. The fraction is
+## clamped to `[0, 1]` so days outside the knot span hold flat at the nearest
+## knot instead of extrapolating the end segment. Needs at least two knots.
+@inline function _knot_bracket(
+        days::AbstractVector{<:Integer}, t::Integer, ::Type{T}
+    ) where {T}
+    nb = length(days)
+    b = 1
+    @inbounds while b < nb - 1 && t > days[b + 1]
+        b += 1
+    end
+    @inbounds d0, d1 = days[b], days[b + 1]
+    frac = d1 == d0 ? zero(T) :
+        clamp(T(t - d0) / T(d1 - d0), zero(T), one(T))
+    return b, frac
 end
 
 """

@@ -20,13 +20,16 @@ Changes since v2.1.0.
   `Mooncake.rrule!!` method on a declared primitive signature. Values are
   unchanged: each rule is checked against central differences and against
   the gradient of an unregistered clone of the same function body.
-- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables.
+- Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables (#837).
   The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
-- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count.
-  A `missing` vector still samples under the same per-entry keys.
+- An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count (#837).
   The two submodels' gradients run 1.2 to 1.9 times faster.
-- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain.
+- New Mooncake rules for the onset, late-confirmed, composition and treatment kernels, and BLAS forms of the convolution and renewal kernels (#856).
+- Observed vectors are scored through the public `NegBinomialVector`, `CensoredNegBinomialVector`, `StudentTVector`, `BetaBinomialVector` and `SplitCountVector`, each with a Mooncake rule on its `logpdf`, and a `missing` vector is sampled under one whole-vector key (#856).
+- Quantities that only feed the report are computed only when `:=` values are recorded, so the gradient skips them (#856).
+- Log densities and gradients match `main` to floating-point rounding, so the model is unchanged (#856).
+- The fit cache key now covers `src/ad_rules.jl`, since a rule changes the floating-point gradients and so the sampled chain (#837).
   A change to the rules therefore forces a refit.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
@@ -137,9 +140,16 @@ Changes since v2.1.0.
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 
+### Fixed
+
+- A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
+
 ### Infrastructure
 
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
+- The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
+- A test compares the production joint's log density and gradient with the rules loaded and with the `mooncake_rules` preference off, and property tests check the kernels the rules cover (#856).
+- `convolve_survival` and `survival_weights` are removed (#856).
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
   This adds about 33 minutes to the joint fit job.

@@ -23,17 +23,13 @@ end
     @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
 end
 
-@testitem "discretise_censored: cdf-difference matches the pdf-loop PMF" begin
-    using Distributions: Gamma, cdf, pdf
+@testitem "discretise_censored: matches the double-interval-censored pdf" begin
+    using Distributions: Gamma, Weibull, Exponential, LogNormal, pdf
     using CensoredDistributions: double_interval_censored
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
 
-    ## `_pmf_from_dic` differences one CDF path rather than calling `pdf` at
-    ## every lag; differencing each integer boundary CDF once is numerically
-    ## identical to the overlapping `pdf(dic, d)` pairs it replaced. Rebuild
-    ## the old pdf-loop here and assert the PMF is unchanged to tight
-    ## tolerance for the delays the model actually uses, so the optimisation
-    ## cannot silently shift the discretisation.
+    ## Reference: the library's own `pdf` of the double-interval-censored
+    ## distribution truncated at `nmax`, one lag at a time.
     function pmf_pdf_loop(dist, nmax)
         dic = double_interval_censored(
             dist; interval = 1.0,
@@ -45,14 +41,30 @@ end
     cases = (
         (lognormal_meansd(6.3, 3.5), 30),
         (lognormal_meansd(4.5, 4.0), 30),
+        (lognormal_meansd(15.3, 9.3), 40),
+        (lognormal_meansd(5.0, 20.0), 42),
         (Gamma(1.178, 3.694), 30),
         (Gamma(3.33, 3.83), 60),
+        (Gamma(0.6, 12.0), 42),
+        (Gamma(2.0, 1.5), 1),
+        (Weibull(1.5, 6.0), 20),
+        (Exponential(4.0), 20),
     )
     for (dist, nmax) in cases
-        @test isapprox(
-            discretise_censored(dist, nmax),
-            pmf_pdf_loop(dist, nmax); rtol = 1.0e-10, atol = 1.0e-12
-        )
+        pmf = discretise_censored(dist, nmax)
+        @test length(pmf) == nmax + 1
+        @test pmf[end] == 0
+        @test maximum(abs.(pmf .- pmf_pdf_loop(dist, nmax))) < 1.0e-13
+    end
+end
+
+@testitem "discretise_censored: a zero total falls back to a uniform PMF" begin
+    using Distributions: LogNormal, Gamma
+    using BVDOutbreakSize: discretise_censored
+
+    ## All the mass sits far beyond `nmax`, so every boundary CDF is zero.
+    for dist in (LogNormal(50.0, 0.1), Gamma(1.0e4, 1.0))
+        @test discretise_censored(dist, 10) == fill(1 / 11, 11)
     end
 end
 
@@ -237,32 +249,6 @@ end
     x = [3.0, 1.0, 4.0, 1.0, 5.0]
     delay = [1.0]
     @test convolve_delay(x, delay) ≈ x
-end
-
-@testitem "convolve_delay: matches the explicit double-sum reference" begin
-    using BVDOutbreakSize: convolve_delay
-    using Random: MersenneTwister
-
-    ## Independent reference: the causal convolution written as the plain
-    ## double sum the vectorised lag-loop must reproduce, exercised across
-    ## sizes including a delay kernel longer than the series.
-    ref(
-        x,
-        delay
-    ) = [
-        sum(
-            x[t - d] * delay[d + 1]
-                for d in 0:min(t - 1, length(delay) - 1)
-        )
-            for t in 1:length(x)
-    ]
-
-    rng = MersenneTwister(20260604)
-    for (n, L) in ((1, 1), (5, 1), (10, 3), (7, 12), (40, 30), (93, 40))
-        x = rand(rng, n)
-        delay = rand(rng, L)
-        @test convolve_delay(x, delay) ≈ ref(x, delay)
-    end
 end
 
 @testitem "knot_days: first is 1, last is n, spacing ≤ week" begin

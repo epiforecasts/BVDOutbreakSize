@@ -45,7 +45,7 @@ The [Methods](methods.md) page describes the model and the [API reference](lib/a
 - Keep the NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) when editing a likelihood.
   They guard against extreme NUTS warmup proposals.
 - The AD backend is Mooncake reverse mode.
-  The hand-written rules in `src/ad_rules.jl` are timed against the backend's own by `task benchmark-rules`.
+  The hand-written rules in `src/mooncake_rules.jl` are timed against the backend's own by `task benchmark-rules`.
   Run it after an AD backend upgrade and delete any rule that no longer pays for itself.
 - Code, code comments and docstrings keep to 80 characters per line.
 - Runic formats all Julia code.

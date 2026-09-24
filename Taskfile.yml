@@ -80,10 +80,10 @@ tasks:
 
   benchmark-rules:
     desc: >
-      Time every component with the hand-written AD rules loaded and again
+      Time every component with the hand-written Mooncake rules loaded and again
       without them, to show whether they still earn their place. Run this
       when the AD backend is upgraded: if the gap has closed, the rules in
-      src/ad_rules.jl are dead weight and should be deleted rather than
+      src/mooncake_rules.jl are dead weight and should be deleted rather than
       maintained. The rules are selected by a load-time preference, so each
       arm is its own process.
     cmds:
@@ -91,12 +91,12 @@ tasks:
       - >
         julia --project=benchmark -e 'using Preferences, UUIDs;
         set_preferences!(UUID("7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"),
-        "ad_rules" => false; force = true)'
+        "mooncake_rules" => false; force = true)'
       - julia --project=benchmark benchmark/rules_ab.jl
       - >
         julia --project=benchmark -e 'using Preferences, UUIDs;
         set_preferences!(UUID("7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"),
-        "ad_rules" => true; force = true)'
+        "mooncake_rules" => true; force = true)'
       - julia --project=benchmark benchmark/rules_ab.jl
 
   benchmark-compile:
