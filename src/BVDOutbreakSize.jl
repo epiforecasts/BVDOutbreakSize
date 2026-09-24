@@ -158,7 +158,6 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     onset_report_G, onset_report_F, onset_nowcast,
     onset_report_anchor, onset_report_anchor_series,
     onset_report_moments, onset_report_scales, onset_report_scale,
-    onset_vintage_indices, onset_scan_adjust,
     onset_report_expected_total,
     onset_report_ascertainment, onset_report_hazard_model,
     onset_ascertainment_model, onset_reporting_model,
@@ -184,14 +183,15 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_export_pressure_model,
     province_composition_model, composition_shares, composition_split_model
 
-## Vector observation distributions a submodel writes on the right of `~`.
-## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
-## there and Julia 1.10 still loads the package.
+## Vector distributions a submodel writes on the right of `~`. Public, not
+## exported. `public` is Julia 1.11 syntax, so it is parsed only there and
+## Julia 1.10 still loads the package.
 @static if VERSION >= v"1.11.0-DEV.469"
     eval(
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
-                "StudentTVector, BetaBinomialVector, SplitCountVector"
+                "StudentTVector, BetaBinomialVector, SplitCountVector, " *
+                "RandomWalkVector"
         )
     )
 end

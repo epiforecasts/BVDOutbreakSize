@@ -26,7 +26,7 @@ end
 @testitem "_split_index separates a parameter from its element index" begin
     using BVDOutbreakSize: _split_index
     @test _split_index("sigma") == ("sigma", 0)
-    @test _split_index("rt_state.z[13]") == ("rt_state.z", 13)
+    @test _split_index("rt_state.log_R[13]") == ("rt_state.log_R", 13)
     ## A multi-index name keeps the first index, the axis its elements
     ## run along.
     @test _split_index("beta[2, 3]") == ("beta", 2)

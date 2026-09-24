@@ -268,16 +268,18 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
-# The walk starts from $R_0$ at its first knot:
+# The walk starts from $R_0$ at its first knot and each later knot is drawn about the one before it:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
-#            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \log R^{\text{trend}}_1 = \log R_0, \qquad
+# \log R^{\text{trend}}_k \sim \mathrm{Normal}\left(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}\right), \quad k = 2, \dots, K, \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
+#
+# The knot levels are the sampled coordinates (the centred form).
+# The onset curve informs the walk strongly, and sampling scaled standard-normal innovations instead (the non-centred form) funnels as $\sigma_{\text{rw}}$ shrinks, holding the sampler at its tree-depth cap with divergences.
 #
 # We do not place a prior on $R_0$ directly.
 # We put the prior on the initial growth rate $r$ instead, given in the seeding and growth subsection below, and derive the established reproduction number forward from it through the Euler–Lotka relation under our generation interval $g$:
@@ -1685,12 +1687,11 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean and a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled for a correction since that differences two reads.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean and, for each digitised bar the cell differences, the $1/12$ variance of rounding an integer read and a fitted read SD $\tau$.
+# A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
-# A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
-#
-# A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute error is per bar and the multiplicative error is one number for the whole figure.
-# The modelled level each cell differences therefore carries its own scan's multiplier $1 + \sigma_{\text{scan}} z_s$ with $z_s \sim \mathrm{Normal}(0, 1)$, and $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ truncated at $8\%$.
+# The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
+# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
@@ -2043,7 +2044,6 @@ cfr_prior_fig #hide
 # It falls between consecutive vintages more than once in the current data.
 # Scoring the level would charge the forecast for a rescan of cases it had already predicted and would count the same revision again at every later horizon.
 #
-# The interval on that increment is dominated by the scan error rather than by epidemic uncertainty.
 # The forecast is worth more as a check that the fitted delay and ascertainment reproduce the next vintage than as a case-count prediction.
 #
 # Each release now saves its forecast as an asset so it can later be scored against what is observed.

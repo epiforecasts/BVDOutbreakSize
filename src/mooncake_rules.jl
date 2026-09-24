@@ -65,9 +65,6 @@ Mooncake.@is_primitive(
 ## histories, with no sampled quantity among their arguments. They pass no
 ## derivative, so the backend need not tape them.
 Mooncake.@zero_derivative(
-    Mooncake.MinimalCtx, Tuple{typeof(onset_vintage_indices), Vararg}
-)
-Mooncake.@zero_derivative(
     Mooncake.MinimalCtx, Tuple{typeof(admission_headroom), Vararg}
 )
 Mooncake.@zero_derivative(
@@ -663,16 +660,6 @@ Mooncake.@is_primitive(
         Array{<:Integer},
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(onset_scanned_cells), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-        Array{<:Integer}, Array{<:Integer}, Array{<:Integer},
-        Mooncake.IEEEFloat,
-    },
-)
-
 ## Derivative of `safe_rate`: the identity above its floor, flat on it.
 _safe_rate_slope(x) = _safe_rate_on(x) ? one(x) : zero(x)
 
@@ -844,57 +831,6 @@ function Mooncake.rrule!!(
         return ntuple(_ -> NoRData(), 9)
     end
     return out, onset_report_moments_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_scanned_cells)},
-        level_cur::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        level_prev::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        scan_level::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        vintage_idx::CoDual{<:Array{<:Integer}},
-        prev_vintage_idx::CoDual{<:Array{<:Integer}},
-        prev_report_idx::CoDual{<:Array{<:Integer}},
-        pixel_sd::CoDual{<:Mooncake.IEEEFloat}
-    )
-    lc = primal(level_cur)
-    lp = primal(level_prev)
-    c = primal(scan_level)
-    vi = primal(vintage_idx)
-    pvi = primal(prev_vintage_idx)
-    pri = primal(prev_report_idx)
-    px = primal(pixel_sd)
-    l̄c = tangent(level_cur)
-    l̄p = tangent(level_prev)
-    c̄ = tangent(scan_level)
-    y = onset_scanned_cells(lc, lp, c, vi, pvi, pri, px)
-    ȳ = map(zero, y)
-    function onset_scanned_cells_pullback!!(::NoRData)
-        ## With `μ = lc · c_s − lp · c_p` and
-        ## `σ = sqrt(max(μ, 0) + px² r)`, each cell gives
-        ##
-        ##     μ̄ = m̄ + [μ > 0] σ̄ / 2σ,    p̄x += σ̄ px r / σ,
-        ##     l̄c += μ̄ c_s,  l̄p −= μ̄ c_p,  c̄_s += μ̄ lc,  c̄_p −= μ̄ lp,
-        ##
-        ## with the scan terms only for an index inside `1:length(c)`. At
-        ## `μ ≤ 0`, `max(μ, 0)` passes no derivative, as the primal does.
-        T = eltype(y.scales)
-        p̄x = zero(T)
-        @inbounds for i in eachindex(lc)
-            σ = y.scales[i]
-            g = ȳ.scales[i] / (2 * σ)
-            r = pri[i] > 0 ? 2 : 1
-            μ̄ = ȳ.means[i] + (y.means[i] > 0 ? g : zero(T))
-            p̄x += g * 2 * px * r
-            s, p = vi[i], pvi[i]
-            l̄c[i] += μ̄ * _scan_multiplier(c, s)
-            l̄p[i] -= μ̄ * _scan_multiplier(c, p)
-            _scan_in_range(c, s) && (c̄[s] += μ̄ * lc[i])
-            _scan_in_range(c, p) && (c̄[p] -= μ̄ * lp[i])
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
-            NoRData(), NoRData(), convert(typeof(px), p̄x)
-    end
-    return CoDual(y, ȳ), onset_scanned_cells_pullback!!
 end
 
 function Mooncake.rrule!!(
