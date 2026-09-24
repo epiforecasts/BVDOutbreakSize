@@ -25,7 +25,9 @@
 #     the nearest chain tick at or before it, so a day 150 days back
 #     does not drift with the rounding of one spacing. The rightmost tick's
 #     date is in CONFIG, read off the axis;
-#   * each daily bar = the bar's own pixel columns, taken as the window
+#   * each daily bar = the bar's own pixel columns: the interval between
+#     the two consecutive outline columns about a day apart whose midpoint
+#     is nearest the day's grid position, else the window
 #     [cx - ppd/2, cx + ppd/2] clipped to the nearest outline column on each
 #     side. Outline columns are those mostly dark over their run. Every
 #     column is read as the run of non-page pixels up from the baseline,
@@ -34,27 +36,31 @@
 #     rows and tick columns (gridlines). The run's top is its highest pixel
 #     darker than an anti-alias, which is the bar's outline; chroma-washed
 #     fill inside the run is crossed on the way up. The bar height is the
-#     height most of its interior columns agree on, or the tallest interior
-#     column when fewer than three agree (a 3-4 px bar has one saturated
-#     column and one or two washed ones that read low). Half a pixel of
+#     height at least two of its interior columns agree on to within a
+#     pixel, or the tallest
+#     interior column when none do (a 3-4 px bar has one saturated column
+#     and one or two washed ones that read low). Half a pixel of
 #     outline is subtracted before dividing by pixels-per-count. The dead
 #     segment is the count of crimson pixels in the chosen column.
 #
 # The Python port (scripts/digitize_onset_curve.py) must match every step
 # above pixel for pixel: the same pixel classes (page, neutral, light,
-# crimson, dark), the same run rule with its gap of three and gridline skip,
-# the same outline thresholds (dark fraction 0.3 strict, 0.1 soft with a
-# floor of three pixels, both only over runs taller than four pixels), the
-# same mode-or-maximum choice with its support of three, and the same
+# crimson, dark, saturated), the same run rule with its gap of three and gridline skip,
+# the same outline thresholds (dark fraction 0.25 strict with a floor of
+# six pixels, 0.1 soft with a floor of five, both only over runs taller
+# than four pixels, and no saturated pixel in a tenth of the run), the
+# same gap rule, the
+# same interval choice, the same mode-or-maximum rule with its support of
+# two, and the same
 # rounding. All of it is expressible on numpy arrays with cumulative sums
 # and per-column loops.
 #
 # Accuracy: against the printed `n` in every figure that carries one
 # (SitReps 064-130, read by OCR and checked by eye), the digitised total is
-# within 2% everywhere and within 0.5% on 48 of the 60 vintages. The
-# largest gaps are SitRep 119 at +1.9% (5428 against n = 5 326), SitRep 126
-# at -1.8% (5670 against n = 5 771) and SitRep 118 at -1.0% (5212 against
-# n = 5 263). Individual daily bars carry pixel rounding of about +/-1 case
+# within 2.1% everywhere and within 0.5% on 42 of the 60 vintages. The
+# largest gaps are SitRep 126 at -2.1% (5650 against n = 5 771), SitRep 119
+# at +1.9% (5429 against n = 5 326) and SitRep 129 at -1.9% (5784 against
+# n = 5 896). Individual daily bars carry pixel rounding of about +/-1 case
 # at the small September renders (2.8 px per count) and less before. The
 # faded bars inside the `donnees potentiellement incompletes` band are read
 # like any other.
@@ -62,7 +68,7 @@
 # Late reporting only ever adds cases, so an onset date's count must be
 # non-decreasing across vintages. On onset dates more than three weeks
 # before the earlier vintage's report date, consecutive distinct snapshots
-# differ by 0.46 cases per day on average (L1) and fall on 14% of such days,
+# differ by 0.40 cases per day on average (L1) and fall on 14% of such days,
 # almost always by a single case, so a between-vintage increment of one is
 # at the noise floor and anything larger is signal.
 #
@@ -406,7 +412,8 @@ function pixel_classes(R, G, B)
     light = (hi .>= 190) .& (spread .< 60)
     crimson = (R .- max.(G, B)) .>= 25
     darkpx = (R .< 150) .& (G .< 150) .& (B .< 150)
-    return page, neutral, light, crimson, darkpx
+    saturated = spread .>= 30
+    return page, neutral, light, crimson, darkpx, saturated
 end
 
 # Per-column run of non-page pixels up from the baseline. Gridlines lie on
@@ -416,10 +423,11 @@ end
 # vertical line's 7 px gaps. The run's top is the highest pixel darker than
 # `light`: the bar's outline, never a stray anti-alias or noise pixel
 # above it, and chroma-washed fill inside the run is crossed on the way up.
-# Returns the run height, the crimson count and the dark count per column.
+# Returns the run height (to the outline), the run's full non-page extent
+# and the crimson, dark and saturated counts per column.
 function column_runs(
-        page, neutral, light, crimson, darkpx, y0, gridrows, gridcols;
-        gap = 3
+        page, neutral, light, crimson, darkpx, saturated, y0, gridrows,
+        gridcols; gap = 3
     )
     H, W = size(page)
     grid = falses(H, W)
@@ -430,22 +438,27 @@ function column_runs(
         1 <= c + d <= W && (grid[:, c + d] .= true)
     end
     h = zeros(Int, W)
+    hp = zeros(Int, W)
     nr = zeros(Int, W)
     nd = zeros(Int, W)
+    ns = zeros(Int, W)
     for x in 1:W
         r = y0 - 1
         miss = 0
         top = y0
-        rr = dd = 0
-        cr = cd = 0
+        last = y0
+        rr = dd = ss = 0
+        cr = cd = cs = 0
         while r >= 1
             if !page[r, x] && !(grid[r, x] && neutral[r, x])
                 miss = 0
+                last = r
                 crimson[r, x] && (rr += 1)
                 darkpx[r, x] && (dd += 1)
+                saturated[r, x] && (ss += 1)
                 if !light[r, x]
                     top = r
-                    cr, cd = rr, dd
+                    cr, cd, cs = rr, dd, ss
                 end
             else
                 miss += 1
@@ -454,10 +467,12 @@ function column_runs(
             r -= 1
         end
         h[x] = y0 - top
+        hp[x] = y0 - last
         nr[x] = cr
         nd[x] = cd
+        ns[x] = cs
     end
-    return h, nr, nd
+    return h, hp, nr, nd, ns
 end
 
 # The regular weekly chain ending on the rightmost tick, as (week index, x)
@@ -480,13 +495,13 @@ function tick_chain(xt)
     return ks, xs
 end
 
-# Most common value of `h` over `cols` and how many columns carry it; ties
-# go to the value nearest `cx` by column.
+# The value of `h` over `cols` that most columns agree with to within a
+# pixel, and how many do; ties go to the value nearest `cx` by column.
 function modal_height(h, cols, cx)
     best = 0
     bestkey = (-1, -Inf)
     for u in unique(h[cols])
-        c = count(x -> h[x] == u, cols)
+        c = count(x -> abs(h[x] - u) <= 1, cols)
         d = minimum(abs(x - cx) for x in cols if h[x] == u)
         key = (c, -d)
         if key > bestkey
@@ -546,16 +561,19 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     w = 7.0 .* ks
     ppd = (n * sum(w .* xs) - sum(w) * sum(xs)) /
         (n * sum(w .^ 2) - sum(w)^2)   # pixels per day
-    page, neutral, light, crimson, darkpx = pixel_classes(R, G, B)
-    h, nr, nd = column_runs(
-        page, neutral, light, crimson, darkpx, y0, yt, xs
+    page, neutral, light, crimson, darkpx, saturated = pixel_classes(R, G, B)
+    h, hp, nr, nd, ns = column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt, xs
     )
-    # outline columns are mostly dark over their run (a one-count bar is
-    # all outline, so the floor keeps it as interior); an outline drawn
-    # across two columns leaves a softer second column that still carries
-    # the neighbour's height, dropped when anything else is left
-    isborder = (h .> 4) .& (nd .>= 0.3 .* h)
-    soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 3))
+    # outline columns are mostly dark over their run (a short bar's top
+    # and junction lines are a few dark pixels in every column, so the
+    # floor keeps its interior as interior), and a column with
+    # no saturated pixel is a gray line (the y-axis, the panel border and
+    # their anti-alias) rather than a bar; an outline drawn across two
+    # columns leaves a softer second column that still carries the
+    # neighbour's height, dropped when anything else is left
+    isborder = (h .> 4) .& ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h))
+    soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
     nz = findall((h .> 2) .& .!isborder)
     barmin, barmax = minimum(nz), maximum(nz)
     rows = Tuple{Date, Int, Int}[]
@@ -567,20 +585,51 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         (cx < barmin - ppd || cx > barmax + ppd) && continue
         lo = max(1, ceil(Int, cx - ppd / 2 + 0.5))
         hi = min(W, floor(Int, cx + ppd / 2 - 0.5))
-        # clip the window to the nearest outline column on each side
+        # the bar is the interval between two consecutive outline columns
+        # about a day apart whose midpoint is nearest cx; when the day grid
+        # lands on an outline that picks the right side of it. With no such
+        # pair (an outline the render lost) the window is clipped to the
+        # nearest outline on each side instead.
         c = round(Int, cx)
         reach = ceil(Int, ppd)
-        bl = findlast(x -> isborder[x], max(1, c - reach):(c - 1))
-        bl === nothing || (lo = max(lo, max(1, c - reach) + bl))
-        br = findfirst(x -> isborder[x], (c + 1):min(W, c + reach))
-        br === nothing || (hi = min(hi, c + br))
-        cols = [x for x in lo:hi if !soft[x]]
+        near = [x for x in max(1, c - reach):min(W, c + reach) if isborder[x]]
+        best = nothing
+        for i in 1:(length(near) - 1)
+            a, b = near[i], near[i + 1]
+            abs(b - a - ppd) <= 1.5 || continue
+            d = abs((a + b) / 2 - cx)
+            (best === nothing || d < best[1]) && (best = (d, a, b))
+        end
+        if best !== nothing && best[1] <= ppd / 2
+            lo, hi = best[2] + 1, best[3] - 1
+        else
+            bl = findlast(x -> isborder[x], max(1, c - reach):(c - 1))
+            bl === nothing || (lo = max(lo, max(1, c - reach) + bl))
+            br = findfirst(x -> isborder[x], (c + 1):min(W, c + reach))
+            br === nothing || (hi = min(hi, c + br))
+        end
+        cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
         isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
         isempty(cols) && continue
-        hb, support = modal_height(h, cols, cx)
-        support >= 3 || (hb = maximum(h[cols]))
+        # a day is empty when half or more of its columns are page from
+        # the baseline up (the baseline's own anti-alias apart); a column
+        # that is fill all the way but never shows an outline pixel
+        # (chroma-washed) abstains rather than reading 0
+        gaps = count(x -> h[x] == 0 && hp[x] <= 2 * ppc, cols)
+        2 * gaps >= length(cols) && continue
+        resolved = [x for x in cols if h[x] > 0]
+        if isempty(resolved)
+            # no outline pixel in any column: read the fill's extent where
+            # two columns agree on it, else it is a halo, not a bar
+            hb, support = modal_height(hp, cols, cx)
+            support >= 2 || continue
+            jb = cols[findfirst(x -> hp[x] == hb, cols)]
+        else
+            hb, support = modal_height(h, resolved, cx)
+            support >= 2 || (hb = maximum(h[resolved]))
+            jb = resolved[findfirst(x -> h[x] == hb, resolved)]
+        end
         hb < 1 && continue
-        jb = cols[findfirst(x -> h[x] == hb, cols)]
         total = round(Int, max(0.0, hb - 0.5) / ppc)
         dead = min(total, round(Int, max(0.0, nr[jb] - 0.5) / ppc))
         push!(rows, (last_tick + Day(off), total - dead, dead))

@@ -40,13 +40,13 @@ Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate.
-Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2% everywhere and within 0.5% on 48 of the 60 vintages.
-The largest gaps are SitRep 119 at +1.9% (5428 against n = 5 326), SitRep 126 at −1.8% (5670 against n = 5 771) and SitRep 118 at −1.0% (5212 against n = 5 263).
+Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2.1% everywhere and within 0.5% on 42 of the 60 vintages.
+The largest gaps are SitRep 126 at −2.1% (5650 against n = 5 771), SitRep 119 at +1.9% (5429 against n = 5 326) and SitRep 129 at −1.9% (5784 against n = 5 896).
 Individual daily bars carry pixel rounding of about ±1 case at the small September renders (2.8 px per count) and less before.
 The faded bars inside the `données potentiellement incomplètes` band are read like any other.
 
 Late reporting only ever adds cases, so an onset date's count must be non-decreasing across vintages.
-On onset dates more than three weeks before the earlier vintage's report date, consecutive distinct snapshots differ by 0.46 cases per day on average (L1) and fall on 14% of such days, almost always by a single case.
+On onset dates more than three weeks before the earlier vintage's report date, consecutive distinct snapshots differ by 0.40 cases per day on average (L1) and fall on 14% of such days, almost always by a single case.
 A between-vintage increment of one is therefore at the noise floor and anything larger is signal.
 See issue #488.
 
