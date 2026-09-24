@@ -96,7 +96,7 @@ function _evolving_rates(
         false
     end
     (
-        has(Symbol("rt_state.z")) && has(Symbol("gi_state.α")) &&
+        has(Symbol("rt_state.sigma_rw")) && has(Symbol("gi_state.α")) &&
             has(Symbol("gi_state.θ")) &&
             (!isnothing(R_T) || has(:R_T))
     ) || return nothing

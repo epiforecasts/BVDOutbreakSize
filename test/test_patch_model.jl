@@ -1237,7 +1237,7 @@ end
     ## Submodel-PREFIXED keys. These are the ones that bite, because a prefix
     ## change leaves the parameter set identical and only breaks the read.
     for q in (
-            "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
+            "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.log_R",
             "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
             "inc_state.delay_mean", "inc_state.delay_sd",
             "cases_state.report_state.α", "cases_state.report_state.θ",

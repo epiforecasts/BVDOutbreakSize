@@ -457,7 +457,6 @@ end
     nd = 25
     chn = (;
         R_T = collect(range(0.6, 1.6; length = nd)),
-        var"rt_state.z" = zeros(nd),
         var"rt_state.sigma_rw" = fill(0.2, nd),
         var"gi_state.α" = fill(2.71, nd),
         var"gi_state.θ" = fill(5.65, nd),

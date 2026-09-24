@@ -494,7 +494,8 @@ end
         var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
         var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
         var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), STREAM_NZ))
+        var"rt_state.log_R" ~
+            product_distribution(fill(Normal(log(1.8), 0.1), STREAM_NZ))
         var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
         var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
         var"dispersion_state.k" ~ truncated(Normal(10.0, 3.0); lower = 1.0)
@@ -706,7 +707,7 @@ end
         var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
         var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
         var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
+        var"rt_state.log_R" ~ product_distribution(fill(Normal(log(1.8), 0.1), nz))
         var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
         var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
         var"treatment_state.disp_state.k" ~
@@ -967,7 +968,7 @@ end
         expected_infections_T ~ truncated(Normal(800.0, 5.0); lower = 1.0)
         R_T ~ truncated(Normal(1.2, 1.0e-4); lower = 1.0e-3)
         var"rt_state.sigma_rw" ~ truncated(Normal(0.15, 1.0e-4); lower = 1.0e-3)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), 8))
+        var"rt_state.log_R" ~ product_distribution(fill(Normal(log(1.2), 0.05), 8))
         var"gi_state.α" ~ truncated(Normal(2.71, 0.01); lower = 0.1)
         var"gi_state.θ" ~ truncated(Normal(5.65, 0.02); lower = 0.1)
         return nothing
@@ -1144,7 +1145,7 @@ end
         var"rt_state.log_R0" ~ Normal(log(1.1), 0.05)
         var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1.0e-3)
         var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
-        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
+        var"rt_state.log_R" ~ product_distribution(fill(Normal(log(1.1), 0.05), nz))
         var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
         var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
         var"treatment_state.disp_state.k" ~
