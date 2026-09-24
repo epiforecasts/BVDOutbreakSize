@@ -10,7 +10,7 @@ Changes since v2.1.0.
 ### Performance
 
 - Hand-written reverse-mode rules for the daily convolution and renewal
-  kernels (`convolve_delay`, `convolve_pmf`,
+  kernels (`convolve_delay`, `convolve_survival`, `convolve_pmf`,
   `interpolate_knots`, `renewal_infections`). Each is a loop over the daily
   grid, so left to the backend every iteration's intermediates reach the
   tape; the rules replace that with a closed-form adjoint of the same
@@ -18,8 +18,8 @@ Changes since v2.1.0.
   under Mooncake, the default backend, and the delay-heavy observation
   submodels rather more; the measurements are in #810. Each is a native
   `Mooncake.rrule!!` method on a declared primitive signature. Values are
-  unchanged: each rule is checked with Mooncake's `test_rule`, and each
-  rewritten kernel's values against a textbook reference loop.
+  unchanged: each rule is checked against central differences and against
+  the gradient of an unregistered clone of the same function body.
 - Hand-written reverse-mode rules for the observation kernels: the abscond thinning of the treatment flows, the two-clock confirmation split, the occupancy balance and the onset-reporting tables (#837).
   The renewal rules now also fire on the matrix rows the per-patch model passes, and `patch_infections` has a rule of its own.
   Each kernel's gradient runs between 2.7 and 17 times faster than the backend's own derivation.
@@ -140,8 +140,8 @@ Changes since v2.1.0.
 ### Infrastructure
 
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
-- The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against Mooncake's own derivation (#856).
-- `test/test_model_fixture.jl` checks the headline joint against values written from `main` (#856).
+- The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
+- A test compares the production joint's log density and gradient with the rules loaded and with the `mooncake_rules` preference off, and property tests check the kernels the rules cover (#856).
 - `convolve_survival` and `survival_weights` are removed (#856).
 - Each report page loads only the fits and prior draws it reads, rather than every page loading all of them, and the render job log shows how long each load takes (#853).
 - The headline joint fit and its no-patches control draw 1000 samples per chain, up from 800 (#838).
