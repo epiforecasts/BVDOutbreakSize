@@ -7,6 +7,7 @@
 ] begin
     using BVDOutbreakSize: renewal_infections_with_force,
         onset_report_expected_total, onset_report_F, stick_breaking_loglik
+    using Distributions: logpdf
     include(joinpath(@__DIR__, "reference_kernels.jl"))
 
     agrees(a::Union{Tuple, NamedTuple}, b) = all(map(agrees, a, b))
@@ -121,8 +122,9 @@
     x = rand(rng, 0:120, 60)
     for k in (0.7, 8.3, 150.0)
         add!(
-            "nbinomial_loglik k = $k", nbinomial_loglik, ref_nbinomial_loglik,
-            k, μ, x
+            "NegBinomialVector k = $k",
+            (k, μ, x) -> logpdf(NegBinomialVector(k, μ), x),
+            ref_nbinomial_loglik, k, μ, x
         )
     end
     m = 20 .* randn(rng, 60)
@@ -130,15 +132,17 @@
     y = round.(Int, m .+ 3 .* σ .* randn(rng, 60))
     for ν in (1.5, 4.0, 40.0)
         add!(
-            "studentt_loglik ν = $ν", studentt_loglik, ref_studentt_loglik,
-            m, σ, y, ν
+            "StudentTVector ν = $ν",
+            (m, σ, y, ν) -> logpdf(StudentTVector(m, σ, ν), y),
+            ref_studentt_loglik, m, σ, y, ν
         )
     end
     n = rand(rng, 0:300, 30)
     n[3] = 0
     for ρ in (0.05, 0.3, 0.8)
         add!(
-            "betabinomial_loglik ρ = $ρ", betabinomial_loglik,
+            "BetaBinomialVector ρ = $ρ",
+            (n, p, ρ, x) -> logpdf(BetaBinomialVector(n, p, ρ), x),
             ref_betabinomial_loglik, n, 0.05 .+ 0.9 .* rand(rng, 30), ρ,
             [rand(rng, 0:t) for t in n]
         )

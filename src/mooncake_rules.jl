@@ -60,13 +60,6 @@ Mooncake.@is_primitive(
         Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(nbinomial_loglik), Mooncake.IEEEFloat,
-        Array{<:Mooncake.IEEEFloat}, Array{<:Integer},
-    },
-)
 
 ## Data-only helpers: lookups over the observation grid and the recorded
 ## histories, with no sampled quantity among their arguments. They pass no
@@ -984,7 +977,13 @@ function Mooncake.rrule!!(
     return out, patch_infections_pullback!!
 end
 
-## Value and gradient of `nbinomial_loglik` in one pass. With `r = k` and
+# Log densities of the vector observation distributions in
+# `models/observation_distributions.jl`. Each rule takes the distribution
+# itself: the tangent of an array field is read from the distribution's
+# fdata and accumulated in place, and the cotangent of a scalar field goes
+# back in its rdata.
+
+## `logpdf(NegBinomialVector(k, μ), x)` in one pass. With `r = k` and
 ## `p = r / (r + μ)` each count `x` contributes
 ##
 ##     ∂ℓ/∂r = log p + ψ(r + x) − ψ(r),    ∂ℓ/∂p = r / p − x / (1 − p),
@@ -992,7 +991,7 @@ end
 ## chained through `p` to `μ` and `k`. The guards are the ones `safe_rate`
 ## and `safe_nbinomial` apply: a floored `k` or `μ`, or a clamped `p`,
 ## passes no derivative. A term that is not finite adds none either.
-function _nbinomial_loglik_grad(
+function _negbinomial_vector_grad(
         k::T, modelled::AbstractVector,
         obs::AbstractVector
     ) where {T}
@@ -1019,38 +1018,45 @@ function _nbinomial_loglik_grad(
     return s, (k_on ? dk : zero(T)), dμ
 end
 
-function Mooncake.rrule!!(
-        ::CoDual{typeof(nbinomial_loglik)},
-        k::CoDual{<:Mooncake.IEEEFloat},
-        modelled::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        obs::CoDual{<:Array{<:Integer}}
-    )
-    s, dk, dμ = _nbinomial_loglik_grad(
-        primal(k), primal(modelled), primal(obs)
-    )
-    μ̄ = tangent(modelled)
-    ## `k` is a scalar, so its adjoint goes back as rdata rather than into
-    ## a tangent buffer.
-    function nbinomial_loglik_pullback!!(s̄)
-        μ̄ .+= s̄ .* dμ
-        return NoRData(), s̄ * dk, NoRData(), NoRData()
-    end
-    return CoDual(s, NoFData()), nbinomial_loglik_pullback!!
-end
-
-## The increments `studentt_loglik` scores: counts in the package data, floats
-## in simulated triangles. Float increments take the adjoint `−∂ℓ/∂μ`.
-const _StudentTObs = Union{Array{<:Integer}, _FloatArray}
-
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(studentt_loglik), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, _StudentTObs, Mooncake.IEEEFloat,
+        typeof(Distributions._logpdf),
+        NegBinomialVector{<:Mooncake.IEEEFloat, <:_FloatArray},
+        Array{<:Integer},
     },
 )
 
-## Value and gradient of `studentt_loglik` in one pass. With
+function Mooncake.rrule!!(
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:NegBinomialVector{<:Mooncake.IEEEFloat, <:_FloatArray}},
+        obs::CoDual{<:Array{<:Integer}}
+    )
+    dist = primal(d)
+    s, dk, dμ = _negbinomial_vector_grad(dist.k, dist.μ, primal(obs))
+    μ̄ = tangent(d).data.μ
+    function negbinomial_vector_pullback!!(s̄)
+        μ̄ .+= s̄ .* dμ
+        return NoRData(), Mooncake.RData((k = s̄ * dk, μ = NoRData())),
+            NoRData()
+    end
+    return CoDual(s, NoFData()), negbinomial_vector_pullback!!
+end
+
+## The increments a `StudentTVector` scores: counts in the package data,
+## floats in simulated triangles. Float increments take the adjoint
+## `−∂ℓ/∂μ`.
+const _StudentTObs = Union{Array{<:Integer}, _FloatArray}
+const _StudentTVec = StudentTVector{
+    <:_FloatArray, <:_FloatArray, <:Mooncake.IEEEFloat,
+}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(Distributions._logpdf), _StudentTVec, _StudentTObs},
+)
+
+## `logpdf(StudentTVector(μ, σ, ν), x)` in one pass. With
 ## `z = (x − μ) / σ` and `g = (ν + 1) z / (ν + z²)` each cell contributes
 ##
 ##     ∂ℓ/∂μ = g / σ,    ∂ℓ/∂σ = (g z − 1) / σ,
@@ -1060,7 +1066,7 @@ Mooncake.@is_primitive(
 ## and `∂ℓ/∂x = −∂ℓ/∂μ`. The guards are `safe_studentt`'s: a floored `σ`
 ## or a defaulted `ν` passes no derivative. A cell whose term is not finite
 ## adds none either.
-function _studentt_loglik_grad(
+function _studentt_vector_grad(
         means::AbstractVector, sds::AbstractVector,
         obs::AbstractVector, ν::Real
     )
@@ -1088,39 +1094,41 @@ function _studentt_loglik_grad(
 end
 
 function Mooncake.rrule!!(
-        ::CoDual{typeof(studentt_loglik)},
-        means::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        sds::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        obs::CoDual{<:_StudentTObs},
-        ν::CoDual{<:Mooncake.IEEEFloat}
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:_StudentTVec},
+        obs::CoDual{<:_StudentTObs}
     )
-    s, dν, dμ, dσ = _studentt_loglik_grad(
-        primal(means), primal(sds), primal(obs), primal(ν)
+    dist = primal(d)
+    s, dν, dμ, dσ = _studentt_vector_grad(
+        dist.μ, dist.σ, primal(obs), dist.ν
     )
-    μ̄ = tangent(means)
-    σ̄ = tangent(sds)
+    μ̄ = tangent(d).data.μ
+    σ̄ = tangent(d).data.σ
     x̄ = tangent(obs)
-    ## `ν` is a scalar, so its adjoint goes back as rdata. Integer
-    ## increments carry no tangent.
-    function studentt_loglik_pullback!!(s̄)
+    ## Integer increments carry no tangent.
+    function studentt_vector_pullback!!(s̄)
         μ̄ .+= s̄ .* dμ
         σ̄ .+= s̄ .* dσ
         x̄ isa _FloatArray && (x̄ .-= s̄ .* dμ)
-        return NoRData(), NoRData(), NoRData(), NoRData(), s̄ * dν
+        d̄ = Mooncake.RData((μ = NoRData(), σ = NoRData(), ν = s̄ * dν))
+        return NoRData(), d̄, NoRData()
     end
-    return CoDual(s, NoFData()), studentt_loglik_pullback!!
+    return CoDual(s, NoFData()), studentt_vector_pullback!!
 end
+
+const _BetaBinomialVec = BetaBinomialVector{
+    <:AbstractVector{<:Integer}, <:_FloatArray, <:Mooncake.IEEEFloat,
+}
 
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(betabinomial_loglik), AbstractVector{<:Integer},
-        Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+        typeof(Distributions._logpdf), _BetaBinomialVec,
         AbstractVector{<:Integer},
     },
 )
 
-## Value and gradient of `betabinomial_loglik` in one pass. With
+## `logpdf(BetaBinomialVector(n, p, ρ), x)` in one pass. With
 ## concentration `c = (1 − ρ) / ρ`, `α = c·p` and `β = c·(1 − p)`, each
 ## count `x` of `n` trials contributes
 ##
@@ -1131,7 +1139,7 @@ Mooncake.@is_primitive(
 ## guards are `safe_betabinomial`'s: a clamped `p` or `ρ`, or an `α` or `β`
 ## held at its floor, passes no derivative. A term that is not finite adds
 ## none either.
-function _betabinomial_loglik_grad(
+function _betabinomial_vector_grad(
         trials::AbstractVector, p::AbstractVector, ρ, obs::AbstractVector
     )
     T = float(promote_type(eltype(p), typeof(ρ)))
@@ -1157,23 +1165,21 @@ function _betabinomial_loglik_grad(
 end
 
 function Mooncake.rrule!!(
-        ::CoDual{typeof(betabinomial_loglik)},
-        trials::CoDual{<:AbstractVector{<:Integer}},
-        p::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        ρ::CoDual{<:Mooncake.IEEEFloat},
+        ::CoDual{typeof(Distributions._logpdf)},
+        d::CoDual{<:_BetaBinomialVec},
         obs::CoDual{<:AbstractVector{<:Integer}}
     )
+    dist = primal(d)
     ## The gradient is taken in the forward pass, since a caller may
     ## overwrite `p` in place before the pullback runs.
-    s, dρ, dp = _betabinomial_loglik_grad(
-        primal(trials), primal(p), primal(ρ), primal(obs)
+    s, dρ, dp = _betabinomial_vector_grad(
+        dist.trials, dist.p, dist.ρ, primal(obs)
     )
-    p̄ = tangent(p)
-    ## `ρ` is a scalar, so its adjoint goes back as rdata rather than into
-    ## a tangent buffer.
-    function betabinomial_loglik_pullback!!(s̄)
+    p̄ = tangent(d).data.p
+    function betabinomial_vector_pullback!!(s̄)
         p̄ .+= s̄ .* dp
-        return NoRData(), NoRData(), NoRData(), s̄ * dρ, NoRData()
+        d̄ = Mooncake.RData((trials = NoRData(), p = NoRData(), ρ = s̄ * dρ))
+        return NoRData(), d̄, NoRData()
     end
-    return CoDual(s, NoFData()), betabinomial_loglik_pullback!!
+    return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end

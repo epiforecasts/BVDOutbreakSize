@@ -15,13 +15,14 @@
 
 @testsnippet ADRuleCases begin
     using Random: Xoshiro
+    using Distributions: _logpdf
     using BVDOutbreakSize: convolve_delay, convolve_pmf, interpolate_knots,
-        knot_days, renewal_infections, patch_infections, nbinomial_loglik,
+        knot_days, renewal_infections, patch_infections, NegBinomialVector,
         abscond_thinned, abscond_thinned_flows, two_clock_confirmed,
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
-        onset_report_moments, studentt_loglik,
-        betabinomial_loglik, onset_vintage_indices, censoring_cap,
+        onset_report_moments, StudentTVector,
+        BetaBinomialVector, onset_vintage_indices, censoring_cap,
         admission_headroom, onset_scanned_cells
 
     ## A positive PMF of length `L` with total mass `mass`.
@@ -133,8 +134,11 @@
     ## speed item times.
     function rule_cases(rng)
         cases = NamedTuple[]
+        ## A distribution's rule is named after the distribution.
+        label(f, args) = f === _logpdf ? nameof(typeof(first(args))) :
+            nameof(f)
         add!(note, f, args...; perf = false) = push!(
-            cases, (; name = "$(nameof(f)): $note", f, args, perf)
+            cases, (; name = "$(label(f, args)): $note", f, args, perf)
         )
 
         M = rand(rng, 3, 40) .+ 0.5
@@ -219,17 +223,18 @@
         x = rand(rng, 0:120, 60)
         x[3] = 0
         for k in (8.3, 0.7, 150.0)
-            add!("k = $k", nbinomial_loglik, k, μ, x)
+            add!("k = $k", _logpdf, NegBinomialVector(k, μ), x)
         end
         add!(
-            "floored means", nbinomial_loglik, 8.3, [μ; -1.0; -5.0],
-            [x; 3; 0]
+            "floored means", _logpdf,
+            NegBinomialVector(8.3, [μ; -1.0; -5.0]), [x; 3; 0]
         )
-        add!("fallback k", nbinomial_loglik, -1.0, μ, x)
-        add!("empty", nbinomial_loglik, 8.3, Float64[], Int[])
+        add!("fallback k", _logpdf, NegBinomialVector(-1.0, μ), x)
+        add!("empty", _logpdf, NegBinomialVector(8.3, Float64[]), Int[])
         add!(
-            "n = 220", nbinomial_loglik, 8.3,
-            exp.(4 .+ 0.5 .* randn(rng, 220)), rand(rng, 0:120, 220);
+            "n = 220", _logpdf,
+            NegBinomialVector(8.3, exp.(4 .+ 0.5 .* randn(rng, 220))),
+            rand(rng, 0:120, 220);
             perf = true
         )
 
@@ -357,20 +362,23 @@
         σ = exp.(1 .+ 0.5 .* randn(rng, 60))
         y = round.(Int, m .+ 3 .* σ .* randn(rng, 60))
         for ν in (4.0, 1.5, 40.0)
-            add!("ν = $ν", studentt_loglik, m, σ, y, ν)
+            add!("ν = $ν", _logpdf, StudentTVector(m, σ, ν), y)
         end
         add!(
-            "float increments", studentt_loglik, m, σ,
-            m .+ 3 .* σ .* randn(rng, 60), 4.0
+            "float increments", _logpdf, StudentTVector(m, σ, 4.0),
+            m .+ 3 .* σ .* randn(rng, 60)
         )
         add!(
-            "floored scales", studentt_loglik, [m; -2.0; 1.0], [σ; -1.0; -3.0],
-            [y; 1; -4], 4.0
+            "floored scales", _logpdf,
+            StudentTVector([m; -2.0; 1.0], [σ; -1.0; -3.0], 4.0), [y; 1; -4]
         )
-        add!("default ν", studentt_loglik, m, σ, y, -1.0)
+        add!("default ν", _logpdf, StudentTVector(m, σ, -1.0), y)
         add!(
-            "n = 220", studentt_loglik, 20 .* randn(rng, 220),
-            exp.(1 .+ 0.5 .* randn(rng, 220)), rand(rng, -40:40, 220), 4.0;
+            "n = 220", _logpdf,
+            StudentTVector(
+                20 .* randn(rng, 220), exp.(1 .+ 0.5 .* randn(rng, 220)), 4.0
+            ),
+            rand(rng, -40:40, 220);
             perf = true
         )
 
@@ -395,12 +403,12 @@
                 ("ρ below its floor", p, -0.5, k),
                 ("ρ above its cap", p, 1.5, k),
             )
-            add!(note, betabinomial_loglik, n, q, ρ, obs)
+            add!(note, _logpdf, BetaBinomialVector(n, q, ρ), obs)
         end
         nb = rand(rng, 0:300, 20)
         add!(
-            "20 vintages", betabinomial_loglik, nb,
-            0.05 .+ 0.9 .* rand(rng, 20), 0.05,
+            "20 vintages", _logpdf,
+            BetaBinomialVector(nb, 0.05 .+ 0.9 .* rand(rng, 20), 0.05),
             [rand(rng, 0:t) for t in nb]; perf = true
         )
 
@@ -546,6 +554,8 @@ end
     agrees(a::Union{Real, AbstractArray{<:Real}}, b) = isapprox(
         a, b; rtol = 1.0e-8
     )
+    ## A distribution argument returns its tangent field by field.
+    agrees(a::Mooncake.Tangent, b) = agrees(a.fields, b.fields)
     agrees(a, b) = a == b
 
     ## Under coverage instrumentation the timings are not those of a fit, so
@@ -619,7 +629,8 @@ end
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
-    using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
+    using Distributions: logpdf
+    using BVDOutbreakSize: NegBinomialVector, StudentTVector,
         onset_scanned_cells, onset_scan_adjust, onset_report_scales
 
     function mgrad(f, args...)
@@ -631,7 +642,9 @@ end
     μ = exp.(4 .+ 0.5 .* randn(rng, 60))
     x = rand(rng, 0:120, 60)
     ## `k` large enough that `p` clamps at `1 − eps` for every count.
-    @test all(iszero, only(mgrad(b -> nbinomial_loglik(1.0e20, b, x), μ)))
+    @test all(
+        iszero, only(mgrad(b -> logpdf(NegBinomialVector(1.0e20, b), x), μ))
+    )
 
     m = 20 .* randn(rng, 60)
     σ = exp.(1 .+ 0.5 .* randn(rng, 60))
@@ -639,11 +652,11 @@ end
     ## A scale at or below its floor, or infinite, passes no derivative to
     ## the scale but still passes one to the mean.
     m0, σ0, y0 = [m; 3.0; -2.0; 0.5], [σ; 0.0; -1.0; Inf], [y; 5; 1; 2]
-    gm, gσ = mgrad((a, b) -> studentt_loglik(a, b, y0, 4.0), m0, σ0)
+    gm, gσ = mgrad((a, b) -> logpdf(StudentTVector(a, b, 4.0), y0), m0, σ0)
     @test all(iszero, gσ[61:63])
     @test all(!iszero, gm[61:63])
     ## A defaulted `ν` passes no derivative.
-    @test iszero(only(mgrad(d -> studentt_loglik(m, σ, y, d), -1.0)))
+    @test iszero(only(mgrad(d -> logpdf(StudentTVector(m, σ, d), y), -1.0)))
 
     ## A scanned cell whose mean is exactly zero, as for an onset date
     ## outside the series, or negative passes no derivative through the
@@ -673,13 +686,13 @@ end
     )
 end
 
-@testitem "Mooncake rules: onset, census and composition rules fire in the joint" tags = [
-    :ad,
-] begin
+@testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin
     using Mooncake: Mooncake, MinimalCtx, ReverseMode
+    using Distributions: _logpdf
     using BVDOutbreakSize: load_observations, joint_fit_args,
         default_breakpoint, onset_vintage_indices,
-        onset_scanned_cells, incare_census, betabinomial_loglik
+        onset_scanned_cells, incare_census, NegBinomialVector,
+        StudentTVector, BetaBinomialVector
 
     ## The argument types `onset_reporting_model` passes on the production
     ## data: float vectors from the moments and the scan levels, the
@@ -699,65 +712,109 @@ end
             typeof(v.prev_vintage_idx), typeof(h.prev_report_days), Float64,
         }
     )
+    ## The onset cells score the history's increments.
+    @test fires(
+        Tuple{
+            typeof(_logpdf), StudentTVector{F, F, Float64},
+            typeof(h.increments),
+        }
+    )
     ## The treatment model's census takes its stocks and offset as float
-    ## vectors. The composition's scored rows reach the BetaBinomial rule as
-    ## the vectors `stick_breaking_loglik` builds.
+    ## vectors. The count streams score integer increments about float
+    ## means, and the composition's rows are the vectors
+    ## `stick_breaking_loglik` builds.
     @test fires(Tuple{typeof(incare_census), F, F, F, Float64, F})
     @test fires(
-        Tuple{typeof(betabinomial_loglik), Vector{Int}, F, Float64, Vector{Int}}
+        Tuple{
+            typeof(_logpdf), NegBinomialVector{Float64, F}, Vector{Int},
+        }
+    )
+    @test fires(
+        Tuple{
+            typeof(_logpdf), BetaBinomialVector{Vector{Int}, F, Float64},
+            Vector{Int},
+        }
     )
 end
 
-@testitem "Mooncake rules: the vector distributions score through the rules" tags = [
+@testitem "Mooncake rules: a vector distribution scores as its entries" tags = [
     :ad,
 ] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
     using Distributions: logpdf, censored
-    using BVDOutbreakSize: nbinomial_loglik, studentt_loglik,
-        betabinomial_loglik, censored_nbinomial_loglik, NegBinomialVector,
-        StudentTVector, BetaBinomialVector, SplitCountVector
+    using BVDOutbreakSize: safe_nbinomial, safe_studentt, safe_betabinomial,
+        safe_rate, nbinomial_logtail, NegBinomialVector, StudentTVector,
+        BetaBinomialVector, SplitCountVector
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
-        return Mooncake.value_and_gradient!!(rule, f, args...)[2][2:end]
+        return Mooncake.value_and_gradient!!(rule, f, args...)
+    end
+    ## Value and gradient agree with the sum of the scalar terms, which
+    ## Mooncake derives for itself, entry by entry.
+    function agrees(a, b)
+        return isapprox(a[1], b[1]; rtol = 1.0e-12) && all(
+            map((x, y) -> isapprox(x, y; rtol = 1.0e-10), a[2][2:end], b[2][2:end])
+        )
     end
 
-    ## `logpdf` of each vector distribution is its summed helper, so the
-    ## helper's rule fires through it and the gradient is the rule's own,
-    ## bit for bit.
     rng = Xoshiro(20260923)
     μ = exp.(4 .+ 0.5 .* randn(rng, 60))
     x = rand(rng, 0:120, 60)
-    @test mgrad((a, b) -> logpdf(NegBinomialVector(a, b), x), 8.3, μ) ==
-        mgrad((a, b) -> nbinomial_loglik(a, b, x), 8.3, μ)
+    nb(k, m, i) = safe_nbinomial(k, safe_rate(m[i]))
+    @test agrees(
+        mgrad((a, b) -> logpdf(NegBinomialVector(a, b), x), 8.3, μ),
+        mgrad((a, b) -> sum(logpdf(nb(a, b, i), x[i]) for i in 1:60), 8.3, μ)
+    )
     ## Every seventh count sits at its ceiling and scores the tail.
     up = [i % 7 == 0 ? float(x[i]) : 1.0e6 for i in 1:60]
-    @test mgrad(
-        (a, b) -> logpdf(censored(NegBinomialVector(a, b); upper = up), x),
-        8.3, μ
-    ) == mgrad((a, b) -> censored_nbinomial_loglik(a, b, up, x), 8.3, μ)
+    function censored_terms(a, b)
+        return sum(
+            x[i] < up[i] ? logpdf(nb(a, b, i), x[i]) :
+                nbinomial_logtail(nb(a, b, i), x[i]) for i in 1:60
+        )
+    end
+    @test agrees(
+        mgrad(
+            (a, b) -> logpdf(censored(NegBinomialVector(a, b); upper = up), x),
+            8.3, μ
+        ),
+        mgrad(censored_terms, 8.3, μ)
+    )
     m = 20 .* randn(rng, 60)
     σ = exp.(1 .+ 0.5 .* randn(rng, 60))
     y = round.(Int, m .+ 3 .* σ .* randn(rng, 60))
-    @test mgrad((a, b, d) -> logpdf(StudentTVector(a, b, d), y), m, σ, 4.0) ==
-        mgrad((a, b, d) -> studentt_loglik(a, b, y, d), m, σ, 4.0)
+    @test agrees(
+        mgrad((a, b, d) -> logpdf(StudentTVector(a, b, d), y), m, σ, 4.0),
+        mgrad(
+            (a, b, d) -> sum(
+                logpdf(safe_studentt(a[i], b[i], d), y[i]) for i in 1:60
+            ), m, σ, 4.0
+        )
+    )
     n = rand(rng, 0:300, 30)
     k = [rand(rng, 0:t) for t in n]
     p = 0.05 .+ 0.9 .* rand(rng, 30)
-    @test mgrad((q, r) -> logpdf(BetaBinomialVector(n, q, r), k), p, 0.05) ==
-        mgrad((q, r) -> betabinomial_loglik(n, q, r, k), p, 0.05)
-    ## The split vector scores its two groups through both rules.
+    bb(q, r, i) = logpdf(safe_betabinomial(n[i], q[i], r), k[i])
+    @test agrees(
+        mgrad((q, r) -> logpdf(BetaBinomialVector(n, q, r), k), p, 0.05),
+        mgrad((q, r) -> sum(bb(q, r, i) for i in 1:30), p, 0.05)
+    )
+    ## The split vector scores each entry by whether it has trials.
     n[[4, 9, 17]] .= 0
-    a, u = findall(>(0), n), findall(iszero, n)
     μs = exp.(3 .+ 0.5 .* randn(rng, 30))
-    @test mgrad(
-        (q, r, s, m) -> logpdf(SplitCountVector(n, q, r, s, m), k),
-        p, 0.05, 8.3, μs
-    ) == mgrad(
-        (q, r, s, m) -> betabinomial_loglik(n[a], q[a], r, k[a]) +
-            nbinomial_loglik(s, m[u], k[u]),
-        p, 0.05, 8.3, μs
+    function split_terms(q, r, s, m)
+        return sum(
+            n[i] > 0 ? bb(q, r, i) : logpdf(nb(s, m, i), k[i]) for i in 1:30
+        )
+    end
+    @test agrees(
+        mgrad(
+            (q, r, s, m) -> logpdf(SplitCountVector(n, q, r, s, m), k),
+            p, 0.05, 8.3, μs
+        ),
+        mgrad(split_terms, p, 0.05, 8.3, μs)
     )
 end
 
@@ -802,11 +859,11 @@ end
     using Random: Xoshiro
     using Mooncake: Mooncake
     using Mooncake.TestUtils: test_rule
-    using Distributions: NegativeBinomial, Normal
+    using Distributions: NegativeBinomial, Normal, logpdf, censored
     using Turing: @model, filldist, to_submodel, DynamicPPL
     using LogDensityProblems: logdensity_and_gradient
     using ADTypes: AutoMooncake
-    using BVDOutbreakSize: nbinomial_logtail, censored_nbinomial_loglik,
+    using BVDOutbreakSize: nbinomial_logtail, NegBinomialVector,
         censored_occupancy_model
 
     rng = Xoshiro(20260923)
@@ -832,7 +889,10 @@ end
     x = rand(rng, 0:120, 20)
     up = [i % 4 == 0 ? x[i] : 10^6 for i in 1:20]
     test_rule(
-        rng, (a, b) -> censored_nbinomial_loglik(a, b, float.(up), x), 8.3, μ;
+        rng,
+        (a, b) -> logpdf(
+            censored(NegBinomialVector(a, b); upper = float.(up)), x
+        ), 8.3, μ;
         is_primitive = false, mode = Mooncake.ReverseMode
     )
 

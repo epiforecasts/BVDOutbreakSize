@@ -7,167 +7,6 @@
 # them against the observed increments.
 
 """
-NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean `μ`
-and dispersion `k`, with clamping on the success probability so extreme
-NUTS proposals during warmup do not trip the distribution domain check.
-Shared by the count-stream observation submodels.
-"""
-function safe_nbinomial(k, μ)
-    g = _nbinomial_params(k, μ)
-    return NegativeBinomial(g.r, g.p)
-end
-
-## `x` where it is finite and positive, otherwise `fallback`, and whether
-## `x` was kept. The domain guard of `safe_nbinomial`'s dispersion and
-## `safe_studentt`'s scale and degrees of freedom.
-@inline function _positive_or(x, fallback)
-    on = isfinite(x) && x > zero(x)
-    return (on ? x : fallback), on
-end
-
-## The guarded parameters `safe_nbinomial(k, μ)` builds from: the dispersion
-## `r`, the floored mean `m` and the success probability `p`, with whether
-## `p` fell inside its clamp. `r` is guarded as well as `p`, because
-## `NegativeBinomial(0, p)` throws `DomainError: r > 0`, which aborts a
-## gradient rather than rejecting the step.
-@inline function _nbinomial_params(k, μ)
-    r, _ = _positive_or(k, eps(typeof(k)))
-    m = max(μ, eps(typeof(μ)))
-    p_raw = r / (r + m)
-    lo = eps(typeof(r))
-    hi = one(r) - lo
-    p_on = isfinite(p_raw) && !(p_raw > hi) && !(p_raw < lo)
-    p = isfinite(p_raw) ? clamp(p_raw, lo, hi) : lo
-    return (; r, m, p, p_on)
-end
-
-"""
-Summed log-likelihood of the counts `obs` under one
-[`safe_nbinomial`](@ref) per entry, about the [`safe_rate`](@ref) of the
-matching mean in `modelled` with the shared dispersion `k`. Equal to what
-one `~` per count accumulates, as a single term. `src/mooncake_rules.jl`
-gives it a closed-form Mooncake rule, so the backend does not tape each
-`logpdf`.
-"""
-function nbinomial_loglik(k, modelled::AbstractVector, obs::AbstractVector)
-    s = zero(float(promote_type(typeof(k), eltype(modelled))))
-    @inbounds for i in eachindex(modelled, obs)
-        s += logpdf(safe_nbinomial(k, safe_rate(modelled[i])), obs[i])
-    end
-    return s
-end
-
-"""
-Log-probability that a draw from the `NegativeBinomial` `d` is at least `x`,
-the censored tail of a count at its ceiling. Equal to `logccdf(d, x - 1)`,
-computed as `1 − I_p(r, x)` from `SpecialFunctions.beta_inc`, whose
-plain-Julia body Mooncake differentiates. `logccdf` calls Rmath's
-`pnbinom` through a `ccall`, which Mooncake cannot. A tail too small for a
-normal float is summed term by term in log space from `x` up, until a term
-adds less than `exp(-40)` of the total. A fractional `x` takes the tail from
-the next count up.
-"""
-function nbinomial_logtail(d::NegativeBinomial, x::Real)
-    x > 0 || return zero(float(typeof(d.p)))
-    u = ceil(x)
-    I, J = beta_inc(d.r, u, d.p)
-    I < J && return log1p(-I)
-    J >= floatmin(J) && return log(J)
-    s = logpdf(d, u)
-    t = logpdf(d, u + 1)
-    while t > s - 40
-        s = logaddexp(s, t)
-        u += 1
-        t = logpdf(d, u + 1)
-    end
-    return s
-end
-
-"""
-Summed right-censored NegativeBinomial log-likelihood of the counts `obs`
-about the means `means`, each censored at the matching `ceilings`. A count
-below its ceiling scores the uncensored `logpdf`, so those go through
-[`nbinomial_loglik`](@ref) together. A count at its ceiling scores the
-censored tail [`nbinomial_logtail`](@ref), and one above it `-Inf`. Equal
-to one `~ censored(...)` per count.
-"""
-function censored_nbinomial_loglik(k, means, ceilings, obs)
-    upper = safe_rate.(ceilings)
-    below = obs .< upper
-    s = nbinomial_loglik(k, means[below], obs[below])
-    @inbounds for i in findall(!, below)
-        s += obs[i] > upper[i] ? oftype(s, -Inf) :
-            nbinomial_logtail(safe_nbinomial(k, safe_rate(means[i])), obs[i])
-    end
-    return s
-end
-
-"""
-NaN / Inf-safe overdispersed `Binomial` (`BetaBinomial`) constructor
-parameterised by the trial count `n`, the mean positive probability `p`
-and an intra-window overdispersion `ρ ∈ (0, 1)`. With concentration
-`s = (1 − ρ)/ρ`, `α = s·p` and `β = s·(1 − p)`, the `BetaBinomial(n, α, β)`
-has mean `n·p` and variance `n·p·(1 − p)·(1 + (n − 1)·ρ)`, so `ρ → 0`
-recovers the plain `Binomial(n, p)` and larger `ρ` inflates the variance
-above it. This carries the day-to-day laboratory batching and within-window
-positivity heterogeneity a pooled per-window `p` does not. `ρ` is floored
-away from `0` and `p` clamped into `(0, 1)` so the distribution stays
-defined under extreme NUTS proposals. Shared by the confirmed-positives
-windows.
-"""
-function safe_betabinomial(n::Integer, p, ρ)
-    T = float(promote_type(typeof(p), typeof(ρ)))
-    g = _betabinomial_shapes(p, _betabinomial_concentration(T, ρ).s)
-    return BetaBinomial(n, g.α, g.β)
-end
-
-## The concentration `s = (1 − ρc) / ρc` of `safe_betabinomial`, with the
-## clamped `ρc` and whether `ρ` fell inside its clamp. `ρ` is floored at
-## 1e-6 (capping `s` at ≈1e6) so a near-zero draw stays a well-conditioned
-## near-Binomial, and capped below 1 so `s` stays positive.
-@inline function _betabinomial_concentration(::Type{T}, ρ) where {T}
-    ρ_lo = T(1.0e-6)
-    ρ_hi = one(T) - ρ_lo
-    ρ_on = isfinite(ρ) && !(ρ < ρ_lo) && !(ρ > ρ_hi)
-    ρc = isfinite(ρ) ? clamp(T(ρ), ρ_lo, ρ_hi) : ρ_lo
-    return (; s = (one(T) - ρc) / ρc, ρc, ρ_on)
-end
-
-## The shapes `α = s·pc` and `β = s·(1 − pc)` of `safe_betabinomial` at
-## concentration `s`, each floored at `eps`, with the mean `pc` clamped into
-## `(0, 1)`. Also returns whether `p` fell inside its clamp and whether each
-## shape sits above its floor.
-@inline function _betabinomial_shapes(p, s::T) where {T}
-    lo = eps(T)
-    p_on = isfinite(p) && !(p < lo) && !(p > one(T) - lo)
-    pc = isfinite(p) ? clamp(T(p), lo, one(T) - lo) : one(T) / 2
-    sα = s * pc
-    sβ = s * (one(T) - pc)
-    return (;
-        α = max(sα, lo), β = max(sβ, lo), pc, p_on,
-        α_on = sα > lo, β_on = sβ > lo,
-    )
-end
-
-"""
-Summed log-likelihood of the counts `obs` under one
-[`safe_betabinomial`](@ref) per entry, with trial counts `trials`, mean
-probabilities `p` and the shared overdispersion `ρ`. Equal to what one `~`
-per count accumulates, as a single term. `src/mooncake_rules.jl` gives it a
-closed-form Mooncake rule, so the backend does not tape each `logpdf`.
-"""
-function betabinomial_loglik(
-        trials::AbstractVector{<:Integer}, p::AbstractVector, ρ,
-        obs::AbstractVector
-    )
-    s = zero(float(promote_type(eltype(p), typeof(ρ))))
-    @inbounds for i in eachindex(trials, p, obs)
-        s += logpdf(safe_betabinomial(trials[i], p[i], ρ), obs[i])
-    end
-    return s
-end
-
-"""
 Modelled between-vintage increments of a daily series `daily`, summed
 directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
@@ -2913,70 +2752,6 @@ end
 # separate multiplicative factor.
 
 """
-    safe_studentt(μ, σ, ν)
-
-NaN / Inf-safe location-scale Student-t distribution `μ + σ · Tν`, built
-from `Distributions.TDist(ν)` via the affine-combination operators. `σ` is
-floored away from zero and non-finite values, mirroring
-[`safe_nbinomial`](@ref)'s domain guard. A non-positive or non-finite `ν`
-falls back to `4`, the caller's own default, rather than to the smallest
-value `TDist` accepts: `TDist(1)` is Cauchy, so a floor at the domain edge
-would turn a bad degrees-of-freedom argument into a likelihood with no mean
-or variance.
-
-Used by [`onset_reporting_model`](@ref) to score the reporting-triangle
-increments, which are frequently negative (a later scan reads fewer cases
-at some onset date than an earlier one, from digitisation noise rather than
-a real reporting reversal) and so cannot take a count distribution.
-"""
-function safe_studentt(μ::Real, σ::Real, ν::Real)
-    σc, _ = _studentt_scale(σ)
-    νc, _ = _studentt_dof(ν)
-    return μ + σc * TDist(νc)
-end
-
-## `safe_studentt`'s guards on the scale and the degrees of freedom, each
-## returning the guarded value and whether the argument was kept.
-_studentt_scale(σ) = _positive_or(σ, eps(typeof(float(σ))))
-_studentt_dof(ν) = _positive_or(ν, oftype(float(ν), 4))
-
-"""
-Summed log-likelihood of the increments `obs` under one
-[`safe_studentt`](@ref) per cell, about `means[i]` with scale `sds[i]` and
-the shared degrees of freedom `ν`, with the same guards. Equal to what one
-`~` per cell accumulates, as a single term, with the normalising constant
-evaluated once. `src/mooncake_rules.jl` gives it a closed-form Mooncake rule, so
-the backend does not tape each `logpdf`.
-"""
-function studentt_loglik(
-        means::AbstractVector, sds::AbstractVector,
-        obs::AbstractVector, ν::Real
-    )
-    T = float(promote_type(eltype(means), eltype(sds), typeof(ν)))
-    νc, _ = _studentt_dof(ν)
-    νp12 = (νc + 1) / 2
-    ## `TDist`'s log-density at zero is its normalising constant, so each
-    ## cell's term below is the location-scale `logpdf` evaluated in full.
-    c = logpdf(TDist(νc), zero(T))
-    s = zero(T)
-    @inbounds for i in eachindex(means, sds, obs)
-        s += _studentt_cell(c, νp12, νc, means[i], sds[i], obs[i]).ℓ
-    end
-    return s
-end
-
-## One cell's term of `studentt_loglik`, given the normalising constant `c`,
-## `(ν + 1) / 2` and the guarded `ν`, with the pieces its gradient reads: the
-## standardised residual `z`, `log1p(z² / ν)` and the guarded scale with
-## whether it was kept.
-@inline function _studentt_cell(c, νp12, νc, μ, σ, x)
-    σc, σ_on = _studentt_scale(σ)
-    z = (x - μ) / σc
-    l1 = log1p(z^2 / νc)
-    return (; ℓ = (c - νp12 * l1) - log(σc), z, l1, σc, σ_on)
-end
-
-"""
     onset_increments_model(means, sds, increments, ν)
 
 Heavy-tailed likelihood for the reporting-triangle increment cells: cell `i`
@@ -4126,15 +3901,14 @@ less the counts before it in the group, with the overdispersion `ρ` and the
 conditional share `share_r / tail_r` clamped into `[0, 1]`. The running
 tail `tail_r = 1 − Σ_{q < r} share_q` is floored at 1e-10. The last row of
 a group is the remainder and adds nothing, so a one-row group adds nothing.
-The rows are scored as one [`betabinomial_loglik`](@ref), through its
-Mooncake rule.
+The rows are scored as one [`BetaBinomialVector`](@ref).
 """
 function stick_breaking_loglik(
         groups::AbstractVector{<:Integer}, counts::AbstractVector{<:Integer},
         shares::AbstractVector, ρ::Real
     )
     cells = _stick_breaking_cells(groups, counts, shares)
-    return betabinomial_loglik(cells.trials, cells.p, ρ, cells.obs)
+    return logpdf(BetaBinomialVector(cells.trials, cells.p, ρ), cells.obs)
 end
 
 ## The scored rows of `stick_breaking_loglik`, each a trial count, a

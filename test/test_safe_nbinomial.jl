@@ -95,7 +95,7 @@ end
 end
 
 @testitem "nbinomial_logtail matches the censored logpdf at the ceiling" begin
-    using BVDOutbreakSize: nbinomial_logtail, censored_nbinomial_loglik
+    using BVDOutbreakSize: nbinomial_logtail, NegBinomialVector
     using Distributions: NegativeBinomial, logpdf, censored
 
     ## The reference is Distributions' `censored` logpdf, which takes the tail
@@ -110,5 +110,7 @@ end
     @test nbinomial_logtail(d, 44.5) ≈
         logpdf(censored(d; upper = 44.5), 44.5) rtol = 1.0e-10
     ## A count above its ceiling has no probability.
-    @test censored_nbinomial_loglik(8.3, [30.0], [40.0], [41]) == -Inf
+    @test logpdf(
+        censored(NegBinomialVector(8.3, [30.0]); upper = [40.0]), [41]
+    ) == -Inf
 end

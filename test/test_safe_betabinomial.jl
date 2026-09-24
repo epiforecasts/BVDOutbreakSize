@@ -75,7 +75,7 @@ end
 
 @testitem "BetaBinomialVector matches one BetaBinomial per count" begin
     using BVDOutbreakSize: BetaBinomialVector, safe_betabinomial,
-        betabinomial_loglik, province_composition_model
+        province_composition_model
     using Distributions: logpdf, product_distribution
     using Random: Xoshiro
     using Turing: DynamicPPL, returned
@@ -89,7 +89,6 @@ end
         [safe_betabinomial(trials[i], p[i], ρ) for i in 1:5]
     )
     @test length(d) == 5
-    @test logpdf(d, x) == betabinomial_loglik(trials, p, ρ, x)
     @test logpdf(d, x) ≈ logpdf(product, x)
     ## The same draws as the product it stands in for, from the same seed.
     @test rand(Xoshiro(7), d) == rand(Xoshiro(7), product)

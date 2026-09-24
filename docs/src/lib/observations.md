@@ -13,6 +13,6 @@ Pages = ["observations.md"]
 
 ```@autodocs
 Modules = [BVDOutbreakSize]
-Pages = ["models/observations.jl", "models/observation_vectors.jl"]
+Pages = ["models/observations.jl", "models/observation_distributions.jl"]
 Private = false
 ```

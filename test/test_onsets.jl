@@ -1526,7 +1526,7 @@ end
 end
 
 @testitem "summed Student-t likelihood matches one term per cell" begin
-    using BVDOutbreakSize: safe_studentt, studentt_loglik,
+    using BVDOutbreakSize: safe_studentt, StudentTVector,
         onset_increments_model
     using Distributions: logpdf
     using Random: Xoshiro
@@ -1541,10 +1541,11 @@ end
     per_term(ν) = sum(logpdf(safe_studentt(μ[i], σ[i], ν), x[i]) for i in 1:6)
     ## A defaulted `ν` falls back to 4 in both.
     for ν in (4.0, 1.5, -1.0)
-        @test studentt_loglik(μ, σ, x, ν) ≈ per_term(ν)
+        @test logpdf(StudentTVector(μ, σ, ν), x) ≈ per_term(ν)
         @test loglik(onset_increments_model(μ, σ, x, ν)) ≈ per_term(ν)
     end
-    @test studentt_loglik(μ, σ, x, -1.0) == studentt_loglik(μ, σ, x, 4.0)
+    @test logpdf(StudentTVector(μ, σ, -1.0), x) ==
+        logpdf(StudentTVector(μ, σ, 4.0), x)
     @test loglik(onset_increments_model(Float64[], Float64[], Int[], 4.0)) == 0
 
     ## A `missing` vector samples as one variable under the whole-vector
