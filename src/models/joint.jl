@@ -501,13 +501,14 @@ end
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
-        region_correlation::Bool = true
+        region_correlation::Bool = true,
+        basis::AbstractMatrix = sum_to_zero_basis(n_patches)
     )
     patch_state ~ to_submodel(
         patch_infection(
             n, n_patches;
             breakpoint, rt_start, rt_walk_start,
-            importation_kernel, region_correlation
+            importation_kernel, region_correlation, basis
         ), false
     )
     onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
@@ -684,6 +685,9 @@ single-population model, since the sum-to-zero deviations vanish, there is
 nothing to import between, and no per-province likelihood is scored.
 `region_correlation = false` fits the provincial `Rt` deviations without a
 cross-province correlation (see [`patch_rt_model`](@ref)).
+`region_basis` is the sum-to-zero basis ([`sum_to_zero_basis`](@ref)) the
+deviation, importation and composition sites share. It is built once when
+the model is constructed and passed to each of them.
 
 The spatial information enters through two composition terms. The
 per-province confirmed cases and confirmed deaths in the situation
@@ -762,6 +766,7 @@ reproduction number implied by the summed patch infections.
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
         region_correlation::Bool = true,
+        region_basis::AbstractMatrix = sum_to_zero_basis(n_patches),
         composition = province_composition_model,
         province_increments::Union{
             Missing, AbstractMatrix{<:Integer},
@@ -815,7 +820,8 @@ reproduction number implied by the summed patch infections.
     latent ~ to_submodel(
         _patch_latent(
             n, n_patches, breakpoint, patch_infection;
-            rt_start, rt_walk_start, importation_kernel, region_correlation
+            rt_start, rt_walk_start, importation_kernel, region_correlation,
+            basis = region_basis
         ), false
     )
     patch_state = latent.patch_state
@@ -974,7 +980,8 @@ reproduction number implied by the summed patch infections.
         composition_state ~ to_submodel(
             composition(
                 province_increments, modelled_prov;
-                testing_covariate = province_testing_covariate
+                testing_covariate = province_testing_covariate,
+                basis = region_basis
             )
         )
         province_shares := composition_state.shares
@@ -1003,7 +1010,8 @@ reproduction number implied by the summed patch infections.
                 province_death_increments,
                 modelled_deaths_prov;
                 ascertainment_sd_prior = death_ascertainment_sd_prior,
-                severity_sd_prior = province_cfr_sd_prior
+                severity_sd_prior = province_cfr_sd_prior,
+                basis = region_basis
             )
         )
         province_death_shares := death_composition_state.shares

@@ -1220,7 +1220,10 @@ the basis, so the implied prior is the same for every patch and every pair
 of patches whatever order the patches come in. `ν` defaults to `n - 1`,
 the most diffuse proper choice, and `c = region_drift_scale / √ν`. The
 level at the first knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`,
-sharing the drift's covariance shape at its own scale.
+sharing the drift's covariance shape at its own scale. `Q` is the `basis`
+keyword, built by the caller and passed in. With the draws `z_k` as the
+columns of `Z`, every knot's innovation comes from the one product
+`c Q A Z`.
 
 With `region_correlation = false` the innovation is `s Q z` with one scale
 `s ~ region_drift_sd_prior` and the level `σ_level Q z_level`. Every patch
@@ -1297,7 +1300,7 @@ draws to one knot's innovations.
         region_correlation::Bool = true,
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
-        basis = sum_to_zero_basis(n_patches)
+        basis::AbstractMatrix = sum_to_zero_basis(n_patches)
     )
     ## Common national trend, the single-patch walk unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
@@ -1397,14 +1400,12 @@ draws to one knot's innovations.
     @inbounds for i in 1:n_patches
         δ_knots[i, 1] = lvl[i]
     end
-    @inbounds for k in 2:nb
-        off = (k - 2) * nd
-        for i in 1:n_patches
-            acc = zero(Tp)
-            for j in 1:nd
-                acc += F_drift[i, j] * z_drift[off + j]
-            end
-            δ_knots[i, k] = φ * δ_knots[i, k - 1] + acc
+    ## Every knot's innovation in one product, column `k - 1` for knot `k`,
+    ## then the AR(1) retention as a scan over the knots.
+    if nb > 1
+        innovations = F_drift * reshape(z_drift, nd, nb - 1)
+        @inbounds for k in 2:nb, i in 1:n_patches
+            δ_knots[i, k] = φ * δ_knots[i, k - 1] + innovations[i, k - 1]
         end
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
@@ -1518,7 +1519,7 @@ the others, which is what the imports figure on the analysis page draws.
         importation_effect_prior = Normal(0, 0.5),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         region_correlation::Bool = true,
-        basis = sum_to_zero_basis(n_patches),
+        basis::AbstractMatrix = sum_to_zero_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1539,7 +1540,7 @@ the others, which is what the imports figure on the analysis page draws.
     rt_state ~ to_submodel(
         rt(
             n, n_patches, log(R0);
-            breakpoint, rt_start, rt_walk_start, region_correlation
+            breakpoint, rt_start, rt_walk_start, region_correlation, basis
         ), false
     )
     Rt_matrix = rt_state.Rt_matrix
