@@ -2015,6 +2015,10 @@ end
     θh = rand(Xoshiro(2), mh)
     fut = filter(k -> !(k in k0), collect(keys(θh)))
     @test all(k -> occursin(r"future|forecast", string(k)), fut)
-    @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), patch_chain) ==
-        logjoint(patch_model, patch_chain)
+    ## To rounding: one of 100 prior draws differs in the last two bits, while
+    ## the fixtures in test_forecast_horizon.jl match to the bit.
+    @test isapprox(
+        logjoint(fix(mh, Dict(k => θh[k] for k in fut)), patch_chain),
+        logjoint(patch_model, patch_chain); rtol = 1.0e-12
+    )
 end

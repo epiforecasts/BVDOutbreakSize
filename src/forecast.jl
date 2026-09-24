@@ -164,10 +164,12 @@ function forecast_reported(
     end
     iso = at("forecast_isolation.obs")
     if !isnothing(iso)
-        df.bed_demand = round.(Int, at("forecast_bed_demand"))
+        ## The modelled demand and capacity are latent means, so they stay
+        ## floats: a prior draw far in the tail can overflow an integer.
+        df.bed_demand = round.(at("forecast_bed_demand"))
         df.isolation_level = round.(Int, iso)
         df.bed_shortfall = max.(
-            df.bed_demand .- round.(Int, at("forecast_bed_capacity")), 0
+            df.bed_demand .- round.(at("forecast_bed_capacity")), 0.0
         )
         df.admissions_fc = round.(Int, at("forecast_admissions.obs"))
         df.incare_deaths_fc = at("forecast_incare_deaths.increments")
