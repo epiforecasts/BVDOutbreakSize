@@ -46,6 +46,11 @@ Changes since v2.1.0.
 
 ### Report
 
+- The National page shows a one-line fit verdict and a count of the streams still reporting, with the diagnostics and data currency tables in dropdowns (#868).
+  The summary dashboard shows the same verdict.
+- The onset snapshot nowcasts move to the national in-sample page, and the province case-fatality ratios to the Provinces page (#868).
+  The in-sample pages open each section with a one-line subtitle.
+- The Provinces page shows its summary figure and a table per province in place of the per-province bullets (#868).
 - The province in-sample page scores each province's confirmed cases and deaths as counts, with the national total predicted rather than held at its observed value (#842).
   Its summary gives the count-scale coverage overall and per province.
 - The offline `analysis.html` is gone (#839).
