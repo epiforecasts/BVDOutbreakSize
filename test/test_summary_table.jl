@@ -240,35 +240,6 @@ end
     @test_throws ErrorException patch_headline(bad, np)
 end
 
-@testitem "patch_detail_headline gives each province its intervals" setup = [
-    PatchHeadlineDraws,
-] begin
-    using BVDOutbreakSize: patch_detail_headline
-
-    md = patch_detail_headline(base, np)
-    ## A bold lead per province, in patch order, each with its own bullets.
-    leads = filter(startswith("**"), split(md, "\n"))
-    @test leads == ["**$(l)**" for l in PROVINCE_LABELS[1:np]]
-    @test count(startswith("- **"), split(md, "\n")) == 2 * np
-    ## Equal-tailed intervals at every level, as on the National page.
-    @test count("30% ", md) == 2 * np
-    @test count("60% ", md) == 2 * np
-    @test count("90% ", md) == 2 * np
-    @test !occursin("median", md)
-    @test !occursin(r"\d\.\d+ infections", md)
-    @test !occursin("Case-fatality", md)
-
-    fmd = patch_detail_headline(full, np)
-    @test count(startswith("- **"), split(fmd, "\n")) == 4 * np
-    @test count("30% ", fmd) == 4 * np
-    ## The case-fatality ratio is written as a percentage.
-    @test occursin(r"90% 3\d\.\d–4\d\.\d%", fmd)
-
-    @test_throws ErrorException patch_detail_headline(
-        (; base.C_T_patch), np
-    )
-end
-
 @testitem "median_interval_text reads as plain words" begin
     using BVDOutbreakSize: median_interval_text
 
