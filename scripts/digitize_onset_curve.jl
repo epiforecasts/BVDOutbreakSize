@@ -641,7 +641,12 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         dead = min(total, round(Int, max(0.0, nr[jb] - 0.5) / ppc))
         push!(rows, (last_tick + Day(off), total - dead, dead))
     end
-    # drop trailing zero rows and isolated tiny strays past the curve tail
+    # drop leading and trailing zero rows (a stray anti-alias column near
+    # the y-axis or the band edge reads as a bar of height 0) and isolated
+    # tiny strays past the curve tail
+    while !isempty(rows) && rows[1][2] + rows[1][3] == 0
+        popfirst!(rows)
+    end
     while !isempty(rows) && rows[end][2] + rows[end][3] == 0
         pop!(rows)
     end
