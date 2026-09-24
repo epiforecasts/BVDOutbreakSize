@@ -1096,20 +1096,15 @@ const _PROVINCE_FORECAST_STREAMS = (
 )
 
 ## A [`forecast_provinces`](@ref) frame for the province summaries. A frame
-## that already is one passes through. Anything else, such as a national
-## [`forecast_reported`](@ref) result from an older call site, is replaced by
-## the projection from `chn` at `horizon`, so every province summary reads
-## one method.
+## that already is one passes through. A national [`forecast_reported`](@ref)
+## result is replaced by the province forecast read from the same draws `pp`
+## at `horizon`, so every province summary reads one method.
 function _as_province_projection(
-        chn, fc, np::Integer, patch_labels::AbstractVector;
+        pp, fc, np::Integer, patch_labels::AbstractVector;
         horizon::Integer = 7
     )
     :patch in propertynames(fc) && return fc
-    _has_key(chn, :R_T_patch) || error(
-        "chain carries no `R_T_patch`; it was not sampled from `bvd_joint` " *
-            "with more than one patch, so it cannot be projected by province."
-    )
-    return forecast_provinces(chn; horizon, n_patches = np, patch_labels)
+    return forecast_provinces(pp; horizon, n_patches = np, patch_labels)
 end
 
 ## Per-province forecast draws: one `(stream_label, province, draws)` entry
@@ -1117,11 +1112,11 @@ end
 ## outer. Shared by the province forecast table, figures and release archive,
 ## so all of them read one projection.
 function _province_forecast_draws(
-        chn, fc, np::Integer,
+        pp, fc, np::Integer,
         patch_labels::AbstractVector;
         horizon::Integer = 7
     )
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon)
     return _province_projection_draws(proj, np, patch_labels)
 end
 
@@ -1168,20 +1163,21 @@ deaths expected in each province over the week to `T + 7`, as the same
 The same content is drawn by [`plot_province_forecast`](@ref) and archived
 for scoring by [`province_forecast_archive`](@ref).
 
-`fc` is a [`forecast_provinces`](@ref) frame, each province projected by its
-own renewal. A national [`forecast_reported`](@ref) result is replaced by the
-projection from `chn` at `horizon` days, which also labels the rows. The table adds each province's new latent
-infections and its reproduction number at the horizon.
+`fc` is a [`forecast_provinces`](@ref) frame. A national
+[`forecast_reported`](@ref) result is replaced by the province forecast read
+from the posterior-predictive draws `pp` at `horizon` days, which also labels
+the rows. The table adds each province's new latent infections and its
+reproduction number at the horizon.
 """
 function province_forecast_table(
-        chn, fc;
+        pp, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         horizon::Integer = 7,
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon)
     entries = [
         (province, "New $(label) by T+$(horizon)", draws, digits)
             for (label, province, draws) in _province_projection_draws(
@@ -1224,21 +1220,22 @@ function province_forecast_table(
 end
 
 """
-Per-province forecast against what was observed. `chn` is a frozen patch
-fit, and `observed` and `baseline` the per-province cumulative counts at the
+Per-province forecast against what was observed. `pp` is the
+posterior-predictive draws of a frozen patch fit ([`forecast_draws`](@ref)),
+and `observed` and `baseline` the per-province cumulative counts at the
 target date and at the forecast origin, so the truth is their difference.
 
-Each province's forecast is the [`forecast_provinces`](@ref) projection from
-`chn` over `horizon` days. `fc` is either that projection or a national
-[`forecast_reported`](@ref) result, which is replaced by the projection so
-the scores read the same method as the report.
+Each province's forecast is the [`forecast_provinces`](@ref) forecast from
+`pp` over `horizon` days. `fc` is either that frame or a national
+[`forecast_reported`](@ref) result, which is replaced by the province
+forecast from the same draws.
 
 Reports the 90% predictive interval, the observed count, and whether the
 observation fell inside the interval, one row per province and stream. No
 central estimate is reported.
 """
 function province_forecast_vs_truth(
-        chn, fc;
+        pp, fc;
         observed::AbstractVector, baseline::AbstractVector,
         death_observed::Union{Nothing, AbstractVector} = nothing,
         death_baseline::Union{Nothing, AbstractVector} = nothing,
@@ -1248,7 +1245,7 @@ function province_forecast_vs_truth(
         digits::Integer = 0
     )
     np = min(n_patches, length(patch_labels))
-    proj = _as_province_projection(chn, fc, np, patch_labels; horizon)
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon)
     cols = propertynames(proj)
     rows = NamedTuple[]
     function add!(stream, p, draws, truth)

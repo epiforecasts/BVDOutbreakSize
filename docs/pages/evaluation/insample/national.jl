@@ -570,10 +570,7 @@ _onset_cells_by_report = Dict{Int, Vector{Int}}()
 for (i, r) in enumerate(obs.onset_curve_history.report_days)
     push!(get!(_onset_cells_by_report, r, Int[]), i)
 end
-_onset_hazard = reconstruct_onset_hazard(
-    chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end
-)
+_onset_hazard = fitted_onset_hazard(fit_model("joint"), chn_joint)
 _onset_daily_draws = onset_daily_draws(chn_joint)
 _onset_replicated = onset_bar_replicator(
     chn_joint, Random.MersenneTwister(20260729)

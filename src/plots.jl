@@ -2245,75 +2245,23 @@ function reconstruct_rt(
 end
 
 """
-    reconstruct_onset_hazard(chn; grid_start, grid_end, week = 7)
+    fitted_onset_hazard(model, chn) -> NamedTuple
 
-Reconstruct each posterior draw's symptom-onset reporting-delay hazard from
-the non-centred components the chain stores, returning `(; logit_h0, γ,
-alpha)` as three `ndraws`-long vectors of vectors. Mirrors
-[`onset_report_hazard_model`](@ref). `logit_h0` is the baseline delay random
-effect `η0 .+ σ_h0 .* z_h0`. `γ` is the report-date calendar walk, weekly
-knots ([`knot_days`](@ref)) following a non-centred cumulative sum of
-`σ_γ .* z_γ` linearly interpolated ([`interpolate_knots`](@ref)) onto the
-daily grid `[grid_start, grid_end]`. `alpha` is read off the chain's
-`onset_ascertainment` deterministic rather than rebuilt, since it depends on
-the confirmed pipeline's anchor series, which is not itself stored.
-
-`grid_start` and `grid_end` are properties of the digitised triangle rather
-than of the chain, so the caller supplies them. A grid whose knot count
-disagrees with the stored innovation length raises rather than silently
-building a walk of the wrong length.
-
-Shared by the report's reporting-delay figures and by
-[`forecast_onsets`](@ref), so the fitted hazard the analysis plots and the
-one the forecast projects forward are the same object.
+Every posterior draw's fitted symptom-onset reporting hazard, read off the
+fitted `model`'s own onset-reporting state at each draw of `chn`
+(`returned`): `logit_h0` (the baseline delay hazard), `γ` (the report-date
+calendar walk) and `alpha` (the ascertainment level over the triangle's
+onset dates), one vector per draw, as the composers return them. The
+model is the one the chain was fitted with, such as a fit spec's `model()`
+in the report.
 """
-function reconstruct_onset_hazard(
-        chn; grid_start::Integer,
-        grid_end::Integer, week::Integer = 7
+function fitted_onset_hazard(model::Model, chn)
+    states = [r.onset_report_state for r in vec(returned(model, chn))]
+    return (;
+        logit_h0 = [collect(Float64, st.logit_h0) for st in states],
+        γ = [collect(Float64, st.γ) for st in states],
+        alpha = [collect(Float64, st.alpha) for st in states],
     )
-    η0 = _draws(chn, Symbol("onset_report_state.η0"))
-    σ_h0 = _draws(chn, Symbol("onset_report_state.σ_h0"))
-    σ_γ = _draws(chn, Symbol("onset_report_state.σ_γ"))
-    zh0 = [
-        collect(z)
-            for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))
-    ]
-    zγ = [
-        collect(z)
-            for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))
-    ]
-    alpha = [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
-
-    nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
-    days = knot_days(nt; week, start = 1)
-    nb = length(days)
-    if !isempty(zγ) && length(zγ[1]) != max(nb - 1, 1)
-        error(
-            "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
-                "gives $(max(nb - 1, 1)) calendar-walk steps but the chain " *
-                "has $(length(zγ[1])); pass the same grid the fit used " *
-                "(minimum onset day to maximum report day of the scored " *
-                "cells)."
-        )
-    end
-    if !isempty(alpha) && length(alpha[1]) != nt
-        error(
-            "reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
-                "gives $nt onset dates but the chain's `onset_ascertainment` " *
-                "has length $(length(alpha[1])); pass the same grid the fit " *
-                "used."
-        )
-    end
-
-    ndraws = length(η0)
-    logit_h0 = Vector{Vector{Float64}}(undef, ndraws)
-    γ = Vector{Vector{Float64}}(undef, ndraws)
-    for i in 1:ndraws
-        logit_h0[i] = η0[i] .+ σ_h0[i] .* zh0[i]
-        steps = σ_γ[i] .* zγ[i][1:max(nb - 1, 0)]
-        γ[i] = interpolate_knots(vcat(0.0, cumsum(steps)), days, nt)
-    end
-    return (; logit_h0, γ, alpha)
 end
 
 """
@@ -2331,7 +2279,7 @@ the prediction will be compared against to keep the two like for like.
 
 `onsets` holds each draw's daily onsets indexed by grid day, the `diff` of
 the chain's `cumulative_onsets`. `hazard` is
-[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`, with `alpha`
+[`fitted_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`, with `alpha`
 indexed from `grid_start` and held flat outside the fitted grid. The two are
 paired draw by draw and must come from one fit. Summarised by
 [`plot_onset_nowcast_grid`](@ref).
@@ -3296,10 +3244,10 @@ end
 
 ## Predictive counts for every patch at every vintage, one trajectory per
 ## posterior draw, allocating `totals[d][i]` for draw `d` at vintage `i`.
-## Patch `p` takes a `BetaBinomial` count out of what patches `1 ... p-1`
-## left of the total, at that patch's conditional share, and the last patch
-## takes the remainder. A vintage with a total of zero allocates zero to
-## every patch.
+## Each draw's split is drawn from [`composition_split_model`](@ref), the
+## stick-breaking the fitted composition scores and the forecast splits
+## with, so there is one province split. A vintage with a total of zero
+## allocates zero to every patch.
 ##
 ## The seed is fixed so a rebuilt report redraws the same band rather than
 ## moving it by the Monte Carlo error of the simulation.
@@ -3308,21 +3256,14 @@ function _composition_counts(ms, rho, totals; seed::Integer = 20_240)
     np, nv = size(first(ms))
     out = [[zeros(Int, nv) for _ in ms] for _ in 1:np]
     for (d, m) in enumerate(ms)
-        for i in 1:nv
-            total = totals[d][i]
-            total > 0 || continue
-            remaining = total
-            tail = 1.0
-            for p in 1:(np - 1)
-                p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
-                out[p][d][i] = rand(
-                    rng,
-                    safe_betabinomial(max(remaining, 0), p_cond, rho[d])
-                )
-                remaining -= out[p][d][i]
-                tail = max(tail - m[p, i], 1.0e-10)
-            end
-            out[np][d][i] = max(remaining, 0)
+        split = composition_split_model(
+            missing, m, [max(Int(t), 0) for t in totals[d]], rho[d]
+        )
+        x = first(
+            init!!(rng, split, VarInfo(), InitFromPrior())
+        ).obs_increments
+        for p in 1:np, i in 1:nv
+            out[p][d][i] = x[p, i]
         end
     end
     return out
@@ -3629,23 +3570,23 @@ This is the figure form of [`province_forecast_table`](@ref), and the figure
 the release archive [`province_forecast_archive`](@ref) carries the draws
 behind.
 
-`fc` is a [`forecast_provinces`](@ref) frame, each province projected by
-its own renewal. A national [`forecast_reported`](@ref) result is replaced by
-the one-week projection from `chn`.
+`fc` is a [`forecast_provinces`](@ref) frame. A national
+[`forecast_reported`](@ref) result is replaced by the one-week province
+forecast read from the posterior-predictive draws `pp`.
 
 Panels are drawn only for the streams `fc` carries, so a forecast without the
 confirmed deaths column shows the cases panel alone, and a forecast carrying
 neither returns an empty figure.
 """
 function plot_province_forecast(
-        chn, fc::DataFrame;
+        pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
         title::AbstractString = "One-week-ahead forecast by province"
     )
     np = min(n_patches, length(patch_labels))
-    entries = _province_forecast_draws(chn, fc, np, patch_labels)
+    entries = _province_forecast_draws(pp, fc, np, patch_labels)
     isempty(entries) && return Figure()
     ## One panel per stream, each holding every province's interval on the
     ## shared province axis.
@@ -3678,8 +3619,8 @@ function plot_province_forecast(
     CairoMakie.Label(
         fig[2, 1:nc],
         "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province is projected by its own " *
-            "renewal equation.";
+            "the median as a dot. Each province is forecast by the fitted " *
+            "patch model, and the provinces add up to the national forecast.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3694,7 +3635,8 @@ per stream with its 90% predictive interval shaded.
 
 The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
 [`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
-result is replaced by the one-week projection from `chn`.
+result is replaced by the one-week province forecast read from the draws
+`pp`.
 
 `observed` optionally gives a recent observed week per stream, keyed by the
 forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
@@ -3702,7 +3644,7 @@ forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
 axis widens to hold it. Panels are drawn only for the streams `fc` carries.
 """
 function plot_province_forecast_detail(
-        chn, fc::DataFrame;
+        pp, fc::DataFrame;
         province::Integer,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
@@ -3714,7 +3656,7 @@ function plot_province_forecast_detail(
     )
     label = patch_labels[province]
     entries = [
-        e for e in _province_forecast_draws(chn, fc, np, patch_labels)
+        e for e in _province_forecast_draws(pp, fc, np, patch_labels)
             if e[2] == label
     ]
     isempty(entries) && return Figure()

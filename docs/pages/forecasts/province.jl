@@ -31,16 +31,18 @@ chn_joint = load_fit("joint");
 #md # <details><summary>Project each province a week ahead</summary>
 #md # ```
 
+## Read from the same draws as the national forecast page, so the provinces
+## add up to the national forecast shown there.
+province_draws = fit_forecast("joint");
 province_projection = forecast_provinces(
-    chn_joint;
-    horizon = 7, n_patches = N_PATCHES
+    province_draws; horizon = 7, n_patches = N_PATCHES
 );
 province_forecast = province_forecast_table(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     n_patches = N_PATCHES
 );
 province_forecast_fig = plot_province_forecast(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     n_patches = N_PATCHES
 );
 province_week_end = obs.cutoff + Day(7);
@@ -49,8 +51,7 @@ province_summary_markdown = let proj = province_projection
     pct(x) = string(round(Int, 100 * x), "%")
     share_text(v) = median_interval_text(v; scale = 100, suffix = "%")
     ## Overall: the provinces ranked by their median projection, each with
-    ## its share of the provinces' combined projection and how often it
-    ## projects the most.
+    ## its share of the national forecast and how often it projects the most.
     function overall(col, stream)
         shares = province_share_draws(proj, col; n_patches = N_PATCHES)
         top = [argmax([s[k] for s in shares]) for k in eachindex(shares[1])]
@@ -69,8 +70,8 @@ province_summary_markdown = let proj = province_projection
             "- **Most $(stream):** $(ranked). " *
                 "$(PROVINCE_LABELS[lead]) projects the most in " *
                 "$(pct(count(==(lead), top) / length(top))) of draws.",
-            "- **Share of $(stream):** $(split_text), of the provinces' " *
-                "combined projection.",
+            "- **Share of $(stream):** $(split_text), of the national " *
+                "forecast.",
         ]
     end
     function detail(p)
@@ -181,7 +182,7 @@ forecast_province_table(p) = MarkdownTable(
     ]
 )
 forecast_province_fig(p) = plot_province_forecast_detail(
-    chn_joint, province_projection;
+    province_draws, province_projection;
     province = p, n_patches = N_PATCHES,
     observed = forecast_province_observed(p)
 )
