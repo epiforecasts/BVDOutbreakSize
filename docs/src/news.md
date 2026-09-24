@@ -26,7 +26,6 @@ Changes since v2.1.0.
 - An observed NegativeBinomial vector in `vintage_increments_model` and `censored_occupancy_model` is scored as one summed term with its own rule, rather than a `~` per count (#837).
   The two submodels' gradients run 1.2 to 1.9 times faster.
 - The scanned onset reporting-triangle cells in `onset_increments_model` are scored the same way, as one summed Student-t term with its own rule (#856).
-  Its gradient runs about 4.2 times faster on the 1066 scanned cells.
 - An observed province composition in `province_composition_model` is scored as one stick-breaking term, `stick_breaking_loglik`, whose rows go through the BetaBinomial rule in one call (#856).
   Its rows are grouped by vintage, and groups may differ in size.
   It sums the vintages in a different order from the per-row terms, so the log density can differ in the last bits.
@@ -36,13 +35,9 @@ Changes since v2.1.0.
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
 - `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!` (#856).
   Its rule's pullback is the matching per-lag `axpy!` and `dot`.
-  On a whole series the forward runs about 1.6 times faster and the gradient about 1.2 times faster.
-  On a matrix row both are unchanged.
   On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
 - The `convolve_pmf` rule's pullback is one `axpy!` and one `dot` per entry of the second PMF (#856).
-  Its gradient runs about 1.1 to 1.6 times faster.
 - `renewal_infections` takes each day's force of infection as one BLAS `dot` against the reversed generation interval (#856).
-  The forward runs about 1.7 times faster and the gradient about 1.25 times faster.
 - `patch_infections` and its rule take each patch's daily force of infection from one shared inline loop (#856).
   The loop may reassociate its sum, so values can differ from a sequential sum in the last bits.
 - The bed-capacity walk steps and the per-patch deviation scales are drawn through `filldist` rather than a `product_distribution` of copies of one truncated Normal (#856).
