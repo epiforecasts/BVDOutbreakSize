@@ -35,9 +35,9 @@ PLAN. Each top-level bullet is the major sentence of one paragraph; sub-bullets 
 RECOLLECTION marks a point needing an author answer from paper/.notes/recollections.md.
 VERIFY marks a claim that rests on agent-written text only (paper/.notes/review-grounding.md) and needs author confirmation.
 Length: about 3500 words; each Methods subsection at most two paragraphs except Model development, which has one short paragraph per model version.
-Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (v2.1.0, SitRep 125).
+Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (v2.2.0 once cut; v2.1.0 until then).
 Dates and durations: never in prose; they live in @tbl-models and @fig-timeline.
-Supporting Information: the single-file report released with the tag (analysis.html); the main text points to it by italic section title.
+Supporting Information: the report site archived with the release (site.zip from v2.2.0; the offline analysis.html before that), whose Methods page carries the full model; the main text points to it by italic page or section title.
 Terms: "the joint model" for the method, "the joint estimate" for its output, "single-stream fits" for the comparators, "release" not "vintage", "province" not "patch", "random walk" not "walk".
 Methods and Results subsection names mirror each other.
 Style: paper/.notes/pc-style.md section 10.
@@ -108,6 +108,7 @@ Style: paper/.notes/pc-style.md section 10.
   - Provincial reproduction numbers are the national trend plus zero-sum mean-reverting deviations, identified by the per-province confirmed deaths.
   - A factor that pinned the provinces to the national trend was tried and removed because the national data constrain them. <!-- RECOLLECTION: why start, why remove -->
   - The cryptic seed now counts generations rather than doublings. <!-- v1 and v2 seeds differ -->
+  - Queued for the next release: the province deviations on an identified sum-to-zero basis with a Wishart-factor correlation (PR 855), the death analysed volume uncapped, the background case-fatality prior lowered, each province forecast by its own renewal process, and every forecast drawn from the fitted model rather than a hand-written projection (PR 867). <!-- include whichever have merged at the pinned release -->
 
 ### Current model
 
@@ -136,14 +137,17 @@ Style: paper/.notes/pc-style.md section 10.
 ### Convergence
 
 - Each fit reports R-hat, bulk effective sample size and divergent transitions for every parameter [@gelman1992; @vehtari2021].
-  - NUTS with the chains, draws, adaptation steps and target acceptance read from the release [@hoffman2014nuts]. <!-- sampler_* keys in generated/numbers.yml -->
+  - NUTS with the chains, draws, adaptation steps, tree-depth cap and target acceptance read from the release [@hoffman2014nuts]. <!-- sampler_* keys in generated/numbers.yml; 1000 draws per chain and depth cap 10 on main -->
+  - The build fails if the joint fit breaches R-hat, effective-sample-size or divergence thresholds, and warns below a tighter tier.
 
 ### Implementation
 
 - The model is written in Julia with Turing, sampled with NUTS and differentiated with Mooncake [@ge2018turing; @hoffman2014nuts; @mooncake_jl].
-  - Each data update refits every affected model in continuous integration, renders the report, and publishes a versioned release with the model definition, thinned draws and forecasts.
-  - Model code, priors and analysis text were drafted by a language-model agent from the McCabe et al. report and the delay reanalysis and were reviewed and revised by the authors.
-  - Code, data transcriptions, per-release draws and forecasts, and the archived report are available [@bvdoutbreaksize-github; @bvdoutbreaksize-zenodo].
+  - The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against finite differences and against the backend's own derivation of an unregistered copy, which cut the joint gradient by about a fifth and the delay-heavy kernels by several fold. <!-- {{ meta }} from PRs 810, 837, 856; author statement: not something the lead author could have written without the agent -->
+  - A precompile workload covering the fit the report runs cuts the cold build to a quarter.
+  - Each data update refits every affected model in continuous integration, renders the report, and publishes a versioned release with the model definition, thinned draws and forecasts; only the jobs a change can reach run, and a release is cut from a comment.
+  - Model code, priors and analysis text were drafted by a language-model agent from the McCabe et al. report and the delay reanalysis and were reviewed and revised by the authors, with convergence and fit to data as the gate on every change.
+  - Code, data transcriptions, per-release draws and forecasts, and the archived report site are available [@bvdoutbreaksize-github; @bvdoutbreaksize-zenodo].
 
 ## Results
 
@@ -155,7 +159,7 @@ Style: paper/.notes/pc-style.md section 10.
   - Provincial reproduction numbers and which province carries growth (@fig-estimates B).
   - Ascertainment by stream against its prior (@fig-estimates C), so the size interval is no narrower than those priors.
   - The fit converges at the release analysed, with the worst-mixing parameters the ascertainment and background terms.
-  - The release before it did not converge once a resumed stream informed a non-centred random walk, and centring it restored convergence without moving the estimate. <!-- VERIFY: agent-only account; release published with the failure unnoticed -->
+  - The release before it did not converge once a resumed stream informed a non-centred random walk, and centring it restored convergence without moving the estimate. <!-- VERIFY: agent-only account; release published with the failure unnoticed; the CI convergence gate followed -->
 
 ### Estimate evolution across releases
 
@@ -211,10 +215,11 @@ Style: paper/.notes/pc-style.md section 10.
 
 <!-- Lessons -->
 
-- The exercise taught us three things about real-time modelling from published reports. <!-- RECOLLECTION: tick, strike or add -->
+- The exercise taught us four things about real-time modelling from published reports. <!-- RECOLLECTION: tick, strike or add -->
   - Reporting changes are the main source of model change, and the increment-and-break design absorbed most of them without a model rewrite.
   - The disagreement between streams is the result to report, because the headline size follows from how that disagreement is resolved.
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
+  - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
 
 <!-- Further work -->
 
