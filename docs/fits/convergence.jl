@@ -153,22 +153,23 @@ end
 """
     convergence_summary(label, d; thresholds = convergence_thresholds())
 
-A report reader's version of [`convergence_verdict`](@ref), as three
-sentences of plain prose: the verdict on the headline diagnostics `d` of the
-fit named `label`, the values behind it, and what a fit needs to pass without
-warnings.
+A report reader's version of [`convergence_verdict`](@ref) for the headline
+diagnostics `d` of the fit named `label`, as plain prose. `verdict` is the
+one-sentence verdict. `detail` gives the values behind it and what a fit
+needs to pass without warnings.
 """
 function convergence_summary(label, d; thresholds = convergence_thresholds())
     v = convergence_verdict(d; thresholds = thresholds)
     w = thresholds.warn
-    return "The $label fit $(_STATUS_PHRASE[v.status]). " *
-        "Its worst R-hat is $(fmt_value(d.max_rhat)) and its lowest bulk " *
-        "effective sample size is $(fmt_count(d.min_ess_bulk)), with " *
+    verdict = "The $label fit $(_STATUS_PHRASE[v.status])."
+    detail = "Its worst R-hat is $(fmt_value(d.max_rhat)) and its lowest " *
+        "bulk effective sample size is $(fmt_count(d.min_ess_bulk)), with " *
         "$(d.n_divergent) divergent transitions in $(d.n_draws) draws. " *
         "A fit passes without warnings when its worst R-hat is at most " *
         "$(fmt_value(w.rhat)), its effective sample sizes are at least " *
         "$(fmt_count(w.ess_bulk)) and at most " *
         "$(_percent(w.divergent_fraction))% of its draws diverge."
+    return (; verdict, detail)
 end
 
 """
