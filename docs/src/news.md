@@ -33,6 +33,7 @@ Changes since v2.1.0.
   An observed matrix of a different size from the modelled one is an error.
 - These submodels score and draw their vectors through `NegBinomialVector`, its `censored` form and `StudentTVector`, so each keeps a single `~` for observed and `missing` data (#856).
   A `missing` vector is now sampled as one variable under the whole-vector key (`<prefix>.increments` or `<prefix>.obs`) rather than per-entry keys.
+  These vector distributions and `SplitCountVector` are declared `public`, and documented with the observation models.
 - `convolve_delay` adds one scaled, shifted copy of its input per lag with a BLAS `axpy!` (#856).
   Its rule's pullback is the matching per-lag `axpy!` and `dot`.
   On float arrays a lag whose weight is exactly zero no longer carries an `Inf` or `NaN` from the input into the output.
