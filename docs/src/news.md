@@ -67,6 +67,7 @@ Changes since v2.1.0.
   Occupancy is split on the uncapped per-patch demand, since a province can print more patients than beds where patients are held outside the counted structures.
   The fit reports beds, demand, utilisation and shortfall by province at the cut-off.
 - A pooled patch's occupancy or bed count is used on a day only when every member that has printed before prints that day, so a silent member is never read as an empty ward (#784).
+- The background split and the province capacity shares put their pooled offsets on the sum-to-zero directions of #855 rather than fixing the first province at its population share, so the pooling scale spreads every province alike (#784).
 - The province case-fatality contrast scale prior is half-normal with sd 0.1 rather than 0.3 (#784).
   At 0.3 a tenth of the prior mass had provinces differing by more than 60% in their case-fatality ratio, and the 23 September fits on #784 left the posterior on the prior (median 0.19 to 0.27) while its chains moved between a scale near zero and one near 0.3, with the whole death-confirmation block frozen at an effective sample size of 4 in the chain that sat near zero.
   The fitted contrasts were within 15% of one, which the tighter prior covers at one standard deviation.

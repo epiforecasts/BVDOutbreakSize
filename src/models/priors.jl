@@ -770,10 +770,12 @@ capacity is the national walk `C(t)` times a share drawn from a partially
 pooled simplex centred on population share,
 
 ```math
-s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp\\bigl((\\tau_{cap} Q z)_p\\bigr),
 ```
 
-with the first patch the reference. The printed province bed counts move
+with `Q` the `n_patches - 1` sum-to-zero directions
+([`sum_to_zero_basis`](@ref)), so no patch is a reference and the pooling
+scale spreads every patch alike. The printed province bed counts move
 little relative to each other over the series, so a static share carries
 the split; one walk per patch would add some sixty truncated-normal
 innovations for a tenth more gradient cost. The bed split identifies the
@@ -789,7 +791,8 @@ Returns `(; s, pooling_sd)`.
             ),
         ],
         pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(n_patches, 1))
     )
     if n_patches <= 1
         return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
@@ -800,13 +803,8 @@ Returns `(; s, pooling_sd)`.
     )
     τ_cap ~ pooling_sd_prior
     z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
-    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
-    total_pop = sum(populations)
-    log_s = Vector{Ts}(undef, n_patches)
-    log_s[1] = log(populations[1] / total_pop)
-    @inbounds for p in 2:n_patches
-        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
-    end
+    log_s = log.(populations ./ sum(populations)) .+
+        sum_to_zero(sum_to_zero_factor(basis, τ_cap), z_cap)
     peak = maximum(log_s)
     s = exp.(log_s .- peak)
     s ./= sum(s)
@@ -1955,13 +1953,13 @@ streams. Each share is the patch's population share moved by a pooled log
 deviation,
 
 ```math
-w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
-\\qquad z_1 = 0,
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp\\bigl((\\tau_{bg} Q z)_p\\bigr),
 ```
 
-normalised to sum to one. The first patch is the reference, so with
-`n_patches - 1` free deviations the simplex has no redundant direction.
-`τ_bg → 0` recovers the population split. The per-province
+normalised to sum to one, with `Q` the `n_patches - 1` sum-to-zero
+directions ([`sum_to_zero_basis`](@ref)), so the simplex has no redundant
+direction and no reference patch. `τ_bg → 0` recovers the population
+split. The per-province
 analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
 since the background dominates the specimens analysed where positivity is
 low.
@@ -1978,7 +1976,8 @@ Returns `(; w, pooling_sd)`.
             ),
         ],
         pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(n_patches, 1))
     )
     if n_patches <= 1
         return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
@@ -1989,13 +1988,8 @@ Returns `(; w, pooling_sd)`.
     )
     τ_bg ~ pooling_sd_prior
     z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
-    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
-    total_pop = sum(populations)
-    log_w = Vector{Tw}(undef, n_patches)
-    log_w[1] = log(populations[1] / total_pop)
-    @inbounds for p in 2:n_patches
-        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
-    end
+    log_w = log.(populations ./ sum(populations)) .+
+        sum_to_zero(sum_to_zero_factor(basis, τ_bg), z_bg)
     ## Softmax against the largest term, so a wide deviation cannot
     ## overflow.
     peak = maximum(log_w)
