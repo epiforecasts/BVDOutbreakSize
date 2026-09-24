@@ -327,7 +327,8 @@ MarkdownTable(vintage_table) #hide
 # AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
 # The covariance of the innovations, $(0.05^2/\nu)\, Q AA^{\top} Q^{\top}$, is a full covariance of a sum-to-zero vector.
 # $A$ has as many entries as that covariance has free parameters, and each knot draws $P - 1$ values, one per direction the deviations can move in.
 # The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
