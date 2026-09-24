@@ -1300,7 +1300,6 @@ draws to one knot's innovations.
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         region_drift_scale::Real = 0.05,
-        region_drift_df::Real = n_patches - 1,
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(n_patches)
@@ -1362,15 +1361,7 @@ draws to one knot's innovations.
     ## directions, whose prior treats every patch alike. With two patches
     ## there is one direction and no lower entry to draw.
     nd = n_patches - 1
-    region_drift_df > nd - 1 || throw(
-        ArgumentError(
-            "patch_rt_model: region_drift_df = $region_drift_df must " *
-                "exceed n_patches - 2 = $(nd - 1)"
-        )
-    )
-    bartlett_diag ~ product_distribution(
-        [Chi(region_drift_df - j + 1) for j in 1:nd]
-    )
+    bartlett_diag ~ product_distribution([Chi(nd - j + 1) for j in 1:nd])
     if nd > 1
         bartlett_lower ~ product_distribution(
             fill(Normal(0, 1), nd * (nd - 1) ÷ 2)
@@ -1380,7 +1371,7 @@ draws to one knot's innovations.
     end
     A = bartlett_factor(bartlett_diag, bartlett_lower)
     F_drift = sum_to_zero_factor(
-        basis, region_drift_scale / sqrt(region_drift_df), A
+        basis, region_drift_scale / sqrt(nd), A
     )
     F_level = sum_to_zero_factor(
         basis, σ_level * sqrt(nd / sum(abs2, A)), A
