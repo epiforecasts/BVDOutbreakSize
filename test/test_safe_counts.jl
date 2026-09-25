@@ -80,3 +80,60 @@ end
     @test _saturating_sum([1, 2, 3]) == 6
     @test _saturating_sum([1.5, 2.5]) == 4.0
 end
+
+@testitem "every observation draw saturates at an extreme mean" begin
+    using BVDOutbreakSize: dated_poisson_model, vintage_increments_model,
+        censored_occupancy_model, late_confirmed_model, exports_model,
+        exports_deaths_model, composition_split_model, SafePoisson,
+        SafeNegBinomial
+    using Random: Xoshiro
+    ## Each submodel that can sample a missing or forecast count, at a mean
+    ## past `typemax(Int)`. Every draw must be an integer in `[0, typemax]`.
+    big = 1.0e22
+    k = 1.0e4
+    pmf = [0.2, 0.5, 0.3]
+    infections = fill(big, 30)
+    models = [
+        "dated Poisson" => dated_poisson_model(fill(big, 3), missing),
+        "vintage increments" => vintage_increments_model(
+            fill(big, 3), missing, k
+        ),
+        "censored occupancy" => censored_occupancy_model(
+            fill(big, 3), fill(1.0e6, 3), missing, k
+        ),
+        "late confirmed" => late_confirmed_model(
+            missing, fill(big, 3), [0, 5, 0], fill(0.1, 3), k
+        ),
+        "cumulative exports" => exports_model(
+            missing, infections, 0.5; incubation_pmf = pmf
+        ),
+        "dated exports" => exports_model(
+            missing, infections, 0.5; incubation_pmf = pmf,
+            export_case_days = [10, 20], pre_detection_exports = missing
+        ),
+        "cumulative export deaths" => exports_deaths_model(
+            missing, infections, 0.5, pmf, pmf
+        ),
+        "dated export deaths" => exports_deaths_model(
+            missing, infections, 0.5, pmf, pmf;
+            export_death_days = [10, 20], pre_death_exports = missing
+        ),
+        "composition split" => composition_split_model(
+            missing, fill(1 / 3, 3, 2), [typemax(Int), 7], 0.1
+        ),
+    ]
+    for (name, m) in models
+        @testset "$name" begin
+            draw = rand(Xoshiro(7), m)
+            counts = [
+                x for (key, v) in pairs(draw)
+                    if !occursin(r"state|daily_travellers", string(key))
+                    for x in v
+            ]
+            @test !isempty(counts)
+            @test all(x -> x isa Integer && 0 <= x <= typemax(Int), counts)
+        end
+    end
+    @test eltype(SafePoisson(1.0)) === Int
+    @test eltype(SafeNegBinomial(k, 1.0)) === Int
+end
