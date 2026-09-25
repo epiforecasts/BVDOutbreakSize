@@ -218,8 +218,8 @@ as tabulated at
 
 One source for all seven rather than the best figure for each, so
 consistency between provinces matters more than the accuracy of any one of
-them. The relative sizes enter the importation kernel and the per-capita
-testing covariate. The absolute sizes are the pools the renewal depletes
+them. The relative sizes enter the importation kernel and centre the
+province background and bed-capacity shares. The absolute sizes are the pools the renewal depletes
 ([`renewal_infections`](@ref), [`patch_infections`](@ref)), where they only
 bound the outbreak, so a figure out by a few years of growth changes nothing
 at the scale the outbreak has reached.
@@ -312,10 +312,9 @@ const _PROVINCE_MEMBER_IDX = [
 
 Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, summed
 over the provinces it pools, from the 2019 INS figures in
-[`PROVINCE_SOURCE_POPULATIONS`](@ref). Used to put the per-province testing
-effort on a per-capita scale (the covariate for the provincial
-ascertainment), to weight the between-province importation kernel and as
-each patch's susceptible pool in the renewal.
+[`PROVINCE_SOURCE_POPULATIONS`](@ref). Used to weight the between-province
+importation kernel, to centre the province background and bed-capacity
+shares, and as each patch's susceptible pool in the renewal.
 """
 const PROVINCE_POPULATIONS = [
     sum(PROVINCE_SOURCE_POPULATIONS[idx])

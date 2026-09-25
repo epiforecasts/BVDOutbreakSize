@@ -56,10 +56,6 @@
     )
 end
 
-"""
-Grid days a `forecast` covers past the cut-off `n`, `n + 1` to
-`n + horizon`.
-"""
 ## Keywords handing one stream its simulated observations, keyed by the
 ## stream's name in the joint (`simulate_recovery`). Nothing is passed for a
 ## fit to real data, so that call is the one it always was.
@@ -69,6 +65,10 @@ function _sim_kw(simulated_data, state::Symbol)
         (; simulated = simulated_data[state]) : (;)
 end
 
+"""
+Grid days a `forecast` covers past the cut-off `n`, `n + 1` to
+`n + horizon`.
+"""
 forecast_days(n::Integer, forecast) = (n + 1):(n + horizon_days(forecast))
 
 ## Future Uganda exports: the per-day Poisson the dated export series is
@@ -1106,7 +1106,8 @@ triangle's future vintages ([`onset_forecast_model`](@ref)). With province
 data, each future week's national confirmed cases and deaths are split
 across the provinces by the fitted compositions
 ([`composition_split_model`](@ref)), as `forecast_province_confirmed` and
-`forecast_province_deaths`. Every quantity up to the cut-off, and the
+`forecast_province_deaths`, and the national isolation and bed forecasts
+likewise as `forecast_province_isolation` and `forecast_province_beds`. Every quantity up to the cut-off, and the
 density there, is the fitted model's.
 """
 @model function bvd_joint(
@@ -1592,12 +1593,6 @@ density there, is the fitted model's.
 
     region_sd := patch_state.σ_level
     region_drift_sd := patch_state.σ_δ
-    ## The loading matrix from standard-normal draws to one knot's
-    ## deviation innovations, flattened column-major, which the provincial
-    ## forecast continues the deviations with.
-    if n_patches > 1
-        region_drift_factor := vec(patch_state.drift_factor)
-    end
 
     region_halflife := patch_state.δ_halflife
 
