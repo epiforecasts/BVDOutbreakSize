@@ -192,13 +192,9 @@ end
 """
 Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
-([`knot_days`](@ref)) and follow a Gaussian random walk in centred form
-([`RandomWalkVector`](@ref)): the first knot is `log_R0` and each later
-knot level is drawn `Normal` about the one before it with SD `sigma_rw`.
-The knot levels after the first are the sampled coordinates, stored as
-`log_R`. The onset curve informs the walk strongly, and in the non-centred
-form (standard-normal innovations scaled by `sigma_rw` and summed) that
-information funnels, holding NUTS at the depth cap with divergences.
+([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
+cumulative-sum form, with standard-normal innovations scaled by `sigma_rw`
+and accumulated, avoiding the funnel geometry of the centred recursion.
 Daily log-`R_t` is the linear interpolation between knots
 ([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
 first WHO situation report) adds a sampled effect `intervention_effect`
@@ -234,8 +230,7 @@ knots a week apart ([`future_knot_days`](@ref)), with standard-normal
 innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
 on. `Rt` then covers the horizon too.
 
-Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
-with `log_R` the full knot series including the first knot at `log_R0`.
+Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
 @model function rt_walk_model(
         n::Integer, log_R0_base::Real;
@@ -254,11 +249,10 @@ with `log_R` the full knot series including the first knot at `log_R0`.
     ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
-    ## Knot levels after the first, each about the one before it. A single
-    ## knot still draws one level so the chain key exists; it is unused.
-    log_R ~ RandomWalkVector(log_R0, sigma_rw, max(nb - 1, 1))
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
-    knots = vcat(log_R0, log_R[1:(nb - 1)])
+    steps = sigma_rw .* z[1:(nb - 1)]
+    log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
     ## variable, so the fitted knots and their density are untouched.
@@ -266,13 +260,13 @@ with `log_R` the full knot series including the first knot at `log_R0`.
     if forecast !== nothing
         fdays = future_knot_days(n, horizon_days(forecast); week)
         z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
-        knots = vcat(knots, knots[end] .+ cumsum(sigma_rw .* z_future))
+        log_R = vcat(log_R, log_R[end] .+ cumsum(sigma_rw .* z_future))
         days = vcat(days, fdays)
     end
-    log_Rt = interpolate_knots(knots, days, ng)
+    log_Rt = interpolate_knots(log_R, days, ng)
     log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(ng, breakpoint; ramp)
     Rt = exp.(log_Rt)
-    return (; Rt, log_R = knots, days, sigma_rw, log_R0, intervention_effect)
+    return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
 end
 
 ## --- Seeding and the generating infection process -----------------------
@@ -1456,7 +1450,7 @@ and `Rt_matrix` covers the horizon.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
-    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.log_R` and
+    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
     ## `rt_state.intervention_effect`, the names the analysis and sensitivity
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.

@@ -651,65 +651,6 @@ end
 end
 
 """
-Knot levels of a Gaussian random walk in centred form: `m` values, the
-first `Normal(start, σ)` and each later one `Normal` about the one before
-it with the same SD. The levels themselves are the sampled coordinates, so
-a walk the data inform well keeps a near-spherical posterior where the
-non-centred form (standard-normal innovations scaled by `σ` and summed)
-funnels as `σ` shrinks. `σ` is floored at `eps` so a zero draw still gives
-a proper density. [`rt_walk_model`](@ref) draws its weekly log-`R_t` knots
-from it.
-"""
-struct RandomWalkVector{S <: Real, T <: Real} <:
-    Distributions.ContinuousMultivariateDistribution
-    "Level the first step is taken from."
-    start::S
-    "Per-step SD."
-    σ::T
-    "Number of steps."
-    m::Int
-end
-
-Base.length(d::RandomWalkVector) = d.m
-Base.eltype(::Type{<:RandomWalkVector}) = Float64
-
-function Distributions._logpdf(d::RandomWalkVector, x::AbstractVector)
-    T = float(promote_type(typeof(d.start), typeof(d.σ), eltype(x)))
-    σ = d.σ + eps(typeof(float(d.σ)))
-    c = -log(σ) - T(0.5 * log(2π))
-    s = zero(T)
-    prev = d.start
-    @inbounds for i in eachindex(x)
-        z = (x[i] - prev) / σ
-        s += c - z^2 / 2
-        prev = x[i]
-    end
-    return s
-end
-
-function Distributions._rand!(
-        rng::AbstractRNG, d::RandomWalkVector, x::AbstractVector{<:Real}
-    )
-    σ = d.σ + eps(typeof(float(d.σ)))
-    prev = d.start
-    @inbounds for i in eachindex(x)
-        x[i] = prev + σ * randn(rng)
-        prev = x[i]
-    end
-    return x
-end
-
-## The levels are unconstrained, so a sampled walk links through the
-## identity.
-VectorBijectors.from_linked_vec(::RandomWalkVector) =
-    VectorBijectors.TypedIdentity()
-VectorBijectors.to_linked_vec(::RandomWalkVector) =
-    VectorBijectors.TypedIdentity()
-VectorBijectors.linked_vec_length(d::RandomWalkVector) = length(d)
-VectorBijectors.linked_optic_vec(d::RandomWalkVector) =
-    VectorBijectors.optic_vec(d)
-
-"""
 Derive the implied national reproduction number from a summed infection
 trajectory by inverting the renewal equation:
 

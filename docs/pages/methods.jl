@@ -268,18 +268,16 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
-# The walk starts from $R_0$ at its first knot and each later knot is drawn about the one before it:
+# The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_1 = \log R_0, \qquad
-# \log R^{\text{trend}}_k \sim \mathrm{Normal}\left(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}\right), \quad k = 2, \dots, K, \qquad
+# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
+#            \sum_{j=1}^{k} z_j, \quad
+# z_j \sim \mathrm{Normal}(0, 1), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
-#
-# The knot levels are the sampled coordinates (the centred form).
-# The onset curve informs the walk strongly, and sampling scaled standard-normal innovations instead (the non-centred form) funnels as $\sigma_{\text{rw}}$ shrinks, holding the sampler at its tree-depth cap with divergences.
 #
 # We do not place a prior on $R_0$ directly.
 # We put the prior on the initial growth rate $r$ instead, given in the seeding and growth subsection below, and derive the established reproduction number forward from it through the Euler–Lotka relation under our generation interval $g$:

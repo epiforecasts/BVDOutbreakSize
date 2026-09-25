@@ -353,34 +353,3 @@ end
     @test age > 0
     @test age <= n
 end
-
-@testitem "RandomWalkVector: density is the chain of Normal steps" begin
-    using BVDOutbreakSize: RandomWalkVector
-    using Distributions: Normal, logpdf
-    using Random: MersenneTwister
-    using Statistics: mean, var
-
-    d = RandomWalkVector(0.3, 0.1, 4)
-    @test length(d) == 4
-    x = [0.35, 0.2, 0.25, 0.4]
-    expected = logpdf(Normal(0.3, 0.1), x[1]) +
-        sum(logpdf(Normal(x[i - 1], 0.1), x[i]) for i in 2:4)
-    @test logpdf(d, x) ≈ expected atol = 1.0e-6
-
-    ## Draws start from `start` and accumulate variance step by step.
-    rng = MersenneTwister(7)
-    draws = [rand(rng, d) for _ in 1:20_000]
-    @test length(draws[1]) == 4
-    @test mean(x[4] for x in draws) ≈ 0.3 atol = 0.01
-    @test var(x[1] for x in draws) ≈ 0.1^2 rtol = 0.1
-    @test var(x[4] for x in draws) ≈ 4 * 0.1^2 rtol = 0.1
-end
-
-@testitem "RandomWalkVector: a zero SD still gives a finite density" begin
-    using BVDOutbreakSize: RandomWalkVector
-    using Distributions: logpdf
-
-    d = RandomWalkVector(0.0, 0.0, 2)
-    @test isfinite(logpdf(d, [0.0, 0.0]))
-    @test logpdf(d, [0.0, 0.0]) > logpdf(d, [1.0e-6, 0.0])
-end
