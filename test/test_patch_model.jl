@@ -2143,3 +2143,16 @@ end
         logjoint(patch_model, patch_chain); rtol = 1.0e-12
     )
 end
+
+@testitem "_patch_headlines: a used-up pool leaves a zero fraction" begin
+    using BVDOutbreakSize: _patch_headlines
+
+    ## The second patch's infections run past its population, as a seed
+    ## larger than the pool does, so its fraction floors at zero rather than
+    ## going negative.
+    I = [fill(1.0, 1, 10); fill(30.0, 1, 10)]
+    h = _patch_headlines(I, [0.5, 0.5], 10, [1000.0, 100.0])
+    @test all(>=(0), h.susceptible_fraction_matrix)
+    @test h.susceptible_fraction_matrix[2, end] == 0
+    @test h.susceptible_fraction_matrix[1, :] ≈ 1 .- cumsum(I[1, :]) ./ 1000
+end

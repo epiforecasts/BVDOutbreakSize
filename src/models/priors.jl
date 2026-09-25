@@ -1846,8 +1846,14 @@ function _patch_headlines(
     )
     infections_total = vec(sum(infections_matrix; dims = 1))
     cumulative_total = cumsum(infections_total)
-    susceptible_fraction_matrix =
-        1 .- cumsum(infections_matrix; dims = 2) ./ populations
+    susceptible_fraction_matrix = reduce(
+        vcat,
+        [
+            susceptible_fraction(
+                cumsum(view(infections_matrix, p, :)), populations[p]
+            )' for p in axes(infections_matrix, 1)
+        ]
+    )
     ## Past the cut-off when forecasting, so the fitted quantities read the
     ## grid up to the cut-off `n`.
     C_T_patch = vec(sum(view(infections_matrix, :, 1:n); dims = 2))
