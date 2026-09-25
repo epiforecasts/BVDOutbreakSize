@@ -631,7 +631,8 @@ end
 PairPlots.jl corner plot over the named posterior parameters, thinned by
 `thin`. Pass `prior`, another chain holding the same parameters, to overlay
 the prior as a second series with a legend, so the data's contribution to
-each marginal is visible.
+each marginal is visible. Draws non-finite in any parameter are left out
+of their series with a warning naming the parameter.
 
 `labels` maps a raw chain symbol to a display name (e.g.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
@@ -669,7 +670,7 @@ function plot_pair(
     _name(p) = Symbol(get(labels, p, string(p)))
     _table(d) = DataFrame(
         NamedTuple(_name(p) => v for (p, v) in pairs(d))
-    )[1:thin:end, :]
+    )[_finite_rows(d), :][1:thin:end, :]
     post = _table(draws)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
@@ -680,6 +681,20 @@ function plot_pair(
             color = colours[2]
         )
     )
+end
+
+## The draws finite in every quantity of `draws`. A pool the outbreak
+## exhausts gives `R_T = 0` and so `r = -Inf`, which the density and
+## histogram panels cannot bin. Each quantity with such draws is named.
+function _finite_rows(draws::NamedTuple)
+    keep = trues(length(first(draws)))
+    for (p, v) in pairs(draws)
+        bad = .!isfinite.(v)
+        any(bad) || continue
+        @warn "plot_pair drops $(count(bad)) non-finite draw(s) of $p"
+        keep .&= .!bad
+    end
+    return keep
 end
 
 """
