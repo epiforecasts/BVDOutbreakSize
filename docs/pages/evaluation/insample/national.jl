@@ -668,14 +668,56 @@ stream_pairs_fig #hide
 # ## Parameter recovery
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
-# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with a short run of the sampler.
-# A quantity is recovered when its true value falls inside the posterior interval, and the forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
+# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
+# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one; the growth rate is shown as the ratio of daily growth factors, `exp(r - r_true)`.
+# Below, each quantity is on its own scale: the prior in grey, each seed's posterior in its colour and its true value as a dashed line in the same colour.
+# The prior is the fitted model's, before the factor-of-five selection of the truths.
+# The forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
 
 #md # ```@raw html
-#md # <details><summary>National quantities recovered from simulated data</summary>
+#md # <details><summary>Recovery figure</summary>
 #md # ```
 
 recovery = recovery_results()
+recovery_national_quantities = ["C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg"]
+recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
+        recovery.params, recovery.draws, recovery.prior;
+        quantities = recovery_national_quantities,
+        labels = Dict("r" => "r (as exp(r))"), panel_labels = Dict("r" => "r"),
+        log_x = ["C_T", "lambda_bg"], difference = ["r"]
+    );
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+isempty(recovery.params) ? Markdown.parse("No parameter-recovery run is available for this build.") : recovery_fig #hide
+
+# The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
+
+#md # ```@raw html
+#md # <details><summary>Summary across seeds</summary>
+#md # ```
+
+recovery_summary_national = isempty(recovery.params) ? DataFrame() :
+    recovery_summary_table(recovery.params; province = false);
+
+recovery_summary_national_display = isempty(recovery_summary_national) ?
+    Markdown.parse("No parameter-recovery run is available for this build.") :
+    MarkdownTable(recovery_summary_national);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+recovery_summary_national_display #hide
+
+#md # ```@raw html
+#md # <details><summary>Each seed's fit and recovered values</summary>
+#md # ```
+
+recovery_seeds = isempty(recovery.params) ? DataFrame() :
+    recovery_seed_verdicts(recovery.params);
 recovery_national = isempty(recovery.params) ? DataFrame() :
     recovery.params[
         .!occursin.("[", recovery.params.quantity), [
@@ -683,16 +725,21 @@ recovery_national = isempty(recovery.params) ? DataFrame() :
         ],
     ];
 
-recovery_national_display = isempty(recovery_national) ?
-    Markdown.parse("No parameter-recovery run is available for this build.") : MarkdownTable(recovery_national);
+recovery_seeds_display = isempty(recovery_seeds) ?
+    Markdown.parse("No parameter-recovery run is available for this build.") :
+    MarkdownTable(recovery_seeds);
+recovery_national_display = isempty(recovery_national) ? Markdown.parse("") :
+    MarkdownTable(recovery_national);
+recovery_seeds_display #hide
+
+#-
+
+recovery_national_display #hide
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-recovery_national_display #hide
-
-#md # ```@raw html
 #md # <details><summary>Forecasts from the recovery fits</summary>
 #md # ```
 

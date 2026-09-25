@@ -354,12 +354,67 @@ province_pairs_fig #hide
 # ## Province parameter recovery
 #
 # Whether the model recovers each province's values when fitted to data it simulated itself, from the same runs as the national [parameter recovery](@ref "Parameter recovery").
+# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, and below each quantity by province is on its own scale with the prior in grey, each seed's posterior in its colour and its true value as a dashed line.
 
 #md # ```@raw html
-#md # <details><summary>Province quantities recovered from simulated data</summary>
+#md # <details><summary>Recovery figure</summary>
 #md # ```
 
-province_recovery = let r = recovery_results().params
+province_recovery_results = recovery_results()
+_recovery_short = [
+    "C_T_patch" => "C_T", "R_T_patch" => "R_T", "CFR_patch" => "CFR",
+    "province_ascertainment" => "ascertainment",
+]
+province_recovery_quantities = [
+    "$(k)[$(p)]" for (k, _) in _recovery_short for p in PROVINCE_LABELS
+]
+province_recovery_fig = isempty(province_recovery_results.params) ? nothing :
+    plot_recovery(
+        province_recovery_results.params, province_recovery_results.draws,
+        province_recovery_results.prior;
+        quantities = province_recovery_quantities,
+        labels = Dict(
+            "$(k)[$(p)]" => "$(v), $(p)" for (k, v) in _recovery_short
+            for p in PROVINCE_LABELS
+        ),
+        panel_labels = Dict(
+            "$(k)[$(p)]" => p for (k, _) in _recovery_short for p in PROVINCE_LABELS
+        ),
+        row_labels = last.(_recovery_short),
+        log_x = ["C_T_patch[$(p)]" for p in PROVINCE_LABELS]
+    );
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+isempty(province_recovery_results.params) ? Markdown.parse("No parameter-recovery run is available for this build.") : province_recovery_fig #hide
+
+# The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
+
+#md # ```@raw html
+#md # <details><summary>Summary across seeds</summary>
+#md # ```
+
+province_recovery_summary = isempty(province_recovery_results.params) ?
+    DataFrame() :
+    recovery_summary_table(province_recovery_results.params; province = true);
+
+province_recovery_summary_display = isempty(province_recovery_summary) ?
+    Markdown.parse("No parameter-recovery run is available for this build.") :
+    MarkdownTable(province_recovery_summary);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_recovery_summary_display #hide
+
+#md # ```@raw html
+#md # <details><summary>Each seed's recovered province values</summary>
+#md # ```
+
+province_recovery = let r = province_recovery_results.params
     isempty(r) ? DataFrame() :
         r[
             occursin.("[", r.quantity), [
@@ -371,12 +426,11 @@ end;
 
 province_recovery_display = isempty(province_recovery) ?
     Markdown.parse("No parameter-recovery run is available for this build.") : MarkdownTable(province_recovery);
+province_recovery_display #hide
 
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-province_recovery_display #hide
 
 # ## Saving province in-sample outputs
 

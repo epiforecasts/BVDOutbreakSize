@@ -393,27 +393,49 @@ if !@isdefined(_BVD_SETUP_LOADED)
         return pp
     end
     ## The parameter-recovery results the `recovery` CI job writes
-    ## (`scripts/recovery.jl`): one table of recovered quantities and one of
-    ## forecasts, over every seed found, or empty tables when no run is
-    ## available.
+    ## (`scripts/recovery.jl`), over every seed found: the recovery table and
+    ## scored forecasts, each seed's thinned posterior draws keyed by seed,
+    ## and every seed's prior draws pooled, since the prior is the same for
+    ## all of them. Empty when no run is available.
     function recovery_results()
         dir = joinpath(
             get(ENV, "BVD_OUTPUT_DIR", joinpath(pkgdir(BVDOutbreakSize), "output")),
             "recovery"
         )
-        read_all(prefix) = begin
-            files = isdir(dir) ? sort(
-                    filter(
-                        f -> startswith(f, prefix) && endswith(f, ".csv"),
-                        readdir(dir)
-                    )
-                ) : String[]
-            isempty(files) ? DataFrame() :
-                reduce(vcat, [CSV.read(joinpath(dir, f), DataFrame) for f in files])
+        files(pattern) = isdir(dir) ?
+            sort(filter(f -> occursin(pattern, f), readdir(dir))) : String[]
+        read_all(pattern) = begin
+            fs = files(pattern)
+            isempty(fs) ? DataFrame() :
+                reduce(vcat, [CSV.read(joinpath(dir, f), DataFrame) for f in fs])
         end
+        draws = Dict(
+            parse(Int, match(r"(\d+)", f)[1]) =>
+                CSV.read(joinpath(dir, f), DataFrame)
+                for f in files(r"^recovery_draws_\d+\.csv$")
+        )
         return (;
-            params = read_all("recovery_"),
-            forecasts = read_all("forecast_recovery_"),
+            params = read_all(r"^recovery_\d+\.csv$"),
+            forecasts = read_all(r"^forecast_recovery_\d+\.csv$"),
+            draws, prior = read_all(r"^recovery_prior_\d+\.csv$"),
+        )
+    end
+    ## The cross-seed recovery summary (`recovery_summary`) of the national
+    ## quantities, or of the per-province ones with `province`, for display.
+    function recovery_summary_table(params; province::Bool)
+        t = recovery_summary(params)
+        t = t[occursin.("[", t.quantity) .== province, :]
+        r2(x) = ismissing(x) ? missing : round(x; digits = 2)
+        return DataFrame(
+            "Quantity" => t.quantity,
+            "Truth, lowest" => round.(t.truth_min; sigdigits = 3),
+            "Truth, highest" => round.(t.truth_max; sigdigits = 3),
+            "Relative error, median" => r2.(t.rel_error_median),
+            "Relative error, range" =>
+                string.(r2.(t.rel_error_min), " to ", r2.(t.rel_error_max)),
+            "z, median" => r2.(t.z_median),
+            "Truth in 90%" => string.(t.covered_90, "/", t.n_seeds),
+            "Outside 99%" => t.outside,
         )
     end
     ## Clean display names for the summary tables and pair plots. The submodel
