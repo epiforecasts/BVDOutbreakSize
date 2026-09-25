@@ -173,7 +173,7 @@ one of:
   than `coverage_fail` of the quantities have the truth inside their 90%
   interval. Chance allows the `outside_quantile` quantile (99%) of a
   Binomial over the quantities checked with probability `1 - outer`: with
-  28 quantities up to two may lie outside. One miss is then expected about
+  29 quantities up to two may lie outside. One miss is then expected about
   one seed in four of a calibrated model, and a failure fewer than one seed
   in three hundred.
 - `:warn`: fewer than `coverage_warn` do. A correct model misses a 90%
