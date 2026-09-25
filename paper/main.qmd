@@ -35,7 +35,7 @@ PLAN. Each top-level bullet is the major sentence of one paragraph; sub-bullets 
 RECOLLECTION marks a point needing an author answer from paper/.notes/recollections.md.
 VERIFY marks a claim that rests on agent-written text only (paper/.notes/review-grounding.md) and needs author confirmation.
 Length: about 3500 words; each Methods subsection at most two paragraphs except Model development, which has one short paragraph per model version.
-Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (v2.2.0 once cut; v2.1.0 until then).
+Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (a results build of main until v2.2.0 is cut, then v2.2.0).
 Dates and durations: never in prose; they live in @tbl-models and @fig-timeline.
 Supporting Information: the report site archived with the release (site.zip from v2.2.0; the offline analysis.html before that), whose Methods page carries the full model; the main text points to it by italic page or section title.
 Terms: "the joint model" for the method, "the joint estimate" for its output, "single-stream fits" for the comparators, "release" not "vintage", "province" not "patch", "random walk" not "walk".
@@ -49,7 +49,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
 @fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) joint fit wall-clock and gradient time per release where recorded. Source: git log, gh api, released_estimates.csv, the benchmark job records.
 @fig-evaluation Figure 4. Evaluation. (A) forecast skill against the persistence baseline by stream and release; (B) outbreak size by single-stream fit against the joint; (C) comparison with McCabe et al. at matched cut-offs. Source: forecast_scores.csv, size_by_release_by_stream.csv, frozen_matched_cutoffs.csv.
 @tbl-streams    Streams fitted: stream, what it observes, observation model, first and last fitted report, break dates.
-@tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change.
+@tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change; main since v2.1.0 is one row, unreleased at the release analysed.
 -->
 
 ## Introduction
@@ -81,7 +81,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
 
 - All DRC counts come from the daily situation reports of the Institut National de Santé Publique, read from the PDFs, with the streams fitted and their first and last fitted report listed in @tbl-streams [@insp_sitrep_2026].
   - Exports to Uganda come from WHO situation reports and Disease Outbreak News and are fitted up to the report at which exports stopped being updated [@who_afro_sitrep01_2026; @who_don_2026_602].
-  - The curve of confirmed cases by onset date is digitised from the figure the reports carry from mid-July, and each digitised figure carries its own level error.
+  - The curve of confirmed cases by onset date is digitised bar by bar from the figure the reports carry from mid-July, and each digitised bar carries a fitted read error on top of the rounding of an integer read (PR 875, PR 881).
   - Each value is read by a language-model agent and independently re-read, with disagreements settled against the PDF, and the INRB-UMIE transcription is used only when the primary source is not publishing [@inrb_umie_2026]. <!-- VERIFY: who the second reader is -->
   - Genetic estimates of the time to the most recent common ancestor and the early doubling time enter as priors and are referred to below as the genetic bound [@virological2026; @mbalaplacide2026].
 
@@ -112,25 +112,35 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The 24h analysed laboratory volume anchors positivity; isolation occupancy and recoveries follow the form of the secondary-observation model of EpiNow2 [@epinow2]; bed occupancy is supply-limited with a random-walk capacity; treatment-centre flows carry an in-care case-fatality ratio; the digitised onset curve is a reporting triangle with time-varying ascertainment.
   - Divergent transitions in the occupancy stream and funnels in the pooled dispersion and random walks were removed by censoring at recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015].
 
-- The current model runs one renewal process per province, coupled by importation, with every national stream fitted against the summed provinces.
+- The provincial model runs one renewal process per province, coupled by importation, with every national stream fitted against the summed provinces.
   - Four provinces, three individually and one pooling the remainder, with a gravity kernel and same-day transfer. <!-- read the patch list from src/ at the tag -->
   - Provincial reproduction numbers are the national trend plus zero-sum mean-reverting deviations, identified by the per-province confirmed deaths.
   - A factor that pinned the provinces to the national trend was tried and removed because the national data constrain them. <!-- RECOLLECTION: why start, why remove -->
   - The cryptic seed now counts generations rather than doublings. <!-- v1 and v2 seeds differ -->
-  - Queued for the next release: the province deviations on an identified sum-to-zero basis with a Wishart-factor correlation (PR 855), the death analysed volume uncapped, the background case-fatality prior lowered, each province forecast by its own renewal process, and every forecast drawn from the fitted model rather than a hand-written projection (PR 867). <!-- include whichever have merged at the pinned release -->
+
+- Since the last tagged release the provincial model has been reparameterised and extended, and it is this version that the release analysed fits.
+  - The province deviations are drawn on an identified sum-to-zero basis, with a Wishart shape for their correlation and a separately sampled drift scale that can shrink to the common-trend limit (PR 855, PR 907).
+  - The analysed laboratory volume, isolation occupancy and bed counts are scored by province as splits of the printed national sums, and the per-head testing covariate on ascertainment is removed (PR 784).
+  - Infections deplete a susceptible pool set at each province's census population, a light upper bound that does not bind at the current size, and every reported reproduction number is net of depletion (PR 900).
+  - The generation-interval prior is narrowed so that its implied mean matches the interval on the serial-interval mean it cites, after the joint had pulled the mean to about a fifth of the prior centre (PR 909). <!-- VERIFY: the cited interval on the mean is not in the source paper (issue 910) -->
+  - The death analysed volume is uncapped and the background case-fatality prior is centred below the BVD ratio (PR 820, PR 800).
+  - A centred form of the weekly reproduction-number random walk mixed on the complete onset curve but split the joint chains, and was reverted to non-centred (PR 880, PR 892). <!-- centred form returns with PR 884 if its joint mixes -->
 
 ### Current model
 
 - The model at the release analysed is summarised in @fig-model, with the full definition and every prior in the Supporting Information (*Methods*).
-  - Renewal equation as a labelled display, @eq-renewal.
+  - Renewal equation with susceptible depletion as a labelled display, @eq-renewal.
   - One stream's observation model, delay convolution times ascertainment with a negative binomial increment likelihood, as a labelled display, @eq-stream.
-  - The province coupling as a labelled display, @eq-province.
+  - The province coupling and the sum-to-zero deviations as a labelled display, @eq-province.
+  - The province splits of the analysed volume, occupancy and beds, and the stream-level province compositions, in one sentence each.
   - The model estimates infections and deaths to date, the reproduction number and doubling time by province, the case-fatality ratio, and the ascertainment of each surveillance system.
 
 ### Forecast evaluation
 
 - We first score each release's forecasts against the data that arrived next, then compare the joint estimate with single-stream fits and published estimates, and finally report convergence.
   - Every release forecasts each still-reported stream one week ahead, and the forecast is scored once the next reports arrive.
+  - Every forecast is drawn from the fitted model by running its likelihoods past the cut-off with the fitted parameters fixed, and province forecasts split the national forecast by the fitted composition (PR 867).
+  - Only forecasts drawn this way are scored, so releases before the change score only where they were backfilled. <!-- VERIFY against data/forecast_scores.csv at the release analysed -->
   - The continuous ranked probability score, where lower is better, with the 50% and 90% interval coverage and the sample-based bias statistic [@gneiting2007; @bosse2022scoringutils]. <!-- confirm which package computes the scores -->
   - The persistence baseline carries the last observed increment forward and was checked to see only the past, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
   - Streams no longer reported are excluded because their truth is zero by construction, which favours neither model.
@@ -148,6 +158,8 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
 - Each fit reports R-hat, bulk effective sample size and divergent transitions for every parameter [@gelman1992; @vehtari2021].
   - NUTS with the chains, draws, adaptation steps, tree-depth cap and target acceptance read from the release [@hoffman2014nuts]. <!-- sampler_* keys in generated/numbers.yml; 1000 draws per chain and depth cap 10 on main -->
   - The build fails if the joint fit breaches R-hat, effective-sample-size or divergence thresholds, and warns below a tighter tier.
+  - The validation and sensitivity joints share the joint's sampler budget (PR 887).
+  - Each build also fits the joint to data it simulated from one prior draw and checks that the posterior recovers the generating values and the simulated future (PR 882).
 
 ### Implementation
 
@@ -230,12 +242,13 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
   - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
 
-- Several defects were of a kind a human author would be unlikely to write, and each was found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
+- Several defects were of a kind a human author would be unlikely to write, and two were found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
   - The forecast compounded the last random-walk innovation over the horizon, so the intervals widened with each release until coverage sat at one (issue 622).
   - Reporting-break corrections were applied in the fit but not in the scoring, so frozen-fit forecasts scored an order of magnitude out (issue 623).
   - The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short (v2.0.0 notes).
   - A chain initialised from a fixed seed sat on a prior tail and produced the same R-hat on three different datasets (issue 671).
-  - Each defect passed the tests and the in-sample checks, and each was caught only where a forecast met the data that arrived next.
+  - A prior documented as carrying the published interval on the generation-interval mean was about two and a half times wider, and the joint pulled the mean far below it (PR 907, PR 909).
+  - Each defect passed the tests and the in-sample checks of the release that carried it.
 
 <!-- Further work -->
 
