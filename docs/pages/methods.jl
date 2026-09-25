@@ -1234,29 +1234,37 @@ cfr_prior_fig #hide
 #
 # The reports also print the patients in isolation and the beds by province, for whichever provinces report that day.
 # Both enter as splits of the printed sum of the provinces present, so the national terms above keep their likelihoods on every day.
-# Each patch's bed demand is the national demand $D_t$ shared out by an approximate per-patch stock,
+# Each patch's BVD admissions are its BVD reports $\text{bvd}_{p}$ through the admission delay, re-split so that together they are the national BVD admissions and each patch carries the case composition's relative ascertainment $a_p$:
 #
 # ```math
-# D_{p,t} = D_t\,
-#     \frac{(a_p\, p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_p * f_{\text{adm}} * S_{\text{clin}})_t
-#            + w_p\, (A_{\text{bg}} * S_{\text{ro}})_t}
-#          {\sum_q \bigl[(a_q\, p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_q * f_{\text{adm}} * S_{\text{clin}})_t
-#            + w_q\, (A_{\text{bg}} * S_{\text{ro}})_t\bigr]},
+# \tilde A_{p,t} = \bigl(p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_{p} * f_{\text{adm}}\bigr)_t,
+# \qquad
+# A_{p,t} = \frac{a_p \tilde A_{p,t}}{\sum_q a_q \tilde A_{q,t}} \sum_q \tilde A_{q,t}.
 # ```
 #
-# the patch's BVD admissions, carrying the case composition's relative ascertainment $a_p$, through the clinical-stay survival $S_{\text{clin}}$, plus its share $w_p$ of the non-BVD admissions through the rule-out stay's survival $S_{\text{ro}}$.
-# The abscond and confirmation dynamics are shared across patches and cancel in the shares, so the split needs the stays alone.
+# Each patch's approximate stock is these admissions through the clinical-stay survival plus its share $w_p$ of the non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+#
+# ```math
+# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + w_p\, (A_{\text{bg}} * S_{\text{ro}})_t,
+# \qquad
+# S_{\text{ro}}(d) = (1 - \kappa)^d \Bigl(1 - \sum_{j \le d} f^{\text{ro}}_j\Bigr),
+# \qquad
+# D_{p,t} = D_t\, \frac{\tilde O_{p,t}}{\sum_q \tilde O_{q,t}}.
+# ```
+#
+# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
+# The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
 # Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
-# On a day $j$ on which the provinces $\mathcal{P}_j$ print, the printed counts are allocated across them by the stick-breaking of equation (54),
+# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
 # O_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
-#     \textstyle\sum_{q \in \mathcal{P}_j} O_{q,j} - \sum_{q < p} O_{q,j},\;
-#     \frac{D_{p,t_j}}{\sum_{q \ge p} D_{q,t_j}},\; \rho^{\text{occ}} \Bigr),
+#     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} O_{q,j},\;
+#     \frac{D_{p,t_j}}{\sum_{q \in \mathcal{P}_j,\, q \ge p} D_{q,t_j}},\; \rho^{\text{occ}} \Bigr),
 # \qquad
 # B_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
-#     \textstyle\sum_{q \in \mathcal{P}_j} B_{q,j} - \sum_{q < p} B_{q,j},\;
-#     \frac{s_p}{\sum_{q \ge p} s_q},\; \rho^{\text{cap}} \Bigr),
+#     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} B_{q,j},\;
+#     \frac{s_p}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_q},\; \rho^{\text{cap}} \Bigr),
 # ```
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
@@ -1832,7 +1840,7 @@ cfr_prior_fig #hide
 #
 # where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
 # The case composition carries no severity term.
-# At $\tau_\kappa = 0.1$ a typical province sits within about ten percent of the national case-fatality ratio; a wider prior left the scale on its prior and let it collapse to zero mid-chain.
+# At $\tau_\kappa = 0.1$ a typical province sits within about ten percent of the national case-fatality ratio.
 #
 # The two compositions identify different things.
 # A patch's confirmed case share is the product of its incidence and its case-finding, and a composition sees only the product.
@@ -1843,29 +1851,32 @@ cfr_prior_fig #hide
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only.
 #
 # A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
-# The modelled split of week $i$ is each patch's BVD suspects reaching the laboratory plus its share of the non-BVD background,
+# Write $c_{p,t}$ for patch $p$'s onsets carried through the onset-to-report and report-to-receipt delays, and $\lambda^{\text{rec}}_t = (\lambda_{\text{bg}} * f_{\text{rec}})_t$ for the national non-BVD background carried to receipt.
+# The national BVD volume $p_{\text{DRC}} \sum_q c_{q,t}$ is split by ascertainment-weighted incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
+# Summed over the printed days $t$ of week $i$, the modelled split is
 #
 # ```math
-# \pi^{\text{lab}}_{p,i} \propto a_p\, p_{\text{DRC}}\,
-#     (\text{bvd}_p * f_{\text{rep}} * f_{\text{rec}})_i
-#     + w_p\, (\lambda_{\text{bg}} * f_{\text{rec}})_i,
+# \pi^{\text{lab}}_{p,i} \propto \sum_{t \in i} \Bigl(
+#     p_{\text{DRC}} \sum_q c_{q,t}\, \frac{a_p c_{p,t}}{\sum_q a_q c_{q,t}}
+#     + w_p\, \lambda^{\text{rec}}_t \Bigr).
 # ```
 #
-# with the BVD volume carrying the case composition's $a_p$, so the two compositions agree on how many of a patch's cases reach the laboratory, and no contrast of its own.
+# The national testing fraction multiplies every term, so it cancels, and the term samples no contrast of its own.
 # The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The per-province positives are not fitted.
 #
-# The background share $w_p$ is a simplex centred on population share,
+# The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl(\tau_{\text{bg}} (Q \mathbf{z}^{\text{bg}})_p\bigr),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
 # \qquad
-# \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5),
+# z^{\text{bg}}_1 = 0,
 # \qquad
-# \mathbf{z}^{\text{bg}} \sim \mathrm{Normal}(0, I_{P-1}),
+# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
+# \qquad
+# \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```
 #
-# with $Q$ the same sum-to-zero basis.
 # The laboratory composition identifies it, since the background dominates the specimens analysed where positivity is low, and the same split feeds each patch's non-BVD admissions in the treatment-centre flow.
 
 #md # ```@raw html
@@ -2136,6 +2147,7 @@ cfr_prior_fig #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
+# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #

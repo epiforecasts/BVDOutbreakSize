@@ -171,6 +171,9 @@ Changes since v2.1.0.
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 - The in-sample Provinces page carries posterior predictive checks on the three province terms, and the Provinces estimates page a table of beds, demand, occupied beds, utilisation and shortfall by province (#784).
+- The province forecast page opens with a table by province and bullets comparing the provinces, adds patients in isolation, isolation beds and the reproduction number to its figure, maps the forecast, and drops the dropdowns around each province (#784).
+- The province forecast evaluation compares last week's forecast with what each province reported, per province and overall (#784).
+- The per-province pair plots add the importation intensity and the export weight (#784).
 - The summary dashboard gives the province comparison as a table with R at the cut-off for every province, and links each section to its estimates and forecast pages (#904).
 ### Fixed
 
