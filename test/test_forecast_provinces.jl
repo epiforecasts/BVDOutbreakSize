@@ -138,7 +138,7 @@ end
 end
 
 
-@testitem "plot_province_forecast captions a projection" setup = [
+@testitem "plot_province_forecast captions the province forecast" setup = [
     HeadlessMakie,
 ] begin
     using DataFrames: DataFrame
@@ -153,7 +153,7 @@ end
     )
     fig = plot_province_forecast((;), fc; n_patches = 2)
     captions = [x.text[] for x in fig.content if x isa Mk.Label]
-    @test any(c -> occursin("fitted patch model", c), captions)
+    @test any(c -> occursin("add up to the national forecast", c), captions)
     @test !any(c -> occursin("modelled share", c), captions)
 end
 

@@ -680,11 +680,21 @@ stream_pairs_fig #hide
 #md # ```
 
 recovery = recovery_results()
-recovery_national_quantities = ["C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg"]
+recovery_national_quantities = [
+    "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
+    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
+    "region_drift_sd",
+]
+recovery_labels = Dict(
+    "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
+    "onset_report_state.τ" => "onset read SD",
+    "region_drift_sd" => "province drift SD",
+)
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
         recovery.params, recovery.draws, recovery.prior;
         quantities = recovery_national_quantities,
-        labels = Dict("r" => "r (as exp(r))"), panel_labels = Dict("r" => "r"),
+        labels = merge(recovery_labels, Dict("r" => "r (as exp(r))")),
+        panel_labels = merge(recovery_labels, Dict("r" => "r")),
         log_x = ["C_T", "lambda_bg"], difference = ["r"]
     );
 

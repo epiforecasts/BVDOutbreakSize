@@ -110,12 +110,30 @@ end
     )
     @test recovery_verdict(mid).status == :warn
     @test recovery_verdict(mid).pass
+    ## Across many quantities a miss or two of the 99% interval is chance:
+    ## with 28 checked, the seed fails only from the third.
+    many = Dict("q$i" => randn(rng, 4000) for i in 1:28)
+    truths(k) = Dict("q$i" => (i <= k ? 3.5 : 0.0) for i in 1:28)
+    two = recovery_verdict(recovery_table(truths(2), many))
+    @test length(two.outside) == 2 && two.outside_allowed == 2
+    @test two.status == :pass
+    three = recovery_verdict(recovery_table(truths(3), many))
+    @test three.status == :fail
     ## A fit that did not converge is not judged, whatever its intervals.
     stuck = (; max_rhat = 1.3, min_ess_bulk = 8.0)
     v = recovery_verdict(tab; diagnostics = stuck)
     @test v.status == :unconverged && !v.pass && !v.converged
     fine = (; max_rhat = 1.01, min_ess_bulk = 400.0)
     @test recovery_verdict(tab; diagnostics = fine).status == :pass
+    ## The bars are an R-hat of 1.1 and a bulk ESS of 30.
+    short = (; max_rhat = 1.08, min_ess_bulk = 35.0)
+    @test recovery_verdict(tab; diagnostics = short).status == :pass
+    @test recovery_verdict(
+        tab; diagnostics = (; max_rhat = 1.08, min_ess_bulk = 25.0)
+    ).status == :unconverged
+    @test recovery_verdict(
+        tab; diagnostics = (; max_rhat = 1.12, min_ess_bulk = 400.0)
+    ).status == :unconverged
 end
 
 @testitem "forecast_recovery_table scores against persistence" begin
