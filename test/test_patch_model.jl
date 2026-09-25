@@ -8,6 +8,7 @@
 @testsnippet PatchJointChain begin
     using BVDOutbreakSize
     using Turing: sample, Prior
+    using Random: Xoshiro
     import FlexiChains
 
     const PATCH_DRAWS = 100
@@ -31,8 +32,9 @@
         breakpoint = obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days
     )
+    ## A seeded generator, so every platform draws the same prior sample.
     patch_chain = sample(
-        patch_model, Prior(), PATCH_DRAWS;
+        Xoshiro(20260925), patch_model, Prior(), PATCH_DRAWS;
         chain_type = FlexiChains.VNChain, progress = false
     )
 end
