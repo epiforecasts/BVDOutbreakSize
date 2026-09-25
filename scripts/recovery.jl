@@ -18,8 +18,8 @@
 #   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
 #   fit
 
-using BVDOutbreakSize, CSV, DataFrames
-using Statistics: median
+using BVDOutbreakSize, CSV, DataFrames, Turing
+using Random: MersenneTwister
 using BVDOutbreakSize: _draws, _draw_vectors
 
 seed = parse(Int, get(ARGS, 1, "1"))
@@ -35,23 +35,6 @@ mkpath(out_dir)
 ## National and province quantities checked, as the report reads them.
 const SCALARS = ["C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg"]
 const PER_PROVINCE = ["C_T_patch", "R_T_patch", "CFR_patch", "province_ascertainment"]
-## Forecast columns scored, with the in-window stream each one's persistence
-## baseline is read from: the data variable names and the observation days.
-const FORECASTS = [
-    (;
-        column = "confirmed_new",
-        prefixes = [
-            "confirmed_state.early_increments.increments",
-            "confirmed_state.late_increments.increments",
-        ],
-        history = :confirmed_history,
-    ),
-    (;
-        column = "confirmed_deaths_new",
-        prefixes = ["confirmed_deaths_state.cdeath_increments.increments"],
-        history = :confirmed_deaths_history,
-    ),
-]
 
 obs = load_observations()
 breakpoint = default_breakpoint(obs)
@@ -59,6 +42,34 @@ generator = generator_joint(obs; breakpoint)
 observed = recovery_observed_varnames(
     generator, production_joint(obs; breakpoint)
 )
+
+## Forecast columns scored, with the in-window streams each one's persistence
+## baseline is read from: the data variable names and their observation days.
+## The confirmed cases are split into windows at the first and last
+## laboratory dates, each drawn as its own stream.
+windows = BVDOutbreakSize.confirmed_positivity_windows(
+    obs.confirmed_history, obs.lab_history, obs.lab_daily_history,
+    obs.confirmed_break_days
+)
+FORECASTS = [
+    (;
+        column = "confirmed_new",
+        parts = [
+            "confirmed_state.early_increments.increments" =>
+                windows.early_days,
+            "confirmed_state.confirmed_positives.positives" =>
+                windows.obs_days,
+            "confirmed_state.late_increments.increments" => windows.late_days,
+        ],
+    ),
+    (;
+        column = "confirmed_deaths_new",
+        parts = [
+            "confirmed_deaths_state.cdeath_increments.increments" =>
+                obs.confirmed_deaths_history.days,
+        ],
+    ),
+]
 
 ## Keep a draw whose outbreak is within a factor of five of the one observed,
 ## so the check runs on an epidemic like this one rather than on the prior's
@@ -86,24 +97,22 @@ fit = recovery_fit(
 )
 fit_minutes = round((time() - t0) / 60; digits = 1)
 
-## Parameter recovery.
-truth = Dict{String, Float64}()
-draws = Dict{String, Vector{Float64}}()
-for k in SCALARS
-    s = Symbol(k)
-    truth[k] = only(_draws(sim.truth, s))
-    draws[k] = vec(_draws(fit.chain, s))
-end
-for k in PER_PROVINCE
-    s = Symbol(k)
-    tv = only(_draw_vectors(sim.truth, s))
-    dv = _draw_vectors(fit.chain, s)
-    for p in eachindex(tv)
-        name = "$(k)[$(PROVINCE_LABELS[p])]"
-        truth[name] = tv[p]
-        draws[name] = [v[p] for v in dv]
+## Parameter recovery. The draws of every checked quantity by name.
+function tracked(chain)
+    out = Dict{String, Vector{Float64}}()
+    for k in SCALARS
+        out[k] = vec(_draws(chain, Symbol(k)))
     end
+    for k in PER_PROVINCE
+        dv = _draw_vectors(chain, Symbol(k))
+        for p in eachindex(PROVINCE_LABELS)
+            out["$(k)[$(PROVINCE_LABELS[p])]"] = [v[p] for v in dv]
+        end
+    end
+    return out
 end
+truth = Dict(k => only(v) for (k, v) in tracked(sim.truth))
+draws = tracked(fit.chain)
 params = recovery_table(truth, draws)
 diagnostics = fit_diagnostics(fit.chain)
 params.seed .= seed
@@ -112,10 +121,25 @@ params.max_rhat .= diagnostics.max_rhat
 params.min_ess_bulk .= diagnostics.min_ess_bulk
 params.divergences .= diagnostics.n_divergent
 CSV.write(joinpath(out_dir, "recovery_$(seed).csv"), params)
+## Every fifth posterior draw and a prior sample of the fitted model, one
+## column per quantity, for the report's figures. The prior is the same for
+## every seed, so each seed's sample adds to one pooled prior.
+thinned(d) = DataFrame(
+    [k => v[1:5:end] for (k, v) in sort(collect(d); by = first)]
+)
+CSV.write(joinpath(out_dir, "recovery_draws_$(seed).csv"), thinned(draws))
+prior = sample(MersenneTwister(seed), model, Prior(), 1000; progress = false)
+CSV.write(
+    joinpath(out_dir, "recovery_prior_$(seed).csv"), thinned(tracked(prior))
+)
 
 ## Forecasts from the fit, scored against the simulated future.
-## The data values of a stream in index order.
+## The data values of a stream in index order, drawn element by element or
+## as one vector.
 function stream_values(data, prefix)
+    for (vn, v) in data
+        string(vn) == prefix && return collect(v)
+    end
     hits = [
         (parse(Int, m[1]), v) for (vn, v) in data
             for m in (
@@ -131,13 +155,17 @@ function stream_values(data, prefix)
 end
 ## The stream's last `h` days of simulated increments carried forward.
 function persistence(spec, h)
-    values = reduce(vcat, [stream_values(sim.data, p) for p in spec.prefixes])
-    days = getproperty(obs, spec.history).days
-    length(values) == length(days) || return nothing
-    return sum(
-        v for (v, d) in zip(values, days) if obs.n - h < d <= obs.n;
-        init = 0
-    )
+    total = 0
+    for (prefix, days) in spec.parts
+        values = stream_values(sim.data, prefix)
+        isempty(days) && continue
+        length(values) == length(days) || return nothing
+        total += sum(
+            v for (v, d) in zip(values, days) if obs.n - h < d <= obs.n;
+            init = 0
+        )
+    end
+    return total
 end
 pp = forecast_draws(fit.model, fit.chain; horizon, seed = seed + 2)
 zero_kw = (;
@@ -171,25 +199,11 @@ forecasts.seed .= seed
 CSV.write(joinpath(out_dir, "forecast_recovery_$(seed).csv"), forecasts)
 
 verdict = recovery_verdict(params; diagnostics)
-## One line per seed for the report job: the verdict, then the summary.
-skill = isempty(forecasts) ? "no forecast scored" :
-    "median relative CRPS " *
-    string(round(median(forecasts.relative_crps); digits = 2))
-write(
-    joinpath(out_dir, "verdict_$(seed).txt"),
-    string(verdict.status) * "\t" *
-        "seed $seed: 90% coverage $(round(verdict.coverage_90; digits = 2)), " *
-        "outside the 99% interval: " *
-        (isempty(verdict.outside) ? "none" : join(verdict.outside, ", ")) *
-        "; forecasts $skill; fit $fit_minutes min, max R-hat " *
-        "$(round(diagnostics.max_rhat; digits = 3)), min bulk ESS " *
-        "$(round(diagnostics.min_ess_bulk; digits = 0))\n"
-)
 println(
     "seed $seed: recovery ", verdict.status,
     " (90% coverage ", round(verdict.coverage_90; digits = 2),
     ", outside the 99% interval: ",
     isempty(verdict.outside) ? "none" : join(verdict.outside, ", "),
-    "), fit took $fit_minutes min"
+    "), ", nrow(forecasts), " forecasts scored, fit took $fit_minutes min"
 )
 flush(stdout)
