@@ -23,7 +23,7 @@ The groups follow the order in which a fit runs.
 | [Joint and single-stream models](joint.md) | The composers that assemble a fittable model |
 | [Fitting](fitting.md) | Running NUTS, initialising it, and the progress callbacks |
 | [Summaries and diagnostics](summaries.md) | Posterior tables and sampler diagnostics |
-| [Forecasts, scoring and counterfactuals](forecasts.md) | Projecting forward, scoring against what arrived, and the counterfactuals |
+| [Forecasts, scoring and counterfactuals](forecasts.md) | Forecasting from the fitted model, scoring against what arrived, and the counterfactuals |
 | [Plotting](plotting.md) | Every figure in the report |
 
 ## Full index

@@ -135,7 +135,15 @@ province_detail_tables[4] #hide
 # Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
 # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
 
+#md # ```@raw html
+#md # <details><summary>Province bed table</summary>
+#md # ```
+
 province_bed_overview = province_bed_table(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 province_bed_overview #hide
 
@@ -218,9 +226,10 @@ province_rt_fig = plot_rt_patches(
 province_rt_fig #hide
 
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
-# The prior admits real divergence, with a 26% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
+# The prior admits real divergence, with a 26% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
 # With four patches and the pooled one carrying almost no signal the cross-province correlation is not identified, and it tracks its prior.
-# It is the correlation of the provinces' deviation innovations, which sum to zero, so it leans negative: with equal spreads each province's correlations with the other three average −1/3.
+# It is the correlation of the provinces' deviation innovations, which sum to zero, so it leans negative.
+# With equal spreads each province's correlations with the other three average −1/3.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
@@ -310,7 +319,7 @@ prior_patch_chn = patch_prior_draws(obs);
 #md # </details>
 #md # ```
 
-# The first pair plot covers the spatial hyperparameters: the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment and its testing effect, the importation intensity, and the spreads of lethality and death confirmation.
+# The first pair plot covers the spatial hyperparameters: the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, and the spreads of lethality and death confirmation.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>

@@ -47,7 +47,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
-# Their relative sizes set the importation kernel and the per-capita testing covariate, and their absolute sizes are the susceptible pools the renewal depletes.
+# Their relative sizes set the importation kernel and centre the background and bed-capacity shares, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -338,7 +338,6 @@ MarkdownTable(vintage_table) #hide
 # Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
 # We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
 # The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
-# With three patches the standard deviations fix the correlations, so asking whether the correlation is needed is asking whether the patches' standard deviations differ.
 # Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
@@ -1217,8 +1216,6 @@ cfr_prior_fig #hide
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
 # Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy, the cut-off bed demand (the need under unconstrained supply), their difference (the bed shortfall) and the utilisation.
-# Out of sample, where no occupancy is observed, the forecast caps admissions at the modelled free beds.
-# This modelled bound is safe because the forecast is a forward simulation outside the likelihood.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
@@ -1236,7 +1233,7 @@ cfr_prior_fig #hide
 #
 # The reports also print the patients in isolation and the beds by province, for whichever provinces report that day.
 # Both enter as splits of the printed sum of the provinces present, so the national terms above keep their likelihoods on every day.
-# Each patch's BVD admissions are its BVD reports $\text{bvd}_{p}$ through the admission delay, re-split so that together they are the national BVD admissions and each patch carries the case composition's relative ascertainment $a_p$:
+# Each patch's BVD admissions are its BVD reports $\text{bvd}_{p}$ through the admission delay, re-split so that together they are the national BVD admissions and each patch carries the case composition's relative ascertainment $a_p$ (defined with the province compositions below):
 #
 # ```math
 # \tilde A_{p,t} = \bigl(p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_{p} * f_{\text{adm}}\bigr)_t,
@@ -1256,7 +1253,7 @@ cfr_prior_fig #hide
 #
 # $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
-# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
+# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ (defined with the laboratory composition below) with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
@@ -1849,7 +1846,6 @@ cfr_prior_fig #hide
 # The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory, so they cancel from the normalised death shares and leave each patch weighted by its delay-convolved incidence alone.
 # The deaths therefore pin the incidence split, and the cases identify the relative case ascertainment as the residual.
 # Within the death composition only the product $a_p \kappa_p$ is identified.
-# The tight prior on $\tau^{\text{d}}_a$ against the loose one on $\tau_\kappa$ is what reads a provincial excess of deaths over cases first as lethality.
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only.
 #
 # A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
@@ -2095,7 +2091,7 @@ cfr_prior_fig #hide
 #
 # #### Symptom-onset nowcast and forecast
 #
-# The symptom-onset stream is projected differently from every stream above.
+# The symptom-onset stream also carries a reporting triangle.
 # The reporting triangle lets us separate two things the other streams cannot tell apart: cases whose symptoms have already begun but whose report has not yet arrived, and cases whose symptoms have not begun at all.
 # The first is a nowcast and the second a forecast.
 # A count of "cases still to come" that mixes them is not interpretable.
@@ -2127,7 +2123,7 @@ cfr_prior_fig #hide
 # The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
-# Every vintage rereads the whole figure, so the printed total moves with the roughly 4% per-scan level error as well as with genuine late reporting.
+# Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with genuine late reporting.
 # It falls between consecutive vintages more than once in the current data.
 # Scoring the level would charge the forecast for a rescan of cases it had already predicted and would count the same revision again at every later horizon.
 #
