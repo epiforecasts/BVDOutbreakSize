@@ -162,33 +162,49 @@
         )
 
         Rt(n) = abs.(randn(rng, n)) .* 0.3 .+ 1.1
+        ## The pool is light unless named as binding, where the renewal takes
+        ## most of it.
         add!(
             "G = 12", renewal_infections, Rt(40), pmf(rng, 12),
-            rand(rng, 7) .+ 1
+            rand(rng, 7) .+ 1, 1.0e6
+        )
+        add!(
+            "G = 12, binding pool", renewal_infections, Rt(40) .+ 1,
+            pmf(rng, 12), rand(rng, 7) .+ 1, 150.0
+        )
+        add!(
+            "single seed, binding pool", renewal_infections, Rt(30) .+ 1,
+            pmf(rng, 6), [2.0], 60.0
         )
         add!(
             "G > n", renewal_infections, Rt(10), pmf(rng, 15),
-            rand(rng, 3) .+ 1
+            rand(rng, 3) .+ 1, 1.0e6
         )
         add!(
             "seed covers the grid", renewal_infections, Rt(6),
-            pmf(rng, 4), rand(rng, 6) .+ 1
+            pmf(rng, 4), rand(rng, 6) .+ 1, 1.0e6
         )
         add!(
             "n = 220, G = 35", renewal_infections, Rt(220), pmf(rng, 35),
-            rand(rng, 14) .+ 1; perf = true
+            rand(rng, 14) .+ 1, 2.7e7; perf = true
         )
 
-        ## No self-importation, and a daily importation intensity per patch.
-        function patch_args(np, n, L, G)
+        ## No self-importation, a daily importation intensity per patch and
+        ## one pool per patch.
+        function patch_args(np, n, L, G; pool = 1.0e6)
             K = rand(rng, np, np) .* 0.2
             foreach(p -> K[p, p] = 0, 1:np)
             return (
                 abs.(randn(rng, np, n)) .* 0.3 .+ 1.0, pmf(rng, G),
                 rand(rng, np, L) .+ 1.0, K, rand(rng, np, n) .* 0.5,
+                pool .* (rand(rng, np) .+ 0.5),
             )
         end
         add!("3 patches", patch_infections, patch_args(3, 40, 7, 12)...)
+        add!(
+            "3 patches, binding pools", patch_infections,
+            patch_args(3, 40, 7, 12; pool = 60.0)...
+        )
         add!("1 patch", patch_infections, patch_args(1, 30, 5, 10)...)
         add!("G > n", patch_infections, patch_args(3, 10, 3, 15)...)
         add!(
@@ -592,7 +608,10 @@ end
     rng = Xoshiro(20260923)
     out, pb = Mooncake.rrule!!(
         zero_fcodual(renewal_infections),
-        map(zero_fcodual, (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7)))...
+        map(
+            zero_fcodual,
+            (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7), 300.0)
+        )...
     )
     Ī = randn(rng, 40)
     tangent(out) .= Ī
@@ -604,7 +623,7 @@ end
     K[[1, 5, 9]] .= 0
     args = (
         rand(rng, np, n) .+ 1, rand(rng, 12), rand(rng, np, 7) .+ 1, K,
-        rand(rng, np, n) .* 0.5,
+        rand(rng, np, n) .* 0.5, fill(300.0, np),
     )
     out, pb = Mooncake.rrule!!(
         zero_fcodual(patch_infections), map(zero_fcodual, args)...

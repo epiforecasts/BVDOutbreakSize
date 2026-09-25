@@ -54,17 +54,70 @@ end
 @testitem "renewal_infections: seeds kept, geometric growth" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: renewal_infections, renewal_infections_with_force
+    using BVDOutbreakSize: renewal_infections, renewal_infections_with_state
     seed = [1.0, 2.0, 4.0]
     ## A one-day generation interval multiplies each day by `R`.
-    I = renewal_infections(fill(1.5, 12), [1.0], seed)
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    I = renewal_infections(fill(1.5, 12), [1.0], seed, 2.0^900)
     @test I[1:3] == seed
     @test I[4:end] ≈ 4.0 .* 1.5 .^ (1:9)
     ## Each day after the seed is `R_t` times its force.
     rng = Xoshiro(3)
     R = rand(rng, 40) .+ 0.5
-    I, f = renewal_infections_with_force(R, pmf(rng, 12), rand(rng, 7))
-    @test I[8:end] ≈ R[8:end] .* f[8:end]
+    st = renewal_infections_with_state(
+        R, pmf(rng, 12), rand(rng, 7), 2.0^900
+    )
+    @test st.infections[8:end] == R[8:end] .* st.force[8:end]
+end
+
+@testitem "renewal_infections: depletion bounds new infections by the pool" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: renewal_infections, renewal_infections_with_state
+    rng = Xoshiro(5)
+    g, seed = pmf(rng, 12), rand(rng, 7) .+ 1
+    N = 500.0
+    ## Each day takes `S (1 - e^{-x})` of the pool `S`, with `x = R f / N`,
+    ## and leaves `S e^{-x}` for the next.
+    R = rand(rng, 40) .+ 0.8
+    st = renewal_infections_with_state(R, g, seed, N)
+    S = N - sum(seed)
+    for t in 8:40
+        x = R[t] * st.force[t] / N
+        @test st.infections[t] ≈ S * (1 - exp(-x))
+        S *= exp(-x)
+        @test st.susceptible[t] ≈ S
+    end
+    ## New infections never exceed the pool left after the seed.
+    I = renewal_infections(fill(3.0, 60), g, seed, N)
+    @test all(>=(0), I)
+    @test sum(I[8:end]) <= N - sum(seed) + 1.0e-8
+    ## A proposal whose force overflows takes the whole pool rather than `Inf`.
+    I = renewal_infections(fill(1.0e308, 30), g, seed, N)
+    @test all(isfinite, I)
+    @test sum(I[8:end]) ≈ N - sum(seed)
+end
+
+@testitem "renewal_infections: depletion is light at census scale" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: renewal_infections, PROVINCE_POPULATIONS
+    using Distributions: Gamma
+    using BVDOutbreakSize: discretise_censored
+    ## Cumulative infections on the day the undepleted renewal first reaches
+    ## `target`, with and without the pool `N`.
+    function at_size(N, target)
+        gi = discretise_censored(Gamma(2.71, 5.65), 40)
+        g = gi[2:end] ./ sum(gi[2:end])
+        R, seed = fill(2.0, 400), fill(10.0, length(g))
+        free = cumsum(renewal_infections(R, g, seed, 2.0^900))
+        t = findfirst(>=(target), free)
+        return cumsum(renewal_infections(R, g, seed, N))[t] / free[t]
+    end
+    ## The outbreak's current size against the affected provinces barely
+    ## moves, while a million-infection tail in Ituri is visibly trimmed.
+    @test at_size(float(sum(PROVINCE_POPULATIONS)), 15_000) > 0.99
+    @test at_size(float(PROVINCE_POPULATIONS[1]), 1.0e6) < 0.9
 end
 
 @testitem "abscond thinning: nests the plain convolution" setup = [

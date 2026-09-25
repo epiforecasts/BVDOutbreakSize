@@ -192,7 +192,7 @@ end
     g = [1.0]
     Rt = fill(2.0, 5)
     seed = [1.0]
-    I = renewal_infections(Rt, g, seed)
+    I = renewal_infections(Rt, g, seed, 1.0e12)
 
     @test I[1] ≈ 1.0
     @test I[2] ≈ 2.0
@@ -210,7 +210,7 @@ end
     n = 60
     seed = ones(length(g))
     Rt = fill(2.0, n)
-    I = renewal_infections(Rt, g, seed)
+    I = renewal_infections(Rt, g, seed, 1.0e12)
     ## Under R > 1 the trajectory must grow on average.
     @test I[n] > I[1]
     @test all(I .>= 0)
@@ -225,7 +225,7 @@ end
     n = 60
     seed = fill(10.0, length(g))
     Rt = fill(0.5, n)
-    I = renewal_infections(Rt, g, seed)
+    I = renewal_infections(Rt, g, seed, 1.0e12)
     ## Under R < 1 the trajectory must eventually fall below seed level.
     @test I[n] < seed[end]
 end
