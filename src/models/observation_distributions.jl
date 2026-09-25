@@ -43,8 +43,33 @@ function _nbinomial_count(rng::AbstractRNG, d::NegativeBinomial)
     return _poisson_count(rng, rand(rng, Gamma(d.r, (1 - d.p) / d.p)))
 end
 
+## A binomial count of `n` trials at success probability `p`. The
+## Distributions sampler overflows for a trial count near `typemax(Int)`, so
+## past `2^52` the draw takes the normal limit, clamped to `[0, n]`.
+function _binomial_count(rng::AbstractRNG, n::Integer, p::Real)
+    n < 2^52 && return rand(rng, Binomial(n, p))
+    μ = n * p
+    x = round(μ + sqrt(μ * (1 - p)) * randn(rng))
+    return clamp(_saturated_count(max(x, zero(x))), 0, n)
+end
+
+## A beta-binomial count by the mixture `rand(::BetaBinomial)` uses, so a
+## trial count within range draws the same count from the same generator
+## state.
+function _betabinomial_count(rng::AbstractRNG, d::BetaBinomial)
+    return _binomial_count(rng, d.n, rand(rng, Beta(d.α, d.β)))
+end
+
 ## `x` floored to an `Int`, saturating at `typemax(Int)`.
 _saturated_count(x::Real) = x < 2.0^63 ? floor(Int, x) : typemax(Int)
+
+## Sum of counts that may have saturated. An integer sum that would pass
+## `typemax(Int)` saturates too rather than wrapping negative.
+function _saturating_sum(x)
+    all(v -> v isa Integer, x) && sum(float, x) >= 2.0^63 &&
+        return typemax(Int)
+    return sum(x)
+end
 
 """
     SafePoisson(λ)
@@ -59,6 +84,7 @@ struct SafePoisson{T <: Real} <: Distributions.DiscreteUnivariateDistribution
     λ::T
 end
 
+Base.eltype(::Type{<:SafePoisson}) = Int
 Base.minimum(::SafePoisson) = 0
 Base.maximum(::SafePoisson) = Inf
 Distributions.insupport(::SafePoisson, x::Real) = isinteger(x) && x >= 0
@@ -78,6 +104,32 @@ Shared by the count-stream observation submodels.
 function safe_nbinomial(k, μ)
     g = _nbinomial_params(k, μ)
     return NegativeBinomial(g.r, g.p)
+end
+
+"""
+    SafeNegBinomial(k, μ)
+
+[`safe_nbinomial`](@ref)`(k, μ)` whose draws saturate at `typemax(Int)`
+rather than throwing `InexactError` past it, as [`SafePoisson`](@ref) does.
+`logpdf` is the `safe_nbinomial` one.
+"""
+struct SafeNegBinomial{T <: Real, M <: Real} <:
+    Distributions.DiscreteUnivariateDistribution
+    "Dispersion."
+    k::T
+    "Mean."
+    μ::M
+end
+
+Base.eltype(::Type{<:SafeNegBinomial}) = Int
+Base.minimum(::SafeNegBinomial) = 0
+Base.maximum(::SafeNegBinomial) = Inf
+Distributions.insupport(::SafeNegBinomial, x::Real) = isinteger(x) && x >= 0
+function Distributions.logpdf(d::SafeNegBinomial, x::Real)
+    return logpdf(safe_nbinomial(d.k, d.μ), x)
+end
+function Base.rand(rng::AbstractRNG, d::SafeNegBinomial)
+    return _saturated_count(_nbinomial_count(rng, safe_nbinomial(d.k, d.μ)))
 end
 
 ## The guarded parameters `safe_nbinomial(k, μ)` builds from: the dispersion
@@ -124,9 +176,7 @@ function Distributions._rand!(
         rng::AbstractRNG, d::NegBinomialVector, x::AbstractVector{<:Real}
     )
     @inbounds for i in eachindex(x, d.μ)
-        x[i] = _saturated_count(
-            _nbinomial_count(rng, safe_nbinomial(d.k, safe_rate(d.μ[i])))
-        )
+        x[i] = rand(rng, SafeNegBinomial(d.k, safe_rate(d.μ[i])))
     end
     return x
 end
@@ -212,9 +262,7 @@ function Distributions._rand!(
         x::AbstractVector{<:Real}
     )
     @inbounds for i in eachindex(x, d.μ, d.upper)
-        count = _saturated_count(
-            _nbinomial_count(rng, safe_nbinomial(d.k, safe_rate(d.μ[i])))
-        )
+        count = rand(rng, SafeNegBinomial(d.k, safe_rate(d.μ[i])))
         x[i] = min(count, safe_rate(d.upper[i]))
     end
     return x
@@ -298,7 +346,9 @@ function Distributions._rand!(
         rng::AbstractRNG, d::BetaBinomialVector, x::AbstractVector{<:Real}
     )
     @inbounds for i in eachindex(x, d.trials, d.p)
-        x[i] = rand(rng, safe_betabinomial(d.trials[i], d.p[i], d.ρ))
+        x[i] = _betabinomial_count(
+            rng, safe_betabinomial(d.trials[i], d.p[i], d.ρ)
+        )
     end
     return x
 end

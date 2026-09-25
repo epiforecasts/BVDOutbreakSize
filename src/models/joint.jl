@@ -58,10 +58,10 @@ _forecast_exports(state, fd) = dated_poisson_model(
 
 ## National forecast counts summed over each future week, the totals the
 ## province split divides. `edges` is the cut-off followed by the future
-## vintage days.
+## vintage days. A week past `typemax(Int)` saturates there.
 function _weekly_totals(daily, n, edges)
     return [
-        Int(sum(@view daily[(edges[j] - n + 1):(edges[j + 1] - n)]))
+        Int(_saturating_sum(view(daily, (edges[j] - n + 1):(edges[j + 1] - n))))
             for j in 1:(length(edges) - 1)
     ]
 end

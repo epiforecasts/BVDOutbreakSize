@@ -23,7 +23,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
 import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
-    NegativeBinomial, BetaBinomial, Normal,
+    NegativeBinomial, BetaBinomial, Binomial, Normal,
     LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution
 using CensoredDistributions: AnalyticalSolver, primary_censored,
@@ -188,7 +188,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
                 "StudentTVector, BetaBinomialVector, SplitCountVector, " *
-                "SafePoisson"
+                "SafePoisson, SafeNegBinomial"
         )
     )
 end

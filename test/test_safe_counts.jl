@@ -88,7 +88,8 @@ end
         SafeNegBinomial
     using Random: Xoshiro
     ## Each submodel that can sample a missing or forecast count, at a mean
-    ## past `typemax(Int)`. Every draw must be an integer in `[0, typemax]`.
+    ## past `typemax(Int)`. Every draw must lie in `[0, typemax(Int)]`. The
+    ## censored occupancy takes its float ceiling where it binds.
     big = 1.0e22
     k = 1.0e4
     pmf = [0.2, 0.5, 0.3]
@@ -131,9 +132,24 @@ end
                     for x in v
             ]
             @test !isempty(counts)
-            @test all(x -> x isa Integer && 0 <= x <= typemax(Int), counts)
+            @test all(x -> isfinite(x) && 0 <= x <= typemax(Int), counts)
         end
     end
     @test eltype(SafePoisson(1.0)) === Int
     @test eltype(SafeNegBinomial(k, 1.0)) === Int
+end
+
+@testitem "beta-binomial draws: huge trial counts stay in range" begin
+    using BVDOutbreakSize: BetaBinomialVector, safe_betabinomial
+    using Random: Xoshiro
+    trials = [5, 2^52 - 1, typemax(Int)]
+    x = rand(Xoshiro(8), BetaBinomialVector(trials, fill(0.4, 3), 0.1))
+    @test all(0 .<= x .<= trials)
+    ## Within range the draw is the Distributions one.
+    y = rand(Xoshiro(9), BetaBinomialVector([5, 40], [0.3, 0.6], 0.1))
+    rng = Xoshiro(9)
+    @test y == [
+        rand(rng, safe_betabinomial(5, 0.3, 0.1)),
+        rand(rng, safe_betabinomial(40, 0.6, 0.1)),
+    ]
 end
