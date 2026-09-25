@@ -77,15 +77,6 @@ function _forecast_new(pp, key, h)
     return [_saturating_sum(x[1:h]) for x in v]
 end
 
-## Sum of one draw's future values. A count draw saturates at `typemax(Int)`
-## ([`SafePoisson`](@ref)), so an integer sum that would pass it saturates too
-## rather than wrapping negative.
-function _saturating_sum(x)
-    all(v -> v isa Integer, x) && sum(float, x) >= 2.0^63 &&
-        return typemax(Int)
-    return sum(x)
-end
-
 ## Each draw's value on future day `h`, or `nothing`.
 function _forecast_at(pp, key, h)
     v = _forecast_vectors(pp, key)
