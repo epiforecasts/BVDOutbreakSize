@@ -38,7 +38,6 @@ Changes since v2.1.0.
 ### Model
 
 - The renewal-start seed is the daily incidence `r·exp(r·T)` of a cryptic phase grown from one index infection, so it can fall below one infection a day (#898).
-  Fitted values change.
 - The weekly log-Rt walk is drawn in non-centred form again: in the joint on main the centred knots split between chains while the onset stream scores only the trailing window (#892).
   Fitted values move only through the sampling, as with the centred form.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
