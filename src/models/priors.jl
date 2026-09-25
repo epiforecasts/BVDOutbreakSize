@@ -1602,9 +1602,8 @@ coupling raise a secondary province's early incidence.
 An all-zero kernel leaves a secondary patch no route to infections at all,
 so the uncoupled path keeps the sampled fractions (`seed_fraction_prior`, a
 `LogNormal` on the fraction of the primary seed). They partition the
-national cryptic seed rather than adding to it, so `2^m` stays the
-country's cryptic size for any patch count and `C_T` stays comparable
-across them.
+national cryptic seed rather than adding to it, so `C_T` stays the
+country's cryptic size and comparable across any patch count.
 
 ### Returns
 
@@ -1674,7 +1673,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    scale the data speak to. With importation off the relative seed
     ##    sets the level of the provincial case split, leaving `δ_p` to be
     ##    identified by its time trend. An absolute seed prior pinned far
-    ##    below the primary's `2^m` would force `δ_p` to absorb the whole
+    ##    below the primary's `C_T` would force `δ_p` to absorb the whole
     ##    level difference, making the reported provincial Rt gap an artefact
     ##    of the seed prior.
     renewal_start = clamp(rt_start, 1, n)
@@ -1700,9 +1699,10 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         eltype(seed_fraction), typeof(float(seed0_total))
     )
     ## The fractions partition the national cryptic seed, they do not add to
-    ## it. `growth_state.C_T` is `2^m`, and the `m` prior is elicited as a
-    ## national quantity, so it is the size of the whole cryptic phase.
-    ## Dividing through by `(1 + Σf)` keeps the national seed at `2^m` for any
+    ## it. `growth_state.C_T` is `exp(r·m·G)` and the `m` prior is
+    ## elicited as a national quantity, so it is the size of the whole
+    ## cryptic phase.
+    ## Dividing through by `(1 + Σf)` keeps the national seed at `C_T` for any
     ## number of patches, so `C_T` stays comparable across `n_patches` and the
     ## genetic prior keeps its meaning.
     seed_shares = zeros(Tp, n_patches)

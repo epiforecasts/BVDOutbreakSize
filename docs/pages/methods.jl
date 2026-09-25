@@ -231,7 +231,7 @@ MarkdownTable(vintage_table) #hide
 # | Reproduction number $R_{p,t}$ | ● | ● | ● | ● | ● | ● | ● |
 # | Generation interval | ● | ● | ● | ● | ● | ● | ● |
 # | Incubation period | ● | ● | ● | ● | ● | ● | ● |
-# | Seed $I_0$ | ● | ● | ● | ● | ● | ● | ● |
+# | Cryptic-phase seed $C_T$ | ● | ● | ● | ● | ● | ● | ● |
 # | Onset-to-death delay |  | ● |  |  |  | ● | ● |
 # | Case-fatality ratio |  | ● |  |  |  | ● | ● |
 # | Death ascertainment $p_{\text{death}}$ |  | ● |  |  |  | ● |  |
@@ -399,22 +399,19 @@ MarkdownTable(vintage_table) #hide
 
 # #### Seeding and growth
 #
-# We assume the outbreak started from a single seed case introduced by a zoonotic spillover.
-# The initial infection count $I_0$ on the last day of the seeding window has a prior centred on a single seed:
-#
-# ```math
-# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{9}
-# ```
-#
-# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
+# We assume the outbreak started from a zoonotic spillover and grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
 # The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March.
+# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March:
+#
+# ```math
+# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2). \tag{9}
+# ```
+#
 # The traced 25 January death then sits near the 87th percentile: it is the earliest chain the field work reached, which bounds the origin rather than dating it.
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
 # C_T = e^{r T_{\text{cryptic}}}. \tag{10}
 # ```
