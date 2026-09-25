@@ -140,7 +140,7 @@ fitted days are uncensored, and so are the future ones.
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := state.C[fd]
     return (;
-        isolation = occupancy, admissions,
+        isolation = occupancy, admissions, occupancy = occ,
         incare_deaths = state.deaths_daily[fd],
         ruleouts = state.ruleout_daily[fd],
     )
@@ -1785,6 +1785,35 @@ density there, is the fitted model's.
             )
             forecast_province_deaths := vec(
                 forecast_province_death_split.obs_increments
+            )
+        end
+        ## Each province's occupancy at each future vintage, the national
+        ## occupancy split by the fitted occupancy split over the per-patch
+        ## demand, and its beds, its static share of the national capacity.
+        if _has_province_rows(province_isolation)
+            vj = vintages .- n
+            forecast_province_isolation_split ~ to_submodel(
+                composition_split_model(
+                    missing,
+                    treatment_state.demand_patch[:, vintages] ./
+                        reshape(
+                        vec(sum(treatment_state.demand_patch[:, vintages]; dims = 1)),
+                        1, :
+                    ),
+                    ## A draw at the bed ceiling is censored, so not whole;
+                    ## `forecast_reported` rounds it the same way.
+                    [round(Int, treatment_forecast.occupancy[j]) for j in vj],
+                    treatment_state.occupancy_split_rho
+                )
+            )
+            forecast_province_isolation := vec(
+                forecast_province_isolation_split.obs_increments
+            )
+        end
+        if length(treatment_state.capacity_shares) == n_patches
+            forecast_province_beds := vec(
+                treatment_state.capacity_shares .*
+                    reshape(treatment_state.capacity_series[vintages], 1, :)
             )
         end
         forecast_means = (;
