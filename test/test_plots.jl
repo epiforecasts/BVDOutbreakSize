@@ -2256,3 +2256,36 @@ end
     ## One slot per made date, whichever fits carry it.
     @test ax.limits[][1] == (0.5, 2.5)
 end
+
+@testitem "plot_recovery draws every seed over the prior" setup = [
+    HeadlessMakie,
+] begin
+    using DataFrames: DataFrame
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_recovery, recovery_table
+    rng = MersenneTwister(4)
+    params = DataFrame()
+    draws = Dict{Int, DataFrame}()
+    for seed in 1:2
+        d = Dict(
+            "C_T" => exp.(8 .+ 0.3 .* randn(rng, 200)),
+            "r" => -0.02 .+ 0.01 .* randn(rng, 200),
+        )
+        tab = recovery_table(Dict("C_T" => 3000.0, "r" => -0.015), d)
+        tab.seed .= seed
+        append!(params, tab)
+        draws[seed] = DataFrame(d)
+    end
+    prior = DataFrame(
+        "C_T" => exp.(9 .+ 2 .* randn(rng, 300)),
+        "r" => 0.03 .* randn(rng, 300),
+    )
+    fig = plot_recovery(
+        params, draws, prior; log_x = ["C_T"], difference = ["r"],
+        ncols = 2, row_labels = ["national"]
+    )
+    @test fig isa CairoMakie.Makie.Figure
+    ## Without draws or a prior only the intervals are drawn.
+    @test plot_recovery(params, Dict{Int, DataFrame}(), DataFrame()) isa
+        CairoMakie.Makie.Figure
+end

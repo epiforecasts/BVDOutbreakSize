@@ -132,3 +132,51 @@ end
     @test tab.relative_crps[2] == Inf
     @test tab.covered_90 == [true, false]
 end
+
+@testitem "recovery summaries across seeds" begin
+    using BVDOutbreakSize, DataFrames
+    ## Two seeds of two quantities: a growth rate with a negative truth and a
+    ## count, with the count's truth outside the 99% interval in seed 2.
+    row(seed, q, truth, med, tq, z; covered = true) = (;
+        quantity = q, truth, median = med, lower_90 = med - 1,
+        upper_90 = med + 1, lower_50 = med - 0.5, upper_50 = med + 0.5,
+        covered_50 = covered, covered_90 = covered, truth_quantile = tq, z,
+        seed, fit_minutes = 10.0, max_rhat = seed == 1 ? 1.01 : 1.2,
+        min_ess_bulk = 400.0, divergences = 0,
+    )
+    params = DataFrame(
+        [
+            row(1, "r", -0.02, -0.01, 0.4, 0.3),
+            row(1, "C_T", 100.0, 120.0, 0.3, 0.5),
+            row(2, "r", -0.04, -0.05, 0.6, -0.4),
+            row(2, "C_T", 100.0, 40.0, 0.999, -3.0; covered = false),
+        ]
+    )
+    s = recovery_summary(params)
+    @test s.quantity == ["r", "C_T"]
+    ## Relative error is taken against the truth's magnitude, so a
+    ## negative truth keeps the sign of the error.
+    @test s.rel_error_min[1] ≈ -0.25
+    @test s.rel_error_max[1] ≈ 0.5
+    @test s.rel_error_median[2] ≈ (0.2 - 0.6) / 2
+    @test s.covered_90 == [2, 1]
+    @test s.outside == [0, 1]
+    @test s.worst_seed == [2, 2]
+    @test s.worst_z[2] == -3.0
+    @test (s.truth_min[1], s.truth_max[1]) == (-0.04, -0.02)
+    ## A zero truth has no relative error.
+    zero_truth = copy(params)
+    zero_truth.truth[zero_truth.quantity .== "r"] .= 0.0
+    z = recovery_summary(zero_truth)
+    @test ismissing(z.rel_error_median[1])
+    @test !ismissing(z.rel_error_median[2])
+
+    v = recovery_seed_verdicts(params)
+    @test v.seed == [1, 2]
+    @test v.status == [:pass, :unconverged]
+    @test v.outside[1] == ""
+    @test recovery_overall(v.status) == :unconverged
+    @test recovery_overall([:pass, :fail, :unconverged]) == :fail
+    @test recovery_overall([:pass, :warn]) == :warn
+    @test recovery_overall([:pass]) == :pass
+end

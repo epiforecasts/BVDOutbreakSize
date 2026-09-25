@@ -173,6 +173,87 @@ end
 """
 $(TYPEDSIGNATURES)
 
+The [`recovery_verdict`](@ref) of each seed in `params`, the
+[`recovery_table`](@ref) rows of every seed stacked with the `seed`,
+`fit_minutes`, `max_rhat`, `min_ess_bulk` and `divergences` columns that
+`scripts/recovery.jl` adds. Returns one row per seed with its `status`,
+90% coverage, the quantities outside the 99% interval and its
+convergence diagnostics. Other keywords pass to [`recovery_verdict`](@ref).
+"""
+function recovery_seed_verdicts(params::DataFrame; kwargs...)
+    rows = map(sort(unique(params.seed))) do s
+        tab = params[params.seed .== s, :]
+        d = (;
+            max_rhat = first(tab.max_rhat),
+            min_ess_bulk = first(tab.min_ess_bulk),
+        )
+        v = recovery_verdict(tab; diagnostics = d, kwargs...)
+        (;
+            seed = s, status = v.status, coverage_90 = v.coverage_90,
+            outside = join(v.outside, ", "),
+            fit_minutes = first(tab.fit_minutes), d.max_rhat,
+            d.min_ess_bulk, divergences = first(tab.divergences),
+        )
+    end
+    return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One verdict over several seeds' statuses (from
+[`recovery_seed_verdicts`](@ref)): the worst of them, in the order `:fail`,
+`:unconverged`, `:warn`, `:pass`.
+"""
+function recovery_overall(statuses::AbstractVector{Symbol})
+    for s in (:fail, :unconverged, :warn)
+        s in statuses && return s
+    end
+    return :pass
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Recovery across seeds, one row per quantity, from the stacked
+[`recovery_table`](@ref) rows of every seed (with a `seed` column). Each row
+has the number of seeds, the range of the true values, the posterior
+median's error relative to the truth (`(median - truth) / |truth|`, missing
+for a true value of zero) and the z-score as their median and range across
+seeds, how many seeds have the truth inside the 90% interval
+(`covered_90`) and outside the central `outer` interval (`outside`), and
+the seed with the largest absolute z (`worst_seed`, `worst_z`).
+"""
+function recovery_summary(params::DataFrame; outer::Real = 0.99)
+    tail = (1 - outer) / 2
+    rows = map(unique(params.quantity)) do q
+        tab = params[params.quantity .== q, :]
+        rel = [
+            t == 0 ? missing : (m - t) / abs(t)
+                for (m, t) in zip(tab.median, tab.truth)
+        ]
+        known = collect(skipmissing(rel))
+        worst = argmax(abs.(tab.z))
+        (;
+            quantity = q, n_seeds = nrow(tab),
+            truth_min = minimum(tab.truth), truth_max = maximum(tab.truth),
+            rel_error_median = isempty(known) ? missing : median(known),
+            rel_error_min = isempty(known) ? missing : minimum(known),
+            rel_error_max = isempty(known) ? missing : maximum(known),
+            z_median = median(tab.z), z_min = minimum(tab.z),
+            z_max = maximum(tab.z), covered_90 = count(tab.covered_90),
+            outside = count(
+                q -> q < tail || q > 1 - tail, tab.truth_quantile
+            ),
+            worst_seed = tab.seed[worst], worst_z = tab.z[worst],
+        )
+    end
+    return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Forecasts from a fit to simulated data, scored against the simulated future
 and against a persistence baseline. `truth` maps each forecast quantity to
 its simulated value, `draws` maps it to the fitted forecast's draws and

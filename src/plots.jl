@@ -4630,3 +4630,163 @@ function plot_diagnostic_contrast(
     )
     return fig
 end
+
+## --- Parameter recovery -------------------------------------------------
+
+"""
+Parameter recovery over every seed (see `scripts/recovery.jl`). `params` is
+the stacked [`recovery_table`](@ref) of each seed with a `seed` column,
+`draws` maps each seed to a frame of its thinned posterior draws and `prior`
+is a frame of prior draws, one column per quantity in both.
+
+The top panel puts every quantity and seed on one scale relative to the
+truth: each seed's posterior median with its 50% and 90% intervals divided
+by that seed's true value, on a log axis about a line at one. A quantity in
+`difference` is shown as `exp(value - truth)` instead, the ratio of daily
+growth factors for a growth rate. Below, one panel per quantity on its
+natural scale holds the prior draws in grey, each seed's posterior in its
+colour and each seed's true value as a dashed line; quantities in `log_x`
+are drawn on a log axis. Panels are laid out `ncols` to a row in the order
+of `quantities`, titled by `panel_labels` (by default `labels`), with
+`row_labels` down the left when given. The axes cover the posteriors and
+the truths, so a wide prior shows as a low grey floor. Returns the
+`Figure`.
+"""
+function plot_recovery(
+        params::DataFrame, draws::AbstractDict, prior::DataFrame;
+        quantities::AbstractVector{<:AbstractString} = unique(params.quantity),
+        labels::AbstractDict = Dict{String, String}(),
+        panel_labels::AbstractDict = labels,
+        row_labels::AbstractVector{<:AbstractString} = String[],
+        log_x = String[], difference = String[], ncols::Integer = 4
+    )
+    label(q) = get(labels, q, q)
+    seeds = sort(unique(params.seed))
+    colours = CairoMakie.Makie.wong_colors()
+    colour(s) = colours[mod1(findfirst(==(s), seeds), length(colours))]
+    nq = length(quantities)
+    nrows = cld(nq, ncols)
+    fig = Figure(
+        ;
+        size = (
+            240 * ncols + 120,
+            100 + (8 + 12 * length(seeds)) * nq + 210 * nrows,
+        )
+    )
+
+    ## Every quantity against its truth, top to bottom in `quantities` order.
+    ax = Axis(
+        fig[1, 1:ncols];
+        xlabel = "Posterior relative to the truth (log scale)",
+        yticks = (collect(nq:-1:1), label.(quantities)), xscale = log10,
+        xticks = [0.1, 0.2, 0.5, 1, 2, 5, 10],
+        xtickformat = vs -> [_recovery_tick(v) for v in vs],
+        title = "Recovery across seeds"
+    )
+    vlines!(ax, [1.0]; color = :black, linestyle = :dash, linewidth = 1.5)
+    dodge = length(seeds) > 1 ?
+        range(-0.3, 0.3; length = length(seeds)) : [0.0]
+    for (k, s) in enumerate(seeds)
+        tab = params[params.seed .== s, :]
+        for (i, q) in enumerate(quantities)
+            j = findfirst(==(q), tab.quantity)
+            j === nothing && continue
+            r = tab[j, :]
+            rel(x) = q in difference ? exp(x - r.truth) : x / r.truth
+            y = nq - i + 1 + dodge[k]
+            linesegments!(
+                ax, [rel(r.lower_90), rel(r.upper_90)], [y, y];
+                color = colour(s), linewidth = 1.5
+            )
+            linesegments!(
+                ax, [rel(r.lower_50), rel(r.upper_50)], [y, y];
+                color = colour(s), linewidth = 4
+            )
+            scatter!(ax, [rel(r.median)], [y]; color = colour(s))
+        end
+    end
+    CairoMakie.Legend(
+        fig[1, ncols + 1],
+        [
+            CairoMakie.LineElement(; color = colour(s), linewidth = 3)
+                for s in seeds
+        ],
+        ["seed $s" for s in seeds];
+        framevisible = false
+    )
+
+    ## Each quantity on its own scale, the prior behind the posteriors.
+    for (i, q) in enumerate(quantities)
+        r, c = fldmod1(i, ncols)
+        logged = q in log_x
+        tf(x) = logged ? log10.(filter(>(0), x)) : x
+        axq = Axis(
+            fig[r + 1, c]; title = get(panel_labels, q, q),
+            yticklabelsvisible = false,
+            yticksvisible = false,
+            xtickformat = logged ?
+                (vs -> [_recovery_tick(10^v) for v in vs]) :
+                (vs -> [_recovery_tick(v) for v in vs])
+        )
+        tab = params[params.quantity .== q, :]
+        post = [
+            tf(Float64.(draws[s][!, q])) for s in seeds
+                if haskey(draws, s) && q in names(draws[s])
+        ]
+        truths = tf(Float64.(tab.truth))
+        span = vcat(truths, [quantile(p, [0.005, 0.995]) for p in post]...)
+        if q in names(prior)
+            pv = tf(filter(isfinite, Float64.(prior[!, q])))
+            length(pv) > 1 &&
+                density!(axq, pv; color = (:grey, 0.35), strokewidth = 0)
+        end
+        for s in seeds
+            haskey(draws, s) && q in names(draws[s]) || continue
+            v = tf(Float64.(draws[s][!, q]))
+            density!(
+                axq, v; color = (colour(s), 0.15), strokecolor = colour(s),
+                strokewidth = 1.5
+            )
+        end
+        for (t, s) in zip(truths, tab.seed)
+            vlines!(
+                axq, [t]; color = colour(s), linestyle = :dash, linewidth = 1.5
+            )
+        end
+        lo, hi = extrema(span)
+        pad = hi > lo ? 0.05 * (hi - lo) : max(abs(lo), 1.0) * 0.1
+        CairoMakie.xlims!(axq, lo - pad, hi + pad)
+        if logged
+            ## Round values on the log axis, spaced to the decades shown, or
+            ## finer when the posteriors span less than a factor of five.
+            decades = hi - lo
+            ms = decades > 2 ? (1,) : decades > 1 ? (1, 3) : (1, 2, 5)
+            steps = [m * 10.0^k for k in -4:9 for m in ms]
+            ticks = filter(v -> lo - pad <= log10(v) <= hi + pad, steps)
+            if length(ticks) < 3
+                steps = [m * 10.0^k for k in -4:9 for m in 1:9]
+                ticks = filter(v -> lo - pad <= log10(v) <= hi + pad, steps)
+                ticks = ticks[1:cld(length(ticks), 4):end]
+            end
+            axq.xticks = log10.(ticks)
+        end
+    end
+    for (r, t) in enumerate(row_labels)
+        CairoMakie.Label(
+            fig[r + 1, 0], t; rotation = pi / 2, font = :bold,
+            tellheight = false
+        )
+    end
+    return fig
+end
+
+## Tick labels for the recovery panels: thousands separated, small values to
+## two significant figures.
+function _recovery_tick(v::Real)
+    a = abs(v)
+    a >= 1000 && return replace(
+        string(round(Int, v)), r"(?<=\d)(?=(\d{3})+$)" => ","
+    )
+    a >= 10 && return string(round(Int, v))
+    return replace(string(round(v; sigdigits = 2)), r"\.0$" => "")
+end
