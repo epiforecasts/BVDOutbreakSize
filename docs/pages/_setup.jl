@@ -378,7 +378,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         cached !== nothing && return cached
         fc = _timed("one-week national forecast") do
             forecast_reported(
-                load_fit("joint");
+                fit_forecast("joint");
                 horizon = 7,
                 obs_cases = obs.reported_cases,
                 obs_deaths = obs.total_deaths,

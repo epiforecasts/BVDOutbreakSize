@@ -53,7 +53,7 @@ frozen_zone_inputs = frozen_zone_stage_inputs();
 ## The frozen fit's one-week-ahead national forecast, the same one the
 ## forecast evaluation page validates. `validation_forecast_from` is defined
 ## in the shared setup.
-validation_forecast = validation_forecast_from(frozen_lastweek);
+validation_forecast = validation_forecast_from("frozen_validation");
 ## The horizon is the days from the frozen cut-off to the last zone
 ## vintage, at most the week. A shorter week needs its own national
 ## forecast at that horizon, since the zone split scales its total; at the
@@ -71,24 +71,15 @@ _zone_validation_missing = Markdown.parse(
 if zone_validation_horizon >= 1
     zone_validation_forecast = zone_validation_horizon == 7 ?
         validation_forecast :
-        let onset_days = frozen_lastweek.o.onset_curve_history.onset_days,
-            report_days = frozen_lastweek.o.onset_curve_history.report_days
-
-            grid_start = isempty(onset_days) ? nothing : minimum(onset_days)
-            grid_end = isnothing(grid_start) ? nothing :
-            max(maximum(report_days), grid_start)
-            forecast_reported(
-                frozen_lastweek.chn;
-                horizon = zone_validation_horizon,
-                obs_cases = frozen_lastweek.o.reported_cases,
-                obs_deaths = frozen_lastweek.o.total_deaths,
-                obs_confirmed = frozen_lastweek.o.confirmed_cases,
-                obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-                obs_recovered = frozen_lastweek.o.recovered_cases,
-                grid_n = frozen_lastweek.o.n,
-                onset_grid_start = grid_start, onset_grid_end = grid_end
-            )
-    end
+        forecast_reported(
+            fit_forecast("frozen_validation");
+            horizon = zone_validation_horizon,
+            obs_cases = frozen_lastweek.o.reported_cases,
+            obs_deaths = frozen_lastweek.o.total_deaths,
+            obs_confirmed = frozen_lastweek.o.confirmed_cases,
+            obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
+            obs_recovered = frozen_lastweek.o.recovered_cases
+        )
     zone_truth = zone_forecast_truth(
         obs, frozen_zone_inputs;
         made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon
