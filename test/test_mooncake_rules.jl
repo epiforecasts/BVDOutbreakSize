@@ -24,7 +24,7 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
-        BetaBinomialVector, censoring_cap, admission_headroom
+        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -123,8 +123,8 @@
         ## A distribution's rule is named after the distribution.
         label(f, args) = f === _logpdf ? nameof(typeof(first(args))) :
             nameof(f)
-        add!(note, f, args...; perf = false) = push!(
-            cases, (; name = "$(label(f, args)): $note", f, args, perf)
+        add!(note, f, args...; perf = false, rtol = 1.0e-6) = push!(
+            cases, (; name = "$(label(f, args)): $note", f, args, perf, rtol)
         )
 
         M = rand(rng, 3, 40) .+ 0.5
@@ -162,33 +162,58 @@
         )
 
         Rt(n) = abs.(randn(rng, n)) .* 0.3 .+ 1.1
+        ## The pool is light unless named as binding, where the renewal takes
+        ## most of it. The binding cases draw from their own stream so the
+        ## cases after them keep their inputs.
+        prng = Xoshiro(895)
         add!(
             "G = 12", renewal_infections, Rt(40), pmf(rng, 12),
-            rand(rng, 7) .+ 1
+            rand(rng, 7) .+ 1, 1.0e6
+        )
+        add!(
+            "G = 12, binding pool", renewal_infections,
+            abs.(randn(prng, 40)) .* 0.3 .+ 2.1, pmf(prng, 12),
+            rand(prng, 7) .+ 1, 150.0
+        )
+        add!(
+            "single seed, binding pool", renewal_infections,
+            abs.(randn(prng, 30)) .* 0.3 .+ 2.1, pmf(prng, 6), [2.0], 60.0
         )
         add!(
             "G > n", renewal_infections, Rt(10), pmf(rng, 15),
-            rand(rng, 3) .+ 1
+            rand(rng, 3) .+ 1, 1.0e6
         )
         add!(
             "seed covers the grid", renewal_infections, Rt(6),
-            pmf(rng, 4), rand(rng, 6) .+ 1
+            pmf(rng, 4), rand(rng, 6) .+ 1, 1.0e6
         )
         add!(
             "n = 220, G = 35", renewal_infections, Rt(220), pmf(rng, 35),
-            rand(rng, 14) .+ 1; perf = true
+            rand(rng, 14) .+ 1, 2.7e7; perf = true
         )
 
-        ## No self-importation, and a daily importation intensity per patch.
-        function patch_args(np, n, L, G)
+        ## No self-importation, a daily importation intensity per patch and
+        ## one pool per patch.
+        function patch_args(np, n, L, G; pool = 1.0e6, rng = rng)
             K = rand(rng, np, np) .* 0.2
             foreach(p -> K[p, p] = 0, 1:np)
             return (
                 abs.(randn(rng, np, n)) .* 0.3 .+ 1.0, pmf(rng, G),
                 rand(rng, np, L) .+ 1.0, K, rand(rng, np, n) .* 0.5,
+                pool .* (rand(prng, np) .+ 0.5),
             )
         end
-        add!("3 patches", patch_infections, patch_args(3, 40, 7, 12)...)
+        ## Its tangent draw gives a small directional derivative, about
+        ## 0.07, so Float64 central differences settle to only about 2e-6
+        ## relative. The adjoint agrees with a BigFloat difference to 1e-15.
+        add!(
+            "3 patches", patch_infections, patch_args(3, 40, 7, 12)...;
+            rtol = 1.0e-5
+        )
+        add!(
+            "3 patches, binding pools", patch_infections,
+            patch_args(3, 40, 7, 12; pool = 60.0, rng = prng)...
+        )
         add!("1 patch", patch_infections, patch_args(1, 30, 5, 10)...)
         add!("G > n", patch_infections, patch_args(3, 10, 3, 15)...)
         add!(
@@ -405,6 +430,13 @@
             perf = true
         )
         add!("missing counts", admission_headroom, days, missing, cap, occ)
+
+        ## The growth rate below, at and above `R = 1`, at the model's
+        ## generation-interval truncation.
+        g40 = pmf(rng, 40)
+        for R in (0.6, 1.0, 1.6)
+            add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
+        end
         return cases
     end
 end
@@ -418,11 +450,13 @@ end
         two_clock_confirmed, stick_breaking_loglik
 
     rng = Xoshiro(20260923)
+    ## Each case draws its tangents from a stream seeded by its name, so
+    ## adding a case or an argument does not move the others' tangents.
     for c in rule_cases(rng)
         @testset "$(c.name)" begin
             test_rule(
-                rng, c.f, c.args...; is_primitive = true, mode = ReverseMode,
-                rtol = 1.0e-6, atol = 1.0e-8
+                Xoshiro(hash(c.name)), c.f, c.args...; is_primitive = true,
+                mode = ReverseMode, c.rtol, atol = 1.0e-8
             )
         end
     end
@@ -592,7 +626,10 @@ end
     rng = Xoshiro(20260923)
     out, pb = Mooncake.rrule!!(
         zero_fcodual(renewal_infections),
-        map(zero_fcodual, (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7)))...
+        map(
+            zero_fcodual,
+            (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7), 300.0)
+        )...
     )
     Ī = randn(rng, 40)
     tangent(out) .= Ī
@@ -604,7 +641,7 @@ end
     K[[1, 5, 9]] .= 0
     args = (
         rand(rng, np, n) .+ 1, rand(rng, 12), rand(rng, np, 7) .+ 1, K,
-        rand(rng, np, n) .* 0.5,
+        rand(rng, np, n) .* 0.5, fill(300.0, np),
     )
     out, pb = Mooncake.rrule!!(
         zero_fcodual(patch_infections), map(zero_fcodual, args)...
@@ -801,6 +838,24 @@ end
     for bit in (_CEN_CONF_X, _CEN_CONF_HI, _CEN_UNCONF, _CEN_SUSP)
         @test any(f -> f & bit != 0, flags)
         @test any(f -> f & bit == 0, flags)
+    end
+end
+
+@testitem "AD: r_to_R0 passes Mooncake's test_rule" tags = [:ad] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using Mooncake.TestUtils: test_rule
+    using BVDOutbreakSize: r_to_R0, lognormal_meansd, discretise_censored
+
+    ## The generation interval at the model's truncation and a long one,
+    ## with growth rates either side of zero.
+    for L in (40, 120), r in (-0.3, 0.0, 0.08)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        test_rule(
+            Xoshiro(L), r_to_R0, r, g;
+            is_primitive = false, mode = Mooncake.ReverseMode
+        )
     end
 end
 

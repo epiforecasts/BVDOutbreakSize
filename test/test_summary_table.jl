@@ -174,45 +174,49 @@ end
     )
 end
 
-@testitem "patch_headline compares the provinces" setup = [
+@testitem "patch_headline tabulates the provinces" setup = [
     PatchHeadlineDraws,
 ] begin
+    using Markdown
     using BVDOutbreakSize: patch_headline
 
     md = patch_headline(base, np)
-    bullets = filter(startswith("- **"), split(md, "\n"))
-    ## Shares of infections and the reproduction number only.
-    @test length(bullets) == 2
+    rows = filter(startswith("| "), split(md, "\n"))
+    ## A header, a separator and one row per province.
+    @test length(rows) == np + 2
+    @test occursin("Share of infections (%)", rows[1])
+    @test occursin("R at the cut-off | P(R > 1)", rows[1])
+    @test !occursin("CFR", rows[1])
+    @test !occursin("ascertainment", rows[1])
     @test !occursin("median", md)
-    ## Every province's share is given, and Ituri, the largest in every
-    ## draw, is named as carrying the most.
     for p in 1:np
-        @test occursin(Regex("$(PROVINCE_LABELS[p]) \\d+–\\d+%"), md)
+        @test startswith(rows[p + 2], "| $(PROVINCE_LABELS[p]) | ")
     end
-    @test occursin("Ituri has the most infections", md)
-    @test occursin("over 99%", md)
-    ## The reproduction number runs from the lowest to the highest province,
-    ## with the probability each is above one read from the draws.
+    ## The reproduction number is given for every province, with the
+    ## probability it is above one read from the draws.
+    @test occursin(r"\| Ituri \| \d+–\d+ \| [\d.]+–[\d.]+ \| over 99% \|", md)
+    @test occursin(r"\| Haut-Uele \| .* \| under 1% \|", md)
+    ## Ituri, the largest in every draw, is named as carrying the most.
     @test occursin(
-        r"from [\d.]+–[\d.]+ in Haut-Uele to [\d.]+–[\d.]+ in Ituri", md
+        "Ituri has the most infections with probability over 99%", md
     )
-    @test occursin("under 1% in Haut-Uele", md)
-    @test occursin("1 of 3 provinces", md)
+    @test occursin("1 of 3 provinces is more likely than not", md)
+    ## Both callers parse the markdown, so the table must parse as one.
+    content = Markdown.parse(md).content
+    @test length(content) == 2
+    @test content[1] isa Markdown.Table
+    @test content[2] isa Markdown.Paragraph
 
-    ## The optional comparisons appear only when the chain carries them.
+    ## The optional columns appear only when the chain carries them.
     fmd = patch_headline(full, np)
-    @test length(filter(startswith("- **"), split(fmd, "\n"))) == 5
-    @test occursin(
-        r"from 1\d\.\d–2\d\.\d% in Haut-Uele to 3\d\.\d–4\d\.\d% in Ituri",
-        fmd
-    )
-    @test occursin(
-        r"national average:\*\* from [\d.]+–[\d.]+ in Haut-Uele to " *
-            r"[\d.]+–[\d.]+ in Ituri",
-        fmd
-    )
+    frows = filter(startswith("| "), split(fmd, "\n"))
+    @test occursin("CFR (%)", frows[1])
+    @test occursin("Relative ascertainment", frows[1])
+    ## Ituri's case-fatality ratio and ascertainment close its row.
+    @test occursin(r"\| 3\d\.\d–4\d\.\d \| [\d.]+–[\d.]+ \|$", frows[3])
     ## Thirty imports against about 1 280 infections.
     @test occursin(r"another province make up 2\.\d–2\.\d%", fmd)
+    @test Markdown.parse(fmd).content[1] isa Markdown.Table
 
     @test_throws ErrorException patch_headline((; base.C_T_patch), np)
 end

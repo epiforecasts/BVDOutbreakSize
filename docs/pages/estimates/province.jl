@@ -33,7 +33,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
-# The bullets below compare the provinces, from the joint posterior.
+# The table below compares the provinces, from the joint posterior.
 # Each range is an equal-tailed 90% credible interval, and the shares and probabilities are computed draw by draw.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 

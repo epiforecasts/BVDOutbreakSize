@@ -194,10 +194,15 @@ joint_max_depth() = parse(
     get(ENV, "BVD_JOINT_MAX_DEPTH", "10")
 )
 
-## The fits that splat `joint_sampler_args()`.
-const JOINT_SAMPLER_FITS = ("joint", "sens_no_patches")
+## The fits that splat `joint_sampler_args()`: the headline, its spatial
+## control, the one-week-back validation joint and the two sensitivity
+## re-fits of the joint.
+const JOINT_SAMPLER_FITS = (
+    "joint", "sens_no_patches", "frozen_validation",
+    "sens_community_delay", "sens_exp_growth_clock",
+)
 
-## The sampler budget both halves of the spatial sensitivity splat.
+## The sampler budget every fit in `JOINT_SAMPLER_FITS` splats.
 joint_sampler_args() = (;
     samples = joint_samples(1000), n_adapts = joint_warmup(500),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
@@ -251,11 +256,15 @@ function build_fit_specs(
         )
         return (; o, model)
     end
+    ## The patched validation joint takes the headline's sampler budget. The
+    ## single-population frozen fits keep the smaller default.
     function fit_frozen_joint(cutoff_date; patches::Bool = false)
         f = frozen_joint(cutoff_date; patches)
+        budget = patches ? joint_sampler_args() :
+            (; samples = samples, target_accept = 0.9)
         chn = nuts_sample(
             f.model;
-            samples = samples, chains = chains, target_accept = 0.9,
+            budget..., chains = chains,
             callback = fit_callback("frozen_$(cutoff_date)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -385,7 +394,7 @@ function build_fit_specs(
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd
             );
-            samples = samples, chains = chains, target_accept = 0.9,
+            joint_sampler_args()..., chains = chains,
             callback = fit_callback("variant")
         )
     end

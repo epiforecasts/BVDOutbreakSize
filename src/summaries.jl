@@ -723,10 +723,6 @@ function _probability_text(p::Real)
     return string(round(Int, 100 * p), "%")
 end
 
-## `a, b and c`.
-_and_join(xs) = length(xs) == 1 ? only(xs) :
-    join(xs[1:(end - 1)], ", ") * " and " * last(xs)
-
 ## The province draws a headline reads, checked for the required ones.
 function _headline_draws(chn, np::Integer)
     required = [:C_T_patch, :R_T_patch]
@@ -741,20 +737,6 @@ function _headline_draws(chn, np::Integer)
         R_T = per_patch(:R_T_patch),
         cfr = per_patch(:CFR_patch),
         asc = per_patch(:province_ascertainment),
-    )
-end
-
-## `from a–b in <lowest> to c–d in <highest>`, the provinces ranked by their
-## posterior medians.
-function _range_text(
-        draws, labels; digits::Integer = 2, unit::AbstractString = ""
-    )
-    meds = median.(draws)
-    lo, hi = argmin(meds), argmax(meds)
-    return string(
-        "from ", _interval90_text(draws[lo]; digits, unit), " in ",
-        labels[lo], " to ", _interval90_text(draws[hi]; digits, unit),
-        " in ", labels[hi]
     )
 end
 
@@ -777,22 +759,20 @@ function _imports_total(chn, np::Integer)
 end
 
 """
-Markdown bullets comparing the provinces of the patch model, each quantity
-as an equal-tailed 90% credible interval. Every comparison is computed draw
-by draw, so it carries the correlation between provinces.
+Markdown table comparing the provinces of the patch model, one row per
+province and each quantity as an equal-tailed 90% credible interval, followed
+by the comparisons across provinces as sentences. Every comparison is
+computed draw by draw, so it carries the correlation between provinces.
 
-- Each province's share of infections to date, and the posterior
-  probability that the largest province has the most infections.
-- The range of the reproduction number at the cut-off across provinces, the
-  probability it is above one in each, and how many provinces are more
-  likely than not to be growing.
-- The range of the case-fatality ratio (`CFR_patch`) and of the case
-  ascertainment relative to the national average
-  (`province_ascertainment`), when the chain carries them.
-- The share of infections to date imported from another province
-  (`importation_patch`), when the chain carries it.
+The columns are the share of infections to date, the reproduction number at
+the cut-off, the posterior probability that it is above one, and, when the
+chain carries them, the case-fatality ratio (`CFR_patch`) and the case
+ascertainment relative to the national average (`province_ascertainment`).
 
-The ranges name the provinces with the lowest and highest posterior medians.
+The sentences give the probability that the largest province has the most
+infections, how many provinces are more likely than not to be growing, and,
+when the chain carries `importation_patch`, the share of infections to date
+imported from another province.
 [`patch_summary_table`](@ref) gives each province's own intervals.
 """
 function patch_headline(
@@ -805,56 +785,44 @@ function patch_headline(
     nd = length(first(d.C_T))
     totals = [sum(d.C_T[p][i] for p in 1:np) for i in 1:nd]
     share = [100 .* d.C_T[p] ./ totals for p in 1:np]
+    p_growing = [mean(>(1), d.R_T[p]) for p in 1:np]
+    df = DataFrame(
+        "Province" => labels,
+        "Share of infections (%)" =>
+            [_interval90_text(share[p]; digits = 0) for p in 1:np],
+        "R at the cut-off" =>
+            [_interval90_text(d.R_T[p]) for p in 1:np],
+        "P(R > 1)" => _probability_text.(p_growing)
+    )
+    d.cfr === nothing || (
+        df[!, "CFR (%)"] =
+            [_interval90_text(100 .* d.cfr[p]; digits = 1) for p in 1:np]
+    )
+    d.asc === nothing || (
+        df[!, "Relative ascertainment"] =
+            [_interval90_text(d.asc[p]) for p in 1:np]
+    )
     top = argmax(median.(d.C_T))
     p_top = count(
         i -> argmax([d.C_T[p][i] for p in 1:np]) == top, 1:nd
     ) / nd
-    bullets = String[
-        "- **Share of infections:** " * _and_join(
-            [
-                string(labels[p], " ", _interval90_text(share[p]; digits = 0), "%")
-                    for p in 1:np
-            ]
-        ) * " of infections to date. $(labels[top]) has the most " *
-            "infections with probability $(_probability_text(p_top)).",
-    ]
-    p_growing = [mean(>(1), d.R_T[p]) for p in 1:np]
     n_growing = count(>(0.5), p_growing)
-    push!(
-        bullets,
-        "- **Reproduction number:** at the cut-off it runs " *
-            _range_text(d.R_T, labels) * ". The probability it is above " *
-            "one is " * _and_join(
-            [
-                "$(_probability_text(p_growing[p])) in $(labels[p])"
-                    for p in 1:np
-            ]
-        ) * ", so $(n_growing) of $(np) provinces " *
-            (n_growing == 1 ? "is" : "are") *
-            " more likely than not to be growing."
-    )
-    d.cfr === nothing || push!(
-        bullets,
-        "- **Case-fatality ratio:** " * _range_text(
-            [100 .* c for c in d.cfr], labels; digits = 1, unit = "%"
-        ) * "."
-    )
-    d.asc === nothing || push!(
-        bullets,
-        "- **Case ascertainment relative to the national average:** " *
-            _range_text(d.asc, labels) * "."
-    )
+    sentences = [
+        "$(labels[top]) has the most infections with probability " *
+            "$(_probability_text(p_top)), and $(n_growing) of $(np) " *
+            "provinces " * (n_growing == 1 ? "is" : "are") *
+            " more likely than not to be growing.",
+    ]
     if _has_key(chn, :importation_patch)
         imports = _imports_total(chn, np)
         push!(
-            bullets,
-            "- **Importation:** infections imported from another province " *
-                "make up " *
+            sentences,
+            "Infections imported from another province make up " *
                 _interval90_text(100 .* imports ./ totals; digits = 1, unit = "%") *
                 " of infections to date."
         )
     end
-    return join(bullets, "\n") * "\n"
+    return markdown_table(df) * "\n" * join(sentences, "\n") * "\n"
 end
 
 """

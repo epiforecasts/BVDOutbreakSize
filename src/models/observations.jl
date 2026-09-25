@@ -115,7 +115,8 @@ end
 Per-day Poisson likelihood for a dated event series. Scores the observed
 per-day `counts` against the modelled per-day `means` with one Poisson
 term each, NaN/Inf-safe via [`safe_rate`](@ref). A `missing` `counts`
-samples instead (the predictive-generator path). The indexed `counts[i]`
+samples instead (the predictive-generator path), saturating at
+`typemax(Int)` ([`SafePoisson`](@ref)). The indexed `counts[i]`
 keeps the predict keys (`<prefix>.counts[i]`) replicable. Used by
 [`exports_model`](@ref) and the export-deaths likelihood for the dated
 Uganda export series.
@@ -129,7 +130,7 @@ Uganda export series.
         counts = Vector{Union{Missing, Int}}(missing, n)
     end
     for i in 1:n
-        counts[i] ~ Poisson(safe_rate(means[i]))
+        counts[i] ~ SafePoisson(safe_rate(means[i]))
     end
     return (; means, counts)
 end
@@ -715,7 +716,7 @@ leaving the unanchored days latent under the no-extrapolation probe.
         if analysed[i] > 0
             increments[i] ~ safe_betabinomial(analysed[i], p_pos[i], ρ)
         else
-            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+            increments[i] ~ SafeNegBinomial(k, safe_rate(modelled[i]))
         end
     end
     return (; modelled, increments)
@@ -1433,7 +1434,7 @@ rate and the daily at-risk prevalence for reuse by
         ## No dated series: cumulative single-total Poisson at the cut-off.
         raw_exports = sum(upto(export_prevalence, n))
         expected_exports_T := safe_rate(raw_exports)
-        exported_cases ~ Poisson(expected_exports_T)
+        exported_cases ~ SafePoisson(expected_exports_T)
     else
         ## Dated per-day Poisson. The export clock stops at the last import
         ## `t_last` (the `last_offset` truncation). Prevalence past it does
@@ -1444,7 +1445,7 @@ rate and the daily at-risk prevalence for reuse by
         ## intensity up to the day before the earliest detection.
         pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
             zero(@inbounds export_prevalence[begin])
-        pre_detection_exports ~ Poisson(safe_rate(pre))
+        pre_detection_exports ~ SafePoisson(safe_rate(pre))
         ## The first increment is measured from `pre`, so the pre-detection
         ## term and the increments partition Λ(t_last).
         raw_inc = bin_increments(export_prevalence, days)
@@ -1518,14 +1519,14 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
         expected_exports_deaths_T := safe_rate(sum(upto(death_daily, n)))
-        exports_deaths ~ Poisson(expected_exports_deaths_T)
+        exports_deaths ~ SafePoisson(expected_exports_deaths_T)
     else
         ## Dated per-day Poisson. The clock stops at the last death day.
         days, counts = dated_event_bins(export_death_days, n)
         δ₁ = days[1]
         pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
             zero(@inbounds death_daily[begin])
-        pre_death_exports ~ Poisson(safe_rate(pre))
+        pre_death_exports ~ SafePoisson(safe_rate(pre))
         raw_inc = bin_increments(death_daily, days)
         μ_day = [
             i == 1 ? raw_inc[1] - pre : raw_inc[i]

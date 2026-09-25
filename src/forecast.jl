@@ -74,7 +74,7 @@ end
 function _forecast_new(pp, key, h)
     v = _forecast_vectors(pp, key)
     isnothing(v) && return nothing
-    return [sum(x[1:h]) for x in v]
+    return [_saturating_sum(x[1:h]) for x in v]
 end
 
 ## Each draw's value on future day `h`, or `nothing`.

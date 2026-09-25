@@ -34,9 +34,12 @@ Changes since v2.1.0.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
+- `euler_lotka_r` returns the converged Euler–Lotka root, with a Mooncake rule from the implicit function theorem. The reported `r` moves by at most 2e-4 (#902).
+- `r_to_R0` takes one `exp` rather than one per lag (#902).
 
 ### Model
 
+- The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
 - The weekly log-Rt walk is drawn in non-centred form again: in the joint on main the centred knots split between chains while the onset stream scores only the trailing window (#892).
   Fitted values move only through the sampling, as with the centred form.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
@@ -168,6 +171,7 @@ Changes since v2.1.0.
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 - The in-sample Provinces page carries posterior predictive checks on the three province terms, and the Provinces estimates page a table of beds, demand, occupied beds, utilisation and shortfall by province (#784).
 
+- The summary dashboard gives the province comparison as a table with R at the cut-off for every province, and links each section to its estimates and forecast pages (#904).
 ### Data
 
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
@@ -175,6 +179,8 @@ Changes since v2.1.0.
 
 ### Fixed
 
+- A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
+- Every other count draw saturates the same way, including the export totals, the late confirmed days and the province split (#905).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 
 ### Infrastructure
@@ -190,6 +196,8 @@ Changes since v2.1.0.
 - `BVD_JOINT_MAX_DEPTH` overrides the joint fit's NUTS tree depth cap, which stays at 10 (#846, #865).
   Depth 12 took the joint fit past the fit job's 350-minute timeout.
 - The headline joint and its no-patches control are cached per joint sampler setting, so a run with a `BVD_JOINT_*` override set no longer overwrites the production fit (#848).
+- The one-week-back validation joint and the two sensitivity re-fits of the joint run at the headline's sampler budget, 1000 draws with 500 adaptation steps at a target acceptance of 0.80 (#887).
+  They had run at 500 draws with 200 adaptation steps at 0.90, and came back with R-hat up to 1.11 and bulk ESS as low as 14 (#886).
 - A release is cut by commenting `@release`, `@release minor` or `@release major` on any issue or pull request, and `task release-notes` prints the notes beforehand (#607, #767).
   The automatic version increment is gone.
 - A version tag's documentation build waits for the `main` build of the same commit and reuses its fits (#765).

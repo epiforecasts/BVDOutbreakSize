@@ -23,7 +23,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
 import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
-    NegativeBinomial, BetaBinomial, Normal,
+    NegativeBinomial, BetaBinomial, Binomial, Normal,
     LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution
 using CensoredDistributions: AnalyticalSolver, primary_censored,
@@ -183,14 +183,15 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_export_pressure_model,
     province_composition_model, composition_shares, composition_split_model
 
-## Vector observation distributions a submodel writes on the right of `~`.
+## Observation distributions a submodel writes on the right of `~`.
 ## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
 ## there and Julia 1.10 still loads the package.
 @static if VERSION >= v"1.11.0-DEV.469"
     eval(
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
-                "StudentTVector, BetaBinomialVector, SplitCountVector"
+                "StudentTVector, BetaBinomialVector, SplitCountVector, " *
+                "SafePoisson, SafeNegBinomial"
         )
     )
 end

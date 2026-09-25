@@ -46,7 +46,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
-# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020*, one source for all seven provinces rather than the best figure for each, since only the relative sizes enter the model.
+# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
+# Their relative sizes set the importation kernel and the per-capita testing covariate, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -231,7 +232,7 @@ MarkdownTable(vintage_table) #hide
 # | Reproduction number $R_{p,t}$ | ● | ● | ● | ● | ● | ● | ● |
 # | Generation interval | ● | ● | ● | ● | ● | ● | ● |
 # | Incubation period | ● | ● | ● | ● | ● | ● | ● |
-# | Seed $I_0$ | ● | ● | ● | ● | ● | ● | ● |
+# | Cryptic-phase seed $C_T$ | ● | ● | ● | ● | ● | ● | ● |
 # | Onset-to-death delay |  | ● |  |  |  | ● | ● |
 # | Case-fatality ratio |  | ● |  |  |  | ● | ● |
 # | Death ascertainment $p_{\text{death}}$ |  | ● |  |  |  | ● |  |
@@ -399,22 +400,19 @@ MarkdownTable(vintage_table) #hide
 
 # #### Seeding and growth
 #
-# We assume the outbreak started from a single seed case introduced by a zoonotic spillover.
-# The initial infection count $I_0$ on the last day of the seeding window has a prior centred on a single seed:
-#
-# ```math
-# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{9}
-# ```
-#
-# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
+# We assume the outbreak started from a zoonotic spillover and grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
 # The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March.
+# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March:
+#
+# ```math
+# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2). \tag{9}
+# ```
+#
 # The traced 25 January death then sits near the 87th percentile: it is the earliest chain the field work reached, which bounds the origin rather than dating it.
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
 # C_T = e^{r T_{\text{cryptic}}}. \tag{10}
 # ```
@@ -553,13 +551,20 @@ MarkdownTable(vintage_table) #hide
 #
 # The grid days before the renewal start are filled by the cryptic exponential seeds above.
 # This gives the recursion a full generation interval of history.
-# Each patch then runs its own renewal forward at its own reproduction number, and importation relocates a share of each day's new infections:
+# Each patch then runs its own renewal forward at its own reproduction number, importation relocates a share of each day's new infections, and the result depletes the patch's susceptible pool:
 #
 # ```math
-# G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
-# I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
-#           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}. \tag{18}
+# \begin{aligned}
+# G_{p,t} &= R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+# Y_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+#           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \\
+# I_{p,t} &= S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr), \qquad
+# S_{p,t} = S_{p,t-1}\, e^{-Y_{p,t}/N_p} = S_{p,t-1} - I_{p,t}.
+# \end{aligned} \tag{18}
 # ```
+#
+# This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
+# $R_{p,t}$ is the reproduction number in a fully susceptible population, and every reproduction number we report is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
 #
 # National infections are the patch sum, and the national reproduction number is read off that sum by inverting the renewal equation:
 #
