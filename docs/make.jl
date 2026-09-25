@@ -22,10 +22,12 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
-    "estimates/national", "estimates/province",
-    "forecasts/national", "forecasts/province",
+    "estimates/national", "estimates/province", "estimates/zone",
+    "forecasts/national", "forecasts/province", "forecasts/zone",
     "evaluation/insample/national", "evaluation/insample/province",
+    "evaluation/insample/zone",
     "evaluation/forecast/national", "evaluation/forecast/province",
+    "evaluation/forecast/zone",
     "sensitivity",
 ]
 
@@ -33,12 +35,16 @@ const PAGES = [
 ##   render-methods      → methods.jl → src/methods.md
 ##   render-main         → estimates/national.jl → src/estimates/national.md
 ##   render-province     → estimates/province.jl
+##   render-zone         → estimates/zone.jl
 ##   render-forecast     → forecasts/national.jl
 ##   render-forecast-province → forecasts/province.jl
+##   render-forecast-zone → forecasts/zone.jl
 ##   render-insample     → evaluation/insample/national.jl
 ##   render-insample-province → evaluation/insample/province.jl
+##   render-insample-zone → evaluation/insample/zone.jl
 ##   render-evaluation   → evaluation/forecast/national.jl
 ##   render-evaluation-province → evaluation/forecast/province.jl
+##   render-evaluation-zone → evaluation/forecast/zone.jl
 ##   render-sensitivity  → sensitivity.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
@@ -109,6 +115,30 @@ function write_references()
     end
 end
 
+## Stage the health-zone map's runtime inputs. Vitepress copies only
+## `src/public/` through unchanged (everything else is either a page or a
+## hashed asset), so the map page at `src/public/zone_map/index.html` fetches
+## its CSV and geojson from that directory by relative URL. The render step
+## writes the CSV into `summary_assets/`; the geojson is versioned under
+## `data/`. A missing input is a warning, not an error, so a build without
+## the zone model still deploys and the page shows its no-data message.
+function stage_zone_map()
+    dest = joinpath(LITERATE_OUT, "public", "zone_map")
+    mkpath(dest)
+    inputs = (
+        joinpath(REPO_ROOT, "data", "health_zones.geojson"),
+        joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"),
+    )
+    for src in inputs
+        if isfile(src)
+            cp(src, joinpath(dest, basename(src)); force = true)
+        else
+            @warn "Zone map input missing; the map will show no estimates" src
+        end
+    end
+    return
+end
+
 ## Assemble and deploy the Vitepress site from the pre-rendered markdown. The
 ## two report pages are already executed (Literate `execute = true`), so
 ## makedocs does not re-run them; it resolves `@ref`/`@cite`/`@bibliography`
@@ -119,6 +149,7 @@ function combine()
     )
     write_index()
     write_references()
+    stage_zone_map()
     makedocs(;
         sitename = "BVDOutbreakSize",
         authors = "Sam Abbott and contributors",
@@ -133,19 +164,23 @@ function combine()
             "Estimates" => [
                 "National" => "estimates/national.md",
                 "Provinces" => "estimates/province.md",
+                "Health zones" => "estimates/zone.md",
             ],
             "Forecasts" => [
                 "National" => "forecasts/national.md",
                 "Provinces" => "forecasts/province.md",
+                "Health zones" => "forecasts/zone.md",
             ],
             "Evaluation" => [
                 "In-sample" => [
                     "National" => "evaluation/insample/national.md",
                     "Provinces" => "evaluation/insample/province.md",
+                    "Health zones" => "evaluation/insample/zone.md",
                 ],
                 "Forecast" => [
                     "National" => "evaluation/forecast/national.md",
                     "Provinces" => "evaluation/forecast/province.md",
+                    "Health zones" => "evaluation/forecast/zone.md",
                 ],
             ],
             "Details" => [
@@ -161,6 +196,7 @@ function combine()
                 "Priors and latent submodels" => "lib/priors.md",
                 "Observation models" => "lib/observations.md",
                 "Joint and single-stream models" => "lib/joint.md",
+                "Health zones" => "lib/zones.md",
                 "Fitting" => "lib/fitting.md",
                 "Summaries and diagnostics" => "lib/summaries.md",
                 "Forecasts and scoring" => "lib/forecasts.md",
@@ -205,18 +241,26 @@ elseif STAGE == "render-main"
     render_page("estimates/national")
 elseif STAGE == "render-province"
     render_page("estimates/province")
+elseif STAGE == "render-zone"
+    render_page("estimates/zone")
 elseif STAGE == "render-forecast"
     render_page("forecasts/national")
 elseif STAGE == "render-forecast-province"
     render_page("forecasts/province")
+elseif STAGE == "render-forecast-zone"
+    render_page("forecasts/zone")
 elseif STAGE == "render-insample"
     render_page("evaluation/insample/national")
 elseif STAGE == "render-insample-province"
     render_page("evaluation/insample/province")
+elseif STAGE == "render-insample-zone"
+    render_page("evaluation/insample/zone")
 elseif STAGE == "render-evaluation"
     render_page("evaluation/forecast/national")
 elseif STAGE == "render-evaluation-province"
     render_page("evaluation/forecast/province")
+elseif STAGE == "render-evaluation-zone"
+    render_page("evaluation/forecast/zone")
 elseif STAGE == "render-sensitivity"
     render_page("sensitivity")
 elseif STAGE == "combine"
@@ -230,10 +274,12 @@ else
     error(
         "unknown BVD_DOCS_STAGE=$STAGE; expected one of render-methods, " *
             "render-main, " *
-            "render-province, render-forecast, " *
-            "render-forecast-province, " *
+            "render-province, render-zone, render-forecast, " *
+            "render-forecast-province, render-forecast-zone, " *
             "render-insample, render-insample-province, " *
+            "render-insample-zone, " *
             "render-evaluation, render-evaluation-province, " *
+            "render-evaluation-zone, " *
             "render-sensitivity, combine, all"
     )
 end

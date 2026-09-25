@@ -272,6 +272,36 @@ function load_observations(
         return result
     end
 
+    ## Per-zone history from a TOML block with one shared `dates` array and
+    ## one dotted `province.zone` array per series (`zone_confirmed_history`
+    ## and `zone_death_history`). Returns a Dict keyed province → zone, each
+    ## zone in the same (; days, counts) shape as history(); `unallocated`
+    ## is the report's own row of counts not yet attributed to a zone and
+    ## is kept as a zone of that name. Empty when the block is absent.
+    function zone_history(key)
+        ZoneHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, Dict{String, ZoneHistory}}()
+        !haskey(raw, key) && return result
+        block = raw[key]
+        !haskey(block, "dates") && return result
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        ord = sortperm(idx)
+        for prov in sort!([k for k in keys(block) if block[k] isa AbstractDict])
+            zones = Dict{String, ZoneHistory}()
+            for (zone, vals) in block[prov]
+                length(vals) == length(block["dates"]) || error(
+                    "$key: $prov.$zone has $(length(vals)) entries for " *
+                        "$(length(block["dates"])) dates"
+                )
+                v = Int.(vals[keep])
+                zones[String(zone)] = (; days = idx[ord], counts = v[ord])
+            end
+            result[prov] = zones
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -486,6 +516,8 @@ function load_observations(
             province_sparse_history("province_isolation_history"),
         province_bed_capacity_history =
             province_sparse_history("province_bed_capacity_history"),
+        zone_confirmed_history = zone_history("zone_confirmed_history"),
+        zone_death_history = zone_history("zone_death_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days,
     )
@@ -562,6 +594,242 @@ function province_increment_matrix(
         increments[p, :] = max.(diff(vcat(0, pooled)), 0)
     end
     return (; days, increments)
+end
+
+"""
+    zone_cumulative_falls(zone_history; min_fall = 1)
+
+Every place a named zone's cumulative count falls between consecutive
+vintages by more than `min_fall`, as a vector of named tuples
+`(; province, zone, day, from, to)`. A cumulative series cannot fall on
+its own, so each entry is a revision: the report has moved counts
+between zones, provinces or the unallocated row. `min_fall` guards
+against a single-unit correction being read as a revision.
+
+[`zone_increment_matrix`](@ref) clamps a negative increment to zero, so
+without this the revision is absorbed silently. Report these rather than
+let the clamp hide them.
+"""
+function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
+    out = @NamedTuple{
+        province::String, zone::String, day::Int,
+        from::Int, to::Int,
+    }[]
+    for (prov, zones) in zone_history, (zone, h) in zones
+
+        zone == "unallocated" && continue
+        for i in 2:length(h.days)
+            h.counts[i - 1] - h.counts[i] > min_fall || continue
+            push!(
+                out,
+                (;
+                    province = String(prov), zone = String(zone),
+                    day = h.days[i], from = h.counts[i - 1], to = h.counts[i],
+                )
+            )
+        end
+    end
+    return sort!(out; by = x -> (x.day, x.province, x.zone))
+end
+
+"""
+    zone_reattribution_days(zone_history; include_zone_falls = false,
+        min_fall = 1)
+
+The vintage days on which a province's `unallocated` cumulative count
+falls, keyed by province, from the per-health-zone histories loaded by
+[`load_observations`](@ref). A fall means the report has attributed
+cases (or deaths) it had carried as unallocated to named zones, so on
+that day the zones' cumulative counts rise by more than the province's.
+A province whose unallocated row never falls, or that has none, is
+absent. [`zone_increment_matrix`](@ref) leaves those vintages out of the
+composition.
+
+A revision can also move counts the other way, out of named zones,
+leaving the unallocated row flat or rising. That vintage is a revision
+just as much, but the unallocated rule does not see it. With
+`include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
+added, so any vintage on which a named zone loses more than `min_fall`
+is left out too. It is off by default: the confirmed-case composition
+was fitted under the unallocated rule alone, and widening it there
+changes that stream rather than this one.
+"""
+function zone_reattribution_days(
+        zone_history;
+        include_zone_falls::Bool = false, min_fall::Integer = 1
+    )
+    out = Dict{String, Vector{Int}}()
+    for (prov, zones) in zone_history
+        haskey(zones, "unallocated") || continue
+        h = zones["unallocated"]
+        falls = [
+            h.days[i] for i in 2:length(h.days)
+                if h.counts[i] < h.counts[i - 1]
+        ]
+        isempty(falls) || (out[String(prov)] = falls)
+    end
+    if include_zone_falls
+        for f in zone_cumulative_falls(zone_history; min_fall)
+            push!(get!(out, f.province, Int[]), f.day)
+        end
+        for (prov, days) in out
+            out[prov] = sort!(unique!(days))
+        end
+    end
+    return out
+end
+
+"""
+    zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS;
+        reattribution = zone_reattribution_days(zone_history))
+
+Reshape the per-health-zone cumulative histories loaded by
+[`load_observations`](@ref) into one increment matrix per patch, the
+within-patch analogue of [`province_increment_matrix`](@ref).
+
+Each patch pools the source provinces `members` gives it (a name with no
+entry is its own province), and its matrix has one row per zone of those
+provinces, the `unallocated` rows left out, and one column per vintage.
+Every zone must be reported on the same vintage days, which the tables
+guarantee by sharing one `dates` array; a mismatch is an error rather
+than a silent reshape. Increments are the differences of consecutive
+cumulative counts, the first from zero, clamped at zero as for the
+provinces since a zone's cumulative can fall when cases are reattributed.
+
+A vintage on which a member province's unallocated count falls
+(`reattribution`, the days per province of
+[`zone_reattribution_days`](@ref)) is a reattribution of counts the
+report had carried as unallocated into named zones. The zone increments
+would read them as new cases, so that column is set to zero for the
+patch, which drops the cell from the composition, and its days are
+returned as `excluded`. The next vintage's increment is still the
+difference of the cumulative counts, so nothing is counted twice. Pass
+the merged days of more than one history (the death block's falls as
+well as the case block's) to exclude the union, or an empty `Dict` to
+keep every vintage.
+
+Returns a vector with one named tuple per patch: `patch` (its name),
+`zones` (a vector of `(province, zone)` key pairs in row order), `days`,
+`increments` (the `(n_zones × n_vintages)` matrix), `totals` (the column
+sums, the allocated count each vintage's composition conditions on) and
+`excluded` (the zeroed vintage days). A patch none of whose provinces
+has zone data gets an empty matrix. An empty `zone_history` returns an
+empty vector.
+"""
+function zone_increment_matrix(
+        zone_history, patch_names::AbstractVector,
+        members::AbstractDict = PROVINCE_MEMBERS;
+        reattribution::AbstractDict = zone_reattribution_days(zone_history)
+    )
+    out = @NamedTuple{
+        patch::String, zones::Vector{Tuple{String, String}},
+        days::Vector{Int}, increments::Matrix{Int}, totals::Vector{Int},
+        excluded::Vector{Int},
+    }[]
+    isempty(zone_history) && return out
+    days = nothing
+    for nm in patch_names
+        provs = get(members, nm, [nm])
+        keys_ = Tuple{String, String}[]
+        for prov in provs
+            haskey(zone_history, prov) || continue
+            for zone in sort!(collect(keys(zone_history[prov])))
+                zone == "unallocated" && continue
+                push!(keys_, (prov, zone))
+            end
+        end
+        if isempty(keys_)
+            push!(
+                out,
+                (;
+                    patch = String(nm), zones = keys_, days = Int[],
+                    increments = Matrix{Int}(undef, 0, 0), totals = Int[],
+                    excluded = Int[],
+                )
+            )
+            continue
+        end
+        for (prov, zone) in keys_
+            h = zone_history[prov][zone]
+            days === nothing && (days = h.days)
+            h.days == days || error(
+                "zone `$(prov).$(zone)` is reported on different vintage " *
+                    "days to `$(keys_[1][1]).$(keys_[1][2])`; the zone " *
+                    "composition needs every zone on the same vintages."
+            )
+        end
+        inc = Matrix{Int}(undef, length(keys_), length(days))
+        for (i, (prov, zone)) in enumerate(keys_)
+            c = zone_history[prov][zone].counts
+            inc[i, :] = max.(diff(vcat(0, c)), 0)
+        end
+        excluded = sort!(
+            unique!(
+                Int[
+                    d
+                        for prov in provs
+                        for d in get(reattribution, prov, Int[])
+                        if d in days
+                ]
+            )
+        )
+        for d in excluded
+            inc[:, findfirst(==(d), days)] .= 0
+        end
+        push!(
+            out,
+            (;
+                patch = String(nm), zones = keys_, days = copy(days),
+                increments = inc, totals = vec(sum(inc; dims = 1)),
+                excluded,
+            )
+        )
+    end
+    return out
+end
+
+"""
+    load_health_zones(path = data/health_zones.csv)
+
+Read the health-zone metadata table: one named tuple per zone with the
+manifest key `zone`, the display `label`, the `province` key, the
+WorldPop `population`, the polygon centroid `lat` and `lon` in decimal
+degrees, and the DHIS2 `zscode` from the health-zone shapefile. Rows are
+in patch order then alphabetical by key. The file is written by
+`scripts/build_health_zones.py`; see `data/README.md` for its sources.
+"""
+function load_health_zones(
+        path::AbstractString = joinpath(
+            @__DIR__, "..", "data",
+            "health_zones.csv"
+        )
+    )
+    Row = @NamedTuple{
+        zone::String, label::String, province::String,
+        population::Int, lat::Float64, lon::Float64, zscode::String,
+    }
+    rows = Row[]
+    lines = readlines(path)
+    header = split(lines[1], ',')
+    header == [
+        "zone", "label", "province", "population", "lat", "lon",
+        "zscode",
+    ] || error("unexpected header in $(path): $(header)")
+    for line in lines[2:end]
+        isempty(strip(line)) && continue
+        f = split(line, ',')
+        length(f) == 7 || error("expected 7 fields in $(path): $(line)")
+        push!(
+            rows,
+            (;
+                zone = String(f[1]), label = String(f[2]),
+                province = String(f[3]), population = parse(Int, f[4]),
+                lat = parse(Float64, f[5]), lon = parse(Float64, f[6]),
+                zscode = String(f[7]),
+            )
+        )
+    end
+    return rows
 end
 
 """
@@ -754,6 +1022,14 @@ the report presents them. Each entry is a `NamedTuple`:
 - `forecast_prefix`: the stem of the stream's forecast columns (`:cases`
   for `cases_cum` and `cases_new`), or `nothing` for a stream that is not
   forecast.
+- `stratum`: the spatial level the stream is reported at, `:national`,
+  `:province` or `:zone`.
+
+A `:province` or `:zone` stream is a block of dated series rather than one
+series: a `Dict` keyed by province, or by province and then health zone,
+each holding the same `(; days, counts)` shape. Its vintage grid is shared
+across the block, so [`stream_last_date`](@ref) reads the block's last
+vintage over all of its series.
 
 This is the single list of streams, so a stream is named once rather than
 once per consumer. [`stream_id`](@ref) resolves any of the four
@@ -764,102 +1040,152 @@ const OBSERVATION_STREAMS = (
         id = :suspected_cases, field = :reported_history,
         label = "Suspected cases", score_label = "reported cases",
         forecast_prefix = :cases,
+        stratum = :national,
     ),
     (;
         id = :suspected_deaths, field = :deaths_history,
         label = "Suspected deaths", score_label = "suspected deaths",
         forecast_prefix = :deaths,
+        stratum = :national,
     ),
     (;
         id = :suspected_daily, field = :suspected_daily_history,
         label = "New suspects/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :suspected_daily_deaths, field = :suspected_daily_deaths_history,
         label = "New suspected deaths/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :confirmed_cases, field = :confirmed_history,
         label = "Confirmed cases", score_label = "confirmed cases",
         forecast_prefix = :confirmed,
+        stratum = :national,
     ),
     (;
         id = :confirmed_deaths, field = :confirmed_deaths_history,
         label = "Confirmed deaths", score_label = "confirmed deaths",
         forecast_prefix = :confirmed_deaths,
+        stratum = :national,
     ),
     (;
         id = :recovered, field = :recovered_history,
         label = "Recovered (confirmed)", score_label = "recovered",
         forecast_prefix = :recovered,
+        stratum = :national,
     ),
     (;
         id = :tests_analysed, field = :lab_history,
         label = "Specimens analysed (cumulative)", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :tests_analysed_daily, field = :lab_daily_history,
         label = "Specimens analysed (24h)", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :tests_received, field = :tests_received_history,
         label = "Specimens received", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :isolation_beds, field = :isolation_history,
         label = "Patients in isolation", score_label = "isolation beds",
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :bed_capacity, field = :bed_capacity_history,
         label = "Bed capacity", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :treatment_admissions, field = :treatment_admissions_history,
         label = "Admissions/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :treatment_deaths, field = :treatment_deaths_history,
         label = "In-care deaths/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :treatment_ruleouts, field = :treatment_ruleout_history,
         label = "Rule-outs/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :treatment_absconded, field = :treatment_absconded_history,
         label = "Absconded/day", score_label = nothing,
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :treatment_beds, field = :treatment_confirmed_incare_history,
         label = "Confirmed in care", score_label = "treatment beds",
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :suspect_beds, field = :treatment_suspect_incare_history,
         label = "Suspects in care",
         score_label = "isolation beds (suspected)",
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :onset_reports, field = :onset_report_history,
         label = "Onset reports", score_label = "onset reports",
         forecast_prefix = nothing,
+        stratum = :national,
     ),
     (;
         id = :exports, field = :export_case_days,
         label = "Uganda exports", score_label = "exports",
         forecast_prefix = nothing,
+        stratum = :national,
+    ),
+    (;
+        id = :province_confirmed, field = :province_confirmed_history,
+        label = "Confirmed cases by province", score_label = nothing,
+        forecast_prefix = nothing,
+        stratum = :province,
+    ),
+    (;
+        id = :province_deaths, field = :province_death_history,
+        label = "Confirmed deaths by province", score_label = nothing,
+        forecast_prefix = nothing,
+        stratum = :province,
+    ),
+    (;
+        id = :province_lab_daily, field = :province_lab_daily_history,
+        label = "Specimens analysed by province (24h)", score_label = nothing,
+        forecast_prefix = nothing,
+        stratum = :province,
+    ),
+    (;
+        id = :zone_confirmed, field = :zone_confirmed_history,
+        label = "Confirmed cases by health zone", score_label = nothing,
+        forecast_prefix = nothing,
+        stratum = :zone,
+    ),
+    (;
+        id = :zone_deaths, field = :zone_death_history,
+        label = "Confirmed deaths by health zone", score_label = nothing,
+        forecast_prefix = nothing,
+        stratum = :zone,
     ),
 )
 
@@ -941,11 +1267,24 @@ function history_last_date(grid_date, history)::Union{Date, Missing}
     return grid_date(maximum(history.days))
 end
 
+## Every vintage day a block of dated series carries, nested one level for
+## the province blocks and two for the zone blocks. The series of a block
+## share one vintage grid, so the days repeat; the ends are what is read.
+function _block_days(block::AbstractDict)
+    days = Int[]
+    for v in values(block)
+        append!(days, v isa AbstractDict ? _block_days(v) : Int.(v.days))
+    end
+    return days
+end
+
 ## The dated series `stream` is read from, as a `(; days)` history on
 ## `obs`'s grid, empty when `obs` does not carry the stream. The Uganda
 ## exports are a dated list of detections rather than a series of vintages,
 ## so their series is the detected imports and the detected import deaths
-## together.
+## together. A `:province` or `:zone` stream is a block of dated series
+## keyed by province, or by province and then health zone, so its series is
+## every vintage day the block carries.
 function _stream_series(obs, stream)
     id = stream_id(stream)
     if id === :exports
@@ -957,7 +1296,9 @@ function _stream_series(obs, stream)
     end
     field = _stream_entry(id).field
     hasproperty(obs, field) || return (; days = Int[])
-    return getproperty(obs, field)
+    h = getproperty(obs, field)
+    h isa AbstractDict && return (; days = _block_days(h))
+    return h
 end
 
 """
@@ -968,6 +1309,9 @@ the stream's first vintage, where its series begins.
 The Uganda exports are a dated list of detections rather than a series of
 vintages, so their first reported date is the earlier of the first
 detected import and the first detected import death.
+
+A `:province` or `:zone` stream is a block of dated series, so its first
+reported date is the vintage its block was first printed on.
 """
 function stream_first_date(obs, stream)::Union{Date, Missing}
     return history_first_date(
@@ -984,6 +1328,10 @@ at its last reported value rather than genuinely observed.
 The Uganda exports are a dated list of detections rather than a series of
 vintages, so their last reported date is the later of the last detected
 import and the last detected import death.
+
+A `:province` or `:zone` stream is a block of dated series, so its last
+reported date is the last vintage over all of them. A block the manifest
+carries as empty reports `missing`.
 """
 function stream_last_date(obs, stream)::Union{Date, Missing}
     return history_last_date(
@@ -1017,12 +1365,20 @@ Reporting status of every stream `obs` carries, one row per entry of
 `stream` identifier, its display `label`, the `last_date` it reported,
 whether it is still `reporting` at the cut-off, and `days_since` that
 last report.
+
+`stratum` keeps the streams of one spatial level, `:national`, `:province`
+or `:zone`. Each report page reads the currency of its own level.
 """
 function stream_report_status(
         obs;
-        grace::Integer = STREAM_REPORTING_GRACE_DAYS
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS,
+        stratum::Union{Symbol, Nothing} = nothing
     )
-    entries = [e for e in OBSERVATION_STREAMS if hasproperty(obs, e.field)]
+    entries = [
+        e for e in OBSERVATION_STREAMS
+            if hasproperty(obs, e.field) &&
+            (isnothing(stratum) || e.stratum === stratum)
+    ]
     last_dates = Union{Date, Missing}[
         stream_last_date(obs, e.id)
             for e in entries

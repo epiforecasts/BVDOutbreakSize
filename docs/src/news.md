@@ -3,6 +3,37 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## v3.0.0
+
+Changes since v2.2.0.
+
+A major version: the report gains a health-zone level below the provinces, with its own estimates, forecasts and evaluation.
+
+### Performance
+
+- A hand-written Mooncake rule differentiates the health-zone renewal (#779).
+
+### Model
+
+- A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
+- The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
+
+### Data
+
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 131 (22 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779).
+
+### Report
+
+- The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
+- The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
+- The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+
+### Infrastructure
+
+- The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
+- The fit summary leaves out any quantity that is not finite in some draw (#779).
+- Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
+
 ## v2.2.0
 
 Changes since v2.1.0.

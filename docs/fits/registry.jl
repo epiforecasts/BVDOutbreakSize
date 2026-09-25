@@ -4,6 +4,10 @@
 # docs build then loads the chains through the content-addressed cache
 # instead of refitting them inline. `build_fit_specs` mirrors the model
 # calls in `docs/examples/analysis.jl`; keep the two in step.
+#
+# A health-zone fit adds `needs`, the ids it is melded from, and runs in a
+# second stage once those are cached (`base_fit_specs`,
+# `dependent_fit_specs`, and the `zone` group `fit_group` puts it in).
 
 include(joinpath(@__DIR__, "cache.jl"))
 
@@ -26,6 +30,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "observations.jl"),
     joinpath(_PKG, "src", "models", "observation_distributions.jl"),
     joinpath(_PKG, "src", "models", "joint.jl"),
+    joinpath(_PKG, "src", "models", "zone.jl"),
     joinpath(_PKG, "src", "models", "fit_args.jl"),
     joinpath(_PKG, "src", "renewal.jl"),
     joinpath(_PKG, "src", "sum_to_zero.jl"),
@@ -94,12 +99,42 @@ end
 
 """
 Content-addressed cache key for fit `id` at the given sampler settings.
-The fits in `JOINT_SAMPLER_FITS` are also keyed on `joint_sampler_args()`,
-so a run with the `BVD_JOINT_*` overrides set writes its own cache entry.
+The fits in `JOINT_SAMPLER_FITS` are also keyed on `joint_sampler_args()`
+and those in `ZONE_SAMPLER_FITS` on `zone_sampler_args()`, so a run with the
+`BVD_JOINT_*` overrides set writes its own cache entry.
+
+The health-zone fits are keyed this way because they sample at the joint's
+settings: without it an override moves the joint's key while leaving theirs
+alone, and a zone chain melded from one joint is served for another.
 """
 function fit_key(id; samples::Integer = 500, chains::Integer = 2)
-    sampler = id in JOINT_SAMPLER_FITS ? joint_sampler_args() : (;)
+    sampler = if id in JOINT_SAMPLER_FITS
+        joint_sampler_args()
+    elseif id in ZONE_SAMPLER_FITS
+        zone_sampler_args()
+    else
+        (;)
+    end
     return string(id, "__", fit_content_hash(; samples, chains, sampler))
+end
+
+"""
+    fit_cache_dir() -> String
+
+The fit cache directory: `BVD_FIT_CACHE` when set, else `logs/fit_cache`
+under the package root. A relative override is resolved against the package
+root, not the working directory, because Literate runs a page from
+`docs/src`.
+"""
+function fit_cache_dir()
+    c = strip(get(ENV, "BVD_FIT_CACHE", ""))
+    return if isempty(c)
+        joinpath(_PKG, "logs", "fit_cache")
+    elseif isabspath(c)
+        String(c)
+    else
+        joinpath(_PKG, c)
+    end
 end
 
 ## Canonical fit-setup values, so `analysis.jl`, `fit_one.jl` and this registry
@@ -147,6 +182,18 @@ function run_sensitivity_env()
     return lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
         ("true", "1", "yes", "on")
 end
+
+"""
+    fit_needs(spec) -> Vector{String}
+
+The ids `spec` loads from the cache before it runs. Only a dependent fit
+carries a `needs` field, so a base spec answers with an empty list and needs
+no entry of its own.
+"""
+fit_needs(spec) = get(spec, :needs, String[])
+
+"True for a fit melded from a cached parent chain."
+is_dependent_fit(spec) = !isempty(fit_needs(spec))
 
 """
     fit_spec(id, model, sample)
@@ -240,9 +287,31 @@ function sensitivity_overrides(obs)
     )
 end
 
+## The fits that splat `zone_sampler_args()`.
+const ZONE_SAMPLER_FITS = ("local", "local_frozen_validation")
+
+## The sampler budget the health-zone stage splats. It follows the joint's
+## overrides, so it is keyed like the joint's.
+zone_sampler_args() = (;
+    samples = joint_samples(800), joint_sampler_args().n_adapts,
+    joint_sampler_args().target_accept,
+)
+
+## Looked up when a dependent thunk runs, so the registry builds without
+## `fit_zone` and tests can inject a double through `zone_fitter`.
+function default_zone_fitter()
+    isdefined(BVDOutbreakSize, :fit_zone) ||
+        error(
+        "BVDOutbreakSize.fit_zone is not defined: the health-zone " *
+            "model (src/models/zone.jl) is needed to run a dependent fit"
+    )
+    return BVDOutbreakSize.fit_zone
+end
+
 """
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 500, chains = 2)
+                    run_sensitivity, samples = 500, chains = 2,
+                    zone_fitter = nothing, cache_dir = fit_cache_dir())
 
 Ordered list of the report's fits as `(; id, kind, model, thunk)` named
 tuples. `kind` is `:chain` for the headline joint and single-stream fits or
@@ -250,6 +319,13 @@ tuples. `kind` is `:chain` for the headline joint and single-stream fits or
 `(; cutoff, o, chn)`). `model` builds the model the thunk samples, which the
 forecasts run past the cut-off. The two re-fits appended only when
 `run_sensitivity` is true are not forecast and carry no `model`.
+
+The health-zone fits `local` and `local_frozen_validation` add a `needs`
+field naming the fit they meld from, which they load from `cache_dir`
+strictly: a missing parent is an error, not a refit. They are the dependent
+stage, and carry no `model`. `zone_fitter` fits a zone model from a parent
+chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the thunk
+runs.
 """
 function build_fit_specs(
         obs;
@@ -259,7 +335,9 @@ function build_fit_specs(
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 500,
-        chains::Integer = 2
+        chains::Integer = 2,
+        zone_fitter = nothing,
+        cache_dir::AbstractString = fit_cache_dir()
     )
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
@@ -644,12 +722,154 @@ function build_fit_specs(
             )...
         )
     end
+
+    ## The health-zone fits meld from a cached parent chain. The parent is
+    ## loaded strictly: a missing parent is an error, not a refit.
+    function load_parent(parent_id)
+        parent = specs[findfirst(s -> s.id == parent_id, specs)]
+        return fit_or_load(
+            fit_key(parent_id), parent.thunk;
+            cache_dir = cache_dir, strict = true
+        )
+    end
+    ## The zone stage samples at the headline joint's settings, so a
+    ## difference between the two levels is the model rather than the
+    ## sampler.
+    function fit_zone_from(parent_chn, o, name)
+        fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
+        return fitter(
+            parent_chn, o;
+            zone_sampler_args()..., chains = chains,
+            callback = fit_callback(name)
+        )
+    end
+    ## A dependent key shares the parent's content hash and moves with the
+    ## joint's sampler overrides (`ZONE_SAMPLER_FITS`), but says nothing
+    ## about the parent chain's bytes, so a parent refit under an unchanged
+    ## key pairs with the zone chain already cached against the old parent.
+    ## The fixed per-chain seed keeps such a refit near-identical, so the
+    ## pairing holds.
+    push!(
+        specs,
+        ## The health-zone fit on the current data, melded from the headline.
+        (;
+            id = "local", kind = :chain, needs = ["joint"],
+            thunk = () -> fit_zone_from(load_parent("joint"), obs, "local"),
+        ),
+        ## The same fit melded from the validation joint, on the observations
+        ## that joint was fitted to, returned in the frozen shape.
+        (;
+            id = "local_frozen_validation", kind = :frozen,
+            needs = ["frozen_validation"],
+            thunk = () -> begin
+                parent = load_parent("frozen_validation")
+                chn = fit_zone_from(
+                    parent.chn, parent.o,
+                    "local_frozen_validation"
+                )
+                (; cutoff = parent.cutoff, o = parent.o, chn)
+            end,
+        )
+    )
+    validate_fit_specs(specs)
     return specs
 end
 
-"Ordered fit ids for the current data and sensitivity setting."
-function fit_ids(
-        obs = load_observations(); run_sensitivity = run_sensitivity_env()
+"""
+    validate_fit_specs(specs)
+
+Check that every id a spec needs names a spec listed earlier. Throws
+otherwise.
+"""
+function validate_fit_specs(specs)
+    seen = Set{String}()
+    for s in specs
+        for parent in fit_needs(s)
+            parent in seen || error(
+                "fit '$(s.id)' needs '$parent', which " *
+                    "is not listed before it in the registry"
+            )
+        end
+        push!(seen, s.id)
+    end
+    return specs
+end
+
+"The specs with no parent: the first stage, run before anything else."
+base_fit_specs(specs) = [s for s in specs if !is_dependent_fit(s)]
+"The specs that need a cached parent: the second stage."
+dependent_fit_specs(specs) = [s for s in specs if is_dependent_fit(s)]
+
+const FIT_STAGES = (:all, :base, :dependent)
+
+## The CI jobs the fits are split across, in the order `list.jl --groups`
+## prints them.
+const FIT_GROUPS = ("joint", "streams", "frozen", "sensitivity", "zone")
+
+"""
+    fit_group(spec) -> String
+
+The CI job that runs `spec`, one of `FIT_GROUPS`. `zone` is exactly
+`dependent_fit_specs`, so a fit's parent decides both the local stage and
+the CI job: a dependent fit runs after the group that cached its parent. The
+other four partition the base fits by what a render job has to wait for.
+"""
+function fit_group(spec)
+    is_dependent_fit(spec) && return "zone"
+    spec.id in JOINT_SAMPLER_FITS && return "joint"
+    spec.kind === :frozen && return "frozen"
+    startswith(spec.id, "sens_") && return "sensitivity"
+    return "streams"
+end
+
+"""
+    fit_stage_env(default) -> Symbol
+
+The fit stage named by `BVD_FIT_STAGE` (`all`, `base` or `dependent`), or
+`default` when unset.
+"""
+function fit_stage_env(default::Symbol)
+    raw = lowercase(strip(get(ENV, "BVD_FIT_STAGE", "")))
+    isempty(raw) && return default
+    stage = Symbol(raw)
+    stage in FIT_STAGES ||
+        error(
+        "BVD_FIT_STAGE=$raw; expected one of " *
+            join(FIT_STAGES, ", ")
     )
-    return [s.id for s in build_fit_specs(obs; run_sensitivity)]
+    return stage
+end
+
+"The specs in `stage` (`:all`, `:base` or `:dependent`), in registry order."
+function stage_fit_specs(specs, stage::Symbol)
+    stage === :all && return specs
+    stage === :base && return base_fit_specs(specs)
+    stage === :dependent && return dependent_fit_specs(specs)
+    error(
+        "unknown fit stage $stage; expected one of " *
+            join(FIT_STAGES, ", ")
+    )
+end
+
+"Ordered fit ids for the current data, sensitivity setting and `stage`."
+function fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env(), stage::Symbol = :all
+    )
+    specs = build_fit_specs(obs; run_sensitivity)
+    return [s.id for s in stage_fit_specs(specs, stage)]
+end
+"Ids of the base fits, those with no parent."
+function base_fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env()
+    )
+    return fit_ids(obs; run_sensitivity, stage = :base)
+end
+"Ids of the dependent fits, those melded from a cached parent."
+function dependent_fit_ids(
+        obs = load_observations();
+        run_sensitivity = run_sensitivity_env()
+    )
+    return fit_ids(obs; run_sensitivity, stage = :dependent)
 end

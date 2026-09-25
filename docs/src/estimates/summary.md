@@ -9,7 +9,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
-See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province page alongside.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province and a health-zone page alongside.
 See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
@@ -100,6 +100,11 @@ These are the underlying outbreak, upstream of the testing and reporting that pr
 The detail is on the [National estimates](national.md) page.
 
 ![Estimated cumulative infections, onsets and deaths over time](../summary_assets/infections.png)
+
+## Health zones
+
+Each patch's infections split across its health zones, the zone maps and the interactive zone map are on the [Health zones](zone.md) page.
+The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
 
 ---
 

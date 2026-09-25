@@ -13,7 +13,7 @@
 # `task benchmark-rules` times both arms; if the gap has closed after a
 # backend upgrade, delete this file rather than maintain it.
 
-using Mooncake: CoDual, NoFData, NoRData, primal, tangent
+using Mooncake: CoDual, NoFData, NoRData, primal, tangent, zero_fcodual
 using SpecialFunctions: digamma
 
 ## An array argument a rule accepts: a float array, or a view into one (a
@@ -1201,4 +1201,255 @@ function Mooncake.rrule!!(
         return NoRData(), d̄, NoRData()
     end
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
+end
+
+## The health-zone renewal is a coupled loop: every zone's own force first,
+## then a mixing step that reads the zones of the other patches on the same
+## day. It cannot call `renewal_infections`, so it carries its own rule.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_share_renewal_kernel), Array{<:Mooncake.IEEEFloat, 2},
+        Array{<:Mooncake.IEEEFloat, 1}, Array{<:Mooncake.IEEEFloat, 2},
+        Array{<:Mooncake.IEEEFloat, 1}, Vector{<:UnitRange}, Integer,
+        Array{<:Mooncake.IEEEFloat, 2}, NamedTuple,
+        Array{<:Mooncake.IEEEFloat, 1},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_share_renewal_kernel), Array{<:Mooncake.IEEEFloat, 2},
+        Array{<:Mooncake.IEEEFloat, 1}, Array{<:Mooncake.IEEEFloat, 2},
+        Array{<:Mooncake.IEEEFloat, 1}, Vector{<:UnitRange}, Integer,
+        Array{<:Mooncake.IEEEFloat, 2}, Nothing, Nothing,
+    },
+)
+
+## Adjoint of `zone_share_renewal_with_state`, walking the days backwards so
+## each day's force adjoint lands on the lagged infections before those days
+## are read. `st` is the forward state, `ȳ` the output cotangent and the
+## remaining arguments the argument tangents and primals.
+function _zone_share_renewal_adjoint!(
+        ȳ, st, Ī_bar, ḡ, δ̄, w̄0, f̄_pre, m̄ix, ε̄,
+        I_bar, g, δ_daily, w0, patch_ranges, t0, force_pre, mix, ε
+    )
+    nd, nz = size(δ_daily)
+    on = mix !== nothing && ε !== nothing
+    Tp = eltype(st.infections)
+    floor_ = eps(Tp)
+    L = length(g)
+    ## Each day's infections feed the later days' force, so the infection
+    ## adjoint grows as the walk goes back. `ȳ.infections` is Mooncake's
+    ## buffer, so it accumulates into a copy.
+    acc = copy(ȳ.infections)
+    ū = zeros(Tp, nz)
+    v̄ = zeros(Tp, nz)
+    h̄ = zeros(Tp, nz)
+    ēu = zeros(Tp, nz)
+    w̄u = zeros(Tp, nz)
+    ## The daily mixed-force and import-pattern adjoints, kept so each
+    ## mixing block takes one product after the walk rather than a rank-one
+    ## update a day.
+    nrow = on ? nd : 0
+    V̄ = zeros(Tp, nrow, nz)
+    H̄ = zeros(Tp, nrow, nz)
+    @inbounds for j in nd:-1:1
+        t = t0 + j - 1
+        fill!(ū, zero(Tp))
+        if !on
+            ## `W = u / Σu`, so each zone's share adjoint feeds back into
+            ## every zone of its patch through the denominator.
+            for p in eachindex(patch_ranges)
+                zs = patch_ranges[p]
+                isempty(zs) && continue
+                raw = st.patch_total[p, j]
+                tot = max(raw, floor_)
+                Ip = I_bar[p, t]
+                pooled = zero(Tp)
+                for z in zs
+                    Ī = acc[j, z]
+                    W̄ = ȳ.shares[j, z] + Ip * Ī
+                    Ī_bar[p, t] += Ī * st.shares[j, z]
+                    ū[z] += W̄ / tot
+                    pooled += W̄ * st.u[j, z]
+                end
+                if raw > floor_
+                    pooled /= tot * tot
+                    for z in zs
+                        ū[z] -= pooled
+                    end
+                end
+            end
+        else
+            fill!(v̄, zero(Tp))
+            fill!(h̄, zero(Tp))
+            ## `I = c_p v + M_p h / Σh`, with the carry `c_p` and both
+            ## denominators pooling over the patch, so a zone's adjoint
+            ## reaches every zone of its patch. Where the import pattern is
+            ## empty the arrivals follow the mixed force instead.
+            for p in eachindex(patch_ranges)
+                zs = patch_ranges[p]
+                isempty(zs) && continue
+                Ip = I_bar[p, t]
+                frac = mix.import_fraction[p, t]
+                Mp = frac * Ip
+                raw = st.patch_total[p, j]
+                sv = max(raw, floor_)
+                sh = st.share_total[p, j]
+                cp = (Ip - Mp) / sv
+                Ibar_floor = max(Ip, floor_)
+                c̄p = zero(Tp)
+                M̄p = zero(Tp)
+                s̄v = zero(Tp)
+                s̄h = zero(Tp)
+                for z in zs
+                    Ī = acc[j, z]
+                    W̄ = ȳ.shares[j, z]
+                    Ī += W̄ / Ibar_floor
+                    if Ip > floor_
+                        Ī_bar[p, t] -=
+                            W̄ * st.infections[j, z] / (Ibar_floor * Ibar_floor)
+                    end
+                    c̄p += Ī * st.v[j, z]
+                    v̄[z] += Ī * cp
+                    īmp = ȳ.imports[j, z] + Ī
+                    if sh > floor_
+                        M̄p += īmp * st.h[j, z] / sh
+                        h̄[z] += īmp * Mp / sh
+                        s̄h -= īmp * Mp * st.h[j, z] / (sh * sh)
+                    else
+                        M̄p += īmp * st.v[j, z] / sv
+                        v̄[z] += īmp * Mp / sv
+                        s̄v -= īmp * Mp * st.v[j, z] / (sv * sv)
+                    end
+                end
+                Ī_bar[p, t] += c̄p / sv
+                M̄p -= c̄p / sv
+                s̄v -= c̄p * (Ip - Mp) / (sv * sv)
+                Ī_bar[p, t] += M̄p * frac
+                m̄ix.import_fraction[p, t] += M̄p * Ip
+                if raw > floor_
+                    for z in zs
+                        v̄[z] += s̄v
+                    end
+                end
+                for z in zs
+                    h̄[z] += s̄h
+                end
+            end
+            ## `v = (1 − ε) u + within (ε u)` and `h = between (w u)`, so the
+            ## two blocks transpose into the force adjoint and pick up an
+            ## outer product of their own, taken after the walk.
+            for z in 1:nz
+                ε̄[z] -= v̄[z] * st.u[j, z]
+                ū[z] += v̄[z] * (one(Tp) - ε[z])
+                V̄[j, z] = v̄[z]
+                H̄[j, z] = h̄[z]
+            end
+            mul!(ēu, transpose(mix.within), v̄)
+            mul!(w̄u, transpose(mix.between), h̄)
+            for z in 1:nz
+                uz = st.u[j, z]
+                ε̄[z] += ēu[z] * uz
+                ū[z] += ēu[z] * ε[z]
+                m̄ix.origin_weight[z] += w̄u[z] * uz
+                ū[z] += w̄u[z] * mix.origin_weight[z]
+            end
+        end
+        ## `u = e^δ Λ` and `Λ` is the pre-`t0` term plus the lagged
+        ## infections through the generation interval.
+        smax = min(L, j - 1)
+        for p in eachindex(patch_ranges)
+            zs = patch_ranges[p]
+            fp = force_pre[p, t]
+            pre = zero(Tp)
+            for z in zs
+                Λ̄ = ȳ.forces[j, z] + ū[z] * exp(δ_daily[j, z])
+                δ̄[j, z] += ū[z] * st.u[j, z]
+                w̄0[z] += Λ̄ * fp
+                pre += Λ̄ * w0[z]
+                for s in 1:smax
+                    acc[j - s, z] += Λ̄ * g[s]
+                    ḡ[s] += Λ̄ * st.infections[j - s, z]
+                end
+            end
+            f̄_pre[p, t] += pre
+        end
+    end
+    if on
+        ## `Σ_j v̄_j (ε u_j)'` and `Σ_j h̄_j (w u_j)'`: each block's outer
+        ## product over the whole grid.
+        mul!(
+            m̄ix.within, transpose(V̄), st.u .* transpose(ε),
+            one(Tp), one(Tp)
+        )
+        mul!(
+            m̄ix.between, transpose(H̄),
+            st.u .* transpose(mix.origin_weight), one(Tp), one(Tp)
+        )
+    end
+    return nothing
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_share_renewal_kernel)},
+        I_bar::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        g::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
+        δ_daily::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        w0::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
+        patch_ranges::CoDual{<:Vector{<:UnitRange}},
+        t0::CoDual{<:Integer},
+        force_pre::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        mix::CoDual{<:NamedTuple},
+        ε::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}}
+    )
+    st = zone_share_renewal_with_state(
+        primal(I_bar), primal(g), primal(δ_daily), primal(w0),
+        primal(patch_ranges), primal(t0), primal(force_pre),
+        primal(mix), primal(ε)
+    )
+    out = zero_fcodual((; st.shares, st.forces, st.infections, st.imports))
+    ȳ = tangent(out)
+    function zone_share_renewal_pullback!!(::NoRData)
+        _zone_share_renewal_adjoint!(
+            ȳ, st, tangent(I_bar), tangent(g), tangent(δ_daily),
+            tangent(w0), tangent(force_pre), tangent(mix), tangent(ε),
+            primal(I_bar), primal(g), primal(δ_daily), primal(w0),
+            primal(patch_ranges), primal(t0), primal(force_pre),
+            primal(mix), primal(ε)
+        )
+        return ntuple(_ -> NoRData(), 10)
+    end
+    return out, zone_share_renewal_pullback!!
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_share_renewal_kernel)},
+        I_bar::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        g::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
+        δ_daily::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        w0::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
+        patch_ranges::CoDual{<:Vector{<:UnitRange}},
+        t0::CoDual{<:Integer},
+        force_pre::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        ::CoDual{Nothing}, ::CoDual{Nothing}
+    )
+    st = zone_share_renewal_with_state(
+        primal(I_bar), primal(g), primal(δ_daily), primal(w0),
+        primal(patch_ranges), primal(t0), primal(force_pre), nothing, nothing
+    )
+    out = zero_fcodual((; st.shares, st.forces, st.infections, st.imports))
+    ȳ = tangent(out)
+    function zone_share_renewal_pullback!!(::NoRData)
+        _zone_share_renewal_adjoint!(
+            ȳ, st, tangent(I_bar), tangent(g), tangent(δ_daily),
+            tangent(w0), tangent(force_pre), nothing, nothing,
+            primal(I_bar), primal(g), primal(δ_daily), primal(w0),
+            primal(patch_ranges), primal(t0), primal(force_pre),
+            nothing, nothing
+        )
+        return ntuple(_ -> NoRData(), 10)
+    end
+    return out, zone_share_renewal_pullback!!
 end

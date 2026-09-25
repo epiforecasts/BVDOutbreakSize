@@ -162,6 +162,7 @@ _md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
 _md_cell(x::AbstractFloat) = isinteger(x) ? string(Integer(x)) :
     string(_md_round(x))
 _md_cell(x) = replace(string(x), "|" => "\\|")
+_md_cell(::Missing) = ""
 
 # Right-align numeric columns and left-align everything else. `Bool` is a
 # `Real` but reads as a label rather than a quantity, so it stays left.
@@ -239,8 +240,10 @@ function _scalar_stats(summary; exclude = _DIAGNOSTIC_EXCLUDE)
     out = Float64[]
     for p in FlexiChains.parameters(summary)
         ## Vector deterministics surface as indexed scalars
-        ## (`cumulative_infections[1]`, ...), so match on the name prefix.
-        any(b -> startswith(string(p), b), exclude) && continue
+        ## (`cumulative_infections[1]`, ...). Match the bare name or the
+        ## name followed by its index.
+        name = string(p)
+        any(b -> name == b || startswith(name, b * "["), exclude) && continue
         v = summary[p]
         if v isa Number
             ismissing(v) && continue
@@ -283,18 +286,46 @@ function _num_draws(chn)
     return count(!ismissing, flags)
 end
 
+## Names of the chain's parameters that hold a non-finite value in any
+## draw. A quantity undefined in some draws (a zone reproduction number
+## below its reporting floor) gets a finite but meaningless R-hat and ESS
+## from the rank normalisation. It is left out of the fit summary by name
+## rather than by value.
+function _nonfinite_keys(chn)
+    out = String[]
+    for k in FlexiChains.parameters(chn)
+        finite = true
+        for v in vec(collect(chn[k]))
+            ismissing(v) && continue
+            if v isa Number
+                isfinite(v) || (finite = false; break)
+            elseif v isa AbstractArray
+                all(x -> ismissing(x) || isfinite(x), v) ||
+                    (finite = false; break)
+            end
+        end
+        finite || push!(out, string(k))
+    end
+    return out
+end
+
 """
 NUTS fit-quality summary for one chain: the worst (maximum) R-hat, the
 smallest bulk and tail effective sample sizes across parameters, the number
 of divergent transitions and the number of post-warmup draws they are out of.
 """
 function fit_diagnostics(chn)
-    ## Drop non-finite entries: a fixed or degenerate quantity has an
-    ## undefined R-hat / ESS (NaN) that would otherwise mask the worst
-    ## genuine value across the sampled parameters.
-    rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn)))
-    bulk = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :bulk)))
-    tail = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :tail)))
+    ## Quantities undefined in some draw are excluded by name, and any
+    ## remaining non-finite entry (a fixed or degenerate quantity) by value.
+    ## Neither masks the worst genuine value across the sampled parameters.
+    exclude = (_DIAGNOSTIC_EXCLUDE..., _nonfinite_keys(chn)...)
+    rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn); exclude))
+    bulk = filter(
+        isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :bulk); exclude)
+    )
+    tail = filter(
+        isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :tail); exclude)
+    )
     return (
         max_rhat = isempty(rhats) ? NaN : maximum(rhats),
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),

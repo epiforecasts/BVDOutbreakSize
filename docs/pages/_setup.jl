@@ -211,7 +211,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
         validation_cutoff = validation_cutoff,
-        run_sensitivity = RUN_SENSITIVITY
+        run_sensitivity = RUN_SENSITIVITY,
+        cache_dir = _fit_cache_dir
     )
     _fit_spec_by_id = Dict(s.id => s for s in _fit_specs)
     _loaded_fits = Dict{String, Any}()
@@ -364,6 +365,83 @@ if !@isdefined(_BVD_SETUP_LOADED)
             sample(Xoshiro(20260518), m, Prior(), 1_000; progress = false)
         end
         _patch_prior_cache[] = (obs, chn)
+        return chn
+    end
+
+    ## The one-week-ahead national forecast from the headline joint. The
+    ## forecasts page reports it and the health-zone pages split it across
+    ## the zones. Kept after the first call, so `scripts/run.jl` projects
+    ## once across the pages that read it.
+    _week_forecast_cache = Ref{Any}(nothing)
+    function national_week_forecast()
+        cached = _week_forecast_cache[]
+        cached !== nothing && return cached
+        fc = _timed("one-week national forecast") do
+            forecast_reported(
+                load_fit("joint");
+                horizon = 7,
+                obs_cases = obs.reported_cases,
+                obs_deaths = obs.total_deaths,
+                obs_confirmed = obs.confirmed_cases,
+                obs_confirmed_deaths = obs.confirmed_deaths,
+                obs_recovered = obs.recovered_cases
+            )
+        end
+        _week_forecast_cache[] = fc
+        return fc
+    end
+
+    ## The health-zone stage's fixed inputs from the headline joint: the
+    ## patch trajectories the zone model conditions on, the zone units and
+    ## their observed counts. The zone estimates, forecast and in-sample
+    ## pages all read them, and the build is the same on each, so it is
+    ## kept after the first call.
+    _zone_inputs_cache = Ref{Any}(nothing)
+    function zone_stage_inputs()
+        cached = _zone_inputs_cache[]
+        cached !== nothing && return cached
+        inputs = _timed("zone inputs") do
+            zone_fit_inputs(load_fit("joint"), obs)
+        end
+        _zone_inputs_cache[] = inputs
+        return inputs
+    end
+
+    ## The same inputs for the frozen fits, rebuilt from the frozen joint
+    ## and the observations the frozen zone fit was fitted to. The zone
+    ## estimates page compares the two cut-offs and the zone forecast
+    ## evaluation scores the frozen split.
+    _frozen_zone_inputs_cache = Ref{Any}(nothing)
+    function frozen_zone_stage_inputs()
+        cached = _frozen_zone_inputs_cache[]
+        cached !== nothing && return cached
+        inputs = _timed("frozen zone inputs") do
+            zone_fit_inputs(
+                load_fit("frozen_validation").chn,
+                load_fit("local_frozen_validation").o
+            )
+        end
+        _frozen_zone_inputs_cache[] = inputs
+        return inputs
+    end
+
+    ## Draws from the health-zone prior, on the same fixed inputs the fit
+    ## takes, for the outer band of the zone composition checks. A function
+    ## rather than an eager draw, since every page includes this file and
+    ## only the zone in-sample page needs it. The draw is kept after the
+    ## first call and takes its own seeded generator, as the other prior
+    ## draws here do.
+    _zone_prior_cache = Ref{Any}(nothing)
+    function zone_prior_draws(inputs)
+        cached = _zone_prior_cache[]
+        cached !== nothing && first(cached) === inputs && return last(cached)
+        chn = _timed("zone prior draws") do
+            sample(
+                Xoshiro(20260518), bvd_zone(inputs.model_data), Prior(), 500;
+                progress = false
+            )
+        end
+        _zone_prior_cache[] = (inputs, chn)
         return chn
     end
 
