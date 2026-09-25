@@ -208,7 +208,7 @@ end
         s = returned(m, rand(rng, m))
         r = s.r
         ## Net of depletion, as `r` is.
-        R_T = s.Rt[n] * s.susceptible_fraction[n - 1]
+        R_T = s.Rt[n] * (1 - s.cumulative[n - 1] / s.population)
         ## Sign agreement at the cut-off.
         ((r < 0) && (R_T >= 1)) && (disagree += 1)
         ((r >= 0) && (R_T < 1)) && (disagree += 1)

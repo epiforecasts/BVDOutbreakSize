@@ -96,16 +96,16 @@ end
     @test sum(I[8:end]) ≈ N - sum(seed)
 end
 
-@testitem "susceptible_fraction: the pool left is the population less the cumulative" setup = [
+@testitem "pool_fraction: the pool left is the population less the cumulative" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: renewal_infections_with_state, susceptible_fraction,
+    using BVDOutbreakSize: renewal_infections_with_state, pool_fraction,
         adjusted_rt
     rng = Xoshiro(6)
     N = 800.0
     R = rand(rng, 50) .+ 1.0
     st = renewal_infections_with_state(R, pmf(rng, 10), rand(rng, 5) .+ 1, N)
-    frac = susceptible_fraction(cumsum(st.infections), N)
+    frac = pool_fraction(cumsum(st.infections), N)
     @test N .* frac[5:end] ≈ st.susceptible[5:end]
     ## Net of depletion, each day's reproduction number uses the pool the
     ## day before, and the first day the full pool.

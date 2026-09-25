@@ -32,17 +32,23 @@
     cumulative_infections := infection_state.cumulative
     C_T := infection_state.C_T
     cumulative_onsets := cumsum(onset_state.onsets)
+    ## The susceptible fraction reaches only `:=` quantities, so it is built
+    ## only when they are recorded.
     if _reporting(__varinfo__)
-        susceptible_fraction := infection_state.susceptible_fraction[1:n]
+        fraction = pool_fraction(
+            infection_state.cumulative, infection_state.population
+        )
+        susceptible_fraction := fraction[1:n]
+        ## The forecast reproduction number is net of depletion.
+        if forecast !== nothing
+            fd = forecast_days(n, forecast)
+            forecast_rt := adjusted_rt(infection_state.Rt, fraction, fd)
+        end
     end
-    ## The forecast reproduction number is net of depletion.
     if forecast !== nothing
         fd = forecast_days(n, forecast)
         forecast_infections := infection_state.infections[fd]
         forecast_onsets := onset_state.onsets[fd]
-        forecast_rt := adjusted_rt(
-            infection_state.Rt, infection_state.susceptible_fraction, fd
-        )
     end
     return (;
         infection_state, onsets = onset_state.onsets,
@@ -740,9 +746,10 @@ end
     C_T := patch_state.C_T
     if _reporting(__varinfo__)
         cumulative_onsets := cumsum(onsets_total)
-        susceptible_fraction := patch_state.susceptible_fraction[1:n]
-        susceptible_fraction_patch :=
-            vec(patch_state.susceptible_fraction_matrix[:, 1:n])
+        susceptible_fraction := pool_fraction(
+            view(patch_state.cumulative_total, 1:n),
+            sum(patch_state.populations)
+        )
     end
     ## Past the cut-off the national reproduction number is read off the
     ## summed infections, as `R_T` is at the cut-off.
@@ -757,10 +764,24 @@ end
     return (; patch_state, onsets_total)
 end
 
-## Patch `p`'s reproduction number net of its own depletion on `days`.
-_patch_adjusted_rt(state, p, days) = adjusted_rt(
-    view(state.Rt_matrix, p, :),
-    view(state.susceptible_fraction_matrix, p, :), days
+## Each patch's share of its population left susceptible each day, one row
+## per patch ([`pool_fraction`](@ref)). Only `:=` quantities read it.
+function _patch_fractions(state)
+    I = state.infections_matrix
+    return reduce(
+        vcat,
+        [
+            pool_fraction(
+                cumsum(view(I, p, :)), state.populations[p]
+            )' for p in axes(I, 1)
+        ]
+    )
+end
+
+## Patch `p`'s reproduction number net of its own depletion on `days`, from
+## the fractions `fr` of `_patch_fractions`.
+_patch_adjusted_rt(state, fr, p, days) = adjusted_rt(
+    view(state.Rt_matrix, p, :), view(fr, p, :), days
 )
 
 ## The implied national reproduction number on each forecast day. A function
@@ -1342,10 +1363,16 @@ density there, is the fitted model's.
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     C_T_patch := patch_state.C_T_patch
-    ## Each province's reproduction number net of its own depletion.
-    R_T_patch := [
-        only(_patch_adjusted_rt(patch_state, p, n:n)) for p in 1:n_patches
-    ]
+    ## Each province's reproduction number net of its own depletion, built
+    ## only when recorded.
+    if _reporting(__varinfo__)
+        fr = _patch_fractions(patch_state)
+        susceptible_fraction_patch := vec(fr[:, 1:n])
+        R_T_patch := [
+            only(_patch_adjusted_rt(patch_state, fr, p, n:n))
+                for p in 1:n_patches
+        ]
+    end
     infections_T_patch := [
         @inbounds(patch_state.infections_matrix[p, n])
             for p in 1:n_patches
@@ -1520,14 +1547,20 @@ density there, is the fitted model's.
         ## and overdispersion the province tables are fitted with, so the
         ## provinces add up to the national counts drawn above.
         forecast_infections_patch := vec(patch_state.infections_matrix[:, fd])
-        forecast_rt_patch := vec(
-            permutedims(
-                reduce(
-                    hcat,
-                    [_patch_adjusted_rt(patch_state, p, fd) for p in 1:n_patches]
+        if _reporting(__varinfo__)
+            frf = _patch_fractions(patch_state)
+            forecast_rt_patch := vec(
+                permutedims(
+                    reduce(
+                        hcat,
+                        [
+                            _patch_adjusted_rt(patch_state, frf, p, fd)
+                                for p in 1:n_patches
+                        ]
+                    )
                 )
             )
-        )
+        end
         edges = vcat(n, vintages)
         if !isempty(province_days)
             province_future = _patch_confirmed_increments(

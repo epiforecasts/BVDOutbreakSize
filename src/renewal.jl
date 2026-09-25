@@ -320,14 +320,14 @@ function renewal_infections_with_state(
 end
 
 """
-    susceptible_fraction(cumulative, N)
+    pool_fraction(cumulative, N)
 
 Share of the pool `N` left susceptible at the end of each day, `1 − C_t / N`
 for the cumulative infections `C_t`, seed included, floored at zero. Exact
 for the depletion in [`renewal_infections`](@ref), where each day's
 infections are what leaves the pool and a seed larger than `N` leaves none.
 """
-susceptible_fraction(cumulative::AbstractVector, N::Real) =
+pool_fraction(cumulative::AbstractVector, N::Real) =
     max.(1 .- cumulative ./ N, 0)
 
 """
@@ -335,7 +335,7 @@ susceptible_fraction(cumulative::AbstractVector, N::Real) =
 
 The reproduction number net of depletion on each of `days`, `R_t` times the
 susceptible `fraction` at the end of the day before
-([`susceptible_fraction`](@ref)). This is the number of infections each
+([`pool_fraction`](@ref)). This is the number of infections each
 infection causes given the pool left, where `Rt` is the number in a fully
 susceptible population. Day one takes the full pool.
 """

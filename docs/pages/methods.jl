@@ -46,8 +46,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
-# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
-# We use one source for all seven provinces rather than the best figure for each.
+# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020*, one source for all seven provinces.
 # Their relative sizes set the importation kernel and the per-capita testing covariate, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
@@ -567,13 +566,10 @@ MarkdownTable(vintage_table) #hide
 # \end{aligned} \tag{18}
 # ```
 #
-# $N_p$ is the patch's 2019 resident population (see data sources above), and $S_{p,t}$ starts at $N_p$ less the seeds.
-# While the pool is large against the outbreak, $I_{p,t} \approx (S_{p,t-1}/N_p)\, Y_{p,t}$.
-# The form bounds each day's infections by the pool left, so an extreme proposal or forecast draw cannot run past the population.
-# We do not know the effective population, since control measures rather than immunity bound transmission here, so the census population is a light upper bound.
-# At the current outbreak size it changes the trajectory by well under one percent.
-# $R_{p,t}$ is the reproduction number in a fully susceptible population.
-# Every reproduction number we report or plot is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
+# This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
+# It bounds each day's infections by the pool left, and while the pool is large $I_{p,t} \approx (S_{p,t-1}/N_p)\, Y_{p,t}$.
+# Control measures rather than immunity limit transmission here, so the census population is only a light upper bound that stops extreme sampler proposals and forecast draws from outgrowing it.
+# $R_{p,t}$ is the reproduction number in a fully susceptible population, and every reproduction number we report is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
 #
 # National infections are the patch sum, and the national reproduction number is read off that sum by inverting the renewal equation:
 #

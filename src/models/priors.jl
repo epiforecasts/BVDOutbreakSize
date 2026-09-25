@@ -440,24 +440,31 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     cumulative = cumsum(infections)
     ## Total outbreak age: cryptic duration (m generations) plus the span.
     T_total = growth_state.T + τ_obs
-    fraction = susceptible_fraction(cumulative, population)
     ## Current growth rate at the cut-off, derived from the cut-off
     ## reproduction number net of depletion and the generation interval
     ## through forward Euler–Lotka, the inverse of the `r_to_R0` above. This
     ## makes the reported growth rate consistent with the adjusted `R_T` by
     ## construction, so `r < 0` iff `R_T < 1`. The realised last-two-days
     ## slope is not used: the intervention ramp depresses the final renewal
-    ## step, so that slope can disagree in sign with `R_T`.
-    r = euler_lotka_r(only(adjusted_rt(Rt, fraction, n:n)), g)
+    ## step, so that slope can disagree in sign with `R_T`. Only `:=`
+    ## quantities read it, so the gradient does not tape it.
+    r = _detached(_cutoff_growth_rate, Rt, cumulative, population, g, n)
     return (;
         infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
-        susceptible_fraction = fraction,
+        population,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
         doubling_time_initial = doubling_time(r_clock),
         T = T_total, C_T = cumulative[n],
         C_T_prior = growth_state.C_T, doubling_time = doubling_time(r),
         seeding_age = seeding_age(upto(cumulative, n), n),
     )
+end
+
+## Growth rate at the cut-off `n` from the reproduction number net of the
+## depletion of `population`.
+function _cutoff_growth_rate(Rt, cumulative, population, g, n)
+    fraction = pool_fraction(view(cumulative, 1:n), population)
+    return euler_lotka_r(only(adjusted_rt(Rt, fraction, n:n)), g)
 end
 
 """
@@ -1790,9 +1797,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     importation_matrix = renewal_state.importation
     ## 7. National totals and headline quantities, which the fit reports and
     ##    no likelihood reads.
-    headlines = _detached(
-        _patch_headlines, infections_matrix, g, n, populations
-    )
+    headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets_matrix = zeros(Tp, n_patches, ng)
@@ -1818,7 +1823,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         m = growth_state.m, τ = growth_state.τ,
         T = T_total,
         seed_at_renewal_start = seed0_total, seed_fraction,
-        incubation_pmf = inc_state.pmf,
+        incubation_pmf = inc_state.pmf, populations,
         headlines...,
     )
 end
@@ -1835,25 +1840,11 @@ that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
 incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
 the national trajectory. Read off the depleted infections, it is net of
 depletion. `r`, `doubling_time` and `seeding_age` follow from it as in
-[`infection_model`](@ref). `susceptible_fraction` is the national share of
-the summed `populations` left susceptible each day and
-`susceptible_fraction_matrix` each patch's
-([`susceptible_fraction`](@ref)).
+[`infection_model`](@ref).
 """
-function _patch_headlines(
-        infections_matrix::AbstractMatrix, g, n::Integer,
-        populations::AbstractVector
-    )
+function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)
     infections_total = vec(sum(infections_matrix; dims = 1))
     cumulative_total = cumsum(infections_total)
-    susceptible_fraction_matrix = reduce(
-        vcat,
-        [
-            susceptible_fraction(
-                cumsum(view(infections_matrix, p, :)), populations[p]
-            )' for p in axes(infections_matrix, 1)
-        ]
-    )
     ## Past the cut-off when forecasting, so the fitted quantities read the
     ## grid up to the cut-off `n`.
     C_T_patch = vec(sum(view(infections_matrix, :, 1:n); dims = 2))
@@ -1862,10 +1853,6 @@ function _patch_headlines(
     return (;
         infections_total, cumulative_total, C_T_patch,
         C_T = cumulative_total[n], R_T, r, doubling_time = doubling_time(r),
-        susceptible_fraction = susceptible_fraction(
-            cumulative_total, sum(populations)
-        ),
-        susceptible_fraction_matrix,
         seeding_age = seeding_age(upto(cumulative_total, n), n),
     )
 end
