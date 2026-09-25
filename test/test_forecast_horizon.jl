@@ -383,9 +383,9 @@ end
         k0 = collect(keys(θ0))
         fut = filter(k -> !(k in k0), collect(keys(θh)))
         @test all(k -> occursin(r"future|forecast", string(k)), fut)
-        ## Agrees to rounding: a draw that exhausts a province's pool can
-        ## differ in the last bit.
+        ## The walk's cumulative sum runs over more knots with a horizon, so
+        ## the two densities agree to rounding rather than bit for bit.
         @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ≈
-            logjoint(m0, θ0) rtol = 1.0e-12
+            logjoint(m0, θ0)
     end
 end

@@ -718,25 +718,21 @@ end
     ndraws = 120
     n = 95
     nz = length(knot_days(n; week = 7)) - 1
-    ## Vector-valued `rt_state.log_R`: one vector of knot levels after the
-    ## first knot per draw, stored as a draws×chains matrix of vectors (as
-    ## the predictive chain returns it).
-    log_R0 = log.(1.0 .+ abs.(randn(rng, ndraws)))
-    kcol = reshape(
-        [log_R0[i] .+ cumsum(0.05 .* randn(rng, nz)) for i in 1:ndraws],
-        ndraws, 1
-    )
+    ## Vector-valued `rt_state.z`: one innovation vector per draw, stored as
+    ## a draws×chains matrix of vectors (as the predictive chain returns it).
+    zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
     chn = FlexiChains.FlexiChain{Symbol}(
         ndraws, 1,
         Dict(
-            FlexiChains.Parameter(Symbol("rt_state.log_R0")) =>
-                reshape(log_R0, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
+                log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1
+            ),
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                 abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
             ),
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
                 reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
-            FlexiChains.Parameter(Symbol("rt_state.log_R")) => kcol,
+            FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)
         )
@@ -765,16 +761,13 @@ end
     ## right length.
     function make_chain(walk_start)
         nz = length(knot_days(n; week = 7, start = walk_start)) - 1
-        log_R0 = log.(1.0 .+ abs.(randn(rng, ndraws)))
-        kcol = reshape(
-            [log_R0[i] .+ cumsum(0.05 .* randn(rng, nz)) for i in 1:ndraws],
-            ndraws, 1
-        )
+        zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
         FlexiChains.FlexiChain{Symbol}(
             ndraws, 1,
             Dict(
-                FlexiChains.Parameter(Symbol("rt_state.log_R0")) =>
-                    reshape(log_R0, ndraws, 1),
+                FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
+                    log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1
+                ),
                 FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                     abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
                 ),
@@ -783,7 +776,7 @@ end
                 ) => reshape(
                     -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1
                 ),
-                FlexiChains.Parameter(Symbol("rt_state.log_R")) => kcol
+                FlexiChains.Parameter(Symbol("rt_state.z")) => zcol
             )
         )
     end
@@ -1636,9 +1629,8 @@ end
         P(Symbol("rt_state.intervention_effect")) => reshape(
             fill(-0.3, nd), nd, 1
         ),
-        P(Symbol("rt_state.log_R")) => reshape(
-            [log(1.5) .+ cumsum(0.05 .* randn(rng, nb - 1)) for _ in 1:nd],
-            nd, 1
+        P(Symbol("rt_state.z")) => reshape(
+            [randn(rng, nb - 1) for _ in 1:nd], nd, 1
         )
     )
     chain(knots) = FlexiChains.FlexiChain{Symbol}(
@@ -1775,9 +1767,8 @@ end
             P(Symbol("rt_state.intervention_effect")) => reshape(
                 fill(-0.3, nd), nd, 1
             ),
-            P(Symbol("rt_state.log_R")) => reshape(
-                [log(1.5) .+ cumsum(0.05 .* randn(rng, nb - 1)) for _ in 1:nd],
-                nd, 1
+            P(Symbol("rt_state.z")) => reshape(
+                [randn(rng, nb - 1) for _ in 1:nd], nd, 1
             ),
             P(:delta_knots) => reshape(knots, nd, 1)
         )
