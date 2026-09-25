@@ -152,6 +152,7 @@ Changes since v2.1.0.
 - The API reference is grouped into eleven pages in the order a fit runs, and says which names are public (#782).
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
+- The summary dashboard gives the province comparison as a table with R at the cut-off for every province, and links each section to its estimates and forecast pages (#904).
 
 ### Fixed
 
