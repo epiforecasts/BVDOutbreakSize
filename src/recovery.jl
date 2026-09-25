@@ -165,8 +165,9 @@ The verdict on a [`recovery_table`](@ref), and on the fit behind it when
 one of:
 
 - `:unconverged`: the fit's worst R-hat is above `max_rhat` (1.1, the fit
-  gate's fail tier) or its smallest bulk ESS below `min_ess` (30), so its
-  intervals say nothing about the model and the recovery is not judged.
+  gate's fail tier) or its smallest bulk ESS below `min_ess` (30, just above
+  the gate's fail tier of 25), so its intervals say nothing about the model
+  and the recovery is not judged.
 - `:fail`: a quantity's true value lies outside its posterior's central
   `outer` interval (99% by default), or fewer than `coverage_fail` of the
   quantities have the truth inside their 90% interval.
