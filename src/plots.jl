@@ -2193,8 +2193,8 @@ Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 Each day is then scaled by the draw's susceptible fraction at the end of
 the day before, the chain's `susceptible_fraction`, so the trajectory is
-net of depletion ([`adjusted_rt`](@ref)). A chain without that series
-predates depletion and is returned unscaled.
+net of depletion ([`adjusted_rt`](@ref)). A chain without that series is
+returned unscaled.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(
@@ -2764,7 +2764,7 @@ Each province runs its own renewal at its own `Rt` and nothing rescales it,
 so `μ(t) · exp(δ_p(t))` is what the model used. Scaled by the province's
 susceptible fraction the day before (the chain's
 `susceptible_fraction_patch`), it is what `R_T_patch` reports. A chain
-without that series predates depletion and is returned unscaled.
+without that series is returned unscaled.
 The national reproduction number is not `μ` but the value implied by the
 summed infections, which is why [`plot_rt_patches`](@ref) draws it from the
 chain's own national trajectory rather than from these.
@@ -3894,8 +3894,7 @@ densities, since the occupancy carries the fitted reporting-basis offset and
 the shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-The model carries a single national bed capacity, so it cannot represent
-local saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
+This shortfall is national, so it cannot show local saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
 at 21.9%, and beds free in one province cannot serve patients in another, so
 the national shortfall understates the local unmet need.
 """
@@ -4918,7 +4917,7 @@ function plot_recovery(
         CairoMakie.xlims!(axq, lo - pad, hi + pad)
         if logged
             ## Round values on the log axis, spaced to the decades shown, or
-            ## finer when the posteriors span less than a factor of five.
+            ## finer when the axis spans two decades or fewer.
             decades = hi - lo
             ms = decades > 2 ? (1,) : decades > 1 ? (1, 3) : (1, 2, 5)
             steps = [m * 10.0^k for k in -4:9 for m in ms]

@@ -338,17 +338,12 @@ jobs:
         id: ${{ fromJSON(needs.list.outputs.sensitivity_ids) }}
     steps: *fit-steps
 
-  # Rescore the published releases and refresh the release overlays, once, in
-  # parallel with the fits. Nothing here reads this run's fits: the scoring
-  # compares past releases' saved forecasts against the current data, so it
-  # can start as soon as the environment is resolved.
   # Parameter recovery: a few datasets simulated from the headline joint at
-  # fixed seeds, each fitted with short sampler settings and scored against
-  # the values that generated it, with its forecasts scored against the
-  # simulated future (`scripts/recovery.jl`). It runs beside the headline
-  # fits, which take longer, so it adds no wall time, and it is cached on
-  # the fit hash plus the recovery code, so an unchanged model reruns
-  # nothing.
+  # fixed seeds, each fitted at the headline joint's sampler settings and
+  # scored against the values that generated it, with its forecasts scored
+  # against the simulated future (`scripts/recovery.jl`). It runs beside the
+  # headline fits and is cached on the fit hash plus the recovery code, so
+  # an unchanged model reruns nothing.
   recovery:
     name: Recovery seed ${{ matrix.seed }}
     needs: list
@@ -456,6 +451,10 @@ jobs:
           fi
           scripts/recovery_report.sh output/recovery $post
 
+  # Rescore the published releases and refresh the release overlays, once, in
+  # parallel with the fits. Nothing here reads this run's fits: the scoring
+  # compares past releases' saved forecasts against the current data, so it
+  # can start as soon as the environment is resolved.
   overlays:
     name: Refresh release overlays
     needs: [changes, list]
@@ -812,9 +811,8 @@ jobs:
 
   render_joint:
     name: Render ${{ matrix.id }}
-    # The in-sample pages show the parameter recovery, which finishes well
-    # before the joint; a failed recovery run leaves that section empty
-    # rather than blocking the pages.
+    # The in-sample pages show the parameter recovery. A failed recovery run
+    # leaves that section empty rather than blocking the pages.
     needs: [fit_joint, recovery]
     if: ${{ !cancelled() && needs.fit_joint.result == 'success' }}
     runs-on: ubuntu-latest

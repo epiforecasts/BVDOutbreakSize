@@ -451,8 +451,8 @@ $(TYPEDSIGNATURES)
 The observations of a [`simulate_recovery`](@ref) dataset in the form
 [`generator_joint`](@ref) takes them: each stream's counts by observation
 name (`streams`), the onset triangle increments (`onsets`) and the province
-case and death compositions as province-by-vintage count matrices
-(`province_cases`, `province_deaths`). Each composition's last province is
+case, death and laboratory compositions as province-by-vintage count
+matrices (`province_cases`, `province_deaths`, `province_lab`). Each composition's last province is
 the remainder of its recorded totals, as the predictive path fills it in.
 """
 function recovery_data(sim)
