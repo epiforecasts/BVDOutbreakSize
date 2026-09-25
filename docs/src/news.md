@@ -34,6 +34,8 @@ Changes since v2.1.0.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
+- `euler_lotka_r` returns the converged Euler–Lotka root, with a Mooncake rule from the implicit function theorem. The reported `r` moves by at most 2e-4 (#902).
+- `r_to_R0` takes one `exp` rather than one per lag (#902).
 
 ### Model
 

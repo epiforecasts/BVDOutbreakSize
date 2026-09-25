@@ -113,22 +113,21 @@ end
 
 """
 Exponential growth rate `r` implied by a reproduction number `R` and a
-generation-interval PMF `g` (indexed from lag 1), solving the
+generation-interval PMF `g` (indexed from lag 1): the root of the
 Euler–Lotka identity `R · Σ_s g_s e^{−r s} = 1`. Starts from the
 small-`r` approximation `r ≈ (R − 1) / (R · ḡ)` with `ḡ` the mean
-generation time, or below `R = 1` from `log(R) / ḡ`, then refines with
-`steps` Newton iterations on `log(R Σ_s g_s e^{−r s}) = 0`. That function
-is convex and falling in `r`, and both starts sit below the root, so
-Newton climbs to it without overshooting. The second start is closer as
-`R` falls, and the log form stays close to linear there, so a near-zero `R`
-from a depleted pool gives a finite rate. `R = 0` has no finite root and
-gives `-Inf`. The loop
-is unrolled over a fixed step count and uses only arithmetic and `exp`,
-so it is AD-transparent under Mooncake. Mirrors the `R_to_r` seeding
-helper in EpiAware.jl and the implied-growth initialisation in the
-EpiNow2 Stan model.
+generation time, or below `R = 1` from `log(R) / ḡ`, then takes Newton
+steps on `log(R Σ_s g_s e^{−r s}) = 0` until a step is below `1e-12`, at
+most 20. That function is convex and falling in `r`, and both starts sit
+below the root, so Newton climbs to it without overshooting. The second
+start is closer as `R` falls, and the log form stays close to linear there,
+so a near-zero `R` from a depleted pool gives a finite rate. `R = 0` has no
+finite root and gives `-Inf`. Its Mooncake rule differentiates the root
+through the implicit function theorem. Mirrors the `R_to_r` seeding helper
+in EpiAware.jl and the implied-growth initialisation in the EpiNow2 Stan
+model.
 """
-function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
+function euler_lotka_r(R, g::AbstractVector)
     Tp = promote_type(typeof(float(R)), eltype(g))
     ḡ = zero(Tp)
     @inbounds for i in eachindex(g)
@@ -136,18 +135,30 @@ function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
     end
     R > zero(R) || return Tp(-Inf)
     r = R < one(R) ? log(R) / ḡ : (R - one(R)) / (R * ḡ)
-    @inbounds for _ in 1:steps
-        G = zero(Tp)
-        dG = zero(Tp)
-        for i in eachindex(g)
-            e = exp(-r * i)
-            G += g[i] * e
-            dG += g[i] * i * e
-        end
+    for _ in 1:20
+        G, dG = euler_lotka_sums(r, g)
         ## f(r) = log(R·G), f'(r) = −dG / G.
-        r = r + log(R * G) * G / dG
+        Δ = log(R * G) * G / dG
+        r += Δ
+        abs(Δ) < 1.0e-12 && break
     end
     return r
+end
+
+## `G = Σ_s g_s e^{−r s}` and `dG = Σ_s s g_s e^{−r s}`, with `e^{−r s}` a
+## running product of one `exp`.
+function euler_lotka_sums(r, g::AbstractVector)
+    Tp = promote_type(typeof(float(r)), eltype(g))
+    q = exp(-r)
+    e = one(Tp)
+    G = zero(Tp)
+    dG = zero(Tp)
+    @inbounds for i in eachindex(g)
+        e *= q
+        G += g[i] * e
+        dG += g[i] * i * e
+    end
+    return G, dG
 end
 
 """
@@ -155,14 +166,18 @@ Reproduction number `R` implied by an exponential growth rate `r` and a
 generation-interval PMF `g` (indexed from lag 1), the forward Euler–Lotka
 relation `R = 1 / Σ_s g_s e^{−r s}`. The inverse of [`euler_lotka_r`](@ref),
 so a prior can be placed on the growth rate and the reproduction number
-derived from it under the model's generation interval. Uses only arithmetic
-and `exp`, so it is AD-transparent under Mooncake.
+derived from it under the model's generation interval. `e^{−r s}` is a
+running product of one `exp`, so the gradient tapes one `exp`, not one per
+lag.
 """
 function r_to_R0(r, g::AbstractVector)
     Tp = promote_type(typeof(float(r)), eltype(g))
+    q = exp(-r)
+    e = one(Tp)
     G = zero(Tp)
     @inbounds for i in eachindex(g)
-        G += g[i] * exp(-r * i)
+        e *= q
+        G += g[i] * e
     end
     return one(Tp) / G
 end

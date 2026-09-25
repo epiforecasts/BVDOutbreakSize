@@ -230,6 +230,43 @@ end
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
+        typeof(euler_lotka_r), Mooncake.IEEEFloat,
+        Array{<:Mooncake.IEEEFloat},
+    },
+)
+
+## At the root `r` of `log R + log G(r) = 0`, with `G = Σ_s g_s e^{−r s}`
+## and `dG = Σ_s s g_s e^{−r s}`, the implicit function theorem gives
+##
+##     ∂r/∂R = G / (R dG),    ∂r/∂g_s = e^{−r s} / dG.
+##
+## `R ≤ 0` returns `-Inf` and passes no derivative.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(euler_lotka_r)}, R::CoDual{<:Mooncake.IEEEFloat},
+        g::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+    )
+    Rp = primal(R)
+    gp = primal(g)
+    ḡ = tangent(g)
+    r = euler_lotka_r(Rp, gp)
+    function euler_lotka_r_pullback!!(r̄)
+        Rp > zero(Rp) || return NoRData(), zero(Rp), NoRData()
+        G, dG = euler_lotka_sums(r, gp)
+        a = r̄ / dG
+        q = exp(-r)
+        e = one(r)
+        @inbounds for i in eachindex(gp)
+            e *= q
+            ḡ[i] += a * e
+        end
+        return NoRData(), oftype(Rp, a * G / Rp), NoRData()
+    end
+    return CoDual(r, NoFData()), euler_lotka_r_pullback!!
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
         typeof(abscond_thinned), Array{<:Mooncake.IEEEFloat},
         Mooncake.IEEEFloat,
     },

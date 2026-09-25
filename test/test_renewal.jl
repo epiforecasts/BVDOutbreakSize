@@ -81,20 +81,19 @@ end
     @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
 end
 
-@testitem "euler_lotka_r: round-trips R → r → R" begin
-    using BVDOutbreakSize: euler_lotka_r
-    using Distributions: LogNormal
-    using BVDOutbreakSize: lognormal_meansd, discretise_censored
+@testitem "euler_lotka_r: returns the Euler–Lotka root" begin
+    using BVDOutbreakSize: euler_lotka_r, lognormal_meansd, discretise_censored
 
-    ## Build a PMF for the generation interval (drop lag-0 bin).
-    gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
-    g = gi_raw[2:end] ./ sum(gi_raw[2:end])
-
-    for R in (0.8, 1.0, 1.5, 2.0, 3.0)
-        r = euler_lotka_r(R, g; steps = 5)
-        ## Verify Euler-Lotka identity: R · Σ g_s e^{-r s} = 1
-        S = sum(g[s] * exp(-r * s) for s in eachindex(g))
-        @test isapprox(R * S, 1.0; rtol = 1.0e-5)
+    ## `R · Σ_s g_s e^{−r s} = 1` holds at the returned rate, from a depleted
+    ## pool's near-zero `R` up to fast growth.
+    for L in (40, 120)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        for R in (1.0e-20, 1.0e-6, 0.01, 0.3, 0.6, 0.8, 1.0, 1.6, 2.5, 5.0)
+            r = euler_lotka_r(R, g)
+            S = sum(g[s] * exp(-r * s) for s in eachindex(g))
+            @test R * S ≈ 1 rtol = 1.0e-12
+        end
     end
 end
 
@@ -109,8 +108,6 @@ end
     for R in (1.0e-20, 1.0e-6, 0.01)
         r = euler_lotka_r(R, g)
         @test isfinite(r) && r < 0
-        r = euler_lotka_r(R, g; steps = 30)
-        @test R * sum(g[s] * exp(-r * s) for s in eachindex(g)) ≈ 1 rtol = 1.0e-6
     end
 end
 
@@ -123,13 +120,27 @@ end
 
     ## r_to_R0 is the forward Euler–Lotka map; it should invert euler_lotka_r.
     for R in (0.8, 1.0, 1.5, 2.0, 3.0)
-        r = euler_lotka_r(R, g; steps = 8)
-        @test isapprox(r_to_R0(r, g), R; rtol = 1.0e-4)
+        r = euler_lotka_r(R, g)
+        @test r_to_R0(r, g) ≈ R rtol = 1.0e-12
     end
     ## r > 0 implies R0 > 1, r < 0 implies R0 < 1, r = 0 implies R0 = 1.
     @test r_to_R0(0.05, g) > 1
     @test r_to_R0(-0.05, g) < 1
     @test isapprox(r_to_R0(0.0, g), 1.0; rtol = 1.0e-10)
+end
+
+@testitem "r_to_R0: matches the per-lag exponential sum" begin
+    using BVDOutbreakSize: r_to_R0, lognormal_meansd, discretise_censored
+
+    ## One `exp` per lag, as `1 / Σ_s g_s e^{−r s}` reads.
+    reference(r, g) = 1 / sum(g[s] * exp(-r * s) for s in eachindex(g))
+    for L in (5, 40, 120)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        for r in (-0.5, -0.05, 0.0, 0.02, 0.08, 0.5)
+            @test r_to_R0(r, g) ≈ reference(r, g) rtol = 1.0e-12
+        end
+    end
 end
 
 @testitem "euler_lotka_r: r > 0 when R > 1, r < 0 when R < 1" begin
@@ -140,9 +151,7 @@ end
 
     @test euler_lotka_r(1.5, g) > 0
     @test euler_lotka_r(0.8, g) < 0
-    ## R = 1 → r ≈ 0
-    r_one = euler_lotka_r(1.0, g; steps = 10)
-    @test abs(r_one) < 1.0e-4
+    @test abs(euler_lotka_r(1.0, g)) < 1.0e-12
 end
 
 @testitem "doubling_time: log(2)/r" begin

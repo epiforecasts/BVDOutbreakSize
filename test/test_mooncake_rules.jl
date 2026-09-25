@@ -24,7 +24,7 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
-        BetaBinomialVector, censoring_cap, admission_headroom
+        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -430,6 +430,13 @@
             perf = true
         )
         add!("missing counts", admission_headroom, days, missing, cap, occ)
+
+        ## The growth rate below, at and above `R = 1`, at the model's
+        ## generation-interval truncation.
+        g40 = pmf(rng, 40)
+        for R in (0.6, 1.0, 1.6)
+            add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
+        end
         return cases
     end
 end
@@ -831,6 +838,24 @@ end
     for bit in (_CEN_CONF_X, _CEN_CONF_HI, _CEN_UNCONF, _CEN_SUSP)
         @test any(f -> f & bit != 0, flags)
         @test any(f -> f & bit == 0, flags)
+    end
+end
+
+@testitem "AD: r_to_R0 passes Mooncake's test_rule" tags = [:ad] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using Mooncake.TestUtils: test_rule
+    using BVDOutbreakSize: r_to_R0, lognormal_meansd, discretise_censored
+
+    ## The generation interval at the model's truncation and a long one,
+    ## with growth rates either side of zero.
+    for L in (40, 120), r in (-0.3, 0.0, 0.08)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        test_rule(
+            Xoshiro(L), r_to_R0, r, g;
+            is_primitive = false, mode = Mooncake.ReverseMode
+        )
     end
 end
 
