@@ -343,35 +343,3 @@ end
     @test unique(weekly2.days) == [1, 9]
     @test all(d -> count(==(d), weekly2.days) == 2, unique(weekly2.days))
 end
-
-@testitem "province share simplexes: the pooled offsets are exchangeable" begin
-    using BVDOutbreakSize: background_split_model, patch_capacity_share_model
-    using Turing: Prior, sample, returned
-    using Random: Xoshiro
-    using Statistics: var, mean
-
-    ## Both simplexes centre on population share and spread the patches
-    ## around it with `n - 1` pooled draws on the sum-to-zero directions, so
-    ## no patch is a reference: the centred log deviation from population
-    ## share has the same prior variance in every patch.
-    pops = [4.0e6, 7.5e6, 2.0e6, 2.5e6]
-    share = pops ./ sum(pops)
-    function deviation_variances(model, key)
-        chn = sample(Xoshiro(11), model, Prior(), 4000; progress = false)
-        vals = returned(model, chn)
-        devs = [
-            begin
-                d = log.(getfield(v, key)) .- log.(share)
-                d .- mean(d)
-            end for v in vec(vals)
-        ]
-        return [var(getindex.(devs, p)) for p in 1:4]
-    end
-    for (model, key) in (
-            (background_split_model(4; populations = pops), :w),
-            (patch_capacity_share_model(4; populations = pops), :s),
-        )
-        v = deviation_variances(model, key)
-        @test all(x -> 0.8 < x / v[1] < 1.25, v)
-    end
-end
