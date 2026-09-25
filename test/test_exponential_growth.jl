@@ -207,7 +207,8 @@ end
     for _ in 1:ndraws
         s = returned(m, rand(rng, m))
         r = s.r
-        R_T = s.Rt[n]
+        ## Net of depletion, as `r` is.
+        R_T = s.Rt[n] * (1 - s.cumulative[n - 1] / s.population)
         ## Sign agreement at the cut-off.
         ((r < 0) && (R_T >= 1)) && (disagree += 1)
         ((r >= 0) && (R_T < 1)) && (disagree += 1)

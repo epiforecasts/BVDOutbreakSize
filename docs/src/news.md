@@ -34,9 +34,12 @@ Changes since v2.1.0.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
+- `euler_lotka_r` returns the converged Euler–Lotka root, with a Mooncake rule from the implicit function theorem. The reported `r` moves by at most 2e-4 (#902).
+- `r_to_R0` takes one `exp` rather than one per lag (#902).
 
 ### Model
 
+- The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
 - The weekly log-Rt walk is drawn in non-centred form again: in the joint on main the centred knots split between chains while the onset stream scores only the trailing window (#892).
   Fitted values move only through the sampling, as with the centred form.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
