@@ -24,7 +24,7 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
-        BetaBinomialVector, censoring_cap, admission_headroom
+        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -424,6 +424,13 @@
             perf = true
         )
         add!("missing counts", admission_headroom, days, missing, cap, occ)
+
+        ## The growth rate below, at and above `R = 1`, at the model's
+        ## generation-interval truncation.
+        g40 = pmf(rng, 40)
+        for R in (0.6, 1.0, 1.6)
+            add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
+        end
         return cases
     end
 end
