@@ -826,6 +826,140 @@ function patch_headline(
 end
 
 """
+Markdown table comparing the provinces' one-week-ahead forecast, one row per
+province and each target as an equal-tailed 90% predictive interval, followed
+by bullets that compare the provinces. Every comparison is computed draw by
+draw from the [`forecast_provinces`](@ref) frame `fc`, so it carries the
+correlation between provinces, and the provinces add up to the national
+forecast.
+
+The columns are the new confirmed cases and confirmed deaths over the week,
+the patients in isolation and the isolation beds at the end of the week, the
+new infections over the week, the reproduction number at the end of the week
+and the probability that it is above one, each when `fc` carries it.
+"""
+function province_forecast_headline(
+        fc::DataFrame;
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    np = min(n_patches, length(patch_labels))
+    labels = patch_labels[1:np]
+    cols = propertynames(fc)
+    draws(p, col) = float.(fc[fc.patch .== p, col])
+    df = DataFrame("Province" => labels)
+    for (col, name, dg) in (
+            (:confirmed_new, "New confirmed cases", 0),
+            (:confirmed_deaths_new, "New confirmed deaths", 0),
+            (:isolation_level, "Patients in isolation", 0),
+            (:bed_capacity, "Isolation beds", 0),
+            (:infections_new, "New infections", 0),
+            (:rt_forecast, "R at T+7", 2),
+        )
+        col in cols || continue
+        df[!, name] = [_interval90_text(draws(p, col); digits = dg) for p in 1:np]
+    end
+    bullets = String[]
+    for (col, stream) in (
+            (:confirmed_new, "new confirmed cases"),
+            (:confirmed_deaths_new, "new confirmed deaths"),
+        )
+        col in cols || continue
+        d = [draws(p, col) for p in 1:np]
+        nd = length(first(d))
+        top = argmax(median.(d))
+        p_top = count(i -> argmax([d[p][i] for p in 1:np]) == top, 1:nd) / nd
+        push!(
+            bullets,
+            "- **Most $(stream):** $(labels[top]), with probability " *
+                "$(_probability_text(p_top))."
+        )
+    end
+    if :rt_forecast in cols
+        p_growing = [mean(>(1), draws(p, :rt_forecast)) for p in 1:np]
+        df[!, "P(R > 1)"] = _probability_text.(p_growing)
+        growing = labels[p_growing .> 0.5]
+        push!(
+            bullets,
+            "- **Growing at T+7:** $(length(growing)) of $(np) provinces are " *
+                "more likely than not to be growing" *
+                (isempty(growing) ? "." : " ($(join(growing, ", ")))."),
+        )
+    end
+    if :isolation_level in cols && :bed_capacity in cols
+        p_full = [
+            mean(draws(p, :isolation_level) .>= draws(p, :bed_capacity))
+                for p in 1:np
+        ]
+        full = labels[p_full .> 0.5]
+        push!(
+            bullets,
+            "- **Beds full at T+7:** " *
+                (
+                isempty(full) ? "no province is more likely than not to be" :
+                    "$(join(full, ", ")) " *
+                    (length(full) == 1 ? "is" : "are") *
+                    " more likely than not to be"
+            ) * " at or above its beds."
+        )
+    end
+    return markdown_table(df) * "\n" * join(bullets, "\n") * "\n"
+end
+
+"""
+Per-province isolation beds at the cut-off, from the province occupancy and
+bed splits in [`treatment_flow_model`](@ref): one row per province with
+the modelled bed count, the latent bed demand, the occupied beds (demand
+capped at the beds), the utilisation and the shortfall, each a median with
+a 90% credible interval. Expects a chain from [`bvd_joint`](@ref) with
+more than one patch, which stores these as the vector deterministics
+`province_bed_capacity`, `province_bed_demand`,
+`province_expected_isolation`, `province_bed_utilisation` and
+`province_bed_shortfall`.
+"""
+function province_bed_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 0,
+        patch_labels::AbstractVector = PROVINCE_LABELS
+    )
+    required = [
+        :province_bed_capacity, :province_bed_demand,
+        :province_expected_isolation, :province_bed_utilisation,
+        :province_bed_shortfall,
+    ]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-province bed deterministics $(absent); " *
+            "it was not sampled from `bvd_joint` with more than one patch."
+    )
+    np = min(n_patches, length(patch_labels))
+    beds = _per_patch(chn, :province_bed_capacity, np)
+    demand = _per_patch(chn, :province_bed_demand, np)
+    occupied = _per_patch(chn, :province_expected_isolation, np)
+    util = _per_patch(chn, :province_bed_utilisation, np)
+    short = _per_patch(chn, :province_bed_shortfall, np)
+    df = DataFrame(
+        "Province" => String[],
+        "Beds" => String[],
+        "Bed demand" => String[],
+        "Occupied beds" => String[],
+        "Utilisation (%)" => String[],
+        "Shortfall" => String[]
+    )
+    for p in 1:np
+        push!(
+            df, Any[
+                patch_labels[p], _median_ci(beds[p]; digits),
+                _median_ci(demand[p]; digits), _median_ci(occupied[p]; digits),
+                _median_ci(100 .* util[p]; digits = 1),
+                _median_ci(short[p]; digits),
+            ]
+        )
+    end
+    return df
+end
+
+"""
 Per-patch outbreak summary for the patch model: one row per province, with
 the cut-off cumulative infections `C_T`, the cut-off reproduction number
 `R_T`, the daily infections at the cut-off, and the log-Rt deviation `δ`
@@ -1063,6 +1197,17 @@ const _PROVINCE_FORECAST_STREAMS = (
     (:confirmed_deaths_new, "confirmed deaths"),
 )
 
+## Every per-province forecast target with its panel title, in the order the
+## province forecast figure and table give them.
+const _PROVINCE_FORECAST_PANELS = (
+    (:confirmed_new, "New confirmed cases by T+7"),
+    (:confirmed_deaths_new, "New confirmed deaths by T+7"),
+    (:isolation_level, "Patients in isolation at T+7"),
+    (:bed_capacity, "Isolation beds at T+7"),
+    (:infections_new, "New infections by T+7"),
+    (:rt_forecast, "Reproduction number at T+7"),
+)
+
 ## A [`forecast_provinces`](@ref) frame for the province summaries. A frame
 ## that already is one passes through. A national [`forecast_reported`](@ref)
 ## result is replaced by the province forecast read from the same draws `pp`
@@ -1152,8 +1297,10 @@ function province_forecast_table(
                 proj, np, patch_labels
             )
     ]
-    ## Each province's latent quantities follow its observed streams.
+    ## Each province's levels and latent quantities follow its counts.
     for p in 1:np, (col, quantity, dg) in (
+                (:isolation_level, "Patients in isolation at T+$(horizon)", digits),
+                (:bed_capacity, "Isolation beds at T+$(horizon)", digits),
                 (:infections_new, "New infections by T+$(horizon)", digits),
                 (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
             )

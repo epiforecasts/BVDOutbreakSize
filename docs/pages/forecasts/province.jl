@@ -24,8 +24,8 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The overall bullets compare the provinces.
-# The detail under each province gives its own projection.
+# The table gives each province's forecast for the week to $T + 7$ as a 90% predictive interval, and the bullets under it compare the provinces draw by draw.
+# The provinces add up to the national forecast.
 
 #md # ```@raw html
 #md # <details><summary>Project each province a week ahead</summary>
@@ -46,72 +46,70 @@ province_forecast_fig = plot_province_forecast(
     n_patches = N_PATCHES
 );
 province_week_end = obs.cutoff + Day(7);
-province_summary_markdown = let proj = province_projection
-    draws(p, col) = float.(proj[proj.patch .== p, col])
-    pct(x) = string(round(Int, 100 * x), "%")
-    share_text(v) = median_interval_text(v; scale = 100, suffix = "%")
-    ## Overall: the provinces ranked by their median projection, each with
-    ## its share of the national forecast and how often it projects the most.
-    function overall(col, stream)
-        shares = province_share_draws(proj, col; n_patches = N_PATCHES)
-        top = [argmax([s[k] for s in shares]) for k in eachindex(shares[1])]
-        order = sortperm(
-            [quantile(draws(p, col), 0.5) for p in 1:N_PATCHES]; rev = true
-        )
-        lead = first(order)
-        ranked = join(PROVINCE_LABELS[order], ", then ")
-        split_text = join(
-            [
-                "$(PROVINCE_LABELS[p]) $(share_text(shares[p]))"
-                    for p in order
-            ], "; "
-        )
-        return [
-            "- **Most $(stream):** $(ranked). " *
-                "$(PROVINCE_LABELS[lead]) projects the most in " *
-                "$(pct(count(==(lead), top) / length(top))) of draws.",
-            "- **Share of $(stream):** $(split_text), of the national " *
-                "forecast.",
-        ]
-    end
-    function detail(p)
-        return join(
-            [
-                "**$(PROVINCE_LABELS[p])**", "",
-                "- New confirmed cases: " *
-                    "$(median_interval_text(draws(p, :confirmed_new))).",
-                "- New confirmed deaths: " *
-                    "$(median_interval_text(draws(p, :confirmed_deaths_new))).",
-                "- New infections, reported and unreported: " *
-                    "$(median_interval_text(draws(p, :infections_new))).",
-                "- Reproduction number on $(province_week_end): " *
-                    "$(median_interval_text(draws(p, :rt_forecast); digits = 2)).",
-            ], "\n"
-        )
-    end
-    join(
-        [
-            "Projected counts are for the week to $(province_week_end).", "",
-            overall(:confirmed_new, "new confirmed cases")...,
-            overall(:confirmed_deaths_new, "new confirmed deaths")..., "",
-            (detail(p) * "\n" for p in 1:N_PATCHES)...,
-        ], "\n"
-    )
-end;
+province_forecast_md = province_forecast_headline(
+    province_projection; n_patches = N_PATCHES
+);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-Markdown.parse(province_summary_markdown) #hide
+Markdown.parse(province_forecast_md) #hide
 
 # ## One-week-ahead forecast by province
 #
-# The table and figure give the new confirmed cases and confirmed deaths expected in each province by $T + 7$.
-# The table also gives each province's new infections and its reproduction number at $T + 7$.
+# Each panel is one forecast target, the provinces side by side, for the week to $(province_week_end).
+
+province_forecast_fig #hide
+
+# The maps shade each province by its patch's forecast, so the pooled patch shades all its provinces alike.
+# The reproduction number is centred on one, and a province whose 90% predictive interval spans one is washed out.
 
 #md # ```@raw html
-#md # <details><summary>Province forecast summary table</summary>
+#md # <details><summary>Build the forecast maps</summary>
+#md # ```
+
+province_forecast_draws(col) = [
+    float.(province_projection[province_projection.patch .== p, col])
+        for p in 1:N_PATCHES
+]
+province_forecast_map = plot_province_map(
+    filter(
+        !isnothing,
+        [
+            (;
+                province_map_summary(province_forecast_draws(:rt_forecast))...,
+                title = "Reproduction number at T+7", diverging_at = 1.0,
+                colorbar_label = "R (median)",
+            ),
+            (;
+                values = province_map_summary(
+                    province_forecast_draws(:confirmed_new)
+                ).values,
+                title = "New confirmed cases by T+7",
+                scale = CairoMakie.Makie.pseudolog10,
+                colorbar_label = "Confirmed cases (median)",
+            ),
+            :isolation_level in propertynames(province_projection) ? (;
+                    values = province_map_summary(
+                        province_forecast_draws(:isolation_level)
+                    ).values,
+                    title = "Patients in isolation at T+7",
+                    scale = CairoMakie.Makie.pseudolog10,
+                    colorbar_label = "Patients (median)",
+                ) : nothing,
+        ]
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_forecast_map #hide
+
+#md # ```@raw html
+#md # <details><summary>Forecast summary table by province</summary>
 #md # ```
 
 MarkdownTable(province_forecast) #hide
@@ -120,44 +118,13 @@ MarkdownTable(province_forecast) #hide
 #md # </details>
 #md # ```
 
-province_forecast_fig #hide
-
-# The map shades each province by its patch's median projected new confirmed cases, so the pooled patch shades all its provinces alike.
-
-#md # ```@raw html
-#md # <details><summary>Map of projected new confirmed cases</summary>
-#md # ```
-
-province_forecast_map = plot_province_map(
-    province_map_summary(
-        [
-            float.(
-                province_projection[
-                    province_projection.patch .== p, :confirmed_new,
-                ]
-            )
-                for p in 1:N_PATCHES
-        ]
-    ).values;
-    title = "New confirmed cases, week to $(province_week_end)",
-    scale = CairoMakie.Makie.pseudolog10,
-    colorbar_label = "Confirmed cases (median)"
-);
-
-province_forecast_map #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # ## Forecast for each province
 #
-# Each province below has its own summary table and forecast figure.
-# The figure histograms the new count over the week, with the 90% predictive interval shaded.
-# The dashed rule is the new count the province reported over its most recent week in the spatial tables, for comparison.
+# Each province has its own forecast figure, one histogram per target with its 90% predictive interval shaded.
+# The dashed rule on the case and death panels is the count the province reported over its most recent week in the spatial tables.
 
 #md # ```@raw html
-#md # <details><summary>Build the per-province tables and figures</summary>
+#md # <details><summary>Build the per-province figures</summary>
 #md # ```
 
 ## The spatial tables' most recent week in each province, clamped as the
@@ -176,11 +143,6 @@ function forecast_province_observed(p)
         (o = merge(o, (; confirmed_deaths_new = recent_deaths.counts[p])))
     return o
 end
-forecast_province_table(p) = MarkdownTable(
-    province_forecast[
-        province_forecast.Province .== PROVINCE_LABELS[p], :,
-    ]
-)
 forecast_province_fig(p) = plot_province_forecast_detail(
     province_draws, province_projection;
     province = p, n_patches = N_PATCHES,
@@ -214,63 +176,23 @@ recent_note = join(
 
 Markdown.parse(recent_note) #hide
 
-#md # ```@raw html
-#md # <details><summary>Ituri</summary>
-#md # ```
-
-forecast_province_table(1) #hide
-
-#-
+# ### Ituri
 
 forecast_province_fig(1) #hide
 
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Nord-Kivu</summary>
-#md # ```
-
-forecast_province_table(2) #hide
-
-#-
+# ### Nord-Kivu
 
 forecast_province_fig(2) #hide
 
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Haut-Uele</summary>
-#md # ```
-
-forecast_province_table(3) #hide
-
-#-
+# ### Haut-Uele
 
 forecast_province_fig(3) #hide
 
-#md # ```@raw html
-#md # </details>
-#md # ```
-
+# ### Other provinces
+#
 # The other provinces are pooled into one patch, so their forecast is for the pool.
 
-#md # ```@raw html
-#md # <details><summary>Other provinces</summary>
-#md # ```
-
-forecast_province_table(4) #hide
-
-#-
-
 forecast_province_fig(4) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ## Past forecasts against what was observed
 #

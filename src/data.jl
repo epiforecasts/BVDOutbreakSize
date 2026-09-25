@@ -252,6 +252,26 @@ function load_observations(
         return result
     end
 
+    ## Sparse province blocks: one `[block.province]` sub-table per province
+    ## with its own `dates` and `values`, since the isolation and bed
+    ## figures are printed for different provinces on different days. A
+    ## province absent on a day has no entry, never a zero.
+    function province_sparse_history(key)
+        ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, ProvHistory}()
+        haskey(raw, key) || return result
+        for (prov, sub) in raw[key]
+            sub isa AbstractDict || continue
+            haskey(sub, "dates") || continue
+            keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+            idx = Int[_index(d) for d in sub["dates"][keep]]
+            ord = sortperm(idx)
+            vals = Int.(sub["values"][keep])
+            result[String(prov)] = (; days = idx[ord], counts = vals[ord])
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -462,6 +482,10 @@ function load_observations(
         province_confirmed_history = province_history("province_confirmed_history"),
         province_death_history = province_history("province_death_history"),
         province_lab_daily_history = province_history("province_lab_daily_history"),
+        province_isolation_history =
+            province_sparse_history("province_isolation_history"),
+        province_bed_capacity_history =
+            province_sparse_history("province_bed_capacity_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days,
     )
@@ -474,9 +498,8 @@ Source provinces each patch pools, in the order of `province_names`.
 
 A name with no [`PROVINCE_MEMBERS`](@ref) entry is its own province, which
 keeps the province helpers usable with an arbitrary province list.
-[`province_increment_matrix`](@ref) and
-[`province_testing_covariate`](@ref) both resolve patches through this, so
-how a patch maps to the manifest blocks it covers is written once.
+[`province_increment_matrix`](@ref) resolves patches through this, so how
+a patch maps to the manifest blocks it covers is written once.
 """
 function patch_members(province_names::AbstractVector)
     return [get(PROVINCE_MEMBERS, nm, [nm]) for nm in province_names]
@@ -542,45 +565,155 @@ function province_increment_matrix(
 end
 
 """
-    province_testing_covariate(province_lab_daily_history, province_names,
-                               populations)
+    province_care_observations(history, province_names; members, every,
+                               changes_only)
 
-Per-capita laboratory effort in each patch, logged and centred to mean
-zero, for the covariate on the prior for relative case ascertainment in
-[`province_composition_model`](@ref).
+Long-format province observations for the isolation-occupancy and bed
+splits in [`treatment_flow_model`](@ref): one row per (day, patch) with a
+printed figure, `(; days, patches, counts)` sorted by day. `history` maps
+a source province to its sparse `(days, counts)` series, as
+[`load_observations`](@ref) reads the `province_isolation_history` and
+`province_bed_capacity_history` blocks. A pooled patch (see
+[`PROVINCE_MEMBERS`](@ref)) is present on a day only when every member
+that has printed on or before that day prints that day, and its count is
+their sum, since a partial sum would read a silent member as an empty
+ward. A province absent from `history` never contributes.
 
-Sums each patch's `<province>_analysed` daily counts over the whole
-laboratory window, pooling the source provinces a patch covers (see
-[`PROVINCE_MEMBERS`](@ref)), and divides by `populations[p]`. Centring
-matches the sum-to-zero ascertainment the composition identifies.
-
-Returns a length-`n_patches` vector of zeros when the laboratory history
-is absent, when a patch has no analysed series, or when a patch analysed
-nothing over the window. A zero covariate recovers the model without it.
+The split scores each kept day as a fresh draw, and a stock reprinted
+daily is not one: the same in-patients fill the same beds from one report
+to the next. `every = 7` keeps one day in seven of the days with a split,
+about one bed stay apart, so the kept days are close to independent; with
+every day kept the split over-constrains the per-patch demand and slows
+the sampler. `changes_only = true` keeps a day only when some province's
+count differs from its last kept count, for the bed counts, which the
+reports repeat unchanged for weeks.
 """
-function province_testing_covariate(
+function province_care_observations(
+        history, province_names::AbstractVector = PROVINCE_NAMES;
+        members = PROVINCE_MEMBERS, every::Integer = 1,
+        changes_only::Bool = false
+    )
+    days = Int[]
+    patches = Int[]
+    counts = Int[]
+    isempty(history) && return (; days, patches, counts)
+    for (p, name) in enumerate(province_names)
+        ms = [
+            m for m in get(members, name, [name])
+                if haskey(history, m) && !isempty(history[m].days)
+        ]
+        isempty(ms) && continue
+        lookup = [
+            Dict(zip(Int.(history[m].days), Int.(history[m].counts)))
+                for m in ms
+        ]
+        firsts = [minimum(Int.(history[m].days)) for m in ms]
+        all_days = sort!(unique!(reduce(vcat, [Int.(history[m].days) for m in ms])))
+        for d in all_days
+            total = 0
+            present = true
+            for (lk, f) in zip(lookup, firsts)
+                if haskey(lk, d)
+                    total += lk[d]
+                elseif f <= d
+                    present = false
+                    break
+                end
+            end
+            present || continue
+            push!(days, d)
+            push!(patches, p)
+            push!(counts, total)
+        end
+    end
+    ord = sortperm(days; alg = MergeSort)
+    days, patches, counts = days[ord], patches[ord], counts[ord]
+    keep = trues(length(days))
+    if changes_only
+        last = Dict{Int, Int}()
+        i = 1
+        while i <= length(days)
+            j = i
+            while j < length(days) && days[j + 1] == days[i]
+                j += 1
+            end
+            changed = any(get(last, patches[r], -1) != counts[r] for r in i:j)
+            for r in i:j
+                keep[r] = changed
+                changed && (last[patches[r]] = counts[r])
+            end
+            i = j + 1
+        end
+    end
+    if every > 1
+        ## Thin over the days that carry a split (two or more patches),
+        ## keeping a day only once `every` days have passed since the last
+        ## kept one.
+        kept_days = Set{Int}()
+        last_kept = typemin(Int) ÷ 2
+        for d in unique(days)
+            count(==(d), days) >= 2 || continue
+            d - last_kept >= every || continue
+            push!(kept_days, d)
+            last_kept = d
+        end
+        for r in eachindex(days)
+            keep[r] = keep[r] && days[r] in kept_days
+        end
+    end
+    return (; days = days[keep], patches = patches[keep], counts = counts[keep])
+end
+
+"""
+    province_lab_increment_matrix(province_lab_daily_history, province_names,
+                                  n_patches; every)
+
+Reshape the per-province daily analysed-specimen histories loaded by
+[`load_observations`](@ref) into the `(n_patches × n_bins)` matrix of
+analysed counts that the laboratory composition in [`bvd_joint`](@ref)
+scores, with the printed day indices `days` and the bin each day falls in
+(`bins`). `every = 1` scores each printed day as its own bin. `every = 7`
+sums the printed days into calendar weeks from the first day, so the
+composition scores a weekly split; the split of a week's volume carries
+the same spatial information at a seventh of the cost of a daily one. A
+pooled patch sums its members' counts (see [`PROVINCE_MEMBERS`](@ref)).
+Every province must be reported on the same days, which the composition
+requires. Returns empty `days` when the history is absent or a patch has
+no analysed series, and the caller skips the term.
+"""
+function province_lab_increment_matrix(
         province_lab_daily_history,
         province_names::AbstractVector = PROVINCE_NAMES,
-        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS
+        n_patches::Integer = length(province_names); every::Integer = 1
     )
-    np = length(province_names)
-    length(populations) == np || error(
-        "province_testing_covariate: $(length(populations)) populations " *
-            "for $(np) patches."
-    )
-    none = zeros(np)
-    isempty(province_lab_daily_history) && return none
-    members = patch_members(province_names)
-    series = [["$(m)_analysed" for m in ms] for ms in members]
+    empty = (; days = Int[], bins = Int[], increments = Matrix{Int}(undef, 0, 0))
+    isempty(province_lab_daily_history) && return empty
+    names = province_names[1:min(n_patches, length(province_names))]
+    series = [["$(m)_analysed" for m in ms] for ms in patch_members(names)]
     any(ks -> any(k -> !haskey(province_lab_daily_history, k), ks), series) &&
-        return none
-    analysed = [
-        sum(sum(province_lab_daily_history[k].counts) for k in ks)
-            for ks in series
-    ]
-    any(iszero, analysed) && return none
-    log_rate = log.(analysed ./ populations)
-    return log_rate .- (sum(log_rate) / np)
+        return empty
+    reference = series[1][1]
+    days = province_lab_daily_history[reference].days
+    isempty(days) && return empty
+    ## Calendar bins from the first printed day, renumbered to be
+    ## consecutive so a week with no printed day leaves no empty column.
+    raw_bins = [fld(Int(d) - Int(days[1]), max(every, 1)) + 1 for d in days]
+    bin_ids = unique(raw_bins)
+    bins = [findfirst(==(b), bin_ids) for b in raw_bins]
+    increments = zeros(Int, length(names), length(bin_ids))
+    for (p, ks) in enumerate(series), k in ks
+
+        h = province_lab_daily_history[k]
+        h.days == days || error(
+            "province series `$(k)` is reported on different days to " *
+                "`$(reference)`; the laboratory composition needs every " *
+                "province on the same days."
+        )
+        for (i, b) in enumerate(bins)
+            increments[p, b] += h.counts[i]
+        end
+    end
+    return (; days = collect(Int, days), bins, increments)
 end
 
 """

@@ -49,10 +49,10 @@ source is the Ebola virus disease serial interval as a generation-time
 proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
 maps once to `α ≈ 2.71` and `θ ≈ 5.65` (`α = (mean/sd)²`,
 `θ = sd²/mean`). The priors are centred there,
-`α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
-keep the Gamma well defined. The SDs propagate the source's reported
-uncertainty, the NEJM serial-interval mean carrying a 95% CI of
-13.0–17.6 d, an SD on the mean of ≈1.17 d.
+`α ~ Normal⁺(2.71, 0.15)` and `θ ~ Normal⁺(5.65, 0.30)`, lower-truncated to
+keep the Gamma well defined. The SDs are set so the implied prior on the
+mean `α·θ` has the source's 95% CI on the serial-interval mean,
+13.0–17.6 d.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
@@ -62,8 +62,8 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        alpha_prior = truncated(Normal(2.71, 0.7); lower = 0.1),
-        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1)
+        alpha_prior = truncated(Normal(2.71, 0.15); lower = 0.1),
+        theta_prior = truncated(Normal(5.65, 0.3); lower = 0.1)
     )
     α ~ alpha_prior
     θ ~ theta_prior
@@ -767,6 +767,56 @@ at the same scale.
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
+end
+
+"""
+Per-patch shares of the national isolation-bed capacity, for the province
+bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
+capacity is the national walk `C(t)` times a share drawn from a partially
+pooled simplex centred on population share,
+
+```math
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+```
+
+with the first patch the reference. The printed province bed counts move
+little relative to each other over the series, so a static share carries
+the split; one walk per patch would add some sixty truncated-normal
+innovations for a tenth more gradient cost. The bed split identifies the
+shares and the split's overdispersion absorbs the residual drift.
+
+Returns `(; s, pooling_sd)`.
+"""
+@model function patch_capacity_share_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "patch_capacity_share_model: $(length(populations)) populations " *
+            "for $(n_patches) patches."
+    )
+    τ_cap ~ pooling_sd_prior
+    z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
+    total_pop = sum(populations)
+    log_s = Vector{Ts}(undef, n_patches)
+    log_s[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
+    end
+    peak = maximum(log_s)
+    s = exp.(log_s .- peak)
+    s ./= sum(s)
+    return (; s, pooling_sd = τ_cap)
 end
 
 """
@@ -1907,4 +1957,63 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
         weights[p] = exp(μ_w + τ_w * z_w[p - 1])
     end
     return (; weights, pooling_sd = τ_w, location = μ_w)
+end
+
+"""
+Partially pooled split of the non-BVD suspected-case background across the
+patches. The national background walk `bg_daily`
+([`reported_cases_model`](@ref)) counts suspects who are not BVD cases and
+carries no province, so the patch model needs a share of it per patch to
+build a per-patch suspect pipeline for the laboratory and isolation
+streams. Each share is the patch's population share moved by a pooled log
+deviation,
+
+```math
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
+\\qquad z_1 = 0,
+```
+
+normalised to sum to one. The first patch is the reference, so with
+`n_patches - 1` free deviations the simplex has no redundant direction.
+`τ_bg → 0` recovers the population split. The per-province
+analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
+since the background dominates the specimens analysed where positivity is
+low.
+
+With one patch the whole background belongs to it and nothing is sampled.
+
+Returns `(; w, pooling_sd)`.
+"""
+@model function background_split_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "background_split_model: $(length(populations)) populations for " *
+            "$(n_patches) patches."
+    )
+    τ_bg ~ pooling_sd_prior
+    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
+    total_pop = sum(populations)
+    log_w = Vector{Tw}(undef, n_patches)
+    log_w[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
+    end
+    ## Softmax against the largest term, so a wide deviation cannot
+    ## overflow.
+    peak = maximum(log_w)
+    w = exp.(log_w .- peak)
+    w ./= sum(w)
+    return (; w, pooling_sd = τ_bg)
 end

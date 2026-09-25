@@ -130,6 +130,15 @@ province_detail_tables[3] #hide
 
 province_detail_tables[4] #hide
 
+# #### Isolation beds
+#
+# Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
+# Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
+
+province_bed_overview = province_bed_table(chn_joint, N_PATCHES);
+
+province_bed_overview #hide
+
 # ## Size and infections
 
 # The national outbreak size in the [joint model estimates](@ref "Joint model estimates") is the sum of the four patches' renewal equations.
@@ -224,7 +233,6 @@ spatial_labels = Dict(
     :region_halflife => "Rt deviation half-life (days)",
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
     :province_ascertainment_sd => "Ascertainment spread",
-    :province_testing_coefficient => "Testing effect on ascertainment",
     :importation_epsilon => "Importation intensity",
     :province_cfr_sd => "Lethality spread",
     :province_death_ascertainment_sd => "Death-confirmation spread"
@@ -233,7 +241,7 @@ spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :province_testing_coefficient,
+        :province_ascertainment_sd,
     ];
     digits = 3, labels = spatial_labels
 );
@@ -312,8 +320,7 @@ spatial_pair_fig = plot_pair(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :province_testing_coefficient,
-        :importation_epsilon, :province_cfr_sd,
+        :province_ascertainment_sd, :importation_epsilon, :province_cfr_sd,
         :province_death_ascertainment_sd,
     ];
     prior = prior_patch_chn, labels = spatial_labels
@@ -326,7 +333,7 @@ spatial_pair_fig = plot_pair(
 spatial_pair_fig #hide
 
 # The pair plots below take one province at a time.
-# Each sets the reproduction number at the cut-off against the relative case ascertainment, and the case-fatality ratio against the relative death confirmation.
+# Each sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the province's importation intensity against its export weight relative to Ituri.
 # Each pair is identified only as a product, so a ridge between the two is expected and its position along the ridge is set by the prior.
 
 #md # ```@raw html
@@ -337,14 +344,20 @@ province_pair_labels = Dict(
     :R_T_patch => "Reproduction number",
     :province_ascertainment => "Case ascertainment",
     :CFR_patch => "Case-fatality ratio",
-    :province_death_ascertainment => "Death confirmation"
+    :province_death_ascertainment => "Death confirmation",
+    :importation_epsilon_patch => "Importation intensity",
+    :export_weight => "Export weight"
 )
+## Ituri is the export reference, its weight fixed at one, so its pair plot
+## leaves the weight out.
 province_pair_figs = [
     plot_pair(
         chn_joint,
         [
             :R_T_patch, :province_ascertainment,
             :CFR_patch, :province_death_ascertainment,
+            :importation_epsilon_patch,
+            (p == 1 ? () : (:export_weight,))...,
         ];
         patch = p, prior = prior_patch_chn, labels = province_pair_labels
     )

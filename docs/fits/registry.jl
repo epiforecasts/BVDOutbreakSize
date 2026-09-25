@@ -228,25 +228,7 @@ function build_fit_specs(
     function frozen_joint(cutoff_date; patches::Bool = false)
         o = freeze_observations(cutoff_date)
         bp = o.n - o.who_first_sitrep_days
-        pp = province_increment_matrix(
-            o.province_confirmed_history,
-            PROVINCE_NAMES, length(PROVINCE_NAMES)
-        )
-        pd = province_increment_matrix(
-            o.province_death_history,
-            PROVINCE_NAMES, length(PROVINCE_NAMES)
-        )
-        patch_args = patches ?
-            (;
-                n_patches = length(PROVINCE_NAMES),
-                province_increments = pp.increments,
-                province_days = pp.days,
-                province_death_increments = pd.increments,
-                province_death_days = pd.days,
-                province_testing_covariate = province_testing_covariate(
-                    o.province_lab_daily_history
-                ),
-            ) : (;)
+        patch_args = patches ? patch_fit_args(o) : (;)
         model = bvd_joint(
             o.n, o.exported_cases, o.total_deaths,
             o.reported_cases, o.exports_deaths, o.confirmed_cases,
