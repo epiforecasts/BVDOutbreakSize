@@ -1699,9 +1699,8 @@ end
     base = Dict(
         P(Symbol("rt_state.log_R0")) => col(fill(log(1.5), nd)),
         P(Symbol("rt_state.intervention_effect")) => col(fill(-0.3, nd)),
-        P(Symbol("rt_state.log_R")) => col(
-            [log(1.5) .+ cumsum(0.05 .* randn(rng, nb - 1)) for _ in 1:nd]
-        ),
+        P(Symbol("rt_state.sigma_rw")) => col(fill(0.05, nd)),
+        P(Symbol("rt_state.z")) => col([randn(rng, nb - 1) for _ in 1:nd]),
         P(:delta_knots) => col([0.1 .* randn(rng, np * nb) for _ in 1:nd]),
     )
     ## Falling fractions that differ by patch, so a misplaced day or patch
