@@ -49,10 +49,10 @@ source is the Ebola virus disease serial interval as a generation-time
 proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
 maps once to `α ≈ 2.71` and `θ ≈ 5.65` (`α = (mean/sd)²`,
 `θ = sd²/mean`). The priors are centred there,
-`α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
-keep the Gamma well defined. The SDs propagate the source's reported
-uncertainty, the NEJM serial-interval mean carrying a 95% CI of
-13.0–17.6 d, an SD on the mean of ≈1.17 d.
+`α ~ Normal⁺(2.71, 0.15)` and `θ ~ Normal⁺(5.65, 0.30)`, lower-truncated to
+keep the Gamma well defined. The SDs are set so the implied prior on the
+mean `α·θ` has the source's 95% CI on the serial-interval mean,
+13.0–17.6 d.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
@@ -62,8 +62,8 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        alpha_prior = truncated(Normal(2.71, 0.7); lower = 0.1),
-        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1)
+        alpha_prior = truncated(Normal(2.71, 0.15); lower = 0.1),
+        theta_prior = truncated(Normal(5.65, 0.3); lower = 0.1)
     )
     α ~ alpha_prior
     θ ~ theta_prior
