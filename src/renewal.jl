@@ -454,7 +454,9 @@ function patch_infections_with_state(
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
         end
-        S[p] = _initial_susceptible(Tp, populations[p], view(seeds_matrix, p, :))
+        S[p] = _initial_susceptible(
+            Tp, populations[p], view(seeds_matrix, p, :)
+        )
         L >= 1 && L <= n && (susceptible[p, L] = S[p])
     end
     gen = zeros(Tp, np)

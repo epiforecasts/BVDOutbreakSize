@@ -220,8 +220,8 @@ One source for all seven rather than the best figure for each. The
 relative sizes enter the model through the importation kernel and the
 per-capita testing covariate, so consistency between provinces matters
 more than the accuracy of any one of them. The absolute sizes enter only as
-the susceptible populations of the renewal, which the fitted epidemic
-depletes by well under one per cent.
+the susceptible populations of the renewal, of which the headline fit's
+epidemic has used under one per cent.
 """
 const PROVINCE_SOURCE_POPULATIONS = [
     4_008_000, 7_574_000, 6_565_000,
