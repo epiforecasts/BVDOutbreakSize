@@ -2742,17 +2742,37 @@ series for forecasting and replication.
     occupancy_split_rho = 0.0
     if split_occ
         occupancy_split_rho ~ province_split_rho_prior
-        @addlogprob! province_split_logpdf(
-            province_isolation.days, province_isolation.patches,
-            province_isolation.counts, demand_patch, occupancy_split_rho
+        occupancy_split ~ to_submodel(
+            province_split_model(
+                merge(
+                    province_isolation,
+                    (;
+                        counts = _sim_obs(
+                            simulated, :occupancy_split,
+                            province_isolation.counts
+                        ),
+                    )
+                ),
+                demand_patch, occupancy_split_rho
+            )
         )
     end
     capacity_split_rho = 0.0
     if split_cap
         capacity_split_rho ~ province_split_rho_prior
-        @addlogprob! province_split_logpdf(
-            province_capacity.days, province_capacity.patches,
-            province_capacity.counts, C_patch, capacity_split_rho
+        capacity_split ~ to_submodel(
+            province_split_model(
+                merge(
+                    province_capacity,
+                    (;
+                        counts = _sim_obs(
+                            simulated, :capacity_split,
+                            province_capacity.counts
+                        ),
+                    )
+                ),
+                C_patch, capacity_split_rho
+            )
         )
     end
 
@@ -4025,12 +4045,18 @@ function province_split_logpdf(
         days::AbstractVector{<:Integer}, patches::AbstractVector{<:Integer},
         counts::AbstractVector{<:Integer}, level::AbstractMatrix, ρ::Real
     )
+    isempty(days) && return zero(promote_type(eltype(level), typeof(float(ρ))))
+    return stick_breaking_loglik(
+        days, counts, _split_shares(days, patches, level, ρ), ρ
+    )
+end
+
+## Each row's share of its day: the patch's floored level over the sum
+## across the patches printed that day.
+function _split_shares(days, patches, level::AbstractMatrix, ρ)
     T = promote_type(eltype(level), typeof(float(ρ)))
     m = length(days)
-    m == 0 && return zero(T)
     nd = size(level, 2)
-    ## Each row's share of its day: the patch's floored level over the sum
-    ## across the patches printed that day.
     shares = Vector{T}(undef, m)
     i = 1
     @inbounds while i <= m
@@ -4048,7 +4074,66 @@ function province_split_logpdf(
         end
         i = j + 1
     end
-    return stick_breaking_loglik(days, counts, shares, ρ)
+    return shares
+end
+
+"""
+Province split of printed daily sums, as a submodel: the counts of `rows`
+`(; days, patches, counts)` scored by [`province_split_logpdf`](@ref) over
+the modelled `level`, or, with `counts` `missing`, drawn by the same
+stick-breaking at each day's printed sum `rows.totals`, one draw per
+position within a day, the last printed province taking the remainder.
+Returns `(; counts)`, and records the counts as `split_counts`.
+"""
+@model function province_split_model(rows, level::AbstractMatrix, ρ::Real)
+    if !ismissing(rows.counts)
+        @addlogprob! province_split_logpdf(
+            rows.days, rows.patches, rows.counts, level, ρ
+        )
+        return (; counts = rows.counts)
+    end
+    days = rows.days
+    m = length(days)
+    shares = _split_shares(days, rows.patches, level, ρ)
+    ## Each row's position within its day and the size of its day.
+    rank = zeros(Int, m)
+    size_ = zeros(Int, m)
+    i = 1
+    while i <= m
+        j = i
+        while j < m && days[j + 1] == days[i]
+            j += 1
+        end
+        rank[i:j] .= 1:(j - i + 1)
+        size_[i:j] .= j - i + 1
+        i = j + 1
+    end
+    counts = zeros(Int, m)
+    remaining = Int.(rows.totals)
+    tail = ones(eltype(shares), m)
+    obs_rank = Vector{Union{Missing, Vector{Int}}}(
+        missing, max(maximum(size_; init = 1) - 1, 0)
+    )
+    for k in eachindex(obs_rank)
+        sel = findall(r -> rank[r] == k && size_[r] > k, 1:m)
+        isempty(sel) && continue
+        p_cond = [clamp(shares[r] / tail[r], 0.0, 1.0) for r in sel]
+        obs_rank[k] ~ BetaBinomialVector(max.(remaining[sel], 0), p_cond, ρ)
+        for (q, r) in enumerate(sel)
+            c = Int(obs_rank[k][q])
+            counts[r] = c
+            ## Carry what is left of the day to the next position.
+            for s in (r + 1):(r + size_[r] - rank[r])
+                remaining[s] = remaining[r] - c
+                tail[s] = max(tail[r] - shares[r], 1.0e-10)
+            end
+        end
+    end
+    for r in 1:m
+        rank[r] == size_[r] && (counts[r] = max(remaining[r], 0))
+    end
+    split_counts := counts
+    return (; counts)
 end
 
 """
