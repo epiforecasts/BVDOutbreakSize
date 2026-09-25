@@ -307,8 +307,9 @@ source.
 
 `m ~ truncated(Normal(2.75, 1.2); lower = 0)` counts the transmission
 generations between the index infection and the renewal start, so the
-origin sits `T = m · G` days back and the cryptic phase grows one infection
-per day there to `C_T = exp(r · T)` per day at the renewal start.
+origin sits `T = m · G` days back. The cryptic phase grows from that single
+index infection, so the cumulative count is `exp(r · t)` after `t` days and
+daily incidence at the renewal start is `C_T = r · exp(r · T)`.
 
 The centre puts the origin in mid-February 2026, 2.75 generation intervals
 before the renewal start. The 90% prior origin runs mid-January to
@@ -316,8 +317,7 @@ mid-March, so the traced 25 January 2026 index death (kupferschmidt2026)
 sits at about the 87th percentile rather than at the centre. It is the
 earliest chain field work reached, which bounds the origin rather than
 dating it. The genetic TMRCA (mbalaplacide2026) is a lower bound consistent
-with an origin that early. The 99th percentile seed is about 150 infections
-per day, against a fitted outbreak of order ten thousand in total.
+with an origin that early.
 
 In the renewal, `C_T` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
@@ -337,9 +337,9 @@ Returns `(; τ, r, m, T, C_T, G)`.
     ## Outbreak age is generations times the generation interval, so it does
     ## not depend on `r`.
     T := m * G
-    ## Daily incidence at the renewal start, grown from one infection per day
-    ## at the origin over `T` days at the cryptic rate.
-    C_T := exp(r * T)
+    ## Daily incidence at the renewal start, grown from the single index
+    ## infection at the origin over `T` days at the cryptic rate.
+    C_T := r * exp(r * T)
     return (; τ, r, m, T, C_T, G)
 end
 
@@ -424,7 +424,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         rt(n, log(R0); breakpoint, rt_start = rt_walk_start, fkw...)
     )
     Rt = rt_state.Rt
-    ## The renewal-start seed is the daily incidence `C_T = exp(r·T)` reached
+    ## The renewal-start seed is the daily incidence `C_T = r·exp(r·T)` reached
     ## after the cryptic phase's `m` generations. Grid days
     ## `1…renewal_start` are filled with the cryptic exponential curve at
     ## rate `r` ending at that seed, a full generation interval of history,

@@ -4,7 +4,7 @@
 ## doubling time) along with the generation count `m`, so the cryptic
 ## duration `T = m·G` is prior-dominated and does not depend on `r`; the
 ## established `R0` is derived forward from `r` in `infection_model`. The
-## renewal-start seed is the daily incidence `C_T = exp(r·T)` reached at the
+## renewal-start seed is the daily incidence `C_T = r·exp(r·T)` reached at the
 ## end of the cryptic phase, and the total age `T + τ_obs` carries the
 ## genetic bound while the renewal sets the realized size.
 
@@ -38,11 +38,11 @@
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r, T = m·G and C_T = exp(r·T) hold draw-by-draw.
+    ## τ = log(2)/r, T = m·G and C_T = r·exp(r·T) hold draw-by-draw.
     @test all(isapprox.(τ, log(2) ./ r; rtol = 1.0e-8))
     @test all(isapprox.(G, G_true; rtol = 1.0e-8))
     @test all(isapprox.(T, m .* G_true; rtol = 1.0e-8))
-    @test all(isapprox.(C_T, exp.(r .* T); rtol = 1.0e-8))
+    @test all(isapprox.(C_T, r .* exp.(r .* T); rtol = 1.0e-8))
     ## The point of counting generations: elapsed time per generation is the
     ## generation interval, so it is the same for every draw regardless of the
     ## growth rate. Counting doublings would make it log(2)/r and vary.

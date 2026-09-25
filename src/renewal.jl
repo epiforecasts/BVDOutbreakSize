@@ -195,11 +195,11 @@ reading the seed as cumulative would shift `m` by several generations.
 
 The cryptic phase runs from the origin to the renewal start (≈ the genetic
 TMRCA day, off the renewal grid), spanning `T = m · G` days for `m` generations
-at mean generation interval `G`. A single daily infection at the origin grows
-over it at the cryptic rate `r` to
+at mean generation interval `G`. A single index infection at the origin grows
+over it at the cryptic rate `r`, so daily incidence at the renewal start is
 
 ```math
-\\text{seed\\_at\\_renewal\\_start} = C_T = e^{r T},
+\\text{seed\\_at\\_renewal\\_start} = C_T = r\\,e^{r T},
 ```
 
 which the renewal grows forward under `R_t`, so the realised cut-off size stays
