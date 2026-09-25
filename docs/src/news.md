@@ -165,6 +165,9 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
+- The docs build fits the headline joint to three datasets it simulates itself and checks it recovers the values and the future that generated them (#882).
+  A density check first confirms the simulated data reach the right streams.
+  A failing recovery comments on a tracking issue on main and on the pull request.
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit.
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
