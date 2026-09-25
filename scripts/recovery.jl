@@ -36,7 +36,7 @@ mkpath(out_dir)
 const SCALARS = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
     "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
-    "region_drift_sd",
+    "region_drift_sd", "rt_state.intervention_effect",
 ]
 const PER_PROVINCE = ["C_T_patch", "R_T_patch", "CFR_patch", "province_ascertainment"]
 
