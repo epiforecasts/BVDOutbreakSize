@@ -168,20 +168,26 @@ one of:
   gate's fail tier) or its smallest bulk ESS below `min_ess` (30, just above
   the gate's fail tier of 25), so its intervals say nothing about the model
   and the recovery is not judged.
-- `:fail`: a quantity's true value lies outside its posterior's central
-  `outer` interval (99% by default), or fewer than `coverage_fail` of the
-  quantities have the truth inside their 90% interval.
+- `:fail`: more quantities have the true value outside their posterior's
+  central `outer` interval (99% by default) than chance allows, or fewer
+  than `coverage_fail` of the quantities have the truth inside their 90%
+  interval. Chance allows the `outside_quantile` quantile (99%) of a
+  Binomial over the quantities checked with probability `1 - outer`: with
+  28 quantities up to two may lie outside. One miss is then expected about
+  one seed in four of a calibrated model, and a failure fewer than one seed
+  in three hundred.
 - `:warn`: fewer than `coverage_warn` do. A correct model misses a 90%
   interval about one time in ten by chance, so the bar sits below 0.9.
 - `:pass` otherwise.
 
-Returns `(; status, pass, outside, coverage_90, converged)`, where `pass`
-is `status` being `:pass` or `:warn` and `outside` lists the quantities
-outside the outer interval.
+Returns `(; status, pass, outside, outside_allowed, coverage_90,
+converged)`, where `pass` is `status` being `:pass` or `:warn`, `outside`
+lists the quantities outside the outer interval and `outside_allowed` is
+how many may be before the seed fails.
 """
 function recovery_verdict(
         tab::DataFrame; diagnostics = nothing, outer::Real = 0.99,
-        coverage_fail::Real = 0.6, coverage_warn::Real = 0.8,
+        outside_quantile::Real = 0.99, coverage_fail::Real = 0.6, coverage_warn::Real = 0.8,
         max_rhat::Real = 1.1, min_ess::Real = 30
     )
     tail = (1 - outer) / 2
@@ -189,17 +195,20 @@ function recovery_verdict(
         r.quantity for r in eachrow(tab)
             if r.truth_quantile < tail || r.truth_quantile > 1 - tail
     ]
+    outside_allowed = nrow(tab) == 0 ? 0 :
+        Int(quantile(Binomial(nrow(tab), 1 - outer), outside_quantile))
     coverage_90 = isempty(tab.covered_90) ? 1.0 : mean(tab.covered_90)
     converged = diagnostics === nothing || (
         diagnostics.max_rhat <= max_rhat &&
             diagnostics.min_ess_bulk >= min_ess
     )
     status = !converged ? :unconverged :
-        (!isempty(outside) || coverage_90 < coverage_fail) ? :fail :
+        (length(outside) > outside_allowed || coverage_90 < coverage_fail) ?
+        :fail :
         coverage_90 < coverage_warn ? :warn : :pass
     return (;
-        status, pass = status in (:pass, :warn), outside, coverage_90,
-        converged,
+        status, pass = status in (:pass, :warn), outside, outside_allowed,
+        coverage_90, converged,
     )
 end
 

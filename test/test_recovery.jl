@@ -110,6 +110,15 @@ end
     )
     @test recovery_verdict(mid).status == :warn
     @test recovery_verdict(mid).pass
+    ## Across many quantities a miss or two of the 99% interval is chance:
+    ## with 28 checked, the seed fails only from the third.
+    many = Dict("q$i" => randn(rng, 4000) for i in 1:28)
+    truths(k) = Dict("q$i" => (i <= k ? 3.5 : 0.0) for i in 1:28)
+    two = recovery_verdict(recovery_table(truths(2), many))
+    @test length(two.outside) == 2 && two.outside_allowed == 2
+    @test two.status == :pass
+    three = recovery_verdict(recovery_table(truths(3), many))
+    @test three.status == :fail
     ## A fit that did not converge is not judged, whatever its intervals.
     stuck = (; max_rhat = 1.3, min_ess_bulk = 8.0)
     v = recovery_verdict(tab; diagnostics = stuck)
