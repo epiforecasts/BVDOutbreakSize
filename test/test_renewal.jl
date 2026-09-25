@@ -137,7 +137,7 @@ end
 
     ## One `exp` per lag, as `1 / Σ_s g_s e^{−r s}` reads.
     reference(r, g) = 1 / sum(g[s] * exp(-r * s) for s in eachindex(g))
-    for L in (1, 40, 120)
+    for L in (5, 40, 120)
         gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
         g = gi_raw[2:end] ./ sum(gi_raw[2:end])
         for r in (-0.5, -0.05, 0.0, 0.02, 0.08, 0.5)
