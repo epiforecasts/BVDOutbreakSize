@@ -567,7 +567,6 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
-# It bounds each day's infections by the pool left, and while the pool is large $I_{p,t} \approx (S_{p,t-1}/N_p)\, Y_{p,t}$.
 # Control measures rather than immunity limit transmission here, so the census population is only a light upper bound that stops extreme sampler proposals and forecast draws from outgrowing it.
 # $R_{p,t}$ is the reproduction number in a fully susceptible population, and every reproduction number we report is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
 #
