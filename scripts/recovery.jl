@@ -1,9 +1,9 @@
 # Parameter recovery and simulated forecasts for the headline joint.
 #
 # One run simulates a dataset from the model itself at a fixed seed, fits the
-# model to it at the headline joint's sampler settings, and writes how well the fit
-# recovers the values that generated the data, and how its forecasts score
-# against the simulated future and a persistence baseline. See
+# model to it at the headline joint's sampler settings, and writes how well
+# the fit recovers the values that generated the data, and how its forecasts
+# score against the simulated future and a persistence baseline. See
 # `src/recovery.jl` for the method.
 #
 # Usage:
