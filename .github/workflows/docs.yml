@@ -404,11 +404,12 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # Summarise the recovery runs. On main, keep a tracking issue in step with
-  # the verdict: comment when recovery fails badly, close it once it passes.
+  # Summarise the recovery runs across seeds. On main, keep a tracking issue
+  # in step with the verdict: comment when recovery fails or a fit does not
+  # converge, close it once it passes.
   recovery_report:
     name: Report parameter recovery
-    needs: recovery
+    needs: [list, recovery]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
@@ -417,6 +418,25 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+          save-always: false
+          include-matrix: false
+      - name: Pin the resolved manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: .
+      - name: Restore the compiled package from `list`
+        uses: ./.github/actions/bvd-pkgimage
+        with:
+          mode: restore
+      - name: Install the docs environment
+        run: julia --project=docs -e 'using Pkg; Pkg.instantiate()'
       - uses: actions/download-artifact@v8
         with:
           pattern: recovery-*
