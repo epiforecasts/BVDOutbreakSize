@@ -31,12 +31,15 @@ end
     using BVDOutbreakSize: NegBinomialVector, safe_nbinomial
     using Distributions: censored
     using Random: Xoshiro
+    ## The success probability is floored at `eps`, so the mean reaches past
+    ## `typemax(Int)` only with a large dispersion.
+    k = 1.0e4
     μ = [3.0, 1.0e22, 40.0]
-    @test_throws InexactError rand(Xoshiro(3), safe_nbinomial(5.0, 1.0e22))
-    x = rand(Xoshiro(3), NegBinomialVector(5.0, μ))
+    @test_throws InexactError rand(Xoshiro(3), safe_nbinomial(k, 1.0e22))
+    x = rand(Xoshiro(3), NegBinomialVector(k, μ))
     @test x isa Vector{Int}
     @test x[2] == typemax(Int)
-    y = rand(Xoshiro(3), censored(NegBinomialVector(5.0, μ); upper = fill(1.0e6, 3)))
+    y = rand(Xoshiro(3), censored(NegBinomialVector(k, μ); upper = fill(1.0e6, 3)))
     @test y[2] == 1.0e6
 end
 

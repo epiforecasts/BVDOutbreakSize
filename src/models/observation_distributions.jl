@@ -17,6 +17,55 @@
     return (on ? x : fallback), on
 end
 
+## Count draws in floating point, floored to an `Int` that saturates at
+## `typemax(Int)`. The Distributions samplers convert to `Int` and throw
+## `InexactError` once a mean passes it, which a forecast from a loosely
+## constrained fit can reach. Following ComposableTuringIDModels'
+## `SafePoisson` and `SafeNegativeBinomial`, the Gamma–Poisson mixture is
+## drawn in floating point and floored safely, saturating rather than
+## widening to `BigInt` because every draw lands in an `Int` container.
+
+## A Poisson count of mean `λ` as a float. Below `2^62` this is the
+## Distributions draw. Above it the sampler's own `Int` conversion can
+## overflow, so the draw takes the normal limit, whose relative error there is
+## below `1e-9`.
+function _poisson_count(rng::AbstractRNG, λ::Real)
+    λ < 2.0^62 && return float(rand(rng, Poisson(λ)))
+    return max(round(λ + sqrt(λ) * randn(rng)), zero(float(λ)))
+end
+
+## A negative binomial count of shape `r` and success probability `p` as a
+## float, by the Gamma–Poisson mixture `rand(::NegativeBinomial)` uses, so a
+## mean within range draws the same count from the same generator state.
+function _nbinomial_count(rng::AbstractRNG, d::NegativeBinomial)
+    isone(d.p) && return 0.0
+    return _poisson_count(rng, rand(rng, Gamma(d.r, (1 - d.p) / d.p)))
+end
+
+## `x` floored to an `Int`, saturating at `typemax(Int)`.
+_saturated_count(x::Real) = x < 2.0^63 ? floor(Int, x) : typemax(Int)
+
+"""
+    SafePoisson(λ)
+
+`Poisson` with mean `λ` whose draws saturate at `typemax(Int)` rather than
+throwing `InexactError` past it. `logpdf` is the `Poisson` one. The draw
+follows ComposableTuringIDModels' `SafePoisson`.
+"""
+struct SafePoisson{T <: Real} <: Distributions.DiscreteUnivariateDistribution
+    λ::T
+end
+
+Base.minimum(::SafePoisson) = 0
+Base.maximum(::SafePoisson) = Inf
+Distributions.insupport(::SafePoisson, x::Real) = isinteger(x) && x >= 0
+function Distributions.logpdf(d::SafePoisson, x::Real)
+    return logpdf(Poisson(d.λ; check_args = false), x)
+end
+function Base.rand(rng::AbstractRNG, d::SafePoisson)
+    return _saturated_count(_poisson_count(rng, d.λ))
+end
+
 """
 NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean `μ`
 and dispersion `k`, with clamping on the success probability so extreme
@@ -72,7 +121,9 @@ function Distributions._rand!(
         rng::AbstractRNG, d::NegBinomialVector, x::AbstractVector{<:Real}
     )
     @inbounds for i in eachindex(x, d.μ)
-        x[i] = rand(rng, safe_nbinomial(d.k, safe_rate(d.μ[i])))
+        x[i] = _saturated_count(
+            _nbinomial_count(rng, safe_nbinomial(d.k, safe_rate(d.μ[i])))
+        )
     end
     return x
 end
@@ -158,12 +209,10 @@ function Distributions._rand!(
         x::AbstractVector{<:Real}
     )
     @inbounds for i in eachindex(x, d.μ, d.upper)
-        x[i] = rand(
-            rng, censored(
-                safe_nbinomial(d.k, safe_rate(d.μ[i]));
-                upper = safe_rate(d.upper[i])
-            )
+        count = _saturated_count(
+            _nbinomial_count(rng, safe_nbinomial(d.k, safe_rate(d.μ[i])))
         )
+        x[i] = min(count, safe_rate(d.upper[i]))
     end
     return x
 end

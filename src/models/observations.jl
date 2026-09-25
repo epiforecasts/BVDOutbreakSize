@@ -115,7 +115,8 @@ end
 Per-day Poisson likelihood for a dated event series. Scores the observed
 per-day `counts` against the modelled per-day `means` with one Poisson
 term each, NaN/Inf-safe via [`safe_rate`](@ref). A `missing` `counts`
-samples instead (the predictive-generator path). The indexed `counts[i]`
+samples instead (the predictive-generator path), saturating at
+`typemax(Int)` ([`SafePoisson`](@ref)). The indexed `counts[i]`
 keeps the predict keys (`<prefix>.counts[i]`) replicable. Used by
 [`exports_model`](@ref) and the export-deaths likelihood for the dated
 Uganda export series.
@@ -129,7 +130,7 @@ Uganda export series.
         counts = Vector{Union{Missing, Int}}(missing, n)
     end
     for i in 1:n
-        counts[i] ~ Poisson(safe_rate(means[i]))
+        counts[i] ~ SafePoisson(safe_rate(means[i]))
     end
     return (; means, counts)
 end
