@@ -135,6 +135,15 @@ Uganda export series.
     return (; means, counts)
 end
 
+## A stream's simulated observation in place of its own, for fitting the
+## model to data it simulated itself (`simulate_recovery`). `simulated` maps
+## an observation's name within the stream to its values. With no simulated
+## data the observation is used as given, so a fit to real data is unchanged.
+_sim_obs(::Nothing, ::Symbol, obs) = obs
+function _sim_obs(simulated, name::Symbol, obs)
+    return haskey(simulated, name) ? simulated[name] : obs
+end
+
 """
 Resolve a stream's per-vintage observation into the vintage day indices
 and the observed between-vintage increment vector to score, given the
@@ -475,7 +484,8 @@ ascertainment and the background CFR for reuse by
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
         ),
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
@@ -506,7 +516,10 @@ ascertainment and the background CFR for reuse by
 
     modelled_increments = bin_increments(deaths_daily, vobs.days)
     death_increments ~ to_submodel(
-        vintage_increments_model(modelled_increments, vobs.obs_increments, k)
+        vintage_increments_model(
+            modelled_increments,
+            _sim_obs(simulated, :death_increments, vobs.obs_increments), k
+        )
     )
 
     ## The mean for day `d` is the single-day `deaths_daily[d]`, not a
@@ -517,7 +530,10 @@ ascertainment and the background CFR for reuse by
     sdd_obs = isempty(suspected_daily_deaths_history.counts) ? missing :
         collect(Int.(suspected_daily_deaths_history.counts))
     suspected_daily_deaths ~ to_submodel(
-        vintage_increments_model(sdd_modelled, sdd_obs, k)
+        vintage_increments_model(
+            sdd_modelled,
+            _sim_obs(simulated, :suspected_daily_deaths, sdd_obs), k
+        )
     )
 
     raw_total = sum(upto(deaths_daily, nc))
@@ -581,7 +597,8 @@ sitrep.
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     pos_state ~ to_submodel(positivity)
     report_state ~ to_submodel(onset_to_report)
@@ -618,7 +635,10 @@ sitrep.
 
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
-        vintage_increments_model(modelled_increments, vobs.obs_increments, k)
+        vintage_increments_model(
+            modelled_increments,
+            _sim_obs(simulated, :reported_increments, vobs.obs_increments), k
+        )
     )
 
     ## The mean for day `d` is the single-day `reports_daily[d]`, not a
@@ -629,7 +649,9 @@ sitrep.
     sd_obs = isempty(suspected_daily_history.counts) ? missing :
         collect(Int.(suspected_daily_history.counts))
     suspected_daily ~ to_submodel(
-        vintage_increments_model(sd_modelled, sd_obs, k)
+        vintage_increments_model(
+            sd_modelled, _sim_obs(simulated, :suspected_daily, sd_obs), k
+        )
     )
 
     raw_total = sum(upto(reports_daily, nc))
@@ -1046,7 +1068,8 @@ quantities.
         ## Zero pins the step at the published discrepancy and samples no
         ## parameter.
         confirmed_break_sd::Real = 25.0,
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     n = length(onsets)
     nc = something(cutoff, n)
@@ -1110,7 +1133,10 @@ quantities.
     ## resamples them, like the early/late windows below.
     vol_obs = have_data ? rvobs.obs_increments : missing
     analysed_increments ~ to_submodel(
-        vintage_increments_model(analysed_inc, vol_obs, k)
+        vintage_increments_model(
+            analysed_inc,
+            _sim_obs(simulated, :analysed_increments, vol_obs), k
+        )
     )
 
     ## Post-cutoff 24h analysed volume. Once the national cumulative analysed
@@ -1122,7 +1148,10 @@ quantities.
         [analysed_daily[d] for d in daily_days]
     daily_obs = have_data ? lab_daily_history.counts : missing
     analysed_daily_increments ~ to_submodel(
-        vintage_increments_model(daily_modelled, daily_obs, k)
+        vintage_increments_model(
+            daily_modelled,
+            _sim_obs(simulated, :analysed_daily_increments, daily_obs), k
+        )
     )
 
     ## Confirmed positives in three groups sharing one partially-pooled
@@ -1209,7 +1238,9 @@ quantities.
     early_obs = (have_data && n_early > 0) ?
         windows.early_increments : missing
     early_increments ~ to_submodel(
-        vintage_increments_model(early_mean, early_obs, k)
+        vintage_increments_model(
+            early_mean, _sim_obs(simulated, :early_increments, early_obs), k
+        )
     )
 
     ## Observed windows: overdispersed BetaBinomial of the observed analysed
@@ -1219,7 +1250,8 @@ quantities.
         missing
     confirmed_positives ~ to_submodel(
         confirmed_positives_model(
-            obs_positives, windows.obs_analysed, obs_p,
+            _sim_obs(simulated, :confirmed_positives, obs_positives),
+            windows.obs_analysed, obs_p,
             ρ_conf
         )
     )
@@ -1281,7 +1313,8 @@ quantities.
     end
     late_increments ~ to_submodel(
         late_confirmed_model(
-            late_obs, late_mean, windows.late_analysed,
+            _sim_obs(simulated, :late_increments, late_obs), late_mean,
+            windows.late_analysed,
             late_p, k, ρ_conf
         )
     )
@@ -1414,7 +1447,8 @@ rate and the daily at-risk prevalence for reuse by
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     travel_state ~ to_submodel(traveller)
     daily_travellers = travel_state.daily_travellers
@@ -1454,7 +1488,9 @@ rate and the daily at-risk prevalence for reuse by
                 for i in eachindex(raw_inc)
         ]
         obs = ismissing(exported_cases) ? missing : counts
-        export_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        export_obs ~ to_submodel(
+            dated_poisson_model(μ_day, _sim_obs(simulated, :export_obs, obs))
+        )
         expected_exports_T := safe_rate(pre + sum(μ_day))
     end
 
@@ -1507,7 +1543,8 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         od_pmf::AbstractVector, incubation_pmf::AbstractVector;
         export_death_days::AbstractVector{<:Integer} = Int[],
         pre_death_exports::Union{Missing, Integer} = 0,
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     n = something(cutoff, length(travelled_prevalence))
     ## Infection→death PMF by age (age 0 = same day).
@@ -1533,7 +1570,9 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
                 for i in eachindex(raw_inc)
         ]
         obs = ismissing(exports_deaths) ? missing : counts
-        death_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        death_obs ~ to_submodel(
+            dated_poisson_model(μ_day, _sim_obs(simulated, :death_obs, obs))
+        )
         expected_exports_deaths_T := safe_rate(pre + sum(μ_day))
     end
 
@@ -1610,7 +1649,8 @@ positivity and the expected confirmed-death count.
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
@@ -1704,7 +1744,10 @@ positivity and the expected confirmed-death count.
     ## the published discrepancy stays available to a predictive.
     cdeath_obs = ismissing(confirmed_deaths) ? missing : vobs.obs_increments
     cdeath_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, cdeath_obs, k)
+        vintage_increments_model(
+            modelled_inc,
+            _sim_obs(simulated, :cdeath_increments, cdeath_obs), k
+        )
     )
 
     expected_confirmed_deaths := safe_rate(
@@ -2353,7 +2396,8 @@ series for forecasting and replication.
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         ## Prior sd of each occupancy break step (beds), centred on zero.
         occupancy_break_sd::Real = 25.0,
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
@@ -2535,7 +2579,9 @@ series for forecasting and replication.
     iso_means = [occ_obs_total[clamp(Int(d), 1, n)] for d in iso_days]
     iso_ceil = censoring_cap(iso_days, iso_obs, capacity_history)
     isolation ~ to_submodel(
-        censored_occupancy_model(iso_means, iso_ceil, iso_obs, k)
+        censored_occupancy_model(
+            iso_means, iso_ceil, _sim_obs(simulated, :isolation, iso_obs), k
+        )
     )
 
     ## Capacity likelihood: the implied bed count is a noisy observation of
@@ -2545,7 +2591,9 @@ series for forecasting and replication.
     cap_obs = isempty(capacity_history.counts) ? missing :
         collect(Int.(capacity_history.counts))
     bed_capacity ~ to_submodel(
-        vintage_increments_model(cap_modelled, cap_obs, k)
+        vintage_increments_model(
+            cap_modelled, _sim_obs(simulated, :bed_capacity, cap_obs), k
+        )
     )
 
     ## Split likelihoods, guarded by `split_active` so they no-op when the
@@ -2555,7 +2603,8 @@ series for forecasting and replication.
         missing : collect(Int.(confirmed_incare_history.counts))
     confirmed_incare_obs ~ to_submodel(
         vintage_increments_model(
-            [conf_split[clamp(Int(d), 1, n)] for d in ci_days], ci_obs, k
+            [conf_split[clamp(Int(d), 1, n)] for d in ci_days],
+            _sim_obs(simulated, :confirmed_incare_obs, ci_obs), k
         )
     )
     si_days = split_active ? suspect_incare_history.days : Int[]
@@ -2566,7 +2615,7 @@ series for forecasting and replication.
             [
                 max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
                     for d in si_days
-            ], si_obs, k
+            ], _sim_obs(simulated, :suspect_incare_obs, si_obs), k
         )
     )
     ## Optional daily Tableau 6 flow likelihoods, each a no-op on empty history.
@@ -2576,7 +2625,8 @@ series for forecasting and replication.
         collect(Int.(deaths_history.counts))
     incare_deaths ~ to_submodel(
         vintage_increments_model(
-            [deaths_daily[clamp(Int(d), 1, n)] for d in dth_days], dth_obs, k
+            [deaths_daily[clamp(Int(d), 1, n)] for d in dth_days],
+            _sim_obs(simulated, :incare_deaths, dth_obs), k
         )
     )
     ro_days = ruleout_history.days
@@ -2584,7 +2634,8 @@ series for forecasting and replication.
         collect(Int.(ruleout_history.counts))
     ruleouts ~ to_submodel(
         vintage_increments_model(
-            [ruleout_daily[clamp(Int(d), 1, n)] for d in ro_days], ro_obs, k
+            [ruleout_daily[clamp(Int(d), 1, n)] for d in ro_days],
+            _sim_obs(simulated, :ruleouts, ro_obs), k
         )
     )
     adm_h_days = admissions_history.days
@@ -2596,14 +2647,18 @@ series for forecasting and replication.
         isolation_history
     )
     admissions ~ to_submodel(
-        censored_occupancy_model(adm_means, adm_ceil, adm_h_obs, k)
+        censored_occupancy_model(
+            adm_means, adm_ceil,
+            _sim_obs(simulated, :admissions, adm_h_obs), k
+        )
     )
     ab_days = absconded_history.days
     ab_obs = isempty(absconded_history.counts) ? missing :
         collect(Int.(absconded_history.counts))
     absconded ~ to_submodel(
         vintage_increments_model(
-            [abscond_daily[clamp(Int(d), 1, n)] for d in ab_days], ab_obs, k
+            [abscond_daily[clamp(Int(d), 1, n)] for d in ab_days],
+            _sim_obs(simulated, :absconded, ab_obs), k
         )
     )
 
@@ -2739,7 +2794,8 @@ the daily recovered series and the cut-off total.
         ## Dispersion can be injected from the joint composer's pooled set
         ## (`k_external`). Standalone it samples its own from `dispersion`.
         k_external::Union{Nothing, Real} = nothing,
-        cutoff::Union{Nothing, Integer} = nothing
+        cutoff::Union{Nothing, Integer} = nothing,
+        simulated = nothing
     )
     rec_state ~ to_submodel(recovery(CFR))
     p_recover = rec_state.p_recover
@@ -2762,7 +2818,11 @@ the daily recovered series and the cut-off total.
     vobs = vintage_obs(recovered_history, recovered_total, n)
     modelled_inc = bin_increments(recovered_daily, vobs.days)
     recovered_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, vobs.obs_increments, k)
+        vintage_increments_model(
+            modelled_inc,
+            _sim_obs(simulated, :recovered_increments, vobs.obs_increments),
+            k
+        )
     )
 
     expected_recovered := safe_rate(sum(upto(recovered_daily, n)))
@@ -4034,6 +4094,9 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     ## The totals are conditioned on, not scored: they are already in the
     ## joint density through the national confirmed stream.
     totals = _composition_totals(obs_increments, modelled_confirmed)
+    ## Recorded so a simulated composition can be rebuilt in full: on the
+    ## predictive path the last province is the remainder of these totals.
+    composition_totals := totals
     ## Attached unprefixed, so the split's `obs_increments[p, :]` sit
     ## directly under the composition's own prefix.
     split_state ~ to_submodel(
