@@ -48,13 +48,10 @@ fmt_day(d) = Dates.format(d, "d U Y")
 ## --- Release ---------------------------------------------------------------
 
 add!("release_tag", meta.tag, "gh release view: tagName")
-add!(
-    "release_commit", meta.commit,
-    "gh release view: source commit named in the release body"
-)
+## Only the short commit: detect-secrets flags a full 40-character SHA.
 add!(
     "release_commit_short", meta.commit[1:7],
-    "first seven characters of release_commit"
+    "gh release view: source commit, first seven characters"
 )
 add!("release_date", fmt_day(meta.date), "gh release view: publishedAt")
 add!("data_cutoff", fmt_day(cutoff), "observations.toml: as_of_date")
@@ -181,8 +178,9 @@ add!(
 ## --- Provinces --------------------------------------------------------------
 ## The province tables are published only on the site snapshot's province
 ## page (site.zip: estimates/province.html), one "Detail by province" table
-## per patch under an h4 heading, and the infection shares only in the
-## summary prose (site.zip: summary_assets/provinces.html).
+## per patch under an h4 heading, and the infection shares and the
+## probability that R is above one only in the summary table
+## (site.zip: summary_assets/provinces.html).
 
 const PROVINCES = [
     ("Ituri", "ituri"), ("Nord-Kivu", "nord_kivu"),
@@ -191,7 +189,7 @@ const PROVINCES = [
 province_page = "site.zip estimates/province.html"
 shares_page = "site.zip summary_assets/provinces.html"
 detail = Dict(headed_tables(site_page("estimates/province.html"), "h4"))
-shares_prose = _cell_text(site_page("summary_assets/provinces.html"))
+shares_table = html_tables(site_page("summary_assets/provinces.html"))
 for (label, key) in PROVINCES
     t = detail[label]
     ## The numeric columns `Lower 90%` .. `Upper 90%` follow the label.
@@ -217,17 +215,19 @@ for (label, key) in PROVINCES
         "$province_page: $label table, Reproduction number, " *
             "Lower 90% to Upper 90%"
     )
-    m = match(Regex(label * raw" (\d+)–(\d+)%"), shares_prose)
+    ## Columns after the label: share of infections (%), R at the
+    ## cut-off, P(R > 1), CFR (%), relative ascertainment.
+    row = table_row(shares_table, label)
+    m = match(r"^(\d+)–(\d+)$", row[2])
     m === nothing && error("no infection share for $label in $shares_page")
     add!(
         "$(key)_share_interval90",
         m.captures[1] * " to " * m.captures[2] * "%",
-        "$shares_page: \"Share of infections\" sentence, $label 90% interval"
+        "$shares_page: table, $label, Share of infections (%)"
     )
-    m = match(Regex(raw"(\d+)% in " * label), shares_prose)
-    m === nothing || add!(
-        "$(key)_rt_prob_above_one", m.captures[1] * "%",
-        "$shares_page: \"probability it is above one\" sentence, $label"
+    add!(
+        "$(key)_rt_prob_above_one", row[4],
+        "$shares_page: table, $label, P(R > 1)"
     )
 end
 add!(

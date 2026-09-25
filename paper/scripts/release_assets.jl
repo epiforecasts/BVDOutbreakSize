@@ -24,6 +24,7 @@ const ASSETS = [
     "posterior_draws.csv", "posterior_summary.csv", "stream_draws.csv",
     "stream_estimates.csv", "forecast.csv", "forecast_validation.csv",
     "province_forecast.csv", "onsets_over_time.csv", "observations.toml",
+    "frozen_matched_cutoffs.csv",
     "site.zip",
 ]
 
@@ -41,6 +42,13 @@ first run only.
 """
 function ensure_assets(tag::AbstractString)
     mkpath(release_dir())
+    ## The directory holds one release at a time; clear another tag's assets.
+    marker = asset_path("TAG")
+    if isfile(marker) && strip(read(marker, String)) != tag
+        @info "clearing the assets of $(strip(read(marker, String)))"
+        foreach(n -> rm(asset_path(n); force = true), [ASSETS; "release.toml"])
+    end
+    write(marker, tag)
     for name in ASSETS
         isfile(asset_path(name)) && continue
         @info "downloading $name from $tag"
