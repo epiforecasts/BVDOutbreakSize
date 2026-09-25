@@ -123,8 +123,8 @@
         ## A distribution's rule is named after the distribution.
         label(f, args) = f === _logpdf ? nameof(typeof(first(args))) :
             nameof(f)
-        add!(note, f, args...; perf = false) = push!(
-            cases, (; name = "$(label(f, args)): $note", f, args, perf)
+        add!(note, f, args...; perf = false, rtol = 1.0e-6) = push!(
+            cases, (; name = "$(label(f, args)): $note", f, args, perf, rtol)
         )
 
         M = rand(rng, 3, 40) .+ 0.5
@@ -203,7 +203,13 @@
                 pool .* (rand(prng, np) .+ 0.5),
             )
         end
-        add!("3 patches", patch_infections, patch_args(3, 40, 7, 12)...)
+        ## Its tangent draw gives a small directional derivative, about
+        ## 0.07, so Float64 central differences settle to only about 2e-6
+        ## relative. The adjoint agrees with a BigFloat difference to 1e-15.
+        add!(
+            "3 patches", patch_infections, patch_args(3, 40, 7, 12)...;
+            rtol = 1.0e-5
+        )
         add!(
             "3 patches, binding pools", patch_infections,
             patch_args(3, 40, 7, 12; pool = 60.0, rng = prng)...
@@ -450,7 +456,7 @@ end
         @testset "$(c.name)" begin
             test_rule(
                 Xoshiro(hash(c.name)), c.f, c.args...; is_primitive = true,
-                mode = ReverseMode, rtol = 1.0e-6, atol = 1.0e-8
+                mode = ReverseMode, c.rtol, atol = 1.0e-8
             )
         end
     end
