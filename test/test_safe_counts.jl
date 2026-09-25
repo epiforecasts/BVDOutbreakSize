@@ -39,7 +39,9 @@ end
     x = rand(Xoshiro(3), NegBinomialVector(k, μ))
     @test x isa Vector{Int}
     @test x[2] == typemax(Int)
-    y = rand(Xoshiro(3), censored(NegBinomialVector(k, μ); upper = fill(1.0e6, 3)))
+    y = rand(
+        Xoshiro(3), censored(NegBinomialVector(k, μ); upper = fill(1.0e6, 3))
+    )
     @test y[2] == 1.0e6
 end
 
@@ -63,7 +65,9 @@ end
 @testitem "dated exports forecast from an extreme mean" begin
     using BVDOutbreakSize: dated_poisson_model
     using Random: Xoshiro
-    draw = rand(Xoshiro(6), dated_poisson_model([2.0, 9.480115359493294e18], missing))
+    draw = rand(
+        Xoshiro(6), dated_poisson_model([2.0, 9.480115359493294e18], missing)
+    )
     counts = [draw[k] for k in keys(draw)]
     @test counts[2] == typemax(Int)
     @test 0 <= counts[1] < 100

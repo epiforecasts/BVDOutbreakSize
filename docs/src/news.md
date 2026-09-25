@@ -155,6 +155,7 @@ Changes since v2.1.0.
 
 ### Fixed
 
+- A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 
 ### Infrastructure
