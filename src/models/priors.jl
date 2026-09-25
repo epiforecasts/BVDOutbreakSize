@@ -54,6 +54,12 @@ keep the Gamma well defined. The SDs propagate the source's reported
 uncertainty, the NEJM serial-interval mean carrying a 95% CI of
 13.0–17.6 d, an SD on the mean of ≈1.17 d.
 
+`prior_weight` raises both default priors to the power `w`, as EpiNow2's
+`gt_opts(weight_prior = TRUE)` does with the number of time points. The
+prior then counts once per time step, as the renewal uses the interval at
+every step. For a truncated Normal this is the same truncated Normal with
+its SD divided by `√w`. The infection submodels set `w` to the renewal span.
+
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
 remainder renormalised, left-truncating the generation interval at one day
@@ -62,8 +68,13 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        alpha_prior = truncated(Normal(2.71, 0.7); lower = 0.1),
-        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1)
+        prior_weight::Real = 1,
+        alpha_prior = truncated(
+            Normal(2.71, 0.7 / sqrt(prior_weight)); lower = 0.1
+        ),
+        theta_prior = truncated(
+            Normal(5.65, 1.5 / sqrt(prior_weight)); lower = 0.1
+        )
     )
     α ~ alpha_prior
     θ ~ theta_prior
@@ -374,6 +385,9 @@ full generation interval of differentiable history. The renewal recursion
 `population`. The default is the summed 2019 INS resident population of the
 seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
+The generation-interval prior is weighted by `gi_prior_weight`, by
+default the renewal span `τ_obs` ([`generation_interval_model`](@ref)).
+
 The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
 applied to this total `T` at the composer. The renewal start sits a small
@@ -405,10 +419,11 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        gi_prior_weight::Real = max(n - clamp(rt_start, 1, n), 1),
         population::Real = float(sum(PROVINCE_POPULATIONS)),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
-    gi_state ~ to_submodel(gi(gi_nmax))
+    gi_state ~ to_submodel(gi(gi_nmax; prior_weight = gi_prior_weight))
     g = gi_state.g
     ## One growth source. The prior is on the cryptic exponential growth rate
     ## `r`, and the established reproduction number `R0` (the walk base) is
@@ -1578,7 +1593,9 @@ I_{p,t} = R_{p,t} \\cdot \\sum_{s \\ge 1} I_{p,t-s}\\, g_s
 ```
 
 with `g_s` the shared generation-interval PMF (sampled once, the biology
-of transmission does not depend on province), `R_{p,t}` from
+of transmission does not depend on province, its prior weighted by
+`gi_prior_weight`, by default the renewal span, as in
+[`infection_model`](@ref)), `R_{p,t}` from
 [`patch_rt_model`](@ref), `K` the importation kernel, and `ε` the
 importation intensity. Each patch depletes its own pool of
 `populations[p]` residents, as in [`patch_infections`](@ref). The default
@@ -1646,6 +1663,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        gi_prior_weight::Real = max(n - clamp(rt_start, 1, n), 1),
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
@@ -1669,7 +1687,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ng = n + horizon_days(forecast)
     fkw = forecast === nothing ? (;) : (; forecast)
     ## 1. Shared generation interval.
-    gi_state ~ to_submodel(gi(gi_nmax))
+    gi_state ~ to_submodel(gi(gi_nmax; prior_weight = gi_prior_weight))
     g = gi_state.g
     ## 2. One growth source, as in [`infection_model`](@ref). The prior is on
     ##    the cryptic growth rate `r`, and the established `R0` (the walk

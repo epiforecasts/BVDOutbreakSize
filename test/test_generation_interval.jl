@@ -22,15 +22,9 @@
         @test Δ(generation_interval_model(nmax; prior_weight = w)) ≈
             w * Δ(base)
     end
-    @test Set(
-        keys(
-            DynamicPPL.VarInfo(
-                generation_interval_model(
-                    nmax; prior_weight = 178
-                )
-            )
-        )
-    ) == Set([@varname(α), @varname(θ)])
+    weighted = generation_interval_model(nmax; prior_weight = 178)
+    @test Set(keys(DynamicPPL.VarInfo(weighted))) ==
+        Set([@varname(α), @varname(θ)])
 end
 
 @testitem "patch_infection_model: GI prior weighted by the renewal span" begin

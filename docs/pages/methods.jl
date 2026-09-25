@@ -380,6 +380,9 @@ MarkdownTable(vintage_table) #hide
 # \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{8}
 # ```
 #
+# As in EpiNow2, we weight this prior by the number of days $w$ the renewal runs to the cut-off, so it counts once per renewal step.
+# Raising a truncated Normal prior to the power $w$ divides its SD by $\sqrt{w}$, which holds the generation interval close to its source.
+#
 # The Gamma is discretised through the same double-interval-censoring route as every delay, described with the first epidemiological process model below.
 # That gives a probability mass function (PMF) $g_s$, the probability assigned to each whole-day lag.
 # The lag-0 bin is dropped and the remainder renormalised, so the generation interval starts at one day and an infectee is infected strictly after its infector.
