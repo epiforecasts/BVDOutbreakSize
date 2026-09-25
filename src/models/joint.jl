@@ -717,6 +717,9 @@ end
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(n_patches, end),
+        ],
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     fkw = forecast === nothing ? (;) : (; forecast)
@@ -724,7 +727,7 @@ end
         patch_infection(
             n, n_patches;
             breakpoint, rt_start, rt_walk_start,
-            importation_kernel, fkw...
+            importation_kernel, populations, fkw...
         ), false
     )
     ## Summed over the patches with one matrix-vector product.
@@ -974,8 +977,11 @@ density there, is the fitted model's.
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
         n_patches::Integer = 1,
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(n_patches, end),
+        ],
         importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]
+            populations
         ),
         confirmed_deaths::Union{Missing, Integer} = missing,
         recovered_cases::Union{Missing, Integer} = missing,
@@ -1071,7 +1077,7 @@ density there, is the fitted model's.
     latent ~ to_submodel(
         _patch_latent(
             n, n_patches, breakpoint, patch_infection;
-            rt_start, rt_walk_start, importation_kernel, forecast
+            rt_start, rt_walk_start, importation_kernel, populations, forecast
         ), false
     )
     patch_state = latent.patch_state

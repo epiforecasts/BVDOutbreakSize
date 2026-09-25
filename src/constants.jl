@@ -216,10 +216,12 @@ as tabulated at
 <https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
 (accessed 15 September 2026).
 
-One source for all seven rather than the best figure for each. Only the
-relative sizes enter the model, through the importation kernel and the
+One source for all seven rather than the best figure for each. The
+relative sizes enter the model through the importation kernel and the
 per-capita testing covariate, so consistency between provinces matters
-more than the accuracy of any one of them.
+more than the accuracy of any one of them. The absolute sizes enter only as
+the susceptible populations of the renewal, which the fitted epidemic
+depletes by well under one per cent.
 """
 const PROVINCE_SOURCE_POPULATIONS = [
     4_008_000, 7_574_000, 6_565_000,
@@ -309,8 +311,9 @@ const _PROVINCE_MEMBER_IDX = [
 
 Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, summed
 over the provinces it pools. Used to put the per-province testing effort on
-a per-capita scale (the covariate for the provincial ascertainment) and to
-weight the between-province importation kernel.
+a per-capita scale (the covariate for the provincial ascertainment), to
+weight the between-province importation kernel and as each patch's
+susceptible population in [`patch_infections`](@ref).
 """
 const PROVINCE_POPULATIONS = [
     sum(PROVINCE_SOURCE_POPULATIONS[idx])

@@ -390,6 +390,10 @@ reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
 sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
 implied by `R0`, and `seeding_age` is diagnostic only.
 
+The renewal depletes a susceptible `population`, by default the resident
+population of the provinces the situation reports cover, so a forecast
+cannot grow past it ([`renewal_infections`](@ref)).
+
 With `forecast` a [`ForecastHorizon`](@ref) the walk and the renewal run
 past the cut-off `n` and `infections`, `cumulative` and `Rt` cover the
 horizon. Every quantity named for the cut-off is still read at day `n`.
@@ -403,6 +407,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        population::Real = sum(PROVINCE_POPULATIONS),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     gi_state ~ to_submodel(gi(gi_nmax))
@@ -433,7 +438,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     τ_obs = n - renewal_start
     seed0 = seed_at_renewal_start(growth_state.C_T)
     seed_vec = seed_infections(seed0, r_clock, renewal_start)
-    infections = renewal_infections(Rt, g, seed_vec)
+    infections = renewal_infections(Rt, g, seed_vec, float(population))
     cumulative = cumsum(infections)
     ## Total outbreak age: cryptic duration (m generations) plus the span.
     T_total = growth_state.T + τ_obs
@@ -1606,6 +1611,14 @@ national cryptic seed rather than adding to it, so `2^m` stays the
 country's cryptic size for any patch count and `C_T` stays comparable
 across them.
 
+### Susceptible depletion
+
+Each patch's renewal depletes its own susceptible population
+(`populations`, the resident population of the provinces it pools by
+default) as in [`patch_infections`](@ref). The fitted epidemic uses up a
+small share of it, so the fitted window barely moves, while a forecast
+cannot grow past the population.
+
 ### Returns
 
 The per-patch state, plus the national aggregates the observation models
@@ -1646,6 +1659,9 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
         ),
         incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)),
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(n_patches, end),
+        ],
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Grid length, past the cut-off `n` when forecasting.
@@ -1773,7 +1789,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
         Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix
+        importation_kernel, ε_matrix, float.(populations)
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
