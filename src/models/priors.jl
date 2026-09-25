@@ -447,8 +447,9 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     ## makes the reported growth rate consistent with the adjusted `R_T` by
     ## construction, so `r < 0` iff `R_T < 1`. The realised last-two-days
     ## slope is not used: the intervention ramp depresses the final renewal
-    ## step, so that slope can disagree in sign with `R_T`.
-    r = euler_lotka_r(only(adjusted_rt(Rt, fraction, n:n)), g)
+    ## step, so that slope can disagree in sign with `R_T`. No likelihood
+    ## reads `r`, so the gradient does not tape the Newton steps.
+    r = _detached(euler_lotka_r, only(adjusted_rt(Rt, fraction, n:n)), g)
     return (;
         infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
         susceptible_fraction = fraction,
