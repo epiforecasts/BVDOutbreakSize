@@ -24,16 +24,19 @@
     end
 end
 
-@testitem "the headline joint and its control share one sampler budget" tags = [
+@testitem "the joint-model fits share one sampler budget" tags = [
     :quality,
 ] begin
-    ## The two fits are the halves of the spatial sensitivity, so they must
-    ## draw from the same budget. Both splat the one helper; a fit that spells
-    ## its own `samples` or `n_adapts` out would drift from the other.
+    ## The headline and its control are the halves of the spatial
+    ## sensitivity, and the validation and sensitivity joints are read
+    ## against them, so all of them draw from the same budget. Each splats
+    ## the one helper; a fit that spells its own `samples` or `n_adapts` out
+    ## would drift from the others.
     src = read(
         joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"), String
     )
-    @test count("joint_sampler_args()...", src) == 2
+    @test count("joint_sampler_args()...", src) == 3
+    @test count("budget = patches ? joint_sampler_args()", src) == 1
     @test count("n_adapts = joint_warmup(", src) == 1
 end
 
@@ -48,8 +51,21 @@ end
     )
     unset = Tuple(v => nothing for v in vars)
     base = withenv(unset...) do
-        Dict(id => fit_key(id) for id in ("joint", "sens_no_patches", "deaths"))
+        Dict(
+            id => fit_key(id) for id in (
+                    "joint", "sens_no_patches", "frozen_validation",
+                    "sens_community_delay", "sens_exp_growth_clock", "deaths",
+                )
+        )
     end
+
+    @test issubset(
+        (
+            "joint", "sens_no_patches", "frozen_validation",
+            "sens_community_delay", "sens_exp_growth_clock",
+        ),
+        JOINT_SAMPLER_FITS
+    )
 
     ## The same settings give the same key, and so does a default set
     ## explicitly.
@@ -64,15 +80,17 @@ end
         @test fit_key("sens_no_patches") == base["sens_no_patches"]
     end
 
-    ## Each override moves both joint keys and leaves the other fits alone.
+    ## Each override moves every joint-budget key and leaves the other fits
+    ## alone.
     overrides = (
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
         "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "12",
     )
     for ov in overrides
         withenv(unset..., ov) do
-            @test fit_key("joint") != base["joint"]
-            @test fit_key("sens_no_patches") != base["sens_no_patches"]
+            for id in JOINT_SAMPLER_FITS
+                @test fit_key(id) != base[id]
+            end
             @test fit_key("deaths") == base["deaths"]
         end
     end
