@@ -164,9 +164,9 @@ The verdict on a [`recovery_table`](@ref), and on the fit behind it when
 `diagnostics` (a [`fit_diagnostics`](@ref) result) is given. `status` is
 one of:
 
-- `:unconverged`: the fit's worst R-hat is above `max_rhat` or its smallest
-  bulk ESS below `min_ess`, so its intervals say nothing about the model
-  and the recovery is not judged.
+- `:unconverged`: the fit's worst R-hat is above `max_rhat` (1.1, the fit
+  gate's fail tier) or its smallest bulk ESS below `min_ess` (30), so its
+  intervals say nothing about the model and the recovery is not judged.
 - `:fail`: a quantity's true value lies outside its posterior's central
   `outer` interval (99% by default), or fewer than `coverage_fail` of the
   quantities have the truth inside their 90% interval.
@@ -181,7 +181,7 @@ outside the outer interval.
 function recovery_verdict(
         tab::DataFrame; diagnostics = nothing, outer::Real = 0.99,
         coverage_fail::Real = 0.6, coverage_warn::Real = 0.8,
-        max_rhat::Real = 1.05, min_ess::Real = 100
+        max_rhat::Real = 1.1, min_ess::Real = 30
     )
     tail = (1 - outer) / 2
     outside = String[

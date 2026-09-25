@@ -116,6 +116,15 @@ end
     @test v.status == :unconverged && !v.pass && !v.converged
     fine = (; max_rhat = 1.01, min_ess_bulk = 400.0)
     @test recovery_verdict(tab; diagnostics = fine).status == :pass
+    ## The bars are an R-hat of 1.1 and a bulk ESS of 30.
+    short = (; max_rhat = 1.08, min_ess_bulk = 35.0)
+    @test recovery_verdict(tab; diagnostics = short).status == :pass
+    @test recovery_verdict(
+        tab; diagnostics = (; max_rhat = 1.08, min_ess_bulk = 25.0)
+    ).status == :unconverged
+    @test recovery_verdict(
+        tab; diagnostics = (; max_rhat = 1.12, min_ess_bulk = 400.0)
+    ).status == :unconverged
 end
 
 @testitem "forecast_recovery_table scores against persistence" begin

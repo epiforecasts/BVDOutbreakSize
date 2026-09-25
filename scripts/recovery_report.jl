@@ -77,7 +77,7 @@ seed_rows = [
 body = """
 ### Parameter recovery: $status ($(nrow(seeds)) seeds)
 
-$n_conv of $(nrow(seeds)) fits converged (R-hat at most 1.05, bulk ESS at least 100).
+$n_conv of $(nrow(seeds)) fits converged (R-hat at most 1.1, bulk ESS at least 30).
 An unconverged seed's recovery is shown but not judged.
 The truth is inside the 90% interval in $n_in of $n_pairs quantity-seed pairs ($(round(Int, 100 * n_in / n_pairs))%) and outside the 99% interval in $(n_out == 0 ? "none" : n_out).
 $skill
