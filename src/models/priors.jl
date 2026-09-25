@@ -1378,16 +1378,17 @@ of that subspace ([`sum_to_zero_basis`](@ref)) and each knot's innovation
 is `c Q A z` with `z ~ N(0, I_{n-1})`. `A` is a lower-triangular Bartlett
 factor ([`bartlett_factor`](@ref)): its diagonal `bartlett_diag[j] ~
 Chi(ν - j + 1)` and its strictly lower entries `bartlett_lower ~ N(0, 1)`,
-so `A Aᵀ ~ Wishart(ν, I)`. The deviation covariance `c² Q A Aᵀ Qᵀ` is a
-full covariance of the sum-to-zero vector with its `n (n - 1) / 2` free
-parameters and no more. The Wishart prior is invariant under rotations of
-the basis, so the implied prior is the same for every patch and every pair
-of patches whatever order the patches come in. `ν` defaults to `n - 1`,
-the most diffuse proper choice, and `c = region_drift_scale / √ν`. The
-level at the first knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`,
-sharing the drift's covariance shape at its own scale. With the draws
-`z_k` as the columns of `Z`, every knot's innovation comes from the one
-product `c Q A Z`.
+so `A Aᵀ ~ Wishart(ν, I)`, with `ν = n - 1`. `A` sets only the shape:
+`c = σ_drift √((n - 1) / tr(A Aᵀ))`, so the innovation covariance
+`c² Q A Aᵀ Qᵀ` has trace `σ_drift² (n - 1)` and `σ_drift ~
+region_drift_sd_prior` sets its size. Together they are a full covariance
+of the sum-to-zero vector with its `n (n - 1) / 2` free parameters, and
+`σ_drift → 0` is reachable. The Wishart prior is invariant under rotations
+of the basis, so the implied prior is the same for every patch and every
+pair of patches whatever order the patches come in. The level at the first
+knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`, sharing the drift's
+shape at its own scale. With the draws `z_k` as the columns of `Z`, every
+knot's innovation comes from the one product `c Q A Z`.
 
 The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
 derived from the loading matrix ([`sum_to_zero_moments`](@ref)). The
@@ -1407,7 +1408,7 @@ largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation
 prior rather than by data, which is why `Σ` is given a proper shrinkage
 prior rather than a flat one.
 
-`σ_δ → 0` recovers a common `Rt` shape shared by every
+`σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
 province, a fixed ratio between them. It is a special case of this model rather than an
 assumption baked into it. `σ_δ` is therefore the headline spatial
 diagnostic, and a posterior pushed away from zero is evidence that
@@ -1454,7 +1455,7 @@ and `Rt_matrix` covers the horizon.
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
-        region_drift_scale::Real = 0.05,
+        region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(n_patches),
@@ -1517,9 +1518,12 @@ and `Rt_matrix` covers the horizon.
     φ = exp2(-week / δ_halflife)
     ## Loading matrices from the `n_patches - 1` sum-to-zero directions to
     ## the patches: a Bartlett factor of a Wishart covariance on the
-    ## directions, whose prior treats every patch alike. With two patches
-    ## there is one direction and no lower entry to draw.
+    ## directions, whose prior treats every patch alike, gives the shape.
+    ## The factor is rescaled to trace `n_patches - 1`, so `σ_drift` alone
+    ## sets the size of the innovations and can shrink them to zero. With
+    ## two patches there is one direction and no lower entry to draw.
     nd = n_patches - 1
+    σ_drift ~ region_drift_sd_prior
     bartlett_diag ~ product_distribution([Chi(nd - j + 1) for j in 1:nd])
     if nd > 1
         bartlett_lower ~ product_distribution(
@@ -1529,12 +1533,9 @@ and `Rt_matrix` covers the horizon.
         bartlett_lower = Float64[]
     end
     A = bartlett_factor(bartlett_diag, bartlett_lower)
-    F_drift = sum_to_zero_factor(
-        basis, region_drift_scale / sqrt(nd), A
-    )
-    F_level = sum_to_zero_factor(
-        basis, σ_level * sqrt(nd / sum(abs2, A)), A
-    )
+    shape_scale = sqrt(nd / sum(abs2, A))
+    F_drift = sum_to_zero_factor(basis, σ_drift * shape_scale, A)
+    F_level = sum_to_zero_factor(basis, σ_level * shape_scale, A)
     ## Standard-normal draws for the level and for each knot's innovation,
     ## `n_patches - 1` per knot.
     z_level ~ product_distribution(fill(region_offset_prior, nd))

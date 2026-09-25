@@ -60,6 +60,15 @@ end
 Grid days a `forecast` covers past the cut-off `n`, `n + 1` to
 `n + horizon`.
 """
+## Keywords handing one stream its simulated observations, keyed by the
+## stream's name in the joint (`simulate_recovery`). Nothing is passed for a
+## fit to real data, so that call is the one it always was.
+_sim_kw(::Nothing, ::Symbol) = (;)
+function _sim_kw(simulated_data, state::Symbol)
+    return haskey(simulated_data, state) ?
+        (; simulated = simulated_data[state]) : (;)
+end
+
 forecast_days(n::Integer, forecast) = (n + 1):(n + horizon_days(forecast))
 
 ## Future Uganda exports: the per-day Poisson the dated export series is
@@ -1193,7 +1202,8 @@ density there, is the fitted model's.
         background_onset_lead::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0)),
         ## Built once, with the model, and passed to `treatment`.
         treatment_defaults = treatment_flow_defaults(),
-        forecast::Union{Nothing, ForecastHorizon} = nothing
+        forecast::Union{Nothing, ForecastHorizon} = nothing,
+        simulated_data = nothing
     )
 
     if n_patches == 1 && (
@@ -1266,14 +1276,16 @@ density there, is the fitted model's.
     cases_state ~ to_submodel(
         cases(
             reported_history, reported_cases, onsets, k_cases, p_drc;
-            suspected_daily_history, background_re = case_bg_re, ckw...
+            suspected_daily_history, background_re = case_bg_re, ckw...,
+            _sim_kw(simulated_data, :cases_state)...
         )
     )
     deaths_state ~ to_submodel(
         deaths(
             deaths_history, total_deaths, onsets, k_deaths;
             suspected_daily_deaths_history,
-            case_bg_daily = cases_state.bg_daily, ckw...
+            case_bg_daily = cases_state.bg_daily, ckw...,
+            _sim_kw(simulated_data, :deaths_state)...
         )
     )
     confirmed_state ~ to_submodel(
@@ -1285,7 +1297,8 @@ density there, is the fitted model's.
             tests_analysed, confirmed_break_days,
             confirmed_break_gross = confirmed_break_gross_cases,
             confirmed_break_sd,
-            specimen_intensity = specimen_intensity_model(), ckw...
+            specimen_intensity = specimen_intensity_model(), ckw...,
+            _sim_kw(simulated_data, :confirmed_state)...
         )
     )
 
@@ -1317,7 +1330,8 @@ density there, is the fitted model's.
             confirmed_break_gross = confirmed_break_gross_deaths,
             confirmed_break_sd,
             case_analysed_daily = confirmed_state.analysed_daily,
-            case_suspected_daily = cases_state.reports_daily, ckw...
+            case_suspected_daily = cases_state.reports_daily, ckw...,
+            _sim_kw(simulated_data, :confirmed_deaths_state)...
         )
     )
 
@@ -1382,7 +1396,8 @@ density there, is the fitted model's.
             occupancy_break_days = occupancy_break_days,
             conf_hazard_daily = conf_hazard_daily,
             k_external = k_isolation,
-            defaults = treatment_defaults, ckw...
+            defaults = treatment_defaults, ckw...,
+            _sim_kw(simulated_data, :treatment_state)...
         )
     )
 
@@ -1390,7 +1405,8 @@ density there, is the fitted model's.
         recovered(
             recovered_history, recovered_cases,
             confirmed_state.confirmed_daily, deaths_state.CFR;
-            k_external = k_recovered, ckw...
+            k_external = k_recovered, ckw...,
+            _sim_kw(simulated_data, :recovered_state)...
         )
     )
 
@@ -1405,7 +1421,8 @@ density there, is the fitted model's.
         exports(
             exported_cases, export_infections, p_uganda;
             export_case_days, incubation_pmf = patch_state.incubation_pmf,
-            source_population, ckw...
+            source_population, ckw...,
+            _sim_kw(simulated_data, :exports_state)...
         )
     )
     exports_deaths_state ~ to_submodel(
@@ -1413,7 +1430,8 @@ density there, is the fitted model's.
             exports_deaths,
             exports_state.travelled_prevalence, deaths_state.CFR,
             deaths_state.od_pmf, patch_state.incubation_pmf; export_death_days,
-            ckw...
+            ckw...,
+            _sim_kw(simulated_data, :exports_deaths_state)...
         )
     )
 
