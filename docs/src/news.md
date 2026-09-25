@@ -39,6 +39,8 @@ Changes since v2.1.0.
 
 ### Model
 
+- The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).
+  Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
 - The weekly log-Rt walk is drawn in non-centred form again: in the joint on main the centred knots split between chains while the onset stream scores only the trailing window (#892).
   Fitted values move only through the sampling, as with the centred form.
