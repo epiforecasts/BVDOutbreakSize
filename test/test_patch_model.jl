@@ -41,18 +41,44 @@ end
     using BVDOutbreakSize: patch_infections, renewal_infections
 
     ## With a zero importation kernel each patch is an independent renewal
-    ## process, so every row must reproduce `renewal_infections` exactly.
+    ## process depleting its own pool, so every row must reproduce
+    ## `renewal_infections` on that pool. The third pool binds.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 40
     Rt = [fill(1.3, n)'; fill(0.8, n)'; fill(2.0, n)']
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = zeros(3, 3)
+    pools = [1.0e6, 1.0e3, 500.0]
 
-    I = patch_infections(Rt, g, seeds, K, 0.0).infections
+    I = patch_infections(Rt, g, seeds, K, 0.0, pools).infections
     @test size(I) == (3, n)
     for p in 1:3
-        single = renewal_infections(vec(Rt[p, :]), g, vec(seeds[p, :]))
+        single = renewal_infections(
+            vec(Rt[p, :]), g, vec(seeds[p, :]), pools[p]
+        )
         @test I[p, :] ≈ single
+    end
+    @test sum(I[3, 3:end]) > 0.5 * (pools[3] - sum(seeds[3, :]))
+end
+
+@testitem "patch_infections: new infections stay within each pool" begin
+    using BVDOutbreakSize: patch_infections, province_importation_kernel
+
+    ## The pool bounds what a province takes in from its own transmission and
+    ## from arrivals alike, and an overflowing reproduction number takes the
+    ## pool rather than returning `Inf`.
+    g = [0.2, 0.3, 0.3, 0.2]
+    n = 60
+    seeds = [5.0 5.0; 1.0 1.0; 0.5 0.5]
+    K = province_importation_kernel()[1:3, 1:3]
+    pools = [2000.0, 800.0, 300.0]
+    for R in (1.8, 1.0e308)
+        I = patch_infections(fill(R, 3, n), g, seeds, K, 0.05, pools).infections
+        @test all(isfinite, I)
+        @test all(>=(0), I)
+        for p in 1:3
+            @test sum(I[p, 3:end]) <= pools[p] - sum(seeds[p, :]) + 1.0e-8
+        end
     end
 end
 
@@ -67,10 +93,12 @@ end
     seeds = [1.0 1.0; 0.0 0.0]
     K = [0.0 0.0; 0.1 0.0]   ## K[2, 1]: flow from patch 1 into patch 2
 
-    off = patch_infections(Rt, g, seeds, K, 0.0).infections
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    unbounded = fill(2.0^900, 2)
+    off = patch_infections(Rt, g, seeds, K, 0.0, unbounded).infections
     @test all(iszero, off[2, :])           ## epsilon = 0: no importation
 
-    on = patch_infections(Rt, g, seeds, K, 0.5).infections
+    on = patch_infections(Rt, g, seeds, K, 0.5, unbounded).infections
     @test all(>(0), on[2, 3:n])            ## epsilon > 0: patch 2 seeded
     ## Patch 1 is debited what it exports. Coupling moves transmission, so the
     ## origin must lose exactly what the destination gains; an earlier version
@@ -106,7 +134,9 @@ end
     ## Very unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
 
-    st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    unbounded = fill(2.0^900, 3)
+    st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0, unbounded)
     total = vec(sum(st.infections; dims = 1))
     implied = implied_national_Rt(total, g)
 
@@ -157,8 +187,10 @@ end
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = province_importation_kernel()
 
-    off = patch_infections(Rt, g, seeds, K, 0.0).infections
-    on = patch_infections(Rt, g, seeds, K, 0.01).infections
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    unbounded = fill(2.0^900, 3)
+    off = patch_infections(Rt, g, seeds, K, 0.0, unbounded).infections
+    on = patch_infections(Rt, g, seeds, K, 0.01, unbounded).infections
 
     ## Moving infections around cannot change how many there are.
     @test sum(on) ≈ sum(off) rtol = 1.0e-8
@@ -199,7 +231,9 @@ end
     R1, R2 = 1.8, 0.6
     Rt = [fill(R1, n)'; fill(R2, n)']
     seeds = [5.0 5.0; 1.0 1.0]
-    I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0).infections
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    unbounded = fill(2.0^900, 2)
+    I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0, unbounded).infections
     total = vec(sum(I; dims = 1))
     implied = implied_national_Rt(total, g)
 
@@ -793,18 +827,27 @@ end
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol = 1.0e-8
     end
 
-    ## The deviations sum to zero and nothing rescales the provinces, so the
-    ## unweighted geometric mean of the provincial Rt is the central trend
-    ## exactly. That is the whole construction, and it is what makes the grey
-    ## reference in the figure readable against the panels.
-    nat = reconstruct_rt(
+    ## The deviations sum to zero and nothing rescales the provinces, so
+    ## before depletion the unweighted geometric mean of the provincial Rt is
+    ## the central trend exactly. That is the whole construction, and it is
+    ## what makes the grey reference in the figure readable against the
+    ## panels. Each province is then scaled by its own susceptible fraction.
+    nat = BVDOutbreakSize._reconstruct_rt_walk(
         chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
+    frac = [
+        reshape(collect(v), np, obs.n)
+            for v in vec(collect(chn[:susceptible_fraction_patch]))
+    ]
     for i in 1:5, d in (obs.n, obs.n - 7)
 
-        gm = exp(sum(log(rt[p][i, d]) for p in 1:np) / np)
+        ## A province whose pool is used up has no Rt left to compare.
+        all(>(0), view(frac[i], :, d - 1)) || continue
+        gm = exp(
+            sum(log(rt[p][i, d] / frac[i][p, d - 1]) for p in 1:np) / np
+        )
         @test gm ≈ nat[i, d] rtol = 1.0e-8
     end
 
@@ -864,15 +907,17 @@ end
 
     function run(scale, n)
         mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
-        single = renewal_infections(mu, g, seed_infections(seed0, r, L))
+        single = renewal_infections(mu, g, seed_infections(seed0, r, L), 2.0^900)
         seeds = reduce(
             vcat,
             [seed_infections(s * seed0, r, L)' for s in shares]
         )
         Rt = reduce(vcat, [(mu .* exp(scale * d))' for d in base])
+        ## A pool so large the renewal is undepleted, exactly so as a power of two.
+        unbounded = fill(2.0^900, 3)
         st = patch_infections(
             Rt, g, seeds,
-            province_importation_kernel(), 0.01
+            province_importation_kernel(), 0.01, unbounded
         )
         tot = vec(sum(st.infections; dims = 1))
         return (
@@ -1050,7 +1095,9 @@ end
         seeds = zeros(3, rt_start)
         seeds[1, :] = seed_infections(seed0, r, rt_start)
         seeds[2, :] = seed_infections(frac * seed0, r, rt_start)
-        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0).infections
+        ## A pool so large the renewal is undepleted, exactly so as a power of two.
+        unbounded = fill(2.0^900, 3)
+        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0, unbounded).infections
         a, b = sum(I[1, :]), sum(I[2, :])
         return b / (a + b)
     end
@@ -1237,7 +1284,7 @@ end
     ## Submodel-PREFIXED keys. These are the ones that bite, because a prefix
     ## change leaves the parameter set identical and only breaks the read.
     for q in (
-            "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.log_R",
+            "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
             "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
             "inc_state.delay_mean", "inc_state.delay_sd",
             "cases_state.report_state.α", "cases_state.report_state.θ",
@@ -1356,7 +1403,9 @@ end
     seeds = [50.0 50.0; 4.0 4.0; 1.0 1.0]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     eps = 0.02
-    st = patch_infections(Rt, g, seeds, K, eps)
+    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    unbounded = fill(2.0^900, 3)
+    st = patch_infections(Rt, g, seeds, K, eps, unbounded)
 
     @test size(st.importation) == (3, n)
     ## Nothing is imported before the renewal starts, and nothing is negative.
@@ -1386,14 +1435,14 @@ end
     ## reproduction numbers, and here the origin is the fastest. Relocating
     ## its infections to slower provinces lowers the national total, which is
     ## epidemiology rather than bookkeeping.
-    uncoupled = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    uncoupled = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0, unbounded)
     @test sum(st.importation) > 0
     @test sum(st.infections) < sum(uncoupled.infections)
     ## With one shared reproduction number the transfer cancels exactly, which
     ## is the bookkeeping half of the same statement.
     flat = fill(1.3, 3, n)
-    a = patch_infections(flat, g, seeds, K, eps).infections
-    b = patch_infections(flat, g, seeds, K, 0.0).infections
+    a = patch_infections(flat, g, seeds, K, eps, unbounded).infections
+    b = patch_infections(flat, g, seeds, K, 0.0, unbounded).infections
     @test sum(a) ≈ sum(b) rtol = 1.0e-8
 end
 
@@ -2093,4 +2142,17 @@ end
         logjoint(fix(mh, Dict(k => θh[k] for k in fut)), patch_chain),
         logjoint(patch_model, patch_chain); rtol = 1.0e-12
     )
+end
+
+@testitem "_patch_fractions: a used-up pool leaves a zero fraction" begin
+    using BVDOutbreakSize: _patch_fractions
+
+    ## The second patch's infections run past its population, as a seed
+    ## larger than the pool does, so its fraction floors at zero rather than
+    ## going negative.
+    I = [fill(1.0, 1, 10); fill(30.0, 1, 10)]
+    fr = _patch_fractions((; infections_matrix = I, populations = [1000.0, 100.0]))
+    @test all(>=(0), fr)
+    @test fr[2, end] == 0
+    @test fr[1, :] ≈ 1 .- cumsum(I[1, :]) ./ 1000
 end

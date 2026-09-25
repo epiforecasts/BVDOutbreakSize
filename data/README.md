@@ -40,7 +40,7 @@ Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate.
-Against the printed figure `n` (SitReps 064 to 130; the 059 to 062 figures print none) the digitised total is within 2.1% everywhere and within 0.5% on 43 of the 60 vintages.
+Against the printed figure `n` (SitReps 064 to 131; the 059 to 062 figures print none) the digitised total is within 2.1% everywhere and within 0.5% on 44 of the 61 vintages.
 The largest gaps are SitRep 126 at −2.1% (5650 against n = 5 771), SitRep 129 at −1.9% (5784 against n = 5 896) and SitRep 118 at −1.3% (5192 against n = 5 263).
 Individual daily bars carry pixel rounding of about ±1 case at the small September renders (2.8 px per count) and less before.
 The faded bars inside the `données potentiellement incomplètes` band are read like any other.
@@ -74,7 +74,7 @@ SitRep 087's figure broke the y-axis count scale instead. Every figure through S
 SitReps 090 and 091 reprint 088's figure, and SitRep 093 reprints 092's.
 SitRep 094's last tick is 17 August, one day past its own rapportage date and equal to its `date de publication`; SitReps 095 and 096 reprint its figure.
 SitReps 068, 082, 094, 101, 108, 115, 122 and 129 all carry that one-day lag, while 102, 116 and 130 print a tick equal to their own rapportage date.
-The axis is anchored to a fixed weekly grid, so the last tick holds while the report date advances: 17 August for 094 to 100, 24 August for 101 to 107, 31 August for 108 to 114, 07 September for 115 to 121, 14 September for 122 to 128 and 21 September for 129 and 130.
+The axis is anchored to a fixed weekly grid, so the last tick holds while the report date advances: 17 August for 094 to 100, 24 August for 101 to 107, 31 August for 108 to 114, 07 September for 115 to 121, 14 September for 122 to 128 and 21 September for 129 to 131.
 Every tick was read off the rendered figure, most by two blind readers, and the L1 date-alignment check in `test/test_onset_digitiser.jl` lands on shift 0 for every consecutive pair.
 SitRep 098 is not digitised.
 Its figure is the only one embedded losslessly (1267x789 against JPEG at about 830x510 for its neighbours) and the colour-mask reader read it 7% high on the same data; the outline reader has not been checked on it, so see issue #594 before adding it back.
@@ -82,6 +82,7 @@ SitReps 101 and 102 are distinct images (827x534 and 825x455) with the same 24 A
 SitRep 105 reprints 104's figure and SitRep 107 reprints 106's; page 4 of 107 carries a second, changed image, so a reprint is judged on the onset chart's own pixels.
 SitRep 108's render (802x479) anti-aliases the baseline and the weekly ticks into the 120 to 180 near-grey range, which is why the reader ranks baseline rows by their longest run under a <180 mask and tries both masks for the tick row.
 SitRep 109 reprints 108's figure.
+SitRep 131 reprints 130's figure (byte-identical embedded JPEG).
 SitRep 110 is not digitised: its page-4 caption still reads "par date de début des symptômes" but the embedded chart is titled and axis-labelled "par date de notification" (n = 5 710), a different basis; see issue #644.
 SitReps 111 to 114 resume the onset-date basis.
 SitRep 112's render (771x433) needs the near-grey fallback for the y-axis ticks as well.

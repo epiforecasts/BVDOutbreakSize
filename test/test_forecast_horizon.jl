@@ -328,6 +328,41 @@ end
         [total(N + 7) - total(N), total(N + 14) - total(N)]
 end
 
+@testitem "an explosive draw forecasts finite counts" setup = [
+    HorizonFixtures,
+] begin
+    ## A steep walk climbing three standard deviations every future week
+    ## grows without bound unless the renewal depletes its susceptibles. The
+    ## future infections must stay within the population and every future
+    ## count within what an `Int` holds.
+    population = sum(PROVINCE_POPULATIONS)
+    H_LONG = 365
+    models = Dict(composers())
+    for name in ("exports", "patch joint")
+        m0 = fix(models[name], Dict(@varname(rt_state.sigma_rw) => 1.0))
+        chn = sample(
+            Xoshiro(1), m0, Prior(), 3;
+            chain_type = FlexiChains.VNChain, progress = false
+        )
+        mh = with_horizon(m0, H_LONG)
+        nz = length(rand(Xoshiro(2), mh)[@varname(rt_state.z_future)])
+        explosive = fix(mh, Dict(@varname(rt_state.z_future) => fill(3.0, nz)))
+        pp = predict(Xoshiro(3), explosive, chn)
+        infections = [collect(v) for v in vec(collect(pp[:forecast_infections]))]
+        @test all(v -> all(isfinite, v) && all(>=(0), v), infections)
+        @test all(v -> sum(v) <= population, infections)
+        counts = filter(
+            k -> occursin(r"forecast_\w+\.(counts|increments|obs)", string(k)),
+            collect(keys(pp))
+        )
+        @test !isempty(counts)
+        for k in counts
+            draws = Iterators.flatten(vec(collect(pp[k])))
+            @test all(x -> isfinite(x) && abs(x) <= typemax(Int), draws)
+        end
+    end
+end
+
 @testitem "production joint keeps its density with a horizon" tags = [
     :slow,
 ] begin
@@ -348,7 +383,9 @@ end
         k0 = collect(keys(θ0))
         fut = filter(k -> !(k in k0), collect(keys(θh)))
         @test all(k -> occursin(r"future|forecast", string(k)), fut)
-        @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ==
+        ## The walk's cumulative sum runs over more knots with a horizon, so
+        ## the two densities agree to rounding rather than bit for bit.
+        @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ≈
             logjoint(m0, θ0)
     end
 end

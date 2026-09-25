@@ -192,13 +192,9 @@ end
 """
 Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
-([`knot_days`](@ref)) and follow a Gaussian random walk in centred form
-([`RandomWalkVector`](@ref)): the first knot is `log_R0` and each later
-knot level is drawn `Normal` about the one before it with SD `sigma_rw`.
-The knot levels after the first are the sampled coordinates, stored as
-`log_R`. The onset curve informs the walk strongly, and in the non-centred
-form (standard-normal innovations scaled by `sigma_rw` and summed) that
-information funnels, holding NUTS at the depth cap with divergences.
+([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
+cumulative-sum form, with standard-normal innovations scaled by `sigma_rw`
+and accumulated, avoiding the funnel geometry of the centred recursion.
 Daily log-`R_t` is the linear interpolation between knots
 ([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
 first WHO situation report) adds a sampled effect `intervention_effect`
@@ -234,8 +230,7 @@ knots a week apart ([`future_knot_days`](@ref)), with standard-normal
 innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
 on. `Rt` then covers the horizon too.
 
-Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
-with `log_R` the full knot series including the first knot at `log_R0`.
+Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
 @model function rt_walk_model(
         n::Integer, log_R0_base::Real;
@@ -254,11 +249,10 @@ with `log_R` the full knot series including the first knot at `log_R0`.
     ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
-    ## Knot levels after the first, each about the one before it. A single
-    ## knot still draws one level so the chain key exists; it is unused.
-    log_R ~ RandomWalkVector(log_R0, sigma_rw, max(nb - 1, 1))
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
-    knots = vcat(log_R0, log_R[1:(nb - 1)])
+    steps = sigma_rw .* z[1:(nb - 1)]
+    log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
     ## variable, so the fitted knots and their density are untouched.
@@ -266,13 +260,13 @@ with `log_R` the full knot series including the first knot at `log_R0`.
     if forecast !== nothing
         fdays = future_knot_days(n, horizon_days(forecast); week)
         z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
-        knots = vcat(knots, knots[end] .+ cumsum(sigma_rw .* z_future))
+        log_R = vcat(log_R, log_R[end] .+ cumsum(sigma_rw .* z_future))
         days = vcat(days, fdays)
     end
-    log_Rt = interpolate_knots(knots, days, ng)
+    log_Rt = interpolate_knots(log_R, days, ng)
     log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(ng, breakpoint; ramp)
     Rt = exp.(log_Rt)
-    return (; Rt, log_R = knots, days, sigma_rw, log_R0, intervention_effect)
+    return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
 end
 
 ## --- Seeding and the generating infection process -----------------------
@@ -376,7 +370,9 @@ flat ridge along which `R0` slides to 1. The grid days
 rate `r` ending at `C_T` ([`seed_infections`](@ref)), giving the recursion a
 full generation interval of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
-`renewal_start+1 … n` under the time-varying `R_t`.
+`renewal_start+1 … n` under the time-varying `R_t`, depleting a pool of
+`population`. The default is the summed 2019 INS resident population of the
+seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
 The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
@@ -409,6 +405,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        population::Real = float(sum(PROVINCE_POPULATIONS)),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     gi_state ~ to_submodel(gi(gi_nmax))
@@ -439,26 +436,35 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     τ_obs = n - renewal_start
     seed0 = seed_at_renewal_start(growth_state.C_T)
     seed_vec = seed_infections(seed0, r_clock, renewal_start)
-    infections = renewal_infections(Rt, g, seed_vec)
+    infections = renewal_infections(Rt, g, seed_vec, population)
     cumulative = cumsum(infections)
     ## Total outbreak age: cryptic duration (m generations) plus the span.
     T_total = growth_state.T + τ_obs
     ## Current growth rate at the cut-off, derived from the cut-off
-    ## reproduction number `Rt[n]` and the generation interval through
-    ## forward Euler–Lotka, the inverse of the `r_to_R0` above. This makes
-    ## the reported growth rate consistent with `R_T := Rt[n]` by
+    ## reproduction number net of depletion and the generation interval
+    ## through forward Euler–Lotka, the inverse of the `r_to_R0` above. This
+    ## makes the reported growth rate consistent with the adjusted `R_T` by
     ## construction, so `r < 0` iff `R_T < 1`. The realised last-two-days
     ## slope is not used: the intervention ramp depresses the final renewal
-    ## step, so that slope can disagree in sign with `R_T`.
-    r = euler_lotka_r(@inbounds(Rt[n]), g)
+    ## step, so that slope can disagree in sign with `R_T`. Only `:=`
+    ## quantities read it, so the gradient does not tape it.
+    r = _detached(_cutoff_growth_rate, Rt, cumulative, population, g, n)
     return (;
         infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
+        population,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
         doubling_time_initial = doubling_time(r_clock),
         T = T_total, C_T = cumulative[n],
         C_T_prior = growth_state.C_T, doubling_time = doubling_time(r),
         seeding_age = seeding_age(upto(cumulative, n), n),
     )
+end
+
+## Growth rate at the cut-off `n` from the reproduction number net of the
+## depletion of `population`.
+function _cutoff_growth_rate(Rt, cumulative, population, g, n)
+    fraction = pool_fraction(view(cumulative, 1:n), population)
+    return euler_lotka_r(only(adjusted_rt(Rt, fraction, n:n)), g)
 end
 
 """
@@ -1408,7 +1414,7 @@ and `Rt_matrix` covers the horizon.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
-    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.log_R` and
+    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
     ## `rt_state.intervention_effect`, the names the analysis and sensitivity
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
@@ -1574,7 +1580,10 @@ I_{p,t} = R_{p,t} \\cdot \\sum_{s \\ge 1} I_{p,t-s}\\, g_s
 with `g_s` the shared generation-interval PMF (sampled once, the biology
 of transmission does not depend on province), `R_{p,t}` from
 [`patch_rt_model`](@ref), `K` the importation kernel, and `ε` the
-importation intensity.
+importation intensity. Each patch depletes its own pool of
+`populations[p]` residents, as in [`patch_infections`](@ref). The default
+is each patch's 2019 INS resident population ([`PROVINCE_POPULATIONS`](@ref)),
+or their sum for a single patch.
 
 ### Importation
 
@@ -1608,9 +1617,8 @@ coupling raise a secondary province's early incidence.
 An all-zero kernel leaves a secondary patch no route to infections at all,
 so the uncoupled path keeps the sampled fractions (`seed_fraction_prior`, a
 `LogNormal` on the fraction of the primary seed). They partition the
-national cryptic seed rather than adding to it, so `2^m` stays the
-country's cryptic size for any patch count and `C_T` stays comparable
-across them.
+national cryptic seed rather than adding to it, so `C_T` stays the
+country's cryptic size and comparable across any patch count.
 
 ### Returns
 
@@ -1652,6 +1660,9 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
         ),
         incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)),
+        populations::AbstractVector{<:Real} = n_patches == 1 ?
+            [float(sum(PROVINCE_POPULATIONS))] :
+            float.(PROVINCE_POPULATIONS[1:n_patches]),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Grid length, past the cut-off `n` when forecasting.
@@ -1680,7 +1691,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    scale the data speak to. With importation off the relative seed
     ##    sets the level of the provincial case split, leaving `δ_p` to be
     ##    identified by its time trend. An absolute seed prior pinned far
-    ##    below the primary's `2^m` would force `δ_p` to absorb the whole
+    ##    below the primary's `C_T` would force `δ_p` to absorb the whole
     ##    level difference, making the reported provincial Rt gap an artefact
     ##    of the seed prior.
     renewal_start = clamp(rt_start, 1, n)
@@ -1706,9 +1717,10 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         eltype(seed_fraction), typeof(float(seed0_total))
     )
     ## The fractions partition the national cryptic seed, they do not add to
-    ## it. `growth_state.C_T` is `2^m`, and the `m` prior is elicited as a
-    ## national quantity, so it is the size of the whole cryptic phase.
-    ## Dividing through by `(1 + Σf)` keeps the national seed at `2^m` for any
+    ## it. `growth_state.C_T` is `exp(r·m·G)` and the `m` prior is
+    ## elicited as a national quantity, so it is the size of the whole
+    ## cryptic phase.
+    ## Dividing through by `(1 + Σf)` keeps the national seed at `C_T` for any
     ## number of patches, so `C_T` stays comparable across `n_patches` and the
     ## genetic prior keeps its meaning.
     seed_shares = zeros(Tp, n_patches)
@@ -1779,7 +1791,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
         Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix
+        importation_kernel, ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
@@ -1811,7 +1823,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         m = growth_state.m, τ = growth_state.τ,
         T = T_total,
         seed_at_renewal_start = seed0_total, seed_fraction,
-        incubation_pmf = inc_state.pmf,
+        incubation_pmf = inc_state.pmf, populations,
         headlines...,
     )
 end
@@ -1826,8 +1838,9 @@ inverts the renewal equation on the summed infections on the cut-off day
 ([`implied_national_Rt_at`](@ref)). With `I_{p,t} = R_{p,t} · force_{p,t}`
 that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
 incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
-the national trajectory. `r`, `doubling_time` and `seeding_age` follow from
-it as in [`infection_model`](@ref).
+the national trajectory. Read off the depleted infections, it is net of
+depletion. `r`, `doubling_time` and `seeding_age` follow from it as in
+[`infection_model`](@ref).
 """
 function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)
     infections_total = vec(sum(infections_matrix; dims = 1))
