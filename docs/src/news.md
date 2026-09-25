@@ -39,6 +39,8 @@ Changes since v2.1.0.
 
 ### Model
 
+- The generation-interval prior SDs are `α` 0.15 and `θ` 0.30, so the implied prior on the mean matches the NEJM 95% interval of 13.0–17.6 d (#909).
+  Fitted values change.
 - The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
