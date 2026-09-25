@@ -375,11 +375,11 @@ MarkdownTable(vintage_table) #hide
 # We assume the generation interval $g$ is a Gamma distribution with a sampled shape $\alpha$ and scale $\theta$.
 # These are taken from the Ebola virus disease serial interval used as a generation-time proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014).
 # That distribution maps once to a Gamma shape near $2.71$ and scale near $5.65$.
-# The priors are centred on those values, with spreads that carry the source's reported uncertainty on the mean rather than a spread we assign ourselves:
+# The priors are centred on those values, with spreads set so the implied prior on the mean $\alpha\theta$ has the source's 95% CI of 13.0–17.6 d:
 #
 # ```math
-# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.70), \qquad
-# \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{8}
+# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.15), \qquad
+# \theta \sim \mathrm{Normal}^{+}(5.65,\ 0.30). \tag{8}
 # ```
 #
 # The Gamma is discretised through the same double-interval-censoring route as every delay, described with the first epidemiological process model below.
