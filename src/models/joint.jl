@@ -1820,7 +1820,7 @@ density there, is the fitted model's.
                     ),
                     ## A draw at the bed ceiling is censored, so not whole;
                     ## `forecast_reported` rounds it the same way.
-                    [round(Int, treatment_forecast.occupancy[j]) for j in vj],
+                    round.(Int, treatment_forecast.occupancy[vj]),
                     treatment_state.occupancy_split_rho
                 )
             )
