@@ -375,15 +375,12 @@ MarkdownTable(vintage_table) #hide
 # We assume the generation interval $g$ is a Gamma distribution with a sampled shape $\alpha$ and scale $\theta$.
 # These are taken from the Ebola virus disease serial interval used as a generation-time proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014).
 # That distribution maps once to a Gamma shape near $2.71$ and scale near $5.65$.
-# The priors are centred on those values, with spreads that carry the source's reported uncertainty on the mean rather than a spread we assign ourselves:
+# The priors are centred on those values, with spreads set so the implied prior on the mean $\alpha\theta$ has the source's 95% CI of 13.0–17.6 d:
 #
 # ```math
-# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.70), \qquad
-# \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{8}
+# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.15), \qquad
+# \theta \sim \mathrm{Normal}^{+}(5.65,\ 0.30). \tag{8}
 # ```
-#
-# As in EpiNow2, we weight this prior by the number of days $w$ the renewal runs to the cut-off, so it counts once per renewal step.
-# Raising a truncated Normal prior to the power $w$ divides its SD by $\sqrt{w}$, which holds the generation interval close to its source.
 #
 # The Gamma is discretised through the same double-interval-censoring route as every delay, described with the first epidemiological process model below.
 # That gives a probability mass function (PMF) $g_s$, the probability assigned to each whole-day lag.
@@ -1236,6 +1233,45 @@ cfr_prior_fig #hide
 # The steps accumulate into a persistent additive offset on the modelled total occupancy, carried forward to every later day.
 # This offset absorbs the overnight gap without bending the reproduction number to chase it.
 # The split does not change the occupancy before 13 June, since no breakdown is published there and the total backbone carries that window.
+#
+# The reports also print the patients in isolation and the beds by province, for whichever provinces report that day.
+# Both enter as splits of the printed sum of the provinces present, so the national terms above keep their likelihoods on every day.
+# Each patch's BVD admissions are its BVD reports $\text{bvd}_{p}$ through the admission delay, re-split so that together they are the national BVD admissions and each patch carries the case composition's relative ascertainment $a_p$:
+#
+# ```math
+# \tilde A_{p,t} = \bigl(p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_{p} * f_{\text{adm}}\bigr)_t,
+# \qquad
+# A_{p,t} = \frac{a_p \tilde A_{p,t}}{\sum_q a_q \tilde A_{q,t}} \sum_q \tilde A_{q,t}.
+# ```
+#
+# Each patch's approximate stock is these admissions through the clinical-stay survival plus its share $w_p$ of the non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+#
+# ```math
+# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + w_p\, (A_{\text{bg}} * S_{\text{ro}})_t,
+# \qquad
+# S_{\text{ro}}(d) = (1 - \kappa)^d \Bigl(1 - \sum_{j \le d} f^{\text{ro}}_j\Bigr),
+# \qquad
+# D_{p,t} = D_t\, \frac{\tilde O_{p,t}}{\sum_q \tilde O_{q,t}}.
+# ```
+#
+# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
+# The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
+# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
+# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
+#
+# ```math
+# O_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
+#     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} O_{q,j},\;
+#     \frac{D_{p,t_j}}{\sum_{q \in \mathcal{P}_j,\, q \ge p} D_{q,t_j}},\; \rho^{\text{occ}} \Bigr),
+# \qquad
+# B_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
+#     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} B_{q,j},\;
+#     \frac{s_p}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_q},\; \rho^{\text{cap}} \Bigr),
+# ```
+#
+# with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
+# The occupancy is split on the uncapped demand, since a province can print more patients than beds.
+# The occupancy split is scored weekly and the bed split on the days a count changes, since a stock reprinted daily is not a fresh draw.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -1247,6 +1283,20 @@ cfr_prior_fig #hide
 #md #     (@code_string BVDOutbreakSize.treatment_flow_model(
 #md #         (; days = Int[], counts = Int[]),
 #md #         Float64[], Float64[], 0.25, 0.3)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: patch_capacity_share_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.patch_capacity_share_model(4)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1765,26 +1815,12 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \beta x_p + \tau_a (Q \mathbf{z})_p, \qquad
+# \log a_p = \tau_a (Q \mathbf{z})_p, \qquad
 # \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
 # with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
 #
-# $x_p$ is the laboratory effort in patch $p$, its samples analysed per head of population, logged and centred across patches:
-#
-# ```math
-# x_p = \log \frac{A_p}{N_p}
-#     - \frac{1}{P} \sum_{q} \log \frac{A_q}{N_q},
-# ```
-#
-# where $A_p$ is the samples analysed in patch $p$ summed over the whole laboratory window, read off the situation reports' per-province laboratory section, and $N_p$ is its population.
-# A pooled patch sums its members before the ratio is taken.
-# The covariate sums to zero across patches by construction, so the log ascertainment sums to zero as well.
-# Ituri analyses about 372 samples per 100k over the window against Nord-Kivu's 104, and that contrast is what the covariate carries.
-# It enters the prior rather than the likelihood, so $\beta$ moves only as far as the compositions pull it away from its prior.
-# A patch that analysed nothing, or a window with no laboratory section, gives $x_p = 0$ for every patch and recovers the model without the covariate.
-# The death composition takes $x_p = 0$.
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
 # ```math
@@ -1800,13 +1836,13 @@ cfr_prior_fig #hide
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
-# \beta \sim \mathrm{Normal}(0,\ 0.5), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
-# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
+# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.1),
 # ```
 #
 # where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
 # The case composition carries no severity term.
+# At $\tau_\kappa = 0.1$ a typical province sits within about ten percent of the national case-fatality ratio.
 #
 # The two compositions identify different things.
 # A patch's confirmed case share is the product of its incidence and its case-finding, and a composition sees only the product.
@@ -1815,6 +1851,35 @@ cfr_prior_fig #hide
 # Within the death composition only the product $a_p \kappa_p$ is identified.
 # The tight prior on $\tau^{\text{d}}_a$ against the loose one on $\tau_\kappa$ is what reads a provincial excess of deaths over cases first as lethality.
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only.
+#
+# A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
+# Write $c_{p,t}$ for patch $p$'s onsets carried through the onset-to-report and report-to-receipt delays, and $\lambda^{\text{rec}}_t = (\lambda_{\text{bg}} * f_{\text{rec}})_t$ for the national non-BVD background carried to receipt.
+# The national BVD volume $p_{\text{DRC}} \sum_q c_{q,t}$ is split by ascertainment-weighted incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
+# Summed over the printed days $t$ of week $i$, the modelled split is
+#
+# ```math
+# \pi^{\text{lab}}_{p,i} \propto \sum_{t \in i} \Bigl(
+#     p_{\text{DRC}} \sum_q c_{q,t}\, \frac{a_p c_{p,t}}{\sum_q a_q c_{q,t}}
+#     + w_p\, \lambda^{\text{rec}}_t \Bigr).
+# ```
+#
+# The national testing fraction multiplies every term, so it cancels, and the term samples no contrast of its own.
+# The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
+# The per-province positives are not fitted.
+#
+# The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
+#
+# ```math
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
+# \qquad
+# z^{\text{bg}}_1 = 0,
+# \qquad
+# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
+# \qquad
+# \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
+# ```
+#
+# The laboratory composition identifies it, since the background dominates the specimens analysed where positivity is low, and the same split feeds each patch's non-BVD admissions in the treatment-centre flow.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_composition_model</summary>
@@ -1825,6 +1890,20 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.province_composition_model(
 #md #         missing, zeros(2, 2))), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: background_split_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.background_split_model(4)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -2070,6 +2149,7 @@ cfr_prior_fig #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
+# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #

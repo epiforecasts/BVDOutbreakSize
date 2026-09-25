@@ -3241,12 +3241,23 @@ end
 ## death composition as `province_death_composition_rho`. A chain carrying
 ## neither still has the submodel's own sampled `rho` under its prefix.
 function _composition_rho_keys(share_key::Symbol)
-    return share_key === :province_death_shares ?
-        [
-            :province_death_composition_rho,
-            Symbol("death_composition_state.ρ"),
-        ] :
-        [:province_composition_rho, Symbol("composition_state.ρ")]
+    share_key === :province_death_shares && return [
+        :province_death_composition_rho,
+        Symbol("death_composition_state.ρ"),
+    ]
+    share_key === :province_lab_shares && return [
+        :province_lab_composition_rho,
+        Symbol("lab_composition_state.ρ"),
+    ]
+    share_key === :province_occupancy_share && return [
+        :province_occupancy_split_rho,
+        Symbol("treatment_state.occupancy_split_rho"),
+    ]
+    share_key === :province_capacity_share && return [
+        :province_capacity_split_rho,
+        Symbol("treatment_state.capacity_split_rho"),
+    ]
+    return [:province_composition_rho, Symbol("composition_state.ρ")]
 end
 
 ## Per-draw composition overdispersion, or `nothing` when the chain carries
@@ -3409,6 +3420,146 @@ function plot_province_composition_ppc(
         "share. Black points are the observed share at each vintage " *
         "and should fall inside the grey band. Each panel starts at " *
         "zero and takes its own upper limit."
+    CairoMakie.Label(
+        fig[2, 1:np], caption;
+        fontsize = 12, padding = (0, 0, 0, 6)
+    )
+    CairoMakie.Label(fig[0, 1:np], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+## Predictive shares for a split scored on the provinces present each day
+## (`province_split_logpdf`): the stick-breaking allocation over the present
+## patches at that day's printed total, one trajectory per draw, NaN where a
+## patch is absent. `share` gives a draw's share of patch `p` on grid day
+## `d`, and `present[j]` the patches printed on the `j`-th kept day.
+function _split_predictive(
+        share, rho, days::AbstractVector{<:Integer}, present, totals,
+        np::Integer; seed::Integer = 20_240
+    )
+    rng = MersenneTwister(seed)
+    nd = length(rho)
+    nk = length(days)
+    preds = [[fill(NaN, nk) for _ in 1:nd] for _ in 1:np]
+    for i in 1:nd, j in 1:nk
+
+        ps = present[j]
+        total = totals[j]
+        (total > 0 && length(ps) >= 2) || continue
+        raw = [share(i, p, days[j]) for p in ps]
+        tot = sum(raw)
+        tot > 0 || continue
+        remaining = total
+        tail = 1.0
+        for (k, p) in enumerate(ps)
+            if k < length(ps)
+                p_cond = clamp(raw[k] / tot / tail, 0.0, 1.0)
+                c = rand(
+                    rng, safe_betabinomial(max(remaining, 0), p_cond, rho[i])
+                )
+                remaining -= c
+                tail = max(tail - raw[k] / tot, 1.0e-10)
+            else
+                c = max(remaining, 0)
+            end
+            preds[p][i][j] = c / total
+        end
+    end
+    return preds
+end
+
+"""
+Posterior predictive check on a province split scored on the provinces
+present each day ([`province_split_logpdf`](@ref)): the isolation
+occupancy (`share_key = :province_occupancy_share`, a daily share matrix)
+and the beds (`share_key = :province_capacity_share`, one static share per
+patch). Each panel shows the modelled share of that province among the
+provinces printed that day, with the observed share as black points, over
+the days the split is scored (`rows`, the long format from
+`province_care_observations` the fit was given). The grey band is the
+posterior predictive interval on the observed share, the stick-breaking
+allocation at the day's printed total under the split's overdispersion, and
+the coloured ribbon the expected share alone. A day on which a province is
+absent leaves a gap. Reads like [`plot_province_composition_ppc`](@ref).
+"""
+function plot_province_split_ppc(
+        chn; share_key::Symbol, rows, seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        colours = [:firebrick, :steelblue, :seagreen, :darkorange],
+        rho_key::Union{Nothing, Symbol} = nothing,
+        title::AbstractString = "Province share, modelled against observed"
+    )
+    np = min(n_patches, length(patch_labels))
+    draws = [collect(v) for v in vec(collect(chn[share_key]))]
+    nd = length(draws)
+    ## A vector share is static; a matrix share is daily.
+    share(i, p, d) = ndims(draws[i]) == 1 ? Float64(draws[i][p]) :
+        Float64(draws[i][p, clamp(d, 1, size(draws[i], 2))])
+    days = unique(rows.days)
+    nk = length(days)
+    present = [
+        Int[rows.patches[r] for r in eachindex(rows.days) if rows.days[r] == d]
+            for d in days
+    ]
+    counts = [
+        Int[rows.counts[r] for r in eachindex(rows.days) if rows.days[r] == d]
+            for d in days
+    ]
+    totals = [sum(c) for c in counts]
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+        [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, nd)
+    preds = rho === nothing ? nothing :
+        _split_predictive(share, rho, days, present, totals, np)
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in days]
+    fig = Figure(; size = (460 * np, 400))
+    for p in 1:np
+        colour = colours[mod1(p, length(colours))]
+        ## Expected share among the provinces present that day.
+        trajs = [
+            Float64[
+                p in present[j] ?
+                    share(i, p, days[j]) /
+                    sum(share(i, q, days[j]) for q in present[j]) : NaN
+                    for j in 1:nk
+            ] for i in 1:nd
+        ]
+        ax = Axis(
+            fig[1, p]; xlabel = "Day", ylabel = "Share of provinces present",
+            title = patch_labels[p], titlecolor = colour,
+            xticklabelrotation = pi / 6
+        )
+        preds === nothing ||
+            _draw_pred_bands!(ax, x, _traj_bands_missing(preds[p], nk))
+        _draw_traj_bands!(ax, x, _traj_bands_missing(trajs, nk), colour)
+        obs = [
+            begin
+                k = findfirst(==(p), present[j])
+                k === nothing || totals[j] == 0 ? NaN :
+                    counts[j][k] / totals[j]
+            end for j in 1:nk
+        ]
+        CairoMakie.scatter!(ax, x, obs; color = :black, markersize = 8)
+        CairoMakie.ylims!(ax, 0, nothing)
+        loax = floor(Int, minimum(x))
+        hiax = ceil(Int, maximum(x))
+        ax.xticks = collect(loax:14:hiax)
+        ax.xtickformat = vals -> [
+            string(epochdays2date(round(Int, v)))
+                for v in vals
+        ]
+    end
+    caption = preds === nothing ?
+        "Bands are 30/60/90% credible intervals on the expected share " *
+        "among the provinces printed that day. Black points are the " *
+        "observed share." :
+        "Grey band is the 30/60/90% posterior predictive interval on " *
+        "the observed share among the provinces printed that day, " *
+        "dashed at its 90% edges. The coloured ribbon inside it is the " *
+        "same intervals on the expected share. Black points are the " *
+        "observed share and should fall inside the grey band."
     CairoMakie.Label(
         fig[2, 1:np], caption;
         fontsize = 12, padding = (0, 0, 0, 6)
@@ -3602,67 +3753,71 @@ function plot_forecast_flows(fc::DataFrame)
 end
 
 """
-One-week-ahead forecast split by province, for the two streams the spatial
-tables report: the new confirmed cases and confirmed deaths expected in each
-province over the week to `T + 7`. One panel per stream, the provinces side
-by side on a shared axis, each drawn as a median dot over nested 30/60/90%
-credible bars, in the style of [`plot_patch_summary`](@ref).
-
-This is the figure form of [`province_forecast_table`](@ref), and the figure
-the release archive [`province_forecast_archive`](@ref) carries the draws
-behind.
+One-week-ahead forecast by province: one panel per forecast target, the
+provinces side by side on a shared axis, each drawn as a median dot over
+nested 30/60/90% credible bars, in the style of [`plot_patch_summary`](@ref).
+The targets are the new confirmed cases and confirmed deaths over the week to
+`T + 7`, the patients in isolation and the isolation beds at `T + 7`, the new
+infections over the week and the reproduction number at `T + 7`, each drawn
+only when `fc` carries it.
 
 `fc` is a [`forecast_provinces`](@ref) frame. A national
 [`forecast_reported`](@ref) result is replaced by the one-week province
 forecast read from the posterior-predictive draws `pp`.
 
-Panels are drawn only for the streams `fc` carries, so a forecast without the
-confirmed deaths column shows the cases panel alone, and a forecast carrying
-neither returns an empty figure.
+`observed` optionally gives, per forecast column, one value per province to
+mark with a cross, such as what each province went on to report.
 """
 function plot_province_forecast(
         pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = [:firebrick, :steelblue, :seagreen, :darkorange3],
+        observed::NamedTuple = (;),
         title::AbstractString = "One-week-ahead forecast by province"
     )
     np = min(n_patches, length(patch_labels))
-    entries = _province_forecast_draws(pp, fc, np, patch_labels)
-    isempty(entries) && return Figure()
-    ## One panel per stream, each holding every province's interval on the
-    ## shared province axis.
-    labels = unique(first.(entries))
-    nc = length(labels)
-    fig = Figure(; size = (420 * nc, 380))
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon = 7)
+    panels = [
+        (col, t) for (col, t) in _PROVINCE_FORECAST_PANELS
+            if col in propertynames(proj)
+    ]
+    isempty(panels) && return Figure()
+    nc = min(length(panels), 3)
+    nr = cld(length(panels), nc)
+    fig = Figure(; size = (420 * nc, 360 * nr + 60))
     xs = Float64.(1:np)
-    for (k, label) in enumerate(labels)
-        sel = [e for e in entries if e[1] == label]
+    for (k, (col, t)) in enumerate(panels)
         ax = Axis(
-            fig[1, k]; ylabel = "Forecast count over the week",
-            title = "New $(label) by T+7",
+            fig[cld(k, nc), mod1(k, nc)]; title = t,
             xticks = (xs, String.(patch_labels[1:np])),
             xticklabelrotation = pi / 6
         )
-        for (p, e) in enumerate(sel)
+        for p in 1:np
             _draw_patch_interval!(
-                ax, xs[p], e[3],
+                ax, xs[p], float.(proj[proj.patch .== p, col]),
                 colours[mod1(p, length(colours))]
             )
         end
-        ## A single province would otherwise sit on the axis edge.
+        if haskey(observed, col)
+            scatter!(
+                ax, xs, float.(observed[col][1:np]); marker = :xcross,
+                color = :black, markersize = 14
+            )
+        end
         CairoMakie.xlims!(ax, 0.5, np + 0.5)
-        ## A count cannot be negative and the panel is read against zero, so
-        ## the axis starts there rather than at the smallest lower bound.
-        CairoMakie.ylims!(ax, 0, nothing)
+        if col === :rt_forecast
+            hlines!(ax, [1.0]; color = :black, linestyle = :dash)
+        else
+            CairoMakie.ylims!(ax, 0, nothing)
+        end
     end
-    ## Two panels is a narrower figure than the per-province summary grid, so
-    ## the caption wraps to the layout width.
+    caption = "Bars are 30/60/90% credible intervals with the median as a " *
+        "dot. The provinces add up to the national forecast."
+    isempty(observed) ||
+        (caption *= " A cross is what the province went on to report.")
     CairoMakie.Label(
-        fig[2, 1:nc],
-        "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province is forecast by the fitted " *
-            "patch model, and the provinces add up to the national forecast.";
+        fig[nr + 1, 1:nc], caption;
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3671,19 +3826,18 @@ end
 
 """
 One-week-ahead forecast for a single province, the per-province counterpart
-of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
-expected in patch `province` over the week to `T + 7`, one histogram panel
-per stream with its 90% predictive interval shaded.
+of [`plot_forecast`](@ref): one histogram panel per target
+[`plot_province_forecast`](@ref) draws for patch `province`, each with its
+90% predictive interval shaded, and the reproduction-number panel with the
+no-growth line at one.
 
-The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
-[`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
-result is replaced by the one-week province forecast read from the draws
-`pp`.
+`fc` is a [`forecast_provinces`](@ref) frame. A national
+[`forecast_reported`](@ref) result is replaced by the one-week province
+forecast read from the draws `pp`.
 
-`observed` optionally gives a recent observed week per stream, keyed by the
-forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
-[`province_recent_counts`](@ref). Each is drawn as a dashed rule, and the
-axis widens to hold it. Panels are drawn only for the streams `fc` carries.
+`observed` optionally gives a value per forecast column (for example a
+recent observed week from [`province_recent_counts`](@ref), or what the
+province went on to report), drawn as a dashed rule.
 """
 function plot_province_forecast_detail(
         pp, fc::DataFrame;
@@ -3696,32 +3850,38 @@ function plot_province_forecast_detail(
     1 <= province <= np || throw(
         ArgumentError("province must be in 1:$np; got $province")
     )
-    label = patch_labels[province]
-    entries = [
-        e for e in _province_forecast_draws(pp, fc, np, patch_labels)
-            if e[2] == label
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon = 7)
+    rows = proj.patch .== province
+    panels = [
+        (col, t) for (col, t) in _PROVINCE_FORECAST_PANELS
+            if col in propertynames(proj)
     ]
-    isempty(entries) && return Figure()
-    cols = Dict(
-        label => col for (col, label) in _PROVINCE_FORECAST_STREAMS
-    )
-    ncols = length(entries)
-    fig = Figure(; size = (400 * ncols, 360))
-    for (i, (stream, _, draws)) in enumerate(entries)
-        col = cols[stream]
+    isempty(panels) && return Figure()
+    nc = min(length(panels), 3)
+    fig = Figure(; size = (400 * nc, 340 * cld(length(panels), nc)))
+    for (k, (col, t)) in enumerate(panels)
+        v = float.(proj[rows, col])
+        pos = (cld(k, nc), mod1(k, nc))
+        colour = get(_PROVINCE_PANEL_COLOURS, col, :steelblue)
         ax = _forecast_count_panel!(
-            fig, (1, i), draws, "New $(stream) ($(label))",
-            _CONFIRMED_FORECAST_COLOURS[col]
+            fig, pos, v, "$(t) ($(patch_labels[province]))", colour
         )
+        col === :rt_forecast &&
+            vlines!(ax, [1.0]; color = :grey40, linestyle = :dot, linewidth = 2)
         haskey(observed, col) || continue
         o = float(observed[col])
         vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
-        CairoMakie.xlims!(
-            ax, 0, max(1.0, quantile(draws, 0.98), 1.05 * o)
-        )
+        CairoMakie.xlims!(ax, 0, max(1.0, quantile(v, 0.98), 1.05 * o))
     end
     return fig
 end
+
+## Panel colours of the per-province forecast targets.
+const _PROVINCE_PANEL_COLOURS = (
+    confirmed_new = :goldenrod, confirmed_deaths_new = :darkorange3,
+    isolation_level = :mediumpurple, bed_capacity = :grey50,
+    infections_new = :steelblue, rt_forecast = :firebrick,
+)
 
 """
 One-week-ahead isolation/treatment-bed forecast from

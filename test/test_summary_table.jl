@@ -259,3 +259,27 @@ end
     @test median_interval_text(draws ./ 100; scale = 100, suffix = "%") ==
         "about 50% (90% credible interval 5% to 95%)"
 end
+
+@testitem "province_forecast_headline compares the provinces draw by draw" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: province_forecast_headline, PROVINCE_LABELS
+
+    ## Province 1 always projects the most cases, province 2 always has R
+    ## above one, and province 3 always fills its beds.
+    nd = 100
+    fc = DataFrame(
+        patch = repeat(1:3; inner = nd),
+        province = repeat(PROVINCE_LABELS[1:3]; inner = nd),
+        draw = repeat(1:nd; outer = 3),
+        confirmed_new = vcat(fill(50.0, nd), fill(10.0, nd), fill(1.0, nd)),
+        rt_forecast = vcat(fill(0.8, nd), fill(1.3, nd), fill(0.9, nd)),
+        isolation_level = vcat(fill(20.0, nd), fill(5.0, nd), fill(12.0, nd)),
+        bed_capacity = vcat(fill(40.0, nd), fill(10.0, nd), fill(10.0, nd))
+    )
+    md = province_forecast_headline(fc; n_patches = 3)
+    @test occursin("| Province |", md)
+    @test occursin("P(R > 1)", md)
+    @test occursin("**Most new confirmed cases:** $(PROVINCE_LABELS[1])", md)
+    @test occursin("1 of 3 provinces are more likely than not to be growing ($(PROVINCE_LABELS[2]))", md)
+    @test occursin("**Beds full at T+7:** $(PROVINCE_LABELS[3]) is", md)
+end

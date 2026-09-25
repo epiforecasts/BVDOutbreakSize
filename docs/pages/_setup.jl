@@ -329,10 +329,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
-    province_testing = province_testing_covariate(
-        obs.province_lab_daily_history
-    )
-
     ## Draws from the four-patch prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
@@ -361,7 +357,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
             n_patches = N_PATCHES,
             province_increments = province_cases.increments,
             province_days = province_cases.days,
-            province_testing_covariate = province_testing,
             province_death_increments = province_deaths.increments,
             province_death_days = province_deaths.days
         )
@@ -392,6 +387,18 @@ if !@isdefined(_BVD_SETUP_LOADED)
         _joint_pp_cache[] = pp
         return pp
     end
+    province_lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES); every = 7
+    )
+    ## The same thinning as `patch_fit_args`, so the generator is the model
+    ## that was fitted.
+    province_isolation = province_care_observations(
+        obs.province_isolation_history, PROVINCE_NAMES; every = 7
+    )
+    province_capacity = province_care_observations(
+        obs.province_bed_capacity_history, PROVINCE_NAMES; changes_only = true
+    )
     ## The parameter-recovery results the `recovery` CI job writes
     ## (`scripts/recovery.jl`), over every seed found: the recovery table and
     ## scored forecasts, each seed's thinned posterior draws keyed by seed,

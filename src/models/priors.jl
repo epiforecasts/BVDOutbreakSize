@@ -49,16 +49,10 @@ source is the Ebola virus disease serial interval as a generation-time
 proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
 maps once to `α ≈ 2.71` and `θ ≈ 5.65` (`α = (mean/sd)²`,
 `θ = sd²/mean`). The priors are centred there,
-`α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
-keep the Gamma well defined. The SDs propagate the source's reported
-uncertainty, the NEJM serial-interval mean carrying a 95% CI of
-13.0–17.6 d, an SD on the mean of ≈1.17 d.
-
-`prior_weight` raises both default priors to the power `w`, as EpiNow2's
-`gt_opts(weight_prior = TRUE)` does with the number of time points. The
-prior then counts once per time step, as the renewal uses the interval at
-every step. For a truncated Normal this is the same truncated Normal with
-its SD divided by `√w`. The infection submodels set `w` to the renewal span.
+`α ~ Normal⁺(2.71, 0.15)` and `θ ~ Normal⁺(5.65, 0.30)`, lower-truncated to
+keep the Gamma well defined. The SDs are set so the implied prior on the
+mean `α·θ` has the source's 95% CI on the serial-interval mean,
+13.0–17.6 d.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
@@ -68,13 +62,8 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        prior_weight::Real = 1,
-        alpha_prior = truncated(
-            Normal(2.71, 0.7 / sqrt(prior_weight)); lower = 0.1
-        ),
-        theta_prior = truncated(
-            Normal(5.65, 1.5 / sqrt(prior_weight)); lower = 0.1
-        )
+        alpha_prior = truncated(Normal(2.71, 0.15); lower = 0.1),
+        theta_prior = truncated(Normal(5.65, 0.3); lower = 0.1)
     )
     α ~ alpha_prior
     θ ~ theta_prior
@@ -385,9 +374,6 @@ full generation interval of differentiable history. The renewal recursion
 `population`. The default is the summed 2019 INS resident population of the
 seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
-The generation-interval prior is weighted by `gi_prior_weight`, by
-default the renewal span `τ_obs` ([`generation_interval_model`](@ref)).
-
 The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
 applied to this total `T` at the composer. The renewal start sits a small
@@ -419,11 +405,10 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        gi_prior_weight::Real = max(n - clamp(rt_start, 1, n), 1),
         population::Real = float(sum(PROVINCE_POPULATIONS)),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
-    gi_state ~ to_submodel(gi(gi_nmax; prior_weight = gi_prior_weight))
+    gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
     ## One growth source. The prior is on the cryptic exponential growth rate
     ## `r`, and the established reproduction number `R0` (the walk base) is
@@ -782,6 +767,56 @@ at the same scale.
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
+end
+
+"""
+Per-patch shares of the national isolation-bed capacity, for the province
+bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
+capacity is the national walk `C(t)` times a share drawn from a partially
+pooled simplex centred on population share,
+
+```math
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+```
+
+with the first patch the reference. The printed province bed counts move
+little relative to each other over the series, so a static share carries
+the split; one walk per patch would add some sixty truncated-normal
+innovations for a tenth more gradient cost. The bed split identifies the
+shares and the split's overdispersion absorbs the residual drift.
+
+Returns `(; s, pooling_sd)`.
+"""
+@model function patch_capacity_share_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "patch_capacity_share_model: $(length(populations)) populations " *
+            "for $(n_patches) patches."
+    )
+    τ_cap ~ pooling_sd_prior
+    z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
+    total_pop = sum(populations)
+    log_s = Vector{Ts}(undef, n_patches)
+    log_s[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
+    end
+    peak = maximum(log_s)
+    s = exp.(log_s .- peak)
+    s ./= sum(s)
+    return (; s, pooling_sd = τ_cap)
 end
 
 """
@@ -1594,9 +1629,7 @@ I_{p,t} = R_{p,t} \\cdot \\sum_{s \\ge 1} I_{p,t-s}\\, g_s
 ```
 
 with `g_s` the shared generation-interval PMF (sampled once, the biology
-of transmission does not depend on province, its prior weighted by
-`gi_prior_weight`, by default the renewal span, as in
-[`infection_model`](@ref)), `R_{p,t}` from
+of transmission does not depend on province), `R_{p,t}` from
 [`patch_rt_model`](@ref), `K` the importation kernel, and `ε` the
 importation intensity. Each patch depletes its own pool of
 `populations[p]` residents, as in [`patch_infections`](@ref). The default
@@ -1664,7 +1697,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        gi_prior_weight::Real = max(n - clamp(rt_start, 1, n), 1),
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
@@ -1688,7 +1720,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ng = n + horizon_days(forecast)
     fkw = forecast === nothing ? (;) : (; forecast)
     ## 1. Shared generation interval.
-    gi_state ~ to_submodel(gi(gi_nmax; prior_weight = gi_prior_weight))
+    gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
     ## 2. One growth source, as in [`infection_model`](@ref). The prior is on
     ##    the cryptic growth rate `r`, and the established `R0` (the walk
@@ -1925,4 +1957,63 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
         weights[p] = exp(μ_w + τ_w * z_w[p - 1])
     end
     return (; weights, pooling_sd = τ_w, location = μ_w)
+end
+
+"""
+Partially pooled split of the non-BVD suspected-case background across the
+patches. The national background walk `bg_daily`
+([`reported_cases_model`](@ref)) counts suspects who are not BVD cases and
+carries no province, so the patch model needs a share of it per patch to
+build a per-patch suspect pipeline for the laboratory and isolation
+streams. Each share is the patch's population share moved by a pooled log
+deviation,
+
+```math
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
+\\qquad z_1 = 0,
+```
+
+normalised to sum to one. The first patch is the reference, so with
+`n_patches - 1` free deviations the simplex has no redundant direction.
+`τ_bg → 0` recovers the population split. The per-province
+analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
+since the background dominates the specimens analysed where positivity is
+low.
+
+With one patch the whole background belongs to it and nothing is sampled.
+
+Returns `(; w, pooling_sd)`.
+"""
+@model function background_split_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "background_split_model: $(length(populations)) populations for " *
+            "$(n_patches) patches."
+    )
+    τ_bg ~ pooling_sd_prior
+    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
+    total_pop = sum(populations)
+    log_w = Vector{Tw}(undef, n_patches)
+    log_w[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
+    end
+    ## Softmax against the largest term, so a wide deviation cannot
+    ## overflow.
+    peak = maximum(log_w)
+    w = exp.(log_w .- peak)
+    w ./= sum(w)
+    return (; w, pooling_sd = τ_bg)
 end

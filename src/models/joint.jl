@@ -149,7 +149,7 @@ fitted days are uncensored, and so are the future ones.
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := state.C[fd]
     return (;
-        isolation = occupancy, admissions,
+        isolation = occupancy, admissions, occupancy = occ,
         incare_deaths = state.deaths_daily[fd],
         ruleouts = state.ruleout_daily[fd],
     )
@@ -824,11 +824,11 @@ function _patch_death_increments(
     )
     np = size(onsets_matrix, 1)
     nv = length(province_days)
-    first_daily = convolve_delay(vec(@view onsets_matrix[1, :]), kernel)
+    first_daily = convolve_delay(onsets_matrix[1, :], kernel)
     out = Matrix{eltype(first_daily)}(undef, np, nv)
     @inbounds out[1, :] = bin_increments(first_daily, province_days)
     @inbounds for p in 2:np
-        daily = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
+        daily = convolve_delay(onsets_matrix[p, :], kernel)
         out[p, :] = bin_increments(daily, province_days)
     end
     return out
@@ -871,19 +871,106 @@ function _patch_confirmed_increments(
         kernel::AbstractVector, s_test::Real,
         province_days::AbstractVector{<:Integer}
     )
-    np = size(onsets_matrix, 1)
-    nv = length(province_days)
-    scaled_kernel = s_test .* kernel
-    first_daily = convolve_delay(
-        vec(@view onsets_matrix[1, :]), scaled_kernel
+    return _patch_confirmed_increments(
+        _patch_carried(onsets_matrix, kernel), s_test, province_days
     )
-    out = Matrix{eltype(first_daily)}(undef, np, nv)
-    @inbounds out[1, :] = bin_increments(first_daily, province_days)
-    @inbounds for p in 2:np
-        daily = convolve_delay(
-            vec(@view onsets_matrix[p, :]), scaled_kernel
+end
+
+## The same binning from an already carried `(n_patches × n)` matrix.
+function _patch_confirmed_increments(
+        carried::AbstractMatrix, s_test::Real,
+        province_days::AbstractVector{<:Integer}
+    )
+    np = size(carried, 1)
+    nv = length(province_days)
+    T = promote_type(eltype(carried), typeof(float(s_test)))
+    out = Matrix{T}(undef, np, nv)
+    @inbounds for p in 1:np
+        out[p, :] = bin_increments(
+            s_test .* carried[p, :], province_days
         )
-        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
+end
+
+"""
+Each patch's onsets carried through a delay kernel, an `(n_patches × n)`
+matrix. The confirmed composition and the laboratory composition both carry
+the onsets through the onset-to-confirmation kernel, so [`bvd_joint`](@ref)
+carries them once and hands the matrix to both.
+"""
+function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
+    np, n = size(onsets_matrix)
+    T = promote_type(eltype(onsets_matrix), eltype(kernel))
+    out = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        out[p, :] = convolve_delay(onsets_matrix[p, :], kernel)
+    end
+    return out
+end
+
+## Province rows are `nothing` or a `(; days, patches, counts)` tuple.
+_has_province_rows(rows) = rows !== nothing && !isempty(rows.days)
+
+"""
+Per-patch BVD reports, each patch's onsets through the shared
+onset-to-report delay, the rows summing to the national `bvd_reports_daily`
+of [`reported_cases_model`](@ref). Returns an `(n_patches × n)` matrix.
+"""
+function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVector)
+    np, n = size(onsets_matrix)
+    T = promote_type(eltype(onsets_matrix), eltype(report_pmf))
+    out = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        out[p, :] = convolve_delay(onsets_matrix[p, :], report_pmf)
+    end
+    return out
+end
+
+"""
+Modelled per-patch analysed-specimen volume summed over the laboratory
+bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
+the national factors the composition normalises away. `carried` is each
+patch's onsets through the onset-to-confirmation kernel (report ⊕ receipt,
+[`_patch_carried`](@ref)); the national BVD volume `p_drc` times the
+patch sum is split by ascertainment-weighted incidence (`asc`, the case
+composition's relative ascertainment), so the BVD-to-background proportion
+stays the national one, and joined by the patch's share `w[p]` of the
+non-BVD
+background carried to receipt (`bg_carried`). Summed over the patches this
+is the national suspect pipeline [`confirmed_cases_model`](@ref) scales
+into the analysed volume, so the shares are exact. `lab_days` are grid day
+indices. Returns an `(n_patches × n_days)` matrix.
+"""
+function _patch_analysed_increments(
+        carried::AbstractMatrix,
+        p_drc::Real, asc::AbstractVector, bg_carried::AbstractVector,
+        w::AbstractVector, lab_days::AbstractVector{<:Integer},
+        lab_bins::AbstractVector{<:Integer} = 1:length(lab_days)
+    )
+    np, n = size(carried)
+    nb = isempty(lab_bins) ? 0 : maximum(lab_bins)
+    T = promote_type(
+        eltype(carried), typeof(float(p_drc)), eltype(asc), eltype(bg_carried),
+        eltype(w)
+    )
+    out = zeros(T, np, nb)
+    @inbounds for (i, day) in enumerate(lab_days)
+        d = clamp(Int(day), 1, n)
+        ## The national BVD volume that day, split by ascertainment-weighted
+        ## incidence, so the BVD-to-background proportion stays national.
+        total = zero(T)
+        weighted = zero(T)
+        for q in 1:np
+            total += carried[q, d]
+            weighted += asc[q] * carried[q, d]
+        end
+        bvd_nat = p_drc * total
+        for p in 1:np
+            share = weighted > zero(T) ? asc[p] * carried[p, d] / weighted :
+                one(T) / np
+            out[p, lab_bins[i]] += bvd_nat * share + w[p] * bg_carried[d]
+        end
     end
     return out
 end
@@ -980,10 +1067,22 @@ are skipped. The case composition identifies only the product of a
 province's incidence and its case-finding. The death composition
 identifies the incidence split, since the case-fatality ratio and the
 death-confirmation probability are national, and the case composition then
-identifies the relative case ascertainment as the residual. The
-`province_testing_covariate` keyword puts each patch's logged tests per
-head ([`province_testing_covariate`](@ref)) on the prior for that
-ascertainment. The death composition takes no covariate.
+identifies the relative case ascertainment as the residual.
+
+A third composition scores the per-province analysed-specimen volume
+conditional on the national daily total. The modelled split is each
+patch's BVD suspects (its onsets through the onset-to-confirmation kernel,
+thinned by `p_drc`) plus its share of the non-BVD background, the share a
+partially pooled simplex ([`background_split_model`](@ref)) carries and
+this term identifies. The BVD suspects carry the case composition's
+relative ascertainment, so the two compositions agree on how many of a
+patch's cases reach the laboratory. Pass `province_lab_increments` with
+`province_lab_days` and `province_lab_bins`, built by
+[`province_lab_increment_matrix`](@ref), which sums the printed days into
+calendar weeks for the production fit.
+The testing fraction stays national and the composition samples no
+ascertainment contrast of its own. The per-province positives are not
+fitted, being the differencing of the confirmed counts already scored.
 
 Uganda exports are driven by the provinces in proportion to sampled
 relative export weights, with Ituri the reference at weight one (see
@@ -1060,7 +1159,15 @@ density there, is the fitted model's.
             Missing, AbstractMatrix{<:Integer},
         } = missing,
         province_days::AbstractVector{<:Integer} = Int[],
-        province_testing_covariate::AbstractVector{<:Real} = zeros(n_patches),
+        province_lab_increments::Union{
+            Missing, AbstractMatrix{<:Integer},
+        } = missing,
+        province_lab_days::AbstractVector{<:Integer} = Int[],
+        province_lab_bins::AbstractVector{<:Integer} = 1:length(province_lab_days),
+        lab_composition = province_composition_model,
+        background_split = background_split_model,
+        province_isolation = nothing,
+        province_capacity = nothing,
         province_death_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1069,7 +1176,7 @@ density there, is the fitted model's.
         death_ascertainment_sd_prior = truncated(
             Normal(0, 0.1); lower = 0
         ),
-        province_cfr_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        province_cfr_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         export_pressure = province_export_pressure_model,
         exports = exports_model,
         deaths = deaths_model,
@@ -1099,8 +1206,12 @@ density there, is the fitted model's.
         simulated_data = nothing
     )
 
-    if n_patches == 1 &&
-            (!isempty(province_days) || !isempty(province_death_days))
+    if n_patches == 1 && (
+            !isempty(province_days) || !isempty(province_death_days) ||
+                !isempty(province_lab_days) ||
+                _has_province_rows(province_isolation) ||
+                _has_province_rows(province_capacity)
+        )
         error(
             "per-province data was supplied but n_patches = 1. The " *
                 "spatial structure would be silently dropped. Pass " *
@@ -1191,6 +1302,13 @@ density there, is the fitted model's.
         )
     )
 
+    ## Split of the non-BVD suspected background across the patches, shared
+    ## by the laboratory composition below and the isolation stream. One
+    ## patch takes the whole background and samples nothing.
+    bg_split_state ~ to_submodel(background_split(n_patches))
+    province_background_split := bg_split_state.w
+    province_background_split_sd := bg_split_state.pooling_sd
+
     ## The anchor stops at the cut-off, so a longer grid leaves the fitted
     ## ascertainment where it was.
     onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
@@ -1217,11 +1335,57 @@ density there, is the fitted model's.
         )
     )
 
+    ## The confirmed and laboratory compositions both carry the patch
+    ## onsets through the onset-to-confirmation kernel, once here.
+    if !isempty(province_days) || !isempty(province_lab_days)
+        confirmed_kernel = convolve_pmf(
+            cases_state.report_pmf, confirmed_state.receipt_pmf
+        )
+        confirmed_carried = _patch_carried(
+            patch_state.onsets_matrix, confirmed_kernel
+        )
+    end
+
+    if !isempty(province_days)
+        modelled_prov = _patch_confirmed_increments(
+            confirmed_carried, confirmed_state.s_test, province_days
+        )
+        composition_state ~ to_submodel(
+            composition(province_increments, modelled_prov)
+        )
+        province_shares := composition_state.shares
+        province_composition_rho := composition_state.rho
+        ## Relative province case ascertainment, the probability an
+        ## infection there becomes a confirmed case, partially pooled and
+        ## sum-to-zero on the log scale. On its own the case composition
+        ## identifies only the product of ascertainment and incidence. The
+        ## death composition below separates them.
+        province_ascertainment := composition_state.province_ascertainment
+        province_ascertainment_sd := composition_state.ascertainment_sd
+    end
+
+    ## Relative case ascertainment by patch, shared by every stream that is
+    ## driven by reported suspects: the laboratory composition and the
+    ## per-patch bed demand split the national BVD volume by
+    ## ascertainment-weighted incidence. Ones when the case composition is
+    ## not scored.
+    patch_asc = isempty(province_days) ? ones(n_patches) :
+        composition_state.province_ascertainment
+
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
+    ## Per-patch BVD reports for the province occupancy split, the rows
+    ## summing to the national series the flows are built on.
+    bvd_reports_matrix = n_patches > 1 ?
+        _patch_reports(patch_state.onsets_matrix, cases_state.report_pmf) :
+        nothing
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,
             cases_state.bg_daily, p_drc, deaths_state.CFR;
+            bvd_reports_matrix,
+            background_split = bg_split_state.w,
+            patch_ascertainment = patch_asc,
+            province_isolation, province_capacity,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
             deaths_history = treatment_deaths_history,
@@ -1277,32 +1441,24 @@ density there, is the fitted model's.
         )
     end
 
-    if !isempty(province_days)
-        confirmed_kernel = convolve_pmf(
-            cases_state.report_pmf, confirmed_state.receipt_pmf
+
+    if !isempty(province_lab_days)
+        modelled_lab = _patch_analysed_increments(
+            confirmed_carried, p_drc, patch_asc,
+            convolve_delay(cases_state.bg_daily, confirmed_state.receipt_pmf),
+            bg_split_state.w, province_lab_days, province_lab_bins
         )
-        modelled_prov = _patch_confirmed_increments(
-            patch_state.onsets_matrix, confirmed_kernel,
-            confirmed_state.s_test, province_days
-        )
-        composition_state ~ to_submodel(
-            composition(
-                province_increments, modelled_prov;
-                testing_covariate = province_testing_covariate
+        ## No ascertainment contrast of its own: the split is carried by the
+        ## background shares and the case composition's ascertainment, and
+        ## the testing fraction is national.
+        lab_composition_state ~ to_submodel(
+            lab_composition(
+                province_lab_increments, modelled_lab;
+                ascertainment_sd_prior = nothing
             )
         )
-        province_shares := composition_state.shares
-        province_composition_rho := composition_state.rho
-        ## Relative province case ascertainment, the probability an
-        ## infection there becomes a confirmed case, partially pooled and
-        ## sum-to-zero on the log scale. On its own the case composition
-        ## identifies only the product of ascertainment and incidence. The
-        ## death composition below separates them.
-        province_ascertainment := composition_state.province_ascertainment
-        province_ascertainment_sd := composition_state.ascertainment_sd
-        ## Elasticity of relative ascertainment on each patch's logged tests
-        ## per head, the covariate on its prior.
-        province_testing_coefficient := composition_state.testing_coefficient
+        province_lab_shares := lab_composition_state.shares
+        province_lab_composition_rho := lab_composition_state.rho
     end
 
     if !isempty(province_death_days)
@@ -1380,6 +1536,33 @@ density there, is the fitted model's.
     expected_infections_T := @inbounds(patch_state.infections_total[n])
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
+    if n_patches > 1 && size(treatment_state.capacity_patch, 1) == n_patches
+        ## Cut-off beds, demand and censored occupancy by patch, from the
+        ## province splits of the isolation stream. Present only when a
+        ## province split scored them.
+        province_bed_capacity := treatment_state.capacity_patch[:, n]
+        province_bed_demand := treatment_state.demand_patch[:, n]
+        province_expected_isolation := min.(
+            treatment_state.demand_patch[:, n],
+            treatment_state.capacity_patch[:, n]
+        )
+        province_bed_utilisation := min.(
+            treatment_state.demand_patch[:, n],
+            treatment_state.capacity_patch[:, n]
+        ) ./ treatment_state.capacity_patch[:, n]
+        province_bed_shortfall := max.(
+            treatment_state.demand_patch[:, n] .-
+                treatment_state.capacity_patch[:, n],
+            0.0
+        )
+        province_capacity_share := treatment_state.capacity_shares
+        ## Daily share of the national bed demand by patch, the modelled
+        ## centre of the occupancy split.
+        province_occupancy_share := treatment_state.demand_patch ./
+            sum(treatment_state.demand_patch; dims = 1)
+        province_occupancy_split_rho := treatment_state.occupancy_split_rho
+        province_capacity_split_rho := treatment_state.capacity_split_rho
+    end
     C_T_patch := patch_state.C_T_patch
     ## Each province's reproduction number net of its own depletion, built
     ## only when recorded.
@@ -1582,8 +1765,7 @@ density there, is the fitted model's.
         edges = vcat(n, vintages)
         if !isempty(province_days)
             province_future = _patch_confirmed_increments(
-                patch_state.onsets_matrix, confirmed_kernel,
-                confirmed_state.s_test, edges
+                confirmed_carried, confirmed_state.s_test, edges
             )[:, 2:end]
             forecast_province_split ~ to_submodel(
                 composition_split_model(
@@ -1621,6 +1803,35 @@ density there, is the fitted model's.
             )
             forecast_province_deaths := vec(
                 forecast_province_death_split.obs_increments
+            )
+        end
+        ## Each province's occupancy at each future vintage, the national
+        ## occupancy split by the fitted occupancy split over the per-patch
+        ## demand, and its beds, its static share of the national capacity.
+        if _has_province_rows(province_isolation)
+            vj = vintages .- n
+            forecast_province_isolation_split ~ to_submodel(
+                composition_split_model(
+                    missing,
+                    treatment_state.demand_patch[:, vintages] ./
+                        reshape(
+                        vec(sum(treatment_state.demand_patch[:, vintages]; dims = 1)),
+                        1, :
+                    ),
+                    ## A draw at the bed ceiling is censored, so not whole;
+                    ## `forecast_reported` rounds it the same way.
+                    [round(Int, treatment_forecast.occupancy[j]) for j in vj],
+                    treatment_state.occupancy_split_rho
+                )
+            )
+            forecast_province_isolation := vec(
+                forecast_province_isolation_split.obs_increments
+            )
+        end
+        if length(treatment_state.capacity_shares) == n_patches
+            forecast_province_beds := vec(
+                treatment_state.capacity_shares .*
+                    reshape(treatment_state.capacity_series[vintages], 1, :)
             )
         end
         forecast_means = (;
