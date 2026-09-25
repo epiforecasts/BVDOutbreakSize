@@ -47,7 +47,6 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
-# We use one source for all seven provinces rather than the best figure for each.
 # Their relative sizes set the importation kernel and the per-capita testing covariate, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
