@@ -219,14 +219,24 @@ seeding call site.
 end
 
 """
-Daily latent infections from the renewal equation
-`I_t = R_t Σ_{s ≥ 1} I_{t−s} g_s`, with generation-interval PMF `g`
-(indexed from lag 1), per-day reproduction numbers `Rt` (length `n`) and
-a pre-computed `seed` of length `L < n` filling the first `L` days (see
-[`seed_infections`](@ref)). The recursion runs for days `L+1 … n`, so
-`Rt[1]` (used to imply the seeding growth) and the seed are mutually
-consistent. Returns the length-`n` infection trajectory. The output
-element type is promoted from `Rt`, `g` and `seed`.
+Daily latent infections from the renewal equation with weak susceptible
+depletion,
+
+```math
+I_t = S_{t-1} \\left(1 - e^{-R_t F_t / N}\\right), \\qquad
+F_t = \\sum_{s \\ge 1} I_{t-s} g_s, \\qquad S_t = S_{t-1} - I_t,
+```
+
+with generation-interval PMF `g` (indexed from lag 1), per-day reproduction
+numbers `Rt` (length `n`), a pre-computed `seed` of length `L < n` filling the
+first `L` days (see [`seed_infections`](@ref)) and a susceptible
+`population` `N`. The susceptibles start at `N` less the seed, floored at
+zero. While `S_{t-1} ≈ N` and `R_t F_t ≪ N` this is the plain renewal
+`I_t = R_t F_t` scaled by the share still susceptible, and it keeps the
+cumulative infections below `N` whatever `Rt` does. The recursion runs for
+days `L+1 … n`, so `Rt[1]` (used to imply the seeding growth) and the seed
+are mutually consistent. Returns the length-`n` infection trajectory. The
+output element type is promoted from `Rt`, `g`, `seed` and `population`.
 
 !!! note "Multi-patch analogue"
     See [`patch_infections`](@ref) for the meta-population extension
@@ -234,41 +244,57 @@ element type is promoted from `Rt`, `g` and `seed`.
 """
 function renewal_infections(
         Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector
+        seed::AbstractVector, population::Real
     )
-    return first(renewal_infections_with_force(Rt, g, seed))
+    return first(renewal_infections_with_force(Rt, g, seed, population))
 end
 
 """
-The renewal trajectory and the per-day force of infection it was built
-from, as `(infections, force)`. [`renewal_infections`](@ref) returns the
-first; the derivative rule needs the second, which it would otherwise
-have to rebuild from a copy of this loop.
+The renewal trajectory, the per-day force of infection it was built from
+and the susceptibles left after each day, as `(infections, force,
+susceptible)`. [`renewal_infections`](@ref) returns the first; the
+derivative rule needs the other two, which it would otherwise have to
+rebuild from a copy of this loop. `susceptible` is zero on the seed days
+before the last.
 
 Each day's force is one `dot` of the most recent infections with the
 generation interval reversed, a single BLAS call on float arrays.
 """
 function renewal_infections_with_force(
         Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector
+        seed::AbstractVector, population::Real
     )
     n = length(Rt)
     L = length(seed)
     G = length(g)
-    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
+    Tp = promote_type(
+        eltype(Rt), eltype(g), eltype(seed), typeof(float(population))
+    )
     I = zeros(Tp, n)
     force = zeros(Tp, n)
+    susceptible = zeros(Tp, n)
     @inbounds for j in 1:min(L, n)
         I[j] = seed[j]
     end
+    S = _initial_susceptible(Tp, population, seed)
+    L >= 1 && L <= n && (susceptible[L] = S)
     rg = reverse(g)
     for t in (L + 1):n
         k = min(t - 1, G)
         f = dot(view(rg, (G - k + 1):G), view(I, (t - k):(t - 1)))
         force[t] = f
-        I[t] = Rt[t] * f
+        I[t] = S * -expm1(-Rt[t] * f / population)
+        S -= I[t]
+        susceptible[t] = S
     end
-    return I, force
+    return I, force, susceptible
+end
+
+## Susceptibles on the last seed day: the population less the seed, floored
+## at zero so a seed larger than the population leaves nothing to infect.
+## Shared by the renewal kernels and their rules.
+@inline function _initial_susceptible(::Type{T}, population, seed) where {T}
+    return max(T(population) - T(sum(seed)), zero(T))
 end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
@@ -328,16 +354,23 @@ end
 end
 
 """
-    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
+    patch_infections(
+        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, populations
+    )
 
-Multi-patch (meta-population) renewal with between-patch importation.
-Each patch `p` follows a modified renewal equation on a shared daily grid:
+Multi-patch (meta-population) renewal with between-patch importation and
+weak susceptible depletion. Each patch `p` follows a modified renewal
+equation on a shared daily grid:
 
 ```math
-I_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t}
+\\lambda_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t},
+\\qquad
+I_{p,t} = S_{p,t-1} \\left(1 - e^{-\\lambda_{p,t} / N_p}\\right)
 ```
 
-where the importation term couples patches through a kernel `K`:
+as in [`renewal_infections`](@ref). The susceptibles `S_{p,t}` start at the
+population `N_p` less the patch's seed and fall by each day's infections, and
+the importation term couples patches through a kernel `K`:
 
 ```math
 \\text{importation}_{p,t} =
@@ -368,6 +401,7 @@ where the importation term couples patches through a kernel `K`:
   own reproduction number, so relocating infections from a fast patch to a
   slow one lowers the national total and the reverse raises it. With one
   shared reproduction number the transfer cancels exactly.
+- `populations`: length-`n_patches` vector of susceptible populations `N_p`.
 
 # Returns
 
@@ -376,28 +410,52 @@ where the importation term couples patches through a kernel `K`:
 patch `p`. The first `L` days are copied from `seeds_matrix` and the
 remaining days are the renewal recursion with importation. `importation` is
 the matching matrix of infections each patch received from the others, the
-arrivals term alone rather than the net of arrivals and departures. The
+arrivals term alone rather than the net of arrivals and departures, before
+depletion at the destination. The
 element type is promoted from all input types. AD-transparent under Mooncake.
 """
 function patch_infections(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix}
+        epsilon::Union{Real, AbstractMatrix}, populations::AbstractVector
+    )
+    st = patch_infections_with_state(
+        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, populations
+    )
+    return (; st.infections, st.importation)
+end
+
+"""
+[`patch_infections`](@ref) with the per-patch pressure `λ_{p,t}` and the
+susceptibles left after each day as well, as `(; infections, importation,
+pressure, susceptible)`. The derivative rule reads the last two rather than
+rebuilding them. `susceptible` is zero on the seed days before the last.
+"""
+function patch_infections_with_state(
+        Rt_matrix::AbstractMatrix, g::AbstractVector,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        epsilon::Union{Real, AbstractMatrix}, populations::AbstractVector
     )
     np, n = size(Rt_matrix)
     L = size(seeds_matrix, 2)
     Tp = promote_type(
         eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
         eltype(importation_kernel),
-        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon)
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon),
+        typeof(float(first(populations)))
     )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
+    pressure = zeros(Tp, np, n)
+    susceptible = zeros(Tp, np, n)
     outflow = _patch_outflow(Tp, importation_kernel, np)
+    S = zeros(Tp, np)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
         end
+        S[p] = _initial_susceptible(Tp, populations[p], view(seeds_matrix, p, :))
+        L >= 1 && L <= n && (susceptible[p, L] = S[p])
     end
     gen = zeros(Tp, np)
     @inbounds for t in (L + 1):n
@@ -418,11 +476,17 @@ function patch_infections(
                     importation_kernel[p, q] * gen[q]
             end
             imports[p, t] = arrivals
-            I[p, t] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
+            λ = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
                 arrivals
+            pressure[p, t] = λ
+            I[p, t] = S[p] * -expm1(-λ / populations[p])
+            S[p] -= I[p, t]
+            susceptible[p, t] = S[p]
         end
     end
-    return (; infections = I, importation = imports)
+    return (;
+        infections = I, importation = imports, pressure, susceptible,
+    )
 end
 
 ## What each of the first `np` origins sends away per unit of its own

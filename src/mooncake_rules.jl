@@ -50,6 +50,7 @@ Mooncake.@is_primitive(
     Tuple{
         typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
         Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat,
     },
 )
 Mooncake.@is_primitive(
@@ -58,6 +59,7 @@ Mooncake.@is_primitive(
         typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
         Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
         Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat},
     },
 )
 
@@ -167,39 +169,61 @@ function Mooncake.rrule!!(
         ::CoDual{typeof(renewal_infections)},
         Rt::CoDual{<:Array{<:Mooncake.IEEEFloat}},
         g::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        seed::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+        seed::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        population::CoDual{<:Mooncake.IEEEFloat}
     )
     Rtp = primal(Rt)
     gp = primal(g)
     seedp = primal(seed)
+    N = primal(population)
     R̄ = tangent(Rt)
     ḡ = tangent(g)
     s̄ = tangent(seed)
     n = length(Rtp)
     L = length(seedp)
     ## The forward pass is the model's own, which also hands back the
-    ## per-day force the pullback needs, so the recursion is defined once.
-    I, force = renewal_infections_with_force(Rtp, gp, seedp)
+    ## per-day force and susceptibles the pullback needs, so the recursion is
+    ## defined once.
+    I, force, S = renewal_infections_with_force(Rtp, gp, seedp, N)
     Ī = zero(I)
     function renewal_infections_pullback!!(::NoRData)
+        Tf = eltype(I)
         ## Sequential recursion, so the walk runs backwards: each day's
         ## adjoint must land on the lagged infections before those days
         ## are read. `Ī` is Mooncake's buffer, so accumulate into a copy.
         acc = copy(Ī)
+        S̄ = zero(Tf)
+        N̄ = zero(Tf)
+        S0 = _initial_susceptible(Tf, N, seedp)
         @inbounds for t in n:-1:(L + 1)
-            it = acc[t]
-            R̄[t] += it * force[t]
-            f̄ = it * Rtp[t]
+            ## I_t = S_{t-1} (1 - e_t) and S_t = S_{t-1} e_t, with
+            ## e_t = exp(-R_t f_t / N).
+            Sp = t - 1 >= max(L, 1) ? S[t - 1] : S0
+            λ = Rtp[t] * force[t]
+            e = exp(-λ / N)
+            ē = (S̄ - acc[t]) * Sp
+            S̄ = acc[t] * -expm1(-λ / N) + S̄ * e
+            λ̄ = -ē * e / N
+            N̄ += ē * e * λ / N^2
+            R̄[t] += λ̄ * force[t]
+            f̄ = λ̄ * Rtp[t]
             kmax = min(t - 1, length(gp))
             for s in 1:kmax
                 acc[t - s] += f̄ * gp[s]
                 ḡ[s] += f̄ * I[t - s]
             end
         end
+        ## S_L = N - Σ seed, unless floored at zero.
+        if N - sum(seedp) > 0
+            N̄ += S̄
+            @inbounds for j in 1:min(L, n)
+                acc[j] -= S̄
+            end
+        end
         @inbounds for j in 1:min(L, n)
             s̄[j] += acc[j]
         end
-        return NoRData(), NoRData(), NoRData(), NoRData()
+        return NoRData(), NoRData(), NoRData(), NoRData(), N̄
     end
     return CoDual(I, Ī), renewal_infections_pullback!!
 end
@@ -839,7 +863,8 @@ function Mooncake.rrule!!(
         g::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
         seeds::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
         K::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}}
+        ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        populations::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
     )
     Rp = primal(Rt)
     gp = primal(g)
@@ -850,13 +875,19 @@ function Mooncake.rrule!!(
     s̄ = tangent(seeds)
     K̄ = tangent(K)
     ε̄ = tangent(ε)
+    Np = primal(populations)
+    N̄ = tangent(populations)
+    seedsp = primal(seeds)
     np, n = size(Rp)
-    L = size(primal(seeds), 2)
-    y = patch_infections(Rp, gp, primal(seeds), Kp, εp)
+    L = size(seedsp, 2)
+    st = patch_infections_with_state(Rp, gp, seedsp, Kp, εp, Np)
+    y = (; st.infections, st.importation)
     out = Mooncake.zero_fcodual(y)
     Ī = tangent(out).infections
     Ā = tangent(out).importation
     I = y.infections
+    Λ = st.pressure
+    S = st.susceptible
     function patch_infections_pullback!!(::NoRData)
         Tf = eltype(I)
         outflow = _patch_outflow(Tf, Kp, np)
@@ -869,6 +900,10 @@ function Mooncake.rrule!!(
         gen = zeros(Tf, np)
         ḡen = zeros(Tf, np)
         ōut = zeros(Tf, np)
+        S̄ = zeros(Tf, np)
+        S0 = [
+            _initial_susceptible(Tf, Np[p], view(seedsp, p, :)) for p in 1:np
+        ]
         @inbounds for t in n:-1:(L + 1)
             kmax = min(t - 1, length(gp))
             for p in 1:np
@@ -877,10 +912,18 @@ function Mooncake.rrule!!(
                 gen[p] = Rp[p, t] * f
                 ḡen[p] = zero(Tf)
             end
-            ## I[p, t] = (1 - ε[p, t] outflow[p]) gen[p] + arrivals[p], and
-            ## the importation output is arrivals[p] alone.
+            ## I[p, t] = S[p, t-1] (1 - e) and S[p, t] = S[p, t-1] e with
+            ## e = exp(-λ[p, t] / N[p]), where λ[p, t] =
+            ## (1 - ε[p, t] outflow[p]) gen[p] + arrivals[p] and the
+            ## importation output is arrivals[p] alone.
             for p in 1:np
-                a = acc[p, t]
+                Sp = t - 1 >= max(L, 1) ? S[p, t - 1] : S0[p]
+                λ = Λ[p, t]
+                e = exp(-λ / Np[p])
+                ē = (S̄[p] - acc[p, t]) * Sp
+                S̄[p] = acc[p, t] * -expm1(-λ / Np[p]) + S̄[p] * e
+                N̄[p] += ē * e * λ / Np[p]^2
+                a = -ē * e / Np[p]
                 ā = a + Ā[p, t]
                 ḡen[p] += a * (one(Tf) - εp[p, t] * outflow[p])
                 ε̄[p, t] -= a * outflow[p] * gen[p]
@@ -905,10 +948,19 @@ function Mooncake.rrule!!(
             r == q && continue
             K̄[r, q] += ōut[q]
         end
+        ## S[p, L] = N[p] - Σ seeds[p, :], unless floored at zero.
+        @inbounds for p in 1:np
+            if Np[p] - sum(view(seedsp, p, :)) > 0
+                N̄[p] += S̄[p]
+                for j in 1:min(L, n)
+                    acc[p, j] -= S̄[p]
+                end
+            end
+        end
         @inbounds for p in 1:np, j in 1:min(L, n)
             s̄[p, j] += acc[p, j]
         end
-        return ntuple(_ -> NoRData(), 6)
+        return ntuple(_ -> NoRData(), 7)
     end
     return out, patch_infections_pullback!!
 end

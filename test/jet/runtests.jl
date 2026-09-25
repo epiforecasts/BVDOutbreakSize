@@ -17,6 +17,6 @@ test_opt(
 )
 test_opt(
     BVDOutbreakSize.renewal_infections,
-    (Vector{Float64}, Vector{Float64}, Vector{Float64});
+    (Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64);
     target_modules = (BVDOutbreakSize,)
 )

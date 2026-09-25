@@ -47,11 +47,12 @@ end
     Rt = [fill(1.3, n)'; fill(0.8, n)'; fill(2.0, n)']
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = zeros(3, 3)
+    N = [1.0e5, 2.0e5, 3.0e5]
 
-    I = patch_infections(Rt, g, seeds, K, 0.0).infections
+    I = patch_infections(Rt, g, seeds, K, 0.0, N).infections
     @test size(I) == (3, n)
     for p in 1:3
-        single = renewal_infections(vec(Rt[p, :]), g, vec(seeds[p, :]))
+        single = renewal_infections(vec(Rt[p, :]), g, vec(seeds[p, :]), N[p])
         @test I[p, :] ≈ single
     end
 end
@@ -66,11 +67,13 @@ end
     Rt = [fill(1.5, n)'; fill(0.0, n)']
     seeds = [1.0 1.0; 0.0 0.0]
     K = [0.0 0.0; 0.1 0.0]   ## K[2, 1]: flow from patch 1 into patch 2
+    ## A population the epidemic cannot deplete.
+    N = fill(1.0e18, 2)
 
-    off = patch_infections(Rt, g, seeds, K, 0.0).infections
+    off = patch_infections(Rt, g, seeds, K, 0.0, N).infections
     @test all(iszero, off[2, :])           ## epsilon = 0: no importation
 
-    on = patch_infections(Rt, g, seeds, K, 0.5).infections
+    on = patch_infections(Rt, g, seeds, K, 0.5, N).infections
     @test all(>(0), on[2, 3:n])            ## epsilon > 0: patch 2 seeded
     ## Patch 1 is debited what it exports. Coupling moves transmission, so the
     ## origin must lose exactly what the destination gains; an earlier version
@@ -106,7 +109,8 @@ end
     ## Very unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
 
-    st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    ## A population the epidemic cannot deplete.
+    st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0, fill(1.0e18, 3))
     total = vec(sum(st.infections; dims = 1))
     implied = implied_national_Rt(total, g)
 
@@ -156,9 +160,12 @@ end
     Rt = [fill(1.3, n)'; fill(1.3, n)'; fill(1.3, n)']
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = province_importation_kernel()
+    ## Depletion is per patch, so conservation is exact only where the
+    ## epidemic cannot deplete the population.
+    N = fill(1.0e18, 3)
 
-    off = patch_infections(Rt, g, seeds, K, 0.0).infections
-    on = patch_infections(Rt, g, seeds, K, 0.01).infections
+    off = patch_infections(Rt, g, seeds, K, 0.0, N).infections
+    on = patch_infections(Rt, g, seeds, K, 0.01, N).infections
 
     ## Moving infections around cannot change how many there are.
     @test sum(on) ≈ sum(off) rtol = 1.0e-8
@@ -199,7 +206,10 @@ end
     R1, R2 = 1.8, 0.6
     Rt = [fill(R1, n)'; fill(R2, n)']
     seeds = [5.0 5.0; 1.0 1.0]
-    I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0).infections
+    ## A population the epidemic cannot deplete.
+    I = patch_infections(
+        Rt, g, seeds, zeros(2, 2), 0.0, fill(1.0e18, 2)
+    ).infections
     total = vec(sum(I; dims = 1))
     implied = implied_national_Rt(total, g)
 
@@ -864,7 +874,10 @@ end
 
     function run(scale, n)
         mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
-        single = renewal_infections(mu, g, seed_infections(seed0, r, L))
+        ## A population the epidemic cannot deplete.
+        single = renewal_infections(
+            mu, g, seed_infections(seed0, r, L), 1.0e18
+        )
         seeds = reduce(
             vcat,
             [seed_infections(s * seed0, r, L)' for s in shares]
@@ -872,7 +885,7 @@ end
         Rt = reduce(vcat, [(mu .* exp(scale * d))' for d in base])
         st = patch_infections(
             Rt, g, seeds,
-            province_importation_kernel(), 0.01
+            province_importation_kernel(), 0.01, fill(1.0e18, 3)
         )
         tot = vec(sum(st.infections; dims = 1))
         return (
@@ -1050,7 +1063,9 @@ end
         seeds = zeros(3, rt_start)
         seeds[1, :] = seed_infections(seed0, r, rt_start)
         seeds[2, :] = seed_infections(frac * seed0, r, rt_start)
-        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0).infections
+        I = patch_infections(
+            Rtm, g, seeds, zeros(3, 3), 0.0, fill(1.0e18, 3)
+        ).infections
         a, b = sum(I[1, :]), sum(I[2, :])
         return b / (a + b)
     end
@@ -1356,7 +1371,8 @@ end
     seeds = [50.0 50.0; 4.0 4.0; 1.0 1.0]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     eps = 0.02
-    st = patch_infections(Rt, g, seeds, K, eps)
+    N = float.(PROVINCE_POPULATIONS[1:3])
+    st = patch_infections(Rt, g, seeds, K, eps, N)
 
     @test size(st.importation) == (3, n)
     ## Nothing is imported before the renewal starts, and nothing is negative.
@@ -1386,14 +1402,17 @@ end
     ## reproduction numbers, and here the origin is the fastest. Relocating
     ## its infections to slower provinces lowers the national total, which is
     ## epidemiology rather than bookkeeping.
-    uncoupled = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    uncoupled = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0, N)
     @test sum(st.importation) > 0
     @test sum(st.infections) < sum(uncoupled.infections)
     ## With one shared reproduction number the transfer cancels exactly, which
     ## is the bookkeeping half of the same statement.
+    ## Depletion is per patch, so the transfer cancels exactly only where the
+    ## epidemic cannot deplete the population.
     flat = fill(1.3, 3, n)
-    a = patch_infections(flat, g, seeds, K, eps).infections
-    b = patch_infections(flat, g, seeds, K, 0.0).infections
+    big = fill(1.0e18, 3)
+    a = patch_infections(flat, g, seeds, K, eps, big).infections
+    b = patch_infections(flat, g, seeds, K, 0.0, big).infections
     @test sum(a) ≈ sum(b) rtol = 1.0e-8
 end
 

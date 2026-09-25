@@ -56,14 +56,17 @@ end
 ] begin
     using BVDOutbreakSize: renewal_infections, renewal_infections_with_force
     seed = [1.0, 2.0, 4.0]
-    ## A one-day generation interval multiplies each day by `R`.
-    I = renewal_infections(fill(1.5, 12), [1.0], seed)
+    ## A one-day generation interval multiplies each day by `R` in a
+    ## population the epidemic cannot deplete.
+    I = renewal_infections(fill(1.5, 12), [1.0], seed, 1.0e18)
     @test I[1:3] == seed
     @test I[4:end] ≈ 4.0 .* 1.5 .^ (1:9)
     ## Each day after the seed is `R_t` times its force.
     rng = Xoshiro(3)
     R = rand(rng, 40) .+ 0.5
-    I, f = renewal_infections_with_force(R, pmf(rng, 12), rand(rng, 7))
+    I, f = renewal_infections_with_force(
+        R, pmf(rng, 12), rand(rng, 7), 1.0e18
+    )
     @test I[8:end] ≈ R[8:end] .* f[8:end]
 end
 
