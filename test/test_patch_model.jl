@@ -313,7 +313,7 @@ end
         len(k) = length(draw[DynamicPPL.VarName{k}()])
         @test len(:z_level) == np - 1
         @test len(:z_drift) == (np - 1) * (nb - 1)
-        @test !has(:σ_drift)
+        @test len(:σ_drift) == 1
         @test len(:bartlett_diag) == np - 1
         ## Two patches have one direction and no lower entry to draw.
         @test has(:bartlett_lower) == (np > 2)
@@ -351,6 +351,32 @@ end
     end
 end
 
+@testitem "patch_rt_model: the drift scale is sampled apart from its shape" begin
+    using BVDOutbreakSize: patch_rt_model
+    using Turing: DynamicPPL, sample, Prior
+    using Turing.DynamicPPL: returned
+    using Random: Xoshiro
+    using Statistics: mean
+
+    ## `σ_drift` sets the size of each knot's innovation and the Bartlett
+    ## factor only its shape: the innovation covariance has trace
+    ## `σ_drift² (np - 1)` whatever the Bartlett draw. So the prior reaches
+    ## the common-shape limit `σ_drift → 0` as often as its own prior does.
+    n, np = 120, 4
+    m = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0)
+    chn = sample(Xoshiro(2), m, Prior(), 2000; progress = false)
+    rets = vec(returned(m, chn))
+    σs = vec(chn[DynamicPPL.VarName{:σ_drift}()])
+    for (r, σ) in zip(rets, σs)
+        @test sum(abs2, r.drift_factor) ≈ σ^2 * (np - 1) rtol = 1.0e-10
+    end
+    ## Mean innovation sd across patches below a fifth of 0.05.
+    small = mean(
+        mean(r.σ_δ) < 0.2 * 0.05 for r in rets
+    )
+    @test small > 0.1
+end
+
 @testitem "patch_rt_model: Rt may vary across space and over time" begin
     using BVDOutbreakSize: patch_rt_model
     using Distributions: Normal, truncated
@@ -368,7 +394,7 @@ end
     flat = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
         region_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0),
-        region_drift_scale = 1.0e-12
+        region_drift_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0)
     )
     seed!(9)
     rf = flat()
@@ -381,7 +407,7 @@ end
     ## separate over time, which a constant modifier could not represent.
     wide = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_drift_scale = 0.5
+        region_drift_sd_prior = truncated(Normal(0.5, 1.0e-3); lower = 0)
     )
     ## The Ituri / Nord-Kivu contrast must actually move over the window.
     ## One walk can end where it started, so this is read over several.

@@ -154,10 +154,11 @@ end
     ## Reference check against the construction the patch model used
     ## before. With `n` per-patch scales `σ_p ~ half-N(0, c)` and an
     ## `n × n` LKJ correlation, then centred, each patch's deviation has
-    ## expected variance `c² (n - 1) / n`. The Wishart form,
-    ## `(c / √ν) Q A` with `A Aᵀ ~ Wishart(ν, I_{n-1})`, has the same
-    ## expected variance for every patch, and the same distribution of the
-    ## sd for every patch, whatever order the patches come in.
+    ## expected variance `c² (n - 1) / n`. The basis form,
+    ## `σ √((n - 1) / tr(A Aᵀ)) Q A` with `σ ~ half-N(0, c)` and
+    ## `A Aᵀ ~ Wishart(ν, I_{n-1})`, has the same expected variance for every
+    ## patch, and the same distribution of the sd for every patch, whatever
+    ## order the patches come in.
     rng = Xoshiro(3)
     c = 0.05
     sd_prior = truncated(Normal(0, c); lower = 0)
@@ -171,7 +172,10 @@ end
         for d in 1:N
             Lo = rand(rng, LKJCholesky(n, 2.0)).L
             Fo = old_factor(rand(rng, sd_prior, n), Lo)
-            Fn = sum_to_zero_factor(Q, c / sqrt(ν), bartlett_draw(rng, n - 1, ν))
+            A = bartlett_draw(rng, n - 1, ν)
+            Fn = sum_to_zero_factor(
+                Q, rand(rng, sd_prior) * sqrt((n - 1) / sum(abs2, A)), A
+            )
             old_var .+= sum_to_zero_moments(Fo).sd .^ 2 ./ N
             sd = sum_to_zero_moments(Fn).sd
             new_var .+= sd .^ 2 ./ N
@@ -179,10 +183,11 @@ end
         end
         @test all(isapprox.(old_var, c^2 * (n - 1) / n; rtol = 0.03))
         @test all(isapprox.(new_var, c^2 * (n - 1) / n; rtol = 0.03))
-        ## Each patch's sd is `c √((n - 1) / (n ν))` times a `Chi(ν)` draw,
-        ## so its mass near zero is the same for every patch.
+        ## Every patch has the same mass near zero, and the half-normal
+        ## scale gives it about as much as the old per-patch scales did.
         near_zero = [mean(new_sd[:, p] .< 0.4 * c) for p in 1:n]
         @test maximum(near_zero) - minimum(near_zero) < 0.015
+        @test minimum(near_zero) > 0.2
     end
 end
 
@@ -386,7 +391,7 @@ end
                 end
             end
             s = σ_level * sqrt(nd / sum(abs2, B))
-            c = 0.05 / sqrt(nd)
+            c = vi[@varname(σ_drift)] * sqrt(nd / sum(abs2, B))
             nb = size(r.δ_knots, 2)
             ref = reference_knots(
                 basis, B, s, c, vi[@varname(z_level)], vi[@varname(z_drift)],
