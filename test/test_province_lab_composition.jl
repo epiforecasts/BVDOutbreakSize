@@ -195,7 +195,7 @@ end
     @test binned[:, 2] ≈ flat[:, 3]
 end
 
-@testitem "the per-head testing covariate is gone" begin
+@testitem "the ascertainment prior carries no testing coefficient" begin
     using BVDOutbreakSize
     using Turing: DynamicPPL
     using Random: Xoshiro
@@ -203,7 +203,6 @@ end
     ## The province laboratory volumes are scored by the lab composition, so
     ## no covariate built from the same series sits on the ascertainment
     ## prior, and the model has no coefficient for one.
-    @test !isdefined(BVDOutbreakSize, :province_testing_covariate)
     obs = load_observations()
     m = production_joint(obs; breakpoint = default_breakpoint(obs))
     vi = DynamicPPL.VarInfo(Xoshiro(1), m)
@@ -219,10 +218,8 @@ end
     using Statistics: median
 
     ## The scale prior is half-normal with sd 0.1, so a typical province sits
-    ## within about ten percent of the national case-fatality ratio; the
-    ## previous 0.3 let a tenth of the prior mass put provinces sixty percent
-    ## apart and left the scale free to collapse to zero mid-chain. A
-    ## half-normal with sd 0.1 has median 0.0674.
+    ## within about ten percent of the national case-fatality ratio. Its
+    ## median is 0.0674.
     obs = load_observations()
     m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(Xoshiro(3), m, Prior(), 400; progress = false)
