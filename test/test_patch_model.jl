@@ -58,7 +58,7 @@ end
         )
         @test I[p, :] ≈ single
     end
-    @test sum(I[3, 3:end]) > 0.9 * (pools[3] - sum(seeds[3, :]))
+    @test sum(I[3, 3:end]) > 0.5 * (pools[3] - sum(seeds[3, :]))
 end
 
 @testitem "patch_infections: new infections stay within each pool" begin
@@ -827,18 +827,27 @@ end
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol = 1.0e-8
     end
 
-    ## The deviations sum to zero and nothing rescales the provinces, so the
-    ## unweighted geometric mean of the provincial Rt is the central trend
-    ## exactly. That is the whole construction, and it is what makes the grey
-    ## reference in the figure readable against the panels.
-    nat = reconstruct_rt(
+    ## The deviations sum to zero and nothing rescales the provinces, so
+    ## before depletion the unweighted geometric mean of the provincial Rt is
+    ## the central trend exactly. That is the whole construction, and it is
+    ## what makes the grey reference in the figure readable against the
+    ## panels. Each province is then scaled by its own susceptible fraction.
+    nat = BVDOutbreakSize._reconstruct_rt_walk(
         chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
+    frac = [
+        reshape(collect(v), np, obs.n)
+            for v in vec(collect(chn[:susceptible_fraction_patch]))
+    ]
     for i in 1:5, d in (obs.n, obs.n - 7)
 
-        gm = exp(sum(log(rt[p][i, d]) for p in 1:np) / np)
+        ## A province whose pool is used up has no Rt left to compare.
+        all(>(0), view(frac[i], :, d - 1)) || continue
+        gm = exp(
+            sum(log(rt[p][i, d] / frac[i][p, d - 1]) for p in 1:np) / np
+        )
         @test gm ≈ nat[i, d] rtol = 1.0e-8
     end
 

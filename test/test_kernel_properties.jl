@@ -81,13 +81,11 @@ end
     ## and leaves `S e^{-x}` for the next.
     R = rand(rng, 40) .+ 0.8
     st = renewal_infections_with_state(R, g, seed, N)
-    S = N - sum(seed)
-    for t in 8:40
-        x = R[t] * st.force[t] / N
-        @test st.infections[t] ≈ S * (1 - exp(-x))
-        S *= exp(-x)
-        @test st.susceptible[t] ≈ S
-    end
+    x = R[8:40] .* st.force[8:40] ./ N
+    pools = (N - sum(seed)) .* exp.(-cumsum(x))
+    before = [N - sum(seed); pools[1:(end - 1)]]
+    @test st.infections[8:40] ≈ before .* (1 .- exp.(-x))
+    @test st.susceptible[8:40] ≈ pools
     ## New infections never exceed the pool left after the seed.
     I = renewal_infections(fill(3.0, 60), g, seed, N)
     @test all(>=(0), I)
@@ -96,6 +94,23 @@ end
     I = renewal_infections(fill(1.0e308, 30), g, seed, N)
     @test all(isfinite, I)
     @test sum(I[8:end]) ≈ N - sum(seed)
+end
+
+@testitem "susceptible_fraction: the pool left is the population less the cumulative" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: renewal_infections_with_state, susceptible_fraction,
+        adjusted_rt
+    rng = Xoshiro(6)
+    N = 800.0
+    R = rand(rng, 50) .+ 1.0
+    st = renewal_infections_with_state(R, pmf(rng, 10), rand(rng, 5) .+ 1, N)
+    frac = susceptible_fraction(cumsum(st.infections), N)
+    @test N .* frac[5:end] ≈ st.susceptible[5:end]
+    ## Net of depletion, each day's reproduction number uses the pool the
+    ## day before, and the first day the full pool.
+    @test adjusted_rt(R, frac, 2:50) ≈ R[2:50] .* frac[1:49]
+    @test adjusted_rt(R, frac, 1:1) == R[1:1]
 end
 
 @testitem "renewal_infections: depletion is light at census scale" setup = [

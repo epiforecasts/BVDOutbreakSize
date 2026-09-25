@@ -2190,9 +2190,40 @@ knots ([`knot_days`](@ref)) from `rt_walk_start` at the sampled levels
 to the day grid ([`interpolate_knots`](@ref)) and shifted by the sampled
 `rt_state.intervention_effect` along a logistic ramp
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
+Each day is then scaled by the draw's susceptible fraction at the end of
+the day before, the chain's `susceptible_fraction`, so the trajectory is
+net of depletion ([`adjusted_rt`](@ref)). A chain without that series
+predates depletion and is returned unscaled.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(
+        chn; n::Integer, breakpoint::Real,
+        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+    )
+    rt = _reconstruct_rt_walk(
+        chn; n, breakpoint, rt_start, rt_walk_start, week, ramp
+    )
+    _has_key(chn, :susceptible_fraction) || return rt
+    fractions = _draw_vectors(chn, :susceptible_fraction)
+    for i in axes(rt, 1)
+        _deplete_rt!(view(rt, i, :), fractions[i])
+    end
+    return rt
+end
+
+## Scale an established-window Rt row by the susceptible fraction at the end
+## of each day before, as `adjusted_rt` does in the model.
+function _deplete_rt!(row::AbstractVector, fraction::AbstractVector)
+    for d in 2:length(row)
+        ismissing(row[d]) && continue
+        row[d] *= fraction[d - 1]
+    end
+    return row
+end
+
+## The walk's daily Rt per draw, before depletion.
+function _reconstruct_rt_walk(
         chn; n::Integer, breakpoint::Real,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
@@ -2727,7 +2758,10 @@ deviation interpolated from the weekly knots the chain carries as
 `(n_patches × n_knots)` deviation matrix flattened column-major.
 
 Each province runs its own renewal at its own `Rt` and nothing rescales it,
-so `μ(t) · exp(δ_p(t))` is what the model used and what `R_T_patch` reports.
+so `μ(t) · exp(δ_p(t))` is what the model used. Scaled by the province's
+susceptible fraction the day before (the chain's
+`susceptible_fraction_patch`), it is what `R_T_patch` reports. A chain
+without that series predates depletion and is returned unscaled.
 The national reproduction number is not `μ` but the value implied by the
 summed infections, which is why [`plot_rt_patches`](@ref) draws it from the
 chain's own national trajectory rather than from these.
@@ -2741,7 +2775,7 @@ function reconstruct_patch_rt(
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
     )
-    national = reconstruct_rt(
+    national = _reconstruct_rt_walk(
         chn; n, breakpoint, rt_start, rt_walk_start,
         week, ramp
     )
@@ -2777,6 +2811,14 @@ function reconstruct_patch_rt(
                 ismissing(national[i, d]) && continue
                 out[p][i, d] = national[i, d] * exp(δ_daily[d])
             end
+        end
+    end
+    _has_key(chn, :susceptible_fraction_patch) || return out
+    fractions = _draw_vectors(chn, :susceptible_fraction_patch)
+    for i in 1:ndraws
+        f = reshape(fractions[i], n_patches, n)
+        for p in 1:n_patches
+            _deplete_rt!(view(out[p], i, :), view(f, p, :))
         end
     end
     return out

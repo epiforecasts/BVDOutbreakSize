@@ -116,7 +116,13 @@ Exponential growth rate `r` implied by a reproduction number `R` and a
 generation-interval PMF `g` (indexed from lag 1), solving the
 Euler–Lotka identity `R · Σ_s g_s e^{−r s} = 1`. Starts from the
 small-`r` approximation `r ≈ (R − 1) / (R · ḡ)` with `ḡ` the mean
-generation time, then refines with `steps` Newton iterations. The loop
+generation time, or below `R = 1` from `log(R) / ḡ`, then refines with
+`steps` Newton iterations on `log(R Σ_s g_s e^{−r s}) = 0`. That function
+is convex and falling in `r`, and both starts sit below the root, so
+Newton climbs to it without overshooting. The second start is closer as
+`R` falls, and the log form stays close to linear there, so a near-zero `R`
+from a depleted pool gives a finite rate. `R = 0` has no finite root and
+gives `-Inf`. The loop
 is unrolled over a fixed step count and uses only arithmetic and `exp`,
 so it is AD-transparent under Mooncake. Mirrors the `R_to_r` seeding
 helper in EpiAware.jl and the implied-growth initialisation in the
@@ -128,7 +134,8 @@ function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
     @inbounds for i in eachindex(g)
         ḡ += g[i] * i
     end
-    r = (R - one(R)) / (R * ḡ)
+    R > zero(R) || return Tp(-Inf)
+    r = R < one(R) ? log(R) / ḡ : (R - one(R)) / (R * ḡ)
     @inbounds for _ in 1:steps
         G = zero(Tp)
         dG = zero(Tp)
@@ -137,8 +144,8 @@ function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
             G += g[i] * e
             dG += g[i] * i * e
         end
-        ## f(r) = R·G − 1, f'(r) = −R·dG.
-        r = r - (R * G - one(R)) / (-R * dG)
+        ## f(r) = log(R·G), f'(r) = −dG / G.
+        r = r + log(R * G) * G / dG
     end
     return r
 end
@@ -219,14 +226,30 @@ seeding call site.
 end
 
 """
-Daily latent infections from the renewal equation
-`I_t = R_t Σ_{s ≥ 1} I_{t−s} g_s`, with generation-interval PMF `g`
-(indexed from lag 1), per-day reproduction numbers `Rt` (length `n`) and
-a pre-computed `seed` of length `L < n` filling the first `L` days (see
-[`seed_infections`](@ref)). The recursion runs for days `L+1 … n`, so
-`Rt[1]` (used to imply the seeding growth) and the seed are mutually
-consistent. Returns the length-`n` infection trajectory. The output
-element type is promoted from `Rt`, `g` and `seed`.
+Daily latent infections from the renewal equation with weak susceptible
+depletion. Each day's renewal force `R_t Σ_{s ≥ 1} I_{t−s} g_s`, with
+generation-interval PMF `g` (indexed from lag 1) and per-day reproduction
+numbers `Rt` (length `n`), is taken as a rate on a pool of `N`:
+
+```math
+x_t = \\frac{R_t}{N} \\sum_{s \\ge 1} I_{t-s} g_s, \\qquad
+I_t = S_{t-1}\\left(1 - e^{-x_t}\\right), \\qquad
+S_t = S_{t-1} e^{-x_t}.
+```
+
+While the pool is large against the outbreak, `I_t ≈ (S_{t−1} / N) R_t f_t`,
+the renewal scaled by the susceptible fraction. `I_t` never exceeds the pool
+left, so an overflowing force takes the pool rather than giving `Inf`.
+`N` is a population size, not an estimate of who can be reached. The models
+pass census counts ([`PROVINCE_POPULATIONS`](@ref)), and at that scale it is
+a light bound that leaves the fitted trajectory unchanged to
+well under one percent and trims only forecasts that run into the millions.
+`Rt` is therefore the reproduction number in a fully susceptible population.
+
+A pre-computed `seed` of length `L < n` fills the first `L` days (see
+[`seed_infections`](@ref)) and is drawn from the pool before the recursion
+runs for days `L+1 … n`. Returns the length-`n` infection trajectory. The
+output element type is promoted from `Rt`, `g`, `seed` and `N`.
 
 !!! note "Multi-patch analogue"
     See [`patch_infections`](@ref) for the meta-population extension
@@ -234,41 +257,85 @@ element type is promoted from `Rt`, `g` and `seed`.
 """
 function renewal_infections(
         Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector
+        seed::AbstractVector, N::Real
     )
-    return first(renewal_infections_with_force(Rt, g, seed))
+    return renewal_infections_with_state(Rt, g, seed, N).infections
 end
 
 """
-The renewal trajectory and the per-day force of infection it was built
-from, as `(infections, force)`. [`renewal_infections`](@ref) returns the
-first; the derivative rule needs the second, which it would otherwise
-have to rebuild from a copy of this loop.
+The renewal trajectory with the state it was built from, as
+`(; infections, force, susceptible)`: the per-day force
+`Σ_{s ≥ 1} I_{t−s} g_s` and the pool left at the end of each day, which is
+the pool after the seed on the seeded days. [`renewal_infections`](@ref)
+returns the first; the derivative rule needs the others, which it would
+otherwise have to rebuild from a copy of this loop.
 
 Each day's force is one `dot` of the most recent infections with the
 generation interval reversed, a single BLAS call on float arrays.
 """
-function renewal_infections_with_force(
+function renewal_infections_with_state(
         Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector
+        seed::AbstractVector, N::Real
     )
     n = length(Rt)
     L = length(seed)
     G = length(g)
-    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
+    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed), typeof(float(N)))
     I = zeros(Tp, n)
     force = zeros(Tp, n)
+    S = zeros(Tp, n)
     @inbounds for j in 1:min(L, n)
         I[j] = seed[j]
+    end
+    pool = convert(Tp, _pool_after_seed(N, view(I, 1:min(L, n))))
+    @inbounds for j in 1:min(L, n)
+        S[j] = pool
     end
     rg = reverse(g)
     for t in (L + 1):n
         k = min(t - 1, G)
         f = dot(view(rg, (G - k + 1):G), view(I, (t - k):(t - 1)))
         force[t] = f
-        I[t] = Rt[t] * f
+        x = Rt[t] * f / N
+        I[t] = -pool * expm1(-x)
+        pool *= exp(-x)
+        S[t] = pool
     end
-    return I, force
+    return (; infections = I, force, susceptible = S)
+end
+
+"""
+    susceptible_fraction(cumulative, N)
+
+Share of the pool `N` left susceptible at the end of each day, `1 − C_t / N`
+for the cumulative infections `C_t`, seed included, floored at zero. Exact
+for the depletion in [`renewal_infections`](@ref), where each day's
+infections are what leaves the pool and a seed larger than `N` leaves none.
+"""
+susceptible_fraction(cumulative::AbstractVector, N::Real) =
+    max.(1 .- cumulative ./ N, 0)
+
+"""
+    adjusted_rt(Rt, fraction, days)
+
+The reproduction number net of depletion on each of `days`, `R_t` times the
+susceptible `fraction` at the end of the day before
+([`susceptible_fraction`](@ref)). This is the number of infections each
+infection causes given the pool left, where `Rt` is the number in a fully
+susceptible population. Day one takes the full pool.
+"""
+function adjusted_rt(Rt::AbstractVector, fraction::AbstractVector, days)
+    return [
+        @inbounds(Rt[t] * (t > 1 ? fraction[t - 1] : one(eltype(fraction))))
+            for t in days
+    ]
+end
+
+## The pool left once the seed is drawn from `N`. The seed can itself
+## overflow on extreme warmup proposals, so the pool is floored at zero.
+@inline function _pool_after_seed(N, seed)
+    left = N - sum(seed)
+    return left > zero(left) ? left : zero(left)
 end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
@@ -328,16 +395,20 @@ end
 end
 
 """
-    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
+    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N)
 
-Multi-patch (meta-population) renewal with between-patch importation.
-Each patch `p` follows a modified renewal equation on a shared daily grid:
+Multi-patch (meta-population) renewal with between-patch importation and
+weak susceptible depletion. Each patch `p` has a renewal force on a shared
+daily grid,
 
 ```math
-I_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t}
+y_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t},
 ```
 
-where the importation term couples patches through a kernel `K`:
+taken as a rate on its own pool of `N[p]` as in [`renewal_infections`](@ref):
+`I_{p,t} = S_{p,t−1}(1 − e^{−y_{p,t} / N_p})` and
+`S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`. The importation term couples
+patches through a kernel `K`:
 
 ```math
 \\text{importation}_{p,t} =
@@ -367,7 +438,11 @@ where the importation term couples patches through a kernel `K`:
   infections. It is not conserved across days. The destination grows at its
   own reproduction number, so relocating infections from a fast patch to a
   slow one lowers the national total and the reverse raises it. With one
-  shared reproduction number the transfer cancels exactly.
+  shared reproduction number the transfer cancels exactly. Depletion acts
+  on the destination after the transfer, so where a pool binds the
+  destination takes in less than the origin sent.
+- `N`: population of each patch, the pool it depletes. The seed is drawn
+  from it first.
 
 # Returns
 
@@ -376,27 +451,53 @@ where the importation term couples patches through a kernel `K`:
 patch `p`. The first `L` days are copied from `seeds_matrix` and the
 remaining days are the renewal recursion with importation. `importation` is
 the matching matrix of infections each patch received from the others, the
-arrivals term alone rather than the net of arrivals and departures. The
-element type is promoted from all input types. AD-transparent under Mooncake.
+arrivals term alone before depletion rather than the net of arrivals and
+departures. The element type is promoted from all input types.
+AD-transparent under Mooncake.
 """
 function patch_infections(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix}
+        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
+    )
+    st = patch_infections_with_state(
+        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N
+    )
+    return (; st.infections, st.importation)
+end
+
+"""
+The [`patch_infections`](@ref) trajectories with the state they were built
+from: `susceptible`, the pool each patch has left at the end of each day
+(the pool after its seed on the seeded days), and `rate`, each day's
+depletion rate `y_{p,t} / N_p`. The derivative rule reads both.
+"""
+function patch_infections_with_state(
+        Rt_matrix::AbstractMatrix, g::AbstractVector,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
     )
     np, n = size(Rt_matrix)
     L = size(seeds_matrix, 2)
     Tp = promote_type(
         eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
         eltype(importation_kernel),
-        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon)
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon),
+        float(eltype(N))
     )
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
+    S = zeros(Tp, np, n)
+    rate = zeros(Tp, np, n)
     outflow = _patch_outflow(Tp, importation_kernel, np)
+    pool = zeros(Tp, np)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
+        end
+        pool[p] = _pool_after_seed(N[p], view(I, p, 1:min(L, n)))
+        for j in 1:min(L, n)
+            S[p, j] = pool[p]
         end
     end
     gen = zeros(Tp, np)
@@ -418,11 +519,16 @@ function patch_infections(
                     importation_kernel[p, q] * gen[q]
             end
             imports[p, t] = arrivals
-            I[p, t] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
+            y = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
                 arrivals
+            x = y / N[p]
+            rate[p, t] = x
+            I[p, t] = -pool[p] * expm1(-x)
+            pool[p] *= exp(-x)
+            S[p, t] = pool[p]
         end
     end
-    return (; infections = I, importation = imports)
+    return (; infections = I, importation = imports, susceptible = S, rate)
 end
 
 ## What each of the first `np` origins sends away per unit of its own

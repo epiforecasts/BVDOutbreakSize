@@ -98,6 +98,22 @@ end
     end
 end
 
+@testitem "euler_lotka_r: finite for a near-zero R" begin
+    using BVDOutbreakSize: euler_lotka_r
+    using BVDOutbreakSize: lognormal_meansd, discretise_censored
+
+    ## A depleted pool drives the implied reproduction number towards zero.
+    gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
+    g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+    @test euler_lotka_r(0.0, g) == -Inf
+    for R in (1.0e-20, 1.0e-6, 0.01)
+        r = euler_lotka_r(R, g)
+        @test isfinite(r) && r < 0
+        r = euler_lotka_r(R, g; steps = 30)
+        @test R * sum(g[s] * exp(-r * s) for s in eachindex(g)) ≈ 1 rtol = 1.0e-6
+    end
+end
+
 @testitem "r_to_R0: forward inverse of euler_lotka_r" begin
     using BVDOutbreakSize: euler_lotka_r, r_to_R0
     using BVDOutbreakSize: lognormal_meansd, discretise_censored

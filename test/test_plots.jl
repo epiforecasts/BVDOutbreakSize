@@ -1692,6 +1692,64 @@ end
     @test_throws ErrorException reconstruct_patch_rt(chain(short); args...)
 end
 
+@testitem "reconstruct_rt: scaled by the susceptible fraction the day before" begin
+    using Random: MersenneTwister
+    import FlexiChains
+    using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days,
+        RT_INTERVENTION_RAMP
+
+    rng = MersenneTwister(6)
+    nd, n, np = 20, 50, 2
+    walk_start = 8
+    nb = length(knot_days(n; week = 7, start = walk_start))
+    P = FlexiChains.Parameter
+    col(v) = reshape(v, nd, 1)
+    base = Dict(
+        P(Symbol("rt_state.log_R0")) => col(fill(log(1.5), nd)),
+        P(Symbol("rt_state.intervention_effect")) => col(fill(-0.3, nd)),
+        P(Symbol("rt_state.log_R")) => col(
+            [log(1.5) .+ cumsum(0.05 .* randn(rng, nb - 1)) for _ in 1:nd]
+        ),
+        P(:delta_knots) => col([0.1 .* randn(rng, np * nb) for _ in 1:nd]),
+    )
+    ## Falling fractions that differ by patch, so a misplaced day or patch
+    ## moves the values.
+    national = [collect(range(1.0, 0.6; length = n)) for _ in 1:nd]
+    patches = [
+        vec([1 - 0.004 * p * d for p in 1:np, d in 1:n]) for _ in 1:nd
+    ]
+    depleted = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        merge(
+            base, Dict(
+                P(:susceptible_fraction) => col(national),
+                P(:susceptible_fraction_patch) => col(patches),
+            )
+        )
+    )
+    full = FlexiChains.FlexiChain{Symbol}(nd, 1, base)
+    args = (;
+        n, breakpoint = n - 11, rt_start = walk_start,
+        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP,
+    )
+    ## A chain without the fraction is the walk as sampled.
+    walk = reconstruct_rt(full; args...)
+    adj = reconstruct_rt(depleted; args...)
+    @test all(
+        adj[i, d] ≈ walk[i, d] * national[i][d - 1]
+            for i in 1:nd, d in walk_start:n
+    )
+    @test all(ismissing, adj[:, 1:(walk_start - 1)])
+    pw = reconstruct_patch_rt(full; n_patches = np, args...)
+    pa = reconstruct_patch_rt(depleted; n_patches = np, args...)
+    for p in 1:np
+        @test all(
+            pa[p][i, d] ≈ pw[p][i, d] * (1 - 0.004 * p * (d - 1))
+                for i in 1:nd, d in walk_start:n
+        )
+    end
+end
+
 @testitem "plot_rt_patches: one panel per province on a shared axis" setup = [
     HeadlessMakie,
 ] begin

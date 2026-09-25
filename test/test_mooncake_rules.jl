@@ -163,18 +163,21 @@
 
         Rt(n) = abs.(randn(rng, n)) .* 0.3 .+ 1.1
         ## The pool is light unless named as binding, where the renewal takes
-        ## most of it.
+        ## most of it. The binding cases draw from their own stream so the
+        ## cases after them keep their inputs.
+        prng = Xoshiro(895)
         add!(
             "G = 12", renewal_infections, Rt(40), pmf(rng, 12),
             rand(rng, 7) .+ 1, 1.0e6
         )
         add!(
-            "G = 12, binding pool", renewal_infections, Rt(40) .+ 1,
-            pmf(rng, 12), rand(rng, 7) .+ 1, 150.0
+            "G = 12, binding pool", renewal_infections,
+            abs.(randn(prng, 40)) .* 0.3 .+ 2.1, pmf(prng, 12),
+            rand(prng, 7) .+ 1, 150.0
         )
         add!(
-            "single seed, binding pool", renewal_infections, Rt(30) .+ 1,
-            pmf(rng, 6), [2.0], 60.0
+            "single seed, binding pool", renewal_infections,
+            abs.(randn(prng, 30)) .* 0.3 .+ 2.1, pmf(prng, 6), [2.0], 60.0
         )
         add!(
             "G > n", renewal_infections, Rt(10), pmf(rng, 15),
@@ -191,19 +194,19 @@
 
         ## No self-importation, a daily importation intensity per patch and
         ## one pool per patch.
-        function patch_args(np, n, L, G; pool = 1.0e6)
+        function patch_args(np, n, L, G; pool = 1.0e6, rng = rng)
             K = rand(rng, np, np) .* 0.2
             foreach(p -> K[p, p] = 0, 1:np)
             return (
                 abs.(randn(rng, np, n)) .* 0.3 .+ 1.0, pmf(rng, G),
                 rand(rng, np, L) .+ 1.0, K, rand(rng, np, n) .* 0.5,
-                pool .* (rand(rng, np) .+ 0.5),
+                pool .* (rand(prng, np) .+ 0.5),
             )
         end
         add!("3 patches", patch_infections, patch_args(3, 40, 7, 12)...)
         add!(
             "3 patches, binding pools", patch_infections,
-            patch_args(3, 40, 7, 12; pool = 60.0)...
+            patch_args(3, 40, 7, 12; pool = 60.0, rng = prng)...
         )
         add!("1 patch", patch_infections, patch_args(1, 30, 5, 10)...)
         add!("G > n", patch_infections, patch_args(3, 10, 3, 15)...)
@@ -434,11 +437,13 @@ end
         two_clock_confirmed, stick_breaking_loglik
 
     rng = Xoshiro(20260923)
+    ## Each case draws its tangents from a stream seeded by its name, so
+    ## adding a case or an argument does not move the others' tangents.
     for c in rule_cases(rng)
         @testset "$(c.name)" begin
             test_rule(
-                rng, c.f, c.args...; is_primitive = true, mode = ReverseMode,
-                rtol = 1.0e-6, atol = 1.0e-8
+                Xoshiro(hash(c.name)), c.f, c.args...; is_primitive = true,
+                mode = ReverseMode, rtol = 1.0e-6, atol = 1.0e-8
             )
         end
     end

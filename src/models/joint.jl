@@ -32,11 +32,17 @@
     cumulative_infections := infection_state.cumulative
     C_T := infection_state.C_T
     cumulative_onsets := cumsum(onset_state.onsets)
+    if _reporting(__varinfo__)
+        susceptible_fraction := infection_state.susceptible_fraction[1:n]
+    end
+    ## The forecast reproduction number is net of depletion.
     if forecast !== nothing
         fd = forecast_days(n, forecast)
         forecast_infections := infection_state.infections[fd]
         forecast_onsets := onset_state.onsets[fd]
-        forecast_rt := infection_state.Rt[fd]
+        forecast_rt := adjusted_rt(
+            infection_state.Rt, infection_state.susceptible_fraction, fd
+        )
     end
     return (;
         infection_state, onsets = onset_state.onsets,
@@ -734,6 +740,9 @@ end
     C_T := patch_state.C_T
     if _reporting(__varinfo__)
         cumulative_onsets := cumsum(onsets_total)
+        susceptible_fraction := patch_state.susceptible_fraction[1:n]
+        susceptible_fraction_patch :=
+            vec(patch_state.susceptible_fraction_matrix[:, 1:n])
     end
     ## Past the cut-off the national reproduction number is read off the
     ## summed infections, as `R_T` is at the cut-off.
@@ -747,6 +756,12 @@ end
     end
     return (; patch_state, onsets_total)
 end
+
+## Patch `p`'s reproduction number net of its own depletion on `days`.
+_patch_adjusted_rt(state, p, days) = adjusted_rt(
+    view(state.Rt_matrix, p, :),
+    view(state.susceptible_fraction_matrix, p, :), days
+)
 
 ## The implied national reproduction number on each forecast day. A function
 ## rather than a comprehension in the model body, which would capture
@@ -1327,7 +1342,10 @@ density there, is the fitted model's.
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     C_T_patch := patch_state.C_T_patch
-    R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]
+    ## Each province's reproduction number net of its own depletion.
+    R_T_patch := [
+        only(_patch_adjusted_rt(patch_state, p, n:n)) for p in 1:n_patches
+    ]
     infections_T_patch := [
         @inbounds(patch_state.infections_matrix[p, n])
             for p in 1:n_patches
@@ -1502,7 +1520,14 @@ density there, is the fitted model's.
         ## and overdispersion the province tables are fitted with, so the
         ## provinces add up to the national counts drawn above.
         forecast_infections_patch := vec(patch_state.infections_matrix[:, fd])
-        forecast_rt_patch := vec(patch_state.Rt_matrix[:, fd])
+        forecast_rt_patch := vec(
+            permutedims(
+                reduce(
+                    hcat,
+                    [_patch_adjusted_rt(patch_state, p, fd) for p in 1:n_patches]
+                )
+            )
+        )
         edges = vcat(n, vintages)
         if !isempty(province_days)
             province_future = _patch_confirmed_increments(

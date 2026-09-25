@@ -37,6 +37,7 @@ Changes since v2.1.0.
 
 ### Model
 
+- The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
   Fitted values change.
 - The weekly log-Rt walk is sampled in centred form: each knot level is drawn about the one before it and stored as `rt_state.log_R`, replacing the scaled standard-normal innovations `rt_state.z`.
