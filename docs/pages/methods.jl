@@ -421,14 +421,13 @@ MarkdownTable(vintage_table) #hide
 #
 # The growth rate $r$ carries the prior the genetic source informs.
 # The BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite) reports an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5).
-# We put a log-normal prior on $r$ equivalent to a log-normal prior on the doubling time centred on 11.7 d.
-# Its log spread is wider than that HPD implies.
-# The HPD is conditional on a single-rate coalescent, the assumption the field epidemiology above contradicts [kupferschmidt2026](@cite).
 # An independent reanalysis of the earlier genomes puts the doubling time at 15.2--24.5 d [cuomodannenburg2026](@cite).
-# Our 95% interval on the doubling time is 5.3--25.6 d, which contains both ranges:
+# The BEAST HPD is conditional on a single-rate coalescent, the assumption the field epidemiology above contradicts [kupferschmidt2026](@cite), and the several hundred suspected cases it traced between mid-January and mid-May imply slower early growth than either analysis.
+# We put a log-normal prior on $r$ equivalent to a log-normal prior on the doubling time centred on 15 d, the geometric midpoint of the two genetic estimates, with a log spread wide enough to cover all three.
+# Our 95% interval on the doubling time is 3.1--72 d:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{11}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{15},\ 0.8\right). \tag{11}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward Euler–Lotka derivation above, sets the established reproduction number.

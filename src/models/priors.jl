@@ -292,14 +292,16 @@ composer ([`infection_model`](@ref)) adds the observation span
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior
-`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.40)`, with median
-doubling time (11.7 d) matching the BEAST X estimate (mbalaplacide2026,
-exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than
-the ≈0.24 that HPD implies, because the HPD is conditional on a
-single-rate coalescent, which the field epidemiology contradicts
-(kupferschmidt2026), and an independent reanalysis puts the doubling time
-at 15.2–24.5 d (cuomodannenburg2026). The induced doubling-time prior is
-`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first reproduction
+`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.8)`, with median
+doubling time 15 d, the geometric midpoint of the BEAST X estimate
+(mbalaplacide2026, exponential growth model, 11.7 d, 95% HPD 6.8–17.5) and
+an independent reanalysis of the earlier genomes (cuomodannenburg2026,
+15.2–24.5 d). The two disagree, the BEAST HPD is conditional on a
+single-rate coalescent that the field epidemiology contradicts
+(kupferschmidt2026), and several hundred suspected cases between
+mid-January and mid-May imply slower early growth than either. The log-SD
+0.8 covers all three. The induced doubling-time prior is
+`LogNormal(log 15, 0.8)`, 3.1–72 d at 95%. The first reproduction
 number is derived forward from this `r` and our generation interval through
 Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)), so the
 cryptic exponential phase and the established renewal share one growth
@@ -325,7 +327,7 @@ Returns `(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(
         g::AbstractVector;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.4),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.8),
         m_prior = truncated(Normal(2.75, 1.2); lower = 0)
     )
     r ~ r_prior
