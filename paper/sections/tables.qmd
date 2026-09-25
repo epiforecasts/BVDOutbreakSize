@@ -1,4 +1,4 @@
-<!-- Streams and model versions. First and last dates are read from data/observations.toml at the worktree HEAD (as_of 21 September 2026); breaks from occupancy_break_dates and confirmed_break_dates; likelihood descriptions checked against src/models/ at the release analysed. All dates are 2026. -->
+<!-- Streams and model versions. First and last dates are read from data/observations.toml at the worktree HEAD (as_of 22 September 2026); breaks from occupancy_break_dates and confirmed_break_dates; province isolation dates from province_isolation_history and province_bed_capacity_history; likelihood descriptions checked against src/models/ at the release analysed. All dates are 2026. -->
 
 | Stream | Observes | Likelihood | First | Last | Breaks and gaps |
 |---|---|---|---|---|---|
@@ -16,8 +16,9 @@
 | Bed capacity | Isolation beds available | Negative binomial of the implied bed count around a log-scale random walk on capacity | 9 June | cut-off | none |
 | Recovered | Cumulative confirmed recoveries | Negative binomial increments | 6 June | cut-off | none |
 | Treatment-centre flows | Admissions, in-care deaths, rule-outs and abscondings | Negative binomial increments with an in-care case-fatality ratio | 13 June | 2 August (frozen) | none |
-| Onset curve | Confirmed cases by symptom-onset date, per report | Student-t reporting triangle with a per-figure level | 12 July | cut-off | absent where a report was not published or carried no onset figure |
-| Province compositions | Confirmed cases, deaths and samples by province | Dirichlet-multinomial shares of the national counts | 6 June | cut-off | none |
+| Onset curve | Confirmed cases by symptom-onset date, per report | Student-t reporting triangle with a fitted read error per bar | 12 July | cut-off | absent where a report was not published or carried no onset figure |
+| Province compositions | Confirmed cases, deaths and analysed samples by province | Beta-binomial stick-breaking split of the national count | 6 June | cut-off | none |
+| Province isolation | Patients in isolation and isolation beds by province | Stick-breaking split of the printed provincial sum | 27 May (beds 15 July) | 21 September | none |
 
 : Data streams fitted by the joint model at the release analysed, with the first and last report dates each enters the likelihood, the dates at which a fitted level offset applies, and the reports at which a stream is absent. {#tbl-streams}
 
@@ -27,6 +28,6 @@
 | v1.3.0 | 9 June | As above | Per-report increments; confirmed cases and deaths through a laboratory queue | The laboratory model was not identified by the throughput counts and the joint estimate sat above every single stream |
 | v1.4.0 to v1.18.0 | 9 June to 9 September | Daily renewal with a weekly random walk on the reproduction number and a cryptic seeding phase | Every stream in @tbl-streams except the province compositions, added over the window | To fit the counts by province that the reports had begun to carry |
 | v2.0.0 to v2.1.0 | 16 to 18 September | One renewal process per province, coupled by importation | Adds the province compositions | The first provincial fit did not converge, and centring the background and bed-capacity walks restored it |
-| v2.2.0 | 24 September, unreleased | As above with hand-written gradient rules | As above, with each province forecast by its own renewal process | The version analysed here |
+| v2.2.0 | Unreleased | As above, with susceptible depletion, sum-to-zero province deviations and hand-written gradient rules | Adds the province splits of the analysed volume, isolation occupancy and beds | The version analysed here |
 
 : Model versions, the release tags they span, and the reason each gave way to the next. {#tbl-models}

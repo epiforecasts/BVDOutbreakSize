@@ -23,7 +23,7 @@ DRC counts come from the daily situation reports of the Institut National de San
 Each value is read from the report PDFs by a language-model agent and re-read independently by a second agent, with disagreements settled against the source.
 The INRB-UMIE transcription is used only when the primary source is not publishing [@inrb_umie_2026].
 Exported cases enter as three dated detections and one dated death, frozen at the cut-off of the first situation-report model, and a fourth export reported afterwards is deliberately not fitted [@who_don_2026_602].
-The curve of confirmed cases by symptom-onset date is digitised from the figure the later reports carry, and each figure carries its own level error.
+The curve of confirmed cases by symptom-onset date is digitised bar by bar from the figure the later reports carry.
 Genetic estimates of the time to the most recent common ancestor and of the early doubling time enter as priors, referred to below as the genetic bound [@virological2026; @mbalaplacide2026].
 Each stream is listed with its observation model, its first and last fitted report and the dates at which its reporting changed or was absent in @tbl-streams.
 
@@ -46,7 +46,10 @@ Every remaining published stream was then added with its own observation model, 
 Divergent transitions in the occupancy stream and funnels in the pooled dispersion, background and bed-capacity random walks were reduced by censoring occupancy at the recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015]. <!-- VERIFY: diagnosis and fixes rest on agent PRs 319, 352, 358, 743 and 745 -->
 
 The provincial model runs one renewal process per province so that those counts enter the likelihood directly, and it adds the province compositions as a stream.
-It is the version fitted at the release analysed, and its definition follows.
+Since the last tagged version the province deviations have moved onto an identified basis, the analysed laboratory volume and the isolation counts have been added by province, and infections now deplete a susceptible pool.
+The generation-interval prior was also narrowed, because it was much wider than the interval it was documented to carry. <!-- PR 909 -->
+A centred form of the reproduction-number random walk was tried and reverted, because it split the chains of the joint fit. <!-- PRs 880 and 892 -->
+This version is the one fitted at the release analysed, and its definition follows.
 
 ### Current model
 
@@ -61,22 +64,33 @@ G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
 \sum_p \delta_{p,t} = 0.
 $$ {#eq-renewal}
 
-The deviations revert toward zero at each weekly knot, with a half-normal scale for each province and an LKJ prior on the correlation between their innovations.
+The deviations revert toward zero at each weekly knot and are drawn on the directions of an orthonormal sum-to-zero basis [@egozcue2003; @stan_refman_2026].
+A Wishart prior sets the shape of their covariance, including the correlation between provinces, and a separate half-normal scale sets its size, so the provinces can share the national trend exactly.
 The deviations are scored through the per-province compositions of confirmed cases and deaths.
 A single import grows through a cryptic phase to the renewal start, with the genetic bound flooring the outbreak age and the number of cryptic generations given a prior.
-Importation relocates a share of what each province generates, with $K$ the gravity kernel and $\varepsilon_{q,t}$ the share leaving origin $q$, and national infections $I_t$ are the sum over provinces
+Importation relocates a share of what each province generates, with $K$ the gravity kernel and $\varepsilon_{q,t}$ the share leaving origin $q$.
+The result depletes a susceptible pool $S_{p,t}$ that starts at the province's census population $N_p$, and national infections $I_t$ are the sum over provinces [@bhatt2023]
 
 $$
-I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
-        + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \qquad
+\begin{aligned}
+Y_{p,t} &= \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+        + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \\
+I_{p,t} &= S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr), \qquad
+S_{p,t} = S_{p,t-1} - I_{p,t}, \qquad
 I_t = \sum_p I_{p,t}.
+\end{aligned}
 $$ {#eq-province}
+
+The census population is a light upper bound rather than an estimate of who can be infected, and it does not bind at the size estimated here.
+Every reproduction number we report is net of depletion, $R_{p,t} S_{p,t-1} / N_p$.
+The generation interval $g$ is a gamma distribution whose shape and scale priors are centred on the serial interval of Ebola virus disease in West Africa, with spreads set so that the implied prior on its mean matches the interval on the mean attributed to that source [@who_ebola_response_2014]. <!-- VERIFY: that interval is not in the main paper and may come from its supplement (issue 910) -->
 
 National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves the onsets with its own delay, scales them by its ascertainment and adds any stream-specific term.
 Every delay is sampled and discretised with double interval censoring [@charniga2024].
 The daily analysed laboratory volume anchors test positivity, and the recovered counts follow the form of the secondary-observation model of EpiNow2 [@epinow2].
 Isolation occupancy is a running balance of admissions, discharges and abscondings, censored at the recorded bed capacity, which itself follows a random walk on the log scale.
-The treatment-centre flows carry an in-care case-fatality ratio, and the digitised onset curve is a reporting triangle with time-varying ascertainment.
+The treatment-centre flows carry an in-care case-fatality ratio, and the digitised onset curve is a reporting triangle with time-varying ascertainment and a fitted read error for each digitised bar.
+A third composition splits the national analysed laboratory volume across provinces by week, and the isolation occupancy and bed counts are split across provinces in the same way, so no national total is scored twice.
 
 For the suspected cases the delay is the onset-to-report distribution $f_{\text{rep}}$, the ascertainment is $p_{\text{DRC}}$ and the added term is a non-BVD background rate $\lambda_{\text{bg},t}$ on a weekly random walk.
 The increment between the reports on days $d_{i-1}$ and $d_i$ is scored with a negative binomial whose dispersion $k_s$ is partially pooled across the four passive-surveillance streams
@@ -91,7 +105,8 @@ The model estimates infections and deaths to date, the reproduction number by pr
 ### Forecast evaluation
 
 Every release forecasts each still-reported stream one to four weeks ahead, and we score the one-week horizon once the next reports arrive.
-Each province is forecast by its own renewal process, and each national stream is projected from its rate at the cut-off under the continued reproduction-number walk and replicated through its fitted dispersion.
+Forecasts are drawn from the fitted model by running it past the cut-off with the fitted parameters fixed, so each future count comes from its stream's own likelihood, and the national forecast is split across provinces by the fitted compositions.
+The scored releases predate this method and projected each stream from its rate at the cut-off under the continued reproduction-number walk.
 We score with the continuous ranked probability score, where lower is better, on the count scale and on a log scale that stops the largest counts dominating [@gneiting2007; @bosse2023transformed].
 We also report coverage of the 50% and 90% predictive intervals and the sample-based bias statistic, which runs from $-1$ for forecasts below the observation to $1$ for those above it [@bosse2022scoringutils].
 
@@ -112,6 +127,7 @@ Each fit reports R-hat, bulk effective sample size and the number of divergent t
 We sample with the No-U-Turn sampler (NUTS), with {{< meta sampler_chains >}} chains of {{< meta sampler_draws >}} draws after {{< meta sampler_adaptation >}} adaptation steps, a maximum tree depth of {{< meta sampler_max_depth >}} and a target acceptance probability of {{< meta sampler_target_accept >}} [@hoffman2014nuts].
 Each chain starts from the first of a batch of prior draws whose log density is at or above the batch median, since a start in the prior tail can trap a chain.
 The build fails if the joint fit exceeds an R-hat of {{< meta convergence_fail_rhat >}} or a divergent fraction of {{< meta convergence_fail_divergent_fraction >}}, or falls below a bulk or tail effective sample size of {{< meta convergence_fail_ess_bulk >}}, and it warns at a tighter tier.
+Each build also fits the joint model to a dataset simulated from one of its prior draws, with the same sampler settings, and checks that the posterior recovers the generating values and the simulated future. <!-- PR 882 -->
 
 ### Implementation
 

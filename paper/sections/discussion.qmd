@@ -47,6 +47,7 @@ The forecast extrapolated the last random-walk innovation as a fixed slope, so i
 Reporting-break corrections were applied in the fit but not in the scoring, so forecasts from fits fixed at each release date scored an order of magnitude out. <!-- issue 623 (Sam) -->
 The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short while the background-driven streams were unaffected. <!-- news v2.0.0 Fixed; how it was found is not recorded -->
 A chain initialised from a fixed seed sat on a prior tail and returned the same R-hat on successive datasets. <!-- issue 671 and news v2.0.0; Sam raised the R-hat on PR 661 -->
+A generation-interval prior documented as matching a published interval on the mean was much wider than that interval, and the fit pulled the mean far below the prior centre. <!-- PRs 907 and 909 -->
 Each passed the tests and the in-sample checks of the release that carried it.
 
 <!-- Further work -->
