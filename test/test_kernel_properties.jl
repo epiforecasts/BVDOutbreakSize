@@ -67,6 +67,52 @@ end
     @test I[8:end] ≈ R[8:end] .* f[8:end]
 end
 
+@testitem "renewal_infections: depletion bounds the trajectory" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: renewal_infections, renewal_infections_with_force
+    rng = Xoshiro(5)
+    g = pmf(rng, 12)
+    seed = rand(rng, 7) .* 100
+    ## Far past the point where an unchecked renewal overflows.
+    N = 1.0e7
+    I = renewal_infections(fill(5.0, 600), g, seed, N)
+    @test all(isfinite, I)
+    @test all(>=(0), I)
+    @test sum(I) <= N * (1 + 1.0e-12)
+    ## A seed larger than the population leaves nothing to infect.
+    I = renewal_infections(fill(2.0, 30), g, fill(2.0e7, 7), N)
+    @test all(iszero, I[8:end])
+    ## Each day is `S_{t-1} (1 - exp(-R_t f_t / N))`.
+    R = rand(rng, 40) .+ 0.5
+    I, f = renewal_infections_with_force(R, g, seed, 2.0e3)
+    S = 2.0e3 .- cumsum(I)
+    @test I[8:end] ≈ S[7:(end - 1)] .* -expm1.(-R[8:end] .* f[8:end] ./ 2.0e3)
+    ## At a population far above the epidemic, each day is `R_t` times its
+    ## force up to the share already infected.
+    I, f = renewal_infections_with_force(R, g, seed, 1.0e7)
+    @test isapprox(I[8:end], R[8:end] .* f[8:end]; rtol = sum(I) / 1.0e7)
+end
+
+@testitem "patch_infections: depletion bounds each patch" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: patch_infections, province_importation_kernel
+    rng = Xoshiro(6)
+    g = pmf(rng, 12)
+    np = 3
+    seeds = rand(rng, np, 7) .* 100
+    K = province_importation_kernel([4.0e6, 7.5e6, 1.0e7])
+    N = [1.0e6, 2.0e6, 3.0e6]
+    st = patch_infections(
+        fill(5.0, np, 600), g, seeds, K, fill(0.01, np, 600), N
+    )
+    I = st.infections
+    @test all(isfinite, I)
+    @test all(>=(0), I)
+    @test all(vec(sum(I; dims = 2)) .<= N .* (1 + 1.0e-12))
+end
+
 @testitem "abscond thinning: nests the plain convolution" setup = [
     KernelProperties,
 ] begin
