@@ -77,6 +77,8 @@ Changes since v2.1.0.
 
 ### Data
 
+- `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
+  They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
 - `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
 
@@ -170,13 +172,7 @@ Changes since v2.1.0.
 - Each release carries a `site.zip` that unpacks to a copy of the site to serve locally, replacing the offline `analysis.html` (#839).
 - The contributing guide covers the project's conventions for code, tests, report pages, prose, commits, news entries and CI (#828).
 - The in-sample Provinces page carries posterior predictive checks on the three province terms, and the Provinces estimates page a table of beds, demand, occupied beds, utilisation and shortfall by province (#784).
-
 - The summary dashboard gives the province comparison as a table with R at the cut-off for every province, and links each section to its estimates and forecast pages (#904).
-### Data
-
-- `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
-  They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
-
 ### Fixed
 
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
