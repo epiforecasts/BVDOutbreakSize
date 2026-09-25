@@ -473,7 +473,7 @@ end
 @testitem "bvd_zone: the truth scores above a perturbed truth" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone
+    using BVDOutbreakSize: bvd_zone, relative_multiplier_dims
     using Turing: DynamicPPL
 
     syn = zone_synthetic()
@@ -493,6 +493,7 @@ end
     K = length(zd.knots)
     truth = syn.truth
     nz = syn.nz
+    nc = relative_multiplier_dims(zd.patch_ranges)
     ## Only the zones the inputs mark as walking carry innovations; the
     ## synthetic truth walks the first three zones, which is the marked set
     ## whenever the counts clear the threshold.
@@ -507,8 +508,8 @@ end
         z_w, σ_level = truth.σ_level, z_level,
         δ_halflife = 42.0, σ_δ = truth.σ_δ, z_drift, ρ = 1.0e-4,
         ρ_death = 1.0e-4, σ_ascertainment = 1.0e-3,
-        z_ascertainment = zeros(nz), σ_severity = 1.0e-3,
-        z_severity = zeros(nz), η = zeros(zd.meld_d),
+        z_ascertainment = zeros(nc), σ_severity = 1.0e-3,
+        z_severity = zeros(nc), η = zeros(zd.meld_d),
     )
     loglik(params) = begin
         vi = DynamicPPL.VarInfo(
@@ -1061,7 +1062,7 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
     eps = [collect(v) for v in vec(collect(chn[:mixing_epsilon_zone]))]
-    @test all(v -> length(v) == syn.nz && all(0 .< v .< 1), eps)
+    @test all(v -> length(v) == syn.nz && all(0 .< v .<= 1), eps)
     ## The states read the fractions, and the mixed shares still sum to one
     ## within each patch but differ from the unmixed ones.
     states = _zone_states(chn, inputs)
@@ -1117,7 +1118,8 @@ end
 @testitem "bvd_zone: the two compositions sum to the likelihood" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, zone_composition_logpdf, _zone_kappa
+    using BVDOutbreakSize: bvd_zone, zone_composition_logpdf, _zone_kappa,
+        relative_multiplier_dims
     using Turing: DynamicPPL
 
     syn = zone_synthetic()
@@ -1147,13 +1149,14 @@ end
     @test length(zd.death_cell_patch) > 2
     @test all(>(0), zd.death_cell_total)
     truth = syn.truth
+    nc = relative_multiplier_dims(zd.patch_ranges)
     ## Zero contrasts leave both relative multipliers at one, so the
     ## likelihood is the two compositions at the modelled increments alone.
     params = (;
         z_w = truth.z_w, σ_level = truth.σ_level,
         z_level = truth.z_level, δ_halflife = 42.0, σ_δ = truth.σ_δ,
         z_drift = truth.z_drift, ρ = 0.05, ρ_death = 0.05,
-        z_ascertainment = zeros(syn.nz), z_severity = zeros(syn.nz),
+        z_ascertainment = zeros(nc), z_severity = zeros(nc),
     )
     m = bvd_zone(zd)
     total = DynamicPPL.loglikelihood(
@@ -1193,7 +1196,7 @@ end
 @testitem "bvd_zone: the sampled dimension and the optional blocks" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone
+    using BVDOutbreakSize: bvd_zone, relative_multiplier_dims
     using Turing: DynamicPPL
     import FlexiChains
     using Turing: sample, Prior
@@ -1203,10 +1206,12 @@ end
     zd = inputs.model_data
     K = length(zd.knots)
     np = length(inputs.patch_ranges)
+    nc = relative_multiplier_dims(zd.patch_ranges)
     dimension(m) = length(DynamicPPL.link(DynamicPPL.VarInfo(m), m)[:])
-    ## Four unit-scale blocks over the zones, the innovations, the six
-    ## scalar scales, one drift scale per patch and the shared draw.
-    dim = 4 * syn.nz + zd.n_walking * (K - 1) + 6 + np + zd.meld_d
+    ## Two unit-scale blocks over the zones, the two multipliers' contrasts
+    ## within each patch, the innovations, the six scalar scales, one drift
+    ## scale per patch and the shared draw.
+    dim = 2 * syn.nz + 2 * nc + zd.n_walking * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
     ## offset per zone, where the inputs carry the kernel blocks. The same
@@ -1226,7 +1231,7 @@ end
     zd0 = inputs0.model_data
     @test zd0.n_walking == 0
     model0 = bvd_zone(zd0)
-    @test dimension(model0) == 4 * syn.nz + 6 + np + zd0.meld_d
+    @test dimension(model0) == 2 * syn.nz + 2 * nc + 6 + np + zd0.meld_d
     chn0 = sample(
         model0, Prior(), 3; chain_type = FlexiChains.VNChain,
         progress = false

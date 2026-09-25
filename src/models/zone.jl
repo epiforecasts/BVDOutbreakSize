@@ -1233,7 +1233,8 @@ from these by [`zone_forward`](@ref).
     ## deaths, each partially pooled within its patch on the scale the
     ## province model estimated between provinces.
     σ_ascertainment ~ LogNormal(pp.ascertainment_sd[1], pp.ascertainment_sd[2])
-    z_ascertainment ~ product_distribution(fill(offset_prior, nz))
+    n_contrast = relative_multiplier_dims(zd.patch_ranges)
+    z_ascertainment ~ product_distribution(fill(offset_prior, n_contrast))
     ## Deaths per infection are taken as near-uniform across the zones of a
     ## patch, which is what lets the death composition pin the incidence
     ## split and the case composition identify ascertainment as the
@@ -1241,7 +1242,7 @@ from these by [`zone_forward`](@ref).
     ## asymmetry the province model makes between death ascertainment and
     ## provincial lethality.
     σ_severity ~ severity_sd_prior
-    z_severity ~ product_distribution(fill(offset_prior, nz))
+    z_severity ~ product_distribution(fill(offset_prior, n_contrast))
     ## Sampled only when used, or they would be prior-only dimensions.
     n_drift = zd.n_walking * (K - 1)
     if n_drift > 0

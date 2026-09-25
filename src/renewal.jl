@@ -769,47 +769,56 @@ end
 end
 
 """
-Partially pooled relative multiplier, `exp(\\sigma z_u + o_u)` centred within
-each group so the log contrasts sum to zero there,
+Partially pooled relative multiplier over the units of each group, with
+log contrasts that sum to zero within the group,
 
 ```math
-m_u = \\exp\\bigl(\\sigma z_u + o_u
-    - \\overline{\\sigma z + o}_{g}\\bigr).
+m_{u \\in g} = \\exp\\bigl(\\sigma\\, (Q_g z_g)_u\\bigr),
+\\qquad z_g \\sim N(0, I_{n_g - 1}).
 ```
 
-The level stays with the group and only the contrasts are identified, so a
-composition over the group's units weights them by the modelled quantity
-alone as `\\sigma` shrinks. `groups` are the index ranges to centre within:
-all the provinces as one group in
-[`province_composition_model`](@ref), one group per patch over its health
-zones in [`bvd_zone`](@ref). `offset` adds a covariate term to the log scale
-before centring, and `nothing` leaves the pooled deviation on its own.
+`Q_g` is the sum-to-zero basis of group `g` ([`sum_to_zero_basis`](@ref)),
+so the log multipliers have the distribution of `n_g` independent
+`N(0, σ²)` draws centred within the group, from the `n_g - 1` directions a
+composition over the group can see. The level stays with the group and as
+`σ` shrinks the composition weights its units by the modelled quantity
+alone. This is the construction of [`province_composition_model`](@ref),
+applied with one group per patch over its health zones in
+[`bvd_zone`](@ref).
 
+`z` holds each group's draws in turn, [`relative_multiplier_dims`](@ref) in
+all. A group of one unit takes no draw and its multiplier is one.
 """
 function relative_multiplier(
         z::AbstractVector, σ::Real,
-        groups::AbstractVector{<:UnitRange};
-        offset::Union{Nothing, AbstractVector} = nothing
+        groups::AbstractVector{<:UnitRange}
     )
-    Tp = promote_type(
-        eltype(z), typeof(float(σ)),
-        offset === nothing ? Float64 : eltype(offset)
+    length(z) == relative_multiplier_dims(groups) || throw(
+        DimensionMismatch(
+            "relative_multiplier: $(length(z)) draws for " *
+                "$(relative_multiplier_dims(groups)) contrasts"
+        )
     )
-    out = ones(Tp, length(z))
-    @inbounds for us in groups
-        isempty(us) && continue
-        m = zero(Tp)
-        for i in us
-            out[i] = σ * z[i] + (offset === nothing ? zero(Tp) : offset[i])
-            m += out[i]
+    Tp = promote_type(eltype(z), typeof(float(σ)))
+    nu = maximum((last(us) for us in groups if !isempty(us)); init = 0)
+    out = ones(Tp, nu)
+    off = 0
+    for us in groups
+        k = length(us) - 1
+        k >= 1 || continue
+        F = sum_to_zero_factor(sum_to_zero_basis(k + 1), σ)
+        δ = sum_to_zero(F, view(z, (off + 1):(off + k)))
+        @inbounds for (a, u) in enumerate(us)
+            out[u] = exp(δ[a])
         end
-        m /= length(us)
-        for i in us
-            out[i] = exp(out[i] - m)
-        end
+        off += k
     end
     return out
 end
+
+"Number of draws [`relative_multiplier`](@ref) takes over `groups`."
+relative_multiplier_dims(groups::AbstractVector{<:UnitRange}) =
+    sum((max(length(us) - 1, 0) for us in groups); init = 0)
 
 """
 Group-centred AR(1) deviation knots, the log-transmission deviation process
