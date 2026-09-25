@@ -2045,16 +2045,34 @@ end
         @test ax.limits[][2][1] == 0
     end
 
-    ## A forecast carrying one stream draws that panel alone, and one
-    ## carrying neither returns an empty figure rather than erroring.
+    ## A forecast carrying one target draws that panel alone, and one
+    ## carrying none returns an empty figure rather than erroring.
     one = plot_province_forecast(
         chn, proj(; confirmed_new = repeat(v, 3)); n_patches = 3
     )
     @test length([x for x in one.content if x isa Mk.Axis]) == 1
     none = plot_province_forecast(
-        chn, proj(; infections_new = repeat(v, 3)); n_patches = 3
+        chn, proj(; other = repeat(v, 3)); n_patches = 3
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
+
+    ## Every target the frame carries gets a panel, the reproduction number
+    ## with its line at one, and an observed value per province is a cross.
+    full = plot_province_forecast(
+        chn, proj(;
+            confirmed_new = repeat(v, 3), isolation_level = repeat(v, 3),
+            rt_forecast = repeat(v ./ 100, 3)
+        ); n_patches = 3,
+        observed = (; confirmed_new = [60.0, 70.0, 80.0])
+    )
+    full_axes = [x for x in full.content if x isa Mk.Axis]
+    @test [ax.title[] for ax in full_axes] == [
+        "New confirmed cases by T+7", "Patients in isolation at T+7",
+        "Reproduction number at T+7",
+    ]
+    @test count(p -> p isa Mk.HLines, full_axes[3].scene.plots) == 1
+    @test count(p -> p isa Mk.Scatter, full_axes[1].scene.plots) == 4
+    @test count(p -> p isa Mk.Scatter, full_axes[2].scene.plots) == 3
 end
 
 @testitem "plot_province_forecast_detail draws one province's streams" setup = [
@@ -2085,8 +2103,10 @@ end
     axes = [x for x in fig.content if x isa Mk.Axis]
     @test length(axes) == 2
     ## Each panel names the stream and the province it is a split for.
-    @test axes[1].xlabel[] == "New confirmed cases ($(PROVINCE_LABELS[2]))"
-    @test axes[2].xlabel[] == "New confirmed deaths ($(PROVINCE_LABELS[2]))"
+    @test axes[1].xlabel[] ==
+        "New confirmed cases by T+7 ($(PROVINCE_LABELS[2]))"
+    @test axes[2].xlabel[] ==
+        "New confirmed deaths by T+7 ($(PROVINCE_LABELS[2]))"
     ## The histogram is that province's draws, so its 90% band is 0.2 times
     ## the underlying series' band for the deaths.
     band = only(p for p in axes[2].scene.plots if p isa Mk.VSpan)

@@ -333,7 +333,7 @@ spatial_pair_fig = plot_pair(
 spatial_pair_fig #hide
 
 # The pair plots below take one province at a time.
-# Each sets the reproduction number at the cut-off against the relative case ascertainment, and the case-fatality ratio against the relative death confirmation.
+# Each sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the province's importation intensity against its export weight relative to Ituri.
 # Each pair is identified only as a product, so a ridge between the two is expected and its position along the ridge is set by the prior.
 
 #md # ```@raw html
@@ -344,14 +344,20 @@ province_pair_labels = Dict(
     :R_T_patch => "Reproduction number",
     :province_ascertainment => "Case ascertainment",
     :CFR_patch => "Case-fatality ratio",
-    :province_death_ascertainment => "Death confirmation"
+    :province_death_ascertainment => "Death confirmation",
+    :importation_epsilon_patch => "Importation intensity",
+    :export_weight => "Export weight"
 )
+## Ituri is the export reference, its weight fixed at one, so its pair plot
+## leaves the weight out.
 province_pair_figs = [
     plot_pair(
         chn_joint,
         [
             :R_T_patch, :province_ascertainment,
             :CFR_patch, :province_death_ascertainment,
+            :importation_epsilon_patch,
+            (p == 1 ? () : (:export_weight,))...,
         ];
         patch = p, prior = prior_patch_chn, labels = province_pair_labels
     )

@@ -3753,67 +3753,71 @@ function plot_forecast_flows(fc::DataFrame)
 end
 
 """
-One-week-ahead forecast split by province, for the two streams the spatial
-tables report: the new confirmed cases and confirmed deaths expected in each
-province over the week to `T + 7`. One panel per stream, the provinces side
-by side on a shared axis, each drawn as a median dot over nested 30/60/90%
-credible bars, in the style of [`plot_patch_summary`](@ref).
-
-This is the figure form of [`province_forecast_table`](@ref), and the figure
-the release archive [`province_forecast_archive`](@ref) carries the draws
-behind.
+One-week-ahead forecast by province: one panel per forecast target, the
+provinces side by side on a shared axis, each drawn as a median dot over
+nested 30/60/90% credible bars, in the style of [`plot_patch_summary`](@ref).
+The targets are the new confirmed cases and confirmed deaths over the week to
+`T + 7`, the patients in isolation and the isolation beds at `T + 7`, the new
+infections over the week and the reproduction number at `T + 7`, each drawn
+only when `fc` carries it.
 
 `fc` is a [`forecast_provinces`](@ref) frame. A national
 [`forecast_reported`](@ref) result is replaced by the one-week province
 forecast read from the posterior-predictive draws `pp`.
 
-Panels are drawn only for the streams `fc` carries, so a forecast without the
-confirmed deaths column shows the cases panel alone, and a forecast carrying
-neither returns an empty figure.
+`observed` optionally gives, per forecast column, one value per province to
+mark with a cross, such as what each province went on to report.
 """
 function plot_province_forecast(
         pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = [:firebrick, :steelblue, :seagreen, :darkorange3],
+        observed::NamedTuple = (;),
         title::AbstractString = "One-week-ahead forecast by province"
     )
     np = min(n_patches, length(patch_labels))
-    entries = _province_forecast_draws(pp, fc, np, patch_labels)
-    isempty(entries) && return Figure()
-    ## One panel per stream, each holding every province's interval on the
-    ## shared province axis.
-    labels = unique(first.(entries))
-    nc = length(labels)
-    fig = Figure(; size = (420 * nc, 380))
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon = 7)
+    panels = [
+        (col, t) for (col, t) in _PROVINCE_FORECAST_PANELS
+            if col in propertynames(proj)
+    ]
+    isempty(panels) && return Figure()
+    nc = min(length(panels), 3)
+    nr = cld(length(panels), nc)
+    fig = Figure(; size = (420 * nc, 360 * nr + 60))
     xs = Float64.(1:np)
-    for (k, label) in enumerate(labels)
-        sel = [e for e in entries if e[1] == label]
+    for (k, (col, t)) in enumerate(panels)
         ax = Axis(
-            fig[1, k]; ylabel = "Forecast count over the week",
-            title = "New $(label) by T+7",
+            fig[cld(k, nc), mod1(k, nc)]; title = t,
             xticks = (xs, String.(patch_labels[1:np])),
             xticklabelrotation = pi / 6
         )
-        for (p, e) in enumerate(sel)
+        for p in 1:np
             _draw_patch_interval!(
-                ax, xs[p], e[3],
+                ax, xs[p], float.(proj[proj.patch .== p, col]),
                 colours[mod1(p, length(colours))]
             )
         end
-        ## A single province would otherwise sit on the axis edge.
+        if haskey(observed, col)
+            scatter!(
+                ax, xs, float.(observed[col][1:np]); marker = :xcross,
+                color = :black, markersize = 14
+            )
+        end
         CairoMakie.xlims!(ax, 0.5, np + 0.5)
-        ## A count cannot be negative and the panel is read against zero, so
-        ## the axis starts there rather than at the smallest lower bound.
-        CairoMakie.ylims!(ax, 0, nothing)
+        if col === :rt_forecast
+            hlines!(ax, [1.0]; color = :black, linestyle = :dash)
+        else
+            CairoMakie.ylims!(ax, 0, nothing)
+        end
     end
-    ## Two panels is a narrower figure than the per-province summary grid, so
-    ## the caption wraps to the layout width.
+    caption = "Bars are 30/60/90% credible intervals with the median as a " *
+        "dot. The provinces add up to the national forecast."
+    isempty(observed) ||
+        (caption *= " A cross is what the province went on to report.")
     CairoMakie.Label(
-        fig[2, 1:nc],
-        "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
-            "the median as a dot. Each province is forecast by the fitted " *
-            "patch model, and the provinces add up to the national forecast.";
+        fig[nr + 1, 1:nc], caption;
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
@@ -3822,19 +3826,18 @@ end
 
 """
 One-week-ahead forecast for a single province, the per-province counterpart
-of [`plot_forecast`](@ref): the new confirmed cases and confirmed deaths
-expected in patch `province` over the week to `T + 7`, one histogram panel
-per stream with its 90% predictive interval shaded.
+of [`plot_forecast`](@ref): one histogram panel per target
+[`plot_province_forecast`](@ref) draws for patch `province`, each with its
+90% predictive interval shaded, and the reproduction-number panel with the
+no-growth line at one.
 
-The draws are the ones [`plot_province_forecast`](@ref) summarises, from a
-[`forecast_provinces`](@ref) frame. A national [`forecast_reported`](@ref)
-result is replaced by the one-week province forecast read from the draws
-`pp`.
+`fc` is a [`forecast_provinces`](@ref) frame. A national
+[`forecast_reported`](@ref) result is replaced by the one-week province
+forecast read from the draws `pp`.
 
-`observed` optionally gives a recent observed week per stream, keyed by the
-forecast column (`confirmed_new`, `confirmed_deaths_new`), for example from
-[`province_recent_counts`](@ref). Each is drawn as a dashed rule, and the
-axis widens to hold it. Panels are drawn only for the streams `fc` carries.
+`observed` optionally gives a value per forecast column (for example a
+recent observed week from [`province_recent_counts`](@ref), or what the
+province went on to report), drawn as a dashed rule.
 """
 function plot_province_forecast_detail(
         pp, fc::DataFrame;
@@ -3847,32 +3850,38 @@ function plot_province_forecast_detail(
     1 <= province <= np || throw(
         ArgumentError("province must be in 1:$np; got $province")
     )
-    label = patch_labels[province]
-    entries = [
-        e for e in _province_forecast_draws(pp, fc, np, patch_labels)
-            if e[2] == label
+    proj = _as_province_projection(pp, fc, np, patch_labels; horizon = 7)
+    rows = proj.patch .== province
+    panels = [
+        (col, t) for (col, t) in _PROVINCE_FORECAST_PANELS
+            if col in propertynames(proj)
     ]
-    isempty(entries) && return Figure()
-    cols = Dict(
-        label => col for (col, label) in _PROVINCE_FORECAST_STREAMS
-    )
-    ncols = length(entries)
-    fig = Figure(; size = (400 * ncols, 360))
-    for (i, (stream, _, draws)) in enumerate(entries)
-        col = cols[stream]
+    isempty(panels) && return Figure()
+    nc = min(length(panels), 3)
+    fig = Figure(; size = (400 * nc, 340 * cld(length(panels), nc)))
+    for (k, (col, t)) in enumerate(panels)
+        v = float.(proj[rows, col])
+        pos = (cld(k, nc), mod1(k, nc))
+        colour = get(_PROVINCE_PANEL_COLOURS, col, :steelblue)
         ax = _forecast_count_panel!(
-            fig, (1, i), draws, "New $(stream) ($(label))",
-            _CONFIRMED_FORECAST_COLOURS[col]
+            fig, pos, v, "$(t) ($(patch_labels[province]))", colour
         )
+        col === :rt_forecast &&
+            vlines!(ax, [1.0]; color = :grey40, linestyle = :dot, linewidth = 2)
         haskey(observed, col) || continue
         o = float(observed[col])
         vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
-        CairoMakie.xlims!(
-            ax, 0, max(1.0, quantile(draws, 0.98), 1.05 * o)
-        )
+        CairoMakie.xlims!(ax, 0, max(1.0, quantile(v, 0.98), 1.05 * o))
     end
     return fig
 end
+
+## Panel colours of the per-province forecast targets.
+const _PROVINCE_PANEL_COLOURS = (
+    confirmed_new = :goldenrod, confirmed_deaths_new = :darkorange3,
+    isolation_level = :mediumpurple, bed_capacity = :grey50,
+    infections_new = :steelblue, rt_forecast = :firebrick,
+)
 
 """
 One-week-ahead isolation/treatment-bed forecast from

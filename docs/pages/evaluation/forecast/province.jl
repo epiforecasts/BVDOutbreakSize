@@ -15,6 +15,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
 ## The fits this page reads, loaded from the cache here.
 frozen_lastweek = load_fit("frozen_validation");
+chn_joint = load_fit("joint");
 
 #md # ```@raw html
 #md # </details>
@@ -88,6 +89,100 @@ province_validation_table = province_forecast_vs_truth(
 #md # ```
 
 MarkdownTable(province_validation_table) #hide
+
+# The same forecast against what each province went on to report, one panel per target.
+# A cross marks the observed count over the week for the cases and deaths, the patients in isolation on the target day where the province printed them, and the current fit's reproduction number at the cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Build the forecast-versus-observed figures</summary>
+#md # ```
+
+frozen_province_draws = fit_forecast("frozen_validation");
+frozen_province_projection = forecast_provinces(
+    frozen_province_draws; horizon = 7, n_patches = N_PATCHES
+);
+## The patients in isolation each province printed on the target day, the
+## current cut-off, or `NaN` where it printed nothing that day.
+province_isolation_now = let
+    rows = province_care_observations(
+        obs.province_isolation_history, PROVINCE_NAMES
+    )
+    v = fill(NaN, N_PATCHES)
+    for (d, p, c) in zip(rows.days, rows.patches, rows.counts)
+        d == obs.n && p <= N_PATCHES && (v[p] = c)
+    end
+    v
+end
+province_rt_now = province_map_summary(
+    chn_joint, :R_T_patch, N_PATCHES
+).values
+province_observed = (;
+    confirmed_new = province_truth.observed .- province_truth.baseline,
+    confirmed_deaths_new = province_truth.death_observed .-
+        province_truth.death_baseline,
+    isolation_level = province_isolation_now,
+    rt_forecast = province_rt_now,
+)
+province_vs_observed_fig = plot_province_forecast(
+    frozen_province_draws, frozen_province_projection;
+    n_patches = N_PATCHES, observed = province_observed,
+    title = "Last week's forecast against what was observed"
+);
+province_vs_observed_detail(p) = plot_province_forecast_detail(
+    frozen_province_draws, frozen_province_projection;
+    province = p, n_patches = N_PATCHES,
+    observed = NamedTuple(
+        k => v[p] for (k, v) in pairs(province_observed) if isfinite(v[p])
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_vs_observed_fig #hide
+
+# Each province's forecast, with the dashed rule at what it went on to report.
+
+#md # ```@raw html
+#md # <details><summary>Ituri</summary>
+#md # ```
+
+province_vs_observed_detail(1) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Nord-Kivu</summary>
+#md # ```
+
+province_vs_observed_detail(2) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Haut-Uele</summary>
+#md # ```
+
+province_vs_observed_detail(3) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Other provinces</summary>
+#md # ```
+
+province_vs_observed_detail(4) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ## Forecast by province across releases
 #
