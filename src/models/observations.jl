@@ -2243,10 +2243,13 @@ function treatment_flow_defaults()
     )
 end
 
-## Reverse-cumulative tail sums of a stay PMF, the inclusive survival
-## `S(d) = P(stay >= d)` that a stock convolves its admissions with.
-function _tail_sums(pmf::AbstractVector)
-    return reverse(cumsum(reverse(pmf)))
+## Share of a background admission cohort still in a bed at cohort age `d`
+## (index `d + 1`): the rule-out stay not yet over, `1 - F(d)`, times the
+## abscond survival `(1 - κ)^d`. It is the per-cohort solution of the running
+## balance the national stock keeps, `R(d) = (1 - κ) R(d - 1) - f(d) (1 - κ)^d`.
+function _background_stay_survival(ruleout_pmf::AbstractVector, κ::Real)
+    F = cumsum(ruleout_pmf)
+    return [(one(κ) - κ)^(d - 1) * (one(eltype(F)) - F[d]) for d in eachindex(F)]
 end
 
 """
@@ -2255,10 +2258,10 @@ Per-patch latent bed demand for the province splits: the national demand
 national BVD admissions (each patch's reports through the admission delay
 at `p_iso_bvd · p_drc`, re-split by the relative ascertainment `asc`) and
 then the clinical-stay survival `S_clin`, plus its share `w[p]` of the
-national non-BVD admissions `A_bg` through the abscond-thinned rule-out
-stay `ruleout_pmf`. The national stock in [`treatment_flow_model`](@ref) carries
-the abscond and confirmation dynamics; those are shared across patches and
-cancel in the shares to first order, so the split needs the stays alone,
+national non-BVD admissions `A_bg` through the rule-out stay `ruleout_pmf`
+and the abscond rate `κ`. The national stock in [`treatment_flow_model`](@ref)
+carries the confirmation dynamics; the patches share them, so they cancel in
+the shares approximately rather than exactly, and the split needs the stays alone,
 one convolution per patch rather than a copy of the flow machinery, whose
 cost is a fifth of the whole gradient. Returns an `(n_patches × n)` matrix
 whose columns sum to `demand`; an equal split of the reports gives equal
@@ -2268,13 +2271,13 @@ function _patch_demand(
         reports_matrix::AbstractMatrix, A_bg::AbstractVector,
         w::AbstractVector, asc::AbstractVector, p_iso_bvd::Real, p_drc::Real,
         adm_pmf::AbstractVector, S_clin::AbstractVector,
-        ruleout_pmf::AbstractVector, demand::AbstractVector
+        ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
     )
     np, n = size(reports_matrix)
     T = promote_type(
         eltype(reports_matrix), eltype(A_bg), eltype(w), eltype(asc),
         typeof(p_iso_bvd), typeof(p_drc), eltype(adm_pmf), eltype(S_clin),
-        eltype(ruleout_pmf), eltype(demand)
+        eltype(ruleout_pmf), typeof(κ), eltype(demand)
     )
     scale = p_iso_bvd * p_drc
     ## Each patch's BVD admissions through the admission delay, then the
@@ -2298,7 +2301,7 @@ function _patch_demand(
         end
     end
     stock = Matrix{T}(undef, np, n)
-    bg_stock = convolve_delay(A_bg, _tail_sums(ruleout_pmf))
+    bg_stock = convolve_delay(A_bg, _background_stay_survival(ruleout_pmf, κ))
     @inbounds for p in 1:np
         O_bvd_p = convolve_delay(A_bvd[p, :], S_clin)
         wp = w[p]
@@ -2633,7 +2636,7 @@ series for forecasting and replication.
         _patch_demand(
             bvd_reports_matrix, A_bg, background_split, patch_ascertainment,
             p_iso_bvd, p_drc, adm_delay_state.pmf, S_clin,
-            abscond_thinned(ruleout_los_state.pmf, κ), demand
+            ruleout_los_state.pmf, κ, demand
         ) : reshape(demand, 1, :)
 
     ## Reclassification offset Δ(t), added to the modelled census total only.

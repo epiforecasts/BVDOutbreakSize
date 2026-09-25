@@ -343,3 +343,21 @@ end
     @test unique(weekly2.days) == [1, 9]
     @test all(d -> count(==(d), weekly2.days) == 2, unique(weekly2.days))
 end
+
+@testitem "per-patch background stock matches the national running balance" begin
+    using BVDOutbreakSize: accumulate_occupancy, abscond_thinned,
+        convolve_delay, _background_stay_survival
+
+    ## With no BVD admissions and no confirmation, the national balance holds
+    ## only the background stock, so the per-cohort survival the province
+    ## split convolves with must reproduce it day by day.
+    n = 40
+    A_bg = [5.0 + 3 * sin(t / 4) for t in 1:n]
+    f = [0.1, 0.3, 0.25, 0.2, 0.1, 0.05]
+    κ = 0.03
+    z = zeros(n)
+    ruleout = convolve_delay(A_bg, abscond_thinned(f, κ))
+    national = accumulate_occupancy(z, A_bg, z, z, ruleout, κ, z).demand
+    patch = convolve_delay(A_bg, _background_stay_survival(f, κ))
+    @test patch ≈ national rtol = 1.0e-10
+end
