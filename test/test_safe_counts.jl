@@ -72,3 +72,11 @@ end
     @test counts[2] == typemax(Int)
     @test 0 <= counts[1] < 100
 end
+
+@testitem "forecast sums saturate rather than wrap" begin
+    using BVDOutbreakSize: _saturating_sum
+    @test _saturating_sum([typemax(Int), 5, 7]) == typemax(Int)
+    @test sum([typemax(Int), 5, 7]) < 0
+    @test _saturating_sum([1, 2, 3]) == 6
+    @test _saturating_sum([1.5, 2.5]) == 4.0
+end
