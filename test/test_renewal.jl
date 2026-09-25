@@ -132,6 +132,20 @@ end
     @test isapprox(r_to_R0(0.0, g), 1.0; rtol = 1.0e-10)
 end
 
+@testitem "r_to_R0: matches the per-lag exponential sum" begin
+    using BVDOutbreakSize: r_to_R0, lognormal_meansd, discretise_censored
+
+    ## One `exp` per lag, as `1 / Σ_s g_s e^{−r s}` reads.
+    reference(r, g) = 1 / sum(g[s] * exp(-r * s) for s in eachindex(g))
+    for L in (1, 40, 120)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        for r in (-0.5, -0.05, 0.0, 0.02, 0.08, 0.5)
+            @test r_to_R0(r, g) ≈ reference(r, g) rtol = 1.0e-12
+        end
+    end
+end
+
 @testitem "euler_lotka_r: r > 0 when R > 1, r < 0 when R < 1" begin
     using BVDOutbreakSize: euler_lotka_r, lognormal_meansd, discretise_censored
 

@@ -828,6 +828,24 @@ end
     end
 end
 
+@testitem "AD: r_to_R0 passes Mooncake's test_rule" tags = [:ad] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using Mooncake.TestUtils: test_rule
+    using BVDOutbreakSize: r_to_R0, lognormal_meansd, discretise_censored
+
+    ## The generation interval at the model's truncation and a long one,
+    ## with growth rates either side of zero.
+    for L in (40, 120), r in (-0.3, 0.0, 0.08)
+        gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), L)
+        g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+        test_rule(
+            Xoshiro(L), r_to_R0, r, g;
+            is_primitive = false, mode = Mooncake.ReverseMode
+        )
+    end
+end
+
 @testitem "AD: the censored NegativeBinomial tail passes Mooncake's test_rule" tags = [
     :ad,
 ] begin
