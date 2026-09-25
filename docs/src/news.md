@@ -34,6 +34,7 @@ Changes since v2.1.0.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
+- `r_to_R0` takes one `exp`, and the infection model's current growth rate is no longer differentiated (#902).
 
 ### Model
 
