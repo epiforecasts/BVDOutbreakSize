@@ -45,7 +45,7 @@ Changes since v2.1.0.
 - The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
-  Fitted values change.
+  Fitted values change by under 1% while the outbreak is far below the population.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
   Fitted values change.
 - Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
