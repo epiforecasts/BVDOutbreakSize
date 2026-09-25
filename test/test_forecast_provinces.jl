@@ -171,3 +171,42 @@ end
     ## no share to give, so it is left out rather than divided by zero.
     @test sh == [[0.75], [0.25]]
 end
+
+@testitem "forecast_provinces splits the isolation and bed forecasts" setup = [
+    HorizonFixtures,
+] begin
+    using BVDOutbreakSize: forecast_draws, forecast_provinces,
+        forecast_reported, _draw_vectors
+    using Turing: sample, Prior
+    import FlexiChains
+    using Random: Xoshiro
+
+    ## The fixture patch joint with province occupancy and bed rows, so the
+    ## forecast carries their splits.
+    care = (;
+        days = [34, 34, 34, 40, 40, 40], patches = [1, 2, 3, 1, 2, 3],
+        counts = [15, 7, 3, 18, 7, 3],
+    )
+    beds = (; days = [30, 30, 30], patches = [1, 2, 3], counts = [40, 15, 5])
+    m = patch_joint(; province_isolation = care, province_capacity = beds)
+    nd = 8
+    chn = sample(
+        Xoshiro(3), m, Prior(), nd;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    pp = forecast_draws(m, chn; horizon = 14)
+    fc = forecast_provinces(pp; horizon = 7, n_patches = NP)
+    nat = forecast_reported(
+        pp; horizon = 7, obs_cases = 905, obs_deaths = 18, obs_confirmed = 40
+    )
+    capacity = _draw_vectors(pp, :forecast_bed_capacity)
+    @test "isolation_level" in names(fc) && "bed_capacity" in names(fc)
+    for d in 1:nd
+        rows = fc.draw .== d
+        ## The provinces' patients in isolation add up to the national
+        ## occupancy forecast on the same day, and their beds to the
+        ## national capacity.
+        @test sum(fc.isolation_level[rows]) == nat.isolation_level[d]
+        @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7] rtol = 1.0e-10
+    end
+end

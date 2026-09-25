@@ -82,12 +82,44 @@ function generator_joint(obs; breakpoint, simulated = nothing)
         province_increments =
             simulated === nothing ? missing : simulated.province_cases,
         province_days = prov_cases.days,
-        province_testing_covariate =
-            province_testing_covariate(obs.province_lab_daily_history),
         province_death_increments =
             simulated === nothing ? missing : simulated.province_deaths,
         province_death_days = prov_deaths.days,
+        province_care_args(obs; simulated)...,
         simulated_data = simulated === nothing ? nothing : simulated.streams
+    )
+end
+
+## The province laboratory, occupancy and bed rows at the thinning
+## `patch_fit_args` fits them with, their counts `missing` so the generator
+## draws them. The occupancy and bed rows keep each day's printed sum, which
+## the splits are conditional on. With `simulated` the laboratory counts are
+## the simulated ones; the occupancy and bed counts reach the treatment
+## stream through its simulated observations.
+function province_care_args(obs; simulated = nothing)
+    lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES); every = 7
+    )
+    function generated(rows)
+        totals = [sum(rows.counts[rows.days .== d]) for d in rows.days]
+        return (; rows.days, rows.patches, counts = missing, totals)
+    end
+    return (;
+        province_lab_increments =
+            simulated === nothing ? missing : simulated.province_lab,
+        province_lab_days = lab.days, province_lab_bins = lab.bins,
+        province_isolation = generated(
+            province_care_observations(
+                obs.province_isolation_history, PROVINCE_NAMES; every = 7
+            )
+        ),
+        province_capacity = generated(
+            province_care_observations(
+                obs.province_bed_capacity_history, PROVINCE_NAMES;
+                changes_only = true
+            )
+        ),
     )
 end
 
@@ -425,9 +457,23 @@ the remainder of its recorded totals, as the predictive path fills it in.
 """
 function recovery_data(sim)
     g = _grouped_observations(sim.data)
+    ## The occupancy and bed splits are drawn a position at a time, so
+    ## their counts are read whole from the draw's recorded `split_counts`.
+    splits = (:occupancy_split, :capacity_split)
     streams = Dict{Symbol, Any}(
         state => NamedTuple(
-            name => Int.(round.(g.in_order(xs))) for (name, xs) in obs
+            name => (
+                name in splits ?
+                    Int.(
+                        only(
+                            _draw_vectors(
+                                sim.truth,
+                                Symbol("$(state).$(name).split_counts")
+                            )
+                        )
+                    ) :
+                    Int.(round.(g.in_order(xs)))
+            ) for (name, xs) in obs
         )
             for (state, obs) in g.streams
     )
@@ -439,6 +485,7 @@ function recovery_data(sim)
         streams, onsets = isempty(g.onsets) ? missing : Float64.(g.onsets),
         province_cases = composition(:composition_state),
         province_deaths = composition(:death_composition_state),
+        province_lab = composition(:lab_composition_state),
     )
 end
 

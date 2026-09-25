@@ -2045,16 +2045,34 @@ end
         @test ax.limits[][2][1] == 0
     end
 
-    ## A forecast carrying one stream draws that panel alone, and one
-    ## carrying neither returns an empty figure rather than erroring.
+    ## A forecast carrying one target draws that panel alone, and one
+    ## carrying none returns an empty figure rather than erroring.
     one = plot_province_forecast(
         chn, proj(; confirmed_new = repeat(v, 3)); n_patches = 3
     )
     @test length([x for x in one.content if x isa Mk.Axis]) == 1
     none = plot_province_forecast(
-        chn, proj(; infections_new = repeat(v, 3)); n_patches = 3
+        chn, proj(; other = repeat(v, 3)); n_patches = 3
     )
     @test isempty([x for x in none.content if x isa Mk.Axis])
+
+    ## Every target the frame carries gets a panel, the reproduction number
+    ## with its line at one, and an observed value per province is a cross.
+    full = plot_province_forecast(
+        chn, proj(;
+            confirmed_new = repeat(v, 3), isolation_level = repeat(v, 3),
+            rt_forecast = repeat(v ./ 100, 3)
+        ); n_patches = 3,
+        observed = (; confirmed_new = [60.0, 70.0, 80.0])
+    )
+    full_axes = [x for x in full.content if x isa Mk.Axis]
+    @test [ax.title[] for ax in full_axes] == [
+        "New confirmed cases by T+7", "Patients in isolation at T+7",
+        "Reproduction number at T+7",
+    ]
+    @test count(p -> p isa Mk.HLines, full_axes[3].scene.plots) == 1
+    @test count(p -> p isa Mk.Scatter, full_axes[1].scene.plots) == 4
+    @test count(p -> p isa Mk.Scatter, full_axes[2].scene.plots) == 3
 end
 
 @testitem "plot_province_forecast_detail draws one province's streams" setup = [
@@ -2085,8 +2103,10 @@ end
     axes = [x for x in fig.content if x isa Mk.Axis]
     @test length(axes) == 2
     ## Each panel names the stream and the province it is a split for.
-    @test axes[1].xlabel[] == "New confirmed cases ($(PROVINCE_LABELS[2]))"
-    @test axes[2].xlabel[] == "New confirmed deaths ($(PROVINCE_LABELS[2]))"
+    @test axes[1].xlabel[] ==
+        "New confirmed cases by T+7 ($(PROVINCE_LABELS[2]))"
+    @test axes[2].xlabel[] ==
+        "New confirmed deaths by T+7 ($(PROVINCE_LABELS[2]))"
     ## The histogram is that province's draws, so its 90% band is 0.2 times
     ## the underlying series' band for the deaths.
     band = only(p for p in axes[2].scene.plots if p isa Mk.VSpan)
@@ -2255,6 +2275,57 @@ end
     ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
     ## One slot per made date, whichever fits carry it.
     @test ax.limits[][1] == (0.5, 2.5)
+end
+
+@testitem "plot_province_split_ppc: daily and static shares over present provinces" setup = [
+    HeadlessMakie,
+] begin
+    using Dates: Date
+    using BVDOutbreakSize: plot_province_split_ppc
+
+    nd = 60
+    n = 30
+    seeding = Date(2025, 8, 1)
+    ## Rows on three days; the third province prints on the last day only.
+    rows = (;
+        days = [10, 10, 20, 20, 30, 30, 30],
+        patches = [1, 2, 1, 2, 1, 2, 3],
+        counts = [300, 100, 280, 120, 250, 100, 50],
+    )
+    daily = [vcat(fill(0.6, 1, n), fill(0.25, 1, n), fill(0.15, 1, n)) for _ in 1:nd]
+    chn = (;
+        province_occupancy_share = daily,
+        province_occupancy_split_rho = fill(0.05, nd),
+    )
+    fig = plot_province_split_ppc(
+        chn; share_key = :province_occupancy_share, rows, seeding, n_patches = 3
+    )
+    @test fig isa CairoMakie.Makie.Figure
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 3
+    for ax in axes
+        @test count(p -> p isa CairoMakie.Makie.Band, ax.scene.plots) == 6
+    end
+
+    ## A static share per patch, as the beds carry, draws the same panels.
+    static = (;
+        province_capacity_share = [[0.6, 0.25, 0.15] for _ in 1:nd],
+        province_capacity_split_rho = fill(0.05, nd),
+    )
+    sfig = plot_province_split_ppc(
+        static; share_key = :province_capacity_share, rows, seeding,
+        n_patches = 3
+    )
+    sax = [x for x in sfig.content if x isa CairoMakie.Makie.Axis]
+    @test length(sax) == 3
+    ## Without the overdispersion only the expected ribbon is drawn.
+    plain = (; province_capacity_share = [[0.6, 0.25, 0.15] for _ in 1:nd])
+    pfig = plot_province_split_ppc(
+        plain; share_key = :province_capacity_share, rows, seeding,
+        n_patches = 3
+    )
+    pax = first(x for x in pfig.content if x isa CairoMakie.Makie.Axis)
+    @test count(p -> p isa CairoMakie.Makie.Band, pax.scene.plots) == 3
 end
 
 @testitem "plot_recovery draws every seed over the prior" setup = [

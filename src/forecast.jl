@@ -348,8 +348,10 @@ national forecast in every draw (see [`bvd_joint`](@ref)).
 Returns one row per province and draw, with columns `patch`, `province`
 (its label in `patch_labels`), `draw`, `infections_new`, `rt_forecast` (the
 province's reproduction number on the last day), and `confirmed_new` and
-`confirmed_deaths_new` when the fit carries the matching composition. The
-counts need `horizon` to be a whole number of weeks.
+`confirmed_deaths_new` when the fit carries the matching composition, and
+`isolation_level` and `bed_capacity` (the province's patients in isolation
+and beds on the last day) when it carries the province occupancy and bed
+splits. These need `horizon` to be a whole number of weeks.
 """
 function forecast_provinces(
         pp;
@@ -384,6 +386,14 @@ function forecast_provinces(
     end
     conf = weekly("forecast_province_confirmed")
     conf_deaths = weekly("forecast_province_deaths")
+    ## Occupancy and beds are levels, read at the vintage `h` days on.
+    function level(key)
+        v = _forecast_vectors(pp, key)
+        (isnothing(v) || isnothing(j)) && return nothing
+        return [reshape(x, n_patches, :)[:, j] for x in v]
+    end
+    iso = level("forecast_province_isolation")
+    beds = level("forecast_province_beds")
     nd = length(inf)
     out = DataFrame(
         patch = Int[], province = String[], draw = Int[],
@@ -408,6 +418,10 @@ function forecast_provinces(
             conf_deaths[i][p] for i in 1:nd for p in 1:np
         ]
     )
+    isnothing(iso) ||
+        (out.isolation_level = [iso[i][p] for i in 1:nd for p in 1:np])
+    isnothing(beds) ||
+        (out.bed_capacity = [beds[i][p] for i in 1:nd for p in 1:np])
     return out
 end
 

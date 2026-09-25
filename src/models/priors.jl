@@ -770,6 +770,56 @@ at the same scale.
 end
 
 """
+Per-patch shares of the national isolation-bed capacity, for the province
+bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
+capacity is the national walk `C(t)` times a share drawn from a partially
+pooled simplex centred on population share,
+
+```math
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+```
+
+with the first patch the reference. The printed province bed counts move
+little relative to each other over the series, so a static share carries
+the split; one walk per patch would add some sixty truncated-normal
+innovations for a tenth more gradient cost. The bed split identifies the
+shares and the split's overdispersion absorbs the residual drift.
+
+Returns `(; s, pooling_sd)`.
+"""
+@model function patch_capacity_share_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "patch_capacity_share_model: $(length(populations)) populations " *
+            "for $(n_patches) patches."
+    )
+    τ_cap ~ pooling_sd_prior
+    z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
+    total_pop = sum(populations)
+    log_s = Vector{Ts}(undef, n_patches)
+    log_s[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
+    end
+    peak = maximum(log_s)
+    s = exp.(log_s .- peak)
+    s ./= sum(s)
+    return (; s, pooling_sd = τ_cap)
+end
+
+"""
 Recovery probability for the recovered-among-confirmed stream
 ([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
 is recovery rather than death is the confirmed-case survival fraction, the
@@ -1907,4 +1957,63 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
         weights[p] = exp(μ_w + τ_w * z_w[p - 1])
     end
     return (; weights, pooling_sd = τ_w, location = μ_w)
+end
+
+"""
+Partially pooled split of the non-BVD suspected-case background across the
+patches. The national background walk `bg_daily`
+([`reported_cases_model`](@ref)) counts suspects who are not BVD cases and
+carries no province, so the patch model needs a share of it per patch to
+build a per-patch suspect pipeline for the laboratory and isolation
+streams. Each share is the patch's population share moved by a pooled log
+deviation,
+
+```math
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
+\\qquad z_1 = 0,
+```
+
+normalised to sum to one. The first patch is the reference, so with
+`n_patches - 1` free deviations the simplex has no redundant direction.
+`τ_bg → 0` recovers the population split. The per-province
+analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
+since the background dominates the specimens analysed where positivity is
+low.
+
+With one patch the whole background belongs to it and nothing is sampled.
+
+Returns `(; w, pooling_sd)`.
+"""
+@model function background_split_model(
+        n_patches::Integer;
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
+            1:min(
+                n_patches, end
+            ),
+        ],
+        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
+        offset_prior = Normal(0, 1)
+    )
+    if n_patches <= 1
+        return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+    end
+    length(populations) == n_patches || error(
+        "background_split_model: $(length(populations)) populations for " *
+            "$(n_patches) patches."
+    )
+    τ_bg ~ pooling_sd_prior
+    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
+    total_pop = sum(populations)
+    log_w = Vector{Tw}(undef, n_patches)
+    log_w[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:n_patches
+        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
+    end
+    ## Softmax against the largest term, so a wide deviation cannot
+    ## overflow.
+    peak = maximum(log_w)
+    w = exp.(log_w .- peak)
+    w ./= sum(w)
+    return (; w, pooling_sd = τ_bg)
 end

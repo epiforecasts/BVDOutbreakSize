@@ -180,3 +180,28 @@ end
     @test recovery_overall([:pass, :warn]) == :warn
     @test recovery_overall([:pass]) == :pass
 end
+
+@testitem "the production generator refits its own simulated data exactly" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: generator_joint, recovery_observed_varnames,
+        simulate_recovery, recovery_data, recovery_density_check
+
+    ## Every stream the headline fit scores, the province laboratory,
+    ## occupancy and bed splits included, is simulated by the generator and
+    ## reaches the rebuilt model, so the two score the true draw alike.
+    obs = load_observations()
+    breakpoint = default_breakpoint(obs)
+    generator = generator_joint(obs; breakpoint)
+    observed = recovery_observed_varnames(
+        generator, production_joint(obs; breakpoint)
+    )
+    @test any(vn -> occursin("occupancy_split", string(vn)), observed)
+    @test any(vn -> occursin("capacity_split", string(vn)), observed)
+    @test any(vn -> occursin("lab_composition_state", string(vn)), observed)
+    sim = simulate_recovery(generator, observed; seed = 3)
+    data = recovery_data(sim)
+    @test data.province_lab isa AbstractMatrix
+    model = generator_joint(obs; breakpoint, simulated = data)
+    d = recovery_density_check(generator, model, sim.truth)
+    @test isfinite(d.from_data)
+end
