@@ -669,7 +669,8 @@ stream_pairs_fig #hide
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
 # Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
-# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one; the growth rate is shown as the ratio of daily growth factors, `exp(r - r_true)`.
+# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
+# The growth rate is shown as the ratio of daily growth factors, `exp(r - r_true)`.
 # Below, each quantity is on its own scale: the prior in grey, each seed's posterior in its colour and its true value as a dashed line in the same colour.
 # The prior is the fitted model's, before the factor-of-five selection of the truths.
 # The forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.

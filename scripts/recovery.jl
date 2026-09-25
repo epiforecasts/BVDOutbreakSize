@@ -19,7 +19,7 @@
 #   fit
 
 using BVDOutbreakSize, CSV, DataFrames, Turing
-using Random: MersenneTwister
+using Random: Xoshiro
 using BVDOutbreakSize: _draws, _draw_vectors
 
 seed = parse(Int, get(ARGS, 1, "1"))
@@ -128,7 +128,7 @@ thinned(d) = DataFrame(
     [k => v[1:5:end] for (k, v) in sort(collect(d); by = first)]
 )
 CSV.write(joinpath(out_dir, "recovery_draws_$(seed).csv"), thinned(draws))
-prior = sample(MersenneTwister(seed), model, Prior(), 1000; progress = false)
+prior = sample(Xoshiro(seed), model, Prior(), 1000; progress = false)
 CSV.write(
     joinpath(out_dir, "recovery_prior_$(seed).csv"), thinned(tracked(prior))
 )

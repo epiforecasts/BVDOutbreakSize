@@ -28,9 +28,7 @@ summary = recovery_summary(params)
 function fmt(x)
     ismissing(x) && return "–"
     a = abs(x)
-    a >= 1000 && return replace(
-        string(round(Int, x)), r"(?<=\d)(?=(\d{3})+$)" => ","
-    )
+    a >= 1000 && return BVDOutbreakSize._recovery_tick(x)
     a >= 10 && return string(round(x; digits = 1))
     a >= 0.1 && return @sprintf("%.2f", x)
     return @sprintf("%.3g", x)
@@ -79,7 +77,8 @@ seed_rows = [
 body = """
 ### Parameter recovery: $status ($(nrow(seeds)) seeds)
 
-$n_conv of $(nrow(seeds)) fits converged (R-hat at most 1.05, bulk ESS at least 100); an unconverged seed's recovery is shown but not judged.
+$n_conv of $(nrow(seeds)) fits converged (R-hat at most 1.05, bulk ESS at least 100).
+An unconverged seed's recovery is shown but not judged.
 The truth is inside the 90% interval in $n_in of $n_pairs quantity-seed pairs ($(round(Int, 100 * n_in / n_pairs))%) and outside the 99% interval in $(n_out == 0 ? "none" : n_out).
 $skill
 
