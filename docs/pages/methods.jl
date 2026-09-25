@@ -319,19 +319,21 @@ MarkdownTable(vintage_table) #hide
 # \boldsymbol\delta_{1} = \sigma_{\text{lvl}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z},
 # \qquad
 # \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
-#   + \frac{0.05}{\sqrt{\nu}}\, Q A \mathbf{z}_k, \tag{6}
+#   + \sigma_{\text{drift}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z}_k, \tag{6}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
+# \sigma_{\text{drift}} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
 # AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
 # with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
 # $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
-# The covariance of the innovations, $(0.05^2/\nu)\, Q AA^{\top} Q^{\top}$, is a full covariance of a sum-to-zero vector.
-# $A$ has as many entries as that covariance has free parameters, and each knot draws $P - 1$ values, one per direction the deviations can move in.
+# $A$ sets the shape of the innovation covariance and $\sigma_{\text{drift}}$ its size, since the covariance has trace $\sigma_{\text{drift}}^2 (P - 1)$ whatever $A$ is.
+# Together they are a full covariance of a sum-to-zero vector, and $\sigma_{\text{drift}} \to 0$ gives every patch the trend's shape.
+# Each knot draws $P - 1$ values, one per direction the deviations can move in.
 # The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
 # Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
 # We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
