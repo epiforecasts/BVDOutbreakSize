@@ -100,7 +100,7 @@ $(join(seed_rows, "\n"))
 
 </details>
 
-A seed fails when more quantities lie outside their 99% interval than the 99th percentile of a Binomial with a 1% chance each (two of 28), or fewer than 60% lie inside their 90% interval.
+A seed fails when more quantities lie outside their 99% interval than the 99th percentile of a Binomial with a 1% chance each (two of 29), or fewer than 60% lie inside their 90% interval.
 Relative error is (posterior median − truth) / |truth| and z is (posterior mean − truth) / posterior SD, each the median across seeds with the range in brackets.
 """
 write(joinpath(dir, "report.md"), body)

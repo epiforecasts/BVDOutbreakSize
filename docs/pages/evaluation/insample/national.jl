@@ -671,6 +671,7 @@ stream_pairs_fig #hide
 # Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
 # The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
 # The growth rate is shown as the ratio of daily growth factors, `exp(r - r_true)`.
+# The intervention effect, a change in log `R_t`, is shown the same way as the ratio of the `R_t` multipliers it implies.
 # Below, each quantity is on its own scale: the prior in grey, each seed's posterior in its colour and its true value as a dashed line in the same colour.
 # The prior is the fitted model's, before the factor-of-five selection of the truths.
 # The forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
@@ -683,19 +684,27 @@ recovery = recovery_results()
 recovery_national_quantities = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
     "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
-    "region_drift_sd",
+    "region_drift_sd", "rt_state.intervention_effect",
 ]
 recovery_labels = Dict(
     "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
     "onset_report_state.τ" => "onset read SD",
     "region_drift_sd" => "province drift SD",
+    "rt_state.intervention_effect" => "intervention effect",
 )
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
         recovery.params, recovery.draws, recovery.prior;
         quantities = recovery_national_quantities,
-        labels = merge(recovery_labels, Dict("r" => "r (as exp(r))")),
+        labels = merge(
+            recovery_labels,
+            Dict(
+                "r" => "r (as exp(r))",
+                "rt_state.intervention_effect" => "intervention effect (as exp)",
+            )
+        ),
         panel_labels = merge(recovery_labels, Dict("r" => "r")),
-        log_x = ["C_T", "lambda_bg"], difference = ["r"]
+        log_x = ["C_T", "lambda_bg"],
+        difference = ["r", "rt_state.intervention_effect"]
     );
 
 #md # ```@raw html
