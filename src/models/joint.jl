@@ -58,7 +58,7 @@ end
 
 ## Keywords handing one stream its simulated observations, keyed by the
 ## stream's name in the joint (`simulate_recovery`). Nothing is passed for a
-## fit to real data, so that call is the one it always was.
+## fit to real data.
 _sim_kw(::Nothing, ::Symbol) = (;)
 function _sim_kw(simulated_data, state::Symbol)
     return haskey(simulated_data, state) ?
@@ -205,10 +205,8 @@ function _cumulative_confirmed(confirmed_daily, confirmed_history, n::Integer)
 end
 
 ## Every composer exposes its stream's cumulative trajectory under the same
-## un-prefixed `:=` name. The forecasters read the cut-off daily rate off it
-## as its last increment, and without one fall back to inverting the
-## cumulative total under exponential growth, which collapses towards zero as
-## the fitted growth rate reaches zero (see [`forecast_stream`](@ref)).
+## un-prefixed `:=` name, so one reader serves the joint and the
+## single-stream fits.
 
 """
 Exports-only composer (geographic-spread analogue). Runs the infection
@@ -330,8 +328,9 @@ confirmed positives, a Binomial of the observed analysed denominator in
 [`confirmed_cases_model`](@ref) and [`reported_cases_model`](@ref).
 
 Exposes the cut-off expected confirmed count as `expected_confirmed_T`,
-the same un-prefixed name [`bvd_joint`](@ref) uses, so the confirmed
-stream can be forecast from this fit ([`forecast_stream`](@ref)).
+the same un-prefixed name [`bvd_joint`](@ref) uses. With `forecast` it draws
+the confirmed counts past the cut-off as `forecast_confirmed`, the future
+draws [`forecast_stream`](@ref) reads.
 """
 @model function confirmed_only_model(
         n::Integer, confirmed_cases::Union{Missing, Integer};
@@ -506,11 +505,12 @@ back to its constant `0.15` anchor.
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the un-prefixed name [`bvd_joint`](@ref) uses,
-and the modelled ascertainment as `onset_ascertainment`. With the shared
-`cumulative_onsets` trajectory from `_latent` that is everything
-[`forecast_onsets`](@ref) needs, so this fit nowcasts and forecasts the
-onset stream, scored on the reported increment rather than on the digitised
-level (see [`forecast_stream`](@ref)).
+and the modelled ascertainment as `onset_ascertainment`. With `forecast` it
+draws future vintages of the triangle ([`onset_forecast_model`](@ref)).
+Those future draws and the shared `cumulative_onsets` trajectory from
+`_latent` are what [`forecast_onsets`](@ref) reads, so this fit nowcasts and
+forecasts the onset stream, scored on the reported increment rather than on
+the digitised level.
 """
 @model function onsets_only_model(
         n::Integer;
@@ -1070,11 +1070,12 @@ death-confirmation probability are national, and the case composition then
 identifies the relative case ascertainment as the residual.
 
 A third composition scores the per-province analysed-specimen volume
-conditional on the national daily total. The modelled split is each
-patch's BVD suspects (its onsets through the onset-to-confirmation kernel,
-thinned by `p_drc`) plus its share of the non-BVD background, the share a
-partially pooled simplex ([`background_split_model`](@ref)) carries and
-this term identifies. The BVD suspects carry the case composition's
+conditional on the national total in each laboratory bin. The modelled
+split is each patch's BVD suspects (its onsets through the
+onset-to-confirmation kernel, thinned by `p_drc`) plus its share of the
+non-BVD background, the share a partially pooled simplex
+([`background_split_model`](@ref)) carries and this term identifies.
+The BVD suspects carry the case composition's
 relative ascertainment, so the two compositions agree on how many of a
 patch's cases reach the laboratory. Pass `province_lab_increments` with
 `province_lab_days` and `province_lab_bins`, built by
@@ -1589,6 +1590,8 @@ density there, is the fitted model's.
             for p in 1:n_patches
     ]
     ## The deviation at every weekly knot, flattened column-major from the
+    ## `(n_patches × n_knots)` matrix, so the provincial Rt trajectory can be
+    ## rebuilt for plotting ([`reconstruct_patch_rt`](@ref)).
     delta_knots := vec(patch_state.δ_knots)
 
     region_sd := patch_state.σ_level
@@ -1647,7 +1650,7 @@ density there, is the fitted model's.
     ## confirmation overlay.
     expected_confirmed_incare_T := treatment_state.expected_confirmed_incare
     expected_suspect_incare_T := treatment_state.expected_suspect_incare
-    ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
+    ## Cut-off daily treatment flows.
     expected_admissions_T := treatment_state.expected_admissions
     expected_incare_deaths_T := treatment_state.expected_incare_deaths
     expected_ruleouts_T := treatment_state.expected_ruleouts

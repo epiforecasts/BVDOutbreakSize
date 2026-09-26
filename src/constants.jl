@@ -221,8 +221,7 @@ consistency between provinces matters more than the accuracy of any one of
 them. The relative sizes enter the importation kernel and centre the
 province background and bed-capacity shares. The absolute sizes are the pools the renewal depletes
 ([`renewal_infections`](@ref), [`patch_infections`](@ref)), where they only
-bound the outbreak, so a figure out by a few years of growth changes nothing
-at the scale the outbreak has reached.
+bound the outbreak.
 """
 const PROVINCE_SOURCE_POPULATIONS = [
     4_008_000, 7_574_000, 6_565_000,
