@@ -1384,8 +1384,7 @@ of the sum-to-zero vector with its `n (n - 1) / 2` free parameters, and
 of the basis, so the implied prior is the same for every patch and every
 pair of patches whatever order the patches come in. The level at the first
 knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`, sharing the drift's
-shape at `σ_level = σ_drift / √(1 - φ²)`, the stationary scale of the
-mean-reverting deviations below. With the draws `z_k` as the columns of `Z`, every
+shape at its own scale. With the draws `z_k` as the columns of `Z`, every
 knot's innovation comes from the one product `c Q A Z`.
 
 The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
@@ -1451,6 +1450,7 @@ and `Rt_matrix` covers the horizon.
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
+        region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
@@ -1509,6 +1509,7 @@ and `Rt_matrix` covers the horizon.
     ## across provinces, not one each: the retention multiplies the whole
     ## deviation vector, and a sum-to-zero vector scaled by a scalar still
     ## sums to zero.
+    σ_level ~ region_sd_prior
     δ_halflife ~ region_halflife_prior
     φ = exp2(-week / δ_halflife)
     ## Loading matrices from the `n_patches - 1` sum-to-zero directions to
@@ -1530,9 +1531,6 @@ and `Rt_matrix` covers the horizon.
     A = bartlett_factor(bartlett_diag, bartlett_lower)
     shape_scale = sqrt(nd / sum(abs2, A))
     F_drift = sum_to_zero_factor(basis, σ_drift * shape_scale, A)
-    ## The first knot starts from the stationary distribution of the
-    ## mean-reverting deviations, so it takes no scale of its own.
-    σ_level = σ_drift / sqrt(1 - φ^2)
     F_level = sum_to_zero_factor(basis, σ_level * shape_scale, A)
     ## Standard-normal draws for the level and for each knot's innovation,
     ## `n_patches - 1` per knot.

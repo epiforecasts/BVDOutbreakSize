@@ -323,15 +323,13 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # ```math
-# \sigma_{\text{lvl}} = \frac{\sigma_{\text{drift}}}{\sqrt{1 - \phi^2}}, \qquad
+# \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
 # \sigma_{\text{drift}} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
 # AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
 # with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
-# The first knot starts from the stationary distribution of the mean-reverting deviations, so its scale $\sigma_{\text{lvl}}$ follows from the drift scale and the half-life rather than being sampled.
-# A scale over the $P - 1$ directions of one knot is barely identified, and when it was sampled it formed a funnel with Nord-Kivu's starting deviation.
 # $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
 # $A$ sets the shape of the innovation covariance and $\sigma_{\text{drift}}$ its size, since the covariance has trace $\sigma_{\text{drift}}^2 (P - 1)$ whatever $A$ is.
 # Together they are a full covariance of a sum-to-zero vector, and $\sigma_{\text{drift}} \to 0$ gives every patch the trend's shape.

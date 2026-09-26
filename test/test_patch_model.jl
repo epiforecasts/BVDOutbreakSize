@@ -395,6 +395,7 @@ end
     ## trend, so they share one temporal Rt shape at a fixed ratio.
     flat = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        region_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0)
     )
     seed!(9)
