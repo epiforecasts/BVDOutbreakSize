@@ -875,7 +875,7 @@ jobs:
             recovery: false
           - id: evaluation/forecast/province
             slug: evaluation-forecast-province
-            fits: fit-frozen_validation
+            fits: fit-{joint,frozen_validation}
             overlays: true
             recovery: false
     steps: *render-steps
