@@ -1,132 +1,128 @@
 # Quoted numbers for paper/main.qmd, read with Quarto meta shortcodes.
-# Written by paper/scripts/paper_numbers.jl from release results-2338 (commit f3815b2, published 2026-09-24);
+# Written by paper/scripts/paper_numbers.jl from release results-2416 (commit 337fef5, published 2026-09-25);
 # never edited by hand. Each key's comment names its source.
 # gh release view: tagName
-release_tag: "results-2338"
-# gh release view: source commit named in the release body
-release_commit: "f3815b2507e98a1c1d3729999911d7a57949ec44"
-# first seven characters of release_commit
-release_commit_short: "f3815b2"
+release_tag: "results-2416"
+# gh release view: source commit, first seven characters
+release_commit_short: "337fef5"
 # gh release view: publishedAt
-release_date: "24 September 2026"
+release_date: "25 September 2026"
 # observations.toml: as_of_date
-data_cutoff: "21 September 2026"
+data_cutoff: "22 September 2026"
 # observations.toml: as_of_date
-data_cutoff_iso: "2026-09-21"
+data_cutoff_iso: "2026-09-22"
 # stream_estimates.csv: fit joint, quantity C_T, median
-cumulative_infections_median: "20,000"
+cumulative_infections_median: "15,000"
 # posterior_summary.csv: C_T, Lower 90%
-cumulative_infections_lower90: "14,000"
+cumulative_infections_lower90: "10,000"
 # posterior_summary.csv: C_T, Upper 90%
-cumulative_infections_upper90: "29,000"
+cumulative_infections_upper90: "23,000"
 # posterior_summary.csv: C_T, Lower 90% to Upper 90%
-cumulative_infections_interval90: "14,000 to 29,000"
+cumulative_infections_interval90: "10,000 to 23,000"
 # observations.toml: confirmed_case_history, last value (dated as_of_date)
-confirmed_cases_at_cutoff: "7,773"
+confirmed_cases_at_cutoff: "7,820"
 # observations.toml: confirmed_death_history, last value (dated as_of_date)
-confirmed_deaths_at_cutoff: "3,759"
+confirmed_deaths_at_cutoff: "3,779"
 # cumulative_infections_median (unrounded) divided by confirmed_cases_at_cutoff
-ratio_infections_to_confirmed: "2.6"
+ratio_infections_to_confirmed: "1.9"
 # posterior_summary.csv C_T 90% bounds divided by confirmed_cases_at_cutoff
-ratio_infections_to_confirmed_interval90: "1.8 to 3.7"
+ratio_infections_to_confirmed_interval90: "1.3 to 3.0"
 # stream_estimates.csv: fit joint, quantity R_T, median
-rt_cutoff_median: "1.1"
+rt_cutoff_median: "0.99"
 # posterior_summary.csv: R_T, Lower 90%
-rt_cutoff_lower90: "0.91"
+rt_cutoff_lower90: "0.87"
 # posterior_summary.csv: R_T, Upper 90%
-rt_cutoff_upper90: "1.4"
+rt_cutoff_upper90: "1.1"
 # posterior_summary.csv: R_T, Lower 90% to Upper 90%
-rt_cutoff_interval90: "0.91 to 1.4"
+rt_cutoff_interval90: "0.87 to 1.1"
 # posterior_draws.csv: share of the thinned R_T draws above one
-rt_cutoff_prob_above_one: "82%"
+rt_cutoff_prob_above_one: "40%"
 # stream_estimates.csv: fit joint, quantity R0 (renewal walk start), median
-r0_median: "1.3"
+r0_median: "1.2"
 # stream_estimates.csv: fit joint, quantity R0, lo90 to hi90
-r0_interval90: "1.2 to 1.6"
+r0_interval90: "1.1 to 1.4"
 # posterior_summary.csv: r (latest daily growth rate), Lower 90% to Upper 90%
-growth_rate_interval90: "-0.02 to 0.08"
-# posterior_draws.csv: median of the thinned doubling_time draws (days; the 90% interval spans zero growth so no bounds are quoted)
-doubling_time_median: "18"
+growth_rate_interval90: "-0.04 to 0.03"
 # posterior_draws.csv: median of the thinned CFR draws
-cfr_median: "46%"
+cfr_median: "50%"
 # posterior_summary.csv: CFR, Lower 90%
-cfr_lower90: "36%"
+cfr_lower90: "38%"
 # posterior_summary.csv: CFR, Upper 90%
-cfr_upper90: "57%"
+cfr_upper90: "62%"
 # posterior_summary.csv: CFR, Lower 90% to Upper 90%
-cfr_interval90: "36% to 57%"
+cfr_interval90: "38% to 62%"
 # posterior_summary.csv: T (days from the first infection to the cut-off), Lower 90% to Upper 90%
-outbreak_age_days_interval90: "180 to 198"
+outbreak_age_days_interval90: "178 to 192"
 # as_of_date minus the posterior_summary.csv T bounds
-outbreak_start_interval90: "7 March to 25 March"
+outbreak_start_interval90: "14 March to 28 March"
 # site.zip estimates/province.html: Ituri table, Cumulative infections, Lower 90% to Upper 90%
-ituri_infections_interval90: "9,400 to 20,000"
+ituri_infections_interval90: "7,200 to 17,000"
 # site.zip estimates/province.html: Ituri table, Reproduction number, Lower 90%
-ituri_rt_lower90: "0.87"
+ituri_rt_lower90: "0.85"
 # site.zip estimates/province.html: Ituri table, Reproduction number, Upper 90%
-ituri_rt_upper90: "1.4"
+ituri_rt_upper90: "1.1"
 # site.zip estimates/province.html: Ituri table, Reproduction number, Lower 90% to Upper 90%
-ituri_rt_interval90: "0.87 to 1.4"
-# site.zip summary_assets/provinces.html: "Share of infections" sentence, Ituri 90% interval
-ituri_share_interval90: "59 to 76%"
-# site.zip summary_assets/provinces.html: "probability it is above one" sentence, Ituri
-ituri_rt_prob_above_one: "74%"
+ituri_rt_interval90: "0.85 to 1.1"
+# site.zip summary_assets/provinces.html: table, Ituri, Share of infections (%)
+ituri_share_interval90: "64 to 78%"
+# site.zip summary_assets/provinces.html: table, Ituri, P(R > 1)
+ituri_rt_prob_above_one: "35%"
 # site.zip estimates/province.html: Nord-Kivu table, Cumulative infections, Lower 90% to Upper 90%
-nord_kivu_infections_interval90: "3,200 to 7,700"
+nord_kivu_infections_interval90: "2,100 to 5,800"
 # site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Lower 90%
-nord_kivu_rt_lower90: "0.88"
+nord_kivu_rt_lower90: "0.8"
 # site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Upper 90%
-nord_kivu_rt_upper90: "1.5"
+nord_kivu_rt_upper90: "1.1"
 # site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Lower 90% to Upper 90%
-nord_kivu_rt_interval90: "0.88 to 1.5"
-# site.zip summary_assets/provinces.html: "Share of infections" sentence, Nord-Kivu 90% interval
-nord_kivu_share_interval90: "18 to 32%"
-# site.zip summary_assets/provinces.html: "probability it is above one" sentence, Nord-Kivu
-nord_kivu_rt_prob_above_one: "78%"
+nord_kivu_rt_interval90: "0.8 to 1.1"
+# site.zip summary_assets/provinces.html: table, Nord-Kivu, Share of infections (%)
+nord_kivu_share_interval90: "17 to 29%"
+# site.zip summary_assets/provinces.html: table, Nord-Kivu, P(R > 1)
+nord_kivu_rt_prob_above_one: "33%"
 # site.zip estimates/province.html: Haut-Uele table, Cumulative infections, Lower 90% to Upper 90%
-haut_uele_infections_interval90: "590 to 1,700"
+haut_uele_infections_interval90: "390 to 1,200"
 # site.zip estimates/province.html: Haut-Uele table, Reproduction number, Lower 90%
-haut_uele_rt_lower90: "0.81"
+haut_uele_rt_lower90: "0.79"
 # site.zip estimates/province.html: Haut-Uele table, Reproduction number, Upper 90%
-haut_uele_rt_upper90: "1.6"
+haut_uele_rt_upper90: "1.2"
 # site.zip estimates/province.html: Haut-Uele table, Reproduction number, Lower 90% to Upper 90%
-haut_uele_rt_interval90: "0.81 to 1.6"
-# site.zip summary_assets/provinces.html: "Share of infections" sentence, Haut-Uele 90% interval
-haut_uele_share_interval90: "3 to 8%"
-# site.zip summary_assets/provinces.html: "probability it is above one" sentence, Haut-Uele
-haut_uele_rt_prob_above_one: "70%"
+haut_uele_rt_interval90: "0.79 to 1.2"
+# site.zip summary_assets/provinces.html: table, Haut-Uele, Share of infections (%)
+haut_uele_share_interval90: "3 to 7%"
+# site.zip summary_assets/provinces.html: table, Haut-Uele, P(R > 1)
+haut_uele_rt_prob_above_one: "43%"
 # site.zip estimates/province.html: Other provinces table, Cumulative infections, Lower 90% to Upper 90%
-other_infections_interval90: "140 to 800"
+other_infections_interval90: "83 to 450"
 # site.zip estimates/province.html: Other provinces table, Reproduction number, Lower 90%
-other_rt_lower90: "0.9"
+other_rt_lower90: "0.88"
 # site.zip estimates/province.html: Other provinces table, Reproduction number, Upper 90%
-other_rt_upper90: "1.7"
+other_rt_upper90: "1.3"
 # site.zip estimates/province.html: Other provinces table, Reproduction number, Lower 90% to Upper 90%
-other_rt_interval90: "0.9 to 1.7"
-# site.zip summary_assets/provinces.html: "Share of infections" sentence, Other provinces 90% interval
-other_share_interval90: "1 to 4%"
-# site.zip summary_assets/provinces.html: "probability it is above one" sentence, Other provinces
-other_rt_prob_above_one: "85%"
+other_rt_interval90: "0.88 to 1.3"
+# site.zip summary_assets/provinces.html: table, Other provinces, Share of infections (%)
+other_share_interval90: "1 to 3%"
+# site.zip summary_assets/provinces.html: table, Other provinces, P(R > 1)
+other_rt_prob_above_one: "69%"
 # province_forecast.csv: number of distinct values of province
 n_provinces: "4"
 # posterior_draws.csv: median of the thinned p_drc draws (suspected-case ascertainment)
-suspected_ascertainment_median: "0.46"
+suspected_ascertainment_median: "0.57"
 # posterior_summary.csv: p_drc, Lower 90% to Upper 90%
-suspected_ascertainment_interval90: "0.32 to 0.66"
+suspected_ascertainment_interval90: "0.37 to 0.84"
 # src/models/priors.jl at the release commit: pooled_ascertainment_model mu_prior centre
 suspected_ascertainment_prior_median: "0.75"
 # posterior_draws.csv: median of the thinned p_uganda draws (export detection in Uganda)
-export_ascertainment_median: "0.55"
+export_ascertainment_median: "0.62"
 # posterior_summary.csv: p_uganda, Lower 90% to Upper 90%
-export_ascertainment_interval90: "0.33 to 0.85"
+export_ascertainment_interval90: "0.38 to 0.9"
 # src/models/priors.jl at the release commit: pooled_ascertainment_model mu_prior centre
 export_ascertainment_prior_median: "0.75"
 # posterior_summary.csv: tau_test (fraction of suspects sampled), Lower 90% to Upper 90%
-tested_fraction_interval90: "0.75 to 0.97"
+tested_fraction_interval90: "0.74 to 0.97"
 # src/models/priors.jl at the release commit: fraction_tested_prior Beta median
 tested_fraction_prior_median: "0.74"
 # site.zip estimates/national.html: onset-report table, median modelled ascertainment, Lower 90% to Upper 90%
-onset_ascertainment_interval90: "0.28 to 0.57"
+onset_ascertainment_interval90: "0.28 to 0.63"
 # docs/fits/registry.jl at the release commit: build_fit_specs chains default
 sampler_chains: "2"
 # docs/fits/registry.jl at the release commit: joint_sampler_args samples (per chain, after warm-up)
@@ -152,35 +148,35 @@ gradient_speedup_kernels_max: "17"
 # PR #791 and news v2.2.0: headline joint fit cold build 1095 s to 292 s
 precompile_cold_build_factor: "3.8"
 # site.zip summary_assets/diagnostics.html: row joint, max_rhat
-max_rhat: "1.035"
+max_rhat: "1.053"
 # site.zip summary_assets/diagnostics.html: row joint, min_ess_bulk
-min_ess_bulk: "80"
+min_ess_bulk: "60"
 # site.zip summary_assets/diagnostics.html: row joint, divergences
-n_divergent: "3"
+n_divergent: "1"
 # forecast_validation.csv: made_date
-forecast_validation_made: "14 September 2026"
+forecast_validation_made: "15 September 2026"
 # forecast_validation.csv: made_date plus seven days
-forecast_validation_target: "21 September 2026"
+forecast_validation_target: "22 September 2026"
 # forecast_validation.csv: confirmed cases, horizon 7, median of draws
-forecast_validation_confirmed_cases_median: "721"
+forecast_validation_confirmed_cases_median: "680"
 # forecast_validation.csv: confirmed cases, horizon 7, 5th to 95th percentile of draws
-forecast_validation_confirmed_cases_interval90: "534 to 986"
+forecast_validation_confirmed_cases_interval90: "502 to 933"
 # observations.toml: confirmed_case_history, value at the validation target minus value at the validation origin
-observed_confirmed_cases_validation_week: "428"
+observed_confirmed_cases_validation_week: "416"
 # forecast.csv: confirmed cases, horizon 7, median of draws
-forecast_confirmed_cases_next_week_median: "822"
+forecast_confirmed_cases_next_week_median: "530"
 # forecast.csv: confirmed cases, horizon 7, 5th to 95th percentile of draws
-forecast_confirmed_cases_next_week_interval90: "536 to 1,217"
+forecast_confirmed_cases_next_week_interval90: "382 to 704"
 # forecast_validation.csv: confirmed deaths, horizon 7, median of draws
-forecast_validation_confirmed_deaths_median: "303"
+forecast_validation_confirmed_deaths_median: "286"
 # forecast_validation.csv: confirmed deaths, horizon 7, 5th to 95th percentile of draws
-forecast_validation_confirmed_deaths_interval90: "225 to 401"
+forecast_validation_confirmed_deaths_interval90: "225 to 380"
 # observations.toml: confirmed_death_history, value at the validation target minus value at the validation origin
-observed_confirmed_deaths_validation_week: "214"
+observed_confirmed_deaths_validation_week: "202"
 # forecast.csv: confirmed deaths, horizon 7, median of draws
-forecast_confirmed_deaths_next_week_median: "310"
+forecast_confirmed_deaths_next_week_median: "254"
 # forecast.csv: confirmed deaths, horizon 7, 5th to 95th percentile of draws
-forecast_confirmed_deaths_next_week_interval90: "226 to 443"
+forecast_confirmed_deaths_next_week_interval90: "191 to 329"
 # release_estimates.csv: row v1.0.0, median
 first_release_median: "972"
 # release_estimates.csv: row v1.0.0, lower90 to upper90
@@ -224,15 +220,19 @@ coverage90_total: "69"
 # stream_estimates.csv: quantity C_T, median, single-stream fit with the smallest median
 single_stream_min_fit: "isolation beds"
 # stream_estimates.csv: quantity C_T, median, fit treatment (the smallest)
-single_stream_min_median: "16,975"
+single_stream_min_median: "16,904"
 # stream_estimates.csv: quantity C_T, median, single-stream fit with the largest median
 single_stream_max_fit: "exports"
 # stream_estimates.csv: quantity C_T, median, fit exports (the largest)
-single_stream_max_median: "184,105"
+single_stream_max_median: "208,496"
 # stream_estimates.csv: quantity C_T, median, largest single-stream median over the smallest
-single_stream_ratio: "10.85"
+single_stream_ratio: "12.33"
+# stream_estimates.csv: quantity C_T, single-stream fits whose lo90 to hi90 overlaps the joint's
+single_stream_overlap_fits: "isolation beds, onset reports and exports"
+# stream_estimates.csv: quantity C_T, median, single-stream fits with a median above the joint's
+single_stream_n_above_joint: "7 of 7"
 # stream_estimates.csv: fit joint, quantity C_T, median to the nearest infection
-joint_median_unrounded: "20,109"
+joint_median_unrounded: "15,138"
 # src/constants.jl at the release commit: CHAMLA_CONFIRMED_CENTRAL row matching the CHAMLA_CONFIRMED_W12 central scenario
 chamla_week12_date: "24 June 2026"
 # src/constants.jl at the release commit: CHAMLA_CONFIRMED_W12 central scenario, median
@@ -240,8 +240,8 @@ chamla_central_median: "990"
 # src/constants.jl at the release commit: CHAMLA_CONFIRMED_W12 central scenario, lower_90 to upper_90
 chamla_central_interval90: "709 to 1,293"
 # site.zip sensitivity.html: Chamla comparison table, row 24 June, Our projection median
-chamla_frozen_projection_median: "1,783"
+chamla_frozen_projection_median: "1,498"
 # site.zip sensitivity.html: Chamla comparison table, row 24 June, Our projection 90% CrI
-chamla_frozen_projection_interval90: "1,165 to 3,771"
+chamla_frozen_projection_interval90: "1,041 to 2,683"
 # observations.toml: confirmed_case_history, value at chamla_week12_date
 observed_confirmed_week12: "1,155"

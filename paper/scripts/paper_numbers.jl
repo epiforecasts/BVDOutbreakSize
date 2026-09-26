@@ -142,11 +142,6 @@ add!(
     "posterior_summary.csv: r (latest daily growth rate), " *
         "Lower 90% to Upper 90%"
 )
-add!(
-    "doubling_time_median", fmt2(median(draws.doubling_time)),
-    "posterior_draws.csv: median of the thinned doubling_time draws (days; " *
-        "the 90% interval spans zero growth so no bounds are quoted)"
-)
 
 cfr90 = bounds90("CFR")
 add!(
@@ -622,6 +617,25 @@ add!(
     "single_stream_ratio",
     string(round(singles[imax] / singles[imin]; digits = 2)),
     "$single_src, largest single-stream median over the smallest"
+)
+## Single-stream fits whose 90% interval overlaps the joint's, in the
+## order of FIT_LABELS.
+overlap = String[]
+for (fit, label) in FIT_LABELS
+    r = stream_row(streams, fit, "C_T")
+    r.lo90 <= ct.hi90 && r.hi90 >= ct.lo90 && push!(overlap, label)
+end
+add!(
+    "single_stream_overlap_fits",
+    length(overlap) == 1 ? only(overlap) :
+        join(overlap[1:(end - 1)], ", ") * " and " * overlap[end],
+    "stream_estimates.csv: quantity C_T, single-stream fits whose lo90 to " *
+        "hi90 overlaps the joint's"
+)
+add!(
+    "single_stream_n_above_joint",
+    string(count(>(ct.median), singles)) * " of " * string(length(singles)),
+    "$single_src, single-stream fits with a median above the joint's"
 )
 add!(
     "joint_median_unrounded", fmt_int(ct.median),

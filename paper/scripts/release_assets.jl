@@ -12,11 +12,10 @@ using TOML
 
 const REPO = "epiforecasts/BVDOutbreakSize"
 
-## The release the paper quotes. Newest `results-*` release with the full
-## asset set at the time of writing (24 September 2026), marked "Latest" on
-## GitHub; the joint summaries it carries are identical to results-2339,
-## published thirteen minutes earlier from the next commit on main.
-const DEFAULT_TAG = "results-2338"
+## The release the paper quotes. Newest `results-*` release at the time of
+## writing (26 September 2026), built from 337fef5 with data to SitRep 131.
+## Later main builds to this date failed a render job and cut no release.
+const DEFAULT_TAG = "results-2416"
 
 ## Assets every script reads. `site.zip` is the rendered report site; the
 ## diagnostics and province tables are only published inside it.

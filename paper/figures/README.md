@@ -47,7 +47,7 @@ It keeps the seven-day horizon only and divides the joint fit's CRPS by the pers
 The still-reported streams are those with a baseline row: confirmed cases, confirmed deaths, isolation beds, onset reports and recovered; reported cases and suspected deaths have stopped being updated, carry no baseline and are absent.
 Releases whose name carries the `(backfill)` label (v1.4.0, v1.5.0, v1.7.0, v1.8.0 and v1.9.0) are reconstructions of tagged model versions rather than forecasts published at the time, so they are drawn as hollow markers and left off the connecting lines; the v1.1.0 backfill scores only the two stopped streams and contributes nothing.
 The strip under panel A marks whether the observation fell inside the joint's 90% interval, from the `coverage_90` column of the joint row.
-Panels B to D read the assets of the pinned release (results-2338, data cut-off 21 September 2026) in `paper/data/release/` and the scenario constants in `src/constants.jl`.
+Panels B to D read the assets of the pinned release (results-2416, data cut-off 22 September 2026) in `paper/data/release/` and the scenario constants in `src/constants.jl`.
 Panel B is the `C_T` row of every fit in `stream_estimates.csv`, a median with nested 30, 60 and 90% intervals on a log axis.
 Panel C is `REPORT_SCENARIOS_CI`, the McCabe et al. scenario means with their 95% confidence intervals at the 18 May, 20 May and 27 May cut-offs, against the joint fit frozen at 20 and 27 May from `frozen_matched_cutoffs.csv`, which publishes the 30, 60 and 90% bounds without a median.
 The 18 May report has no frozen fit of its own, and the asset's 23 May and 8 June fits match no McCabe vintage, so they are not drawn.
