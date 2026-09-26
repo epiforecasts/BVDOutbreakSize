@@ -1487,7 +1487,6 @@ end
         (v = collect(t); vcat(v[1], diff(v)))
             for t in vec(collect(chn[:cumulative_onsets]))
     ]
-    τ = vec(Array(chn[Symbol("onset_report_state.τ")]))
     k = [
         1 / x^2 for x in
             vec(Array(chn[Symbol("onset_report_state.inv_sqrt_k")]))
@@ -1495,7 +1494,7 @@ end
     u = 12
 
     draws = onset_level_predictive_draws(
-        u, daily, hz, τ, k;
+        u, daily, hz, k;
         grid_start, alpha_grid_start = grid_start, n_rep = 5,
         rng = MersenneTwister(11)
     )
@@ -1505,7 +1504,7 @@ end
     ## Same seed, same replicate: the model call is deterministic given an
     ## explicit `rng`.
     draws_again = onset_level_predictive_draws(
-        u, daily, hz, τ, k;
+        u, daily, hz, k;
         grid_start, alpha_grid_start = grid_start, n_rep = 5,
         rng = MersenneTwister(11)
     )
@@ -1515,12 +1514,12 @@ end
     ## noise draws the replicates centre below the eventual total
     ## (`target_delay = nothing`).
     short = onset_level_predictive_draws(
-        u, daily, hz, τ, k;
+        u, daily, hz, k;
         grid_start, alpha_grid_start = grid_start, target_delay = 3,
         n_rep = 20, rng = MersenneTwister(13)
     )
     full = onset_level_predictive_draws(
-        u, daily, hz, τ, k;
+        u, daily, hz, k;
         grid_start, alpha_grid_start = grid_start, n_rep = 20,
         rng = MersenneTwister(13)
     )
@@ -1528,7 +1527,7 @@ end
 
     ## The default four replicates per draw.
     draws_default = onset_level_predictive_draws(
-        u, daily, hz, τ, k;
+        u, daily, hz, k;
         grid_start, alpha_grid_start = grid_start,
         rng = MersenneTwister(12)
     )
@@ -1536,11 +1535,11 @@ end
     @test all(isfinite, draws_default)
 
     @test_throws ErrorException onset_level_predictive_draws(
-        999, daily, hz, τ, k;
+        999, daily, hz, k;
         grid_start, alpha_grid_start = grid_start
     )
     @test_throws ErrorException onset_level_predictive_draws(
-        u, daily, hz, τ[1:3], k;
+        u, daily, hz, k[1:3];
         grid_start, alpha_grid_start = grid_start
     )
 end

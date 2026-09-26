@@ -1689,12 +1689,14 @@ cfr_prior_fig #hide
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
-# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
+# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric.
+# Its deviations sum to zero, drawn on the $D - 1$ directions of an orthonormal sum-to-zero basis $Q$:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{50}
+# z_{h0} \sim \mathrm{Normal}(0,\ I_{D-1}), \qquad
+# \mathrm{logit}\,h_0 = \eta_0 + \sigma_{h0}\,Q\,z_{h0}. \tag{50}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
@@ -1702,11 +1704,17 @@ cfr_prior_fig #hide
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
-# \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# w_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# \qquad
+# \gamma_t = w_t - \bar w,
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
 # \tag{51}
 # ```
+#
+# The walk is centred on its mean over the report days it spans, so $\eta_0$ is the mean logit hazard across both delays and report days.
+# Without the two constraints the hazard's level trades against the mean delay deviation, which the data cannot see, and against a shift of the whole walk, which they barely see, since its first knot sits over report days only the shortest delays read.
+# Neither constraint changes which hazards the model can express.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
@@ -1745,19 +1753,20 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# The scale is set so the Student-$t$'s variance is that of a negative binomial count about the cell's modelled mean $\mu_u$, plus a read SD $\tau$ for each of the $r_u$ digitised bars the cell reads:
+# The scale is set so the Student-$t$'s variance is that of a negative binomial count about the cell's modelled mean $\mu_u$:
 #
 # ```math
-# \sigma_u^2 = \frac{\nu - 2}{\nu}\bigl(\mu_u + \mu_u^2 / k + r_u \tau^2\bigr),
-# \qquad 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0,\ 1),
-# \qquad \tau \sim \mathrm{LogNormal}(\log 1,\ 1).
+# \sigma_u^2 = \frac{\nu - 2}{\nu}\bigl(\mu_u + \mu_u^2 / k\bigr),
+# \qquad 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0,\ 1).
 # ```
 #
 # $\mu_u$ is the modelled mean and never the observed count, so the observation cannot feed into its own variance.
+# The digitisation error of each bar has no term of its own.
+# It is taken to grow with the count read, so $k$ absorbs it with the count overdispersion, and the Student-$t$ tails take the occasional misread.
 #
 # Each onset date is scored once.
-# Its first print is a level, differenced against an implicit empty predecessor and right-truncated at that snapshot's report day, with one read.
-# Each later snapshot that prints it while its delay is inside the support scores a correction against the last snapshot that printed it, with two reads.
+# Its first print is a level, differenced against an implicit empty predecessor and right-truncated at that snapshot's report day.
+# Each later snapshot that prints it while its delay is inside the support scores a correction against the last snapshot that printed it.
 # A level and its corrections sum to the latest print inside the support.
 # Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
 # Past the support the modelled increment is zero, so later reprints of a settled date are not scored and late reclassification is not modelled.

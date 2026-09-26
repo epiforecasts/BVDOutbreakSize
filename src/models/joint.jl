@@ -168,7 +168,7 @@ vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 runs past the cut-off `n`. Its increment over the total at the cut-off is
 drawn with the Student-t the scored cells take, at the scale
 [`onset_report_scale`](@ref) gives a correction with that mean: count
-variation at the fitted dispersion `k` plus two reads at the read SD `τ`.
+variation at the fitted dispersion `k`.
 The increment is drawn on the whole figure, not per onset date, since the
 figure's total is the quantity the forecast is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
@@ -182,7 +182,7 @@ printed by the cut-off.
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
     sds = [
-        onset_report_scale(means[j], state.τ, state.k, 2, state.ν)
+        onset_report_scale(means[j], state.k, state.ν)
             for j in eachindex(vintages)
     ]
     forecast_onset_reports ~ to_submodel(

@@ -47,7 +47,9 @@ Changes since v2.1.0.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
   Fitted values change by under 1% while the outbreak is far below the population.
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#884).
-  Every cell is Student-t with the variance of a negative binomial count plus one fitted read SD per digitised bar.
+  Every cell is Student-t with the variance of a negative binomial count.
+  The per-bar read SD from #881 is removed, and the count dispersion absorbs the digitisation error.
+  The onset-report baseline hazard's delay deviations sum to zero and its calendar walk is centred on its mean, so the hazard level is no longer traded against the walk's level.
   The onset ascertainment is anchored on the chance a case is confirmed, from true positives per suspected BVD case at the pipeline's own onset-to-analysis delay, rather than on specimen positivity.
   The reporting calendar walk starts one delay support before the earliest report day rather than at the earliest onset date.
   The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites.

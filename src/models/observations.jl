@@ -3425,56 +3425,50 @@ end
     (δ < 0 || D == 0) ? 0 : min(Int(δ), D - 1) + 1
 
 """
-    onset_report_scales(means, τ, k, reads, ν)
+    onset_report_scales(means, k, ν)
 
 Per-cell Student-t scale for the reporting-triangle likelihood, set so the
-Student-t's variance matches a negative binomial count variance plus read
-error:
+Student-t's variance matches a negative binomial count variance:
 
 ```math
-\\sigma_i^2 = \\frac{\\nu - 2}{\\nu}
-    \\bigl(\\mu_i + \\mu_i^2 / k + r_i \\tau^2\\bigr),
+\\sigma_i^2 = \\frac{\\nu - 2}{\\nu} \\bigl(\\mu_i + \\mu_i^2 / k\\bigr),
 ```
 
-with `μ_i = means[i]` the modelled cell mean, `k` the shared count
-dispersion, `r_i = reads[i]` the number of digitised bars the cell reads
-(`1` for a level, `2` for a correction between two snapshots) and `τ` the
-read SD. The variance of a Student-t with scale `σ` is `σ² ν / (ν - 2)`,
+with `μ_i = means[i]` the modelled cell mean and `k` the shared count
+dispersion. The variance of a Student-t with scale `σ` is `σ² ν / (ν - 2)`,
 hence the leading factor. A level and a correction share one variance
 model: a level is a count of the cases printed so far, a correction a count
-of the cases reported in between, and each read adds its own error.
+of the cases reported in between. The digitisation error of each read has
+no term of its own. It is taken to grow with the count read, so `k` absorbs
+it with the count overdispersion, and the Student-t tails take the
+occasional misread.
 
 The magnitude entering the scale is the modelled mean, never the observed
 count, so the observation cannot feed into its own variance. Pure,
 top-level, single indexed loop.
 """
-function onset_report_scales(
-        means::AbstractVector, τ::Real, k::Real,
-        reads::AbstractVector{<:Integer}, ν::Real
-    )
+function onset_report_scales(means::AbstractVector, k::Real, ν::Real)
     m = length(means)
-    T = promote_type(eltype(means), typeof(float(τ)), typeof(float(k)))
+    T = promote_type(eltype(means), typeof(float(k)))
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
-        out[i] = onset_report_scale(means[i], τ, k, reads[i], ν)
+        out[i] = onset_report_scale(means[i], k, ν)
     end
     return out
 end
 
 """
-    onset_report_scale(μ, τ, k, reads, ν)
+    onset_report_scale(μ, k, ν)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula. The vector
 method calls this, so the two cannot drift apart. The onset forecast
 ([`onset_forecast_model`](@ref)) and the report's level predictive call it
 directly, so a predicted cell carries the scale a scored cell does.
 """
-function onset_report_scale(
-        μ::Real, τ::Real, k::Real, reads::Integer, ν::Real
-    )
-    T = promote_type(typeof(float(μ)), typeof(float(τ)), typeof(float(k)))
+function onset_report_scale(μ::Real, k::Real, ν::Real)
+    T = promote_type(typeof(float(μ)), typeof(float(k)))
     m = max(μ, zero(T))
-    return sqrt((ν - 2) / ν * (m + m^2 / k + reads * τ^2))
+    return sqrt((ν - 2) / ν * (m + m^2 / k))
 end
 
 """
@@ -3604,23 +3598,38 @@ Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
-    partially-pooled non-centred random effect over delay:
+    partially-pooled non-centred random effect over delay whose deviations
+    sum to zero, drawn on the `D - 1` directions of
+    [`sum_to_zero_basis`](@ref) `Q`:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
-    z_{h0,d} \\sim \\mathcal N(0,1), \\quad
-    \\text{logit\\_h0}(d) = \\eta_0 + \\sigma_{h0} z_{h0,d};
+    z_{h0} \\sim \\mathcal N(0, I_{D-1}), \\quad
+    \\text{logit\\_h0} = \\eta_0 + \\sigma_{h0} Q z_{h0};
     ```
   - a calendar-time random walk on report date, weekly knots linearly
     interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
-    cumulative-sum walk, same construction):
+    cumulative-sum walk, same construction), then centred on its mean
+    over the grid:
     ```math
     \\sigma_\\gamma \\sim \\text{walk\\_sigma\\_prior}, \\quad
     z_{\\gamma,k} \\sim \\mathcal N(0,1), \\quad
-    \\gamma_{\\text{knot},1} = 0, \\
-    \\gamma_{\\text{knot},k+1} = \\gamma_{\\text{knot},k} +
-        \\sigma_\\gamma z_{\\gamma,k}.
+    w_{\\text{knot},1} = 0, \\
+    w_{\\text{knot},k+1} = w_{\\text{knot},k} + \\sigma_\\gamma z_{\\gamma,k},
+    \\quad \\gamma = w - \\bar w.
     ```
+
+Both constraints fix where the hazard's level lives, so `η0` is the mean
+logit hazard across delays and across the report days the walk spans. Left
+free, the level trades against the mean of the delay deviations, which the
+likelihood cannot see at all, and against a shift of the whole walk, which
+it barely sees. The walk's first knot sits a delay support before the
+earliest report day ([`onset_hazard_grid_start`](@ref)), where only the
+shortest delays of the first printed onset dates read it, so pinning it at
+zero left that second trade-off almost entirely to the walk prior. Neither
+constraint changes the family of hazards the model can express. `Q z` has
+the distribution of `D` independent standard normals centred on their mean,
+so the delay prior stays exchangeable.
 
 The walk is indexed on the report-date grid `[grid_start, grid_end]`, not
 the onset/infection-date axis [`rt_walk_model`](@ref) already carries a
@@ -3644,10 +3653,10 @@ increments the estimate rests on).
 scored triangle can show is reachable rather than extreme. A 14% shift in
 a snapshot's printed level needs a calendar shift of roughly `0.32` at
 delay 8 and `0.58` at delay 12 on the logit hazard, holding the baseline at
-its prior median, and after the six weekly knots the scored window spans
-`γ` has SD `E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays
-concentrated at zero, so a flat reporting profile is the default the data
-has to argue away from. Widening it further risks the walk explaining
+its prior median, and six weekly steps of the walk have SD
+`E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays concentrated
+at zero, so a flat reporting profile is the default the data has to argue
+away from. Widening it further risks the walk explaining
 recent onset-date structure that belongs to `R_t`, so any change here
 should report `R_t` over the final fortnight and `C_T` either side.
 
@@ -3665,8 +3674,8 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     )
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
-    z_h0 ~ product_distribution(fill(Normal(0, 1), D))
-    logit_h0 = η0 .+ σ_h0 .* z_h0
+    z_h0 ~ product_distribution(fill(Normal(0, 1), max(D - 1, 1)))
+    logit_h0 = η0 .+ σ_h0 .* (sum_to_zero_basis(D) * z_h0[1:(D - 1)])
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.
@@ -3677,7 +3686,8 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     z_γ ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     steps = σ_γ .* z_γ[1:max(nb - 1, 0)]
     γ_knots = vcat(zero(σ_γ), cumsum(steps))
-    γ = interpolate_knots(γ_knots, days, nt)
+    w = interpolate_knots(γ_knots, days, nt)
+    γ = w .- mean(w)
 
     return (; logit_h0, γ, grid_start = Int(grid_start), η0, σ_h0, σ_γ)
 end
@@ -3703,8 +3713,10 @@ truncated(Normal(0, 0.1); lower = 0)` is deliberately tight: `omega` shares
 the onset-date axis with [`rt_walk_model`](@ref), so a flat ascertainment
 level is the default the data has to argue away from. Weekly knots,
 linearly interpolated ([`knot_days`](@ref)/[`interpolate_knots`](@ref)),
-first knot pinned at zero, mirroring [`onset_report_hazard_model`](@ref)'s
-calendar walk exactly.
+first knot pinned at zero. It is not centred as
+[`onset_report_hazard_model`](@ref)'s calendar walk is, since its first knot
+sits on scored onset dates and its tight step prior leaves it little level
+to trade against `β`.
 
 Returns `(; alpha, β, σ_a, z_a, ω)`, `alpha` and `ω` length `nt =
 max(grid_end - grid_start + 1, 1)`.
@@ -3805,8 +3817,7 @@ freedom `ν` (default 4), weakly identified and so not sampled, as in
 read a bar lower, which a count likelihood cannot score. The scale
 ([`onset_report_scales`](@ref)) matches the Student-t's variance to a
 negative binomial count variance with dispersion
-`1/sqrt(k) ~ dispersion_prior`, plus a read SD `τ ~ read_sd_prior` for
-each digitised bar the cell reads.
+`1/sqrt(k) ~ dispersion_prior`, which also absorbs the digitisation error.
 
 The calendar walk's grid starts at [`onset_hazard_grid_start`](@ref), no
 earlier than one delay support's width before the earliest report day, so
@@ -3815,7 +3826,7 @@ table and ascertainment walk still span the full onset-date grid from
 `minimum(onset_days)`.
 
 Returns `(; increments, modelled, scales, logit_h0, γ, grid_start,
-grid_end, alpha, alpha_grid_start, τ, k, η0, σ_h0, σ_γ, β, σ_a, ν)` with
+grid_end, alpha, alpha_grid_start, k, η0, σ_h0, σ_γ, β, σ_a, ν)` with
 `modelled` the per-cell increment means the likelihood scores, `scales`
 the per-cell observation scales it scores them with, `grid_start` the
 report-date grid day `γ` is indexed from (see above), `grid_end` the
@@ -3831,7 +3842,6 @@ for the pairs-plot summary.
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        read_sd_prior = LogNormal(log(1.0), 1.0),
         dispersion_prior = truncated(Normal(0, 1); lower = 0),
         ν::Real = 4.0
     )
@@ -3871,21 +3881,16 @@ for the pairs-plot summary.
     )
     alpha = asc_state.alpha
 
-    ## Cell noise: negative binomial count variation with dispersion `k`,
-    ## plus a read SD `τ` for every digitised bar the cell reads. A
-    ## correction differences two reads; a level (the sentinel
-    ## `prev_report_days[i] = 0`, an empty predecessor) reads one.
-    τ ~ read_sd_prior
+    ## Cell noise: negative binomial count variation with dispersion `k`.
     inv_sqrt_k ~ dispersion_prior
     k = 1 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
-    reads = [p == 0 ? 1 : 2 for p in prev_report_days]
 
     moments = onset_report_moments(
         cdf_table, u_lo, onsets,
         u_lo, alpha, onset_days, report_days,
         prev_report_days
     )
-    scales = onset_report_scales(moments.means, τ, k, reads, ν)
+    scales = onset_report_scales(moments.means, k, ν)
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
@@ -3904,7 +3909,7 @@ for the pairs-plot summary.
         increments, modelled = moments.means, scales,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
         grid_start = hazard_state.grid_start, grid_end, alpha,
-        alpha_grid_start = u_lo, τ, k,
+        alpha_grid_start = u_lo, k,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
         ν,

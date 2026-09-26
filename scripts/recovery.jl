@@ -35,7 +35,7 @@ mkpath(out_dir)
 ## National and province quantities checked, as the report reads them.
 const SCALARS = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
-    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
+    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.inv_sqrt_k",
     "region_drift_sd",
 ]
 const PER_PROVINCE = ["C_T_patch", "R_T_patch", "CFR_patch", "province_ascertainment"]

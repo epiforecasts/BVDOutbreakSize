@@ -2325,8 +2325,8 @@ line) and `latest` (the count the latest figure prints, black points, for
 context).
 
 Pass `nowcast` as a predictive rather than the latent count, built from
-[`onset_level_predictive_draws`](@ref) so it carries the stream's read
-error. Recent bars sit below the ribbon by construction, since they are
+[`onset_level_predictive_draws`](@ref) so it carries the stream's count
+noise. Recent bars sit below the ribbon by construction, since they are
 partial reads of onset dates still reporting.
 
 A panel whose series disagree in length raises, and an empty `panels`
@@ -2533,15 +2533,14 @@ function plot_onset_delay_profile(
 end
 
 """
-    onset_level_predictive_draws(u, onsets, hazard, τ, k; grid_start,
+    onset_level_predictive_draws(u, onsets, hazard, k; grid_start,
         alpha_grid_start = grid_start, target_delay = nothing, ν = 4.0,
         n_rep = 4, rng = default_rng())
 
 Posterior predictive replicate of onset date `u`'s reported level, read
 off one digitised figure: sampled from [`onset_increments_model`](@ref)'s
 `missing` branch at the scale the likelihood gives a level cell, count
-variation at dispersion `k` plus one read at the read SD `τ`
-([`onset_report_scale`](@ref) with `reads = 1`).
+variation at dispersion `k` ([`onset_report_scale`](@ref)).
 
 `target_delay` is the delay the level is read at. `nothing` (default)
 targets the eventual total (`onset_report_F` at delay `D - 1`, `=
@@ -2550,8 +2549,8 @@ alpha(u)`); an integer targets a snapshot's own reach instead
 
 `hazard` is [`fitted_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`;
 `onsets` holds each draw's daily onset series (`diff` of
-`cumulative_onsets`); `τ` and `k` are the per-draw read SD and count
-dispersion, `onset_report_state.τ` and `1 / onset_report_state.inv_sqrt_k^2`.
+`cumulative_onsets`); `k` is the per-draw count dispersion,
+`1 / onset_report_state.inv_sqrt_k^2`.
 
 `n_rep` replicates per posterior draw smooth the credible ribbon: `means`
 and `sds` are tiled and [`onset_increments_model`](@ref) sampled once
@@ -2561,8 +2560,7 @@ of replicate draws, not grouped by posterior draw.
 function onset_level_predictive_draws(
         u::Integer,
         onsets::AbstractVector{<:AbstractVector{<:Real}},
-        hazard::NamedTuple,
-        τ::AbstractVector{<:Real}, k::AbstractVector{<:Real};
+        hazard::NamedTuple, k::AbstractVector{<:Real};
         grid_start::Integer, alpha_grid_start::Integer = grid_start,
         target_delay::Union{Nothing, Integer} = nothing,
         ν::Real = 4.0, n_rep::Integer = 4,
@@ -2570,16 +2568,14 @@ function onset_level_predictive_draws(
     )
     ndraws = length(onsets)
     if length(hazard.alpha) != ndraws || length(hazard.logit_h0) != ndraws ||
-            length(hazard.γ) != ndraws || length(τ) != ndraws ||
-            length(k) != ndraws
+            length(hazard.γ) != ndraws || length(k) != ndraws
         error(
-            "onset_level_predictive_draws: `onsets`, `hazard`, `τ` and " *
-                "`k` " *
+            "onset_level_predictive_draws: `onsets`, `hazard` and `k` " *
                 "must all come from the same fit, got $ndraws onset draws " *
                 "against $(length(hazard.alpha)) ascertainment, " *
                 "$(length(hazard.logit_h0)) baseline-hazard, " *
                 "$(length(hazard.γ)) calendar-walk and " *
-                "$(length(τ)) read-SD and $(length(k)) dispersion draws."
+                "$(length(k)) dispersion draws."
         )
     end
     ndays = ndraws == 0 ? 0 : length(first(onsets))
@@ -2598,7 +2594,7 @@ function onset_level_predictive_draws(
         means[i] = onsets[i][u] * onset_report_F(
             δ, hazard.logit_h0[i], hazard.γ[i], u, grid_start, α
         )
-        sds[i] = onset_report_scale(means[i], τ[i], k[i], 1, ν)
+        sds[i] = onset_report_scale(means[i], k[i], ν)
     end
     rep_means = repeat(means, n_rep)
     rep_sds = repeat(sds, n_rep)

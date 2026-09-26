@@ -544,12 +544,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
         vcat(v[1], diff(v)) for v in vec(collect(chn[:cumulative_onsets]))
     ]
 
-    ## The chain's per-draw read SD and count dispersion, the noise a single
-    ## digitised bar is replicated through (`onset_level_predictive_draws`).
+    ## The chain's per-draw count dispersion, the noise a single digitised
+    ## bar is replicated through (`onset_level_predictive_draws`).
     function onset_noise_draws(chn)
-        τ = vec(collect(chn[Symbol("onset_report_state.τ")]))
         isk = vec(collect(chn[Symbol("onset_report_state.inv_sqrt_k")]))
-        return (; τ, k = [1 / (x^2 + eps(x)) for x in isk])
+        return (; k = [1 / (x^2 + eps(x)) for x in isk])
     end
 
     _render_log("setup done: $(_since(_setup_t0))")

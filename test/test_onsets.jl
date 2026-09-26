@@ -722,29 +722,41 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
-@testitem "onset_report_scales: Student-t variance matches count plus read" begin
+@testitem "onset_report_hazard_model: the hazard level lives in η0" begin
+    ## The delay deviations sum to zero and the calendar walk has mean zero,
+    ## so `η0` is the mean logit hazard over delays and report days.
+    using BVDOutbreakSize: onset_report_hazard_model
+    using Turing: @varname
+    using Random: seed!, Xoshiro
+    using Statistics: mean
+
+    model = onset_report_hazard_model(1, 60; D = 12)
+    @test length(rand(Xoshiro(1), model)[@varname(z_h0)]) == 11
+    seed!(20260926)
+    for _ in 1:5
+        out = model()
+        @test length(out.logit_h0) == 12
+        @test mean(out.logit_h0) ≈ out.η0
+        @test abs(mean(out.γ)) < 1.0e-12
+    end
+end
+
+@testitem "onset_report_scales: Student-t variance matches a count" begin
     using BVDOutbreakSize: onset_report_scales
     using Distributions: TDist, var
 
     means = [0.0, 20.0, 40.0]
-    ## Cells 1 and 3 are levels with one read; cell 2 is a correction
-    ## between two snapshots, so it carries two reads.
-    reads = [1, 2, 1]
-    τ, k, ν = 1.2, 5.0, 4.0
-    s = onset_report_scales(means, τ, k, reads, ν)
-    target = means .+ means .^ 2 ./ k .+ reads .* τ^2
+    k, ν = 5.0, 4.0
+    s = onset_report_scales(means, k, ν)
     ## A Student-t with scale `σ` has variance `σ² ν / (ν - 2)`.
-    @test s .^ 2 .* var(TDist(ν)) ≈ target
-    ## A level of 40 is dominated by its count variation, not the read.
-    @test s[3] > s[1] * 4
+    @test s .^ 2 .* var(TDist(ν)) ≈ means .+ means .^ 2 ./ k
     ## A negative mean cannot give a negative variance.
-    @test isfinite(only(onset_report_scales([-5.0], τ, k, [2], ν)))
+    @test only(onset_report_scales([-5.0], k, ν)) == 0
 end
 
-@testitem "onset_reporting_model: scale is count variation plus a read SD per read" begin
-    ## A two-vintage triangle: the first vintage's cells and the date the
-    ## second prints first are levels (one read); the rest are corrections
-    ## (two reads).
+@testitem "onset_reporting_model: scale is count variation alone" begin
+    ## A two-vintage triangle of levels and corrections, which share one
+    ## variance model.
     using BVDOutbreakSize: onset_reporting_model
     using Turing: DynamicPPL
     using Random: seed!
@@ -757,16 +769,14 @@ end
     )
     model = onset_reporting_model(oc, fill(30.0, 25))
     names = string.(collect(keys(DynamicPPL.VarInfo(model))))
-    @test "τ" in names
+    @test !("τ" in names)
     @test "inv_sqrt_k" in names
     seed!(20260924)
     out = model()
-    @test out.τ > 0
     @test out.k > 0
-    reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
     μ = max.(out.modelled, 0)
     @test out.scales ≈
-        sqrt.((out.ν - 2) / out.ν .* (μ .+ μ .^ 2 ./ out.k .+ reads .* out.τ^2))
+        sqrt.((out.ν - 2) / out.ν .* (μ .+ μ .^ 2 ./ out.k))
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin

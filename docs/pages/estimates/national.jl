@@ -616,8 +616,7 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The read SD row is the error the fit attributes to one digitised bar, in cases.
-# The count dispersion row is the negative binomial overdispersion of the reported counts, as $1/\sqrt{k}$.
+# The count dispersion row is the negative binomial overdispersion of the reported counts, as $1/\sqrt{k}$, and also covers the digitisation error.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -667,7 +666,6 @@ _onset_labels = merge(
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.τ") => "onset-report read SD (cases)",
         Symbol("onset_report_state.inv_sqrt_k") =>
             "onset-report count dispersion (1/sqrt k)"
     )
@@ -714,7 +712,6 @@ onset_summary = vcat(
         [
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.τ"),
             Symbol("onset_report_state.inv_sqrt_k"),
         ];
         digits = 3, labels = _onset_labels
@@ -746,7 +743,6 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
-        Symbol("onset_report_state.τ"),
         Symbol("onset_report_state.inv_sqrt_k"),
     ];
     prior = prior_chn, labels = _onset_labels
@@ -788,7 +784,7 @@ onset_delay_profile_fig #hide
 
 ## The daily onsets series per posterior draw (`diff` of the chain's
 ## `cumulative_onsets`; the model stores only the running sum), the chain's
-## per-draw read SD and count dispersion, and the latest printed reading of each onset date
+## per-draw count dispersion, and the latest printed reading of each onset date
 ## (`onset_snapshot_readings`).
 _onset_daily_draws = onset_daily_draws(chn_joint)
 _onset_noise = onset_noise_draws(chn_joint)
@@ -813,8 +809,7 @@ _onset_by_date_onsets = [
 ## bar carries (`onset_level_predictive_draws`'s level-cell case).
 _onset_by_date_reps = [
     onset_level_predictive_draws(
-        u, _onset_daily_draws, _onset_hazard,
-        _onset_noise.τ, _onset_noise.k;
+        u, _onset_daily_draws, _onset_hazard, _onset_noise.k;
         grid_start = _onset_hazard_grid_start,
         alpha_grid_start = _onset_grid_start,
         target_delay = _onset_grid_end - u, rng = _onset_rng

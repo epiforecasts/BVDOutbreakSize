@@ -602,8 +602,7 @@ _onset_panels = map(_onset_selected_report_days) do R
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
     nowcast = [
         onset_level_predictive_draws(
-            u, _onset_daily_draws, _onset_hazard,
-            _onset_noise.τ, _onset_noise.k;
+            u, _onset_daily_draws, _onset_hazard, _onset_noise.k;
             grid_start = _onset_hazard_grid_start,
             alpha_grid_start = _onset_grid_start, rng = _onset_rng
         )
@@ -702,12 +701,12 @@ stream_pairs_fig #hide
 recovery = recovery_results()
 recovery_national_quantities = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
-    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
+    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.inv_sqrt_k",
     "region_drift_sd",
 ]
 recovery_labels = Dict(
     "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
-    "onset_report_state.τ" => "onset read SD",
+    "onset_report_state.inv_sqrt_k" => "onset count dispersion",
     "region_drift_sd" => "province drift SD",
 )
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
