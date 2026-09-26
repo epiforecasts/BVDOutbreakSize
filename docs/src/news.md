@@ -184,6 +184,7 @@ Changes since v2.1.0.
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
 - Every other count draw saturates the same way, including the export totals, the late confirmed days and the province split (#905).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
+- `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 
 ### Infrastructure
 
