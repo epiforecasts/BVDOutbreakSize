@@ -1,11 +1,11 @@
 # Post-processing of a health-zone chain (`bvd_zone`): daily trajectories
-# rebuilt from the stored knots, the one-week zone forecast and its
-# archive, the overview and forecast tables, scoring against the observed
-# split, and the fit diagnostics. Every draw carries its own draw of the
-# shared quantity, so the province model's uncertainty is already inside
-# each zone draw and nothing here pairs the two stages after the fact.
-# Everything reads the chain and the `zone_fit_inputs` it was fitted with;
-# nothing re-evaluates the Turing model.
+# rebuilt from the stored knots, the zone forecast drawn from the model with
+# `predict` and its archive, the overview and forecast tables, scoring
+# against the observed split, and the fit diagnostics. Every draw carries
+# its own draw of the shared quantity, so the province model's uncertainty
+# is already inside each zone draw and nothing here pairs the two stages
+# after the fact. Everything but the forecast reads the chain and the
+# `zone_fit_inputs` it was fitted with.
 
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
@@ -249,164 +249,54 @@ function zone_infections(chn, inputs)
     return out
 end
 
-## The model data extended `horizon` days past the cut-off for one draw:
-## its patch infections `I_base` continue at their own cut-off weekly
-## growth, `I_p(n + d) = I_p(n) (I_p(n) / I_p(n − 7))^{d/7}`, the pre-`t0`
-## terms are rebuilt on the longer grid and the vintage days become the
-## cut-off and each horizon day, so the increments read `(n, n + d]` by
-## cumulative sum. `report_matrix` is the same for every draw and is built
-## once by the caller. Because `I_base` already carries the draw's shared
-## quantity, the returned data need no further deformation.
-function _zone_extended_data(
-        inputs, I_base::AbstractMatrix,
-        report_matrix::AbstractMatrix; horizon::Integer = 7,
-        week::Integer = 7, growth_bounds = (0.25, 4.0)
-    )
-    zd = inputs.model_data
-    n = zd.n
-    np = size(I_base, 1)
-    I_ext = zeros(Float64, np, n + horizon)
-    I_ext[:, 1:n] .= I_base
-    for p in 1:np
-        last = I_base[p, n]
-        back = n > week ? I_base[p, n - week] : last
-        ratio = back > 0 ? clamp(last / back, growth_bounds...) : 1.0
-        for d in 1:horizon
-            I_ext[p, n + d] = last * ratio^(d / week)
-        end
-    end
-    fixed = zone_fixed_terms(I_ext, zd.g, zd.f, zd.t0)
-    days = vcat(n, n .+ (1:horizon))
-    ## The renewal reads `import_fraction` by absolute day, so it has to
-    ## reach the horizon like every other per-day term. The final vintage's
-    ## fraction is held over the forecast, the parent having no arrivals
-    ## beyond its own cut-off to apportion.
-    mixing = if zd.mixing === nothing
-        nothing
-    else
-        imp = zeros(Float64, np, n + horizon)
-        imp[:, 1:n] .= zd.mixing.import_fraction
-        for d in 1:horizon
-            imp[:, n + d] .= view(zd.mixing.import_fraction, :, n)
-        end
-        merge(zd.mixing, (; import_fraction = imp))
-    end
-    return merge(
-        zd,
-        (;
-            I_bar = I_ext, n = n + horizon, days, mixing,
-            fixed.force_pre, fixed.report_pre_cum, fixed.infections_pre,
-            report_matrix,
-            report_pre_rows = zone_report_pre_rows(
-                fixed.report_pre,
-                inputs.patch_of_zone, zd.t0, n + horizon
-            ),
+"""
+$(TYPEDSIGNATURES)
+
+Posterior-predictive draws of the zone forecast: `predict` on
+[`bvd_zone`](@ref) run past the cut-off ([`forecast_draws`](@ref)) over the
+zone chain `chn`. `inputs` must carry the parent's forecast
+([`zone_fit_inputs`](@ref) with `parent_forecast`), whose horizon the
+forecast runs to. Each draw keeps its fitted parameters, draws the future
+shared quantity from the parent's posterior conditional on the fitted one,
+fresh deviation innovations for the future knots and a parent draw of the
+patch totals, and splits each total over the zones by the fitted
+composition.
+"""
+function zone_forecast(chn, inputs; seed::Integer = 20260518)
+    zf = inputs.model_data.forecast
+    zf === nothing && throw(
+        ArgumentError(
+            "zone_forecast: the inputs carry no parent forecast; build them " *
+                "with `zone_fit_inputs(...; parent_forecast)`."
         )
     )
-end
-
-## Daily deviations over `t0 … n + horizon` for one draw: the knots
-## interpolated to the cut-off, then the AR mean path `φ^{d/7} δ(n)`.
-function _zone_extended_deviations(
-        st, inputs; horizon::Integer = 7,
-        week::Integer = 7
+    return forecast_draws(
+        bvd_zone(inputs.model_data), chn; horizon = zf.horizon, seed
     )
-    zd = inputs.model_data
-    base = zd.interp * transpose(st.δ_knots)
-    nd, nz = size(base)
-    out = zeros(Float64, nd + horizon, nz)
-    out[1:nd, :] .= base
-    for d in 1:horizon, z in 1:nz
-
-        out[nd + d, z] = st.φ^(d / week) * base[nd, z]
-    end
-    return out
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Projected share of each patch's confirmed reports falling in each zone over
-the horizon: the share renewal continued past the cut-off with the
-deviations on their AR mean path, each draw's own patch infections on
-their cut-off weekly growth and no fresh innovations, then
-`π_z(d) = C_z(n, n + d] / Σ_{z' ∈ p} C_{z'}(n, n + d]`. Returns an
-`(ndraws × n_zones × horizon)` array.
+The zone forecast draws `fc` ([`zone_forecast`](@ref)) per zone and patch:
+the new confirmed cases over the horizon, one draw vector per zone in the
+order of `inputs.zone_keys`, the paired parent patch totals, one draw
+vector per patch, each draw's zone shares `(ndraws × n_zones)` and each
+draw's composition concentration. Returns `(; zones, patches, shares,
+kappa)`.
 """
-function zone_forecast_shares(chn, inputs; horizon::Integer = 7)
-    zd = inputs.model_data
-    states = _zone_states(chn, inputs)
-    nd_ext = zd.n + horizon - zd.t0 + 1
-    report_matrix = zone_delay_operator(zd.f, nd_ext)
+function zone_forecast_draws(fc, inputs)
     nz = length(inputs.zone_keys)
-    out = zeros(Float64, length(states), nz, horizon)
-    for (i, st) in enumerate(states)
-        zd_ext = _zone_extended_data(
-            inputs, st.def.I_bar, report_matrix;
-            horizon, week = inputs.week
-        )
-        δ = _zone_extended_deviations(st, inputs; horizon, week = inputs.week)
-        inc = zone_forward_daily(
-            zd_ext, δ, st.w0, st.ε,
-            zone_deformation(zd_ext, nothing)
-        ).increments
-        for zs in inputs.patch_ranges
-            isempty(zs) && continue
-            run = zeros(Float64, length(zs))
-            for d in 1:horizon
-                for (k, z) in enumerate(zs)
-                    run[k] += inc[z, d + 1]
-                end
-                tot = max(sum(run), eps())
-                for (k, z) in enumerate(zs)
-                    out[i, z, d] = run[k] / tot
-                end
-            end
-        end
-    end
-    return out
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Per-zone forecast draws of new confirmed cases over `horizon` days from
-one [`forecast_reported`](@ref) result `fc`: the national draw times the
-patch share at the parent's last spatial vintage (the same stage-1 draw,
-as [`province_forecast_archive`](@ref) pairs them) times a random stage-2
-draw's projected zone share ([`zone_forecast_shares`](@ref), passed as
-`shares` to reuse one projection). Returns `(; zones, patches, pick)`, one
-draw vector per zone in the order of `inputs.zone_keys`, the patch totals
-per patch and the stage-2 draw index each forecast draw took its shares
-from.
-"""
-function zone_forecast_draws(
-        chn, parent_chain, fc, inputs;
-        horizon::Integer = 7, rng::AbstractRNG = MersenneTwister(20260518),
-        shares = zone_forecast_shares(chn, inputs; horizon)
-    )
-    :confirmed_new in propertynames(fc) || error(
-        "zone forecast: `fc` carries no `confirmed_new`; it must be a " *
-            "`forecast_reported` result."
-    )
-    parent_chain = _zone_parent_chain(parent_chain)
     np = length(inputs.patch_names)
-    national = Float64.(fc[!, :confirmed_new])
-    patch_share = _per_patch_last_share(parent_chain, :province_shares, np)
-    nd1 = min(length(national), minimum(length, patch_share))
-    pick = rand(rng, 1:size(shares, 1), nd1)
-    nz = length(inputs.zone_keys)
-    zones = [Vector{Float64}(undef, nd1) for _ in 1:nz]
-    patches = [Vector{Float64}(undef, nd1) for _ in 1:np]
-    for i in 1:nd1
-        for p in 1:np
-            patches[p][i] = national[i] * patch_share[p][i]
-            for z in inputs.patch_ranges[p]
-                zones[z][i] = patches[p][i] * shares[pick[i], z, horizon]
-            end
-        end
-    end
-    return (; zones, patches, pick)
+    counts = _draw_vectors(fc, :forecast_zone_confirmed)
+    totals = _draw_vectors(fc, :forecast_patch_confirmed)
+    shares = _draw_vectors(fc, :forecast_zone_share)
+    return (;
+        zones = [Float64[c[z] for c in counts] for z in 1:nz],
+        patches = [Float64[t[p] for t in totals] for p in 1:np],
+        shares = Float64[s[z] for s in shares, z in 1:nz],
+        kappa = Float64.(_draws(fc, :forecast_zone_concentration)),
+    )
 end
 
 """
@@ -415,47 +305,36 @@ $(TYPEDSIGNATURES)
 Probability that each zone reports at least `K` new confirmed cases over
 the horizon, for every `K` in `thresholds`. Under the fitted composition a
 zone's count given its patch total `N` is Beta-binomial, the marginal of
-the Dirichlet-multinomial with concentration `κ π`, so for forecast draw
-`i` with patch total `N_i` (the draw of [`zone_forecast_draws`](@ref),
-rounded), projected share `π_i` and the same stage-2 draw's `κ_i = (1 −
-ρ_i)/ρ_i`:
+the Dirichlet-multinomial with concentration `κ π`, so over the forecast
+draws `i` ([`zone_forecast_draws`](@ref)), each with its patch total `N_i`,
+zone share `π_i` and concentration `κ_i`:
 
 ```math
 P(y_z ≥ K) = \\frac{1}{n}\\sum_i \\Bigl[1 − F_{\\mathrm{BB}(N_i,\\, κ_i π_{z,i},\\, κ_i (1 − π_{z,i}))}(K − 1)\\Bigr].
 ```
 
-`draws` and `shares` are the forecast draws and projected shares, passed
-to reuse one projection. Returns an `(n_zones × length(thresholds))`
-matrix.
+Returns an `(n_zones × length(thresholds))` matrix.
 """
 function zone_forecast_probabilities(
-        chn, parent_chain, fc, inputs;
-        thresholds = (1, 5, 10, 20), horizon::Integer = 7,
-        rng::AbstractRNG = MersenneTwister(20260518),
-        shares = zone_forecast_shares(chn, inputs; horizon),
-        draws = zone_forecast_draws(
-            chn, parent_chain, fc, inputs; horizon, rng, shares
-        )
+        fc, inputs;
+        thresholds = (1, 5, 10, 20),
+        draws = zone_forecast_draws(fc, inputs)
     )
     nz = length(inputs.zone_keys)
-    rho = _draws(chn, :composition_rho_zone)
     out = zeros(Float64, nz, length(thresholds))
-    nd1 = length(draws.pick)
+    nd = length(draws.kappa)
     for (p, zs) in enumerate(inputs.patch_ranges), z in zs
         for (k, K) in enumerate(thresholds)
             acc = 0.0
-            for i in 1:nd1
+            for i in 1:nd
                 N = round(Int, draws.patches[p][i])
-                if N < K
-                    continue
-                end
-                j = draws.pick[i]
-                κ = (1 - rho[j]) / rho[j]
-                α = max(κ * shares[j, z, horizon], eps())
+                N < K && continue
+                κ = draws.kappa[i]
+                α = max(κ * draws.shares[i, z], eps())
                 β = max(κ - α, eps())
                 acc += 1 - cdf(BetaBinomial(N, α, β), K - 1)
             end
-            out[z, k] = acc / nd1
+            out[z, k] = acc / nd
         end
     end
     return out
@@ -490,48 +369,35 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Long-format archive of the per-zone split of one or more
-[`forecast_reported`](@ref) results `fcs` (an iterable of `(horizon, fc)`
-pairs) made from the cut-off `made_date`, in the
+Long-format archive of the zone forecast draws `fc` ([`zone_forecast`](@ref))
+made from the cut-off `made_date`, in the
 [`province_forecast_archive`](@ref) schema plus a `zone` column. `province`
-is the patch key and `zone` the manifest's dotted `province.zone` key.
-Each value is the national draw times the patch share at the parent's last
-spatial vintage (the same stage-1 draw) times a random stage-2 draw's
-projected zone share over that horizon ([`zone_forecast_shares`](@ref)),
-under the `confirmed cases` stream label. `thin` keeps every `thin`-th
-draw.
+is the patch key and `zone` the manifest's dotted `province.zone` key, and
+each value is one draw of the zone's new confirmed cases over the forecast
+horizon, under the `confirmed cases` stream label. `thin` keeps every
+`thin`-th draw.
 """
 function zone_forecast_archive(
-        chn, parent_chain, fcs, inputs;
-        made_date::Date, horizon::Integer = 7, thin::Integer = 1,
-        rng::AbstractRNG = MersenneTwister(20260518)
+        fc, inputs; made_date::Date, thin::Integer = 1
     )
     out = DataFrame(
         made_date = Date[], horizon = Int[], target_date = Date[],
         province = String[], zone = String[], stream = String[],
         draw = Int[], value = Float64[]
     )
-    shares = zone_forecast_shares(chn, inputs; horizon)
-    for (h, fc) in fcs
-        hh = Int(h)
-        1 <= hh <= horizon || continue
-        :confirmed_new in propertynames(fc) || continue
-        target = made_date + Day(hh)
-        draws = zone_forecast_draws(
-            chn, parent_chain, fc, inputs;
-            horizon = hh, rng, shares
-        )
-        for z in eachindex(inputs.zone_keys)
-            vals = draws.zones[z]
-            prov = inputs.patch_names[inputs.patch_of_zone[z]]
-            for (d, i) in enumerate(1:thin:length(vals))
-                push!(
-                    out, (
-                        made_date, hh, target, prov, inputs.zone_keys[z],
-                        "confirmed cases", d, vals[i],
-                    )
+    h = inputs.model_data.forecast.horizon
+    target = made_date + Day(h)
+    draws = zone_forecast_draws(fc, inputs)
+    for z in eachindex(inputs.zone_keys)
+        vals = draws.zones[z]
+        prov = inputs.patch_names[inputs.patch_of_zone[z]]
+        for (d, i) in enumerate(1:thin:length(vals))
+            push!(
+                out, (
+                    made_date, h, target, prov, inputs.zone_keys[z],
+                    "confirmed cases", d, vals[i],
                 )
-            end
+            )
         end
     end
     return out
@@ -603,27 +469,18 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Per-zone one-week-ahead new confirmed cases from a
-[`forecast_reported`](@ref) result `fc` made from `parent_chain`, as the
-median and the 90/60/30% intervals the other forecast tables report, then
-the probability of at least `K` cases for each `K` in `thresholds`
+Per-zone new confirmed cases over the forecast horizon from the zone
+forecast draws `fc` ([`zone_forecast`](@ref)), as the median and the
+90/60/30% intervals the other forecast tables report, then the probability
+of at least `K` cases for each `K` in `thresholds`
 ([`zone_forecast_probabilities`](@ref)) as `p_ge_K`, one row per zone with
-a patch-total row per patch (its threshold columns `missing`), built as
-[`zone_forecast_archive`](@ref) builds them.
+a patch-total row per patch (its threshold columns `missing`).
 """
 function zone_forecast_table(
-        chn, parent_chain, fc, inputs;
-        horizon::Integer = 7, digits::Integer = 0,
-        thresholds = (1, 5, 10, 20),
-        rng::AbstractRNG = MersenneTwister(20260518)
+        fc, inputs; digits::Integer = 0, thresholds = (1, 5, 10, 20)
     )
-    shares = zone_forecast_shares(chn, inputs; horizon)
-    draws = zone_forecast_draws(
-        chn, parent_chain, fc, inputs; horizon, rng, shares
-    )
-    probs = zone_forecast_probabilities(
-        chn, parent_chain, fc, inputs; thresholds, horizon, shares, draws
-    )
+    draws = zone_forecast_draws(fc, inputs)
+    probs = zone_forecast_probabilities(fc, inputs; thresholds, draws)
     pcols = [Symbol("p_ge_", K) for K in thresholds]
     row(label, patch, v, pr) = begin
         s = posterior_summary(v)
@@ -707,16 +564,14 @@ end
 $(TYPEDSIGNATURES)
 
 Per-zone forecast against what was observed: the median, 50% and 90%
-intervals of the one-week zone forecast ([`zone_forecast_table`](@ref)), the
+intervals of the zone forecast draws `fc` ([`zone_forecast`](@ref)), the
 observed count from `truth` ([`zone_forecast_truth`](@ref)) and whether it
 fell inside the interval, one row per zone plus a patch-total row.
 """
 function zone_forecast_vs_truth(
-        chn, parent_chain, fc, inputs;
-        truth::AbstractVector, horizon::Integer = 7, digits::Integer = 0,
-        rng::AbstractRNG = MersenneTwister(20260518)
+        fc, inputs; truth::AbstractVector, digits::Integer = 0
     )
-    draws = zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng)
+    draws = zone_forecast_draws(fc, inputs)
     row(label, patch, v, obs) = begin
         s = posterior_summary(v)
         (
@@ -786,8 +641,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Scores of the one-week zone forecast against the observed split `truth`
-([`zone_forecast_truth`](@ref)). Per patch, the multinomial log score of
+Scores of the zone forecast draws `fc` ([`zone_forecast`](@ref)) against
+the observed split `truth` ([`zone_forecast_truth`](@ref)). Per patch, the multinomial log score of
 the observed zone split of the patch's weekly total under the zone model
 (the log of the draw-averaged multinomial mass at the projected shares),
 against two nulls: share persistence, the observed cumulative zone shares
@@ -804,16 +659,11 @@ total of the last `window` days with negative-binomial noise at dispersion
 its score columns are `missing`.
 """
 function zone_forecast_scores(
-        chn, parent_chain, fc, inputs;
-        truth::AbstractVector, horizon::Integer = 7, window::Integer = 7,
-        k_baseline::Real = 5.0,
+        fc, inputs;
+        truth::AbstractVector, window::Integer = 7, k_baseline::Real = 5.0,
         rng::AbstractRNG = MersenneTwister(20260518)
     )
-    shares = zone_forecast_shares(chn, inputs; horizon)
-    draws = zone_forecast_draws(
-        chn, parent_chain, fc, inputs; horizon, rng,
-        shares
-    )
+    draws = zone_forecast_draws(fc, inputs)
     recent = _zone_recent_counts(inputs; window)
     rows = NamedTuple[]
     for (p, zs) in enumerate(inputs.patch_ranges)
@@ -823,7 +673,7 @@ function zone_forecast_scores(
         N = sum(y)
         label = inputs.patch_labels[p]
         if N > 0
-            Π = shares[:, zs, horizon]
+            Π = draws.shares[:, zs]
             cum = Float64[inputs.cumulative[z] + 0.5 for z in zs]
             last_ = Float64[recent[z] + 0.5 for z in zs]
             row(method, log_score, total) = merge(

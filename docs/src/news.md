@@ -17,6 +17,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
+- The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
 
 ### Data
 

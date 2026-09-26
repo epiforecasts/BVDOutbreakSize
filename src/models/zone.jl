@@ -46,8 +46,8 @@ const _ZONE_PARENT_KEYS = (
     correlation = :region_corr_primary_secondary,
 )
 
-## Every parent key the zone stage and its forecast read, so an extract of
-## these draws stands in for the full chain.
+## Every parent key the zone stage and its diagnostics read, so an extract
+## of these draws stands in for the full chain.
 const _ZONE_EXTRACT_KEYS = (values(_ZONE_PARENT_KEYS)..., :province_shares)
 
 """
@@ -300,7 +300,8 @@ the pre-`t0` terms of [`zone_fixed_terms`](@ref) be rescaled by one factor
 per patch rather than rebuilt on every forward pass. A patch whose first
 kept midpoint fell before `t0` would break that, and is an error.
 
-Returns `(; weights, L, cells_patch, cells_week, midpoints, d, mean_log)`.
+Returns `(; weights, L, cells_patch, cells_week, midpoints, d, mean_log,
+log_sums)`, `log_sums` holding the per-draw log sums `(n_draws × d)`.
 """
 ## Cholesky factor of a covariance, conditioned by a ridge of `ridge` of
 ## each cell's own variance and then blended toward that diagonal by the
@@ -341,6 +342,7 @@ function zone_meld_block(
         weights = zeros(Float64, np * n, 0),
         L = zeros(Float64, 0, 0), cells_patch, cells_week,
         midpoints = mids, d = 0, mean_log = Float64[],
+        log_sums = zeros(Float64, length(infections), 0),
     )
     S = Matrix{Float64}(undef, length(infections), d)
     for (i, v) in enumerate(infections)
@@ -380,7 +382,151 @@ function zone_meld_block(
     end
     return (;
         weights, L, cells_patch, cells_week, midpoints = mids, d,
-        mean_log,
+        mean_log, log_sums = S,
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The fixed inputs [`bvd_zone`](@ref) reads past the cut-off `n` when run with
+a [`ForecastHorizon`](@ref) of `horizon` days, built from the fitted
+shared quantity `meld` ([`zone_meld_block`](@ref)) and the parent's
+posterior-predictive draws `forecast` ([`forecast_draws`](@ref) on the
+parent), which carry one draw per parent draw in the same order.
+
+The shared quantity is extended over the forecast weeks. Each parent draw's
+log weekly patch infections over the fitted cells of `meld` and over the
+future windows `(n, n + 7]`, … (kept where the parent's mean reaches
+`min_infections`) are stacked, and their covariance factorised with the
+fitted block held at `meld.L`:
+
+```math
+L = \\begin{pmatrix} L_{11} & 0 \\\\ L_{21} & L_{22} \\end{pmatrix},
+\\qquad L_{21} = Σ_{21} L_{11}^{-\\top},
+\\qquad L_{22} L_{22}^\\top = Σ_{22} − L_{21} L_{21}^\\top.
+```
+
+A fresh `η_f ∼ N(0, I)` then draws the future weeks from the parent's
+posterior conditional on the fitted draw `η`, and the fitted model is
+unchanged. The daily deformation keeps the fitted rows up to `n` and
+interpolates from day `n` to the future midpoints after it. The mean curve
+past `n` is the parent's mean log predicted infections, and every delay
+operator and pre-`t0` term is rebuilt on the longer grid. The import
+fractions hold their value at `n`.
+
+`totals` holds each parent draw's predicted confirmed cases per patch over
+`(n, n + horizon]` (`forecast_province_confirmed`), the counts the zone
+forecast splits. `horizon` must be one of the parent's weekly forecast
+vintages.
+"""
+function zone_forecast_block(
+        forecast, meld, I_bar::AbstractMatrix, g::AbstractVector,
+        f::AbstractVector, death_pmf::AbstractVector, t0::Integer,
+        knots::AbstractVector{<:Integer}, patch_of_zone, mixing;
+        horizon::Integer = 7, week::Integer = 7,
+        min_infections::Real = 1.0, ridge::Real = 1.0e-6
+    )
+    np, n = size(I_bar)
+    H = Int(horizon)
+    inf = _draw_vectors(forecast, :forecast_infections_patch)
+    Hp = length(first(inf)) ÷ np
+    Hp >= H || error(
+        "zone_forecast_block: the parent forecast covers $Hp days, fewer " *
+            "than the $H-day horizon."
+    )
+    ndraw = length(inf)
+    size(meld.log_sums, 1) == ndraw || error(
+        "zone_forecast_block: $ndraw parent forecast draws for " *
+            "$(size(meld.log_sums, 1)) fitted draws; draw the forecast from " *
+            "the chain the zone inputs were built from."
+    )
+    future = [reshape(Float64.(v), np, Hp)[:, 1:H] for v in inf]
+    I_f = exp.(reduce(+, (log.(safe_rate.(M)) for M in future)) ./ ndraw)
+    I_ext = hcat(I_bar, I_f)
+    ## Future windows and their midpoints, on the days past the cut-off.
+    edges = vcat(n, future_knot_days(n, H; week))
+    cells_patch = Int[]
+    cells_mid = Int[]
+    cells_lohi = UnitRange{Int}[]
+    for p in 1:np, k in 1:(length(edges) - 1)
+
+        lo, hi = edges[k] + 1 - n, edges[k + 1] - n
+        sum(@view I_f[p, lo:hi]) >= min_infections || continue
+        push!(cells_patch, p)
+        push!(cells_mid, (edges[k] + edges[k + 1]) ÷ 2)
+        push!(cells_lohi, lo:hi)
+    end
+    d, df = meld.d, length(cells_patch)
+    S_f = [
+        log(safe_rate(sum(@view future[i][cells_patch[c], cells_lohi[c]])))
+            for i in 1:ndraw, c in 1:df
+    ]
+    Σ = cov(hcat(meld.log_sums, S_f))
+    L21 = d == 0 ? zeros(df, 0) :
+        Σ[(d + 1):end, 1:d] / transpose(LowerTriangular(meld.L))
+    L22 = df == 0 ? zeros(0, 0) :
+        _zone_meld_factor(
+            Symmetric(Σ[(d + 1):end, (d + 1):end] - L21 * transpose(L21)), df;
+            ridge
+        )
+    L = [meld.L zeros(d, df); L21 L22]
+    ## The deformation's daily rows: the fitted rows to `n`, then each patch
+    ## interpolated from its value on day `n` to its future midpoints.
+    weights = zeros(Float64, np * (n + H), d + df)
+    weights[1:(np * n), 1:d] .= meld.weights
+    for p in 1:np
+        cs = findall(==(p), cells_patch)
+        anchors = vcat(n, cells_mid[cs])
+        W = zone_interpolation_weights(anchors, n + 1, n + H)
+        base = meld.weights[(n - 1) * np + p, :]
+        for t in 1:H
+            row = (n + t - 1) * np + p
+            weights[row, 1:d] .= W[t, 1] .* base
+            for (j, c) in enumerate(cs)
+                weights[row, d + c] = W[t, j + 1]
+            end
+        end
+    end
+    fixed = zone_fixed_terms(I_ext, g, f, t0)
+    death_fixed = zone_fixed_terms(I_ext, g, death_pmf, t0)
+    nd = n + H - t0 + 1
+    knots_ext = vcat(knots, future_knot_days(n, H; week))
+    mixing_ext = mixing === nothing ? nothing :
+        merge(
+            mixing, (;
+                import_fraction = hcat(
+                    mixing.import_fraction,
+                    repeat(mixing.import_fraction[:, n], 1, H)
+                ),
+            )
+        )
+    conf = _draw_vectors(forecast, :forecast_province_confirmed)
+    j = findfirst(==(H), future_knot_days(0, Hp; week))
+    j === nothing && error(
+        "zone_forecast_block: the $H-day horizon is not one of the parent's " *
+            "weekly forecast vintages."
+    )
+    totals = [
+        sum(reshape(Int.(conf[i]), np, :)[p, 1:j]) for i in 1:ndraw, p in 1:np
+    ]
+    return (;
+        horizon = H, knots = knots_ext,
+        n_future_knots = length(knots_ext) - length(knots),
+        meld_weights = weights, meld_L = L, meld_d_future = df,
+        I_bar = I_ext, fixed.force_pre, fixed.report_pre_cum,
+        fixed.infections_pre,
+        report_pre_rows = zone_report_pre_rows(
+            fixed.report_pre, patch_of_zone, t0, n + H
+        ),
+        death_pre_cum = death_fixed.report_pre_cum,
+        death_pre_rows = zone_report_pre_rows(
+            death_fixed.report_pre, patch_of_zone, t0, n + H
+        ),
+        interp = zone_interpolation_weights(knots_ext, t0, n + H),
+        report_matrix = zone_delay_operator(f, nd),
+        death_matrix = zone_delay_operator(death_pmf, nd),
+        mixing = mixing_ext, totals,
     )
 end
 
@@ -812,7 +958,7 @@ end
 $(TYPEDSIGNATURES)
 
 Bin the daily expected reports `(n_days × n_zones)` of
-[`zone_forward_daily`](@ref) into the vintage windows `(d_{v−1}, d_v]`
+[`zone_forward`](@ref) into the vintage windows `(d_{v−1}, d_v]`
 given by the grid days `days`, the first window opening on day one. Days
 before the grid start `t0` contribute the initial share times the patch's
 pre-`t0` accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)).
@@ -961,21 +1107,6 @@ function zone_forward(
         def = zone_deformation(zd, nothing)
     )
     δ_daily = zd.interp * transpose(δ_knots)
-    return zone_forward_daily(zd, δ_daily, w0, ε, def)
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-[`zone_forward`](@ref) from daily deviations `(n_days × n_zones)` rather
-than knots, for the forecast projection, which continues the deviations
-on their AR mean path day by day.
-"""
-function zone_forward_daily(
-        zd, δ_daily::AbstractMatrix, w0::AbstractVector,
-        ε::Union{Nothing, AbstractVector},
-        def = zone_deformation(zd, nothing)
-    )
     mix = ε === nothing ? nothing : zd.mixing
     st = zone_share_renewal(
         def.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
@@ -1053,6 +1184,56 @@ function _zone_shares_at_knots(
 end
 
 ## --- The model -----------------------------------------------------------
+
+## The zone forecast over the horizon. Each zone's expected confirmed
+## reports over `(n, n + H]`, times the case composition's multiplier, set
+## its share of the patch, and a paired parent draw's predicted patch total
+## is split over the zones by the fitted Dirichlet-multinomial, drawn one
+## zone at a time as its sequence of Beta-binomials.
+@model function _zone_forecast_counts(zd, zf, fw, asc, ρ, nd::Integer)
+    nz = length(asc)
+    H = zf.horizon
+    future = (nd + 1):(nd + H)
+    expected = vec(sum(view(fw.reports, future, :); dims = 1))
+    Tp = promote_type(eltype(expected), eltype(asc), typeof(float(ρ)))
+    π = zeros(Tp, nz)
+    for zs in zd.patch_ranges
+        isempty(zs) && continue
+        tot = sum(asc[z] * safe_rate(expected[z]) for z in zs)
+        for z in zs
+            π[z] = asc[z] * safe_rate(expected[z]) / tot
+        end
+    end
+    κ = _zone_kappa(ρ)
+    forecast_pair ~ DiscreteUniform(1, size(zf.totals, 1))
+    N = zf.totals[forecast_pair, :]
+    forecast_zone_draw = Vector{Union{Missing, Int}}(missing, nz)
+    counts = zeros(Int, nz)
+    for (p, zs) in enumerate(zd.patch_ranges)
+        isempty(zs) && continue
+        left = N[p]
+        tail = one(Tp)
+        for z in zs
+            if z == last(zs)
+                counts[z] = left
+            else
+                forecast_zone_draw[z] ~ BetaBinomial(
+                    left, κ * safe_rate(π[z]), κ * safe_rate(tail - π[z])
+                )
+                counts[z] = forecast_zone_draw[z]
+                left -= counts[z]
+                tail -= π[z]
+            end
+        end
+    end
+    forecast_zone_confirmed := counts
+    forecast_patch_confirmed := N
+    forecast_zone_share := π
+    forecast_zone_concentration := κ
+    forecast_zone_infections := vec(sum(view(fw.infections, future, :); dims = 1))
+    return (; counts, π)
+end
+
 
 """
 Health-zone composition model, stage two of the melding. `zd` is the
@@ -1199,6 +1380,21 @@ times the zone's own),
 `parent_patch_T_zone` (the sampled patch infections on the last grid day)
 and, with mixing, `mixing_epsilon_zone`. Daily trajectories are rebuilt
 from these by [`zone_forward`](@ref).
+
+### Forecast
+
+With `forecast` a [`ForecastHorizon`](@ref) (see [`with_horizon`](@ref))
+the model runs past the cut-off on the inputs of
+[`zone_forecast_block`](@ref), which `zd.forecast` must carry for the same
+horizon. The future weeks of the shared quantity are `η_future ∼ N(0, I)`
+through the extended factor, the future knots take fresh innovations
+`z_drift_future` through the same AR(1), and the renewal and delays run on
+over the horizon. Each zone's expected confirmed reports over the horizon,
+times its relative ascertainment, set its share `forecast_zone_share` of
+the patch. `forecast_pair` picks a parent forecast draw, whose confirmed
+cases per patch (`forecast_patch_confirmed`) are split over the zones by
+the fitted case composition into `forecast_zone_confirmed`. Every fitted
+quantity is computed on the fitted days as without a forecast.
 """
 @model function bvd_zone(
         zd;
@@ -1207,11 +1403,18 @@ from these by [`zone_forward`](@ref).
         severity_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         mixing_within_prior = Beta(1, 20),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        offset_prior = Normal(0, 1),
+        forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     nz = size(zd.counts, 1)
     np = length(zd.patch_ranges)
     K = length(zd.knots)
+    H = horizon_days(forecast)
+    zf = get(zd, :forecast, nothing)
+    H == 0 || (zf !== nothing && zf.horizon == H) || error(
+        "bvd_zone: a $H-day forecast needs zone inputs built with the " *
+            "parent's forecast over the same horizon."
+    )
     ## Mixing needs the kernel blocks and the province model's own flows;
     ## without them the zones stay inside their own boundaries.
     mix_on = zd.mixing !== nothing
@@ -1273,12 +1476,34 @@ from these by [`zone_forward`](@ref).
     n_meld = zd.meld_d
     if n_meld > 0
         η ~ product_distribution(fill(offset_prior, n_meld))
-        scale = zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n)
     else
         η = Float64[]
-        scale = nothing
     end
-    def = zone_deformation(zd, scale)
+    ## Past the cut-off the grid, the delays and the shared quantity run on
+    ## over the horizon; the fitted days are unchanged.
+    zx = H == 0 ? zd :
+        merge(
+            zd, (;
+                zf.I_bar, zf.force_pre, zf.report_pre_cum, zf.infections_pre,
+                zf.report_pre_rows, zf.death_pre_cum, zf.death_pre_rows,
+                zf.interp, zf.report_matrix, zf.death_matrix, zf.mixing,
+            )
+        )
+    if H > 0 && zf.meld_d_future > 0
+        η_future ~ product_distribution(fill(offset_prior, zf.meld_d_future))
+        scale = zone_parent_scale(
+            zf.meld_weights, zf.meld_L, vcat(η, η_future), np, zd.n + H
+        )
+    elseif H > 0
+        scale = n_meld > 0 ?
+            zone_parent_scale(zf.meld_weights, zf.meld_L, η, np, zd.n + H) :
+            nothing
+    else
+        scale = n_meld > 0 ?
+            zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n) :
+            nothing
+    end
+    def = zone_deformation(zx, scale)
     ## The correlation of two zones a reference distance apart, the prior
     ## taken from the province model's own learned correlation between its
     ## patches at the distance between their capitals.
@@ -1299,12 +1524,22 @@ from these by [`zone_forward`](@ref).
     φ = exp2(-zd.week / δ_halflife)
     ## The province model's deviation process ([`deviation_knots`](@ref)),
     ## called with one group per patch and the zones of a patch as its units.
-    δ_knots = deviation_knots(
-        z_level, z_drift, σ_level, σ_δ[zd.patch_of_zone], φ,
+    Kf = H == 0 ? 0 : zf.n_future_knots
+    if Kf > 0 && zd.n_walking > 0
+        z_drift_future ~ product_distribution(
+            fill(offset_prior, zd.n_walking * Kf)
+        )
+        z_drift_all = vcat(z_drift, z_drift_future)
+    else
+        z_drift_all = z_drift
+    end
+    δ_knots_all = deviation_knots(
+        z_level, z_drift_all, σ_level, σ_δ[zd.patch_of_zone], φ,
         zd.patch_ranges, level_factors, drift_factors,
-        zd.walking, zd.walk_index, zd.n_walking, K
+        zd.walking, zd.walk_index, zd.n_walking, K + Kf
     )
-    fw = zone_forward(zd, δ_knots, w0, ε_mix, def)
+    δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
+    fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
     asc = relative_multiplier(
         z_ascertainment, σ_ascertainment, zd.patch_ranges
     )
@@ -1321,7 +1556,7 @@ from these by [`zone_forward`](@ref).
     )
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
-    death_daily = zd.death_matrix * fw.infections .+
+    death_daily = zx.death_matrix * fw.infections .+
         def.death_pre_rows .* transpose(w0)
     D = zone_report_increments(
         death_daily, w0, zd.patch_ranges,
@@ -1341,12 +1576,17 @@ from these by [`zone_forward`](@ref).
     )
     nd = zd.n - zd.t0 + 1
     cum = _zone_cumulative_infections(
-        fw.infections, w0, zd.patch_ranges,
+        view(fw.infections, 1:nd, :), w0, zd.patch_ranges,
         def.infections_pre
     )
     R_T_zone := _zone_rt_at(fw.infections, fw.forces, cum, nd, zd.rt_floor)
     parent_eta_zone := η
     parent_patch_T_zone := def.I_bar[:, zd.n]
+    if H > 0
+        forecast_zone ~ to_submodel(
+            _zone_forecast_counts(zd, zf, fw, asc, ρ, nd), false
+        )
+    end
     delta_knots_zone := vec(δ_knots)
     delta_T_zone := δ_knots[:, K]
     share_T_zone := fw.shares[nd, :]
@@ -1720,6 +1960,12 @@ The shared quantity's multivariate normal is fitted here too
 and every patch together, and `meld_min_infections` is the parent mean
 below which a window is dropped as not yet seeded.
 
+`parent_forecast`, the parent's posterior-predictive draws
+([`forecast_draws`](@ref)), adds the inputs the forecast reads
+([`zone_forecast_block`](@ref)) over `horizon` days as `model_data.forecast`.
+The fitted model does not read them, so a chain fitted without them serves
+the forecast model.
+
 `zones` is the metadata table of [`load_health_zones`](@ref), read from the
 package data by default, for labels and, with mixing, populations and
 centroids. Returns a named tuple whose `model_data` field is the plain-array
@@ -1738,7 +1984,9 @@ function zone_fit_inputs(
         meld_min_infections::Real = 1.0,
         zones = _default_health_zones(),
         patch_names::AbstractVector = PROVINCE_NAMES,
-        patch_labels::AbstractVector = PROVINCE_LABELS
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        parent_forecast = nothing,
+        horizon::Integer = 7
     )
     hasproperty(obs, :zone_confirmed_history) || error(
         "zone_fit_inputs: `obs` carries no `zone_confirmed_history`; load " *
@@ -1963,6 +2211,12 @@ function zone_fit_inputs(
         ),
         np, n, knots, I_bar, t0; min_infections = meld_min_infections
     )
+    forecast = parent_forecast === nothing ? nothing :
+        zone_forecast_block(
+            parent_forecast, meld, I_bar, parent.g, parent.f, death_pmf, t0,
+            knots, patch_of_zone, mixing; horizon, week,
+            min_infections = meld_min_infections
+        )
     model_data = (;
         counts, cell_patch, cell_vintage, cell_total, cell_const,
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, patch_of_zone,
@@ -1985,6 +2239,7 @@ function zone_fit_inputs(
         province_severity = _zone_province_factor(
             parent.province_severity, patch_of_zone
         ),
+        forecast,
     )
     dates = [obs.seeding + Day(d - 1) for d in days]
     return (;

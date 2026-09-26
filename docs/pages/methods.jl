@@ -2364,22 +2364,30 @@ cfr_prior_fig #hide
 #
 # #### Health-zone forecast
 #
-# The one-week zone forecast continues the share renewal of Equation (57) past the cut-off with no fresh innovations:
+# The one-week zone forecast is drawn from the fitted zone model run a week past the cut-off, as the other forecasts are.
+# Each draw keeps its fitted parameters.
+# The shared quantity of Equation (56) is extended over the forecast week.
+# The multivariate normal is fitted to each joint-model draw's log weekly patch infections over the fitted weeks and over the forecast week of the same draw's forecast, with the fitted block of its Cholesky factor held fixed:
 #
 # ```math
-# \delta_{z,n+d} = \phi_{\text{z}}^{d/7}\, \delta_{z,n}, \qquad
-# \bar I_{p,n+d} = \bar I_{p,n}\Bigl(\frac{\bar I_{p,n}}{\bar I_{p,n-7}}\Bigr)^{d/7}, \qquad
-# \pi^{\text{fc}}_{z} = \frac{C_{z,(n,\,n+7]}}{\sum_{z' \in p} C_{z',(n,\,n+7]}}, \tag{69}
+# \begin{pmatrix} \mathbf a \\ \mathbf a^{\text{fc}} \end{pmatrix}
+# = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
+# \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
+# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{68}
 # ```
 #
-# for horizon days $d = 1, \dots, 7$.
-# The week-on-week ratio is held within $[0.25, 4]$, so a patch whose last week was near zero cannot be extrapolated to an arbitrary level.
-# The bound is a numerical guard rather than a modelling choice and does not bind at the fitted trajectories.
-# A zone's forecast count is the national confirmed-case forecast draw times its patch's share at the last spatial vintage, times $\pi^{\text{fc}}_z$ from a zone draw chosen at random.
-# The national draw and the patch share come from the same joint-model draw, as the [province forecast](@ref "One-week-ahead forecast results") pairs them.
+# The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
+# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the share renewal of Equation (58) runs on to the end of the week.
+# Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
+#
+# ```math
+# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{69}
+# ```
+#
+# Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (64) at $\pi^{\text{fc}}$.
 #
 # The probability that a zone reports at least $K$ confirmed cases over the week follows from the same composition.
-# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, projected share $\pi_{z,i}$ and that zone draw's $\kappa_i$:
+# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
 #
 # ```math
 # P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{70}

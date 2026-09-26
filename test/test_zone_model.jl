@@ -14,7 +14,7 @@
         zone_forward, discretise_censored,
         lognormal_meansd, convolve_pmf, knot_days,
         zone_interpolation_weights, zone_delay_operator,
-        zone_report_pre_rows
+        zone_report_pre_rows, future_knot_days
     using Dates: Date, Day
     using Distributions: Gamma, Multinomial
     using Random: Xoshiro
@@ -183,6 +183,25 @@
         return zone_fit_inputs(
             syn.chain, syn.obs; zones, walk_threshold,
             patch_names = ["a", "b"], patch_labels = ["A", "B"], kwargs...
+        )
+    end
+
+    ## Stand-in parent forecast for the chain of `zone_synthetic`: each draw
+    ## holds its patch infections at the cut-off level, a little apart from
+    ## draw to draw, for `H` days, and predicts `totals` confirmed cases per
+    ## patch in every forecast week.
+    function zone_parent_forecast(syn; H = 28, totals = [80, 20])
+        np, n = size(syn.I_bar)
+        nw = length(future_knot_days(0, H))
+        ndraw = size(syn.chain[:infections_patch], 1)
+        inf = [
+            vec(repeat(syn.I_bar[:, n], 1, H) .* (1 + 0.01 * i))
+                for i in 1:ndraw
+        ]
+        conf = [vec(repeat(totals, 1, nw)) for _ in 1:ndraw]
+        return Dict{Symbol, Any}(
+            :forecast_infections_patch => reshape(inf, ndraw, 1),
+            :forecast_province_confirmed => reshape(conf, ndraw, 1),
         )
     end
 
@@ -606,63 +625,64 @@ end
     end
 end
 
-@testitem "zone forecast: continuous with the fit and a proper split" setup = [
+@testitem "zone forecast: the fitted model is unchanged and the split is proper" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, _zone_states, _zone_extended_data,
-        zone_deformation, zone_delay_operator,
-        _zone_extended_deviations, zone_forward_daily
-    using Turing: sample, Prior
+    using BVDOutbreakSize: bvd_zone, zone_forecast
+    using Turing: sample, Prior, DynamicPPL
+    using Random: Xoshiro
     import FlexiChains
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn)
-    zd = inputs.model_data
+    inputs_f = zone_inputs(syn; parent_forecast = zone_parent_forecast(syn))
+    zd, zdf = inputs.model_data, inputs_f.model_data
+    zf = zdf.forecast
+    np, n = size(zd.I_bar)
+    d, K = zd.meld_d, length(zd.knots)
+    nd = n - zd.t0 + 1
+    ## The forecast inputs keep every fitted piece as it is.
+    @test zf.horizon == 7
+    @test zf.meld_L[1:d, 1:d] == zd.meld_L
+    @test zf.meld_weights[1:(np * n), 1:d] == zd.meld_weights
+    @test all(iszero, zf.meld_weights[1:(np * n), (d + 1):end])
+    @test zf.interp[1:nd, 1:K] ≈ zd.interp
+    @test all(iszero, zf.interp[1:nd, (K + 1):end])
+    @test zf.I_bar[:, 1:n] == zd.I_bar
+    @test size(zf.I_bar, 2) == n + 7
+    @test all(r -> r == [80, 20], eachrow(zf.totals))
+    ## So the fitted model's log density does not change.
+    for seed in 1:3
+        vi = DynamicPPL.VarInfo(Xoshiro(seed), bvd_zone(zd))
+        @test DynamicPPL.logjoint(bvd_zone(zdf), vi) ==
+            DynamicPPL.logjoint(bvd_zone(zd), vi)
+    end
+    ## A forecast of another horizon is refused.
+    @test_throws ErrorException zone_inputs(
+        syn; parent_forecast = zone_parent_forecast(syn), horizon = 5
+    )
     chn = sample(
         bvd_zone(zd), Prior(), 5; chain_type = FlexiChains.VNChain,
         progress = false
     )
-    H = 7
-    fc = zone_forecast_shares(chn, inputs; horizon = H)
-    @test size(fc) == (5, syn.nz, H)
-    for i in 1:5, d in 1:H, zs in inputs.patch_ranges
-        @test sum(fc[i, zs, d]) ≈ 1 rtol = 1.0e-10
+    @test_throws ArgumentError zone_forecast(chn, inputs)
+    fc = zone_forecast(chn, inputs_f)
+    draws = zone_forecast_draws(fc, inputs_f)
+    @test size(draws.shares) == (5, syn.nz)
+    @test all(isfinite, draws.shares) && all(>=(0), draws.shares)
+    @test all(>(0), draws.kappa)
+    for (p, zs) in enumerate(inputs_f.patch_ranges), i in 1:5
+        @test sum(draws.shares[i, zs]) ≈ 1 rtol = 1.0e-10
+        @test sum(draws.zones[z][i] for z in zs) == draws.patches[p][i]
+        @test draws.patches[p][i] == (p == 1 ? 80 : 20)
     end
-    ## The extended recursion reproduces the fitted days exactly and the
-    ## deviations continue on the AR mean path.
-    st = first(_zone_states(chn, inputs))
-    fitted = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
-    ## The forecast extends the draw's own deformed patch trajectory, so
-    ## the extension is built from `st.def.I_bar` rather than the mean.
-    nd_ext = zd.n + H - zd.t0 + 1
-    zd_ext = _zone_extended_data(
-        inputs, st.def.I_bar,
-        zone_delay_operator(zd.f, nd_ext); horizon = H
-    )
-    δ_ext = _zone_extended_deviations(st, inputs; horizon = H)
-    ext = zone_forward_daily(
-        zd_ext, δ_ext, st.w0, st.ε,
-        zone_deformation(zd_ext, nothing)
-    )
-    nd = inputs.n - inputs.t0 + 1
-    @test ext.shares[1:nd, :] ≈ fitted.shares rtol = 1.0e-10
-    @test ext.infections[1:nd, :] ≈ fitted.infections rtol = 1.0e-10
-    for d in 1:H, z in 1:syn.nz
-
-        @test δ_ext[nd + d, z] ≈ st.φ^(d / 7) * δ_ext[nd, z] rtol = 1.0e-12
-    end
-    ## Patch infections continue at the draw's own cut-off weekly growth.
-    for p in 1:2
-        base = st.def.I_bar
-        ratio = base[p, inputs.n] / base[p, inputs.n - 7]
-        @test zd_ext.I_bar[p, inputs.n + 7] ≈ base[p, inputs.n] * ratio
-    end
+    @test all(v -> all(>=(0), v), draws.zones)
 end
 
 @testitem "zone tables: overview, forecast, truth and scores" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone
+    using BVDOutbreakSize: bvd_zone, zone_forecast
     using Turing: sample, Prior
     using DataFrames: DataFrame, nrow, names
     using Dates: Day
@@ -689,25 +709,17 @@ end
             ov.rt_lo90[z] <= ov.rt_median[z] <= ov.rt_hi90[z], 1:syn.nz
     )
     @test Set(ov.zone) == Set(inputs.zone_labels)
-    ## A stand-in national forecast and parent with a province split.
-    nd1 = 30
-    fc = DataFrame(confirmed_new = fill(100.0, nd1))
-    parent = merge(
-        syn.chain,
-        Dict(
-            :province_shares => reshape(
-                [[0.8 0.8; 0.2 0.2] for _ in 1:nd1], nd1, 1
-            )
-        )
-    )
-    ft = zone_forecast_table(chn, parent, fc, inputs)
+    ## The zone forecast drawn from the model over a stand-in parent forecast.
+    fcin = zone_inputs(syn; parent_forecast = zone_parent_forecast(syn))
+    fc = zone_forecast(chn, fcin)
+    ft = zone_forecast_table(fc, fcin)
     @test nrow(ft) == syn.nz + 2
     @test all(ft.lower_90 .<= ft.median .<= ft.upper_90)
-    fd = zone_forecast_draws(chn, parent, fc, inputs)
+    fd = zone_forecast_draws(fc, fcin)
     @test length(fd.zones) == syn.nz && length(fd.patches) == 2
-    @test all(sum(fd.zones[z] for z in 1:5) .≈ fd.patches[1])
-    ## Zone forecasts sum to the patch total draw by draw, so the patch rows
-    ## carry the national split exactly.
+    @test all(sum(fd.zones[z] for z in 1:5) .== fd.patches[1])
+    ## Zone forecasts sum to the paired patch total draw by draw, so the
+    ## patch rows carry the parent's totals exactly.
     tot = ft[ft.zone .== "Patch total", :]
     @test tot.upper_90 ≈ [80.0, 20.0]
     ## Truth from a later manifest: one more vintage a week on.
@@ -724,11 +736,11 @@ end
     ## Without a vintage at the target the truth is missing.
     truth0 = zone_forecast_truth(syn.obs, inputs; made_date = made)
     @test all(ismissing, truth0)
-    vt = zone_forecast_vs_truth(chn, parent, fc, inputs; truth)
+    vt = zone_forecast_vs_truth(fc, fcin; truth)
     @test nrow(vt) == syn.nz + 2
     @test all(vt.observed[vt.zone .!= "Patch total"] .== 3)
     @test all(vt.lower_90 .<= vt.lower_50 .<= vt.upper_50 .<= vt.upper_90)
-    sc = zone_forecast_scores(chn, parent, fc, inputs; truth)
+    sc = zone_forecast_scores(fc, fcin; truth)
     @test Set(sc.method) ==
         Set(["zone model", "share persistence", "naive persistence"])
     @test all(isfinite, sc.log_score)
@@ -804,17 +816,14 @@ end
     ## deaths are a tenth of the cases, so the counts differ.
     @test zone_composition_ppc(chn, inputs; top = 3).observed !=
         zone_composition_ppc(chn, inputs; top = 3, stream = :deaths).observed
-    arch = zone_forecast_archive(
-        chn, parent, [(7, fc)], inputs;
-        made_date = made, thin = 5
-    )
+    arch = zone_forecast_archive(fc, fcin; made_date = made, thin = 5)
     @test Set(propertynames(arch)) == Set(
         [
             :made_date, :horizon, :target_date,
             :province, :zone, :stream, :draw, :value,
         ]
     )
-    @test nrow(arch) == syn.nz * length(1:5:nd1)
+    @test nrow(arch) == syn.nz * length(1:5:8)
     @test all(arch.target_date .== made + Day(7))
 end
 
@@ -1521,9 +1530,9 @@ end
 @testitem "zone forecast probabilities: thresholds and the table" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone
+    using BVDOutbreakSize: bvd_zone, zone_forecast
     using Turing: sample, Prior
-    using DataFrames: DataFrame, names
+    using DataFrames: names
     import FlexiChains
 
     syn = zone_synthetic()
@@ -1532,18 +1541,11 @@ end
         bvd_zone(inputs.model_data), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false
     )
-    fc = DataFrame(confirmed_new = fill(40.0, 12))
-    parent = merge(
-        syn.chain,
-        Dict(
-            :province_shares => reshape(
-                [[0.8 0.8; 0.2 0.2] for _ in 1:12], 12, 1
-            )
-        )
+    fcin = zone_inputs(
+        syn; parent_forecast = zone_parent_forecast(syn; totals = [32, 8])
     )
-    P = zone_forecast_probabilities(
-        chn, parent, fc, inputs; thresholds = (1, 5, 10)
-    )
+    fc = zone_forecast(chn, fcin)
+    P = zone_forecast_probabilities(fc, fcin; thresholds = (1, 5, 10))
     @test size(P) == (syn.nz, 3)
     @test all(0 .<= P .<= 1)
     ## Non-increasing in the threshold, zone by zone.
@@ -1551,15 +1553,15 @@ end
         @test P[z, 1] >= P[z, 2] >= P[z, 3]
     end
     ## A patch total below the threshold gives zero for every zone in it.
+    fcin0 = zone_inputs(
+        syn; parent_forecast = zone_parent_forecast(syn; totals = [0, 0])
+    )
     P0 = zone_forecast_probabilities(
-        chn, parent, DataFrame(confirmed_new = fill(0.4, 12)), inputs;
-        thresholds = (1,)
+        zone_forecast(chn, fcin0), fcin0; thresholds = (1,)
     )
     @test all(iszero, P0)
     ## The table carries one column per threshold, missing on patch rows.
-    t = zone_forecast_table(
-        chn, parent, fc, inputs; thresholds = (1, 10)
-    )
+    t = zone_forecast_table(fc, fcin; thresholds = (1, 10))
     @test all(c -> c in names(t), ["p_ge_1", "p_ge_10"])
     @test all(ismissing, t[t.zone .== "Patch total", :p_ge_1])
     @test all(x -> ismissing(x) || 0 <= x <= 1, t.p_ge_1)
@@ -1607,11 +1609,6 @@ end
 end
 
 @testitem "zone parent extract stands in for the chain" setup = [ZoneSynthetic] begin
-    using DataFrames: DataFrame
-    using Turing: sample, Prior
-    using BVDOutbreakSize: bvd_zone
-    import FlexiChains
-
     syn = zone_synthetic()
     parent = merge(
         syn.chain,
@@ -1635,15 +1632,6 @@ end
     @test a.model_data.g == b.model_data.g
     @test a.model_data.meld_L == b.model_data.meld_L
     @test a.model_data.parent_priors == b.model_data.parent_priors
-    ## The forecast reads the patch shares from the extract as from the chain.
-    chn = sample(
-        bvd_zone(a.model_data), Prior(), 4;
-        chain_type = FlexiChains.VNChain, progress = false
-    )
-    fc = DataFrame(confirmed_new = fill(40.0, 4))
-    da = zone_forecast_draws(chn, parent, fc, a)
-    db = zone_forecast_draws(chn, ex, fc, a)
-    @test da.patches == db.patches
     ## A chain without the patch structure is refused.
     bare = Dict{Symbol, Any}(:C_T => fill(1.0, 4, 1))
     @test_throws ErrorException zone_parent_extract(bare)
@@ -1924,68 +1912,53 @@ end
     end
 end
 
-@testitem "the forecast extension carries the mixing to the horizon" setup = [
+@testitem "the forecast inputs carry the mixing to the horizon" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: _zone_extended_data, zone_delay_operator,
-        zone_share_renewal, zone_deformation
+    using BVDOutbreakSize: bvd_zone, zone_forecast, zone_share_renewal,
+        zone_deformation
+    using Turing: sample, Prior
+    import FlexiChains
     syn = zone_synthetic()
-    inputs = zone_inputs(syn)
-    zd = inputs.model_data
-    nz = size(zd.counts, 1)
-    np = length(zd.patch_ranges)
-    horizon = 7
-    ## The fixture mixes nothing, so a mixing block of the right shapes is
-    ## put in to exercise the extension.
-    mixing = (;
-        within = zeros(nz, nz), between = zeros(nz, nz),
-        origin_weight = ones(nz),
-        import_fraction = repeat(range(0.1, 0.4; length = np), 1, zd.n),
-        patch_of_zone = zd.patch_of_zone,
+    inputs = zone_inputs(
+        syn; zones = zone_metadata(syn),
+        parent_forecast = zone_parent_forecast(syn)
     )
-    inputs_m = merge(inputs, (; model_data = merge(zd, (; mixing))))
-    rm = zone_delay_operator(zd.f, zd.n + horizon - zd.t0 + 1)
-    ext = _zone_extended_data(inputs_m, zd.I_bar, rm; horizon)
+    zd = inputs.model_data
+    zf = zd.forecast
+    nz = size(zd.counts, 1)
+    horizon = zf.horizon
+    @test zd.mixing !== nothing
 
     ## Every per-day term reaches the last day the renewal indexes, the
-    ## import fractions held at the final vintage over the forecast.
-    @test size(ext.mixing.import_fraction, 2) == zd.n + horizon
+    ## import fractions held at the cut-off over the forecast.
+    @test size(zf.mixing.import_fraction, 2) == zd.n + horizon
     for d in 1:horizon
-        @test ext.mixing.import_fraction[:, zd.n + d] ==
-            mixing.import_fraction[:, zd.n]
+        @test zf.mixing.import_fraction[:, zd.n + d] ==
+            zd.mixing.import_fraction[:, zd.n]
     end
-    @test size(ext.I_bar, 2) == zd.n + horizon
+    @test size(zf.I_bar, 2) == zd.n + horizon
 
     ## A term that stops short is read past its end under `@inbounds`, so
     ## the renewal refuses it rather than returning whatever follows.
     nd = zd.n + horizon - zd.t0 + 1
-    def = zone_deformation(ext, nothing)
+    def = zone_deformation(merge(zd, zf), nothing)
     short = merge(
-        ext.mixing,
-        (; import_fraction = mixing.import_fraction[:, 1:(zd.n)])
+        zf.mixing, (; import_fraction = zd.mixing.import_fraction)
     )
     @test_throws DimensionMismatch zone_share_renewal(
-        def.I_bar, ext.g, zeros(nd, nz), fill(1 / nz, nz),
-        ext.patch_ranges, ext.t0, def.force_pre;
+        def.I_bar, zd.g, zeros(nd, nz), fill(1 / nz, nz),
+        zd.patch_ranges, zd.t0, def.force_pre;
         mix = short, ε = fill(0.01, nz)
     )
-end
 
-@testitem "zone forecast shares stay finite over the horizon" setup = [
-    ZoneSynthetic,
-] begin
-    using Turing: sample, Prior, VNChain
-    syn = zone_synthetic()
-    inputs = zone_inputs(syn)
+    ## The mixed model forecasts a proper split.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), 4;
-        chain_type = VNChain, progress = false
+        bvd_zone(zd), Prior(), 3; chain_type = FlexiChains.VNChain,
+        progress = false
     )
-    sh = zone_forecast_shares(chn, inputs)
-    @test !any(isnan, sh)
-    @test all(>=(0), sh)
-    for i in axes(sh, 1), d in axes(sh, 3), zs in inputs.patch_ranges
-        isempty(zs) && continue
-        @test sum(view(sh, i, zs, d)) ≈ 1 atol = 1.0e-8
+    draws = zone_forecast_draws(zone_forecast(chn, inputs), inputs)
+    for (p, zs) in enumerate(zd.patch_ranges), i in 1:3
+        @test sum(draws.zones[z][i] for z in zs) == draws.patches[p][i]
     end
 end

@@ -368,61 +368,39 @@ if !@isdefined(_BVD_SETUP_LOADED)
         return chn
     end
 
-    ## The one-week-ahead national forecast from the headline joint. The
-    ## forecasts page reports it and the health-zone pages split it across
-    ## the zones. Kept after the first call, so `scripts/run.jl` projects
-    ## once across the pages that read it.
-    _week_forecast_cache = Ref{Any}(nothing)
-    function national_week_forecast()
-        cached = _week_forecast_cache[]
-        cached !== nothing && return cached
-        fc = _timed("one-week national forecast") do
-            forecast_reported(
-                fit_forecast("joint");
-                horizon = 7,
-                obs_cases = obs.reported_cases,
-                obs_deaths = obs.total_deaths,
-                obs_confirmed = obs.confirmed_cases,
-                obs_confirmed_deaths = obs.confirmed_deaths,
-                obs_recovered = obs.recovered_cases
-            )
-        end
-        _week_forecast_cache[] = fc
-        return fc
-    end
-
     ## The health-zone stage's fixed inputs from the headline joint: the
     ## patch trajectories the zone model conditions on, the zone units and
-    ## their observed counts. The zone estimates, forecast and in-sample
-    ## pages all read them, and the build is the same on each, so it is
-    ## kept after the first call.
-    _zone_inputs_cache = Ref{Any}(nothing)
-    function zone_stage_inputs()
-        cached = _zone_inputs_cache[]
-        cached !== nothing && return cached
-        inputs = _timed("zone inputs") do
-            zone_fit_inputs(load_fit("joint"), obs)
+    ## their observed counts, and with `forecast` the joint's own forecast
+    ## the zone forecast is drawn from. Kept after the first call.
+    _zone_inputs_cache = Dict{Bool, Any}()
+    function zone_stage_inputs(; forecast::Bool = false)
+        return get!(_zone_inputs_cache, forecast) do
+            _timed("zone inputs") do
+                zone_fit_inputs(
+                    load_fit("joint"), obs;
+                    parent_forecast = forecast ? fit_forecast("joint") : nothing
+                )
+            end
         end
-        _zone_inputs_cache[] = inputs
-        return inputs
     end
 
-    ## The same inputs for the frozen fits, rebuilt from the frozen joint
-    ## and the observations the frozen zone fit was fitted to. The zone
-    ## estimates page compares the two cut-offs and the zone forecast
-    ## evaluation scores the frozen split.
-    _frozen_zone_inputs_cache = Ref{Any}(nothing)
-    function frozen_zone_stage_inputs()
-        cached = _frozen_zone_inputs_cache[]
-        cached !== nothing && return cached
-        inputs = _timed("frozen zone inputs") do
-            zone_fit_inputs(
-                load_fit("frozen_validation").chn,
-                load_fit("local_frozen_validation").o
-            )
+    ## The same inputs for the frozen fits, rebuilt from the frozen joint and
+    ## the observations the frozen zone fit was fitted to, with the frozen
+    ## joint's forecast under `forecast`. The zone estimates page compares
+    ## the two cut-offs and the zone forecast evaluation scores the frozen
+    ## split.
+    _frozen_zone_inputs_cache = Dict{Bool, Any}()
+    function frozen_zone_stage_inputs(; forecast::Bool = false)
+        return get!(_frozen_zone_inputs_cache, forecast) do
+            _timed("frozen zone inputs") do
+                zone_fit_inputs(
+                    load_fit("frozen_validation").chn,
+                    load_fit("local_frozen_validation").o;
+                    parent_forecast = forecast ?
+                        fit_forecast("frozen_validation") : nothing
+                )
+            end
         end
-        _frozen_zone_inputs_cache[] = inputs
-        return inputs
     end
 
     ## Draws from the health-zone prior, on the same fixed inputs the fit

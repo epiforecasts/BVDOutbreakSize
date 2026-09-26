@@ -2,7 +2,7 @@ module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, cov, std, var
 using LinearAlgebra: cholesky, Symmetric, I, Diagonal, diag,
-    issuccess, mul!
+    issuccess, mul!, LowerTriangular
 using Statistics: quantile, mean, cor, median, std
 using LinearAlgebra: axpy!, dot
 using TOML: TOML
@@ -30,7 +30,7 @@ using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Binomial, Normal,
     LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution,
-    DirichletMultinomial
+    DirichletMultinomial, DiscreteUniform
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
 using StatsFuns: logit, logistic, logaddexp
@@ -201,11 +201,12 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     province_composition_model, composition_shares, composition_split_model,
     # health-zone model
     bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
-    zone_share_renewal, zone_meld_block, zone_week_midpoints,
+    zone_share_renewal, zone_meld_block, zone_forecast_block,
+    zone_week_midpoints,
     zone_correlation_factors,
     zone_parent_scale, zone_deformation, zone_meld_check,
     reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
-    zone_forecast_shares, zone_forecast_draws, zone_forecast_archive,
+    zone_forecast, zone_forecast_draws, zone_forecast_archive,
     zone_overview_table, zone_forecast_probabilities, zone_recent_cases,
     zone_last_case_dates, zone_parent_extract, zone_subset,
     zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,

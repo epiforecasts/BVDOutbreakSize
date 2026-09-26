@@ -25,14 +25,12 @@ chn_local = load_fit("local");
 frozen_lastweek = load_fit("frozen_validation");
 frozen_local = load_fit("local_frozen_validation");
 
-## The zone stage's fixed inputs, the frozen fit's inputs for the comparison
-## below, and the one-week national forecast the zone split scales, all from
-## the shared setup, so the health-zone forecast page splits the same
-## projection over the same inputs.
-zone_inputs = zone_stage_inputs();
+## The zone stage's fixed inputs with the joint's forecast, and the frozen
+## fit's inputs for the comparison below, both from the shared setup, so the
+## health-zone forecast page draws the same forecast from the same inputs.
+zone_inputs = zone_stage_inputs(; forecast = true);
 zone_patch = zone_inputs.patch_of_zone;
 frozen_zone_inputs = frozen_zone_stage_inputs();
-forecast = national_week_forecast();
 
 #md # ```@raw html
 #md # </details>
@@ -69,18 +67,13 @@ zone_share_T = let vs = vec(collect(chn_local[:share_T_zone]))
     [Float64[v[z] for v in vs] for z in eachindex(zone_map_keys)]
 end;
 _zq(v, p) = quantile(v, p)
-## The one-week zone forecast, split from the headline forecast above,
-## and the probability of at least K cases per zone from the same draws.
-zone_fc_shares = zone_forecast_shares(chn_local, zone_inputs);
-zone_fc_draws = zone_forecast_draws(
-    chn_local, chn_joint, forecast,
-    zone_inputs; shares = zone_fc_shares
-);
+## The one-week zone forecast drawn from the zone model, and the
+## probability of at least K cases per zone from the same draws.
+zone_fc = zone_forecast(chn_local, zone_inputs);
+zone_fc_draws = zone_forecast_draws(zone_fc, zone_inputs);
 ZONE_THRESHOLDS = (1, 5, 10, 20)
 zone_fc_probs = zone_forecast_probabilities(
-    chn_local, chn_joint, forecast, zone_inputs;
-    thresholds = ZONE_THRESHOLDS, shares = zone_fc_shares,
-    draws = zone_fc_draws
+    zone_fc, zone_inputs; thresholds = ZONE_THRESHOLDS, draws = zone_fc_draws
 );
 zone_overview = zone_overview_table(chn_local, zone_inputs);
 ## Cases allocated to each zone over the past one, two and four weeks,

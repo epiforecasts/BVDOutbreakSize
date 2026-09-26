@@ -14,9 +14,7 @@
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
-## The fits this page reads, loaded from the cache here: the frozen joint
-## and the zone fit melded from it.
-frozen_lastweek = load_fit("frozen_validation");
+## The zone fit melded from the frozen joint, loaded from the cache here.
 frozen_local = load_fit("local_frozen_validation");
 
 #md # ```@raw html
@@ -37,9 +35,9 @@ frozen_local = load_fit("local_frozen_validation");
 # ## Forecast by health zone
 #
 # The one-week-ahead forecast split by health zone, scored against what each zone went on to report.
-# Each zone's forecast is the frozen national projection times its province's modelled share times the zone's projected share of that province's confirmed reports over the week, from the [health-zone model](@ref "Health-zone model") melded from the frozen fit.
+# Each zone's forecast is drawn from the [health-zone model](@ref "Health-zone model") melded from the frozen fit, run a week past the frozen cut-off.
 # The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the current data, clamped at zero.
-# When the zone tables end before the current cut-off, the week scored is shortened to the days they cover.
+# The week is scored only when the zone tables carry a vintage on its last day.
 # The scores and the two persistence rules they are set against are those of the [zone forecast scoring](@ref "Forecast scoring against a persistence baseline") in the analysis methods.
 # The figure shows the fifteen zones with the largest forecast medians and the fold below the scores holds every zone.
 
@@ -49,50 +47,28 @@ frozen_local = load_fit("local_frozen_validation");
 
 ## `frozen_zone_stage_inputs` is defined in the shared setup, so the zone
 ## estimates page reads the same frozen inputs.
-frozen_zone_inputs = frozen_zone_stage_inputs();
-## The frozen fit's one-week-ahead national forecast, the same one the
-## forecast evaluation page validates. `validation_forecast_from` is defined
-## in the shared setup.
-validation_forecast = validation_forecast_from("frozen_validation");
-## The horizon is the days from the frozen cut-off to the last zone
-## vintage, at most the week. A shorter week needs its own national
-## forecast at that horizon, since the zone split scales its total; at the
-## full week it is the forecast above. Zone tables that end at or before
-## the frozen cut-off leave no day to score, and the section shows a note
-## in place of its outputs.
-zone_validation_horizon = min(
-    7,
-    value(frozen_zone_inputs.dates[end] - frozen_local.o.cutoff)
+frozen_zone_inputs = frozen_zone_stage_inputs(; forecast = true);
+## The week is scored when the current zone tables carry a vintage a week
+## past the frozen cut-off. Otherwise the section shows a note in place of
+## its outputs.
+zone_validation_horizon = frozen_zone_inputs.model_data.forecast.horizon
+zone_truth = zone_forecast_truth(
+    obs, frozen_zone_inputs;
+    made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon
 )
 _zone_validation_missing = Markdown.parse(
-    "_The zone tables end at or before the frozen cut-off, so the zone " *
-        "forecast is not scored in this build._"
+    "_The zone tables carry no vintage a week after the frozen cut-off, so " *
+        "the zone forecast is not scored in this build._"
 )
-if zone_validation_horizon >= 1
-    zone_validation_forecast = zone_validation_horizon == 7 ?
-        validation_forecast :
-        forecast_reported(
-            fit_forecast("frozen_validation");
-            horizon = zone_validation_horizon,
-            obs_cases = frozen_lastweek.o.reported_cases,
-            obs_deaths = frozen_lastweek.o.total_deaths,
-            obs_confirmed = frozen_lastweek.o.confirmed_cases,
-            obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-            obs_recovered = frozen_lastweek.o.recovered_cases
-        )
-    zone_truth = zone_forecast_truth(
-        obs, frozen_zone_inputs;
-        made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon
+if any(!ismissing, zone_truth)
+    zone_validation_forecast = zone_forecast(
+        frozen_local.chn, frozen_zone_inputs
     )
     zone_validation_table = zone_forecast_vs_truth(
-        frozen_local.chn,
-        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
-        truth = zone_truth, horizon = zone_validation_horizon
+        zone_validation_forecast, frozen_zone_inputs; truth = zone_truth
     )
     zone_validation_scores = zone_forecast_scores(
-        frozen_local.chn,
-        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
-        truth = zone_truth, horizon = zone_validation_horizon
+        zone_validation_forecast, frozen_zone_inputs; truth = zone_truth
     )
     zone_validation_fig = plot_zone_forecast(
         zone_validation_table;

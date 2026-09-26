@@ -15,10 +15,7 @@
 using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
-## The fits this page reads, loaded from the cache here. The headline joint
-## carries the patch trajectories and the national projection the split
-## scales; the zone fit carries the shares.
-chn_joint = load_fit("joint");
+## The zone fit this page reads, loaded from the cache here.
 chn_local = load_fit("local");
 
 #md # ```@raw html
@@ -34,27 +31,19 @@ chn_local = load_fit("local");
 #md # <details><summary>Split the one-week-ahead forecast across the zones</summary>
 #md # ```
 
-## `zone_stage_inputs` and `national_week_forecast` are defined in the shared
-## setup, so the zone estimates page splits the same projection over the
-## same fixed inputs.
-zone_inputs = zone_stage_inputs();
+## `zone_stage_inputs` is defined in the shared setup, so the zone
+## estimates page draws the same forecast from the same fixed inputs.
+zone_inputs = zone_stage_inputs(; forecast = true);
 zone_patch = zone_inputs.patch_of_zone;
-forecast = national_week_forecast();
 zone_week_end = obs.cutoff + Day(7);
 ZONE_THRESHOLDS = (1, 5, 10, 20)
-zone_fc_shares = zone_forecast_shares(chn_local, zone_inputs);
-zone_fc_draws = zone_forecast_draws(
-    chn_local, chn_joint, forecast,
-    zone_inputs; shares = zone_fc_shares
-);
+zone_fc = zone_forecast(chn_local, zone_inputs);
+zone_fc_draws = zone_forecast_draws(zone_fc, zone_inputs);
 zone_fc_probs = zone_forecast_probabilities(
-    chn_local, chn_joint, forecast, zone_inputs;
-    thresholds = ZONE_THRESHOLDS, shares = zone_fc_shares,
-    draws = zone_fc_draws
+    zone_fc, zone_inputs; thresholds = ZONE_THRESHOLDS, draws = zone_fc_draws
 );
 zone_forecast_summary = zone_forecast_table(
-    chn_local, chn_joint, forecast,
-    zone_inputs; thresholds = ZONE_THRESHOLDS
+    zone_fc, zone_inputs; thresholds = ZONE_THRESHOLDS
 );
 ## Cases allocated to each zone over the past one, two and four weeks, and
 ## the last vintage on which each zone's count rose.
@@ -108,7 +97,7 @@ Markdown.parse(zone_forecast_bullets) #hide
 #
 # The figure and table below give the fifteen zones with the largest forecasts.
 # The patch totals in the table are the projections on the [province forecasts](@ref "Province forecasts") page.
-# Each zone's count is the national draw times its province's modelled share times the zone's projected share of that province's reports over the week.
+# Each zone's count is drawn from the zone model run a week past the cut-off, splitting a draw of its province's forecast total over the province's zones.
 # The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week (Equation (70)).
 
 #md # ```@raw html
