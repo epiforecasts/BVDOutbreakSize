@@ -1,0 +1,13 @@
+date,tag_or_pr,arm,model,joint_gradient_ms,joint_fit_minutes,source_url,note
+2026-09-08,#656,before,"production joint, main",21.0,,https://github.com/epiforecasts/BVDOutbreakSize/pull/656,"median of 20 gradient evaluations, idle machine"
+2026-09-08,#656,after,"production joint, branch",10.2,,https://github.com/epiforecasts/BVDOutbreakSize/pull/656,"median of 20 gradient evaluations, idle machine"
+2026-09-16,#716,,headline patch fit on CI,,320,https://github.com/epiforecasts/BVDOutbreakSize/pull/716,wall-clock of the last headline fit job before the PR
+2026-09-16,#717,before,"production joint, 229 parameters",16.05,,https://github.com/epiforecasts/BVDOutbreakSize/pull/717,loaded machine; after arm given only as ratio 0.729 (median)
+2026-09-22,#810,before,"synthetic joint bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14), 106 parameters",5.655,,https://github.com/epiforecasts/BVDOutbreakSize/pull/810,"median of 400, quiet machine, rules off"
+2026-09-22,#810,after,"synthetic joint bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14), 106 parameters",4.065,,https://github.com/epiforecasts/BVDOutbreakSize/pull/810,"median of 400, quiet machine, rules on"
+2026-09-22,#810,before,"CI benchmark suite joint, Mooncake",1.83,,https://github.com/epiforecasts/BVDOutbreakSize/pull/810#issuecomment-5778816174,"AirspeedVelocity minimum time per call, main"
+2026-09-22,#810,after,"CI benchmark suite joint, Mooncake",1.56,,https://github.com/epiforecasts/BVDOutbreakSize/pull/810#issuecomment-5778816174,"AirspeedVelocity minimum time per call, PR"
+2026-09-23,#837,before,"CI benchmark suite joint, Mooncake",1.57,,https://github.com/epiforecasts/BVDOutbreakSize/pull/837#issuecomment-5794384416,"AirspeedVelocity minimum time per call, main"
+2026-09-23,#837,after,"CI benchmark suite joint, Mooncake",1.38,,https://github.com/epiforecasts/BVDOutbreakSize/pull/837#issuecomment-5794384416,"AirspeedVelocity minimum time per call, PR"
+2026-09-24,#856,before,"CI benchmark suite joint, Mooncake",1.35,,https://github.com/epiforecasts/BVDOutbreakSize/pull/856#issuecomment-5801344552,"AirspeedVelocity minimum time per call, main"
+2026-09-24,#856,after,"CI benchmark suite joint, Mooncake",1.06,,https://github.com/epiforecasts/BVDOutbreakSize/pull/856#issuecomment-5801344552,"AirspeedVelocity minimum time per call, PR"

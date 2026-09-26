@@ -1,0 +1,8 @@
+tag,date,model_version_label,headline_C_T_median,lower90,upper90
+v1.0.0,2026-05-18,closed-form,972,478,2437
+v1.1.0,2026-05-18,closed-form,925,438,2234
+v1.2.0,2026-05-23,closed-form,1391,704,3421
+v1.3.0,2026-06-07,closed-form,4509,3213,7665
+v1.4.0,2026-06-07,renewal,4161,2345,12421
+v1.5.0,2026-06-10,renewal,4490,2749,9940
+v1.6.0,2026-06-21,renewal,2250,1632,3838

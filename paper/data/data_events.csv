@@ -1,0 +1,16 @@
+date,sitrep,event,effect,evidence_url,human_decision
+2026-05-27,WHO AFRO 01 to INSP,Data source moved from the WHO AFRO sitrep to INSP sitreps via the INRB-UMIE transcription,New source for every stream (v1.2.0),https://github.com/epiforecasts/BVDOutbreakSize/issues/69,yes
+2026-05-28,014,INSP reclassifies suspects (1077 to 906 to 349) and withdraws the suspected-death headline; SitRep 012 re-issued as v2,Suspected cumulative streams frozen at 26 May; confirmed cases and deaths fitted (v1.3.0),https://github.com/epiforecasts/BVDOutbreakSize/issues/168,yes
+2026-06-02,,GeneXpert cannot detect BDBV so early samples were false negative,"Test sensitivity prior widened and lowered to Beta(6, 2)",https://github.com/epiforecasts/BVDOutbreakSize/issues/131#issuecomment-4605308124,yes
+2026-06-06,,Uganda export stream lags the cut-off,Exports frozen,https://github.com/epiforecasts/BVDOutbreakSize/issues/141#issuecomment-4639599194,yes
+2026-06-11,,24h analysed counts available only for some provinces on some days,Analysed-volume stream fitted with partial days accepted,https://github.com/epiforecasts/BVDOutbreakSize/pull/257,yes
+2026-06-19,,DHIS2 reclassification steps the isolation occupancy down,Opt-in occupancy break days with fitted level offsets,https://github.com/epiforecasts/BVDOutbreakSize/pull/372,yes
+2026-07-05,,"Tableau 6 patient-movement table absent from 30 June, returns 5 to 8 July",Treatment flows fitted as a vintage; confirmed and suspect occupancy split,https://github.com/epiforecasts/BVDOutbreakSize/issues/373#issuecomment-4956011911,yes
+2026-07-12,059,"Analytique format: onset epidemic curve appears, page-1 suspected-death subtitle stops",Onset reporting triangle fitted (v1.11.0); suspected daily deaths frozen at 11 July,https://github.com/epiforecasts/BVDOutbreakSize/issues/431,yes
+2026-07-22,069,Harmonisation step integrates a provincial base (+369 net against +97 gross cases),Opt-in confirmed break day,https://github.com/epiforecasts/BVDOutbreakSize/pull/485,no
+2026-08-06,084,"Short MVEBDB brief format: no suspects-du-jour tile, no onset figure, Tableau 6 dropped at 081",Treatment flows frozen at SitRep 080; suspected daily cases frozen at 083,https://github.com/epiforecasts/BVDOutbreakSize/issues/562,yes
+2026-08-12,090,National samples-analysed total dropped,"tests_analysed_daily_history frozen at 11 August, resumed when the total returned",https://github.com/epiforecasts/BVDOutbreakSize/issues/570,yes
+2026-08-13,088-089,Isolation census drops about 200 in a day,Occupancy break day,https://github.com/epiforecasts/BVDOutbreakSize/pull/567#issuecomment-5291322716,yes
+2026-08-20,098,Onset figure embedded losslessly and reads about 7% high,SitRep 098 excluded from the onset curve,https://github.com/epiforecasts/BVDOutbreakSize/issues/594,yes
+2026-09-07,115-116,Onset date printed past the report date creates a delay-0 cell; joint R-hat 2.644,Loader bounds the pair window; SitRep 117 briefly excluded then restored,https://github.com/epiforecasts/BVDOutbreakSize/issues/671,yes
+2026-09-16,,Daily suspect series resumed from the alert-validation table and the headline joint failed to converge,Centred walks and widened background innovation SD (v2.1.0),https://github.com/epiforecasts/BVDOutbreakSize/pull/761,no

@@ -1,2 +1,4 @@
 /.quarto/
 **/*.quarto_ipynb
+# Release assets downloaded by paper/scripts/release_assets.jl
+/data/release/

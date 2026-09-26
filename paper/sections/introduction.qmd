@@ -1,0 +1,23 @@
+## Introduction
+
+Ebola disease caused by Bundibugyo virus has re-emerged in the Democratic Republic of the Congo (DRC), with exported cases in Uganda [@insp_sitrep_2026; @who_don_2026_602].
+The number of infections is unknown while the outbreak is ongoing, and its size and growth drive the response, from bed and laboratory capacity to the risk of further exports [@meltzer2014].
+Surveillance observes the reported fraction of infections after delays from infection to onset, confirmation and death, so the current size has to be inferred from the counts that are published.
+
+The national situation reports carry many counts but no line list, and every count is report-dated and open to revision [@insp_sitrep_2026; @inrb_umie_2026].
+They report suspected and confirmed cases and deaths, laboratory throughput, isolation occupancy, treatment-centre flows, and an intermittently published curve of confirmed cases by onset date.
+Each stream observes the same epidemic through a different delay and a different ascertainment, so used alone each implies a different outbreak size.
+
+Several estimates of the outbreak size have been published, but each uses a subset of these counts under fixed assumptions.
+McCabe et al. [@mccabe2026; @mccabe2026update; @mccabe2026lancet] estimated cumulative infections from the exported cases and the reported deaths under constant exponential growth, following the export-based approach of Imai et al. [@imai2020].
+They report scenarios over fixed delay, doubling-time and case-fatality assumptions rather than one posterior.
+Chamla et al. [@chamla2026] projected confirmed cases with a stochastic compartmental model fitted to the confirmed series alone.
+Genomic analyses bound the time of the most recent common ancestor and the early doubling time but not the size of the outbreak [@virological2026; @cuomodannenburg2026; @mbalaplacide2026].
+Earlier Bundibugyo outbreaks were small and give few outbreak-specific parameters, so the delay and severity assumptions every one of these estimates needs are drawn from other outbreaks or from judgement [@macneil2010; @rosello2015].
+Renewal-based real-time tools such as EpiNow2 fit a case series with one secondary observation [@epinow2], and they are not designed for a set of report-dated aggregates that stop and change format.
+
+In this paper we present a joint model of the outbreak size fitted to every count the situation reports publish, and its evaluation across four months of releases.
+The core idea is that one latent infection process, staged through explicit delays and stream-specific ascertainment, generates every published count, so all streams inform one posterior.
+We started from the approach of McCabe et al. [@mccabe2026], replaced it with a discrete renewal model in which the reproduction number varies over time [@fraser2007; @cori2013], and then ran one renewal process per province.
+We release each update with the model definition, the draws and the forecasts.
+We evaluate the model on the situation reports [@insp_sitrep_2026] by one-week-ahead forecasts against a persistence baseline, by fitting each stream alone, and against the estimates of McCabe et al. and Chamla et al. [@mccabe2026; @chamla2026].

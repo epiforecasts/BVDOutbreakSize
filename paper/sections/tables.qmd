@@ -1,0 +1,32 @@
+<!-- Streams and model versions. First and last dates are read from data/observations.toml at the worktree HEAD (as_of 22 September 2026); breaks from occupancy_break_dates and confirmed_break_dates; likelihood descriptions checked against src/models/ at the release analysed. All dates are 2026. -->
+
+| Stream | Observes | Likelihood | First | Last | Breaks and gaps |
+|---|---|---|---|---|---|
+| Exported cases | Cases detected in Uganda, by detection date | Poisson, delayed by onset to detection abroad | 11 May | 23 May (frozen) | none |
+| Deaths among exports | Deaths among exported cases | Poisson on the dated death, delayed by onset to death | 14 May | 14 May (frozen) | none |
+| Suspected cases | Cumulative suspected cases, per report | Negative binomial increments with a non-BVD background | 18 May | 26 May (frozen) | none |
+| Suspected deaths | Cumulative suspected deaths, per report | Negative binomial increments with a background | 18 May | 26 May (frozen) | none |
+| Daily new suspects | Suspects notified in the previous 24 h | Negative binomial | 4 June | cut-off | 6 August absent |
+| Daily suspected deaths | Suspected deaths in the previous 24 h | Negative binomial | 7 June | 11 July (frozen) | none |
+| Confirmed cases | Cumulative laboratory-confirmed cases, per report | Beta-binomial of the specimens analysed where a denominator is published, negative binomial increments otherwise | 14 May | cut-off | 22 July |
+| Confirmed deaths | Cumulative confirmed deaths, per report | Negative binomial increments through the death-side pipeline | 14 May | cut-off | 22 July |
+| Laboratory total | Cumulative samples analysed | Negative binomial | 23 May | 28 May (frozen) | none |
+| 24 h analysed volume | Samples analysed in the previous 24 h | Negative binomial, anchors positivity | 1 June | cut-off | none |
+| Isolation occupancy | Patients in isolation on the report day | Censored negative binomial against a supply-limited bed model | 1 June | cut-off | 9 June, 19 June, 14 July, 11 August |
+| Bed capacity | Isolation beds available | Negative binomial of the implied bed count around a log-scale random walk on capacity | 9 June | cut-off | none |
+| Recovered | Cumulative confirmed recoveries | Negative binomial increments | 6 June | cut-off | none |
+| Treatment-centre flows | Admissions, in-care deaths, rule-outs and abscondings | Negative binomial increments with an in-care case-fatality ratio | 13 June | 2 August (frozen) | none |
+| Onset curve | Confirmed cases by symptom-onset date, per report | Student-t reporting triangle with a fitted read error per bar | 12 July | cut-off | absent where a report was not published or carried no onset figure |
+| Province compositions | Confirmed cases and deaths by province, with samples analysed per head as an ascertainment covariate | Beta-binomial stick-breaking split of the national count | 6 June | cut-off | none |
+
+: Data streams fitted by the joint model at the release analysed, with the first and last report dates each enters the likelihood, the dates at which a fitted level offset applies, and the reports at which a stream is absent. {#tbl-streams}
+
+| Version | Released | Latent process | Streams | Reason for the next version |
+|---|---|---|---|---|
+| v1.0.0 to v1.2.0 | 20 to 27 May | Continuous-time constant exponential growth with exact delay convolutions | Exports, deaths among exports, suspected cases and deaths as cumulative totals | The situation reports gave per-report increments and the suspected totals were withdrawn |
+| v1.3.0 | 9 June | As above | Per-report increments; confirmed cases and deaths through a laboratory queue | The laboratory model was not identified by the throughput counts and the joint estimate sat above every single stream |
+| v1.4.0 to v1.18.0 | 9 June to 9 September | Daily renewal with a weekly random walk on the reproduction number and a cryptic seeding phase | Every stream in @tbl-streams except the province compositions, added over the window | To fit the counts by province that the reports had begun to carry |
+| v2.0.0 to v2.1.0 | 16 to 18 September | One renewal process per province, coupled by importation | Adds the province compositions | The first provincial fit did not converge, and centring the background and bed-capacity walks restored it |
+| v2.2.0 | Unreleased | As above, with the province deviations on a sum-to-zero basis and hand-written gradient rules | As above | The version analysed here; main has since added susceptible depletion and province splits of the laboratory and isolation counts |
+
+: Model versions, the release tags they span, and the reason each gave way to the next. {#tbl-models}
