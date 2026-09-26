@@ -2178,11 +2178,12 @@ cfr_prior_fig #hide
 # Relative ascertainment $a_z$ and relative fatality $\theta_z$ are the provincial composition's own multiplier over the zones of a patch, log contrasts summing to zero within the patch:
 #
 # ```math
-# a_z = \exp\bigl(\sigma_a (z^a_z - \bar z^a_p)\bigr),
+# a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
 # \qquad
-# \theta_z = \exp\bigl(\sigma_\theta (z^\theta_z - \bar z^\theta_p)\bigr). \tag{66}
+# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr), \tag{66}
 # ```
 #
+# with $\mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1})$ and $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$, as in the [province compositions](@ref "Province compositions").
 # A composition identifies only the product of a multiplier and the incidence split, so the pooling is what separates them: as $\sigma$ shrinks the shares weight zones by incidence alone.
 #
 # Both are relative to the zone's own province.
