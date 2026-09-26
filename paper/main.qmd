@@ -118,7 +118,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - A factor that pinned the provinces to the national trend was tried and removed because the national data constrain them. <!-- RECOLLECTION: why start, why remove -->
   - The cryptic seed now counts generations rather than doublings. <!-- v1 and v2 seeds differ -->
 
-- Since the last tagged release the provincial model has been reparameterised and extended, and it is this version that the release analysed fits.
+- Since the last tagged release the provincial model has been reparameterised and extended; say which of these changes the release analysed carries and which came after it. <!-- results-2416 (337fef5) carries PRs 800, 820, 855, 867, 881 and 880/892; not 784, 900, 907 or 909 -->
   - The province deviations are drawn on an identified sum-to-zero basis, with a Wishart shape for their correlation and a separately sampled drift scale that can shrink to the common-trend limit (PR 855, PR 907).
   - The analysed laboratory volume, isolation occupancy and bed counts are scored by province as splits of the printed national sums, and the per-head testing covariate on ascertainment is removed (PR 784).
   - Infections deplete a susceptible pool set at each province's census population, a light upper bound that does not bind at the current size, and every reported reproduction number is net of depletion (PR 900).
