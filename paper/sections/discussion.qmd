@@ -1,7 +1,7 @@
 ## Discussion
 
 In this paper we have presented a joint model of the size of the 2026 Bundibugyo virus outbreak fitted to every count the national situation reports publish.
-At the release analysed the joint estimate sat at the low end of the range spanned by the single-stream fits.
+At the release analysed the joint estimate sat below every single-stream fit.
 The one-week-ahead forecasts rarely beat a persistence baseline, and the onset reports were the only stream on which they beat it at most releases.
 
 <!-- Strengths and limitations -->
@@ -16,6 +16,7 @@ Finally, the whole model definition lives in one versioned document that others 
 The main limitation is that the delays, the case-fatality ratio and the laboratory parameters rest on priors from other outbreaks or from judgement.
 The data do little to move them, so the size interval inherits their width and any error in them moves the estimate the same way.
 Almost every count is report-dated, so the timing of the epidemic is recovered through those assumed delays rather than observed.
+At the release analysed the generation-interval prior was wider than documented, and the fitted mean sat far below the serial interval the prior was centred on, which feeds into every reproduction number reported here. <!-- PRs 907 and 909 -->
 The reproduction of the first model has not been checked against the original authors' code.
 The data are aggregate national and provincial counts, with no line list in the released model.
 
@@ -27,10 +28,10 @@ However, the aggregate design still supports the per-stream ascertainment and th
 <!-- Comparison to the literature -->
 
 Each published estimate answers a different question from a different subset of the published counts.
-The reproduction of the method of McCabe et al. [@mccabe2026] at their own fixed inputs recovers their headline estimate, and the joint posterior sits above both of their headline scenarios and above their back-calculation scenarios at the matched cut-off.
+The reproduction of the method of McCabe et al. [@mccabe2026] at their own fixed inputs recovers their headline estimate, and the joint posterior sits above both of their headline scenarios and overlaps only the upper half of their back-calculation scenarios at the matched cut-off.
 What the joint model adds is the streams that inform ascertainment, which their fixed assumptions leave outside the posterior.
 It adds to the projection of Chamla et al. [@chamla2026] a forecast drawn from every stream rather than from the confirmed series alone.
-The confirmed cases that followed ran above their central projection and just below the lower bound of the joint forecast.
+The confirmed cases that followed ran above their central projection and inside the interval of the joint forecast.
 Genomic estimates bound the outbreak age and the early growth rate, and they enter the joint model as priors that the surveillance data then update [@mbalaplacide2026].
 More generally, the model belongs to the class of multi-stream renewal models with nowcasting components, applied here to report-dated aggregates rather than to line lists [@epinow2; @lison2024nowcast].
 

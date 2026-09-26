@@ -23,9 +23,9 @@ abstract: |
   The cumulative counts are fitted as the increments between reports, with a fitted level offset where reporting changed, and streams that stop being reported stay in the likelihood.
   The model began as a reproduction of an early export-based estimate and became a renewal model with a time-varying reproduction number and provincial structure.
   We evaluate each release by one-week-ahead forecasts scored against the data that arrive next and against a persistence baseline, by fits to single streams, and against the published estimates.
-  At the release analysed the joint model estimates an outbreak substantially larger than the confirmed count, with transmission continuing.
+  At the release analysed the joint model estimates an outbreak larger than the confirmed count, with the reproduction number close to one.
   Persistence is hard to beat one week ahead, and the joint forecast beat it at most releases only for the onset curve.
-  The joint estimate sits at the low end of the range that the single streams imply on their own, and the interval on size is no narrower than the priors on ascertainment and delays that the data do not move.
+  The joint estimate sits below every estimate that the single streams imply on their own, and the interval on size is no narrower than the priors on ascertainment and delays that the data do not move.
   A joint estimate from published reports alone is feasible in real time and makes the agreement and conflict between surveillance streams explicit.
 ---
 

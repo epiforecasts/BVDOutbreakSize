@@ -23,15 +23,15 @@ The latent curve placed most of the seeding density in the months before the fir
 The release carries no median for the provincial reproduction numbers or the fraction tested, and the onset reports have no single prior median, so those markers are absent.](figures/fig-current){#fig-current width=85%}
 
 At the data cut-off of the release analysed the joint model estimated {{< meta cumulative_infections_median >}} cumulative infections (90% interval {{< meta cumulative_infections_interval90 >}}), {{< meta ratio_infections_to_confirmed >}} times the {{< meta confirmed_cases_at_cutoff >}} confirmed cases reported by then.
-The posterior daily onsets rose over the first two months of reporting, levelled off, and rose again towards the cut-off with widening bands (@fig-current A).
+The posterior daily onsets rose over the first two months of reporting, levelled off from July, and eased towards the cut-off (@fig-current A).
 The national reproduction number at the cut-off was {{< meta rt_cutoff_median >}} (90% interval {{< meta rt_cutoff_interval90 >}}), with {{< meta rt_cutoff_prob_above_one >}} of draws above one (@fig-current B).
-The median doubling time was {{< meta doubling_time_median >}} days, the case-fatality ratio was {{< meta cfr_median >}} (90% interval {{< meta cfr_interval90 >}}) and the first infection was placed {{< meta outbreak_age_days_interval90 >}} days before the cut-off (90% interval).
-Every provincial reproduction number straddled one at the cut-off, and the probability that it was above one ranged from {{< meta haut_uele_rt_prob_above_one >}} in Haut-Uele to {{< meta other_rt_prob_above_one >}} in the remaining provinces (@fig-current B).
+The daily growth rate at the cut-off was {{< meta growth_rate_interval90 >}} (90% interval), the case-fatality ratio was {{< meta cfr_median >}} (90% interval {{< meta cfr_interval90 >}}) and the first infection was placed {{< meta outbreak_age_days_interval90 >}} days before the cut-off (90% interval).
+Every provincial reproduction number straddled one at the cut-off, and the probability that it was above one was {{< meta ituri_rt_prob_above_one >}} in Ituri, {{< meta nord_kivu_rt_prob_above_one >}} in Nord-Kivu, {{< meta haut_uele_rt_prob_above_one >}} in Haut-Uele and {{< meta other_rt_prob_above_one >}} in the remaining provinces (@fig-current B).
 
 The posterior on suspected-case ascertainment moved below its prior median of {{< meta suspected_ascertainment_prior_median >}} to {{< meta suspected_ascertainment_median >}} (90% interval {{< meta suspected_ascertainment_interval90 >}}), and export ascertainment moved from {{< meta export_ascertainment_prior_median >}} to {{< meta export_ascertainment_median >}} (90% interval {{< meta export_ascertainment_interval90 >}}) (@fig-current C).
-The fraction of suspects tested moved above its prior median of {{< meta tested_fraction_prior_median >}} to {{< meta tested_fraction_interval90 >}} (90% interval), and the onset-report ascertainment was {{< meta onset_ascertainment_interval90 >}} (90% interval) (@fig-current C).
+The 90% interval of the fraction of suspects tested, {{< meta tested_fraction_interval90 >}}, started at its prior median of {{< meta tested_fraction_prior_median >}}, and the onset-report ascertainment was {{< meta onset_ascertainment_interval90 >}} (90% interval) (@fig-current C).
 
-The fit that produced these estimates passed the convergence gate, with a maximum R-hat of {{< meta max_rhat >}}, a minimum bulk effective sample size of {{< meta min_ess_bulk >}} and {{< meta n_divergent >}} divergent transitions over {{< meta sampler_chains >}} chains of {{< meta sampler_draws >}} draws.
+The fit that produced these estimates passed the convergence gate, with a maximum R-hat of {{< meta max_rhat >}}, a minimum bulk effective sample size of {{< meta min_ess_bulk >}} and a divergent-transition count of {{< meta n_divergent >}} over {{< meta sampler_chains >}} chains of {{< meta sampler_draws >}} draws.
 The forecast made at the previous release gave {{< meta forecast_validation_confirmed_cases_median >}} new confirmed cases (90% interval {{< meta forecast_validation_confirmed_cases_interval90 >}}) and {{< meta forecast_validation_confirmed_deaths_median >}} new confirmed deaths (90% interval {{< meta forecast_validation_confirmed_deaths_interval90 >}}) for the week to the cut-off (@fig-current D).
 The reports carried {{< meta observed_confirmed_cases_validation_week >}} cases and {{< meta observed_confirmed_deaths_validation_week >}} deaths over that week, so both streams fell below the 90% interval of the forecast (@fig-current D).
 
@@ -52,7 +52,7 @@ The released estimate rose by more than an order of magnitude, from {{< meta fir
 The largest step came with the move to situation-report increments and the laboratory model, where the median rose by a factor of {{< meta closed_form_step_ratio >}} between the last two releases of the closed-form model.
 The estimate then fell at the release after the isolation step and again at the release after the local peak that followed, before rising over the remaining renewal releases (@fig-journey C).
 Over the same window the number of fitted streams rose from four to eleven, most commits came from the agent account, and the recorded joint gradient time fell across the benchmarked pull requests (@fig-journey A, B and D).
-Under the provincial model the two released estimates plateaued, and the release analysed, which postdates the last version tag and is not drawn, sat above them at {{< meta cumulative_infections_median >}}.
+Under the provincial model the two released estimates plateaued, and the release analysed, which postdates the last version tag and is not drawn, sat close to them at {{< meta cumulative_infections_median >}}.
 
 ### Forecast evaluation
 
@@ -71,11 +71,11 @@ Every scored forecast predates the correction of the forecast defects reported i
 
 ### Comparison with single-stream fits and published estimates
 
-The single-stream fits disagreed on cumulative infections at the cut-off by a factor of {{< meta single_stream_ratio >}}, from {{< meta single_stream_min_median >}} for the isolation-bed fit to {{< meta single_stream_max_median >}} for the export fit (@fig-evaluation B).
-The joint estimate of {{< meta joint_median_unrounded >}} sat near the low end of that range, above only the isolation-bed fit, and its 90% interval of {{< meta cumulative_infections_interval90 >}} overlapped only the isolation-bed, export and reported-death intervals (@fig-evaluation B).
+The single-stream fits disagreed on cumulative infections at the cut-off by a factor of {{< meta single_stream_ratio >}}, from {{< meta single_stream_min_median >}} for the {{< meta single_stream_min_fit >}} fit to {{< meta single_stream_max_median >}} for the {{< meta single_stream_max_fit >}} fit (@fig-evaluation B).
+The joint estimate of {{< meta joint_median_unrounded >}} sat below the median of every single-stream fit ({{< meta single_stream_n_above_joint >}}), and its 90% interval of {{< meta cumulative_infections_interval90 >}} overlapped only the {{< meta single_stream_overlap_fits >}} intervals (@fig-evaluation B).
 
-At the second cut-off of McCabe et al. [@mccabe2026; @mccabe2026lancet] the frozen joint fit sat above their back-calculation scenarios and overlapped the upper parts of their geographic-spread intervals (@fig-evaluation C).
+At the second cut-off of McCabe et al. [@mccabe2026; @mccabe2026lancet] the frozen joint interval overlapped the upper half of their back-calculation scenarios and the upper parts of their geographic-spread intervals (@fig-evaluation C).
 At their third cut-off the frozen joint interval overlapped both sets of scenarios, and the back-calculation scenarios sat in its lower half (@fig-evaluation C).
 
 The joint fit frozen at the calibration date of Chamla et al. [@chamla2026] projected {{< meta chamla_frozen_projection_median >}} confirmed cases (90% interval {{< meta chamla_frozen_projection_interval90 >}}) by their week-12 date, against their central {{< meta chamla_central_median >}} ({{< meta chamla_central_interval90 >}}) (@fig-evaluation D).
-The observed count of {{< meta observed_confirmed_week12 >}} lay above their central projection and inside their interval, and just below the lower bound of the joint's interval (@fig-evaluation D).
+The observed count of {{< meta observed_confirmed_week12 >}} lay above their central projection and inside both their interval and the joint's (@fig-evaluation D).
