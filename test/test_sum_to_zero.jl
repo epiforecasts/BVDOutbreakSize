@@ -372,8 +372,9 @@ end
                 ),
             )
             r, vi = prior_draw(model, seed)
-            σ_level = vi[@varname(σ_level)]
             φ = exp2(-7 / vi[@varname(δ_halflife)])
+            ## The first knot is drawn at the stationary scale.
+            σ_level = vi[@varname(σ_drift)] / sqrt(1 - φ^2)
             ## Two patches draw no lower entry.
             d = vi[@varname(bartlett_diag)]
             o = np > 2 ? vi[@varname(bartlett_lower)] : Float64[]
