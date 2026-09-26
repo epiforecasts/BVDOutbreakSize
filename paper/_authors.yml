@@ -1,0 +1,16 @@
+authors:
+  - name: "Sam Abbott"
+    affiliations:
+      - ref: lshtm
+    email: "sam.abbott@lshtm.ac.uk"
+    orcid: "0000-0001-8057-8037"
+    attributes:
+      corresponding: true
+  - name: "Sebastian Funk"
+    affiliations:
+      - ref: lshtm
+    orcid: "0000-0002-2842-3406"
+
+affiliations:
+  - id: lshtm
+    name: "Centre for Mathematical Modelling of Infectious Diseases, London School of Hygiene & Tropical Medicine, London, United Kingdom"

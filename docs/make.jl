@@ -169,6 +169,7 @@ function combine()
             ],
             "About" => [
                 "Authors and funding" => "about.md",
+                "Paper" => "paper.md",
                 "Contributing" => "contributing.md",
                 "News" => "news.md",
                 "References" => "references.md",

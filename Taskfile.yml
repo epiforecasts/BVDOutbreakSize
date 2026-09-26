@@ -290,3 +290,44 @@ tasks:
     cmds:
       - uvx --python 3.12 --with 'setuptools<81' --from tensorboard
         tensorboard --logdir logs/tensorboard {{.CLI_ARGS}}
+
+  # ---- Paper ----------------------------------------------------------------
+  # Paper rendering is decoupled from the fits and the docs build: it depends
+  # only on the committed sources under paper/ and the figures and quoted
+  # numbers written into paper/ from a pinned release. Editing prose or
+  # references re-renders without refitting anything.
+  paper:
+    desc: Render the preprint to PDF and HTML
+    cmds:
+      - task: paper-html
+      - task: paper-pdf
+
+  paper-pdf:
+    desc: Render the preprint to PDF only
+    dir: paper
+    sources:
+      - "**/*.qmd"
+      - "**/*.bib"
+      - "**/*.yml"
+      - "figures/**"
+      - "generated/**"
+    cmds:
+      - quarto render main.qmd --to pdf
+
+  paper-html:
+    desc: Render the preprint to HTML only
+    dir: paper
+    sources:
+      - "**/*.qmd"
+      - "**/*.bib"
+      - "**/*.yml"
+      - "figures/**"
+      - "generated/**"
+    cmds:
+      - quarto render main.qmd --to html
+
+  paper-preview:
+    desc: Live-preview the preprint in the browser while editing
+    dir: paper
+    cmds:
+      - quarto preview main.qmd

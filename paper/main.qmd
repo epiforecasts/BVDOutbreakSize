@@ -1,0 +1,283 @@
+---
+title: "Real-time joint estimation of the size of the 2026 Bundibugyo virus outbreak in the Democratic Republic of the Congo"
+metadata-files:
+  - _authors.yml
+  - generated/numbers.yml
+date: today
+format:
+  html:
+    toc: false
+    number-sections: false
+  pdf:
+    number-sections: false
+bibliography: reference.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/plos.csl
+filters:
+  - authors-block
+abstract: |
+  <!-- About 12 sentences, no numbers, no citations, ending on the headline finding. -->
+  <!-- 1. An outbreak of Ebola disease caused by Bundibugyo virus is ongoing in the DRC with exported cases in Uganda. -->
+  <!-- 2. Most infections are unreported, so the current size has to be inferred from the surveillance counts that are published. -->
+  <!-- 3. Published estimates use a subset of those counts under fixed delay, doubling-time and case-fatality assumptions. -->
+  <!-- 4. We instead fit every count the national situation reports publish in one posterior, refreshed and released on each report. -->
+  <!-- 5. One latent infection process by province, staged through explicit delays and stream-specific ascertainment, generates every stream. -->
+  <!-- 6. Counts are fitted as the increments between reports, with breaks where reporting changed and frozen streams kept in the likelihood. -->
+  <!-- 7. The model began as a reproduction of an early export-based estimate and became a renewal model with a time-varying reproduction number and provincial structure. -->
+  <!-- 8. Each release is evaluated by one-week-ahead forecasts scored against the data that arrive next and a persistence baseline, by single-stream fits, and against published estimates. -->
+  <!-- 9. Finding on size, growth and severity at the release analysed, without numbers. -->
+  <!-- 10. Finding on forecast skill and on which streams anchor the estimate. -->
+  <!-- 11. The size interval is no narrower than the priors on ascertainment and delays that the data do not move. -->
+  <!-- 12. Headline: a joint estimate from published reports alone is feasible in real time and makes the agreement and conflict between streams explicit. -->
+---
+
+<!--
+PLAN. Each top-level bullet is the major sentence of one paragraph; sub-bullets are its supporting sentences with citations.
+RECOLLECTION marks a point needing an author answer from paper/.notes/recollections.md.
+VERIFY marks a claim that rests on agent-written text only (paper/.notes/review-grounding.md) and needs author confirmation.
+Length: about 3500 words; each Methods subsection at most two paragraphs except Model development, which has one short paragraph per model version.
+Numbers: never typed; every quantity is a Quarto meta shortcode read from generated/numbers.yml, written from the release analysed (a results build of main until v2.2.0 is cut, then v2.2.0).
+Dates and durations: never in prose; they live in @tbl-models and @fig-timeline.
+Supporting Information: the report site archived with the release (site.zip from v2.2.0; the offline analysis.html before that), whose Methods page carries the full model; the main text points to it by italic page or section title.
+Terms: "the joint model" for the method, "the joint estimate" for its output, "single-stream fits" for the comparators, "release" not "vintage", "province" not "patch", "random walk" not "walk".
+Methods and Results subsection names mirror each other.
+Style: paper/.notes/pc-style.md section 10, and the composable-models paper (~/code/EpiAware/ComposableProbabilisticIDModels/index.qmd) for a second exemplar.
+Authors: Sam Abbott and Sebastian Funk; Katharine Sherratt and Samuel Brand in the Acknowledgements (author decision, 24 Sep; issue 775 stays open for their reply).
+
+FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and the GitHub record; scripts under paper/scripts/, outputs under paper/figures/ committed as pdf and png).
+@fig-model      Figure 1. Where the work started: the first model's outputs. Panels: (A) the McCabe et al. scenario estimates against the v1.0.0 joint posterior of cumulative infections at the 18 May cut-off; (B) the four streams fitted then, observed and posterior predictive; (C) the constant-growth latent curve. Source: the v1.0.0 results release and released_estimates.csv.
+@fig-estimates  Figure 2. Where the work is now: the current model's outputs. Panels: (A) national infections, deaths and the reproduction number over time with the data streams; (B) provincial reproduction numbers and infections, with the health-zone stratum if merged; (C) ascertainment by stream against its prior; (D) one-week-ahead forecast against what was reported. Source: the pinned results release (posterior_draws.csv, stream_draws.csv, forecast.csv, province_forecast.csv).
+@fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) joint fit wall-clock and gradient time per release where recorded. Source: git log, gh api, released_estimates.csv, the benchmark job records.
+@fig-evaluation Figure 4. Evaluation. (A) forecast skill against the persistence baseline by stream and release; (B) outbreak size by single-stream fit against the joint; (C) comparison with McCabe et al. at matched cut-offs. Source: forecast_scores.csv, size_by_release_by_stream.csv, frozen_matched_cutoffs.csv.
+@tbl-streams    Streams fitted: stream, what it observes, observation model, first and last fitted report, break dates.
+@tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change; main since v2.1.0 is one row, unreleased at the release analysed.
+-->
+
+## Introduction
+
+- Ebola disease caused by Bundibugyo virus re-emerged in the DRC in 2026, with exported cases in Uganda, and the number of infections is unknown while the outbreak is ongoing [@insp_sitrep_2026; @who_don_2026_602].
+  - Outbreak size and growth drive the response, from bed and laboratory capacity to the risk of further exports [@meltzer2014].
+  - Surveillance sees the reported fraction after delays from infection to onset, confirmation and death, so the current size has to be inferred [@imai2020].
+  - Earlier Bundibugyo outbreaks were small and give few outbreak-specific parameters [@macneil2010; @rosello2015].
+
+- The national situation reports carry many counts but no line list, and every count is report-dated and open to revision [@insp_sitrep_2026; @inrb_umie_2026].
+  - Suspected and confirmed cases and deaths, laboratory throughput, isolation occupancy, treatment-centre flows, and an intermittently published curve of confirmed cases by onset date.
+  - Each stream observes the same epidemic through a different delay and a different ascertainment, so used alone each implies a different outbreak size.
+
+- Several estimates of the outbreak size have been published, but each uses a subset of these counts under fixed assumptions.
+  - McCabe et al. [@mccabe2026; @mccabe2026update; @mccabe2026lancet] estimated cumulative infections from the exported cases and the reported deaths under constant exponential growth, following the export-based approach of Imai et al. [@imai2020], and report scenarios over fixed delay, doubling-time and case-fatality assumptions rather than one posterior.
+  - Chamla et al. [@chamla2026] projected confirmed cases with a stochastic compartmental model fitted to the confirmed series alone.
+  - Genomic analyses bound the time of the most recent common ancestor and the early doubling time but not the size [@virological2026; @cuomodannenburg2026; @mbalaplacide2026].
+  - Real-time renewal tools fit one or two streams and were not built for a set of report-dated aggregates that stop and change format [@epinow2].
+
+- In this paper we present a joint model of the outbreak size fitted to every count the situation reports publish, and its evaluation across four months of releases.
+  - The core idea is that one latent infection process, staged through explicit delays and stream-specific ascertainment, generates every published count, so all streams inform one posterior.
+  - We started from the approach of McCabe et al. [@mccabe2026] and replaced it with a discrete renewal model with a time-varying reproduction number [@fraser2007; @cori2013], then with one renewal process per province.
+  - We fit each count as the increment between successive reports, with a break at each documented change in reporting, and we release each update with the model definition, the draws and the forecasts.
+  - We evaluate the model on the situation reports [@insp_sitrep_2026] by one-week-ahead forecasts against a persistence baseline, by fitting each stream alone, and against the estimates of McCabe et al. and Chamla et al. [@mccabe2026; @chamla2026].
+
+## Methods
+
+### Data
+
+- All DRC counts come from the daily situation reports of the Institut National de Santé Publique, read from the PDFs, with the streams fitted and their first and last fitted report listed in @tbl-streams [@insp_sitrep_2026].
+  - Exports to Uganda come from WHO situation reports and Disease Outbreak News and are fitted up to the report at which exports stopped being updated [@who_afro_sitrep01_2026; @who_don_2026_602].
+  - The curve of confirmed cases by onset date is digitised bar by bar from the figure the reports carry from mid-July, and each digitised bar carries a fitted read error on top of the rounding of an integer read (PR 875, PR 881).
+  - Each value is read by a language-model agent and independently re-read, with disagreements settled against the PDF, and the INRB-UMIE transcription is used only when the primary source is not publishing [@inrb_umie_2026]. <!-- VERIFY: who the second reader is -->
+  - Genetic estimates of the time to the most recent common ancestor and the early doubling time enter as priors and are referred to below as the genetic bound [@virological2026; @mbalaplacide2026].
+
+- Streams are fitted as the increments between successive reports, with a fitted level offset at each documented reclassification or harmonisation date, and a stream that stops being published is frozen at its last report and stays in the likelihood.
+  - Reporting changed basis or format several times over the window, at the dates listed in @tbl-streams. <!-- record shows at least eight changes; no count in prose -->
+
+### Model development
+
+<!-- One paragraph per model version. Each defines the version by its latent process, streams and priors, and gives the reason for the change as a property of the data or the posterior. Dates, releases and streams per version are in @tbl-models; none appear in prose. RECOLLECTION: phases 1 to 5. -->
+
+- The first model reproduced the approach of McCabe et al. [@mccabe2026] as one posterior rather than a set of scenarios.
+  - The same continuous-time constant-growth latent process, with the two closed-form approximations replaced by exact convolutions and every fixed quantity given a prior [@bdbv_linelist_analysis_2026].
+  - Four streams, exported cases and deaths and DRC suspected deaths and cases with an ascertainment component, and the same model fitted to each stream alone.
+  - A configuration pinned to their assumptions reproduced their deaths-based headline, after which the reproduction served as a comparison target rather than the method.
+
+- Moving to the situation reports as the data source changed the observation model from cumulative totals to increments and added the confirmed series with a laboratory model.
+  - Reclassification of suspects withdrew the suspected totals, so confirmed cases and deaths became the fitted series and the suspected streams were frozen.
+  - The laboratory model added parameters the throughput counts could not identify, and the joint posterior implied a larger outbreak than any single stream.
+  - This model was released with a warning and replaced. <!-- RECOLLECTION: renewal planned before the conflict (issue 144, 29 May) -->
+
+- The renewal model kept the observation streams and replaced the latent process with a discrete daily renewal equation and a time-varying reproduction number [@fraser2007; @cori2013].
+  - The reproduction number follows a weekly log-scale random walk, starting four weeks before the first report, with a logistic outbreak-response ramp at the first report.
+  - A single import grows through a cryptic phase to the renewal start, with the genetic bound flooring the outbreak age and the number of cryptic generations given a prior.
+  - Every delay is sampled and discretised with double interval censoring [@charniga2024].
+  - Five candidate latent processes were prototyped, an explicit convolution, deterministic renewal, stochastic renewal, a particle-filtered state space and a compartmental model, and the deterministic renewal was kept because the others either did not fit the aggregate data or added nothing at the data's resolution. <!-- RECOLLECTION: reason -->
+
+- Every remaining published stream was then added with its own observation model, listed in @tbl-streams.
+  - The 24h analysed laboratory volume anchors positivity; isolation occupancy and recoveries follow the form of the secondary-observation model of EpiNow2 [@epinow2]; bed occupancy is supply-limited with a random-walk capacity; treatment-centre flows carry an in-care case-fatality ratio; the digitised onset curve is a reporting triangle with time-varying ascertainment.
+  - Divergent transitions in the occupancy stream and funnels in the pooled dispersion and random walks were removed by censoring at recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015].
+
+- The provincial model runs one renewal process per province, coupled by importation, with every national stream fitted against the summed provinces.
+  - Four provinces, three individually and one pooling the remainder, with a gravity kernel and same-day transfer. <!-- read the patch list from src/ at the tag -->
+  - Provincial reproduction numbers are the national trend plus zero-sum mean-reverting deviations, identified by the per-province confirmed deaths.
+  - A factor that pinned the provinces to the national trend was tried and removed because the national data constrain them. <!-- RECOLLECTION: why start, why remove -->
+  - The cryptic seed now counts generations rather than doublings. <!-- v1 and v2 seeds differ -->
+
+- Since the last tagged release the provincial model has been reparameterised and extended; say which of these changes the release analysed carries and which came after it. <!-- results-2416 (337fef5) carries PRs 800, 820, 855, 867, 881 and 880/892; not 784, 900, 907 or 909 -->
+  - The province deviations are drawn on an identified sum-to-zero basis, with a Wishart shape for their correlation and a separately sampled drift scale that can shrink to the common-trend limit (PR 855, PR 907).
+  - The analysed laboratory volume, isolation occupancy and bed counts are scored by province as splits of the printed national sums, and the per-head testing covariate on ascertainment is removed (PR 784).
+  - Infections deplete a susceptible pool set at each province's census population, a light upper bound that does not bind at the current size, and every reported reproduction number is net of depletion (PR 900).
+  - The generation-interval prior is narrowed so that its implied mean matches the interval on the serial-interval mean it cites, after the joint had pulled the mean to about a fifth of the prior centre (PR 909). <!-- VERIFY: the cited interval on the mean is not in the source paper (issue 910) -->
+  - The death analysed volume is uncapped and the background case-fatality prior is centred below the BVD ratio (PR 820, PR 800).
+  - A centred form of the weekly reproduction-number random walk mixed on the complete onset curve but split the joint chains, and was reverted to non-centred (PR 880, PR 892). <!-- centred form returns with PR 884 if its joint mixes -->
+
+### Current model
+
+- The model at the release analysed is summarised in @fig-model, with the full definition and every prior in the Supporting Information (*Methods*).
+  - Renewal equation with susceptible depletion as a labelled display, @eq-renewal.
+  - One stream's observation model, delay convolution times ascertainment with a negative binomial increment likelihood, as a labelled display, @eq-stream.
+  - The province coupling and the sum-to-zero deviations as a labelled display, @eq-province.
+  - The province splits of the analysed volume, occupancy and beds, and the stream-level province compositions, in one sentence each.
+  - The model estimates infections and deaths to date, the reproduction number and doubling time by province, the case-fatality ratio, and the ascertainment of each surveillance system.
+
+### Forecast evaluation
+
+- We first score each release's forecasts against the data that arrived next, then compare the joint estimate with single-stream fits and published estimates, and finally report convergence.
+  - Every release forecasts each still-reported stream one week ahead, and the forecast is scored once the next reports arrive.
+  - Every forecast is drawn from the fitted model by running its likelihoods past the cut-off with the fitted parameters fixed, and province forecasts split the national forecast by the fitted composition (PR 867).
+  - Only forecasts drawn this way are scored, so releases before the change score only where they were backfilled. <!-- VERIFY against data/forecast_scores.csv at the release analysed -->
+  - The continuous ranked probability score, where lower is better, with the 50% and 90% interval coverage and the sample-based bias statistic [@gneiting2007; @bosse2022scoringutils]. <!-- confirm which package computes the scores -->
+  - The persistence baseline carries the last observed increment forward and was checked to see only the past, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
+  - Streams no longer reported are excluded because their truth is zero by construction, which favours neither model.
+  - Fits fixed at each release date are scored on one scale across reporting breaks.
+
+### Comparison with single-stream fits and published estimates
+
+- The joint estimate is set against the same model fitted to one stream at a time, against the estimate of every earlier release, and against the published estimates.
+  - Single-stream fits use the joint model with one likelihood term.
+  - The estimate of each earlier release is read from that release's published outputs.
+  - McCabe et al. are matched at their cut-offs by fits fixed at those dates, and Chamla et al. by a projection from a fit fixed at their calibration date [@mccabe2026; @mccabe2026lancet; @chamla2026]. <!-- RECOLLECTION: Chamla kept despite 30 June request to drop -->
+
+### Convergence
+
+- Each fit reports R-hat, bulk effective sample size and divergent transitions for every parameter [@gelman1992; @vehtari2021].
+  - NUTS with the chains, draws, adaptation steps, tree-depth cap and target acceptance read from the release [@hoffman2014nuts]. <!-- sampler_* keys in generated/numbers.yml; 1000 draws per chain and depth cap 10 on main -->
+  - The build fails if the joint fit breaches R-hat, effective-sample-size or divergence thresholds, and warns below a tighter tier.
+  - The validation and sensitivity joints share the joint's sampler budget (PR 887).
+  - Each build also fits the joint to data it simulated from one prior draw and checks that the posterior recovers the generating values and the simulated future (PR 882).
+
+### Implementation
+
+- The model is written in Julia with Turing, sampled with NUTS and differentiated with Mooncake [@ge2018turing; @hoffman2014nuts; @mooncake_jl].
+  - The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against finite differences and against the backend's own derivation of an unregistered copy, which cut the joint gradient by about a fifth and the delay-heavy kernels by several fold. <!-- {{ meta }} from PRs 810, 837, 856; author statement: not something the lead author could have written without the agent -->
+  - Agents ran wide searches over parameterisations, samplers and gradient backends, most of which measured as null and were not merged, and a precompile workload covering the fit the report runs cuts the cold build to a quarter. <!-- cite the benchmark PRs; author steer: "very wider performance searches" -->
+  - Each data update refits every affected model in continuous integration, renders the report, and publishes a versioned release with the model definition, thinned draws and forecasts; only the jobs a change can reach run, and a release is cut from a comment.
+  - Model code, priors and analysis text were drafted by a language-model agent from the McCabe et al. report and the delay reanalysis and were reviewed and revised by the authors, with convergence and fit to data as the gate on every change.
+  - Code, data transcriptions, per-release draws and forecasts, and the archived report site are available [@bvdoutbreaksize-github; @bvdoutbreaksize-zenodo].
+
+## Results
+
+<!-- Each Results paragraph: claim, figure pointer, then inline numbers from generated/numbers.yml. Figure blocks precede the subsection prose. -->
+
+### Outbreak size and dynamics
+
+- At the release analysed the joint model estimates the cumulative infections and deaths, the reproduction number and the case-fatality ratio shown in @fig-estimates A.
+  - Provincial reproduction numbers and which province carries growth (@fig-estimates B).
+  - Ascertainment by stream against its prior (@fig-estimates C), so the size interval is no narrower than those priors.
+  - The fit converges at the release analysed, with the worst-mixing parameters the ascertainment and background terms.
+  - The release before it did not converge once a resumed stream informed a non-centred random walk, and centring it restored convergence without moving the estimate. <!-- VERIFY: agent-only account; release published with the failure unnoticed; the CI convergence gate followed -->
+
+### Estimate evolution across releases
+
+- The estimate moved with each model version and each reporting change, and @fig-timeline sets the two against each other.
+  - The reproduction of McCabe et al. against their scenario range at their cut-off.
+  - The direction of the change at the renewal switch, at the arrival of the onset curve and at the provincial model, read from the released estimates.
+  - The direction of the change at each frozen stream and reporting break.
+
+### Forecast evaluation
+
+- Joint forecasts scored better than persistence on the still-reported streams at most releases (@fig-evaluation A).
+  - Skill by stream and release, with coverage against nominal.
+  - The releases where they did not, naming the stream and the break or the forecast defect since corrected.
+  - The same ordering holds for fits fixed at each release date (Supporting Information, *Frozen-fit forecast evaluation*).
+
+### Comparison with single-stream fits and published estimates
+
+- Single-stream fits disagree on outbreak size by the factor shown in @fig-evaluation B and the joint estimate sits within their range.
+  - Which streams anchor the estimate and which tighten the correlation between ascertainment and size.
+  - Under the first model the joint estimate sat above every single stream.
+  - Against McCabe et al. at matched cut-offs and against the Chamla et al. projection (@fig-evaluation C).
+
+## Discussion
+
+- In this paper we have presented a joint model of the size of the 2026 Bundibugyo virus outbreak fitted to every count the national situation reports publish, developed from a reproduction of an early export-based estimate into a provincial renewal model, and evaluated across four months of releases.
+  - Restate the idea in one sentence.
+  - The findings on size, growth, forecast skill and stream agreement without numbers.
+  - The model, data and every release are published and archived.
+
+<!-- Strengths and limitations -->
+
+- The approach has several strengths.
+  - First, one posterior over every published stream makes each stream's information and its conflict with the others explicit, in the ascertainment and background terms under the renewal model where under the first model it inflated the size.
+  - Second, fitting the increments between reports with a break at each reporting change handles revisions and format changes rather than ignoring them, and a frozen stream stays informative without dominating the forecast.
+  - Third, scoring every release against the data that arrive next found two forecast defects that no in-sample check had shown.
+  - Finally, the whole model definition lives in one versioned document that others can review and adapt, and the model was refit and released with each report.
+
+- The main limitation is that the delays, the case-fatality ratio and the laboratory parameters rest on priors from other outbreaks or from judgement, and the data do little to move them, so the size interval is no narrower than those priors.
+  - Almost every count is report-dated, so the timing of the epidemic is recovered through the assumed delays.
+  - The streams share one case pool but may be treated as conditionally independent, which may understate uncertainty.
+  - The data are aggregate national and provincial counts with no line list in the released model, and the model may misstate growth where the streams look sub-exponential while the reproduction number sits above one. <!-- Sebastian, issue 243 -->
+  - However, the aggregate design still supports the per-stream ascertainment and the forecast evaluation reported here.
+  - Sampler geometry rather than likelihood cost set the pace of development, and the reimplementation has not been checked against the original authors' code.
+
+<!-- Comparison to the literature -->
+
+- The published estimates each answer a narrower question than the joint model.
+  - McCabe et al. [@mccabe2026] infer size from exports and deaths under fixed assumptions, and the joint model recovers their estimate at their cut-off while adding the streams that inform ascertainment.
+  - Chamla et al. [@chamla2026] project confirmed cases from the confirmed series, and the joint model adds a projection from every stream with an explicit ascertainment.
+  - Genomic estimates [@mbalaplacide2026] bound the outbreak age and early growth and enter the joint model as priors that the surveillance data then update.
+  - Renewal-based real-time tools fit one or two streams [@epinow2], and the joint model follows the form of their secondary-observation model for every stream.
+  - More generally, the model belongs to the class of multi-stream renewal models with nowcasting components, applied here to report-dated aggregates rather than line lists [@placeholder-nowcasting].
+
+<!-- Lessons -->
+
+- The exercise taught us four things about real-time modelling from published reports. <!-- RECOLLECTION: tick, strike or add -->
+  - Reporting changes are the main source of model change, and the increment-and-break design absorbed most of them without a model rewrite.
+  - The disagreement between streams is the result to report, because the headline size follows from how that disagreement is resolved.
+  - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
+  - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
+
+- Several defects were of a kind a human author would be unlikely to write, and two were found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
+  - The forecast compounded the last random-walk innovation over the horizon, so the intervals widened with each release until coverage sat at one (issue 622).
+  - Reporting-break corrections were applied in the fit but not in the scoring, so frozen-fit forecasts scored an order of magnitude out (issue 623).
+  - The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short (v2.0.0 notes).
+  - A chain initialised from a fixed seed sat on a prior tail and produced the same R-hat on three different datasets (issue 671).
+  - A prior documented as carrying the published interval on the generation-interval mean was about two and a half times wider, and the joint pulled the mean far below it (PR 907, PR 909).
+  - Each defect passed the tests and the in-sample checks of the release that carried it.
+
+<!-- Further work -->
+
+- Future work could resolve the health-zone structure, ground the delays on outbreak-specific data, and model the revision process directly.
+  - A health-zone model conditioned on the provincial posterior is in development.
+  - Outbreak-specific delays from a line list [@akilimali2026].
+  - Revision as an observation process [@placeholder-revision].
+  - A retrospective evaluation once the outbreak has ended, against the final counts.
+  - The experiments so far were ad hoc; formal experiments across settings and outbreaks, and a deliberate application of the infectious disease modelling workflow [@abbott_workflow], could test whether the workflow improves the efficiency of agent work, and each of these is also a limitation of the present work. <!-- author statement, 24 Sep -->
+  - Who should sit in the seat for agent-driven modelling, an infectious disease modeller and of what seniority or someone on the ground, and how a team shares the work at this pace, are open questions. <!-- author statement, 24 Sep -->
+
+<!-- Conclusions -->
+
+- Five sentences, no numbers, no new claims: a joint real-time estimate is feasible from published reports alone, its value is in making the streams' agreement and conflict explicit, and we aim to support real-time size estimation from published surveillance in future outbreaks.
+
+## Funding {.appendix}
+
+<!-- NIHR HPRU in Health Analytics and Modelling, grant NIHR207404, text from issue 179, in the form used in primarycensored-paper with its disclaimer sentence. -->
+
+## Acknowledgements {.appendix}
+
+<!-- Katharine Sherratt and Samuel P. C. Brand for their contributions to the early versions and their review; Neil Ferguson for the genetic bound suggestion; INSP and INRB-UMIE for the data; outside contributors on GitHub by name. -->
+
+## Data and software availability {.appendix}
+
+<!-- Repository, Zenodo concept DOI, the release tag analysed and its single-file report as the Supporting Information. -->
+
+## AI disclosure {.appendix}
+
+<!-- One paragraph in the form of the primarycensored-paper disclosure: which models were used, that they drafted the model code, priors, analysis text and this manuscript, that the authors reviewed and revised all of it and take responsibility, and that an automated reviewer and convergence and fit-to-data gates checked every change. -->
+
+# References {.unnumbered}
