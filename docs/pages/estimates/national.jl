@@ -945,6 +945,8 @@ end;
 
 confirmed_cfr_line #hide
 
+#-
+
 confirmed_cfr_summary #hide
 
 # The figure below shows the posterior densities of the delay-corrected confirmed CFR and the structural CFR.

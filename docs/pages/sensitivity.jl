@@ -1466,7 +1466,11 @@ spatial_rt_density_fig = plot_density_overlay(
 
 spatial_rt_fig #hide
 
+#-
+
 spatial_cfr_fig #hide
+
+#-
 
 spatial_rt_density_fig #hide
 
