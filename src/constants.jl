@@ -257,10 +257,10 @@ const PROVINCE_SOURCE_CAPITALS = [
     PROVINCE_NAMES
 
 The patches of the meta-population model, in patch order. The first entry
-is the primary patch. It is the origin of the outbreak, the reference for
-the per-patch reproduction-number deviations in
-[`patch_rt_model`](@ref), and the reference for the Uganda export
-propensities in [`province_export_pressure_model`](@ref).
+is the primary patch. It is the origin of the outbreak and the reference for
+the Uganda export propensities in [`province_export_pressure_model`](@ref).
+The per-patch reproduction-number deviations in [`patch_rt_model`](@ref)
+sum to zero, so no patch is their reference.
 
 Ituri, Nord-Kivu and Haut-Uele carry enough confirmed cases to be patches
 in their own right. The rest hold a few dozen between them and are pooled
