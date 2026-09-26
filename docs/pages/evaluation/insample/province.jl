@@ -82,6 +82,8 @@ prior_death_ppc_fig = plot_province_composition_ppc(
 
 prior_case_ppc_fig #hide
 
+#-
+
 prior_death_ppc_fig #hide
 
 #md # ```@raw html
@@ -150,6 +152,8 @@ province_death_ppc_fig = plot_province_composition_ppc(
 
 province_case_ppc_fig #hide
 
+#-
+
 province_death_ppc_fig #hide
 
 # The three province terms for the isolation and laboratory data are checked the same way.
@@ -195,7 +199,11 @@ province_beds_ppc_fig = plot_province_split_ppc(
 
 province_lab_ppc_fig #hide
 
+#-
+
 province_occupancy_ppc_fig #hide
+
+#-
 
 province_beds_ppc_fig #hide
 
