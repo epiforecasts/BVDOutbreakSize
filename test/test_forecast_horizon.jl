@@ -320,7 +320,8 @@ end
     rh = returned(fix_future(mh, d.θh, d.fut), d.θ0)
     st = rh.onset_report_state
     total(as_of) = onset_report_expected_total(
-        rh.onsets, st.logit_h0, st.γ, st.grid_start, st.alpha, as_of
+        rh.onsets, st.logit_h0, st.γ, st.grid_start, st.alpha, as_of,
+        st.alpha_grid_start
     )
     ## One future vintage a week, each the reported total it should print
     ## less the total at the cut-off.

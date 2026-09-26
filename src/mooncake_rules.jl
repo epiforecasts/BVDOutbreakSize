@@ -707,13 +707,6 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(onset_report_anchor_series), Matrix{<:Mooncake.IEEEFloat},
-        Integer, Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
         typeof(onset_report_moments), Matrix{<:Mooncake.IEEEFloat},
         Integer, Array{<:Mooncake.IEEEFloat}, Integer,
         Array{<:Mooncake.IEEEFloat}, Array{<:Integer}, Array{<:Integer},
@@ -780,50 +773,6 @@ function Mooncake.rrule!!(
         return ntuple(_ -> NoRData(), 6)
     end
     return out, onset_report_cdf_table_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_anchor_series)},
-        cdf_table::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        u_lo::CoDual{<:Integer}, a::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    cp = primal(cdf_table)
-    ap = primal(a)
-    lo = Int(primal(u_lo))
-    c̄ = tangent(cdf_table)
-    ā = tangent(a)
-    y = onset_report_anchor_series(cp, lo, ap)
-    out = Mooncake.zero_fcodual(y)
-    ȳ = tangent(out)
-    ## `out[k] = S_k / den_k` with `S_k = Σ_d (c_d - c_{d-1}) a_{u+d}` and
-    ## `den_k = safe_rate(c_{D-1})`, so `c_d` enters `S_k` through two
-    ## neighbouring anchor days and `c_{D-1}` also through the denominator.
-    function onset_report_anchor_series_pullback!!(::NoRData)
-        D = size(cp, 1)
-        na = length(ap)
-        D == 0 && return NoRData(), NoRData(), NoRData(), NoRData()
-        @inbounds for k in axes(cp, 2)
-            g = ȳ[k]
-            u = lo + k - 1
-            cD = cp[D, k]
-            invden = inv(safe_rate(cD))
-            gi = g * invden
-            c_prev = zero(eltype(cp))
-            S = zero(eltype(cp))
-            for d in 0:(D - 1)
-                cd = cp[d + 1, k]
-                ad = ap[clamp(u + d, 1, na)]
-                a_next = d < D - 1 ? ap[clamp(u + d + 1, 1, na)] : zero(ad)
-                c̄[d + 1, k] += gi * (ad - a_next)
-                ā[clamp(u + d, 1, na)] += gi * (cd - c_prev)
-                S += (cd - c_prev) * ad
-                c_prev = cd
-            end
-            c̄[D, k] -= gi * S * invden * _safe_rate_slope(cD)
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return out, onset_report_anchor_series_pullback!!
 end
 
 function Mooncake.rrule!!(

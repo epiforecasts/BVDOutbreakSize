@@ -616,16 +616,18 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The read SD row is the error the fit attributes to one digitised bar, in cases, on top of the rounding every integer read carries.
+# The read SD row is the error the fit attributes to one digitised bar, in cases.
+# The count dispersion row is the negative binomial overdispersion of the reported counts, as $1/\sqrt{k}$.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
 #md # ```
 
-## The report-date grid the calendar walk spans, `_onset_grid_start` to
-## `_onset_grid_end`, is a fixed function of the digitised triangle rather
-## than chain contents, so the shared setup builds it once from
-## `obs.onset_curve_history`.
+## The report-date grid the calendar walk spans, `_onset_hazard_grid_start`
+## to `_onset_grid_end`, is a fixed function of the digitised triangle, so
+## the shared setup builds it once from `obs.onset_curve_history`.
+## `_onset_grid_start` (the ascertainment walk's own, always the earliest
+## scored onset date) is generally earlier; see `onset_hazard_grid_start`.
 ## Every posterior draw's `logit_h0` (the baseline delay hazard), `γ` (the
 ## report-date calendar walk) and ascertainment level, read off the fitted
 ## model's own onset-reporting state at each draw.
@@ -642,7 +644,7 @@ _onset_7d_fraction = [
     onset_report_G(
         6, _onset_hazard.logit_h0[i],
         _onset_hazard.γ[i], _onset_u_ref,
-        _onset_grid_start
+        _onset_hazard_grid_start
     )
         for i in eachindex(_onset_hazard.logit_h0)
 ]
@@ -665,7 +667,9 @@ _onset_labels = merge(
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.τ") => "onset-report read SD (cases)"
+        Symbol("onset_report_state.τ") => "onset-report read SD (cases)",
+        Symbol("onset_report_state.inv_sqrt_k") =>
+            "onset-report count dispersion (1/sqrt k)"
     )
 );
 
@@ -711,6 +715,7 @@ onset_summary = vcat(
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
             Symbol("onset_report_state.τ"),
+            Symbol("onset_report_state.inv_sqrt_k"),
         ];
         digits = 3, labels = _onset_labels
     ),
@@ -742,6 +747,7 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.τ"),
+        Symbol("onset_report_state.inv_sqrt_k"),
     ];
     prior = prior_chn, labels = _onset_labels
 );
@@ -752,7 +758,26 @@ onset_pair_fig = plot_pair(
 
 onset_pair_fig #hide
 
-# The nowcast of each digitised snapshot against the latest figure is on the [in-sample checks](@ref "Onset snapshot nowcasts") page.
+# The figure below reads the fitted hazard differently: the onset-to-report delay distribution implied for a report on a given calendar day, holding that day's calendar-walk level fixed across the delay axis.
+# The top panel is the mean delay, the bottom the delay's SD, both with 50%/90% credible ribbons over report time.
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset reporting delay over report time</summary>
+#md # ```
+
+onset_delay_profile_fig = plot_onset_delay_profile(
+    _onset_hazard;
+    grid_start = _onset_hazard_grid_start, grid_end = _onset_grid_end,
+    seeding = obs.seeding
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_delay_profile_fig #hide
+
+# Each digitised snapshot against the predicted eventual reported total is on the [in-sample checks](@ref "Onset snapshots against the predicted eventual total") page.
 #
 # The posterior predictive below compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
 # The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
@@ -761,27 +786,20 @@ onset_pair_fig #hide
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
 #md # ```
 
-_onset_last_printed = onset_snapshot_readings().last_printed
+## The daily onsets series per posterior draw (`diff` of the chain's
+## `cumulative_onsets`; the model stores only the running sum), the chain's
+## per-draw read SD and count dispersion, and the latest printed reading of each onset date
+## (`onset_snapshot_readings`).
 _onset_daily_draws = onset_daily_draws(chn_joint)
-_onset_replicated = onset_bar_replicator(
-    chn_joint, Random.MersenneTwister(20260729)
-)
+_onset_noise = onset_noise_draws(chn_joint)
+_onset_readings = onset_snapshot_readings()
+_onset_rng = Random.MersenneTwister(20260729)
 
-## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
-## the fitted grid the same way the model extrapolates it.
-function _onset_alpha(i::Integer, u::Integer)
-    a = _onset_hazard.alpha[i]
-    return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
-end
+_onset_last_printed = _onset_readings.last_printed
 
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
-## Modelled onsets on each of those days, and the count the latest figure
-## should print for them: the same onsets times the cumulative reported
-## proportion at that figure's own delay, `_onset_grid_end - u`, so the
-## band is a predictive for the bar actually plotted rather than for the
-## eventual total. `onset_report_F` holds the calendar walk flat past its
-## fitted support, which the most recent onset dates run into.
+## Modelled onsets on each of those days.
 _onset_by_date_onsets = [
     [
         _onset_daily_draws[i][u]
@@ -789,20 +807,20 @@ _onset_by_date_onsets = [
     ]
         for u in _onset_by_date_days
 ]
-_onset_by_date_printed = [
-    [
-        _onset_daily_draws[i][u] *
-            onset_report_F(
-            _onset_grid_end - u,
-            _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
-            u, _onset_grid_start, _onset_alpha(i, u)
-        )
-            for i in eachindex(_onset_daily_draws)
-    ]
+## The count the latest figure should print for each date, read at the
+## current cut-off's delay (`_onset_grid_end - u`) rather than the eventual
+## total, through the same predictive measurement error a single digitised
+## bar carries (`onset_level_predictive_draws`'s level-cell case).
+_onset_by_date_reps = [
+    onset_level_predictive_draws(
+        u, _onset_daily_draws, _onset_hazard,
+        _onset_noise.τ, _onset_noise.k;
+        grid_start = _onset_hazard_grid_start,
+        alpha_grid_start = _onset_grid_start,
+        target_delay = _onset_grid_end - u, rng = _onset_rng
+    )
         for u in _onset_by_date_days
 ]
-## That count put through the measurement error of one digitised bar.
-_onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
 
 onset_ppc_by_date_fig = let
     fig = CairoMakie.Figure(; size = (900, 380))

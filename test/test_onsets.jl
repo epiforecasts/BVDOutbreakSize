@@ -131,10 +131,7 @@ end
         """
     )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(
-        path; cutoff = Date("2026-03-07"), seeding,
-        max_delay = 10
-    )
+    h = load_onset_curve(path; cutoff = Date("2026-03-07"), seeding)
     ## Grid index of 2026-03-02 (seeding 2026-01-01).
     u = Int(date2epochdays(Date("2026-03-02")) - date2epochdays(seeding)) + 1
     R2 = Int(date2epochdays(Date("2026-03-07")) - date2epochdays(seeding)) + 1
@@ -196,23 +193,22 @@ end
         """
     )
     seeding = Date("2026-01-01")   # Jan 1 = grid day 1
-    h = load_onset_curve(
-        path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10
-    )
+    h = load_onset_curve(path; cutoff = Date("2026-02-14"), seeding)
 
-    ## V1 (report day 41, virtual empty predecessor): window is its own
-    ## extent 32:39 intersected with the trailing 10-day horizon 32:41.
-    ## V2 (report day 43): both extents cover 32:39, horizon starts at 34.
-    ## V3 (report day 45): both extents cover 32:41, horizon starts at 36.
-    exp_onset = vcat(32:39, 34:39, 36:41)
-    exp_report = vcat(fill(41, 8), fill(43, 6), fill(45, 6))
-    exp_prev = vcat(fill(0, 8), fill(41, 6), fill(43, 6))
+    ## Each vintage corrects the dates an earlier one printed and scores a
+    ## level for each date it prints first.
+    ## V1 (report day 41): levels over its extent, 32:39.
+    ## V2 (report day 43): corrections 32:39, first-print levels 40:41.
+    ## V3 (report day 45): corrections 32:41, first-print levels 42:43.
+    exp_onset = vcat(32:39, 32:41, 32:43)
+    exp_report = vcat(fill(41, 8), fill(43, 10), fill(45, 12))
+    exp_prev = vcat(fill(0, 8), fill(41, 8), [0, 0], fill(43, 10), [0, 0])
     exp_inc = vcat(
-        [5, 3, 2, 4, 3, 2, 1, 1],      # V1 levels vs the virtual empty
-        [0, 1, 1, 1, 1, 1],            # V2 vs V1
-        [0, -1, 1, 0, 1, 1]
-    )           # V3 vs V2 (Feb 6 revised 3 -> 2)
+        [5, 3, 2, 4, 3, 2, 1, 1],          # V1 levels
+        [1, 0, 0, 1, 1, 1, 1, 1], [1, 1],  # V2 corrections, then levels
+        [1, 0, 0, 0, 0, -1, 1, 0, 1, 1],   # V3 corrections (Feb 6 3 -> 2)
+        [1, 1]                             # V3 levels
+    )
 
     @test h.onset_days == exp_onset
     @test h.report_days == exp_report
@@ -224,73 +220,13 @@ end
     @test h.last_total == 34   # V3's cumulative total
 end
 
-@testitem "load_onset_curve: horizon window excludes settled onset dates" begin
-    using BVDOutbreakSize: load_onset_curve
-    using Dates: Date
-
-    dir = mktempdir()
-    path = joinpath(dir, "onset.csv")
-    ## A three-snapshot triangle whose printed extents run close to each
-    ## report date, the shape the real digitised figures take. Grid days
-    ## with seeding 2026-01-01: Feb 1 = 32, ..., Feb 14 = 45.
-    ##   001 report Feb 10 (day 41), extent Feb 1-8   (32-39)
-    ##   002 report Feb 12 (day 43), extent Feb 1-10  (32-41)
-    ##   003 report Feb 14 (day 45), extent Feb 1-12  (32-43)
-    write(
-        path, """
-        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-        001,2026-02-10,2026-02-01,5,0,5
-        001,2026-02-10,2026-02-02,3,0,3
-        001,2026-02-10,2026-02-03,2,0,2
-        001,2026-02-10,2026-02-04,4,0,4
-        001,2026-02-10,2026-02-05,3,0,3
-        001,2026-02-10,2026-02-06,2,0,2
-        001,2026-02-10,2026-02-07,1,0,1
-        001,2026-02-10,2026-02-08,1,0,1
-        002,2026-02-12,2026-02-01,6,0,6
-        002,2026-02-12,2026-02-02,3,0,3
-        002,2026-02-12,2026-02-03,2,0,2
-        002,2026-02-12,2026-02-04,5,0,5
-        002,2026-02-12,2026-02-05,4,0,4
-        002,2026-02-12,2026-02-06,3,0,3
-        002,2026-02-12,2026-02-07,2,0,2
-        002,2026-02-12,2026-02-08,2,0,2
-        002,2026-02-12,2026-02-09,1,0,1
-        002,2026-02-12,2026-02-10,1,0,1
-        003,2026-02-14,2026-02-01,7,0,7
-        003,2026-02-14,2026-02-02,3,0,3
-        003,2026-02-14,2026-02-03,2,0,2
-        003,2026-02-14,2026-02-04,5,0,5
-        003,2026-02-14,2026-02-05,4,0,4
-        003,2026-02-14,2026-02-06,2,0,2
-        003,2026-02-14,2026-02-07,3,0,3
-        003,2026-02-14,2026-02-08,2,0,2
-        003,2026-02-14,2026-02-09,2,0,2
-        003,2026-02-14,2026-02-10,2,0,2
-        003,2026-02-14,2026-02-11,1,0,1
-        003,2026-02-14,2026-02-12,1,0,1
-        """
-    )
-    seeding = Date("2026-01-01")
-    h = load_onset_curve(
-        path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10
-    )
-    ## Feb 1-2 (days 32-33) sit 11-12 days before the 002 report day (43):
-    ## older than the horizon (10), so their revisions are not re-scored in
-    ## the 002 window even though both figures print them.
-    v2_days = h.onset_days[h.report_days .== 43]
-    @test 32 ∉ v2_days
-    @test 33 ∉ v2_days
-    @test minimum(v2_days) == 34
-end
-
-@testitem "load_onset_curve: out-of-extent dates are dropped, not zeroed" begin
+@testitem "load_onset_curve: out-of-extent dates are unobserved, not zeroed" begin
     ## The published figures stop their x axis short of the report date. A
-    ## date the figure never covered carries no observation, so its cell is
-    ## dropped; reading it as zero would assert nothing had been reported
-    ## yet and bias the fitted hazard towards slow reporting at exactly the
-    ## delays the axis gap spans.
+    ## date the figure never covered carries no observation there; reading
+    ## it as zero would assert nothing had been reported yet and bias the
+    ## fitted hazard towards slow reporting at exactly the delays the axis
+    ## gap spans. Its first cell is the level where a figure first prints
+    ## it.
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date, date2epochdays
 
@@ -338,22 +274,117 @@ end
         """
     )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(
-        path; cutoff = Date("2026-02-14"), seeding,
-        max_delay = 10
-    )
+    h = load_onset_curve(path; cutoff = Date("2026-02-14"), seeding)
     _day(s) = Int(date2epochdays(Date(s)) - date2epochdays(seeding)) + 1
 
     ## 001's axis ends at Feb 8 (day 39), two days before its report day, so
     ## Feb 9 and Feb 10 are never scored against it.
     v1 = h.onset_days[h.report_days .== _day("2026-02-10")]
     @test maximum(v1) == _day("2026-02-08")
-    ## The 002 correction cells stop at Feb 8 too: a correction needs both
-    ## figures to print the date, and 001 is the narrower of the pair.
-    v2 = h.onset_days[h.report_days .== _day("2026-02-12")]
-    @test maximum(v2) == _day("2026-02-08")
+    ## 002 corrects only the dates 001 printed, and scores Feb 9 and Feb 10
+    ## as first-print levels.
+    v2 = h.report_days .== _day("2026-02-12")
+    corr2 = h.onset_days[v2 .& (h.prev_report_days .> 0)]
+    @test maximum(corr2) == _day("2026-02-08")
+    lev2 = h.onset_days[v2 .& (h.prev_report_days .== 0)]
+    @test lev2 == [_day("2026-02-09"), _day("2026-02-10")]
     ## No cell anywhere reaches delay 0 or 1 for this triangle.
     @test minimum(h.report_days .- h.onset_days) == 2
+end
+
+@testitem "load_onset_curve: one level per onset date, corrections inside the support" begin
+    ## A synthetic 3-vintage triangle with printed extents wider than the
+    ## delay support. Each onset date scores one level where it is first
+    ## printed and then corrections only while the delay is inside the
+    ## support.
+    using BVDOutbreakSize: load_onset_curve, ONSET_REPORT_MAX_DELAY
+    using Dates: Date, Day
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    seeding = Date("2026-01-01")
+    lines = [
+        "sitrep,report_date,onset_date,confirmed_alive,confirmed_dead," *
+            "confirmed_total",
+    ]
+    for u in 1:58
+        push!(lines, "001,2026-03-01,$(seeding + Day(u - 1)),0,0,1")
+    end
+    for u in 1:63
+        push!(lines, "002,2026-03-06,$(seeding + Day(u - 1)),0,0,2")
+    end
+    for u in 1:68
+        push!(lines, "003,2026-03-11,$(seeding + Day(u - 1)),0,0,3")
+    end
+    write(path, join(lines, "\n"))
+
+    D = ONSET_REPORT_MAX_DELAY
+    h = load_onset_curve(path; cutoff = Date("2026-03-11"), seeding)
+    R1, R2, R3 = 60, 65, 70
+    levels = h.prev_report_days .== 0
+    ## One level per printed onset date, at the vintage that printed it
+    ## first.
+    @test sort(h.onset_days[levels]) == collect(1:68)
+    first_print = Dict(zip(h.onset_days[levels], h.report_days[levels]))
+    @test all(first_print[u] == R1 for u in 1:58)
+    @test all(first_print[u] == R2 for u in 59:63)
+    @test all(first_print[u] == R3 for u in 64:68)
+    ## Corrections only inside the delay support, each against the
+    ## previous vintage.
+    corr = .!levels
+    @test all(h.report_days[corr] .- h.onset_days[corr] .< D)
+    @test sort(h.onset_days[corr .& (h.report_days .== R2)]) ==
+        collect((R2 - D + 1):58)
+    @test sort(h.onset_days[corr .& (h.report_days .== R3)]) ==
+        collect((R3 - D + 1):63)
+    @test all(==(1), h.increments[corr])
+    ## Every level is the count printed at first print.
+    @test all(
+        h.increments[i] == (
+            h.report_days[i] == R1 ? 1 :
+                h.report_days[i] == R2 ? 2 : 3
+        )
+            for i in findall(levels)
+    )
+end
+
+@testitem "onset_report_moments: cells with both reads beyond the support score zero" begin
+    ## `onset_report_moments` is a pure per-cell function: a cell whose two
+    ## reads are both beyond the delay support has both reads saturated at
+    ## the same asymptote, so its mean is exactly 0. The loader never builds
+    ## such a cell, so the cells are set here directly.
+    using BVDOutbreakSize: onset_report_moments, ONSET_REPORT_MAX_DELAY
+
+    D = ONSET_REPORT_MAX_DELAY
+    h = (;
+        onset_days = vcat(1:58, 1:63),
+        report_days = vcat(fill(60, 58), fill(65, 63)),
+        prev_report_days = vcat(fill(0, 58), fill(60, 63)),
+    )
+    grid_start = minimum(h.onset_days)
+    grid_end = maximum(h.report_days)
+    onsets = fill(50.0, grid_end)
+    logit_h0 = fill(log(0.15 / 0.85), D)
+    γ = zeros(grid_end - grid_start + 1)
+    alpha = fill(0.6, grid_end - grid_start + 1)
+
+    full = onset_report_moments(
+        onsets, logit_h0, γ, grid_start, alpha,
+        h.onset_days, h.report_days, h.prev_report_days
+    )
+
+    ## Added cells whose current and previous reads (a real predecessor,
+    ## not the virtual-empty sentinel `0`) are both beyond the delay
+    ## support have both reads saturated at the same asymptote, so their
+    ## mean is exactly zero.
+    added_idx = findall(
+        i -> h.prev_report_days[i] > 0 &&
+            h.report_days[i] - h.onset_days[i] > D - 1 &&
+            h.prev_report_days[i] - h.onset_days[i] > D - 1,
+        eachindex(h.onset_days)
+    )
+    @test !isempty(added_idx)
+    @test all(==(0.0), full.means[added_idx])
 end
 
 ## --- Hazard / CDF pure functions ------------------------------------------
@@ -501,29 +532,21 @@ end
     @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
 end
 
-@testitem "onset_report_anchor weighted-averages a, exact for constant a" begin
-    using BVDOutbreakSize: onset_report_anchor
-    using Random: seed!
-    using StatsFuns: logit
+@testitem "onset_confirmation_anchor averages ahead over the pipeline delay" begin
+    using BVDOutbreakSize: onset_confirmation_anchor
 
-    seed!(20260803)
-    D = 28
-    grid_start = 1
-    u = 10
-    a = 0.05 .+ 0.5 .* rand(80)
-    for _ in 1:20
-        logit_h0 = randn(D) .* 1.2 .- 0.8
-        γ = randn(80) .* 0.3
-        anc = onset_report_anchor(logit_h0, γ, u, grid_start, a)
-        @test minimum(a) <= anc <= maximum(a)
-    end
-
-    ## A constant anchor series reproduces that constant exactly, since the
-    ## delay weights sum to one regardless of the hazard.
-    logit_h0 = fill(logit(0.15), D)
-    γ = zeros(40)
-    const_a = fill(0.23, 60)
-    @test onset_report_anchor(logit_h0, γ, 10, 1, const_a) ≈ 0.23
+    a = [0.1, 0.2, 0.3, 0.4, 0.5]
+    ## A cohort is confirmed d days after onset with probability pmf[d+1],
+    ## so its anchor averages the confirmation chance ahead of its onset.
+    pmf = [0.5, 0.5]
+    out = onset_confirmation_anchor(a, pmf)
+    @test out[1:4] ≈ [0.15, 0.25, 0.35, 0.45]
+    ## Past the end of `a` it is held at its last value.
+    @test out[5] ≈ 0.5
+    ## A constant is returned exactly, and an unnormalised pmf is normalised.
+    @test onset_confirmation_anchor(fill(0.23, 6), [2.0, 1.0, 1.0]) ≈ fill(0.23, 6)
+    ## No delay is the identity.
+    @test onset_confirmation_anchor(a, [1.0]) ≈ a
 end
 
 @testitem "onset_report_expected_total stays in bounds" begin
@@ -538,7 +561,7 @@ end
         alpha = fill(0.3, nt)
         total = onset_report_expected_total(
             onsets, logit_h0, γ, grid_start,
-            alpha, grid_end
+            alpha, grid_end, grid_start
         )
         @test isfinite(total)
         @test total >= 0
@@ -571,7 +594,7 @@ end
     )
     total = onset_report_expected_total(
         onsets, logit_h0, γ, grid_start,
-        alpha, grid_end
+        alpha, grid_end, grid_start
     )
 
     ## The onset dates before `grid_start` (days 1:59) are old enough by
@@ -614,10 +637,7 @@ end
         """
     )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(
-        path; cutoff = Date("2026-03-07"), seeding,
-        max_delay = 10
-    )
+    h = load_onset_curve(path; cutoff = Date("2026-03-07"), seeding)
     _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
     u = _day("2026-03-01")
     R2 = _day("2026-03-07")
@@ -641,11 +661,11 @@ end
     @test minimum(h.increments) >= 0
 end
 
-@testitem "load_onset_curve: an onset past the predecessor's report drops" begin
-    ## A figure can print an onset date later than the previous vintage's
-    ## report date. That cell's previous delay is negative, where
-    ## `onset_report_cdf` is zero, so its mean would be a level while its
-    ## observed value stayed an increment. It must be dropped instead.
+@testitem "load_onset_curve: an onset past its figure's report is not a print" begin
+    ## A figure can print an onset date later than its own report date. That
+    ## bar has a negative delay, where `onset_report_cdf` is zero, so it is
+    ## not a print of that date: the date's first print is the next figure,
+    ## which scores it as a level.
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date, date2epochdays
 
@@ -662,19 +682,14 @@ end
         """
     )
     seeding = Date("2026-01-01")
-    h = load_onset_curve(
-        path; cutoff = Date("2026-03-06"), seeding,
-        max_delay = 10
-    )
+    h = load_onset_curve(path; cutoff = Date("2026-03-06"), seeding)
     _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
-    ## No cell for 03-06 in the 001-versus-002 pair.
-    @test isempty(
-        findall(
-            i -> h.onset_days[i] == _day("2026-03-06") &&
-                h.report_days[i] == _day("2026-03-06"),
-            eachindex(h.onset_days)
-        )
-    )
+    ## 03-06 scores once, as a level at 002.
+    i606 = findall(==(_day("2026-03-06")), h.onset_days)
+    @test length(i606) == 1
+    @test h.report_days[i606[1]] == _day("2026-03-06")
+    @test h.prev_report_days[i606[1]] == 0
+    @test h.increments[i606[1]] == 9
     ## The 03-04 correction the pair does support is untouched.
     idx = findall(
         i -> h.onset_days[i] == _day("2026-03-04") &&
@@ -707,42 +722,29 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
-@testitem "onset_report_scales: error formula match, grows with magnitude" begin
+@testitem "onset_report_scales: Student-t variance matches count plus read" begin
     using BVDOutbreakSize: onset_report_scales
+    using Distributions: TDist, var
 
-    level_cur = [0.0, 100.0, 40.0]
-    level_prev = [0.0, 80.0, 0.0]
-    means = level_cur .- level_prev
-    ## Cells 1 and 3 have a virtual (empty) predecessor and so score a
-    ## level with one read; cell 2 is a correction between two real
-    ## snapshots, so it carries two reads' rounding and read error.
+    means = [0.0, 20.0, 40.0]
+    ## Cells 1 and 3 are levels with one read; cell 2 is a correction
+    ## between two snapshots, so it carries two reads.
     reads = [1, 2, 1]
-    s = onset_report_scales(means, 1.2, reads)
-    @test s[1] ≈ sqrt(1 / 12 + 1.2^2)
-    @test s[2] ≈ sqrt(20.0 + 2 / 12 + 2 * 1.2^2)
-    ## A level cell carries the counting variation of the cases it reports,
-    ## which for a bar of 40 dominates the read error.
-    @test s[3] ≈ sqrt(40.0 + 1 / 12 + 1.2^2)
-    @test s[3] > sqrt(40.0)
-    ## The scale grows with the modelled magnitude.
-    @test s[2] > s[1]
+    τ, k, ν = 1.2, 5.0, 4.0
+    s = onset_report_scales(means, τ, k, reads, ν)
+    target = means .+ means .^ 2 ./ k .+ reads .* τ^2
+    ## A Student-t with scale `σ` has variance `σ² ν / (ν - 2)`.
+    @test s .^ 2 .* var(TDist(ν)) ≈ target
+    ## A level of 40 is dominated by its count variation, not the read.
+    @test s[3] > s[1] * 4
+    ## A negative mean cannot give a negative variance.
+    @test isfinite(only(onset_report_scales([-5.0], τ, k, [2], ν)))
 end
 
-@testitem "onset_report_scales floors a negative counting term" begin
-    ## `means` is non-negative by construction (F is monotone in δ), but a
-    ## degenerate call must not take the square root of a negative variance.
-    using BVDOutbreakSize: onset_report_scales
-
-    s = onset_report_scales([-5.0], 1.2, [2])
-    @test isfinite(s[1])
-    @test s[1] > 0
-end
-
-@testitem "onset_reporting_model samples one read SD for every read" begin
-    ## A two-vintage triangle: the first vintage's cells difference the
-    ## empty predecessor (one read), the second's correct the first (two
-    ## reads). The scale the likelihood scores each cell with is the
-    ## counting term plus one rounding variance and one `τ²` per read.
+@testitem "onset_reporting_model: scale is count variation plus a read SD per read" begin
+    ## A two-vintage triangle: the first vintage's cells and the date the
+    ## second prints first are levels (one read); the rest are corrections
+    ## (two reads).
     using BVDOutbreakSize: onset_reporting_model
     using Turing: DynamicPPL
     using Random: seed!
@@ -756,12 +758,15 @@ end
     model = onset_reporting_model(oc, fill(30.0, 25))
     names = string.(collect(keys(DynamicPPL.VarInfo(model))))
     @test "τ" in names
+    @test "inv_sqrt_k" in names
     seed!(20260924)
     out = model()
     @test out.τ > 0
+    @test out.k > 0
     reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
+    μ = max.(out.modelled, 0)
     @test out.scales ≈
-        sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
+        sqrt.((out.ν - 2) / out.ν .* (μ .+ μ .^ 2 ./ out.k .+ reads .* out.τ^2))
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin
@@ -1058,7 +1063,8 @@ end
     @test hz.alpha == [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
     rebuilt = [
         onset_report_expected_total(
-            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n
+            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n,
+            grid_start
         ) for i in 1:20
     ]
     @test rebuilt ≈ et
@@ -1079,50 +1085,6 @@ end
     @test size(rows, 1) == 4
     @test rows.value == [10.0, 12.0, 14.0, 9.0]
     @test all(rows.target_date .== Date("2026-08-01"))
-end
-
-@testitem "onset_nowcast closes on the data as the delay runs out" begin
-    using BVDOutbreakSize: onset_nowcast, onset_report_F
-    D = 21
-    logit_h0 = fill(-1.5, D)
-    γ = zeros(60)
-    u, gs, α = 10, 1, 0.4
-    onsets_u = 200.0
-    y = 62.0
-    ## At the longest delay the hazard covers, every case that will ever be
-    ## reported has been, so the nowcast is the observed count exactly.
-    @test onset_nowcast(y, onsets_u, D - 1, logit_h0, γ, u, gs, α) ≈ y
-    ## At delay zero only the first day's hazard has fired, so almost the
-    ## whole ascertained total is still outstanding.
-    n0 = onset_nowcast(y, onsets_u, 0, logit_h0, γ, u, gs, α)
-    @test n0 > y + 0.8 * onsets_u * α
-    ## The correction shrinks monotonically as the delay grows, and never
-    ## takes the nowcast below what is already reported.
-    ns = [
-        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
-            for δ in 0:(D - 1)
-    ]
-    @test all(diff(ns) .<= 1.0e-9)
-    @test all(ns .>= y - 1.0e-9)
-    ## The whole correction is the unreported part of `α`, so the nowcast
-    ## agrees with the closed form it is built from.
-    δ = 5
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α) ≈
-        y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
-    ## `until` targets a delay rather than the eventual total: nothing
-    ## outstanding when it is the delay already reached, the reporting
-    ## between the two delays when it is later, and never less than that.
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ) ≈ y
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ - 2) ≈
-        y
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = 12) ≈
-        y +
-        onsets_u * (
-        onset_report_F(12, logit_h0, γ, u, gs, α) -
-            onset_report_F(δ, logit_h0, γ, u, gs, α)
-    )
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
-        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end
 
 @testitem "summed Student-t likelihood matches one term per cell" begin
@@ -1158,4 +1120,96 @@ end
         DynamicPPL.getlogjoint(vi)
     draw = m(Xoshiro(2)).increments
     @test draw isa Vector{Float64} && length(draw) == 6
+end
+
+@testitem "load_onset_curve: the archive scores each onset date once" begin
+    ## The seeding day sits before the genetic TMRCA bound and the earliest
+    ## digitised onset date is in late April, so every scored cell sits
+    ## inside the 1-based grid. Every printed onset date has exactly one
+    ## level, its corrections sit inside the delay support, and a date's
+    ## cells sum to the last print they reach.
+    using BVDOutbreakSize: BVDOutbreakSize, load_observations,
+        ONSET_REPORT_MAX_DELAY
+    using Dates: Day
+
+    obs = load_observations()
+    h = obs.onset_curve_history
+    @test !isempty(h.onset_days)
+    @test minimum(h.onset_days) >= 1
+
+    path = joinpath(
+        pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv"
+    )
+    blocks = filter(
+        b -> b.report_date <= obs.cutoff,
+        BVDOutbreakSize._dedup_onset_blocks(
+            BVDOutbreakSize._read_onset_curve_blocks(path)
+        )
+    )
+    _date(u) = obs.cutoff - Day(obs.n - u)
+    levels = h.prev_report_days .== 0
+    @test allunique(h.onset_days[levels])
+    @test Set(h.onset_days) == Set(h.onset_days[levels])
+    corr = .!levels
+    @test all(h.report_days[corr] .- h.onset_days[corr] .< ONSET_REPORT_MAX_DELAY)
+    by_report = Dict(b.report_date => b for b in blocks)
+    for u in unique(h.onset_days)
+        idx = findall(==(u), h.onset_days)
+        last_R = maximum(h.report_days[idx])
+        printed = get(by_report[_date(last_R)].onsets, _date(u), 0)
+        @test sum(h.increments[idx]) == printed
+    end
+end
+
+@testitem "onset_reporting_model: the calendar walk and alpha start on their own grids" begin
+    ## Report days starting more than D days after the first onset day, so
+    ## the hazard's own grid start (`onset_hazard_grid_start`) diverges from
+    ## `minimum(onset_days)`, the grid `alpha` is indexed from. The model's
+    ## own state carries both origins, `fitted_onset_hazard` returns `γ` and
+    ## `alpha` at their own lengths, and the tracked cut-off total is the
+    ## 7-argument `onset_report_expected_total` on those two grids.
+    using BVDOutbreakSize: onsets_only_model, fitted_onset_hazard,
+        onset_hazard_grid_start, onset_report_expected_total,
+        ONSET_REPORT_MAX_DELAY
+    using Turing: Prior, sample, returned
+    import FlexiChains
+
+    oc = (;
+        onset_days = [1, 2, 3, 4, 1, 2, 3, 4, 5],
+        report_days = [50, 50, 50, 50, 55, 55, 55, 55, 55],
+        prev_report_days = [0, 0, 0, 0, 50, 50, 50, 50, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 80
+    D = ONSET_REPORT_MAX_DELAY
+    alpha_grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    grid_start = onset_hazard_grid_start(oc.onset_days, oc.report_days; D)
+    @test grid_start > alpha_grid_start
+
+    m = onsets_only_model(n; onset_curve_history = oc, breakpoint = 30)
+    chn = sample(
+        m, Prior(), 5; chain_type = FlexiChains.VNChain, progress = false
+    )
+    states = [r.onset_report_state for r in vec(returned(m, chn))]
+    @test all(st.grid_start == grid_start for st in states)
+    @test all(st.alpha_grid_start == alpha_grid_start for st in states)
+
+    hz = fitted_onset_hazard(m, chn)
+    @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
+    @test all(length(a) == grid_end - alpha_grid_start + 1 for a in hz.alpha)
+
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
+    et = vec(Array(chn[:expected_onset_reported_T]))
+    rebuilt = [
+        onset_report_expected_total(
+            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n,
+            alpha_grid_start
+        ) for i in 1:5
+    ]
+    @test rebuilt ≈ et
 end

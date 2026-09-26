@@ -157,7 +157,8 @@ end
 
 ## Reported onset total as of `as_of` under a fitted onset-reporting state.
 _onset_total(onsets, state, as_of) = onset_report_expected_total(
-    onsets, state.logit_h0, state.γ, state.grid_start, state.alpha, as_of
+    onsets, state.logit_h0, state.γ, state.grid_start, state.alpha, as_of,
+    state.alpha_grid_start
 )
 
 """
@@ -166,10 +167,10 @@ vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 [`onset_report_expected_total`](@ref) as of `v`, over the onsets the model
 runs past the cut-off `n`. Its increment over the total at the cut-off is
 drawn with the Student-t the scored cells take, at the scale
-[`onset_report_scale`](@ref) gives a correction read off two bars with the
-fitted read SD `τ`. The increment is drawn on the whole figure, not per
-onset date, since the figure's total is the quantity the forecast is
-scored on. The split of each
+[`onset_report_scale`](@ref) gives a correction with that mean: count
+variation at the fitted dispersion `k` plus two reads at the read SD `τ`.
+The increment is drawn on the whole figure, not per onset date, since the
+figure's total is the quantity the forecast is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
@@ -180,7 +181,10 @@ printed by the cut-off.
     then = [_onset_total(onsets, state, v) for v in vintages]
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
-    sds = [onset_report_scale(means[j], state.τ, 2) for j in eachindex(vintages)]
+    sds = [
+        onset_report_scale(means[j], state.τ, state.k, 2, state.ν)
+            for j in eachindex(vintages)
+    ]
     forecast_onset_reports ~ to_submodel(
         onset_increments_model(means, sds, missing, state.ν)
     )
@@ -535,7 +539,8 @@ the digitised level.
         expected_onset_reported_T := onset_report_expected_total(
             latent.onsets,
             onset_report_state.logit_h0, onset_report_state.γ,
-            onset_report_state.grid_start, onset_report_state.alpha, n
+            onset_report_state.grid_start, onset_report_state.alpha, n,
+            onset_report_state.alpha_grid_start
         )
     end
     onset_ascertainment := onset_report_state.alpha
@@ -1311,10 +1316,17 @@ density there, is the fitted model's.
     province_background_split := bg_split_state.w
     province_background_split_sd := bg_split_state.pooling_sd
 
-    ## The anchor stops at the cut-off, so a longer grid leaves the fitted
-    ## ascertainment where it was.
-    onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
-        upto(confirmed_state.p_pos_grid, n)
+    ## Share of BVD cases the confirmed pipeline confirms: reported as a
+    ## suspect (`p_drc`), then at least one positive test when positives per
+    ## suspect are Poisson at the pipeline's rate. The anchor stops at the
+    ## cut-off, so a longer grid leaves the fitted ascertainment where it was.
+    ## It is carried onto the onset axis through the pipeline's own
+    ## onset-to-analysis delay.
+    onset_anchor_daily = onset_confirmation_anchor(
+        p_drc .*
+            (1 .- exp.(.-upto(confirmed_state.case_confirmation_grid, n))),
+        convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+    )
     onset_report_state ~ to_submodel(
         onset_report(
             onset_curve_history, onsets;
@@ -1635,7 +1647,8 @@ density there, is the fitted model's.
         expected_onset_reported_T := onset_report_expected_total(
             onsets,
             onset_report_state.logit_h0, onset_report_state.γ,
-            onset_report_state.grid_start, onset_report_state.alpha, n
+            onset_report_state.grid_start, onset_report_state.alpha, n,
+            onset_report_state.alpha_grid_start
         )
     end
     onset_ascertainment := onset_report_state.alpha

@@ -230,7 +230,9 @@ end
     alpha = abs.(randn(rng, 36)) .* 0.3
     α(u) = alpha[clamp(u - 5 + 1, 1, 36)]
     ## An empty delay support reports nothing.
-    @test onset_report_expected_total(onsets, Float64[], γ, 5, alpha, 45) == 0
+    @test onset_report_expected_total(
+        onsets, Float64[], γ, 5, alpha, 45, 5
+    ) == 0
     ## Each date contributes its onsets times its reported share, settled
     ## dates included, also when the report probability sits on the
     ## `safe_rate` floor.
@@ -238,7 +240,7 @@ end
         by_date = sum(
             onsets[u] * onset_report_F(45 - u, lh, γ, u, 5, α(u)) for u in 1:45
         )
-        @test onset_report_expected_total(onsets, lh, γ, 5, alpha, 45) ≈
+        @test onset_report_expected_total(onsets, lh, γ, 5, alpha, 45, 5) ≈
             by_date rtol = 1.0e-12
     end
 end
