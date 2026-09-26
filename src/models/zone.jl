@@ -264,6 +264,23 @@ function zone_week_midpoints(knots::AbstractVector{<:Integer})
     return [(knots[k] + knots[k + 1]) ÷ 2 for k in 1:(length(knots) - 1)]
 end
 
+## Cholesky factor of a covariance, conditioned by a ridge of `ridge` of
+## each cell's own variance and then blended toward that diagonal by the
+## least weight that factorises. A covariance that never factorises falls
+## back to its diagonal, which drops the correlations and keeps the
+## marginal variances.
+function _zone_meld_factor(Σ::AbstractMatrix, d::Integer; ridge::Real = 1.0e-6)
+    dg = Diagonal(max.(diag(Σ), eps()))
+    λ = 0.0
+    while λ <= 1.0
+        M = Symmetric((1 - λ) * Σ + λ * Matrix(dg) + ridge * Matrix(dg))
+        F = cholesky(M; check = false)
+        issuccess(F) && return Matrix(F.L)
+        λ = λ == 0.0 ? 1.0e-4 : 10λ
+    end
+    return Matrix(cholesky(Symmetric(Matrix(dg))).L)
+end
+
 """
 $(TYPEDSIGNATURES)
 
@@ -303,23 +320,6 @@ kept midpoint fell before `t0` would break that, and is an error.
 Returns `(; weights, L, cells_patch, cells_week, midpoints, d, mean_log,
 log_sums)`, `log_sums` holding the per-draw log sums `(n_draws × d)`.
 """
-## Cholesky factor of a covariance, conditioned by a ridge of `ridge` of
-## each cell's own variance and then blended toward that diagonal by the
-## least weight that factorises. A covariance that never factorises falls
-## back to its diagonal, which drops the correlations and keeps the
-## marginal variances.
-function _zone_meld_factor(Σ::AbstractMatrix, d::Integer; ridge::Real = 1.0e-6)
-    dg = Diagonal(max.(diag(Σ), eps()))
-    λ = 0.0
-    while λ <= 1.0
-        M = Symmetric((1 - λ) * Σ + λ * Matrix(dg) + ridge * Matrix(dg))
-        F = cholesky(M; check = false)
-        issuccess(F) && return Matrix(F.L)
-        λ = λ == 0.0 ? 1.0e-4 : 10λ
-    end
-    return Matrix(cholesky(Symmetric(Matrix(dg))).L)
-end
-
 function zone_meld_block(
         infections::AbstractVector, np::Integer,
         n::Integer, knots::AbstractVector{<:Integer},

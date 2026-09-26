@@ -2182,16 +2182,16 @@ cfr_prior_fig #hide
 # \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr), \tag{66}
 # ```
 #
-# with $\mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1})$ and $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$, as in the [province compositions](@ref "Province compositions").
+# with $\mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1})$ and $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$, as in the [province compositions](@ref methods-province-compositions).
 # A composition identifies only the product of a multiplier and the incidence split, so the pooling is what separates them: as $\sigma$ shrinks the shares weight zones by incidence alone.
 #
 # Both are relative to the zone's own province.
-# A factor common to a patch cancels in a within-patch composition, so the province level of each multiplier is the one the [province compositions](@ref "Province compositions") estimate, and only the zone level is estimated here.
+# A factor common to a patch cancels in a within-patch composition, so the province level of each multiplier is the one the [province compositions](@ref methods-province-compositions) estimate, and only the zone level is estimated here.
 # The ascertainment scale $\sigma_a$ takes its prior from the province posterior for the same scale between provinces, so the two levels are pooled toward a common national value.
 # The fatality scale is tight, $\sigma_\theta \sim \mathrm{Normal}^{+}(0,\ 0.1)$.
 # Two compositions carry three unknowns per zone, so one has to be pinned.
 # A tight $\sigma_\theta$ asserts that deaths per infection vary little between the zones of a patch, which lets the death composition pin the incidence split and the case composition identify ascertainment as the residual.
-# It is the asymmetry the [province compositions](@ref "Province compositions") make between death ascertainment and provincial lethality, one level down.
+# It is the asymmetry the [province compositions](@ref methods-province-compositions) make between death ascertainment and provincial lethality, one level down.
 # The assumption is stronger here, since zones within a province differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
 # The product of the two contrasts is reported as each zone's ascertainment and fatality against the national average.
 #
