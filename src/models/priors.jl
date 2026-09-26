@@ -773,11 +773,12 @@ end
 """
 Per-patch shares of the national isolation-bed capacity, for the province
 bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
-capacity is the national walk `C(t)` times a share drawn from a partially
-pooled simplex centred on population share,
+capacity is the national walk `C(t)` times a share drawn from a simplex
+centred on population share,
 
 ```math
-s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
+s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\ell_p), \\qquad \\ell_1 = 0,
+\\qquad \\ell_p \\sim \\mathrm{N}(0, 2.5^2),
 ```
 
 with the first patch the reference. The printed province bed counts move
@@ -786,7 +787,15 @@ the split; one walk per patch would add some sixty truncated-normal
 innovations. The bed split identifies the
 shares and the split's overdispersion absorbs the residual drift.
 
-Returns `(; s, pooling_sd)`.
+The log-ratios `ℓ_p` take a fixed scale, not a pooling scale. Beds are
+not allocated in proportion to population (Ituri holds about three
+quarters of them against 15% of the population), so the shares sit
+several units from the centre and the data pin each one. A scale pooled
+over three such deviations is barely identified and trades off against
+them along a ridge. A standard deviation of 2.5 puts every observed
+share within two prior standard deviations of its population centre.
+
+Returns `(; s)`.
 """
 @model function patch_capacity_share_model(
         n_patches::Integer;
@@ -795,29 +804,37 @@ Returns `(; s, pooling_sd)`.
                 n_patches, end
             ),
         ],
-        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        log_ratio_prior = Normal(0, 2.5)
     )
     if n_patches <= 1
-        return (; s = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+        return (; s = ones(Float64, max(n_patches, 1)))
     end
     length(populations) == n_patches || error(
         "patch_capacity_share_model: $(length(populations)) populations " *
             "for $(n_patches) patches."
     )
-    τ_cap ~ pooling_sd_prior
-    z_cap ~ product_distribution(fill(offset_prior, n_patches - 1))
-    Ts = promote_type(typeof(float(τ_cap)), eltype(z_cap))
+    cap_log_ratio ~ product_distribution(fill(log_ratio_prior, n_patches - 1))
+    return (; s = _population_centred_simplex(populations, cap_log_ratio))
+end
+
+## Simplex centred on population share, moved by a log-ratio per patch
+## against the first patch, the reference: `w_p ∝ N_p exp(ℓ_p) / Σ_q N_q`,
+## with `ℓ_1 = 0` and `log_ratio` holding `ℓ_2, …, ℓ_n`. Normalised against
+## the largest term, so a wide log-ratio cannot overflow.
+function _population_centred_simplex(
+        populations::AbstractVector{<:Real}, log_ratio::AbstractVector
+    )
+    T = promote_type(Float64, eltype(log_ratio))
     total_pop = sum(populations)
-    log_s = Vector{Ts}(undef, n_patches)
-    log_s[1] = log(populations[1] / total_pop)
-    @inbounds for p in 2:n_patches
-        log_s[p] = log(populations[p] / total_pop) + τ_cap * z_cap[p - 1]
+    log_w = Vector{T}(undef, length(populations))
+    log_w[1] = log(populations[1] / total_pop)
+    @inbounds for p in 2:length(populations)
+        log_w[p] = log(populations[p] / total_pop) + log_ratio[p - 1]
     end
-    peak = maximum(log_s)
-    s = exp.(log_s .- peak)
-    s ./= sum(s)
-    return (; s, pooling_sd = τ_cap)
+    peak = maximum(log_w)
+    w = exp.(log_w .- peak)
+    w ./= sum(w)
+    return w
 end
 
 """
@@ -1939,29 +1956,32 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
 end
 
 """
-Partially pooled split of the non-BVD suspected-case background across the
-patches. The national background walk `bg_daily`
+Split of the non-BVD suspected-case background across the patches. The national background walk `bg_daily`
 ([`reported_cases_model`](@ref)) counts suspects who are not BVD cases and
 carries no province, so the patch model needs a share of it per patch to
 build a per-patch suspect pipeline for the laboratory and isolation
-streams. Each share is the patch's population share moved by a pooled log
-deviation,
+streams. Each share is the patch's population share moved by a log-ratio,
 
 ```math
-w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
-\\qquad z_1 = 0,
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\ell_p),
+\\qquad \\ell_1 = 0, \\qquad \\ell_p \\sim \\mathrm{N}(0, 2.5^2),
 ```
 
-normalised to sum to one. The first patch is the reference, so with
-`n_patches - 1` free deviations the simplex has no redundant direction.
-`τ_bg → 0` recovers the population split. The per-province
-analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
-since the background dominates the specimens analysed where positivity is
-low.
+normalised to sum to one. The first
+patch is the reference, so with `n_patches - 1` free log-ratios the simplex
+has no redundant direction. The per-province analysed-specimen composition
+in [`bvd_joint`](@ref) identifies the shares, since the background dominates
+the specimens analysed where positivity is low.
+
+The log-ratios take a fixed scale rather than a pooling scale, for the
+reason given in [`patch_capacity_share_model`](@ref). Ituri sends over half
+the specimens analysed from 15% of the population, so the shares sit far
+from the population centre, and a scale pooled over three log-ratios the
+data pin only rides a ridge with them.
 
 With one patch the whole background belongs to it and nothing is sampled.
 
-Returns `(; w, pooling_sd)`.
+Returns `(; w)`.
 """
 @model function background_split_model(
         n_patches::Integer;
@@ -1970,29 +1990,15 @@ Returns `(; w, pooling_sd)`.
                 n_patches, end
             ),
         ],
-        pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        log_ratio_prior = Normal(0, 2.5)
     )
     if n_patches <= 1
-        return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
+        return (; w = ones(Float64, max(n_patches, 1)))
     end
     length(populations) == n_patches || error(
         "background_split_model: $(length(populations)) populations for " *
             "$(n_patches) patches."
     )
-    τ_bg ~ pooling_sd_prior
-    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
-    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
-    total_pop = sum(populations)
-    log_w = Vector{Tw}(undef, n_patches)
-    log_w[1] = log(populations[1] / total_pop)
-    @inbounds for p in 2:n_patches
-        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
-    end
-    ## Softmax against the largest term, so a wide deviation cannot
-    ## overflow.
-    peak = maximum(log_w)
-    w = exp.(log_w .- peak)
-    w ./= sum(w)
-    return (; w, pooling_sd = τ_bg)
+    bg_log_ratio ~ product_distribution(fill(log_ratio_prior, n_patches - 1))
+    return (; w = _population_centred_simplex(populations, bg_log_ratio))
 end
