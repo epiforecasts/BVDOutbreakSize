@@ -816,7 +816,7 @@ other four partition the base fits by what a render job has to wait for.
 """
 function fit_group(spec)
     is_dependent_fit(spec) && return "zone"
-    spec.id in JOINT_SAMPLER_FITS && return "joint"
+    spec.id in ("joint", "sens_no_patches") && return "joint"
     spec.kind === :frozen && return "frozen"
     startswith(spec.id, "sens_") && return "sensitivity"
     return "streams"
