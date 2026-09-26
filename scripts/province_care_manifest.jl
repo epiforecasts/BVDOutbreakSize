@@ -176,7 +176,7 @@ function main()
         # the split. Nord-Kivu's count from SitRep 124 is the beds in normed
         # structures, the figure its printed rate refers to. Fitted as a split
         # of the printed sum of the provinces present each day, over
-        # per-patch capacity walks.""",
+        # static per-patch shares of the national capacity walk.""",
         "INSP situation reports, per-province bed counts (lits) from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read by scripts/province_care_manifest.jl.",
         beds
     )

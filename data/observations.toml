@@ -962,7 +962,7 @@ values = [1, 1, 1, 1, 1, 6, 7, 7, 7, 5, 11, 10, 6, 8]
 # the split. Nord-Kivu's count from SitRep 124 is the beds in normed
 # structures, the figure its printed rate refers to. Fitted as a split
 # of the printed sum of the provinces present each day, over
-# per-patch capacity walks.
+# static per-patch shares of the national capacity walk.
 [province_bed_capacity_history]
 source = "INSP situation reports, per-province bed counts (lits) from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read by scripts/province_care_manifest.jl."
 
