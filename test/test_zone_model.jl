@@ -1062,7 +1062,7 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
     eps = [collect(v) for v in vec(collect(chn[:mixing_epsilon_zone]))]
-    @test all(v -> length(v) == syn.nz && all(0 .< v .<= 1), eps)
+    @test all(v -> length(v) == syn.nz && all(0 .< v .< 1), eps)
     ## The states read the fractions, and the mixed shares still sum to one
     ## within each patch but differ from the unmixed ones.
     states = _zone_states(chn, inputs)

@@ -1178,7 +1178,7 @@ there, so the zone stage only distributes them over the destination
 patch's zones and the same movement is not counted at both levels. Within
 a patch the spill is the zone stage's own mechanism and carries its own
 intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation
-`exp(τ (z − z̄))`. Mixing is off, and the correlation below with it, when
+`τ (z − z̄)` on the logit scale. Mixing is off, and the correlation below with it, when
 the health-zone metadata does not cover every zone or the parent chain
 carries no between-patch movement (`zd.mixing === nothing`).
 
@@ -1257,12 +1257,13 @@ from these by [`zone_forward`](@ref).
         ## zones is not that quantity, so this carries its own prior. The
         ## between-patch flows take the province model's intensity instead,
         ## fixed, inside the kernel's between block. `τ_mix` is how far one
-        ## origin may depart from the shared level.
+        ## origin may depart from the shared level, on the logit scale so a
+        ## departure never leaves the unit interval.
         ε_within ~ mixing_within_prior
         τ_mix ~ mixing_departure_prior
         z_mix ~ product_distribution(fill(offset_prior, nz))
-        ε_mix = min.(
-            ε_within .* exp.(τ_mix .* (z_mix .- sum(z_mix) / nz)), 1.0
+        ε_mix = logistic.(
+            logit(ε_within) .+ τ_mix .* (z_mix .- sum(z_mix) / nz)
         )
     else
         ε_mix = nothing

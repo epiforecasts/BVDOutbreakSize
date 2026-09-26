@@ -2125,9 +2125,8 @@ cfr_prior_fig #hide
 # The within-patch spill is the zone stage's own mechanism and carries its own intensity, one level with a pooled per-origin deviation:
 #
 # ```math
-# \varepsilon_z = \min\!\bigl(
-#     \varepsilon_{\text{w}} \exp(\tau (z^\varepsilon_z - \bar z^\varepsilon)),
-#     \ 1\bigr), \qquad
+# \operatorname{logit} \varepsilon_z = \operatorname{logit} \varepsilon_{\text{w}}
+#     + \tau (z^\varepsilon_z - \bar z^\varepsilon), \qquad
 # \varepsilon_{\text{w}} \sim \mathrm{Beta}(1,\ 20), \qquad
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.5). \tag{62}
 # ```
