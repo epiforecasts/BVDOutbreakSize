@@ -2202,7 +2202,8 @@ before `rt_start`). The saved chain stores only the cut-off `R_T`, so each
 draw's daily `Rt` is rebuilt by mirroring [`rt_walk_model`](@ref): weekly
 knots ([`knot_days`](@ref)) from `rt_walk_start` follow a non-centred
 Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
-`rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
+`rt_state.sigma_rw .* rt_state.z`, scaled by the draw's
+`gi_state.gi_mean / GI_PRIOR_MEAN`), linearly interpolated to the day grid
 ([`interpolate_knots`](@ref)) and shifted by the sampled
 `rt_state.intervention_effect` along a logistic ramp
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
@@ -2247,6 +2248,11 @@ function _reconstruct_rt_walk(
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
+    ## The walk's steps scale with the draw's generation-interval mean, as in
+    ## the model. A chain without it is read at the prior centre.
+    gi_key = Symbol("gi_state.gi_mean")
+    gi_scale = _has_key(chn, gi_key) ?
+        _draws(chn, gi_key) ./ GI_PRIOR_MEAN : ones(length(sigma))
     ## `rt_state.z` is vector-valued: one standard-normal innovation vector
     ## per draw. Pull each draw's full vector from the chain slice.
     zmat = chn[Symbol("rt_state.z")]
@@ -2275,7 +2281,7 @@ function _reconstruct_rt_walk(
     rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
     for i in 1:ndraws
         z = zrows[i]
-        steps = sigma[i] .* z[1:(nb - 1)]
+        steps = (sigma[i] * gi_scale[i]) .* z[1:(nb - 1)]
         log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
         walk = interpolate_knots(log_R, days, n)
         ## Days before the renewal start clamp to the established R0, the

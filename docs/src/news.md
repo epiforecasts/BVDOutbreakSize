@@ -40,6 +40,9 @@ Changes since v2.1.0.
 
 ### Model
 
+- The national Rt walk steps and the provincial deviations scale with the sampled mean generation interval over its prior centre, so their priors sit on the growth rate rather than on log Rt (#915).
+  On the log scale a shorter generation interval no longer buys the same growth path with smaller steps, which pulled the fitted interval short.
+  Fitted values change.
 - The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
   The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
   Fitted values change.

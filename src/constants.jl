@@ -148,6 +148,17 @@ M_PRIOR_DOUBLING_DAYS), 0.30)`.
 const M_PRIOR_DOUBLING_DAYS = 11.7
 
 """
+    GI_PRIOR_MEAN
+
+Prior-centre mean generation interval (days), the fitted Gamma mean of the
+Ebola virus disease serial interval (WHO Ebola Response Team 2014, NEJM).
+Centres [`generation_interval_model`](@ref) and is the reference `G₀` at
+which the reproduction-number walk and the provincial deviations take
+their prior scale ([`rt_walk_model`](@ref)).
+"""
+const GI_PRIOR_MEAN = 15.3
+
+"""
     RENEWAL_START_LEAD
 
 Days the renewal start sits after the genetic TMRCA day. The renewal

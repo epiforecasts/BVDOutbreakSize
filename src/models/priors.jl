@@ -63,7 +63,7 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        mean_prior = truncated(Normal(15.3, 0.97); lower = 1),
+        mean_prior = truncated(Normal(GI_PRIOR_MEAN, 0.97); lower = 1),
         sd_prior = truncated(Normal(9.3, 1.0); lower = 1)
     )
     gi_mean ~ mean_prior
@@ -215,7 +215,16 @@ which clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
-one week to the next. The walk starts at `rt_start`, so every knot sits in
+one week to the next.
+
+The steps are scaled by `gi_scale`, the mean generation interval over its
+prior centre [`GI_PRIOR_MEAN`](@ref). To first order in Euler–Lotka
+`log R ≈ r G`, so a fixed change in the growth rate moves `log R` in
+proportion to `G`. Scaling the steps puts the walk's prior on the growth
+rate, with `sigma_rw` the weekly log-`R_t` step at the prior-centre
+generation interval. Without it a shorter generation interval would buy the
+same growth-rate path with smaller log-`R_t` steps, and the walk prior
+would pull the generation interval short. The walk starts at `rt_start`, so every knot sits in
 the observed window rather than drifting over the unobserved pre-report
 stretch.
 
@@ -240,6 +249,7 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
         ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0),
+        gi_scale::Real = 1.0,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     days = knot_days(n; week, start = rt_start)
@@ -251,7 +261,7 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
     sigma_rw ~ sigma_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
-    steps = sigma_rw .* z[1:(nb - 1)]
+    steps = (sigma_rw * gi_scale) .* z[1:(nb - 1)]
     log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
@@ -260,7 +270,9 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
     if forecast !== nothing
         fdays = future_knot_days(n, horizon_days(forecast); week)
         z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
-        log_R = vcat(log_R, log_R[end] .+ cumsum(sigma_rw .* z_future))
+        log_R = vcat(
+            log_R, log_R[end] .+ cumsum((sigma_rw * gi_scale) .* z_future)
+        )
         days = vcat(days, fdays)
     end
     log_Rt = interpolate_knots(log_R, days, ng)
@@ -425,8 +437,9 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     ## dynamics are unidentified and a free walk there only adds unsupported
     ## drift. `rt_walk_start` defaults to `rt_start`.
     fkw = forecast === nothing ? (;) : (; forecast)
+    gi_scale = gi_state.gi_mean / GI_PRIOR_MEAN
     rt_state ~ to_submodel(
-        rt(n, log(R0); breakpoint, rt_start = rt_walk_start, fkw...)
+        rt(n, log(R0); breakpoint, rt_start = rt_walk_start, gi_scale, fkw...)
     )
     Rt = rt_state.Rt
     ## The renewal-start seed is the daily incidence `C_T = exp(r·T)` reached
@@ -1371,6 +1384,10 @@ knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`, sharing the drift's
 shape at its own scale. With the draws `z_k` as the columns of `Z`, every
 knot's innovation comes from the one product `c Q A Z`.
 
+Both the level and the drift scales are multiplied by `gi_scale`, which
+puts them on the growth-rate scale as for the national walk
+([`rt_walk_model`](@ref)).
+
 The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
 derived from the loading matrix ([`sum_to_zero_moments`](@ref)). The
 correlations of a sum-to-zero vector are constrained: its entries cannot
@@ -1439,6 +1456,7 @@ and `Rt_matrix` covers the horizon.
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(n_patches),
+        gi_scale::Real = 1.0,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Common national trend, the single-patch walk unchanged.
@@ -1451,7 +1469,10 @@ and `Rt_matrix` covers the horizon.
     ## render time on a KeyError.
     fkw = forecast === nothing ? (;) : (; forecast)
     rt_state ~ to_submodel(
-        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start, fkw...)
+        rt(
+            n, log_R0_base;
+            breakpoint, rt_start = rt_walk_start, gi_scale, fkw...
+        )
     )
     Rt_national = rt_state.Rt
     ## The deviations live on the same weekly knots as the national walk, so
@@ -1513,7 +1534,9 @@ and `Rt_matrix` covers the horizon.
         bartlett_lower = Float64[]
     end
     A = bartlett_factor(bartlett_diag, bartlett_lower)
-    shape_scale = sqrt(nd / sum(abs2, A))
+    ## `gi_scale` puts the deviations on the growth-rate scale, as for the
+    ## national walk ([`rt_walk_model`](@ref)).
+    shape_scale = gi_scale * sqrt(nd / sum(abs2, A))
     F_drift = sum_to_zero_factor(basis, σ_drift * shape_scale, A)
     F_level = sum_to_zero_factor(basis, σ_level * shape_scale, A)
     ## Standard-normal draws for the level and for each knot's innovation,
@@ -1713,7 +1736,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     rt_state ~ to_submodel(
         rt(
             n, n_patches, log(R0);
-            breakpoint, rt_start, rt_walk_start, fkw...
+            breakpoint, rt_start, rt_walk_start,
+            gi_scale = gi_state.gi_mean / GI_PRIOR_MEAN, fkw...
         ), false
     )
     Rt_matrix = rt_state.Rt_matrix

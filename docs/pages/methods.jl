@@ -274,7 +274,7 @@ MarkdownTable(vintage_table) #hide
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
+# \log R^{\text{trend}}_k = \log R_0 + \frac{\mu_g}{\bar\mu_g}\, \sigma_{\text{rw}}
 #            \sum_{j=1}^{k} z_j, \quad
 # z_j \sim \mathrm{Normal}(0, 1), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
@@ -288,6 +288,9 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # We set the half-normal on $\sigma_{\text{rw}}$ so that the trend is unlikely to change by more than about 20% from one week to the next: two standard deviations of the weekly log-step is around $0.20$.
+# The steps are scaled by $\mu_g / \bar\mu_g$, the sampled mean generation interval over its prior centre of 15.3 d, and so are the patch deviations below.
+# To first order in equation 3, $\log R \approx r \mu_g$, so the scaling puts the walk and deviation priors on the growth rate and $\sigma_{\text{rw}}$ is the weekly step at the prior-centre generation interval.
+# Without it a shorter generation interval would give the same growth-rate path with smaller log-scale steps, and the priors would favour it.
 #
 # Daily $\log R^{\text{trend}}_t$ is the linear interpolation between the weekly knots.
 # Before the first knot it is held flat at $R_0$ (the interpolation clamps below the first knot rather than extrapolating):
@@ -329,7 +332,7 @@ MarkdownTable(vintage_table) #hide
 # AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with both scales multiplied by $\mu_g / \bar\mu_g$ as for the trend, $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
 # $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
 # $A$ sets the shape of the innovation covariance and $\sigma_{\text{drift}}$ its size, since the covariance has trace $\sigma_{\text{drift}}^2 (P - 1)$ whatever $A$ is.
 # Together they are a full covariance of a sum-to-zero vector, and $\sigma_{\text{drift}} \to 0$ gives every patch the trend's shape.
