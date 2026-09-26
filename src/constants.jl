@@ -438,32 +438,60 @@ function province_importation_kernel(
         decay::Real = PROVINCE_DISTANCE_DECAY
     )
     np = length(pops)
-    tot = sum(pops)
-    K = zeros(Float64, np, np)
     size(distances) == (np, np) || error(
         "province_importation_kernel: `distances` is $(size(distances)) " *
             "but there are $np provinces."
     )
+    tot = sum(pops)
+    pull = gravity_pull(pops; distances, decay)
+    K = zeros(Float64, np, np)
     @inbounds for q in 1:np
-        ## Relative pull of each destination from origin `q`, by destination
-        ## size and by how far it is. A zero distance matrix leaves the
-        ## population-only kernel.
-        pull = zeros(Float64, np)
-        for p in 1:np
-            p == q && continue
-            d = distances[p, q]
-            pull[p] = d > 0 ? pops[p] / d^decay : Float64(pops[p])
-        end
-        s = sum(pull)
+        s = sum(@view pull[:, q])
         s > 0 || continue
         ## Hold the column total at the pre-distance value, so the distance
         ## redistributes a province's exports without changing their volume.
         outflow = 1 - pops[q] / tot
         for p in 1:np
-            K[p, q] = outflow * pull[p] / s
+            K[p, q] = outflow * pull[p, q] / s
         end
     end
     return K
+end
+
+"""
+    gravity_pull(pops; distances, decay)
+
+Unnormalised gravity pull, `pull[p, q]` the relative attraction of
+destination `p` to an origin `q`,
+
+```math
+\\mathrm{pull}_{p,q} = \\frac{N_p}{d_{p,q}^{\\gamma}},
+```
+
+zero on the diagonal, and the destination population alone where the
+distance is zero. This is the one gravity form both spatial levels use.
+[`province_importation_kernel`](@ref) normalises its columns over the
+provinces; the health-zone model normalises the same pull within and
+between patches ([`zone_importation_blocks`](@ref)).
+"""
+function gravity_pull(
+        pops::AbstractVector;
+        distances::AbstractMatrix,
+        decay::Real = PROVINCE_DISTANCE_DECAY
+    )
+    np = length(pops)
+    size(distances) == (np, np) || error(
+        "gravity_pull: `distances` is $(size(distances)) but there are " *
+            "$np locations."
+    )
+    pull = zeros(Float64, np, np)
+    @inbounds for q in 1:np, p in 1:np
+
+        p == q && continue
+        d = distances[p, q]
+        pull[p, q] = d > 0 ? pops[p] / d^decay : Float64(pops[p])
+    end
+    return pull
 end
 
 """

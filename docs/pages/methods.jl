@@ -2021,6 +2021,219 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ### Health-zone model
+#
+# The situation reports also give cumulative confirmed cases and deaths per health zone within each province.
+# A second-stage model splits each patch's infections across its zones, conditional on the fitted joint model above.
+# This is a two-stage Markov melding [goudie2019](@cite) in which the zone stage receives the patch posterior and feeds nothing back, a cut [plummer2015](@cite).
+# Write $\xi$ for the quantity the two stages share, $\psi$ for the zone parameters, $Y_1$ for the national and provincial data and $Y_2$ for the zone tables.
+# The zone stage samples
+#
+# ```math
+# p(\psi, \xi \mid Y_1, Y_2) \;\propto\;
+#   p_1(\xi \mid Y_1)\; p(Y_2 \mid \xi, \psi)\; p(\psi), \tag{55}
+# ```
+#
+# with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
+#
+# The shared quantity is the joint model's weekly infections in each patch, $S_{p,w}$.
+# A window in which a patch's mean infections stay below one is dropped as not yet seeded, leaving $d$ pairs $(p, w)$.
+# Over the joint model's draws the kept $\log S_{p,w}$ have sample covariance $\hat\Sigma$.
+# Its Cholesky factor $L$ is taken after adding $10^{-6}$ of each cell's own variance to the diagonal, which conditions the factorisation without rescaling any week.
+# The joint model carries fewer draws than there are cells, so $\hat\Sigma$ can still be singular.
+# The factorisation then blends toward its own diagonal, $(1 - \lambda)\hat\Sigma + \lambda\,\mathrm{diag}(\hat\Sigma)$, at the smallest $\lambda$ that succeeds.
+# Shrinking toward the diagonal of $\hat\Sigma$ rather than toward the identity keeps every week's own variance and gives up only the correlations.
+#
+# ```math
+# \eta \sim \mathrm{Normal}(0, I_d), \qquad
+# a = L\eta, \qquad
+# I_{p,t} = \bar I_{p,t}\, e^{a_p(t)}. \tag{56}
+# ```
+#
+# Here $a_p(t)$ interpolates patch $p$'s kept week midpoints and holds flat outside them, and $\bar I_{p,t}$ is the exponential of the joint model's posterior mean log infections.
+# One draw moves whole patch trajectories, and moves the patches together where the joint model says they move together.
+# Nothing else in the zone stage carries a second term from that posterior.
+# The zone infections sum to the sampled patch totals by construction, so scoring those sums again would count the same posterior twice, in every direction the draw already sets.
+#
+# The generation interval $\bar g$ and the infection-to-report delay $\bar f$ are the joint model's posterior mean distributions, $\bar f$ the incubation period convolved with the report-to-receipt delay.
+# The infection-to-confirmed-death delay adds the onset-to-death delay.
+#
+# The units are the health zones that have reported a confirmed case, nested in the four patches, so the pooled patch's zones span Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi.
+# The zone tables are read at the vintages $d_1 < \dots < d_V$ they were printed on, from Tableau 2 of the same situation reports [insp_sitrep_2026](@cite).
+# Zone populations and centroids come from the Ministry of Health health-zone boundaries [hdx_drc_health_zones](@cite) with WorldPop population counts [worldpop2025](@cite).
+# The zone stage and the joint model it melds from are fitted to the same cut-off, the one this report carries throughout.
+# A parent fitted to a different one is refused rather than aligned.
+# A zone's increment $y_{z,v}$ at vintage $v$ is the difference of its cumulative count from the previous vintage, clamped at zero, and the first vintage's increment is its cumulative count.
+# The allocated patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ excludes the report's unallocated row.
+# A patch and vintage with no allocated cases is not scored.
+# A vintage on which a province's unallocated count falls is a reattribution of counts into named zones rather than new cases, so that province's zone split is not scored on that date.
+# The zone grid starts on day $t_0$, 42 days before the first zone vintage, and carries weekly knots $k = 1, \dots, K$ from there to the cut-off.
+#
+# The shares start from a within-patch softmax of standard-normal draws at a fixed scale of two, centred within the patch:
+#
+# ```math
+# w_{z,t_0} = \frac{\exp\bigl(2\,(z^w_z - \bar z^w_p)\bigr)}
+#   {\sum_{z' \in p} \exp\bigl(2\,(z^w_{z'} - \bar z^w_p)\bigr)}, \qquad
+# z^w_z \sim \mathrm{Normal}(0, 1). \tag{57}
+# ```
+#
+# From the grid start each zone runs the renewal on its own past infections, scaled by a log-transmission deviation $\delta_{z,t}$:
+#
+# ```math
+# \Lambda_{z,t} = \sum_{s \ge 1} \bar g_s\, I_{z,t-s}, \qquad
+# u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{58}
+# ```
+#
+# with $I_{z,t} = I_{p,t}\, w_{z,t_0}$ on the days before the grid start.
+#
+# Infections cross zone boundaries as they cross provincial ones in Equation (18), through a gravity kernel at a per-origin intensity.
+# The kernel is decomposed so that the movement the joint model already estimated is not estimated again.
+# Both blocks are normalisations of one gravity pull $\mathrm{pull}_{zq} = N_z\, d_{zq}^{-1}$ over all zones, the same form as Equation (14) and the coupling of [xia2004](@citet):
+#
+# ```math
+# K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
+#     {\sum_{z' \in p(q)} \mathrm{pull}_{z'q}}, \qquad
+# K^{\text{b}}_{zq} = K_{p(z)p(q)}\,
+#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{59}
+# ```
+#
+# the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
+# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
+#
+# Within a patch the spill is a transfer, and between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$ at its posterior mean import fraction $f_{p,t}$:
+#
+# ```math
+# v_{z,t} = (1 - \varepsilon_z) u_{z,t}
+#   + \sum_{q \in p,\, q \ne z} \varepsilon_q K^{\text{w}}_{zq}\, u_{q,t},
+# \qquad
+# c_{p,t} = \frac{I_{p,t} - M_{p,t}}{\sum_{z \in p} v_{z,t}}, \tag{60}
+# ```
+#
+# ```math
+# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \bar\varepsilon_{p(q)}
+#     K^{\text{b}}_{zq}\, u_{q,t},
+# \qquad
+# I_{z,t} = c_{p,t}\, v_{z,t}
+#   + M_{p,t}\, \frac{h_{z,t}}{\sum_{z' \in p} h_{z',t}},
+# \qquad
+# w_{z,t} = \frac{I_{z,t}}{I_{p,t}}, \tag{61}
+# ```
+#
+# Here $\bar\varepsilon_{p}$ is the joint model's posterior mean per-origin intensity of Equation (15).
+# It enters only as a relative weight across origin patches.
+# The zone infections of a patch therefore sum to $I_{p,t}$ exactly.
+# The within-patch spill is the zone stage's own mechanism and carries its own intensity, one level with a pooled per-origin deviation:
+#
+# ```math
+# \operatorname{logit} \varepsilon_z = \operatorname{logit} \varepsilon_{\text{w}}
+#     + \tau (z^\varepsilon_z - \bar z^\varepsilon), \qquad
+# \varepsilon_{\text{w}} \sim \mathrm{Beta}(1,\ 20), \qquad
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5). \tag{62}
+# ```
+#
+# The deviations are the patch deviation process of Equation (6), run with one group per patch and the zones of a patch as its units.
+# The level and the innovations are correlated within a patch and centred within it, so each patch sums to zero at every knot.
+# The correlation decays with the distance between zone centroids, and $\rho_{\text{corr}}$ is the correlation of two zones a reference distance $\bar d$ apart, $\bar d$ being the mean distance between the provincial capitals:
+#
+# ```math
+# C_{zq} = \exp(-d_{zq} / \ell), \qquad
+# \ell = -\bar d / \log \rho_{\text{corr}}. \tag{63}
+# ```
+#
+# A ridge of $10^{-6}$ on the diagonal of $C$ conditions its Cholesky factorisation.
+#
+# Zones enter through the distance between their centroids rather than through shared borders, so the correlation is the exponential covariance of model-based geostatistics [diggle1998](@cite), a Mat\'ern kernel at $\nu = 1/2$.
+# Only walking zones carry innovations, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones.
+# Every other zone decays along the mean path $\phi_{\text{z}}^{k-1}\,\delta_{z,1}$ from its level.
+# The level scale and half-life keep the province model's priors, $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$ and $h_{\text{z}} \sim \mathrm{LogNormal}(\log 42, 0.6)$ with $\phi_{\text{z}} = 2^{-7/h_{\text{z}}}$.
+# Each patch has its own drift scale $\sigma_{\delta,p}$ as in Equation (7).
+#
+# Every scale the two levels share takes its prior from the joint model's posterior for the same quantity between provinces, fitted to its draws: a log-normal for each positive scale and a beta for each correlation and overdispersion.
+# This is what makes a zone start at its province's estimate and depart only as far as its own counts require.
+# A negative provincial correlation enters the zone prior as no correlation, since two provinces moving apart says nothing about how far two neighbouring zones move together.
+#
+# The expected confirmed reports of a zone in the window of vintage $v$ carry its infections through $\bar f$, and the observed increments of each patch and vintage follow a Dirichlet-multinomial on the allocated total, the composition of Equation (54) in its unsequenced form:
+#
+# ```math
+# C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} \bar f_s\, I_{z,t-s},
+# \qquad
+# y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa\, \pi_{p,v}\bigr),
+# \qquad
+# \kappa = \frac{1 - \rho}{\rho}. \tag{64}
+# ```
+#
+# The allocated confirmed deaths of every vintage follow a second Dirichlet-multinomial of the same form, on the infection-to-confirmed-death delay, with its own intra-class correlation $\rho_{\text{death}}$.
+# A case table and a death table do not disperse alike.
+# The two do not share one concentration.
+#
+# Cases observe incidence times case-finding and deaths incidence times lethality, and each composition is normalised within its patch:
+#
+# ```math
+# \pi^{C}_{z,v} = \frac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}},
+# \qquad
+# \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}. \tag{65}
+# ```
+#
+# Relative ascertainment $a_z$ and relative fatality $\theta_z$ are the provincial composition's own multiplier over the zones of a patch, log contrasts summing to zero within the patch:
+#
+# ```math
+# a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
+# \qquad
+# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr), \tag{66}
+# ```
+#
+# with $\mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1})$ and $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$, as in the [province compositions](@ref "Province compositions").
+# A composition identifies only the product of a multiplier and the incidence split, so the pooling is what separates them: as $\sigma$ shrinks the shares weight zones by incidence alone.
+#
+# Both are relative to the zone's own province.
+# A factor common to a patch cancels in a within-patch composition, so the province level of each multiplier is the one the [province compositions](@ref "Province compositions") estimate, and only the zone level is estimated here.
+# The ascertainment scale $\sigma_a$ takes its prior from the province posterior for the same scale between provinces, so the two levels are pooled toward a common national value.
+# The fatality scale is tight, $\sigma_\theta \sim \mathrm{Normal}^{+}(0,\ 0.1)$.
+# Two compositions carry three unknowns per zone, so one has to be pinned.
+# A tight $\sigma_\theta$ asserts that deaths per infection vary little between the zones of a patch, which lets the death composition pin the incidence split and the case composition identify ascertainment as the residual.
+# It is the asymmetry the [province compositions](@ref "Province compositions") make between death ascertainment and provincial lethality, one level down.
+# The assumption is stronger here, since zones within a province differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
+# The product of the two contrasts is reported as each zone's ascertainment and fatality against the national average.
+#
+# The implied zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
+#
+# ```math
+# R_{z,t} = \frac{I_{z,t}}{\Lambda_{z,t}}. \tag{67}
+# ```
+#
+# It is reported only from the day the zone's cumulative infections reach ten in the median draw.
+# For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
+# The results rank zones by the posterior probability that the reproduction number exceeds one.
+#
+# We assume the generation interval and the two delays are the joint model's posterior means, and the import fraction and the per-origin intensity likewise.
+# Only the weekly patch infections are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
+# Straight-line distance stands for the roads, the lake and the international border that carry movement.
+# We assume the gravity form carries movement between zones as it does between provinces, with no mobility data to check it against.
+# The increments are consecutive-vintage differences clamped at zero.
+# The walking set depends on the data and can differ between fits at different cut-offs.
+# A revision can move counts out of named zones.
+# That leaves the unallocated row flat and the clamp absorbing the fall.
+# The death composition therefore leaves out any vintage on which a named zone loses more than one death.
+# That is five vintages beyond those the unallocated row identifies.
+# The case composition keeps the unallocated rule.
+
+#md # ```@raw html
+#md # <details><summary>Model: bvd_zone</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.bvd_zone(nothing)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Model fitting and evaluation
+#
+
 # ## Model fitting and evaluation
 #
 # ### Fitting the models
@@ -2149,6 +2362,40 @@ cfr_prior_fig #hide
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
+# #### Health-zone forecast
+#
+# The one-week zone forecast is drawn from the fitted zone model run a week past the cut-off, as the other forecasts are.
+# Each draw keeps its fitted parameters.
+# The shared quantity of Equation (56) is extended over the forecast week.
+# The multivariate normal is fitted to each joint-model draw's log weekly patch infections over the fitted weeks and over the forecast week of the same draw's forecast, with the fitted block of its Cholesky factor held fixed:
+#
+# ```math
+# \begin{pmatrix} \mathbf a \\ \mathbf a^{\text{fc}} \end{pmatrix}
+# = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
+# \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
+# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{68}
+# ```
+#
+# The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
+# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the share renewal of Equation (58) runs on to the end of the week.
+# Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
+#
+# ```math
+# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{69}
+# ```
+#
+# Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (64) at $\pi^{\text{fc}}$.
+#
+# The probability that a zone reports at least $K$ confirmed cases over the week follows from the same composition.
+# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
+#
+# ```math
+# P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{70}
+# ```
+#
+# The results report this at $K = 1$, $5$, $10$ and $20$, and the health-zone map colours zones by it at a chosen $K$, with a filter for zones that did or did not report a case over a past window.
+#
+
 # ### Forecast-versus-frozen evaluation
 #
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.

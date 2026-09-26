@@ -312,7 +312,8 @@ their median log joint density ([`ViablePrior`](@ref)), which keeps the
 sampler off the prior tail no chain recovers from without concentrating
 the starts. Pass `init = Turing.DynamicPPL.InitFromPrior()` for unguarded
 prior initialisation, or `init = Turing.DynamicPPL.InitFromUniform()` for
-unconstrained uniform initialisation.
+unconstrained uniform initialisation. A vector of strategies, one per
+chain, starts each chain at its own point.
 
 `target_accept` defaults to 0.85. The renewal joint conditions the
 confirmed counts on the observed analysed denominator and samples the
@@ -383,6 +384,14 @@ function nuts_sample(
             viable_prior_init(rng, model; attempts = init.attempts, ldf)
                 for _ in 1:chains
         ]
+    elseif init isa AbstractVector
+        length(init) == chains || throw(
+            ArgumentError(
+                "nuts_sample: `init` holds $(length(init)) strategies for " *
+                    "$chains chains; pass one per chain."
+            )
+        )
+        collect(init)
     else
         fill(init, chains)
     end

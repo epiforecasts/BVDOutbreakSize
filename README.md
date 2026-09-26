@@ -40,11 +40,13 @@ The rendered report fills in the build date and the exact data cut-off automatic
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
-The model is a discrete-time renewal process on a daily grid.
+The model is a discrete-time renewal process on a daily grid, a meta-population over four provincial patches coupled by importation.
 It fits in a single posterior the daily counts the INSP situation reports publish, including the suspected and confirmed case and death series as well as the laboratory, isolation, treatment-centre and recovery records.
 We also digitise the epidemic curve by symptom-onset date as intermittently reported in the INSP situation reports and fit them using a model that accounts for time-varying ascertainment and reporting delays.
 Finally, we fit to data on initial exports of cases and deaths to Uganda, taken from the WHO situation reports and Disease Outbreak News.
 The same infection process generates all of them, staged to daily symptom onsets and routed into every observation stream.
+A second stage splits each patch across its health zones, fitted to the per-zone confirmed cases and deaths jointly as a composition within the patch.
+It is steered by the full posterior of the province fit and does not feed back into it.
 A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
 From these it estimates the infections and deaths to date, reported and unreported, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
 Every release projects each DRC stream a week ahead.

@@ -84,3 +84,80 @@ function write_fit_summary(id, result)
     end
     return nothing
 end
+
+## --- Diagnostics bundle ---------------------------------------------------
+
+using BVDOutbreakSize: parameter_diagnostics, sampler_by_chain_table
+using DataFrames: DataFrame, nrow, names, eachrow
+using Serialization: serialize
+
+## A plain CSV writer, so the bundle needs no package the test environment
+## lacks: header then one row per data row, strings quoted when they hold
+## a comma or a quote, `missing` empty.
+function _write_csv(path, df::DataFrame)
+    cell(x) = ismissing(x) ? "" :
+        x isa AbstractString && (occursin(',', x) || occursin('"', x)) ?
+        '"' * replace(x, '"' => "\"\"") * '"' : string(x)
+    open(path, "w") do io
+        println(io, join(names(df), ","))
+        for row in eachrow(df)
+            println(io, join((cell(row[c]) for c in names(df)), ","))
+        end
+    end
+    return path
+end
+
+"""
+    write_fit_bundle(id, chn, dir) -> String
+
+Write the diagnostics an agent needs to judge fit `id` without loading a
+chain: `parameters.csv` (one row per scalar parameter element with its R-hat
+and effective sample sizes, [`parameter_diagnostics`](@ref)),
+`sampler_by_chain.csv` (draws, divergences, step size and deepest tree per
+chain, [`sampler_by_chain_table`](@ref)) and `summary.csv` (one row: the
+headline diagnostics of [`fit_diagnostics`](@ref) with the draw, chain and
+parameter counts). Returns `dir`.
+"""
+function write_fit_bundle(id, chn, dir)
+    mkpath(dir)
+    params = parameter_diagnostics(chn)
+    _write_csv(joinpath(dir, "parameters.csv"), params)
+    _write_csv(joinpath(dir, "sampler_by_chain.csv"), sampler_by_chain_table(chn))
+    d = fit_diagnostics(chn)
+    nd, nc = size(chn)
+    _write_csv(
+        joinpath(dir, "summary.csv"),
+        DataFrame(
+            fit = [string(id)], max_rhat = [d.max_rhat],
+            min_ess_bulk = [d.min_ess_bulk], min_ess_tail = [d.min_ess_tail],
+            divergences = [d.n_divergent], draws = [nd], chains = [nc],
+            parameters = [nrow(params)]
+        )
+    )
+    return dir
+end
+
+"""
+    write_fit_extras(id, key, result, cache_dir) -> Nothing
+
+Write, next to the cached fit `<cache_dir>/<key>.jls`, the diagnostics
+bundle under `<key>_diagnostics/` and, for a chain the zone stage can meld
+from (one carrying `infections_patch`), the parent extract
+`<key>.parent.jls` ([`zone_parent_extract`](@ref)). A failure is warned
+about rather than thrown: the fit is already cached.
+"""
+function write_fit_extras(id, key, result, cache_dir)
+    chn = fit_chain(result)
+    try
+        write_fit_bundle(id, chn, joinpath(cache_dir, key * "_diagnostics"))
+        if BVDOutbreakSize._has_key(chn, :infections_patch)
+            serialize(
+                joinpath(cache_dir, key * ".parent.jls"),
+                zone_parent_extract(chn; source = key)
+            )
+        end
+    catch e
+        @warn "could not write the fit extras" id = id exception = e
+    end
+    return nothing
+end

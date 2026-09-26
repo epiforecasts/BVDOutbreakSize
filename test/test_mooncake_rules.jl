@@ -24,7 +24,8 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
-        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r
+        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r,
+        zone_share_renewal_kernel
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -112,6 +113,58 @@
             onsets = abs.(randn(rng, n)) .* 20,
             alpha = abs.(randn(rng, nu)) .* 0.3,
         )
+    end
+
+    ## Health-zone renewal inputs: `sizes` zones per patch on an `nd`-day
+    ## grid opening at day `t0`, with the parent trajectories reaching the
+    ## last day. The within block is zero on the diagonal and across
+    ## patches and normalised down each origin's column, the between block
+    ## zero within a patch. `quiet` underflows every deviation, so every
+    ## zone's force is zero, every patch total sits on its floor and the
+    ## import pattern is empty; that whole region is flat, so the
+    ## finite-difference steps stay off the floor's kink. `mixing = false`
+    ## takes the unmixed signature.
+    function zone_args(
+            rng, sizes; nd = 12, t0 = 4, L = 4, mixing = true, quiet = false
+        )
+        np, nz = length(sizes), sum(sizes)
+        n = t0 + nd - 1
+        patch_of_zone = reduce(
+            vcat, [fill(p, k) for (p, k) in enumerate(sizes)]; init = Int[]
+        )
+        ranges, start = UnitRange{Int}[], 1
+        for k in sizes
+            push!(ranges, start:(start + k - 1))
+            start += k
+        end
+        δ = quiet ? fill(-2.0e3, nd, nz) : 0.3 .* randn(rng, nd, nz)
+        w0 = reduce(
+            vcat, [(w = rand(rng, k) .+ 0.2; w ./ sum(w)) for k in sizes];
+            init = Float64[]
+        )
+        base = (
+            abs.(randn(rng, np, n)) .+ 1.0, pmf(rng, L), δ, w0, ranges, t0,
+            abs.(randn(rng, np, n)) .+ 0.5,
+        )
+        mixing || return (base..., nothing, nothing)
+        within, between = zeros(nz, nz), zeros(nz, nz)
+        for a in 1:nz, b in 1:nz
+            a == b && continue
+            if patch_of_zone[a] == patch_of_zone[b]
+                within[a, b] = rand(rng)
+            else
+                between[a, b] = rand(rng)
+            end
+        end
+        for zs in ranges, b in zs
+            s = sum(view(within, zs, b))
+            s > 0 && (within[zs, b] ./= s)
+        end
+        mix = (;
+            within, between, origin_weight = 0.2 .+ rand(rng, nz),
+            import_fraction = 0.1 .+ 0.3 .* rand(rng, np, n), patch_of_zone,
+        )
+        return (base..., mix, 0.05 .+ 0.3 .* rand(rng, nz))
     end
 
     ## Every native rule with the argument types its call sites pass: float
@@ -410,6 +463,35 @@
             [rand(rng, 0:t) for t in nb]; perf = true
         )
 
+        ## The health-zone renewal on two patches of three and two zones,
+        ## and the branches of its coupled loop: the import pattern the
+        ## other patch sets, a patch with no zones, a generation interval
+        ## longer than the grid, and every patch total on its floor, where
+        ## the import pattern is empty too and the arrivals take the
+        ## fallback that splits them on the mixed force. The unmixed
+        ## signature takes `nothing` for both mixing arguments. The cases
+        ## draw from their own stream so the cases after them keep their
+        ## inputs.
+        zone = zone_share_renewal_kernel
+        zrng = Xoshiro(779)
+        add!("2 patches", zone, zone_args(zrng, [3, 2])...)
+        add!("unmixed", zone, zone_args(zrng, [3, 2]; mixing = false)...)
+        add!("patch with no zones", zone, zone_args(zrng, [3, 0, 2])...)
+        add!("G > n", zone, zone_args(zrng, [3, 2]; nd = 3, L = 6)...)
+        add!(
+            "floored patch totals", zone,
+            zone_args(zrng, [3, 2]; quiet = true)...
+        )
+        add!(
+            "floored patch totals, unmixed", zone,
+            zone_args(zrng, [3, 2]; mixing = false, quiet = true)...
+        )
+        add!(
+            "62 zones, n = 220", zone,
+            zone_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)...;
+            perf = true
+        )
+
         ## The data-only helpers pass no derivative. Their inputs are the
         ## integer day indices and counts the histories carry, including a
         ## `missing` observation vector and a capacity history with no
@@ -616,8 +698,7 @@ end
 
 @testitem "Mooncake rules: pullbacks leave the output tangent as given" tags = [
     :ad,
-] begin
-    using Random: Xoshiro
+] setup = [ADRuleCases] begin
     using Mooncake: Mooncake, NoRData, tangent, zero_fcodual
     using BVDOutbreakSize: renewal_infections, patch_infections
 
@@ -650,13 +731,29 @@ end
     tangent(out).infections .= Ī
     pb(NoRData())
     @test tangent(out).infections == Ī
+
+    ## The zone pullback walks its days backwards through a copy of the
+    ## infection tangent and reads the other three outputs.
+    args = zone_args(rng, [3, 2])
+    out, pb = Mooncake.rrule!!(
+        zero_fcodual(zone_share_renewal_kernel), map(zero_fcodual, args)...
+    )
+    ks = (:shares, :forces, :infections, :imports)
+    ȳ = tangent(out)
+    for k in ks
+        getproperty(ȳ, k) .= randn(rng, size(args[3]))
+    end
+    given = map(k -> copy(getproperty(ȳ, k)), ks)
+    pb(NoRData())
+    @test all(map((k, v) -> getproperty(ȳ, k) == v, ks, given))
 end
 
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
     using Distributions: logpdf
-    using BVDOutbreakSize: NegBinomialVector, StudentTVector
+    using BVDOutbreakSize: NegBinomialVector, StudentTVector,
+        zone_share_renewal_kernel
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -682,6 +779,27 @@ end
     @test all(!iszero, gm[61:63])
     ## A defaulted `ν` passes no derivative.
     @test iszero(only(mgrad(d -> logpdf(StudentTVector(m, σ, d), y), -1.0)))
+
+    ## Deviations far enough below zero that every zone's force underflows
+    ## leave each patch total on its floor. The shares and the infections
+    ## are then zero whatever the deviations and the patch trajectories do,
+    ## so neither takes a derivative.
+    nd, nz, np, t0 = 6, 4, 2, 3
+    ranges = [1:2, 3:4]
+    n = t0 + nd - 1
+    g = (v -> v ./ sum(v))(rand(rng, 4) .+ 0.1)
+    w0 = repeat([0.4, 0.6], 2)
+    fp = rand(rng, np, n) .+ 0.5
+    renewal(Ib, δ) = zone_share_renewal_kernel(
+        Ib, g, δ, w0, ranges, t0, fp, nothing, nothing
+    )
+    gIb, gδ = mgrad(
+        (Ib, δ) -> sum(renewal(Ib, δ).shares) +
+            sum(renewal(Ib, δ).infections),
+        rand(rng, np, n) .+ 1.0, fill(-2.0e3, nd, nz)
+    )
+    @test all(iszero, gIb)
+    @test all(iszero, gδ)
 end
 
 @testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin

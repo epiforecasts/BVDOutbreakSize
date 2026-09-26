@@ -1,9 +1,10 @@
 # Execute one report page via Literate to produce docs/src/<page>.md. Select
 # the page with the `BVD_DOC_PAGE` environment variable (one of `methods`,
-# `estimates/national`, `estimates/province`, `forecasts/national`,
-# `forecasts/province`,
+# `estimates/national`, `estimates/province`, `estimates/zone`,
+# `forecasts/national`, `forecasts/province`, `forecasts/zone`,
 # `evaluation/insample/national`, `evaluation/insample/province`,
-# `evaluation/forecast/national`, `evaluation/forecast/province`,
+# `evaluation/insample/zone`, `evaluation/forecast/national`,
+# `evaluation/forecast/province`, `evaluation/forecast/zone`,
 # `sensitivity`). Every model
 # fit is loaded from the content-addressed cache (`BVD_FIT_CACHE`) rather
 # than refitted, so this is fast once the per-fit matrix (or an earlier run)
@@ -26,17 +27,21 @@ using BVDOutbreakSize
 const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "estimates/national")))
 PAGE in (
     "methods",
-    "estimates/national", "estimates/province", "forecasts/national",
-    "forecasts/province",
+    "estimates/national", "estimates/province", "estimates/zone",
+    "forecasts/national", "forecasts/province", "forecasts/zone",
     "evaluation/insample/national", "evaluation/insample/province",
+    "evaluation/insample/zone",
     "evaluation/forecast/national", "evaluation/forecast/province",
+    "evaluation/forecast/zone",
     "sensitivity",
 ) ||
     error(
     "BVD_DOC_PAGE must be one of methods, estimates/national, " *
-        "estimates/province, forecasts/national, forecasts/province, " *
+        "estimates/province, estimates/zone, forecasts/national, " *
+        "forecasts/province, forecasts/zone, " *
         "evaluation/insample/national, evaluation/insample/province, " *
-        "evaluation/forecast/national, evaluation/forecast/province, " *
+        "evaluation/insample/zone, evaluation/forecast/national, " *
+        "evaluation/forecast/province, evaluation/forecast/zone, " *
         "sensitivity; got \"$PAGE\""
 )
 

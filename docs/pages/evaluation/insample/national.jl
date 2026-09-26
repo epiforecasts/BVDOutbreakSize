@@ -1,7 +1,7 @@
 # # In-sample checks
 #
 # Whether the fitted joint model reproduces the national data it was fitted to.
-# The same checks by province are on the [province in-sample checks](@ref "Province in-sample checks") page.
+# The same checks by province are on the [province in-sample checks](@ref "Province in-sample checks") page and by health zone on the [health-zone in-sample checks](@ref "Health-zone in-sample checks") page.
 # How the model predicts data it has not seen is on the [forecast evaluation](@ref "Forecast evaluation") page.
 
 #md # ```@raw html

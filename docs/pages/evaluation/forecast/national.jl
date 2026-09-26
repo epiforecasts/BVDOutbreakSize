@@ -2,7 +2,7 @@
 #
 # How the forecasts on the [forecasts](@ref "Forecasts") page have scored against the data that arrived afterwards.
 # Scoring is the continuous ranked probability score against a persistence baseline, defined in the [forecast scoring](@ref "Forecast scoring against a persistence baseline") Methods section.
-# The same scoring by province is on the [province forecast evaluation](@ref "Province forecast evaluation") page.
+# The same scoring by province is on the [province forecast evaluation](@ref "Province forecast evaluation") page and by health zone on the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>

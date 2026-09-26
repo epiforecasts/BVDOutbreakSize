@@ -93,6 +93,7 @@ jobs:
       streams_ids: ${{ steps.ids.outputs.streams_ids }}
       frozen_ids: ${{ steps.ids.outputs.frozen_ids }}
       sensitivity_ids: ${{ steps.ids.outputs.sensitivity_ids }}
+      zone_ids: ${{ steps.ids.outputs.zone_ids }}
       fit_hash: ${{ steps.fit_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
@@ -236,6 +237,19 @@ jobs:
         uses: ./.github/actions/bvd-pkgimage
         with:
           mode: restore
+      # A dependent fit melds from a cached parent chain, so the parent's
+      # artifact goes into the same cache directory the fit loads from.
+      # `matrix.parents` is set only in the `fit_zone` matrix; the base fit
+      # groups have no parents and skip this.
+      - name: Collect the parent fits
+        if: >-
+          ${{ matrix.parents != '' &&
+          steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ matrix.parents }}
+          path: logs/fit_cache
+          merge-multiple: true
       # The fleet is mixed and the joint fit's wall clock varies by half
       # again between runs of the same commit, so the summary names the CPU
       # a refit ran on. Read it next to the fit's timing when a job runs long.
@@ -302,6 +316,17 @@ jobs:
           path: logs/fit_cache/*.jls
           if-no-files-found: error
           retention-days: 3
+      # The diagnostics bundle and, for a chain the zone stage reads, its
+      # parent extract: small plain files kept long enough to diagnose a fit
+      # or fit the zone stage from it weeks later without the chain.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fit-extras-${{ matrix.id }}
+          path: |
+            logs/fit_cache/*_diagnostics/
+            logs/fit_cache/*.parent.jls
+          if-no-files-found: ignore
+          retention-days: 90
 
   fit_streams:
     name: Fit ${{ matrix.id }}
@@ -336,6 +361,22 @@ jobs:
       fail-fast: false
       matrix:
         id: ${{ fromJSON(needs.list.outputs.sensitivity_ids) }}
+    steps: *fit-steps
+
+  # The health-zone fits are melded from a cached parent chain rather than
+  # sampled from the data alone, so they run once the groups holding their
+  # parents have finished and download those chains first. Each matrix entry
+  # carries its own parent artifact pattern, taken from the registry's
+  # `needs` by `docs/fits/list.jl --groups`.
+  fit_zone:
+    name: Fit ${{ matrix.id }}
+    needs: [list, fit_joint, fit_frozen]
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.list.outputs.zone_ids) }}
     steps: *fit-steps
 
   # Parameter recovery: a few datasets simulated from the headline joint at
@@ -531,8 +572,8 @@ jobs:
   # goes red and says so in a comment of its own, rather than the failure being
   # something a reader has to go looking for.
   convergence:
-    name: Check joint convergence
-    needs: fit_joint
+    name: Check fit convergence
+    needs: [fit_joint, fit_zone]
     # Not the default `success()`. The verdict is one comment edited in
     # place, so a build where this job never ran leaves the previous build's
     # verdict on the thread reading as current: "no new comment" and "still
@@ -586,17 +627,18 @@ jobs:
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
-      # Only the gated fit, not the whole `fit-*` set: the single-stream
+      # Only the gated fits, not the whole `fit-*` set: the single-stream
       # chains are not gated and downloading them all costs minutes.
       # `continue-on-error` so a missing fit reaches the check, which fails
       # on the strict cache miss naming the key it looked for, rather than
       # ending the job here with nothing said on the pull request.
-      - name: Collect the joint fit
+      - name: Collect the gated fits
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: fit-joint
+          pattern: fit-{joint,local}
           path: logs/fit_cache
+          merge-multiple: true
       # `continue-on-error` so the verdict is commented before the job fails
       # on it. The failure is re-raised in the last step.
       #
@@ -611,7 +653,7 @@ jobs:
         continue-on-error: true
         env:
           BVD_FIT_CACHE: logs/fit_cache
-          BVD_CONVERGENCE_IDS: joint
+          BVD_CONVERGENCE_IDS: joint,local
           BVD_CONVERGENCE_REPORT: logs/convergence.md
         run: julia --project=docs docs/fits/check_convergence.jl
       # One comment per pull request, edited in place on every build, so the
@@ -880,6 +922,37 @@ jobs:
             recovery: false
     steps: *render-steps
 
+  # The health-zone pages read the zone melds alongside the joint and frozen
+  # chains they were melded from. `fit_zone` already waits on both parent
+  # groups, so waiting on it is enough for all four artifacts to be in the
+  # run. None of these pages reads the rescored release overlays.
+  render_zone:
+    name: Render ${{ matrix.id }}
+    needs: fit_zone
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: estimates/zone
+            slug: estimates-zone
+            fits: fit-{joint,local,frozen_validation,local_frozen_validation}
+            overlays: false
+          - id: forecasts/zone
+            slug: forecasts-zone
+            fits: fit-{joint,local}
+            overlays: false
+          - id: evaluation/insample/zone
+            slug: evaluation-insample-zone
+            fits: fit-{joint,local}
+            overlays: false
+          - id: evaluation/forecast/zone
+            slug: evaluation-forecast-zone
+            fits: fit-{frozen_validation,local_frozen_validation}
+            overlays: false
+    steps: *render-steps
+
   # These two pages read every group. The sensitivity group is skipped on
   # pull requests, which would skip this job too under the default
   # `success()`, so the condition is spelled out.
@@ -921,6 +994,7 @@ jobs:
       - render_joint
       - render_joint_overlays
       - render_validation
+      - render_zone
       - render_all
     runs-on: ubuntu-latest
     timeout-minutes: 90

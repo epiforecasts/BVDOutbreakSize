@@ -421,6 +421,47 @@ province_pair_figs[4] #hide
 #
 # Whether the model reproduces each province's observed share of the national total is on the [in-sample checks](@ref province-compositions) page.
 
+# ## Data currency
+#
+# The province blocks are the situation reports' provincial tables: confirmed cases, confirmed deaths and the 24h laboratory volumes.
+# Each is read here against the cut-off, so a block that stops updating shows as a date before it rather than as a flat series.
+
+#md # ```@raw html
+#md # <details><summary>Province block currency</summary>
+#md # ```
+
+## Every province block whose last vintage falls before the cut-off, from
+## the shared stream registry rather than a per-page list of dates. The
+## grace the national table allows is not applied here: one vintage behind
+## is already worth reading.
+province_currency = let
+    status = stream_report_status(obs; stratum = :province)
+    behind = status[[ismissing(d) || d > 0 for d in status.days_since], :]
+    isempty(behind) ?
+        Markdown.parse(
+            "Every province block reports to the cut-off, $(obs.cutoff)."
+        ) :
+        MarkdownTable(
+            DataFrame(
+                "Block" => behind.label,
+                "Last reported" => [
+                    ismissing(d) ? "never" : string(d)
+                    for d in behind.last_date
+                ],
+                "Days before cut-off" => [
+                    ismissing(d) ? "-" : string(d)
+                    for d in behind.days_since
+                ]
+            )
+        )
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_currency #hide
+
 # ## Saving province assets
 #
 # The summary dashboard shows the province comparison and the reproduction

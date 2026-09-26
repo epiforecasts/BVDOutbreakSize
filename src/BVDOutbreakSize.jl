@@ -1,5 +1,8 @@
 module BVDOutbreakSize
 
+using Statistics: quantile, mean, cor, median, cov, std, var
+using LinearAlgebra: cholesky, Symmetric, I, Diagonal, diag,
+    issuccess, mul!, LowerTriangular
 using Statistics: quantile, mean, cor, median, std
 using LinearAlgebra: axpy!, dot
 using TOML: TOML
@@ -7,7 +10,7 @@ using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister
-using Dates: Date, Day, date2epochdays, epochdays2date
+using Dates: Date, Day, date2epochdays, epochdays2date, now
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
@@ -16,7 +19,8 @@ using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
-    is_extracting_colon_eq_values, logjoint
+    is_extracting_colon_eq_values, logjoint, link
+using LogDensityProblems: LogDensityProblems
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -25,11 +29,12 @@ import Distributions
 using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Binomial, Normal,
     LogNormal, Beta, Chi,
-    Gamma, TDist, Uniform, truncated, censored, product_distribution
+    Gamma, TDist, Uniform, truncated, censored, product_distribution,
+    DirichletMultinomial, DiscreteUniform
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
 using StatsFuns: logit, logistic, logaddexp
-using SpecialFunctions: beta_inc
+using SpecialFunctions: beta_inc, loggamma
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
@@ -97,6 +102,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_infections_patches, plot_imports_patches,
     plot_patch_summary,
     plot_province_composition_ppc, plot_province_split_ppc,
+    ZONE_MAP_PROVINCES, zone_key, zone_geojson_path,
+    load_health_zones_geojson,
+    plot_zone_map, plot_zone_map_panels, plot_rt_zones,
+    plot_zone_shares, plot_zone_forecast, plot_zone_ranking,
+    plot_zone_comparison, zone_summary_table,
     plot_rhat_spread, plot_parameter_index_diagnostics,
     plot_divergence_locations, plot_diagnostic_contrast,
     reconstruct_rt, reconstruct_patch_rt, fitted_onset_hazard,
@@ -125,7 +135,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     recovery_table, recovery_verdict, recovery_seed_verdicts,
     recovery_overall, recovery_summary,
     forecast_recovery_table,
-    interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
+    interpolate_knots, deviation_knots, relative_multiplier,
+    sigmoid_ramp, seeding_age, lognormal_meansd,
     safe_rate,
     # prior / latent submodels
     censored_delay_model, gamma_delay_model, onset_to_death_model,
@@ -176,6 +187,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     PROVINCE_DISTANCE_DECAY, haversine_km,
     province_distance_matrix, province_importation_kernel,
     province_increment_matrix, province_recent_counts,
+    zone_increment_matrix, zone_reattribution_days,
+    zone_cumulative_falls, load_health_zones,
     joint_fit_args, patch_fit_args, production_joint,
     default_breakpoint,
     province_lab_increment_matrix, background_split_model,
@@ -185,7 +198,21 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
     province_export_pressure_model,
-    province_composition_model, composition_shares, composition_split_model
+    province_composition_model, composition_shares, composition_split_model,
+    # health-zone model
+    bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
+    zone_share_renewal, zone_meld_block, zone_forecast_block,
+    zone_week_midpoints,
+    zone_correlation_factors,
+    zone_parent_scale, zone_deformation, zone_meld_check,
+    reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
+    zone_forecast, zone_forecast_draws, zone_forecast_archive,
+    zone_overview_table, zone_forecast_probabilities, zone_recent_cases,
+    zone_last_case_dates, zone_parent_extract, zone_subset,
+    zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,
+    zone_forecast_scores, zone_composition_ppc, zone_composition_draws,
+    zone_composition_calibration, plot_zone_composition_ppc,
+    zone_diagnostics_table, zone_sampler_diagnostics
 
 ## Observation distributions a submodel writes on the right of `~`.
 ## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
@@ -221,6 +248,9 @@ include("models/observations.jl")
 include("models/joint.jl")
 include("models/fit_args.jl")
 include("recovery.jl")
+include("models/zone.jl")
+include("zone.jl")
+
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:
 ##   set_preferences!(BVDOutbreakSize, "mooncake_rules" => false)
