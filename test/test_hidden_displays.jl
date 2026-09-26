@@ -5,6 +5,7 @@
 @testitem "report pages: one hidden display per code chunk" tags = [
     :quality,
 ] begin
+    using BVDOutbreakSize
     pages = joinpath(pkgdir(BVDOutbreakSize), "docs", "pages")
     ## A line Literate renders as markdown, or a chunk break. `##` is a code
     ## comment and `#src` lines are dropped before parsing.
