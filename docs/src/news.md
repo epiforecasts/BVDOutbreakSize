@@ -46,6 +46,15 @@ Changes since v2.1.0.
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
   Fitted values change by under 1% while the outbreak is far below the population.
+- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#884).
+  Every cell is Student-t with the variance of a negative binomial count.
+  The per-bar read SD from #881 is removed, and the count dispersion absorbs the digitisation error.
+  The onset-report baseline hazard's delay deviations sum to zero and its calendar walk is centred on its mean, so the hazard level is no longer traded against the walk's level.
+  The onset ascertainment is anchored on the chance a case is confirmed, from true positives per suspected BVD case at the pipeline's own onset-to-analysis delay, rather than on specimen positivity.
+  The reporting calendar walk starts one delay support before the earliest report day rather than at the earliest onset date.
+  The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites.
+  A truncated Normal open to 0.01 admitted a mode at shape 0.05 once the complete curve was fitted.
+  Fitted values change.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
   Fitted values change.
 - Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
@@ -86,6 +95,8 @@ Changes since v2.1.0.
 
 ### Report
 
+- The national page adds the fitted onset-to-report delay distribution over report time (#884).
+  The in-sample panels show each digitised snapshot against the predicted eventual reported total drawn through the onset likelihood, for the first and the eight most recent snapshots.
 - Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#867).
   The national forecast now carries the renewal, each stream's delays and ascertainment and its own likelihood past the cut-off.
   The province forecast splits each week of it by the fitted compositions, so the provinces add up to it.

@@ -202,7 +202,7 @@ observes them, one row per draw, read from the posterior-predictive draws
 `pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
 separates cases that have had their onset but are not yet reported from
 cases whose onset has not happened. The model runs the fitted reporting
-hazard, ascertainment and scan noise forward to a future vintage
+hazard, ascertainment and observation noise forward to a future vintage
 `horizon` days past the cut-off, which must be a whole number of weeks
 (see [`onset_forecast_model`](@ref)). Columns, all per draw:
 

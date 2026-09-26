@@ -6,7 +6,7 @@ using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
 using Chain: @chain
-using Random: AbstractRNG, MersenneTwister
+using Random: AbstractRNG, MersenneTwister, default_rng
 using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
@@ -44,7 +44,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
     RT_INTERVENTION_RAMP, ONSET_REPORT_MAX_DELAY,
     load_observations, freeze_observations,
-    load_onset_curve,
+    load_onset_curve, onset_hazard_grid_start,
     OBSERVATION_STREAMS, STREAM_REPORTING_GRACE_DAYS,
     stream_id, stream_forecast_columns,
     history_first_date, history_last_date,
@@ -100,7 +100,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_rhat_spread, plot_parameter_index_diagnostics,
     plot_divergence_locations, plot_diagnostic_contrast,
     reconstruct_rt, reconstruct_patch_rt, fitted_onset_hazard,
-    onset_nowcast_draws, plot_onset_nowcast_grid,
+    plot_onset_nowcast_grid,
+    onset_report_delay_pmf, onset_report_delay_moments,
+    onset_level_predictive_draws,
+    plot_onset_delay_profile,
     predict_no_onward_deaths, plot_no_onward_deaths,
     forecast_draws, forecast_reported, forecast_stream, forecast_table,
     forecast_archive,
@@ -157,8 +160,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     exports_model, exports_deaths_model,
     safe_studentt, onset_report_cdf, onset_report_cdf_extrapolated,
     onset_report_cdf_table,
-    onset_report_G, onset_report_F, onset_nowcast,
-    onset_report_anchor, onset_report_anchor_series,
+    onset_report_G, onset_report_F,
+    onset_confirmation_anchor,
     onset_report_moments, onset_report_scales, onset_report_scale,
     onset_report_expected_total,
     onset_report_ascertainment, onset_report_hazard_model,

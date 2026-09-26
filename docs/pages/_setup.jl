@@ -497,6 +497,15 @@ if !@isdefined(_BVD_SETUP_LOADED)
             maximum(obs.onset_curve_history.report_days),
             _onset_grid_start
         )
+    ## The reporting-delay calendar walk's own grid start
+    ## (`onset_hazard_grid_start`), distinct from `_onset_grid_start`.
+    ## Callers evaluating the fitted hazard (`onset_report_F`,
+    ## `onset_report_G`, `onset_level_predictive_draws`) need this one; callers
+    ## indexing `alpha` need `_onset_grid_start`.
+    _onset_hazard_grid_start = onset_hazard_grid_start(
+        obs.onset_curve_history.onset_days,
+        obs.onset_curve_history.report_days
+    )
 
     ## The digitised onset snapshots up to the cut-off and, for each onset
     ## date they cover, the latest printed count and the report day it came
@@ -535,21 +544,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
         vcat(v[1], diff(v)) for v in vec(collect(chn[:cumulative_onsets]))
     ]
 
-    ## A function giving posterior predictive draws of one digitised bar
-    ## from per-draw modelled counts, through the onset stream's
-    ## measurement error for a single read (`onset_report_scale`'s level
-    ## case: one read at the fitted read SD). Four replicates per draw
-    ## keep the 90% band edge from being ragged with Monte Carlo error.
-    function onset_bar_replicator(chn, rng)
-        τ = vec(collect(chn[Symbol("onset_report_state.τ")]))
-        return draws -> [
-            begin
-                μ = draws[i]
-                σ = onset_report_scale(μ, τ[i], 1)
-                μ + σ * rand(rng, TDist(4.0))
-            end
-                for _ in 1:4 for i in eachindex(draws)
-        ]
+    ## The chain's per-draw count dispersion, the noise a single digitised
+    ## bar is replicated through (`onset_level_predictive_draws`).
+    function onset_noise_draws(chn)
+        isk = vec(collect(chn[Symbol("onset_report_state.inv_sqrt_k")]))
+        return (; k = [1 / (x^2 + eps(x)) for x in isk])
     end
 
     _render_log("setup done: $(_since(_setup_t0))")

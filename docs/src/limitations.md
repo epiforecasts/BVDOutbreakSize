@@ -20,7 +20,7 @@
 - The suspected streams are no longer published, so the late window rests on the confirmed, laboratory, treatment-centre and onset data, and the suspected forecasts cannot be checked.
   The laboratory analysed-specimen series covers only part of the window ([laboratory pipeline](@ref "Laboratory pipeline")).
 - Later situation reports can revise earlier totals up or down as suspects are reclassified and newly-reporting health zones are added, and we do not model this revision process.
-- The onset curve is digitised from a figure that each report redraws, so the counts carry scan error that the model treats as noise at a fixed scale.
+- The onset curve is digitised from a figure that each report redraws, so the counts carry scan error that the model folds into the count overdispersion rather than modelling separately.
 
 ### Model
 

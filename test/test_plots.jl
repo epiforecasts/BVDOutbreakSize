@@ -1383,78 +1383,6 @@ end
         ["New per vintage"]
 end
 
-@testitem "onset_nowcast_draws narrows as the reporting delay grows" begin
-    using Random: MersenneTwister
-    using Statistics: quantile
-    using BVDOutbreakSize: onset_nowcast_draws
-    rng = MersenneTwister(4242)
-    D, gs, ge = 21, 1, 60
-    ndraws = 200
-    ## A fitted hazard with posterior spread in every component, so the
-    ## nowcast interval has something to be wide about at a short delay.
-    hazard = (;
-        logit_h0 = [fill(-1.4 + 0.2 * randn(rng), D) for _ in 1:ndraws],
-        γ = [zeros(ge) for _ in 1:ndraws],
-        alpha = [
-            fill(0.4 + 0.05 * randn(rng), ge - gs + 1)
-                for _ in 1:ndraws
-        ],
-    )
-    onsets = [fill(150.0 + 30 * randn(rng), ge) for _ in 1:ndraws]
-    ## One onset day per delay, all carrying the same observed count so the
-    ## only thing separating them is how much reporting has happened.
-    delays = [0, 5, 10, D - 1]
-    days = [40, 39, 38, 37]
-    observed = fill(50.0, length(days))
-    draws = onset_nowcast_draws(
-        days, observed, delays, onsets, hazard;
-        grid_start = gs
-    )
-    @test length(draws) == length(days)
-    @test all(length(d) == ndraws for d in draws)
-    ## Never below what is already reported.
-    @test all(all(d .>= 50.0 - 1.0e-9) for d in draws)
-    ## The interval collapses onto the observed count once the delay has
-    ## run out, and widens monotonically as the delay shortens.
-    width(d) = quantile(d, 0.95) - quantile(d, 0.05)
-    ws = width.(draws)
-    @test ws[end] < 1.0e-6
-    @test all(diff(ws) .< 0)
-    @test all(isapprox.(draws[end], 50.0; atol = 1.0e-6))
-    @test_throws ErrorException onset_nowcast_draws(
-        days, observed[1:2],
-        delays, onsets, hazard; grid_start = gs
-    )
-    ## Onsets and hazard must be the same fit's draws, paired one to one.
-    @test_throws ErrorException onset_nowcast_draws(
-        days, observed, delays,
-        onsets[1:(ndraws - 1)], hazard; grid_start = gs
-    )
-    ## A day off the end of the onset series is named rather than left to a
-    ## `BoundsError` from inside the draw loop.
-    @test_throws ErrorException onset_nowcast_draws(
-        [ge + 1], [1.0], [0],
-        onsets, hazard; grid_start = gs
-    )
-    ## `target_delays` stops the prediction at a given delay: nothing
-    ## outstanding when it is the delay already reached, and no more than
-    ## the eventual total when it is the end of the delay axis.
-    same = onset_nowcast_draws(
-        days, observed, delays, onsets, hazard;
-        grid_start = gs, target_delays = delays
-    )
-    @test all(all(isapprox.(d, 50.0; atol = 1.0e-9)) for d in same)
-    full = onset_nowcast_draws(
-        days, observed, delays, onsets, hazard;
-        grid_start = gs, target_delays = fill(D - 1, length(days))
-    )
-    @test all(all(full[k] .<= draws[k] .+ 1.0e-9) for k in eachindex(days))
-    @test_throws ErrorException onset_nowcast_draws(
-        days, observed, delays,
-        onsets, hazard; grid_start = gs, target_delays = delays[1:2]
-    )
-end
-
 @testitem "plot_onset_nowcast_grid returns a Makie figure" setup = [HeadlessMakie] begin
     using Random: MersenneTwister
     using Dates: Date, Day
@@ -1487,6 +1415,161 @@ end
             ),
         ]
     )
+end
+
+@testitem "onset_report_delay_pmf sums to one and stays nonnegative" begin
+    using BVDOutbreakSize: onset_report_delay_pmf
+    using Random: MersenneTwister
+
+    logit_h0 = randn(MersenneTwister(1), 28) .- 1.0
+    γ = 0.3 .* randn(MersenneTwister(2), 10)
+    for t in (1, 5, 10)
+        pmf = onset_report_delay_pmf(logit_h0, γ, t, 1)
+        @test length(pmf) == 28
+        @test all(>=(0), pmf)
+        @test sum(pmf) ≈ 1.0 atol = 1.0e-8
+    end
+    ## `t` outside `[grid_start, grid_start + length(γ) - 1]` holds the
+    ## calendar effect flat at the walk's nearest edge rather than erroring.
+    pmf_before = onset_report_delay_pmf(logit_h0, γ, -5, 1)
+    pmf_edge = onset_report_delay_pmf(logit_h0, γ, 1, 1)
+    @test pmf_before ≈ pmf_edge
+end
+
+@testitem "onset_report_delay_moments matches a hand-computed pmf" begin
+    ## D = 2, a flat hazard (logit_h0 both zero) and no calendar effect: the
+    ## un-normalised cdf is the truncated-geometric survival product, hand
+    ## computable, and the pmf is that normalised by its own last entry
+    ## (`onset_report_delay_pmf`'s guard against underflow).
+    using BVDOutbreakSize: onset_report_delay_moments, onset_report_delay_pmf
+    using StatsFuns: logistic
+
+    logit_h0 = [0.0, 0.0]
+    γ = [0.0]
+    h = logistic(0.0)
+    cdf0 = 1 - (1 - h)
+    cdf1 = 1 - (1 - h)^2
+    p0 = cdf0 / cdf1
+    p1 = (cdf1 - cdf0) / cdf1
+    pmf = onset_report_delay_pmf(logit_h0, γ, 1, 1)
+    @test pmf ≈ [p0, p1] atol = 1.0e-8
+
+    m = onset_report_delay_moments(logit_h0, γ, 1, 1)
+    @test m.mean ≈ 0 * pmf[1] + 1 * pmf[2] atol = 1.0e-8
+    @test m.sd ≈
+        sqrt(max(0^2 * pmf[1] + 1^2 * pmf[2] - m.mean^2, 0)) atol = 1.0e-8
+end
+
+@testitem "onset_level_predictive_draws samples through the missing branch" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: onset_level_predictive_draws, onsets_only_model,
+        fitted_onset_hazard
+    using Turing: Prior, sample
+    using Random: MersenneTwister
+    using Statistics: mean
+    import FlexiChains
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 40
+    m = onsets_only_model(n; onset_curve_history = oc)
+    chn = sample(
+        m, Prior(), 20; chain_type = FlexiChains.VNChain, progress = false
+    )
+    grid_start = minimum(oc.onset_days)
+    hz = fitted_onset_hazard(m, chn)
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
+    k = [
+        1 / x^2 for x in
+            vec(Array(chn[Symbol("onset_report_state.inv_sqrt_k")]))
+    ]
+    u = 12
+
+    draws = onset_level_predictive_draws(
+        u, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start, n_rep = 5,
+        rng = MersenneTwister(11)
+    )
+    @test length(draws) == 20 * 5
+    @test all(isfinite, draws)
+
+    ## Same seed, same replicate: the model call is deterministic given an
+    ## explicit `rng`.
+    draws_again = onset_level_predictive_draws(
+        u, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start, n_rep = 5,
+        rng = MersenneTwister(11)
+    )
+    @test draws == draws_again
+
+    ## `target_delay` reads the level at a shorter delay, so on the same
+    ## noise draws the replicates centre below the eventual total
+    ## (`target_delay = nothing`).
+    short = onset_level_predictive_draws(
+        u, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start, target_delay = 3,
+        n_rep = 20, rng = MersenneTwister(13)
+    )
+    full = onset_level_predictive_draws(
+        u, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start, n_rep = 20,
+        rng = MersenneTwister(13)
+    )
+    @test mean(short) < mean(full)
+
+    ## The default four replicates per draw.
+    draws_default = onset_level_predictive_draws(
+        u, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start,
+        rng = MersenneTwister(12)
+    )
+    @test length(draws_default) == 20 * 4
+    @test all(isfinite, draws_default)
+
+    @test_throws ErrorException onset_level_predictive_draws(
+        999, daily, hz, k;
+        grid_start, alpha_grid_start = grid_start
+    )
+    @test_throws ErrorException onset_level_predictive_draws(
+        u, daily, hz, k[1:3];
+        grid_start, alpha_grid_start = grid_start
+    )
+end
+
+@testitem "plot_onset_delay_profile returns a Makie figure" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: onsets_only_model, fitted_onset_hazard,
+        plot_onset_delay_profile
+    using Turing: Prior, sample
+    using Dates: Date
+    import FlexiChains
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    m = onsets_only_model(40; onset_curve_history = oc)
+    chn = sample(
+        m, Prior(), 10; chain_type = FlexiChains.VNChain, progress = false
+    )
+    grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    hz = fitted_onset_hazard(m, chn)
+    fig = plot_onset_delay_profile(
+        hz; grid_start, grid_end, seeding = Date("2026-01-01")
+    )
+    @test fig isa CairoMakie.Makie.Figure
 end
 
 @testitem "_composition_predictive: allocates the observed total, wider with rho" begin

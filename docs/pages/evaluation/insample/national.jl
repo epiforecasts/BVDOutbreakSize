@@ -551,9 +551,14 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# ### Onset snapshot nowcasts
+# ### Onset snapshots against the predicted eventual total
 #
-# Whether the fitted reporting delay nowcasts each digitised onset snapshot to the latest figure covering its dates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# Each panel is one digitised onset snapshot, plotted by onset date.
+# The grey crosses are the counts that snapshot's own figure printed.
+# The band is the model's posterior predictive of each onset date's eventual reported total, sampled through the onset stream's likelihood so it carries the fitted count dispersion, one read's error and the Student-t tail.
+# Recent bars sit below the band by construction, since they are partial reads of onset dates still reporting.
+# The black points are the latest figure's own reading, shown for context rather than as the target the band is read against.
+# Every snapshot is fitted, but only the first and the eight most recent are shown (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 
 #md # ```@raw html
 #md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
@@ -570,28 +575,42 @@ _onset_cells_by_report = Dict{Int, Vector{Int}}()
 for (i, r) in enumerate(obs.onset_curve_history.report_days)
     push!(get!(_onset_cells_by_report, r, Int[]), i)
 end
+_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
 _onset_hazard = fitted_onset_hazard(fit_model("joint"), chn_joint)
 _onset_daily_draws = onset_daily_draws(chn_joint)
-_onset_replicated = onset_bar_replicator(
-    chn_joint, Random.MersenneTwister(20260729)
-)
+_onset_noise = onset_noise_draws(chn_joint)
+_onset_rng = Random.MersenneTwister(20260729)
 
-## Each snapshot is nowcast to the delay of the figure each of its onset
-## dates was last printed on, so the band and the latest reading are the
-## same quantity.
-_onset_panels = map(sort(collect(keys(_onset_cells_by_report)))) do R
+## The first snapshot plus the eight most recent: the earliest carries the
+## complete-curve level cells and the latest the current nowcast.
+_onset_selected_report_days = length(_onset_report_grid_days) <= 9 ?
+    _onset_report_grid_days :
+    sort(
+        unique(
+            vcat(
+                first(_onset_report_grid_days),
+                last(_onset_report_grid_days, 8)
+            )
+        )
+    )
+
+## One panel per selected snapshot: printed counts against the posterior
+## predictive of the eventual reported total.
+_onset_panels = map(_onset_selected_report_days) do R
     snap = _onset_snap_by_day[R]
     us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-    nowcast = onset_nowcast_draws(
-        us, observed, [R - u for u in us],
-        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
-        target_delays = [_onset_readings.last_report_day[u] - u for u in us]
-    )
+    nowcast = [
+        onset_level_predictive_draws(
+            u, _onset_daily_draws, _onset_hazard, _onset_noise.k;
+            grid_start = _onset_hazard_grid_start,
+            alpha_grid_start = _onset_grid_start, rng = _onset_rng
+        )
+            for u in us
+    ]
     (;
         title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast = [_onset_replicated(d) for d in nowcast],
-        latest = [_onset_readings.last_printed[u] for u in us],
+        nowcast, latest = [_onset_readings.last_printed[u] for u in us],
     )
 end
 
@@ -682,12 +701,12 @@ stream_pairs_fig #hide
 recovery = recovery_results()
 recovery_national_quantities = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
-    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
+    "growth_state.G", "rt_state.sigma_rw", "onset_report_state.inv_sqrt_k",
     "region_drift_sd",
 ]
 recovery_labels = Dict(
     "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
-    "onset_report_state.τ" => "onset read SD",
+    "onset_report_state.inv_sqrt_k" => "onset count dispersion",
     "region_drift_sd" => "province drift SD",
 )
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(

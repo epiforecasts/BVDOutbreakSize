@@ -191,3 +191,35 @@ end
     @test p[1] ≈ 0.25
     @test p[4] == hi
 end
+
+@testitem "composition_case_confirmation is true positives per BVD suspect" begin
+    using BVDOutbreakSize: composition_positivity,
+        composition_case_confirmation
+
+    bvd = [2.0, 1.0, 5.0]
+    pool = [8.0, 50.0, 6.0]
+    c = [0.0, 10.0, 40.0]
+    lo, hi = 1.0e-8, 1 - 1.0e-8
+    s_test, spec = 0.9, 0.98
+    ## With no enrichment a BVD suspect is tested as often as the pool
+    ## average, so the per-case rate is the sensitivity alone.
+    @test composition_case_confirmation(
+        bvd, pool, c, 0.0, 1.0, s_test, lo, hi
+    ) ≈ fill(s_test, 3)
+    ## With enrichment it rises above the sensitivity, and times the BVD
+    ## share it gives the positivity less its false positives.
+    δ0, dscale = 1.5, 20.0
+    r = composition_case_confirmation(bvd, pool, c, δ0, dscale, s_test, lo, hi)
+    @test all(r .> s_test)
+    p = composition_positivity(
+        1:3, bvd, pool, c, δ0, dscale, s_test, spec, lo, hi
+    )
+    φ = bvd ./ (pool .+ lo)
+    q = r .* φ ./ s_test
+    @test p ≈ s_test .* q .+ (1 - spec) .* (1 .- q)
+    ## A tiny BVD share does not blow the rate up through false positives.
+    tiny = composition_case_confirmation(
+        [1.0e-6], [100.0], [0.0], δ0, dscale, s_test, lo, hi
+    )
+    @test only(tiny) < s_test * exp(δ0) + 1.0e-6
+end

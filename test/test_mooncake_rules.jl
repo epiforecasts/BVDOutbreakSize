@@ -22,7 +22,7 @@
         knot_days, renewal_infections, patch_infections, NegBinomialVector,
         abscond_thinned, abscond_thinned_flows, two_clock_confirmed,
         clinical_stay_survival, accumulate_occupancy, incare_census,
-        onset_report_cdf_table, onset_report_anchor_series,
+        onset_report_cdf_table,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r
 
@@ -330,14 +330,6 @@
         add!(
             "D = 28", onset_report_cdf_table, big.lh, big.γ, 120, 120, 220;
             perf = true
-        )
-        ## A daily anchor series and the length-1 constant default.
-        add!("daily anchor", onset_report_anchor_series, o.tab, gs, o.alpha)
-        add!("constant anchor", onset_report_anchor_series, o.tab, gs, [0.15])
-        add!("D = 1", onset_report_anchor_series, o.tab[1:1, :], gs, o.alpha)
-        add!(
-            "D = 28", onset_report_anchor_series, big.tab, 120,
-            abs.(randn(rng, 220)) .* 0.3; perf = true
         )
         add!(
             "D = 12", onset_report_moments, o.tab, gs, o.onsets, gs,

@@ -689,7 +689,7 @@ MarkdownTable(vintage_table) #hide
 # We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty:
 #
 # ```math
-# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
 # ```
 #
@@ -705,7 +705,7 @@ MarkdownTable(vintage_table) #hide
 # We do the same: each component is a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posteriors:
 #
 # ```math
-# \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
+# \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
@@ -720,7 +720,7 @@ MarkdownTable(vintage_table) #hide
 # The export model therefore uses the same line-list onset-to-admission delay [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above, with the same natural shape and scale priors:
 #
 # ```math
-# \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
 # ```
 #
@@ -1689,12 +1689,14 @@ cfr_prior_fig #hide
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
-# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
+# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric.
+# Its deviations sum to zero, drawn on the $D - 1$ directions of an orthonormal sum-to-zero basis $Q$:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{50}
+# z_{h0} \sim \mathrm{Normal}(0,\ I_{D-1}), \qquad
+# \mathrm{logit}\,h_0 = \eta_0 + \sigma_{h0}\,Q\,z_{h0}. \tag{50}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
@@ -1702,11 +1704,17 @@ cfr_prior_fig #hide
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
-# \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# w_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# \qquad
+# \gamma_t = w_t - \bar w,
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
 # \tag{51}
 # ```
+#
+# The walk is centred on its mean over the report days it spans, so $\eta_0$ is the mean logit hazard across both delays and report days.
+# Without the two constraints the hazard's level trades against the mean delay deviation, which the data cannot see, and against a shift of the whole walk, which they barely see, since its first knot sits over report days only the shortest delays read.
+# Neither constraint changes which hazards the model can express.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
@@ -1725,14 +1733,17 @@ cfr_prior_fig #hide
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
 # $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset and $\omega$ a weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$).
-# $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto the onset axis, so this triangle's ascertainment is tied to the confirmed pipeline's rather than left free.
+# $\mathrm{anchor}(u)$ is the share of cases with onset on day $u$ that the confirmed pipeline confirms, so this triangle's ascertainment is tied to the confirmed pipeline's rather than left free.
+# A case is reported as a suspect with probability $p_{\text{drc}}$ and then yields true positives at rate $c_t = \kappa\,\tau_{\text{test}}\,s\,q_t / \varphi_t$ per suspect.
+# $\varphi_t$ is the BVD share of the analysed pool and $q_t$ its severity-enriched tested share, so $q_t/\varphi_t$ is how much more often a BVD suspect is tested than the pool average.
+# False positives confirm no BVD case, so they are left out.
+# With Poisson positives per suspect, a case whose specimen is analysed on day $t$ is confirmed with probability $a_t = p_{\text{drc}}\,(1 - e^{-c_t})$.
+# A cohort meets the testing conditions of the days it reaches the laboratory, so $\mathrm{anchor}(u) = \sum_d w_d\, a_{u+d}$, with $w$ the pipeline's onset-to-analysis delay (onset to suspect report convolved with report to analysis).
 # The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
 # The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
-# The likelihood scores the difference between consecutive snapshots at each onset date, in a trailing $D$-day window of the newer snapshot's report day.
-# This avoids double-counting a case already reported earlier, and drops the older onset dates that carry only noise by then.
 # A count likelihood cannot be used, since a re-dated case can move a bar down in a later scan even though the true running total cannot fall.
-# The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
+# Each cell is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
@@ -1742,14 +1753,26 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean and, for each digitised bar the cell differences, the $1/12$ variance of rounding an integer read and a fitted read SD $\tau$.
-# A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
-# Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
-# The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# The scale is set so the Student-$t$'s variance is that of a negative binomial count about the cell's modelled mean $\mu_u$:
 #
-# The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
-# That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
+# ```math
+# \sigma_u^2 = \frac{\nu - 2}{\nu}\bigl(\mu_u + \mu_u^2 / k\bigr),
+# \qquad 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0,\ 1).
+# ```
+#
+# $\mu_u$ is the modelled mean and never the observed count, so the observation cannot feed into its own variance.
+# The digitisation error of each bar has no term of its own.
+# It is taken to grow with the count read, so $k$ absorbs it with the count overdispersion, and the Student-$t$ tails take the occasional misread.
+#
+# Each onset date is scored once.
+# Its first print is a level, differenced against an implicit empty predecessor and right-truncated at that snapshot's report day.
+# Each later snapshot that prints it while its delay is inside the support scores a correction against the last snapshot that printed it.
+# A level and its corrections sum to the latest print inside the support.
+# Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
+# Past the support the modelled increment is zero, so later reprints of a settled date are not scored and late reclassification is not modelled.
+# The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
+# The calendar walk on report date starts one delay support before the earliest report day, so no knot sits over onset dates no scored cell can reach.
+# The ascertainment walk spans every scored onset date.
 #
 # Three things stay weak.
 # The ascertainment walk $\omega$ shares the onset axis with the reproduction-number walk, and both are least constrained over the final fortnight.

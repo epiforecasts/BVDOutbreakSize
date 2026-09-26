@@ -207,7 +207,7 @@ onset_forecast_fig = let
     ## The first three bars are latent, so the third is exactly the first
     ## two added. The fourth is that same sum replicated through the
     ## observation model, which is the scored quantity and the only one
-    ## comparable to a digitised figure; it is wider by the read error,
+    ## comparable to a digitised figure; it is wider by the observation noise,
     ## which is why the three latent bars are shown as well rather than a
     ## decomposition that appears not to add up.
     _latent_total = onset_forecast.onset_reports_backfill .+
