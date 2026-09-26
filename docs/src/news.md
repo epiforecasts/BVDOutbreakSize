@@ -40,6 +40,12 @@ Changes since v2.1.0.
 
 ### Model
 
+- The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
+  The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
+  Fitted values change.
+- The clock growth-rate prior's log-SD is 0.30 rather than 0.40, a doubling time of 6.5–21.1 d at 95% (#926).
+  The prior's 99th-percentile seed falls from about 2,000 to under 1,000 infections a day.
+  Fitted values change.
 - The generation-interval prior SDs are `α` 0.15 and `θ` 0.30, so the implied prior on the mean matches the NEJM 95% interval of 13.0–17.6 d (#909).
   Fitted values change.
 - The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).

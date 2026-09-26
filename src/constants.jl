@@ -143,7 +143,7 @@ Median doubling time (days) for the size and growth priors, from the
 BEAST X analysis (mbalaplacide2026, exponential growth model, 11.7 d,
 95% HPD 6.8-17.5). Sets the median of the growth-rate prior in
 [`exponential_growth_model`](@ref), `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.40)`.
+M_PRIOR_DOUBLING_DAYS), 0.30)`.
 """
 const M_PRIOR_DOUBLING_DAYS = 11.7
 

@@ -371,15 +371,17 @@ MarkdownTable(vintage_table) #hide
 
 # #### Generation interval
 #
-# We assume the generation interval $g$ is a Gamma distribution with a sampled shape $\alpha$ and scale $\theta$.
-# These are taken from the Ebola virus disease serial interval used as a generation-time proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014).
-# That distribution maps once to a Gamma shape near $2.71$ and scale near $5.65$.
-# The priors are centred on those values, with spreads set so the implied prior on the mean $\alpha\theta$ has the source's 95% CI of 13.0–17.6 d:
+# We assume the generation interval $g$ is a Gamma distribution with a sampled mean $\mu_g$ and standard deviation $\sigma_g$.
+# These are taken from the Ebola virus disease serial interval used as a generation-time proxy (fitted Gamma, mean 15.3 d, SD 9.3 d, from 92 transmission pairs; WHO Ebola Response Team 2014).
+# The source reports no interval on either value, so each prior's spread is the sampling standard error of that estimate from 92 pairs, $9.3/\sqrt{92} \approx 0.97$ d for the mean and about 1.0 d for the SD:
 #
 # ```math
-# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.15), \qquad
-# \theta \sim \mathrm{Normal}^{+}(5.65,\ 0.30). \tag{8}
+# \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 0.97), \qquad
+# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 1.0). \tag{8}
 # ```
+#
+# That puts 95% of the prior mean between 13.4 and 17.2 d and of the prior SD between 7.3 and 11.3 d.
+# The Gamma shape $(\mu_g/\sigma_g)^2$ and scale $\sigma_g^2/\mu_g$ follow from them.
 #
 # The Gamma is discretised through the same double-interval-censoring route as every delay, described with the first epidemiological process model below.
 # That gives a probability mass function (PMF) $g_s$, the probability assigned to each whole-day lag.
@@ -421,13 +423,13 @@ MarkdownTable(vintage_table) #hide
 # The growth rate $r$ carries the prior the genetic source informs.
 # The BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite) reports an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5).
 # We put a log-normal prior on $r$ equivalent to a log-normal prior on the doubling time centred on 11.7 d.
-# Its log spread is wider than that HPD implies.
+# Its log spread of 0.30 is a quarter wider than the 0.24 that HPD implies.
 # The HPD is conditional on a single-rate coalescent, the assumption the field epidemiology above contradicts [kupferschmidt2026](@cite).
-# An independent reanalysis of the earlier genomes puts the doubling time at 15.2--24.5 d [cuomodannenburg2026](@cite).
-# Our 95% interval on the doubling time is 5.3--25.6 d, which contains both ranges:
+# An earlier reanalysis of the first ten genomes, which the BEAST X rate supersedes, put the doubling time at 15.2--24.5 d [cuomodannenburg2026](@cite).
+# Our 95% interval on the doubling time is 6.5--21.1 d, which contains the HPD and reaches into that earlier range:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{11}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.30\right). \tag{11}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward Euler–Lotka derivation above, sets the established reproduction number.
