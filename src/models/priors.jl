@@ -1451,7 +1451,7 @@ and `Rt_matrix` covers the horizon.
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
-        region_drift_sd_prior = truncated(Normal(0, 0.1); lower = 0),
+        region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         region_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(n_patches),
