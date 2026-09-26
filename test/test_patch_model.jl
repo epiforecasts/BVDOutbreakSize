@@ -372,9 +372,9 @@ end
     for (r, σ) in zip(rets, σs)
         @test sum(abs2, r.drift_factor) ≈ σ^2 * (np - 1) rtol = 1.0e-10
     end
-    ## Mean innovation sd across patches below a fifth of 0.05.
+    ## Mean innovation sd across patches below a fifth of the prior sd 0.1.
     small = mean(
-        mean(r.σ_δ) < 0.2 * 0.05 for r in rets
+        mean(r.σ_δ) < 0.2 * 0.1 for r in rets
     )
     @test small > 0.1
 end

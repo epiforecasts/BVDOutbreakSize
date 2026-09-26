@@ -43,6 +43,8 @@ Changes since v2.1.0.
 - The province background and bed-capacity shares take fixed-scale log-ratios against population share, `Normal(0, 2.5)`, in place of a pooling scale over three deviations (#919).
   The data put both simplices several units from population share, so the pooling scale traded off against the deviations along a ridge and set the lowest bulk ESS in the patch model.
   The chain keys `τ_bg`, `z_bg`, `τ_cap` and `z_cap` become `bg_log_ratio` and `cap_log_ratio`, and `province_background_split_sd` is removed.
+- The provincial Rt deviation drift scale prior is `σ_drift ~ half-N(0, 0.1)`, the prior of the trend's own step size, rather than `half-N(0, 0.05)`.
+  The joint put `σ_drift` at 0.16 (90% 0.11 to 0.22), over three prior standard deviations out, and it mixed among the slowest patch terms.
 - The generation-interval prior SDs are `α` 0.15 and `θ` 0.30, so the implied prior on the mean matches the NEJM 95% interval of 13.0–17.6 d (#909).
   Fitted values change.
 - The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).
