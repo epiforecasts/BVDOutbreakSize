@@ -34,7 +34,8 @@ Changes since v2.1.0.
 - Gradients are about 20% faster, from hand-written reverse-mode rules for the daily convolution and renewal kernels (#810).
   Values are unchanged.
 - The precompile workload compiles the fit the report runs, so the headline joint fit's cold build drops from 1095 s to 292 s (#791).
-- `euler_lotka_r` returns the converged Euler–Lotka root, with a Mooncake rule from the implicit function theorem. The reported `r` moves by at most 2e-4 (#902).
+- `euler_lotka_r` returns the converged Euler–Lotka root, with a Mooncake rule from the implicit function theorem (#902).
+  The reported `r` moves by at most 2e-4.
 - `r_to_R0` takes one `exp` rather than one per lag (#902).
 
 ### Model
@@ -43,17 +44,13 @@ Changes since v2.1.0.
   Fitted values change.
 - The provincial Rt deviation drift scale is sampled, `σ_drift ~ half-N(0, 0.05)`, with the Wishart factor giving only the covariance shape (#907).
   Fitted values change.
-- The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#895).
-- The weekly log-Rt walk is drawn in non-centred form again: in the joint on main the centred knots split between chains while the onset stream scores only the trailing window (#892).
-  Fitted values move only through the sampling, as with the centred form.
+- The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
+  Fitted values change by under 1% while the outbreak is far below the population.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
   Fitted values change.
-- The weekly log-Rt walk is sampled in centred form: each knot level is drawn about the one before it and stored as `rt_state.log_R`, replacing the scaled standard-normal innovations `rt_state.z`.
-  With the onset curve fitted the non-centred form held the sampler at its tree-depth cap with divergences.
-  The prior is unchanged, so fitted values move only through the sampling.
 - Every model takes a forecast horizon, runs past its cut-off and draws each stream's future counts as missing observations (#867).
   Fixing the future variables leaves the fitted density unchanged to within floating-point rounding, which the tests check on every composer and on the live patch joint.
-- The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` sum-to-zero directions rather than as `n` draws then centred, with a Wishart prior on the Rt deviation covariance that province forecasts now also use (#855).
+- The provincial Rt deviations, importation intensities and ascertainment and severity multipliers are drawn on the `n - 1` sum-to-zero directions rather than as `n` draws then centred, with a Wishart prior on the Rt deviation covariance that province forecasts also use (#855).
   Fitted values change.
 - The death analysed volume is no longer capped at the suspected-death pool (#820).
   `tau_death` is now specimens per suspected death and may exceed one.
@@ -68,18 +65,20 @@ Changes since v2.1.0.
   The modelled split is each patch's BVD suspects plus its share of the non-BVD background, a partially pooled simplex centred on population share (`background_split_model`).
   The BVD suspects carry the case composition's relative ascertainment, so the two compositions agree on how many of a patch's cases reach the laboratory.
   The testing fraction stays national and the per-province positives remain unfitted.
-  The per-head testing covariate on the ascertainment prior is removed, with `province_testing_covariate` and the `province_testing_covariate` keyword, since the same laboratory series now enters through this composition; its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
+  The per-head testing covariate on the ascertainment prior is removed, with `province_testing_covariate` and the `province_testing_covariate` keyword, since the same laboratory series enters through this composition.
+  Its coefficient was 0.05 (90% -0.14 to 0.31) in the 23 September CI joint fit on #784.
 - Province isolation occupancy and bed counts enter the treatment-flow stream as splits of the printed sum of the provinces present each day (#784).
   The split is over per-patch bed demand, the national demand shared out by each patch's admissions through the stays, and static per-patch shares of the national capacity walk.
   Occupancy is split weekly on the uncapped demand and beds on the days a count changes; the national terms keep their likelihoods every day.
   The fit reports beds, demand, utilisation and shortfall by province at the cut-off.
 - A pooled patch's occupancy or bed count is used on a day only when every member that has printed before prints that day, so a silent member is never read as an empty ward (#784).
 - The province case-fatality contrast scale prior is half-normal with sd 0.1 rather than 0.3 (#784).
-  At 0.3 a tenth of the prior mass had provinces differing by more than 60% in their case-fatality ratio, and the 23 September fits on #784 left the posterior on the prior (median 0.19 to 0.27) while its chains moved between a scale near zero and one near 0.3, with the whole death-confirmation block frozen at an effective sample size of 4 in the chain that sat near zero.
+  At 0.3 the 23 September fits on #784 left the scale on its prior, with chains split between near zero and near 0.3.
   The fitted contrasts were within 15% of one, which the tighter prior covers at one standard deviation.
 
 ### Data
 
+- The model cut-off advances to SitRep 131, 22 September (#885).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
@@ -179,6 +178,8 @@ Changes since v2.1.0.
 - The province forecast evaluation compares last week's forecast with what each province reported, per province and overall (#784).
 - The per-province pair plots add the importation intensity and the export weight (#784).
 - The summary dashboard gives the province comparison as a table with R at the cut-off for every province, and links each section to its estimates and forecast pages (#904).
+- The Methods page describes the cryptic-phase seed $C_T$ the model uses in place of an initial infection count (#903).
+
 ### Fixed
 
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
@@ -191,8 +192,8 @@ Changes since v2.1.0.
 - The docs build fits the headline joint to three datasets it simulates itself and checks it recovers the values and the future that generated them (#882).
   A density check first confirms the simulated data reach the right streams.
   A failing recovery comments on a tracking issue on main and on the pull request.
-- A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30 (#911).
-- `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit.
+- A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30, and a seed fails only when more truths miss their 99% interval than chance allows (#911).
+- `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit (#880).
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
 - A test compares the production joint's log density and gradient with the rules loaded and with the `mooncake_rules` preference off, and property tests check the kernels the rules cover (#856).

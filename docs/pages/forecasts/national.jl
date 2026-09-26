@@ -129,7 +129,7 @@ forecast_beds_fig = plot_forecast_beds(forecast);
 
 forecast_beds_fig #hide
 
-# The flow figure projects the daily isolation/treatment flows a week ahead: new admissions, in-care deaths and rule-outs, each grown from its cut-off daily rate and replicated through the isolation dispersion.
+# The flow figure projects the daily isolation/treatment flows a week ahead: new admissions, in-care deaths and rule-outs, each drawn from the model run past the cut-off through the isolation dispersion.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead treatment-flow forecast plot</summary>

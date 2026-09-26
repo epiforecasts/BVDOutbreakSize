@@ -17,9 +17,9 @@
     centring(n) = [(i == j) - 1 / n for i in 1:n, j in 1:n]
     covariance(F) = matmul(F, permutedims(F))
 
-    ## The construction the patch model used before: `n` per-patch scales,
-    ## an `n × n` correlation factor, then the mean subtracted.
-    old_factor(σ, L) = matmul(centring(length(σ)), matmul(diagm_(σ), L))
+    ## A centred per-patch construction: `n` per-patch scales, an `n × n`
+    ## correlation factor, then the mean subtracted.
+    centred_factor(σ, L) = matmul(centring(length(σ)), matmul(diagm_(σ), L))
 
     ## A Bartlett factor of a `Wishart(ν, I_k)` draw, written out directly.
     function bartlett_draw(rng, k, ν)
@@ -76,14 +76,12 @@ end
     SumToZeroReference,
 ] begin
     ## The exchangeable form has exactly the covariance of `n` independent
-    ## `N(0, σ²)` draws with their mean subtracted, which is what the
-    ## importation and ascertainment deviations were before, with one draw
-    ## fewer.
+    ## `N(0, σ²)` draws with their mean subtracted, from one draw fewer.
     for n in 2:6
         σ = 0.37
         F = sum_to_zero_factor(sum_to_zero_basis(n), σ)
         @test covariance(F) ≈ σ^2 .* centring(n) atol = 1.0e-14
-        old = old_factor(fill(σ, n), diagm_(ones(n)))
+        old = centred_factor(fill(σ, n), diagm_(ones(n)))
         @test covariance(F) ≈ covariance(old) atol = 1.0e-14
         mom = sum_to_zero_moments(F)
         @test all(≈(σ * sqrt((n - 1) / n)), mom.sd)
@@ -148,11 +146,10 @@ end
     @test sum_to_zero_moments(F1).cor == ones(1, 1)
 end
 
-@testitem "sum_to_zero: prior matches the centred construction it replaces" setup = [
+@testitem "sum_to_zero: prior matches a centred per-patch prior" setup = [
     SumToZeroReference,
 ] begin
-    ## Reference check against the construction the patch model used
-    ## before. With `n` per-patch scales `σ_p ~ half-N(0, c)` and an
+    ## With `n` per-patch scales `σ_p ~ half-N(0, c)` and an
     ## `n × n` LKJ correlation, then centred, each patch's deviation has
     ## expected variance `c² (n - 1) / n`. The basis form,
     ## `σ √((n - 1) / tr(A Aᵀ)) Q A` with `σ ~ half-N(0, c)` and
@@ -171,7 +168,7 @@ end
         new_sd = zeros(N, n)
         for d in 1:N
             Lo = rand(rng, LKJCholesky(n, 2.0)).L
-            Fo = old_factor(rand(rng, sd_prior, n), Lo)
+            Fo = centred_factor(rand(rng, sd_prior, n), Lo)
             A = bartlett_draw(rng, n - 1, ν)
             Fn = sum_to_zero_factor(
                 Q, rand(rng, sd_prior) * sqrt((n - 1) / sum(abs2, A)), A
@@ -183,8 +180,8 @@ end
         end
         @test all(isapprox.(old_var, c^2 * (n - 1) / n; rtol = 0.03))
         @test all(isapprox.(new_var, c^2 * (n - 1) / n; rtol = 0.03))
-        ## Every patch has the same mass near zero, and the half-normal
-        ## scale gives it about as much as the old per-patch scales did.
+        ## Every patch has the same mass near zero, and at least a fifth of
+        ## the prior mass.
         near_zero = [mean(new_sd[:, p] .< 0.4 * c) for p in 1:n]
         @test maximum(near_zero) - minimum(near_zero) < 0.015
         @test minimum(near_zero) > 0.2
@@ -305,7 +302,7 @@ end
                 patch_infection_model(60, 4; importation_kernel = kernel4),
             ),
             (
-                "province_composition_model, covariate and severity",
+                "province_composition_model, ascertainment and severity",
                 province_composition_model(
                     obs, modelled;
                     severity_sd_prior = truncated(Normal(0, 0.3); lower = 0)

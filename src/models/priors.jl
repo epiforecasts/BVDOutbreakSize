@@ -374,22 +374,23 @@ full generation interval of differentiable history. The renewal recursion
 `population`. The default is the summed 2019 INS resident population of the
 seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
-The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
+The total outbreak age is `T = m·G + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
 applied to this total `T` at the composer. The renewal start sits a small
 lead after the genetic TMRCA day, past the TMRCA uncertainty where
 sustained transmission is confident, so `τ_obs < tmrca_days` and the
 censored bound `tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays
 informative. It pulls the origin to sit at or before the MRCA, so the
-cryptic duration `m·τ` cannot be too short.
+cryptic duration `m·G` cannot be too short.
 
 The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
 forwarded to the reproduction-number submodel. Returns
-`(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ, R0, r0, r,
-doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`,
-where `r`/`doubling_time` are the current growth derived from the cut-off
-reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
-sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
+`(; infections, cumulative, Rt, g, seed_at_renewal_start, population, m, τ,
+R0, r0, r, doubling_time_initial, T, C_T, C_T_prior, doubling_time,
+seeding_age)`, where `r`/`doubling_time` are the current growth derived from
+the cut-off reproduction number net of depletion ([`adjusted_rt`](@ref))
+through forward Euler–Lotka (so `r` is sign-consistent with that `R_T` by
+construction), `r0` the cryptic rate
 implied by `R0`, and `seeding_age` is diagnostic only.
 
 With `forecast` a [`ForecastHorizon`](@ref) the walk and the renewal run
@@ -1313,27 +1314,6 @@ end
 
 ## --- Patch (multi-population) models -----------------------------------
 
-## One knot of the provincial deviations: the previous knot retained by
-## `φ`, plus innovations that are the scales `σ_δ` times the correlation
-## factor `L` times the standard normals `z[offset + 1 : offset + np]`,
-## centred so the patches sum to zero. Shared by the fitted knots and the
-## knots past the cut-off, so both follow one recursion.
-function _deviation_step!(knots, k, innov, L, σ_δ, z, offset, φ)
-    np = size(knots, 1)
-    @inbounds for i in 1:np
-        acc = zero(eltype(innov))
-        for j in 1:i
-            acc += L[i, j] * z[offset + j]
-        end
-        innov[i] = σ_δ[i] * acc
-    end
-    innov_bar = sum(innov) / np
-    @inbounds for i in 1:np
-        knots[i, k] = φ * knots[i, k - 1] + (innov[i] - innov_bar)
-    end
-    return knots
-end
-
 """
 Reproduction numbers for several spatial patches (Ituri, Nord-Kivu,
 Sud-Kivu): a common national trend plus per-patch deviations that are free
@@ -1868,7 +1848,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         σ_δ = rt_state.σ_δ,
         δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
-        drift_factor = rt_state.drift_factor,
         Rt_national = rt_state.Rt_national,
         g, R0, r0 = r_clock,
         m = growth_state.m, τ = growth_state.τ,

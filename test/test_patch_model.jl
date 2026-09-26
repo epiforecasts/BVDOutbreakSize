@@ -95,7 +95,7 @@ end
     seeds = [1.0 1.0; 0.0 0.0]
     K = [0.0 0.0; 0.1 0.0]   ## K[2, 1]: flow from patch 1 into patch 2
 
-    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    ## A power-of-two pool, so the renewal is exactly undepleted.
     unbounded = fill(2.0^900, 2)
     off = patch_infections(Rt, g, seeds, K, 0.0, unbounded).infections
     @test all(iszero, off[2, :])           ## epsilon = 0: no importation
@@ -136,7 +136,7 @@ end
     ## Very unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
 
-    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    ## A power-of-two pool, so the renewal is exactly undepleted.
     unbounded = fill(2.0^900, 3)
     st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0, unbounded)
     total = vec(sum(st.infections; dims = 1))
@@ -189,7 +189,7 @@ end
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = province_importation_kernel()
 
-    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    ## A power-of-two pool, so the renewal is exactly undepleted.
     unbounded = fill(2.0^900, 3)
     off = patch_infections(Rt, g, seeds, K, 0.0, unbounded).infections
     on = patch_infections(Rt, g, seeds, K, 0.01, unbounded).infections
@@ -233,7 +233,7 @@ end
     R1, R2 = 1.8, 0.6
     Rt = [fill(R1, n)'; fill(R2, n)']
     seeds = [5.0 5.0; 1.0 1.0]
-    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    ## A power-of-two pool, so the renewal is exactly undepleted.
     unbounded = fill(2.0^900, 2)
     I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0, unbounded).infections
     total = vec(sum(I; dims = 1))
@@ -857,9 +857,7 @@ end
 
     ## The deviations sum to zero and nothing rescales the provinces, so
     ## before depletion the unweighted geometric mean of the provincial Rt is
-    ## the central trend exactly. That is the whole construction, and it is
-    ## what makes the grey reference in the figure readable against the
-    ## panels. Each province is then scaled by its own susceptible fraction.
+    ## the central trend exactly. Each province is then scaled by its own susceptible fraction.
     nat = BVDOutbreakSize._reconstruct_rt_walk(
         chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
@@ -941,7 +939,7 @@ end
             [seed_infections(s * seed0, r, L)' for s in shares]
         )
         Rt = reduce(vcat, [(mu .* exp(scale * d))' for d in base])
-        ## A pool so large the renewal is undepleted, exactly so as a power of two.
+        ## A power-of-two pool, so the renewal is exactly undepleted.
         unbounded = fill(2.0^900, 3)
         st = patch_infections(
             Rt, g, seeds,
@@ -1123,7 +1121,7 @@ end
         seeds = zeros(3, rt_start)
         seeds[1, :] = seed_infections(seed0, r, rt_start)
         seeds[2, :] = seed_infections(frac * seed0, r, rt_start)
-        ## A pool so large the renewal is undepleted, exactly so as a power of two.
+        ## A power-of-two pool, so the renewal is exactly undepleted.
         unbounded = fill(2.0^900, 3)
         I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0, unbounded).infections
         a, b = sum(I[1, :]), sum(I[2, :])
@@ -1431,7 +1429,7 @@ end
     seeds = [50.0 50.0; 4.0 4.0; 1.0 1.0]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     eps = 0.02
-    ## A pool so large the renewal is undepleted, exactly so as a power of two.
+    ## A power-of-two pool, so the renewal is exactly undepleted.
     unbounded = fill(2.0^900, 3)
     st = patch_infections(Rt, g, seeds, K, eps, unbounded)
 

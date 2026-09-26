@@ -159,18 +159,7 @@ fit_spec(id, model, sample) = (;
     id, kind = :chain, model, thunk = () -> sample(model()),
 )
 
-"""
-    build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 500, chains = 2)
-
-Ordered list of the report's fits as `(; id, kind, model, thunk)` named
-tuples. `kind` is `:chain` for the headline joint and single-stream fits or
-`:frozen` for the frozen/validation joints (whose thunk returns
-`(; cutoff, o, chn)`). `model` builds the model the thunk samples, which the
-forecasts run past the cut-off. The two re-fits appended only when
-`run_sensitivity` is true are not forecast and carry no `model`.
-"""
-## Sampler settings for the headline and its spatial control.
+## Sampler settings for the fits in `JOINT_SAMPLER_FITS`.
 ##
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
 ## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
@@ -208,6 +197,17 @@ joint_sampler_args() = (;
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
+"""
+    build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
+                    run_sensitivity, samples = 500, chains = 2)
+
+Ordered list of the report's fits as `(; id, kind, model, thunk)` named
+tuples. `kind` is `:chain` for the headline joint and single-stream fits or
+`:frozen` for the frozen/validation joints (whose thunk returns
+`(; cutoff, o, chn)`). `model` builds the model the thunk samples, which the
+forecasts run past the cut-off. The two re-fits appended only when
+`run_sensitivity` is true are not forecast and carry no `model`.
+"""
 function build_fit_specs(
         obs;
         breakpoint = default_breakpoint(obs),

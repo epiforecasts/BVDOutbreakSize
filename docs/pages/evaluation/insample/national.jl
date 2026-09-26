@@ -670,7 +670,7 @@ stream_pairs_fig #hide
 # Whether the model recovers known values when fitted to data it simulated itself.
 # Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
 # The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
-# The growth rate is shown as the ratio of daily growth factors, `exp(r - r_true)`.
+# The growth rate is shown as the ratio of daily growth factors, $\exp(r - r_{\text{true}})$.
 # Below, each quantity is on its own scale: the prior in grey, each seed's posterior in its colour and its true value as a dashed line in the same colour.
 # The prior is the fitted model's, before the factor-of-five selection of the truths.
 # The forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
@@ -751,6 +751,7 @@ recovery_national_display #hide
 #md # </details>
 #md # ```
 
+#md # ```@raw html
 #md # <details><summary>Forecasts from the recovery fits</summary>
 #md # ```
 
@@ -763,7 +764,8 @@ recovery_forecasts = isempty(recovery.forecasts) ? DataFrame() :
     ];
 
 recovery_forecasts_display = isempty(recovery_forecasts) ?
-    Markdown.parse("No recovery forecast is available for this build.") : MarkdownTable(recovery_forecasts);
+    Markdown.parse("No recovery forecast is available for this build.") :
+    MarkdownTable(recovery_forecasts);
 
 #md # ```@raw html
 #md # </details>
