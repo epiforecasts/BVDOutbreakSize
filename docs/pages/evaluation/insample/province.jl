@@ -421,6 +421,7 @@ province_recovery_results = recovery_results()
 _recovery_short = [
     "C_T_patch" => "C_T", "R_T_patch" => "R_T", "CFR_patch" => "CFR",
     "province_ascertainment" => "ascertainment",
+    "region_drift_sd" => "drift SD",
 ]
 province_recovery_quantities = [
     "$(k)[$(p)]" for (k, _) in _recovery_short for p in PROVINCE_LABELS
