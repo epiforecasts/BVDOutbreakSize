@@ -1311,7 +1311,7 @@ end
     ## change leaves the parameter set identical and only breaks the read.
     for q in (
             "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
-            "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
+            "rt_state.intervention_effect", "gi_state.gi_mean", "gi_state.gi_sd",
             "inc_state.delay_mean", "inc_state.delay_sd",
             "cases_state.report_state.α", "cases_state.report_state.θ",
             "confirmed_state.receipt_state.d.delay_mean",

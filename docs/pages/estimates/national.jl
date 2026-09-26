@@ -377,7 +377,7 @@ infection_pair_fig #hide
 infection_delay_summary = summary_table(
     chn_joint,
     [
-        Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("gi_state.gi_mean"), Symbol("gi_state.gi_sd"),
         Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd"),
     ];
     digits = 2, labels = display_names
@@ -404,7 +404,7 @@ infection_delay_summary #hide
 infection_delay_pair_fig = plot_pair(
     chn_joint,
     [
-        Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("gi_state.gi_mean"), Symbol("gi_state.gi_sd"),
         Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd"),
     ];
     prior = prior_chn, labels = display_names

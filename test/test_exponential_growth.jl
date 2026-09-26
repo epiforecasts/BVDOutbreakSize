@@ -80,21 +80,46 @@ end
     @test 0.05 < mean(r) < 0.08
     ## `r` is LogNormal, so `log r` pins both the centre and the spread
     ## directly. The centre is log(log 2 / 11.7) ≈ -2.826 and the log-SD is
-    ## 0.40. At 4000 draws the standard error on each is under 0.007, so
+    ## 0.30. At 4000 draws the standard error on each is under 0.007, so
     ## these bounds hold the prior to the documented values rather than
     ## merely to the right order of magnitude.
     @test -2.86 < mean(log.(r)) < -2.79
-    @test 0.37 < std(log.(r)) < 0.43
-    ## The induced doubling time τ = log 2 / r is LogNormal(log 11.7, 0.40),
-    ## a 95% interval of 5.3-25.6 d. This is the interval the analysis text
+    @test 0.28 < std(log.(r)) < 0.32
+    ## The induced doubling time τ = log 2 / r is LogNormal(log 11.7, 0.30),
+    ## a 95% interval of 6.5-21.1 d. This is the interval the analysis text
     ## quotes, so it is guarded here.
     τ = log(2) ./ r
-    @test 4.9 < quantile(τ, 0.025) < 5.8
-    @test 23.6 < quantile(τ, 0.975) < 27.8
+    @test 6.1 < quantile(τ, 0.025) < 6.9
+    @test 19.8 < quantile(τ, 0.975) < 22.4
     ## The cryptic duration T = m·G is `m`'s own spread scaled by the fixed
     ## generation interval, and carries none of `r`'s.
     @test isapprox(std(T), std(m) * G_true; rtol = 1.0e-8)
     @test std(T) > 4.0
+end
+
+@testitem "exponential_growth_model: the prior seed tail stays below 1,000 a day" begin
+    using Turing: @model, to_submodel, sample, Prior
+    import FlexiChains
+    using Distributions: Gamma, quantile
+    using Random: Xoshiro
+    using BVDOutbreakSize: exponential_growth_model, generation_interval_model,
+        cdf_nmax
+
+    ## The renewal-start seed `C_T = exp(r·m·G)` under the joint's growth
+    ## and generation-interval priors. Its 99th percentile was about 2,000
+    ## infections a day at a growth-rate log-SD of 0.40 (#926).
+    @model function _wrap()
+        gi ~ to_submodel(generation_interval_model(cdf_nmax(Gamma(2.71, 5.65))))
+        st ~ to_submodel(exponential_growth_model(gi.g))
+        return st
+    end
+    chn = sample(
+        Xoshiro(20260926), _wrap(), Prior(), 4000;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    seed = vec(Array(chn[Symbol("st.C_T")]))
+    @test quantile(seed, 0.5) < 20
+    @test quantile(seed, 0.99) < 1000
 end
 
 @testitem "infection_model: two-phase renewal-start seeding" tags = [:slow] begin
