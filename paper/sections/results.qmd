@@ -36,7 +36,7 @@ The forecast made at the previous release gave {{< meta forecast_validation_conf
 The reports carried {{< meta observed_confirmed_cases_validation_week >}} cases and {{< meta observed_confirmed_deaths_validation_week >}} deaths over that week, so both streams fell below the 90% interval of the forecast (@fig-current D).
 
 The release before the one analysed did not converge and was published with a convergence warning.
-Convergence was restored at the next release, and the released median stayed inside the interval of the release that failed (@fig-journey C). <!-- VERIFY: agent-only account; news v2.0.0 note and PR 745; the release was published with the failure unnoticed and the CI convergence gate followed -->
+Convergence was restored at the next release, and the released median stayed inside the interval of the release that failed (@fig-journey C). <!-- news v2.0.0 convergence warning; PR 745 (runs 35130675748 and 35133911610); the CI convergence gate followed in PR 764 -->
 
 ### Estimate evolution across releases
 
@@ -67,7 +67,7 @@ The frozen joint in (C) carries no median and has no fit at the first cut-off.](
 The joint one-week-ahead forecast scored worse than persistence on most stream-release pairs, beating the baseline on {{< meta skill_pairs_beat >}} of {{< meta skill_pairs_total >}} pairs overall and on {{< meta skill_pairs_beat_live >}} of {{< meta skill_pairs_total_live >}} at the live releases (@fig-evaluation A).
 By stream it beat persistence on {{< meta skill_confirmed_cases >}} releases for confirmed cases, {{< meta skill_confirmed_deaths >}} for confirmed deaths, {{< meta skill_isolation_beds >}} for isolation beds, {{< meta skill_onset_reports >}} for onset reports and {{< meta skill_recovered >}} for recovered.
 The 90% interval of the joint forecast covered {{< meta coverage90_covered >}} of {{< meta coverage90_total >}} observations (@fig-evaluation A).
-Every scored forecast predates the correction of the forecast defects reported in the Discussion, so the intervals scored here are wider than the model now produces. <!-- VERIFY: data/forecast_scores.csv was last refreshed in PR 637 -->
+Every scored forecast predates the correction of the forecast defects reported in the Discussion, so the intervals scored here are wider than the model now produces. <!-- data/forecast_scores.csv was last changed in PR 637 (git log on main) -->
 
 ### Comparison with single-stream fits and published estimates
 
