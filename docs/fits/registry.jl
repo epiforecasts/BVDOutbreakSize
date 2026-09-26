@@ -198,6 +198,49 @@ joint_sampler_args() = (;
 )
 
 """
+Keyword arguments of the headline joint fit for `obs`, with `overrides`
+merged over them. The headline and every sensitivity re-fit of it are built
+from this, so a re-fit differs from the headline only in its overrides.
+"""
+function headline_joint_args(
+        obs; breakpoint = default_breakpoint(obs), overrides...
+    )
+    return merge(
+        joint_fit_args(obs; breakpoint), patch_fit_args(obs),
+        values(overrides)
+    )
+end
+
+"""
+The keywords each sensitivity re-fit overrides on the headline joint, as a
+`NamedTuple` keyed by fit id.
+"""
+function sensitivity_overrides(obs)
+    ## Community-pathway onset-to-death delay (Isiro 2012 line-list
+    ## reanalysis).
+    function deaths_community_delay(history, total, onsets, k; kwargs...)
+        return deaths_model(
+            history, total, onsets, k;
+            onset_to_death = gamma_delay_model(
+                40;
+                alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
+                theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)
+            ),
+            kwargs...
+        )
+    end
+    ## Exponential growth tree prior: common ancestor ~7 days earlier than
+    ## the Skygrid baseline (2026-03-08 vs 2026-03-15).
+    clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
+    return (;
+        sens_community_delay = (; deaths = deaths_community_delay),
+        sens_exp_growth_clock = (;
+            tmrca_days = obs.tmrca_days - clock_alt_offset,
+        ),
+    )
+end
+
+"""
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
                     run_sensitivity, samples = 500, chains = 2)
 
@@ -349,71 +392,22 @@ function build_fit_specs(
         return (; cutoff = f.o.cutoff, f.o, chn)
     end
 
-    ## One joint re-fit on the live data, with hooks to override the deaths
-    ## submodel and the molecular-clock bound for the sensitivity analyses.
-    function refit_joint_variant(;
-            deaths = deaths_model,
-            confirmed = confirmed_cases_model,
-            tmrca_days = obs.tmrca_days, tmrca_days_sd = 16.0
-        )
+    ## One re-fit of the headline joint on the live data with the keywords
+    ## `sensitivity_overrides` gives fit `id` replaced.
+    function refit_joint_variant(id)
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
                 obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
                 obs.tests_analysed;
-                confirmed_deaths = obs.confirmed_deaths,
-                recovered_cases = obs.recovered_cases,
-                deaths_history = obs.deaths_history,
-                reported_history = obs.reported_history,
-                confirmed_history = obs.confirmed_history,
-                confirmed_deaths_history = obs.confirmed_deaths_history,
-                lab_history = obs.lab_history,
-                lab_daily_history = obs.lab_daily_history,
-                suspected_daily_history = obs.suspected_daily_history,
-                suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                isolation_history = obs.isolation_history,
-                bed_capacity_history = obs.bed_capacity_history,
-                recovered_history = obs.recovered_history,
-                treatment_admissions_history = obs.treatment_admissions_history,
-                treatment_deaths_history = obs.treatment_deaths_history,
-                treatment_ruleout_history = obs.treatment_ruleout_history,
-                treatment_absconded_history = obs.treatment_absconded_history,
-                occupancy_break_days = obs.occupancy_break_days,
-                confirmed_break_days = obs.confirmed_break_days,
-                confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
-                confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
-                export_case_days = obs.export_case_days,
-                export_death_days = obs.export_death_days,
-                onset_curve_history = obs.onset_curve_history,
-                breakpoint = breakpoint,
-                background_pooling = background_pooling_model,
-                deaths = deaths,
-                confirmed = confirmed,
-                genetic = genetic_seeding_model,
-                tmrca_days = tmrca_days,
-                tmrca_days_sd = tmrca_days_sd
+                headline_joint_args(
+                    obs; breakpoint, sensitivity_overrides(obs)[Symbol(id)]...
+                )...
             );
             joint_sampler_args()..., chains = chains,
-            callback = fit_callback("variant")
+            callback = fit_callback(id)
         )
     end
-
-    ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
-    deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
-        history, total, onsets, k;
-        onset_to_death = gamma_delay_model(
-            40;
-            alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-            theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)
-        ),
-        kwargs...
-    )
-
-    ## Exponential growth tree prior: common ancestor ~7 days earlier than
-    ## the Skygrid baseline (2026-03-08 vs 2026-03-15).
-    clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
-    tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
@@ -430,9 +424,6 @@ function build_fit_specs(
     ## reaches.
     joint_common = joint_fit_args(obs; breakpoint = breakpoint)
 
-    ## The only difference between the headline and the control.
-    patch_only = patch_fit_args(obs)
-
     specs = Any[
         ## Headline fit. The patch (meta-population) model is the joint. With
         ## `n_patches = 1` it collapses exactly onto the single-population
@@ -445,7 +436,7 @@ function build_fit_specs(
                 obs.n, obs.exported_cases, obs.total_deaths,
                 obs.reported_cases, obs.exports_deaths,
                 obs.confirmed_cases, obs.tests_analysed;
-                joint_common..., patch_only...
+                headline_joint_args(obs; breakpoint)...
             ),
             m -> nuts_sample(
                 m;
@@ -644,16 +635,13 @@ function build_fit_specs(
     if run_sensitivity
         push!(
             specs,
-            (;
-                id = "sens_community_delay", kind = :chain,
-                thunk = () -> refit_joint_variant(deaths = deaths_community_delay),
-            ),
-            (;
-                id = "sens_exp_growth_clock", kind = :chain,
-                thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0
-                ),
-            )
+            (
+                (;
+                    id, kind = :chain,
+                    thunk = () -> refit_joint_variant(id),
+                )
+                    for id in string.(keys(sensitivity_overrides(obs)))
+            )...
         )
     end
     return specs

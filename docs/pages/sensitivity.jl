@@ -962,7 +962,8 @@ chamla_rt_fig #hide
 # We re-fit the joint model under the community-pathway delay from the same reanalysis: the delay for deaths that occur in the community without a recorded admission.
 # This delay is shorter (implied mean about 8 d).
 # Both pathways come from the line list, so this varies the actual delay assumption rather than an arbitrary scenario.
-# The re-fit uses the full headline settings: 1000 draws across two chains.
+# The re-fit is the headline model, with its provinces and in-care split, and changes only the delay.
+# It uses the headline's sampler settings.
 #
 # The infection count to date shifts with the assumed delay, and the table and overlaid densities below show how far.
 
@@ -1021,6 +1022,7 @@ delay_sensitivity_fig #hide
 # The report also fits an Exponential growth tree prior, which dates the common ancestor about a week earlier to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr) [mbalaplacide2026](@cite).
 # Both priors give similar evolutionary rates ($\sim 1.1\times10^{-3}$ subs/site/year).
 # We re-fit the joint model under the Exponential growth TMRCA and compare the infection count to date and the outbreak age.
+# As for the delay, the re-fit is the headline model with only the common-ancestor date changed.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
