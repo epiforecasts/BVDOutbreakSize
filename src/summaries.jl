@@ -909,8 +909,9 @@ end
 """
 Per-province isolation beds at the cut-off, from the province occupancy and
 bed splits in [`treatment_flow_model`](@ref): one row per province with
-the modelled bed count, the latent bed demand, the occupied beds (demand
-capped at the beds), the utilisation and the shortfall, each a median with
+the modelled bed count, the latent bed demand, the occupied beds (the
+national occupancy split on the demand shares), the utilisation and the
+demand above the beds, each a median with
 a 90% credible interval. Expects a chain from [`bvd_joint`](@ref) with
 more than one patch, which stores these as the vector deterministics
 `province_bed_capacity`, `province_bed_demand`,
@@ -944,7 +945,7 @@ function province_bed_table(
         "Bed demand" => String[],
         "Occupied beds" => String[],
         "Utilisation (%)" => String[],
-        "Shortfall" => String[]
+        "Demand above beds" => String[]
     )
     for p in 1:np
         push!(

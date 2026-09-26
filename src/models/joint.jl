@@ -99,10 +99,8 @@ through the likelihood the fitted days are scored with. The occupancy is
 the censored negative binomial around the modelled demand plus the
 reclassification offset. Its cap is the modelled bed capacity, which the
 capacity walk carries past the cut-off, floored at the last fitted cap
-([`censoring_cap`](@ref)). Admissions are censored at the free-bed headroom,
-that cap less the previous day's occupancy: the last recorded occupancy on
-the first day, then the drawn one ([`admission_headroom`](@ref)). In-care
-deaths and rule-outs are daily negative binomials. The latent bed demand and
+([`censoring_cap`](@ref)). Admissions, in-care deaths and rule-outs are
+daily negative binomials. The latent bed demand and
 capacity are tracked alongside. With no recorded capacity or occupancy the
 fitted days are uncensored, and so are the future ones.
 """
@@ -126,19 +124,8 @@ fitted days are uncensored, and so are the future ones.
     forecast_isolation ~ to_submodel(
         censored_occupancy_model(occupancy, ceilings, missing, k)
     )
-    occ = forecast_isolation.obs
-    head = if have_cap && have_occ
-        prev = vcat(
-            float(isolation_history.counts[end]),
-            [float(occ[j]) for j in 1:(length(fd) - 1)]
-        )
-        max.(ceilings .- prev, 0.5)
-    else
-        fill(nocap, length(fd))
-    end
-    admissions = state.admit_daily[fd]
     forecast_admissions ~ to_submodel(
-        censored_occupancy_model(admissions, head, missing, k)
+        _forecast_counts(state.admit_daily, fd, k)
     )
     forecast_incare_deaths ~ to_submodel(
         _forecast_counts(state.deaths_daily, fd, k)
@@ -149,7 +136,8 @@ fitted days are uncensored, and so are the future ones.
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := state.C[fd]
     return (;
-        isolation = occupancy, admissions, occupancy = occ,
+        isolation = occupancy, admissions = state.admit_daily[fd],
+        occupancy = forecast_isolation.obs,
         incare_deaths = state.deaths_daily[fd],
         ruleouts = state.ruleout_daily[fd],
     )
@@ -1539,19 +1527,18 @@ density there, is the fitted model's.
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     if n_patches > 1 && size(treatment_state.capacity_patch, 1) == n_patches
-        ## Cut-off beds, demand and censored occupancy by patch, from the
-        ## province splits of the isolation stream. Present only when a
-        ## province split scored them.
+        ## Cut-off beds, demand and occupancy by patch, from the province
+        ## splits of the isolation stream. The occupancy is the national one
+        ## split on the demand shares, as the split likelihood scores it.
+        ## Present only when a province split scored them.
         province_bed_capacity := treatment_state.capacity_patch[:, n]
         province_bed_demand := treatment_state.demand_patch[:, n]
-        province_expected_isolation := min.(
-            treatment_state.demand_patch[:, n],
+        occupied_patch = treatment_state.expected_isolation .*
+            treatment_state.demand_patch[:, n] ./
+            sum(treatment_state.demand_patch[:, n])
+        province_expected_isolation := occupied_patch
+        province_bed_utilisation := occupied_patch ./
             treatment_state.capacity_patch[:, n]
-        )
-        province_bed_utilisation := min.(
-            treatment_state.demand_patch[:, n],
-            treatment_state.capacity_patch[:, n]
-        ) ./ treatment_state.capacity_patch[:, n]
         province_bed_shortfall := max.(
             treatment_state.demand_patch[:, n] .-
                 treatment_state.capacity_patch[:, n],
@@ -1641,10 +1628,7 @@ density there, is the fitted model's.
     onset_ascertainment := onset_report_state.alpha
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
-    bed_shortfall_T := safe_rate(
-        treatment_state.expected_bed_demand -
-            treatment_state.expected_isolation
-    )
+    bed_shortfall_T := treatment_state.bed_shortfall
     ## Cut-off occupancy split, the confirmed-in-care and suspect-in-care
     ## sub-stock prevalences carved from the occupied true-case stock by the
     ## confirmation overlay.

@@ -228,7 +228,7 @@ end
             "forecast_confirmed.increments",
             "forecast_confirmed_deaths.increments",
             "forecast_recovered.increments", "forecast_isolation.obs",
-            "forecast_admissions.obs", "forecast_incare_deaths.increments",
+            "forecast_admissions.increments", "forecast_incare_deaths.increments",
             "forecast_ruleouts.increments", "forecast_infections",
             "forecast_onsets", "forecast_rt",
         )

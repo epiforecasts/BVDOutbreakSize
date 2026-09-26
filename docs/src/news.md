@@ -187,6 +187,9 @@ Changes since v2.1.0.
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 - `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 - The delay and tree-prior sensitivity re-fits are built from the headline's keywords, so they keep its provinces and in-care split and differ from it only in the delay or the common-ancestor date (#916).
+- Admissions are a plain negative binomial in the fit, its predictive checks and the forecast, dropping a free-bed headroom censor that never bound a fitted day but capped the forecast (#918).
+- The cut-off occupancy is on the reported scale, the demand plus the reclassification offset, and the bed shortfall is the demand above the modelled capacity (#640).
+- Province occupied beds are the national occupancy split on the demand shares, as the split likelihood and the forecast use, rather than the demand capped at the printed beds (#920).
 
 ### Infrastructure
 

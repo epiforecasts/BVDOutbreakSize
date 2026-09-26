@@ -231,7 +231,7 @@ end
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
 end
 
-@testitem "province_bed_table: beds, demand and shortfall by province" tags = [
+@testitem "province_bed_table: beds, demand and occupancy by province" tags = [
     :slow,
 ] begin
     using BVDOutbreakSize
@@ -266,7 +266,7 @@ end
     @test nrow(df) == np
     @test names(df) == [
         "Province", "Beds", "Bed demand", "Occupied beds",
-        "Utilisation (%)", "Shortfall",
+        "Utilisation (%)", "Demand above beds",
     ]
     @test df.Province == collect(PROVINCE_LABELS[1:np])
     ## Every cell is a median with an interval.
