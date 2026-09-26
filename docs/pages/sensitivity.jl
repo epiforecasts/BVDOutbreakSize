@@ -1374,20 +1374,19 @@ frozen_contrast_fig #hide
 #
 # ### Spatial structure sensitivity
 #
-# The headline runs the model over the three affected provinces.
-# Reducing it to a single province collapses it onto one well-mixed
+# The headline runs the model over four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling the other affected provinces.
+# Reducing it to a single patch collapses it onto one well-mixed
 # population, which is the model the earlier releases used.
-# The spatial section of the analysis page describes what the provinces add.
+# The model overview on the methods page describes what the provinces add.
 #
 # Splitting the country into provinces adds no national data, so the national
 # outbreak size should not move far either way.
 # The two are not identical by construction: the provinces run free and the
 # country grows at the force-weighted mean of their reproduction numbers,
-# which sits above the central trend they pool toward. That gap is second
+# which sits above the central trend they pool toward. That gap is first
 # order in the deviation scale.
 # A large gap between the two posteriors below would therefore point at the
-# deviation priors rather than at the data, and the headline should not be
-# read from the meta-population fit until such a gap is explained.
+# deviation priors rather than at the data.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
