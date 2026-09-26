@@ -1253,7 +1253,7 @@ cfr_prior_fig #hide
 #
 # $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
-# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ (defined with the laboratory composition below) with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
+# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ (defined with the laboratory composition below) with its own log-ratios $\ell^{\text{cap}}_p \sim \mathrm{Normal}(0,\ 2.5)$.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
@@ -1866,14 +1866,17 @@ cfr_prior_fig #hide
 # The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\ell^{\text{bg}}_p),
 # \qquad
-# z^{\text{bg}}_1 = 0,
+# \ell^{\text{bg}}_1 = 0,
 # \qquad
-# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
-# \qquad
-# \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
+# \ell^{\text{bg}}_p \sim \mathrm{Normal}(0,\ 2.5).
 # ```
+#
+# The log-ratios take a fixed scale rather than a pooling scale.
+# Ituri holds over half the specimens analysed and about three quarters of the beds from 15% of the population, so both simplices sit several units from their population centre and the data pin each log-ratio.
+# A scale pooled over three such log-ratios is barely identified, and in the fits it traded off against them along a ridge that slowed mixing.
+# A standard deviation of 2.5 places every observed share within two prior standard deviations of its centre.
 #
 # The laboratory composition identifies it, since the background dominates the specimens analysed where positivity is low, and the same split feeds each patch's non-BVD admissions in the treatment-centre flow.
 

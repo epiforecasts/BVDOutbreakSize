@@ -1073,7 +1073,7 @@ A third composition scores the per-province analysed-specimen volume
 conditional on the national total in each laboratory bin. The modelled
 split is each patch's BVD suspects (its onsets through the
 onset-to-confirmation kernel, thinned by `p_drc`) plus its share of the
-non-BVD background, the share a partially pooled simplex
+non-BVD background, the share a simplex
 ([`background_split_model`](@ref)) carries and this term identifies.
 The BVD suspects carry the case composition's
 relative ascertainment, so the two compositions agree on how many of a
@@ -1309,7 +1309,6 @@ density there, is the fitted model's.
     ## patch takes the whole background and samples nothing.
     bg_split_state ~ to_submodel(background_split(n_patches))
     province_background_split := bg_split_state.w
-    province_background_split_sd := bg_split_state.pooling_sd
 
     ## The anchor stops at the cut-off, so a longer grid leaves the fitted
     ## ascertainment where it was.
