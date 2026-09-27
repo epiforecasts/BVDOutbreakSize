@@ -764,6 +764,78 @@ end
         sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
 end
 
+@testitem "onset_report_hazard_model: the hazard level lives in η0" begin
+    ## The delay deviations sum to zero and the calendar walk has mean zero,
+    ## so `η0` is the mean logit hazard over delays and report days.
+    using BVDOutbreakSize: onset_report_hazard_model
+    using Turing: @varname
+    using Random: seed!, Xoshiro
+    using Statistics: mean
+
+    model = onset_report_hazard_model(1, 60; D = 12)
+    @test length(rand(Xoshiro(1), model)[@varname(z_h0)]) == 11
+    seed!(20260926)
+    for _ in 1:5
+        out = model()
+        @test length(out.logit_h0) == 12
+        @test mean(out.logit_h0) ≈ out.η0
+        @test abs(mean(out.γ)) < 1.0e-12
+    end
+end
+
+@testitem "onset_reporting_model: the calendar walk starts a delay support before the first report" begin
+    ## Report days start more than D days after the first onset day, so the
+    ## walk is sampled from one delay support before the first report day
+    ## and held at its first value back to the first onset day.
+    using BVDOutbreakSize: BVDOutbreakSize, onsets_only_model,
+        fitted_onset_hazard, onset_report_expected_total,
+        ONSET_REPORT_MAX_DELAY
+    using Turing: Prior, sample, returned
+    using Statistics: mean
+    import FlexiChains
+
+    oc = (;
+        onset_days = [1, 2, 3, 4, 1, 2, 3, 4, 5],
+        report_days = [50, 50, 50, 50, 55, 55, 55, 55, 55],
+        prev_report_days = [0, 0, 0, 0, 50, 50, 50, 50, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 80
+    D = ONSET_REPORT_MAX_DELAY
+    grid_end = maximum(oc.report_days)
+    walk_start = minimum(oc.report_days) - D + 1
+    @test BVDOutbreakSize._onset_hazard_grid_start(
+        oc.onset_days, oc.report_days, D
+    ) == walk_start
+
+    m = onsets_only_model(n; onset_curve_history = oc)
+    chn = sample(
+        m, Prior(), 5; chain_type = FlexiChains.VNChain, progress = false
+    )
+    states = [r.onset_report_state for r in vec(returned(m, chn))]
+    @test all(st.grid_start == 1 for st in states)
+
+    hz = fitted_onset_hazard(m, chn)
+    k0 = walk_start - 1
+    for g in hz.γ
+        @test length(g) == grid_end
+        @test all(==(g[k0 + 1]), g[1:k0])
+        @test abs(mean(g[(k0 + 1):end])) < 1.0e-12
+    end
+
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
+    et = vec(Array(chn[:expected_onset_reported_T]))
+    rebuilt = [
+        onset_report_expected_total(
+            daily[i], hz.logit_h0[i], hz.γ[i], 1, hz.alpha[i], n
+        ) for i in 1:5
+    ]
+    @test rebuilt ≈ et
+end
+
 @testitem "safe_studentt stays valid under extreme scale/df" begin
     using BVDOutbreakSize: safe_studentt
     using Distributions: mean, std, logpdf

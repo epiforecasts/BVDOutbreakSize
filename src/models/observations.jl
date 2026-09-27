@@ -3667,23 +3667,34 @@ Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
-    partially-pooled non-centred random effect over delay:
+    partially-pooled non-centred random effect over delay whose deviations
+    sum to zero, drawn on the `D - 1` directions of
+    [`sum_to_zero_basis`](@ref) `Q`:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
-    z_{h0,d} \\sim \\mathcal N(0,1), \\quad
-    \\text{logit\\_h0}(d) = \\eta_0 + \\sigma_{h0} z_{h0,d};
+    z_{h0} \\sim \\mathcal N(0, I_{D-1}), \\quad
+    \\text{logit\\_h0} = \\eta_0 + \\sigma_{h0} Q z_{h0};
     ```
   - a calendar-time random walk on report date, weekly knots linearly
     interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
-    cumulative-sum walk, same construction):
+    cumulative-sum walk, same construction), then centred on its mean
+    over the grid:
     ```math
     \\sigma_\\gamma \\sim \\text{walk\\_sigma\\_prior}, \\quad
     z_{\\gamma,k} \\sim \\mathcal N(0,1), \\quad
-    \\gamma_{\\text{knot},1} = 0, \\
-    \\gamma_{\\text{knot},k+1} = \\gamma_{\\text{knot},k} +
-        \\sigma_\\gamma z_{\\gamma,k}.
+    w_{\\text{knot},1} = 0, \\
+    w_{\\text{knot},k+1} = w_{\\text{knot},k} + \\sigma_\\gamma z_{\\gamma,k},
+    \\quad \\gamma = w - \\bar w.
     ```
+
+Both constraints fix where the hazard's level lives, so `η0` is the mean
+logit hazard across delays and across the report days the walk spans. Left
+free, the level trades against the mean of the delay deviations, which the
+likelihood cannot see at all, and against a shift of the whole walk, which
+it barely sees. Neither constraint changes the family of hazards the model
+can express. `Q z` has the distribution of `D` independent standard normals
+centred on their mean, so the delay prior stays exchangeable.
 
 The walk is indexed on the report-date grid `[grid_start, grid_end]`, not
 the onset/infection-date axis [`rt_walk_model`](@ref) already carries a
@@ -3707,8 +3718,8 @@ increments the estimate rests on).
 scored triangle can show is reachable rather than extreme. A 14% shift in
 a snapshot's printed level needs a calendar shift of roughly `0.32` at
 delay 8 and `0.58` at delay 12 on the logit hazard, holding the baseline at
-its prior median, and after the six weekly knots the scored window spans
-`γ` has SD `E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays
+its prior median, and six weekly steps of the walk have SD
+`E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays
 concentrated at zero, so a flat reporting profile is the default the data
 has to argue away from. Widening it further risks the walk explaining
 recent onset-date structure that belongs to `R_t`, so any change here
@@ -3728,8 +3739,8 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     )
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
-    z_h0 ~ product_distribution(fill(Normal(0, 1), D))
-    logit_h0 = η0 .+ σ_h0 .* z_h0
+    z_h0 ~ product_distribution(fill(Normal(0, 1), max(D - 1, 1)))
+    logit_h0 = η0 .+ σ_h0 .* (sum_to_zero_basis(D) * z_h0[1:(D - 1)])
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.
@@ -3740,7 +3751,8 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     z_γ ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     steps = σ_γ .* z_γ[1:max(nb - 1, 0)]
     γ_knots = vcat(zero(σ_γ), cumsum(steps))
-    γ = interpolate_knots(γ_knots, days, nt)
+    w = interpolate_knots(γ_knots, days, nt)
+    γ = w .- mean(w)
 
     return (; logit_h0, γ, grid_start = Int(grid_start), η0, σ_h0, σ_γ)
 end
@@ -3790,6 +3802,30 @@ max(grid_end - grid_start + 1, 1)`.
     ω = interpolate_knots(ω_knots, days, nt)
     alpha = onset_report_ascertainment(anchor_series, β, ω)
     return (; alpha, β, σ_a, z_a, ω)
+end
+
+## Report day the reporting hazard's calendar walk starts from: one delay
+## support before the earliest report day, bounded below by the earliest
+## scored onset date and by grid day 1. Returns `1` for an empty history.
+function _onset_hazard_grid_start(
+        onset_days::AbstractVector{<:Integer},
+        report_days::AbstractVector{<:Integer}, D::Integer
+    )
+    isempty(onset_days) && return 1
+    return max(minimum(onset_days), minimum(report_days) - Int(D) + 1, 1)
+end
+
+## The calendar walk `γ`, indexed from report day `walk_start`, re-indexed
+## onto `grid_start:grid_end`. A day before the walk reads its first value
+## and a day after it its last, the clamp every hazard kernel applies.
+function _onset_walk_on_grid(
+        γ::AbstractVector, walk_start::Integer, grid_start::Integer,
+        grid_end::Integer
+    )
+    idx = clamp.(
+        (Int(grid_start):Int(grid_end)) .- Int(walk_start) .+ 1, 1, length(γ)
+    )
+    return γ[idx]
 end
 
 """
@@ -3850,6 +3886,12 @@ been checked. All three act on overlapping calendar windows and are least
 constrained over the final fortnight, so any change here should report
 `R_t` over the final fortnight and `C_T` either side.
 
+The calendar walk `γ` is sampled from one delay support before the
+earliest report day, since only the shortest delays of the first printed
+onset dates read report days before that. It is then held at its first
+value back to the earliest scored onset date, so the returned `γ` is
+indexed from `grid_start` like the ascertainment walk.
+
 The alive/dead split the raw triangle carries is not modelled separately:
 only `confirmed_total` is fitted, since the confirmed-death stream already
 carries that split from other data.
@@ -3895,10 +3937,11 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     report_days = onset_curve_history.report_days
     prev_report_days = onset_curve_history.prev_report_days
     m = length(onset_days)
-    ## Report-date grid the calendar walk spans: the union of every onset
-    ## and report day a scored cell can touch. Falls back to a degenerate
-    ## length-1 grid `[1, 1]` when the history is empty (the no-op path),
-    ## which `onset_report_hazard_model` handles via its own `nt` floor.
+    ## Grid of every onset and report day a scored cell can touch. Falls
+    ## back to a degenerate length-1 grid `[1, 1]` when the history is empty
+    ## (the no-op path), which `onset_report_hazard_model` handles via its
+    ## own `nt` floor. The walk is sampled from `walk_start` and held at its
+    ## first value back to `grid_start`.
     grid_start = m > 0 ? minimum(onset_days) : 1
     grid_end = m > 0 ? max(maximum(report_days), grid_start) : 1
     ## Unprefixed (`false`): the hazard model has no `:=` deterministics to
@@ -3906,7 +3949,9 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## surfaces them as a flat `onset_report_state.η0` at the composer level
     ## rather than the double-nested form a prefixed attachment would give.
     ## The pairs-plot summary indexes the flat names.
-    hazard_state ~ to_submodel(hazard(grid_start, grid_end; D), false)
+    walk_start = _onset_hazard_grid_start(onset_days, report_days, D)
+    hazard_state ~ to_submodel(hazard(walk_start, grid_end; D), false)
+    γ = _onset_walk_on_grid(hazard_state.γ, walk_start, grid_start, grid_end)
 
     ## Delay-weighted anchor series over the onset-date grid, built from the
     ## fitted hazard and the caller-supplied calendar-indexed daily
@@ -3916,9 +3961,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## anchor series and the per-cell moments, so the reporting hazard is
     ## evaluated once per (delay, onset date) cell for the whole stream.
     cdf_table = onset_report_cdf_table(
-        hazard_state.logit_h0,
-        hazard_state.γ, hazard_state.grid_start, grid_start,
-        grid_end
+        hazard_state.logit_h0, γ, grid_start, grid_start, grid_end
     )
     anchor_series = onset_report_anchor_series(
         cdf_table, grid_start,
@@ -3938,7 +3981,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
 
     moments = onset_report_moments(
         cdf_table, grid_start, onsets,
-        hazard_state.grid_start, alpha, onset_days, report_days,
+        grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
     scales = onset_report_scales(moments.means, τ, reads)
@@ -3958,8 +4001,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
 
     return (;
         increments, modelled = moments.means, scales,
-        logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
-        grid_start = hazard_state.grid_start, grid_end, alpha, τ,
+        logit_h0 = hazard_state.logit_h0, γ, grid_start, grid_end, alpha, τ,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
         ν,

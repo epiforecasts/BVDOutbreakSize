@@ -1691,24 +1691,34 @@ cfr_prior_fig #hide
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
-# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
+# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric.
+# Its deviations sum to zero, drawn on the $D - 1$ directions of an orthonormal sum-to-zero basis $Q$:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{50}
+# z_{h0} \sim \mathrm{Normal}(0,\ I_{D-1}), \qquad
+# \mathrm{logit}\,h_0 = \eta_0 + \sigma_{h0}\,Q\,z_{h0}. \tag{50}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
 # It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
-# A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
+# A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed.
+# The walk starts one delay support before the earliest report day and is centred on its mean over the report days it spans:
 #
 # ```math
-# \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# w_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
+# \qquad
+# \gamma_t = w_t - \bar w,
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
 # \tag{51}
 # ```
+#
+# An earlier report day reads the walk's first value.
+# The two constraints make $\eta_0$ the mean logit hazard across delays and report days.
+# Without them the hazard's level trades against the mean delay deviation, which the data cannot see, and against a shift of the whole walk, which they barely see.
+# Neither constraint changes which hazards the model can express.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
