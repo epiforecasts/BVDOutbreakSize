@@ -962,7 +962,8 @@ chamla_rt_fig #hide
 # We re-fit the joint model under the community-pathway delay from the same reanalysis: the delay for deaths that occur in the community without a recorded admission.
 # This delay is shorter (implied mean about 8 d).
 # Both pathways come from the line list, so this varies the actual delay assumption rather than an arbitrary scenario.
-# The re-fit uses the full headline settings: 1000 draws across two chains.
+# The re-fit is the headline model, with its provinces and in-care split, and changes only the delay.
+# It uses the headline's sampler settings.
 #
 # The infection count to date shifts with the assumed delay, and the table and overlaid densities below show how far.
 
@@ -1021,6 +1022,7 @@ delay_sensitivity_fig #hide
 # The report also fits an Exponential growth tree prior, which dates the common ancestor about a week earlier to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr) [mbalaplacide2026](@cite).
 # Both priors give similar evolutionary rates ($\sim 1.1\times10^{-3}$ subs/site/year).
 # We re-fit the joint model under the Exponential growth TMRCA and compare the infection count to date and the outbreak age.
+# As for the delay, the re-fit is the headline model with only the common-ancestor date changed.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
@@ -1374,20 +1376,19 @@ frozen_contrast_fig #hide
 #
 # ### Spatial structure sensitivity
 #
-# The headline runs the model over the three affected provinces.
-# Reducing it to a single province collapses it onto one well-mixed
+# The headline runs the model over four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling the other affected provinces.
+# Reducing it to a single patch collapses it onto one well-mixed
 # population, which is the model the earlier releases used.
-# The spatial section of the analysis page describes what the provinces add.
+# The model overview on the methods page describes what the provinces add.
 #
 # Splitting the country into provinces adds no national data, so the national
 # outbreak size should not move far either way.
 # The two are not identical by construction: the provinces run free and the
 # country grows at the force-weighted mean of their reproduction numbers,
-# which sits above the central trend they pool toward. That gap is second
+# which sits above the central trend they pool toward. That gap is first
 # order in the deviation scale.
 # A large gap between the two posteriors below would therefore point at the
-# deviation priors rather than at the data, and the headline should not be
-# read from the meta-population fit until such a gap is explained.
+# deviation priors rather than at the data.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
