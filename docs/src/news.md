@@ -196,7 +196,7 @@ Changes since v2.1.0.
 
 ### Infrastructure
 
-- The Enzyme sweep runs the full joint in a subprocess of its own, and each of its two runs is killed past a wall-clock bound and recorded as broken.
+- The Enzyme sweep runs the full joint in a subprocess of its own, and each of its two runs is killed past a wall-clock bound and recorded as broken (#950).
   On Julia 1.13.1 Enzyme's type analysis of the joint runs for hours rather than failing, which took the quality job past its 150-minute timeout on every run.
 - The docs build fits the headline joint to three datasets it simulates itself and checks it recovers the values and the future that generated them (#882).
   A density check first confirms the simulated data reach the right streams.
