@@ -47,7 +47,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
-# Their relative sizes set the importation kernel and centre the background and bed-capacity shares, and their absolute sizes are the susceptible pools the renewal depletes.
+# Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -1255,7 +1255,25 @@ cfr_prior_fig #hide
 #
 # $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
-# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ (defined with the laboratory composition below) with its own log-ratios $\ell^{\text{cap}}_p \sim \mathrm{Normal}(0,\ 2.5)$.
+# Each patch's capacity on day $t$ is a share $s_{p,t}$ of the national capacity walk.
+# Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
+#
+# ```math
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp(\tau_{\text{cap}} z^{\text{cap}}_p),
+# \qquad
+# z^{\text{cap}}_1 = 0,
+# \qquad
+# z^{\text{cap}}_p \sim \mathrm{Normal}(0, 1),
+# \qquad
+# \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
+# ```
+#
+# normalised over the patches each day, with Ituri as the reference.
+# The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
+# The deviations are static, and the share moves over time only through its centre.
+# The pooling scale is our choice, and it places a two-fold gap between a patch's share of beds and its share of admissions well inside the prior.
+# The centre differs from the stock that splits the demand.
+# The stock falls as patients leave, whereas the cumulative admissions never fall, as the national capacity never does.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
@@ -1265,7 +1283,7 @@ cfr_prior_fig #hide
 # \qquad
 # B_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
 #     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} B_{q,j},\;
-#     \frac{s_p}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_q},\; \rho^{\text{cap}} \Bigr),
+#     \frac{s_{p,t_j}}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_{q,t_j}},\; \rho^{\text{cap}} \Bigr),
 # ```
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
@@ -1295,7 +1313,7 @@ cfr_prior_fig #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.patch_capacity_share_model(4)), "\n```"))
+#md #     (@code_string BVDOutbreakSize.patch_capacity_share_model(ones(4, 2))), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1876,7 +1894,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The log-ratios take a fixed scale rather than a pooling scale.
-# Ituri holds over half the specimens analysed and about three quarters of the beds from 15% of the population, so both simplices sit several units from their population centre and the data pin each log-ratio.
+# Ituri sends over half the specimens analysed from 15% of the population, so the simplex sits several units from its population centre and the data pin each log-ratio.
 # A scale pooled over three such log-ratios is barely identified, and in the fits it traded off against them along a ridge that slowed mixing.
 # A standard deviation of 2.5 places every observed share within two prior standard deviations of its centre.
 #

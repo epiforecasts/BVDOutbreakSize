@@ -121,6 +121,9 @@ end
     @test res.demand_patch[1, :] ≈ res.demand ./ 2
     @test vec(sum(res.capacity_patch; dims = 1)) ≈ res.capacity_series
     @test all(>(0), res.capacity_patch)
+    ## The capacity share is daily, a simplex on each day.
+    @test size(res.capacity_shares) == (2, n)
+    @test vec(sum(res.capacity_shares; dims = 1)) ≈ ones(n)
 
     ## One patch is the national model and exposes no split.
     single = treatment_flow_model(iso, bvd, bg, 0.5, 0.3)()

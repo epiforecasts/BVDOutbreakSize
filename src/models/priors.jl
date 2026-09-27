@@ -774,48 +774,98 @@ end
 """
 Per-patch shares of the national isolation-bed capacity, for the province
 bed and occupancy splits in [`treatment_flow_model`](@ref). Each patch's
-capacity is the national walk `C(t)` times a share drawn from a simplex
-centred on population share,
+capacity on day `t` is the national walk `C(t)` times a share centred on
+the patch's modelled cumulative admissions to that day,
 
 ```math
-s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\ell_p), \\qquad \\ell_1 = 0,
-\\qquad \\ell_p \\sim \\mathrm{N}(0, 2.5^2),
+s_p(t) \\propto \\bigl(A_p(t) + a_0\\bigr) \\exp(\\tau_{cap} z_p),
+\\qquad z_1 = 0, \\qquad z_p \\sim \\mathrm{N}(0, 1),
+\\qquad \\tau_{cap} \\sim \\mathrm{N}^+(0, 1),
 ```
 
-with the first patch the reference. The printed province bed counts move
-little relative to each other over the series, so a static share carries
-the split; one walk per patch would add some sixty truncated-normal
-innovations. The bed split identifies the
-shares and the split's overdispersion absorbs the residual drift.
+normalised over the patches each day, with the first patch the reference.
+`A_p(t)` sums the patch's latent admissions into isolation, BVD and
+background, over days `1, …, t`. It is the `admissions` matrix
+`(n_patches × n)` of daily admissions, accumulated here.
 
-The log-ratios `ℓ_p` take a fixed scale, not a pooling scale. Beds are
-not allocated in proportion to population (Ituri holds about three
-quarters of them against 15% of the population), so the shares sit
-several units from the centre and the data pin each one. A scale pooled
-over three such deviations is barely identified and trades off against
-them along a ridge. A standard deviation of 2.5 puts every observed
-share within two prior standard deviations of its population centre.
+Beds are allocated in response to cases, so the centre follows where the
+model sends patients. The share moves over time through the centre alone,
+at no extra parameter cost, and the deviations `z_p` are static. The floor
+`a_0` (`admission_floor`, one admission by default) keeps a patch with no
+admissions yet from being given no capacity, so early shares sit near an
+equal split.
 
-Returns `(; s)`.
+The pooling scale `τ_cap` is the typical log-ratio between a patch's share
+of beds and its share of admissions to date. Its half-normal prior with
+scale 1 puts a two-fold departure well inside the prior and a seven-fold
+one near its edge. The centre already carries the large gap between beds
+and population, so the deviations left for the pool are modest.
+
+The cumulative admissions differ from the stock that splits the bed demand
+in [`treatment_flow_model`](@ref). The stock counts
+the patients still in a bed and falls as they leave. Cumulative admissions
+never fall, as the national walk never does, and they remember where the
+response has been sent since the start.
+
+Returns `(; s, pooling_sd)`, with `s` an `(n_patches × n)` matrix whose
+columns sum to one.
 """
 @model function patch_capacity_share_model(
-        n_patches::Integer;
-        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS[
-            1:min(
-                n_patches, end
-            ),
-        ],
-        log_ratio_prior = Normal(0, 2.5)
+        admissions::AbstractMatrix{<:Real};
+        admission_floor::Real = 1.0,
+        pooling_sd_prior = truncated(Normal(0, 1); lower = 0),
+        offset_prior = Normal(0, 1)
     )
-    if n_patches <= 1
-        return (; s = ones(Float64, max(n_patches, 1)))
+    np, n = size(admissions)
+    if np <= 1
+        return (; s = ones(Float64, max(np, 1), n), pooling_sd = 0.0)
     end
-    length(populations) == n_patches || error(
-        "patch_capacity_share_model: $(length(populations)) populations " *
-            "for $(n_patches) patches."
+    admission_floor > 0 || error(
+        "patch_capacity_share_model: admission_floor must be positive, " *
+            "got $(admission_floor)."
     )
-    cap_log_ratio ~ product_distribution(fill(log_ratio_prior, n_patches - 1))
-    return (; s = _population_centred_simplex(populations, cap_log_ratio))
+    τ_cap ~ pooling_sd_prior
+    z_cap ~ product_distribution(fill(offset_prior, np - 1))
+    s = _admission_centred_shares(admissions, τ_cap, z_cap, admission_floor)
+    return (; s, pooling_sd = τ_cap)
+end
+
+## Daily simplex centred on cumulative admissions: column `t` is
+## `s_p(t) ∝ (Σ_{u ≤ t} a_{p,u} + a0) exp(τ z_p)`, with `z_1 = 0` and `z`
+## holding `z_2, …, z_n`. Each column is normalised against its largest
+## term, so a wide deviation cannot overflow.
+function _admission_centred_shares(
+        admissions::AbstractMatrix{<:Real}, τ::Real, z::AbstractVector{<:Real},
+        a0::Real
+    )
+    np, n = size(admissions)
+    T = promote_type(
+        Float64, eltype(admissions), typeof(τ), eltype(z), typeof(a0)
+    )
+    dev = Vector{T}(undef, np)
+    dev[1] = zero(T)
+    @inbounds for p in 2:np
+        dev[p] = τ * z[p - 1]
+    end
+    cum = zeros(T, np)
+    s = Matrix{T}(undef, np, n)
+    @inbounds for t in 1:n
+        peak = typemin(T)
+        for p in 1:np
+            cum[p] += admissions[p, t]
+            s[p, t] = log(cum[p] + a0) + dev[p]
+            peak = max(peak, s[p, t])
+        end
+        tot = zero(T)
+        for p in 1:np
+            s[p, t] = exp(s[p, t] - peak)
+            tot += s[p, t]
+        end
+        for p in 1:np
+            s[p, t] /= tot
+        end
+    end
+    return s
 end
 
 ## Simplex centred on population share, moved by a log-ratio per patch
@@ -1974,11 +2024,12 @@ has no redundant direction. The per-province analysed-specimen composition
 in [`bvd_joint`](@ref) identifies the shares, since the background dominates
 the specimens analysed where positivity is low.
 
-The log-ratios take a fixed scale rather than a pooling scale, for the
-reason given in [`patch_capacity_share_model`](@ref). Ituri sends over half
-the specimens analysed from 15% of the population, so the shares sit far
-from the population centre, and a scale pooled over three log-ratios the
-data pin only rides a ridge with them.
+The log-ratios take a fixed scale rather than a pooling scale. Ituri sends
+over half the specimens analysed from 15% of the population, so the shares
+sit several units from the population centre and the data pin each one. A
+scale pooled over three such log-ratios is barely identified and trades off
+against them along a ridge. A standard deviation of 2.5 puts every observed
+share within two prior standard deviations of its population centre.
 
 With one patch the whole background belongs to it and nothing is sampled.
 

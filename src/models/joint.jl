@@ -1804,7 +1804,7 @@ density there, is the fitted model's.
         end
         ## Each province's occupancy at each future vintage, the national
         ## occupancy split by the fitted occupancy split over the per-patch
-        ## demand, and its beds, its static share of the national capacity.
+        ## demand, and its beds, its modelled share of the national capacity.
         if _has_province_rows(province_isolation)
             vj = vintages .- n
             forecast_province_isolation_split ~ to_submodel(
@@ -1825,10 +1825,9 @@ density there, is the fitted model's.
                 forecast_province_isolation_split.obs_increments
             )
         end
-        if length(treatment_state.capacity_shares) == n_patches
+        if size(treatment_state.capacity_patch, 1) == n_patches
             forecast_province_beds := vec(
-                treatment_state.capacity_shares .*
-                    reshape(treatment_state.capacity_series[vintages], 1, :)
+                treatment_state.capacity_patch[:, vintages]
             )
         end
         forecast_means = (;
