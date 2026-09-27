@@ -99,13 +99,17 @@ failed = try
         end
 
         @testset "gradient matches Mooncake on the joint" begin
-            check_scenario(
-                "bvd_joint",
-                enzyme_matches_mooncake(
-                    bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
-                ),
-                ADFixtures.enzyme_broken_scenarios()
-            )
+            if "bvd_joint" in ADFixtures.enzyme_skip_scenarios()
+                @test_skip "declared unrunnable under Enzyme (#445)"
+            else
+                check_scenario(
+                    "bvd_joint",
+                    enzyme_matches_mooncake(
+                        bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
+                    ),
+                    ADFixtures.enzyme_broken_scenarios()
+                )
+            end
         end
     end
     false

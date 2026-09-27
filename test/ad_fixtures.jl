@@ -436,7 +436,6 @@ function enzyme_broken_scenarios()
     ## Enzyme reverse mode on Julia 1.13; both differentiate on 1.11.
     return Set(
         [
-            "bvd_joint",
             "patch_infection_model (uncoupled)",
             "patch_infection_model (coupled)",
         ]
@@ -448,8 +447,9 @@ Scenario names not run under Enzyme at all.
 """
 function enzyme_skip_scenarios()
     ## Fails type analysis rather than returning a verdict a
-    ## `@test_broken` could record.
-    return Set(["treatment_flow_model", "treatment_only_model"])
+    ## `@test_broken` could record. On Julia 1.13.1 the joint's type
+    ## analysis stalls rather than throwing (#445).
+    return Set(["treatment_flow_model", "treatment_only_model", "bvd_joint"])
 end
 
 end # module
