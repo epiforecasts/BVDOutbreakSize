@@ -1,0 +1,87 @@
+name: Prune superseded docs versions
+
+# Every minor release adds a full copy of the site to gh-pages (`keep =
+# :minor` in docs/make.jl), each 40 to 110 MB, so the branch grows by one
+# copy per release and every clone pulls all of them (#899). Each release's
+# `results-v*` assets carry a `site.zip` of the site as it was, so a
+# superseded minor version on gh-pages duplicates something already
+# archived.
+#
+# This removes each `vX.Y` directory that is not the newest minor of its
+# major and whose site is archived in a `results-vX.Y.*` release. `dev`,
+# `stable`, the major aliases (`v1`, `v2`), the previews and any version
+# without an archived site stay. It is a plain commit, not a force push. The
+# preview cleanup and sweep already replace gh-pages with a single
+# parentless commit, and the next of those drops the removed files from the
+# history.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'log what would be removed without pushing'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+      - name: Remove superseded minor versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          gh release list -R "$GITHUB_REPOSITORY" --limit 1000 \
+            --json tagName --jq '.[].tagName' > "$RUNNER_TEMP/tags.txt"
+          archived() {
+            local tag
+            grep -E "^results-$1\.[0-9]+$" "$RUNNER_TEMP/tags.txt" |
+              while read -r tag; do
+                gh release view "$tag" -R "$GITHUB_REPOSITORY" \
+                  --json assets --jq '.assets[].name' | grep -qx site.zip &&
+                  echo yes && break
+              done
+          }
+          versions=$(ls -d v*.*/ 2>/dev/null | tr -d / | sort -V || true)
+          removed=()
+          for major in $(printf '%s\n' $versions | cut -d. -f1 | sort -u); do
+            newest=$(printf '%s\n' $versions | grep "^$major\." | tail -n 1)
+            for v in $(printf '%s\n' $versions | grep "^$major\."); do
+              [ "$v" = "$newest" ] && continue
+              if [ "$(archived "$v")" = yes ]; then
+                removed+=("$v")
+              else
+                echo "keeping $v: no archived site.zip"
+              fi
+            done
+          done
+          if [ ${#removed[@]} -eq 0 ]; then
+            echo "no superseded versions to remove"
+            exit 0
+          fi
+          echo "removing: ${removed[*]}"
+          if [ "$DRY_RUN" = "true" ]; then
+            du -shc "${removed[@]}"
+            echo "dry run, leaving gh-pages untouched"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email \
+            'github-actions[bot]@users.noreply.github.com'
+          for v in "${removed[@]}"; do
+            git rm -rq "$v"
+            sed -i "/^  \"$v\",$/d" versions.js
+          done
+          git add versions.js
+          git commit -qm "prune superseded docs versions: ${removed[*]}"
+          git push origin HEAD:gh-pages

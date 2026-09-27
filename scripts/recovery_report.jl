@@ -62,6 +62,8 @@ n_pairs = nrow(params)
 n_in = count(params.covered_90)
 n_out = sum(summary.outside)
 n_conv = count(!=(:unconverged), seeds.status)
+first_seed = params[params.seed .== first(params.seed), :]
+n_allowed = recovery_verdict(first_seed).outside_allowed
 skill = isempty(forecasts) ? "No forecast was scored." :
     "Forecasts: $(nrow(forecasts)) scored, median CRPS relative to " *
     "persistence $(fmt(median(forecasts.relative_crps))) (below one beats it)."
@@ -100,7 +102,7 @@ $(join(seed_rows, "\n"))
 
 </details>
 
-A seed fails when more quantities lie outside their 99% interval than the 99th percentile of a Binomial with a 1% chance each (two of 28), or fewer than 60% lie inside their 90% interval.
+A seed fails when more quantities lie outside their 99% interval than the 99th percentile of a Binomial with a 1% chance each ($n_allowed of $(nrow(first_seed))), or fewer than 60% lie inside their 90% interval.
 Relative error is (posterior median − truth) / |truth| and z is (posterior mean − truth) / posterior SD, each the median across seeds with the range in brackets.
 """
 write(joinpath(dir, "report.md"), body)
