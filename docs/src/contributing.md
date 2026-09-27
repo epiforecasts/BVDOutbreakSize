@@ -26,6 +26,14 @@ To render one report page from the cached fits, set `BVD_DOC_PAGE` to its path u
 BVD_DOC_PAGE=estimates/national julia --project=docs docs/execute.jl
 ```
 
+The `gh-pages` branch holds the built site and is several hundred MB.
+It is replaced by a new single commit whenever a preview is cleaned up, so each fetch downloads it again.
+Exclude it from fetches:
+
+```bash
+git config --add remote.origin.fetch '^refs/heads/gh-pages'
+```
+
 The scripts under `scripts/` differ in which Julia project they need.
 Read [`scripts/README.md`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/scripts/README.md) before running one.
 

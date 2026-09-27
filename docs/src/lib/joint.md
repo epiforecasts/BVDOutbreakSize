@@ -14,6 +14,6 @@ Pages = ["joint.md"]
 
 ```@autodocs
 Modules = [BVDOutbreakSize]
-Pages = ["models/joint.jl"]
+Pages = ["models/joint.jl", "models/fit_args.jl"]
 Private = false
 ```
