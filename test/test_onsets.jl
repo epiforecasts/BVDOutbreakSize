@@ -707,42 +707,40 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
-@testitem "onset_report_scales: error formula match, grows with magnitude" begin
-    using BVDOutbreakSize: onset_report_scales
+@testitem "onset_report_scales: Student-t variance matches count plus read" begin
+    using BVDOutbreakSize: onset_report_scales, onset_report_scale
+    using Distributions: TDist, var
 
-    level_cur = [0.0, 100.0, 40.0]
-    level_prev = [0.0, 80.0, 0.0]
-    means = level_cur .- level_prev
-    ## Cells 1 and 3 have a virtual (empty) predecessor and so score a
-    ## level with one read; cell 2 is a correction between two real
-    ## snapshots, so it carries two reads' rounding and read error.
+    means = [0.0, 20.0, 40.0]
+    ## Cells 1 and 3 are levels with one read; cell 2 is a correction
+    ## between two snapshots, so it carries two reads.
     reads = [1, 2, 1]
-    s = onset_report_scales(means, 1.2, reads)
-    @test s[1] ≈ sqrt(1 / 12 + 1.2^2)
-    @test s[2] ≈ sqrt(20.0 + 2 / 12 + 2 * 1.2^2)
-    ## A level cell carries the counting variation of the cases it reports,
-    ## which for a bar of 40 dominates the read error.
-    @test s[3] ≈ sqrt(40.0 + 1 / 12 + 1.2^2)
-    @test s[3] > sqrt(40.0)
-    ## The scale grows with the modelled magnitude.
-    @test s[2] > s[1]
+    τ, k, ν = 1.2, 5.0, 4.0
+    s = onset_report_scales(means, τ, k, reads, ν)
+    target = means .+ means .^ 2 ./ k .+ reads .* τ^2
+    ## A Student-t with scale `σ` has variance `σ² ν / (ν - 2)`.
+    @test s .^ 2 .* var(TDist(ν)) ≈ target
+    @test s[2] == onset_report_scale(20.0, τ, k, 2, ν)
+    ## A level of 40 is dominated by its count variation, not the read.
+    @test s[3] > s[1] * 4
+    ## The count variance grows as the dispersion `k` falls.
+    @test only(onset_report_scales([40.0], τ, 1.0, [1], ν)) > s[3]
 end
 
-@testitem "onset_report_scales floors a negative counting term" begin
+@testitem "onset_report_scales floors a negative mean" begin
     ## `means` is non-negative by construction (F is monotone in δ), but a
     ## degenerate call must not take the square root of a negative variance.
     using BVDOutbreakSize: onset_report_scales
 
-    s = onset_report_scales([-5.0], 1.2, [2])
+    s = onset_report_scales([-5.0], 1.2, 5.0, [2], 4.0)
     @test isfinite(s[1])
-    @test s[1] > 0
+    @test s[1] ≈ sqrt(2 / 4 * 2 * 1.2^2)
 end
 
-@testitem "onset_reporting_model samples one read SD for every read" begin
+@testitem "onset_reporting_model: scale is count variation plus a read SD per read" begin
     ## A two-vintage triangle: the first vintage's cells difference the
     ## empty predecessor (one read), the second's correct the first (two
-    ## reads). The scale the likelihood scores each cell with is the
-    ## counting term plus one rounding variance and one `τ²` per read.
+    ## reads).
     using BVDOutbreakSize: onset_reporting_model
     using Turing: DynamicPPL
     using Random: seed!
@@ -756,12 +754,15 @@ end
     model = onset_reporting_model(oc, fill(30.0, 25))
     names = string.(collect(keys(DynamicPPL.VarInfo(model))))
     @test "τ" in names
+    @test "inv_sqrt_k" in names
     seed!(20260924)
     out = model()
     @test out.τ > 0
+    @test out.k > 0
     reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
+    μ = max.(out.modelled, 0)
     @test out.scales ≈
-        sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
+        sqrt.((out.ν - 2) / out.ν .* (μ .+ μ .^ 2 ./ out.k .+ reads .* out.τ^2))
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin

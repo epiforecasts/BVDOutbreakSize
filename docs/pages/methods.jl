@@ -1737,18 +1737,22 @@ cfr_prior_fig #hide
 # The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
 # ```math
-# y_u \sim \mathrm{Student}\text{-}t\Bigl(
-#     \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),\
-#     \sigma_u,\ \nu{=}4\Bigr). \tag{53}
+# y_u \sim \mathrm{Student}\text{-}t(\mu_u,\ \sigma_u,\ \nu),
+# \qquad
+# \mu_u = \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),
+# \qquad
+# \sigma_u^2 = \frac{\nu - 2}{\nu}\bigl(\mu_u + \mu_u^2 / k + r_u \tau^2\bigr). \tag{53}
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean and, for each digitised bar the cell differences, the $1/12$ variance of rounding an integer read and a fitted read SD $\tau$.
-# A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
-# Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
-# The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# The scale sets the Student-$t$ variance to a negative binomial count about the modelled mean plus a read SD $\tau$ for each of the $r_u$ digitised bars the cell differences.
+# A first-snapshot level reads one bar and a correction two.
+# Both terms are needed.
+# The count term sets the spread of large cells, and the read term sets that of the small late corrections, whose bars differ only by scan error.
+# We use priors of $1/\sqrt{k} \sim \mathrm{Normal}^{+}(0,\ 1)$ and $\tau \sim \mathrm{LogNormal}(\log 0.4,\ 0.5)$.
+# The read SD prior is centred on the 0.40 cases per settled bar-day that the digitisation audit finds between consecutive figures.
+# The mean entering the scale is the modelled one, never the observed count, so the likelihood's noise cannot feed into its own variance.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.

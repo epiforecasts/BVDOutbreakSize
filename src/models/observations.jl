@@ -3466,79 +3466,58 @@ end
     (δ < 0 || D == 0) ? 0 : min(Int(δ), D - 1) + 1
 
 """
-    onset_report_scales(means, τ, reads)
+    onset_report_scales(means, τ, k, reads, ν)
 
-Per-cell observation scale for the reporting-triangle increment likelihood,
-the square root of a variance built from three sources.
-
-  - Counting variation of the cases the cell actually reports. The cell is a
-    count of newly reported cases, so it carries its own sampling variation
-    of about its mean, `means[i]`, on top of any reading error. This term is
-    what makes the scale correct for the very first snapshot's cells, which
-    are differenced against an empty predecessor and so score a level rather
-    than a correction (see [`load_onset_curve`](@ref)): a level of 40 cases
-    has counting variation of about `sqrt(40) ≈ 6`, far larger than the
-    reading error below, and scoring it on reading error alone would let 28
-    level cells dominate the joint likelihood.
-  - Rounding of each read. A digitised bar is an integer, so every read
-    carries the `1/12` variance of rounding to the nearest count. The term
-    is structural rather than measured, and it is what keeps the read SD
-    below from collapsing to zero on the settled cells whose residual is
-    exactly zero.
-  - Read error on each digitised bar, the fitted read SD `τ` of
-    [`onset_reporting_model`](@ref).
-
-`reads[i]` is the number of bars cell `i` differences: `1` for a level
-cell off the first scored snapshot and `2` for a correction between two
-snapshots. The read variances add, so
+Per-cell Student-t scale for the reporting-triangle likelihood, set so the
+Student-t's variance matches a negative binomial count variance plus read
+error:
 
 ```math
-\\sigma_i = \\sqrt{\\max(\\mu_i, 0) + r_i / 12 + r_i \\tau^2},
+\\sigma_i^2 = \\frac{\\nu - 2}{\\nu}
+    \\bigl(\\mu_i + \\mu_i^2 / k + r_i \\tau^2\\bigr),
 ```
 
-with `μ_i = means[i]` the modelled increment and `r_i = reads[i]`. The
-counting term cancels for a genuine correction between two snapshots only
-to the extent that the two reads share the same realised cases: the newly
-reported cases in between are a fresh count, and `μ_i` is exactly their
-expected number, so the same formula covers both cell kinds without a
-branch.
+with `μ_i = means[i]` the modelled cell mean, `k` the shared count
+dispersion, `r_i = reads[i]` the number of digitised bars the cell reads
+(`1` for a level, `2` for a correction between two snapshots) and `τ` the
+read SD. The variance of a Student-t with scale `σ` is `σ² ν / (ν - 2)`,
+hence the leading factor. A level and a correction share one variance
+model: a level is a count of the cases printed so far, a correction a count
+of the cases reported in between, and each read adds its own error.
 
-The magnitude entering the scale is the modelled increment (`means` from
-[`onset_report_moments`](@ref)), never the raw observed count: feeding the
-likelihood's own noisy observation back into its variance would bias
-towards overconfidence on cells that happen to undershoot. Pure,
-top-level, single indexed loop.
-
-The counting term is Poisson-like, with no separate overdispersion
-parameter. The test is the empirical over modelled residual ratio across
-bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
-the report's symptom-onset reporting-delay section.
+The magnitude entering the scale is the modelled mean
+([`onset_report_moments`](@ref)), never the observed count, so the
+observation cannot feed into its own variance. A negative mean is floored
+at zero. Pure, top-level, single indexed loop.
 """
 function onset_report_scales(
-        means::AbstractVector, τ::Real, reads::AbstractVector{<:Integer}
+        means::AbstractVector, τ::Real, k::Real,
+        reads::AbstractVector{<:Integer}, ν::Real
     )
     m = length(means)
-    T = promote_type(eltype(means), typeof(float(τ)))
+    T = promote_type(eltype(means), typeof(float(τ)), typeof(float(k)))
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
-        out[i] = onset_report_scale(means[i], τ, reads[i])
+        out[i] = onset_report_scale(means[i], τ, k, reads[i], ν)
     end
     return out
 end
 
 """
-    onset_report_scale(μ, τ, reads)
+    onset_report_scale(μ, τ, k, reads, ν)
 
-Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
-increment mean `μ` over `reads` digitised bars with the read SD `τ`. The
-vector method calls this, so the two cannot drift apart. The onset
-forecast ([`onset_forecast_model`](@ref)) calls it directly to give a future
+Scalar form of [`onset_report_scales`](@ref)'s per-cell formula. The vector
+method calls this, so the two cannot drift apart. The onset forecast
+([`onset_forecast_model`](@ref)) calls it directly to give a future
 reporting increment the same observation scale the likelihood gives a
-scored cell. See [`onset_report_scales`](@ref) for what each term means.
+scored cell.
 """
-function onset_report_scale(μ::Real, τ::Real, reads::Integer)
-    T = promote_type(typeof(float(μ)), typeof(float(τ)))
-    return sqrt(max(μ, zero(T)) + reads / 12 + reads * τ^2)
+function onset_report_scale(
+        μ::Real, τ::Real, k::Real, reads::Integer, ν::Real
+    )
+    T = promote_type(typeof(float(μ)), typeof(float(τ)), typeof(float(k)))
+    m = max(μ, zero(T))
+    return sqrt((ν - 2) / ν * (m + m^2 / k + reads * τ^2))
 end
 
 """
@@ -3860,22 +3839,22 @@ empty history makes every loop here a no-op, the degrade-gracefully path
 for a missing input file. `increments` may be `missing` to sample instead
 of condition (the predictive-generator path).
 
-The observation scale ([`onset_report_scales`](@ref)) is built from
-counting variation, the rounding variance of each integer read and a
-fitted read SD `τ ~ read_sd_prior`, one for every read of a digitised bar:
-a correction cell carries two reads' error and a first-snapshot level cell
-one read's. One count is about 2.9 pixels on the published figures, so a
-read is a rounding plus an outline pixel, of order one count. The prior is
-centred on that scale and the data set the value.
-
-The likelihood is Student-t with fixed degrees of freedom `ν` (default 4).
+Every cell is Student-t with fixed degrees of freedom `ν` (default 4).
 With only a few hundred cells `ν` is weakly identified, so it is not
 sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
-than breaking a count likelihood.
+than breaking a count likelihood. The scale
+([`onset_report_scales`](@ref)) matches a negative binomial count variance
+with dispersion `1/sqrt(k) ~ dispersion_prior` plus a read SD
+`τ ~ read_sd_prior` for each digitised bar the cell differences. Both are
+needed: the count term sets the spread of large cells and the read term
+that of the small late corrections. The read SD prior is centred on the
+digitisation audit's noise floor of 0.40 cases per settled bar-day
+(`scripts/README.md`), which keeps it from explaining every correction as
+scan error.
 
 Returns `(; increments, modelled, scales, logit_h0, γ, grid_start,
-grid_end, alpha, τ, η0, σ_h0, σ_γ, β, σ_a, ν)` with `modelled` the per-cell
+grid_end, alpha, τ, k, η0, σ_h0, σ_γ, β, σ_a, ν)` with `modelled` the per-cell
 increment means the likelihood scores, `scales` the per-cell observation
 scales it scores them with, `grid_end` the report-date grid day the
 calendar walk was built up to
@@ -3888,7 +3867,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        read_sd_prior = LogNormal(log(1.0), 0.5),
+        read_sd_prior = LogNormal(log(0.4), 0.5),
+        dispersion_prior = truncated(Normal(0, 1); lower = 0),
         ν::Real = 4.0
     )
     onset_days = onset_curve_history.onset_days
@@ -3935,13 +3915,16 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## scored vintage) reads one bar.
     τ ~ read_sd_prior
     reads = [p == 0 ? 1 : 2 for p in prev_report_days]
+    ## Negative binomial count dispersion, on `1/sqrt(k)`.
+    inv_sqrt_k ~ dispersion_prior
+    k = 1 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
 
     moments = onset_report_moments(
         cdf_table, grid_start, onsets,
         hazard_state.grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
-    scales = onset_report_scales(moments.means, τ, reads)
+    scales = onset_report_scales(moments.means, τ, k, reads, ν)
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
@@ -3959,7 +3942,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     return (;
         increments, modelled = moments.means, scales,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
-        grid_start = hazard_state.grid_start, grid_end, alpha, τ,
+        grid_start = hazard_state.grid_start, grid_end, alpha, τ, k,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
         ν,

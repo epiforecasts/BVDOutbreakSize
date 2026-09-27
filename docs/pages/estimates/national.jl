@@ -616,7 +616,8 @@ surveillance_pair_fig #hide
 # These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The read SD row is the error the fit attributes to one digitised bar, in cases, on top of the rounding every integer read carries.
+# The read SD row is the error the fit attributes to one digitised bar, in cases.
+# The count dispersion row is the negative binomial overdispersion of the reported counts, as $1/\sqrt{k}$.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -665,7 +666,9 @@ _onset_labels = merge(
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.τ") => "onset-report read SD (cases)"
+        Symbol("onset_report_state.τ") => "onset-report read SD (cases)",
+        Symbol("onset_report_state.inv_sqrt_k") =>
+            "onset-report count dispersion (1/sqrt k)"
     )
 );
 
@@ -711,6 +714,7 @@ onset_summary = vcat(
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
             Symbol("onset_report_state.τ"),
+            Symbol("onset_report_state.inv_sqrt_k"),
         ];
         digits = 3, labels = _onset_labels
     ),
@@ -742,6 +746,7 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.τ"),
+        Symbol("onset_report_state.inv_sqrt_k"),
     ];
     prior = prior_chn, labels = _onset_labels
 );

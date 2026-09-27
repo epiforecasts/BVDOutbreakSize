@@ -40,6 +40,11 @@ Changes since v2.1.0.
 
 ### Model
 
+- Each onset-curve cell's variance is a negative binomial count about the modelled mean plus one read SD per digitised bar the cell differences (#PR).
+  It replaces the Poisson count and the rounding variance of an integer read.
+  The Student-t scale is set so its variance matches, and the read SD prior is centred on the digitisation audit's 0.40 cases per settled bar-day.
+  Ascertainment stays anchored on the confirmed pipeline.
+  Fitted values change.
 - The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
   The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
   Fitted values change.
