@@ -707,17 +707,9 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(onset_report_anchor_series), Matrix{<:Mooncake.IEEEFloat},
-        Integer, Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(onset_report_moments), Matrix{<:Mooncake.IEEEFloat},
-        Integer, Array{<:Mooncake.IEEEFloat}, Integer,
-        Array{<:Mooncake.IEEEFloat}, Array{<:Integer}, Array{<:Integer},
-        Array{<:Integer},
+        typeof(onset_report_means), Matrix{<:Mooncake.IEEEFloat},
+        Integer, Array{<:Mooncake.IEEEFloat}, Array{<:Integer},
+        Array{<:Integer}, Array{<:Integer},
     },
 )
 ## Derivative of `safe_rate`: the identity above its floor, flat on it.
@@ -783,56 +775,10 @@ function Mooncake.rrule!!(
 end
 
 function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_anchor_series)},
-        cdf_table::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        u_lo::CoDual{<:Integer}, a::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    cp = primal(cdf_table)
-    ap = primal(a)
-    lo = Int(primal(u_lo))
-    c̄ = tangent(cdf_table)
-    ā = tangent(a)
-    y = onset_report_anchor_series(cp, lo, ap)
-    out = Mooncake.zero_fcodual(y)
-    ȳ = tangent(out)
-    ## `out[k] = S_k / den_k` with `S_k = Σ_d (c_d - c_{d-1}) a_{u+d}` and
-    ## `den_k = safe_rate(c_{D-1})`, so `c_d` enters `S_k` through two
-    ## neighbouring anchor days and `c_{D-1}` also through the denominator.
-    function onset_report_anchor_series_pullback!!(::NoRData)
-        D = size(cp, 1)
-        na = length(ap)
-        D == 0 && return NoRData(), NoRData(), NoRData(), NoRData()
-        @inbounds for k in axes(cp, 2)
-            g = ȳ[k]
-            u = lo + k - 1
-            cD = cp[D, k]
-            invden = inv(safe_rate(cD))
-            gi = g * invden
-            c_prev = zero(eltype(cp))
-            S = zero(eltype(cp))
-            for d in 0:(D - 1)
-                cd = cp[d + 1, k]
-                ad = ap[clamp(u + d, 1, na)]
-                a_next = d < D - 1 ? ap[clamp(u + d + 1, 1, na)] : zero(ad)
-                c̄[d + 1, k] += gi * (ad - a_next)
-                ā[clamp(u + d, 1, na)] += gi * (cd - c_prev)
-                S += (cd - c_prev) * ad
-                c_prev = cd
-            end
-            c̄[D, k] -= gi * S * invden * _safe_rate_slope(cD)
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return out, onset_report_anchor_series_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_moments)},
+        ::CoDual{typeof(onset_report_means)},
         cdf_table::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
         u_lo::CoDual{<:Integer},
         onsets::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        grid_start::CoDual{<:Integer},
-        alpha::CoDual{<:Array{<:Mooncake.IEEEFloat}},
         onset_idx::CoDual{<:Array{<:Integer}},
         cur_report_idx::CoDual{<:Array{<:Integer}},
         prev_report_idx::CoDual{<:Array{<:Integer}}
@@ -840,57 +786,41 @@ function Mooncake.rrule!!(
     cp = primal(cdf_table)
     lo = Int(primal(u_lo))
     op = primal(onsets)
-    gs = Int(primal(grid_start))
-    alp = primal(alpha)
     oi = primal(onset_idx)
     ci = primal(cur_report_idx)
     pri = primal(prev_report_idx)
     c̄ = tangent(cdf_table)
     ō = tangent(onsets)
-    ᾱ = tangent(alpha)
-    y = onset_report_moments(cp, lo, op, gs, alp, oi, ci, pri)
+    y = onset_report_means(cp, lo, op, oi, ci, pri)
     out = Mooncake.zero_fcodual(y)
     ȳ = tangent(out)
-    ## Per cell, `level = onset · α · num / den` for the current and the
-    ## previous report date, and `means = level_cur - level_prev`, so the
-    ## `means` cotangent folds into the two level cotangents first.
-    function onset_report_moments_pullback!!(::NoRData)
+    ## Per cell, `mean = onset · (num_cur - num_prev) / den`.
+    function onset_report_means_pullback!!(::NoRData)
         D = size(cp, 1)
         n = length(op)
-        na = length(alp)
         T = eltype(cp)
         @inbounds for i in eachindex(oi)
-            gm = ȳ.means[i]
-            gc = ȳ.level_cur[i] + gm
-            gp = ȳ.level_prev[i] - gm
+            g = ȳ[i]
             u = oi[i]
             k = u - lo + 1
             in_range = u >= 1 && u <= n
             onset_rate = in_range ? op[u] : zero(T)
-            ia = clamp(u - gs + 1, 1, na)
-            α = alp[ia]
-            δc = ci[i] - u
-            δp = pri[i] - u
-            jc = _onset_delay_row(δc, D)
-            jp = _onset_delay_row(δp, D)
+            jc = _onset_delay_row(ci[i] - u, D)
+            jp = _onset_delay_row(pri[i] - u, D)
             num_c = jc == 0 ? zero(T) : cp[jc, k]
             num_p = jp == 0 ? zero(T) : cp[jp, k]
             cD = D > 0 ? cp[D, k] : zero(T)
             sden = safe_rate(cD)
-            r = (num_c * gc + num_p * gp) / sden
-            in_range && (ō[u] += α * r)
-            ᾱ[ia] += onset_rate * r
-            w = onset_rate * α / sden
-            jc > 0 && (c̄[jc, k] += w * gc)
-            jp > 0 && (c̄[jp, k] += w * gp)
-            D > 0 && (
-                c̄[D, k] -= onset_rate * α * r / sden *
-                    _safe_rate_slope(cD)
-            )
+            r = (num_c - num_p) / sden
+            in_range && (ō[u] += r * g)
+            w = onset_rate * g / sden
+            jc > 0 && (c̄[jc, k] += w)
+            jp > 0 && (c̄[jp, k] -= w)
+            D > 0 && (c̄[D, k] -= w * r * _safe_rate_slope(cD))
         end
-        return ntuple(_ -> NoRData(), 9)
+        return ntuple(_ -> NoRData(), 7)
     end
-    return out, onset_report_moments_pullback!!
+    return out, onset_report_means_pullback!!
 end
 
 function Mooncake.rrule!!(

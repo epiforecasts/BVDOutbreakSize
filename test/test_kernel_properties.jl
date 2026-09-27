@@ -227,18 +227,17 @@ end
     rng = Xoshiro(8)
     onsets = abs.(randn(rng, 45)) .* 20
     γ = 0.3 .* randn(rng, 36)
-    alpha = abs.(randn(rng, 36)) .* 0.3
-    α(u) = alpha[clamp(u - 5 + 1, 1, 36)]
+    α = 0.3
     ## An empty delay support reports nothing.
-    @test onset_report_expected_total(onsets, Float64[], γ, 5, alpha, 45) == 0
+    @test onset_report_expected_total(onsets, Float64[], γ, 5, α, 45) == 0
     ## Each date contributes its onsets times its reported share, settled
     ## dates included, also when the report probability sits on the
     ## `safe_rate` floor.
     for lh in (randn(rng, 12) .- 2, fill(-40.0, 12), fill(-800.0, 12))
         by_date = sum(
-            onsets[u] * onset_report_F(45 - u, lh, γ, u, 5, α(u)) for u in 1:45
+            onsets[u] * onset_report_F(45 - u, lh, γ, u, 5, α) for u in 1:45
         )
-        @test onset_report_expected_total(onsets, lh, γ, 5, alpha, 45) ≈
+        @test onset_report_expected_total(onsets, lh, γ, 5, α, 45) ≈
             by_date rtol = 1.0e-12
     end
 end

@@ -164,8 +164,8 @@ predecessor via the sentinel `prev_report_days[i] = 0`.
 `0` postdates no valid onset day, so this recovers signal from the first
 digitised vintage as a difference from nothing, with no extra branch
 downstream. Those cells score a level rather than a correction, which is
-what anchors `alpha`. Corrections only pin differences of `F`, so without
-a level somewhere `alpha` would float. [`onset_report_scales`](@ref) gives
+what pins the ascertainment. Corrections only pin differences of `F`, so
+without a level somewhere the ascertainment would float. [`onset_report_scales`](@ref) gives
 them the counting variation a level carries and a correction largely does
 not.
 
@@ -278,4 +278,29 @@ function load_onset_curve(
         onset_days, report_days, prev_report_days, increments,
         total_days, total_counts, last_total = total_counts[end],
     )
+end
+
+"""
+    onset_hazard_grid_start(onset_days, report_days; D = ONSET_REPORT_MAX_DELAY)
+
+Report-date grid day the reporting-delay calendar walk `γ`
+([`onset_report_hazard_model`](@ref)) starts from: bounded below by the
+earliest scored onset date, otherwise pulled forward to one delay
+support's width before the earliest report day,
+`max(minimum(onset_days), minimum(report_days) - D + 1, 1)`. Returns `1`
+for an empty `onset_days`.
+
+[`onset_reporting_model`](@ref) uses this to build its own `γ` and returns
+it as `grid_start`. Every caller that evaluates the fitted hazard outside
+the model (the report pages, through [`fitted_onset_hazard`](@ref)) indexes
+`γ` from it. Pure, top-level.
+"""
+function onset_hazard_grid_start(
+        onset_days::AbstractVector{<:Integer},
+        report_days::AbstractVector{<:Integer};
+        D::Integer = ONSET_REPORT_MAX_DELAY
+    )
+    isempty(onset_days) && return 1
+    u_lo = minimum(onset_days)
+    return max(u_lo, minimum(report_days) - Int(D) + 1, 1)
 end

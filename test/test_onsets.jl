@@ -358,239 +358,6 @@ end
 
 ## --- Hazard / CDF pure functions ------------------------------------------
 
-@testitem "onset_report_cdf: truncation, range and monotonicity" begin
-    using BVDOutbreakSize: onset_report_cdf
-    using StatsFuns: logit
-
-    logit_h0 = fill(logit(0.1), 28)
-    γ = zeros(60)
-    u = 5
-    vals = [onset_report_cdf(δ, logit_h0, γ, u, 1) for δ in (-5):(28 + 5)]
-
-    ## δ < 0 is exact right truncation: F = 0.
-    @test all(==(0.0), vals[1:5])
-    ## F always lies in [0, 1].
-    @test all(v -> 0 <= v <= 1, vals)
-    ## Monotone non-decreasing in δ for fixed hazards.
-    @test issorted(vals)
-    ## Saturates (constant) once δ >= D - 1 = 27, since the hazard has no
-    ## support beyond the tracked delay window.
-    i27 = findfirst(==(27), (-5):(28 + 5))
-    i30 = findfirst(==(30), (-5):(28 + 5))
-    @test vals[i27] == vals[i30]
-end
-
-@testitem "onset_report_cdf_extrapolated matches in-range, safe outside" begin
-    using BVDOutbreakSize: onset_report_cdf, onset_report_cdf_extrapolated
-    using StatsFuns: logit
-
-    logit_h0 = fill(logit(0.15), 28)
-    γ = collect(range(-0.5, 0.5; length = 30))
-    grid_start = 10
-
-    ## In-range: identical to `onset_report_cdf`.
-    for u in grid_start:(grid_start + 5), δ in 0:10
-
-        @test onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start) ≈
-            onset_report_cdf(δ, logit_h0, γ, u, grid_start)
-    end
-
-    ## Out-of-range on both sides: finite, in [0, 1], no bounds error, and
-    ## δ < 0 is still exact right truncation.
-    for u in (-20, 0, 1, 5000)
-        @test onset_report_cdf_extrapolated(-1, logit_h0, γ, u, grid_start) ==
-            0.0
-        for δ in (0, 10, 27, 40)
-            v = onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
-            @test isfinite(v)
-            @test 0 <= v <= 1
-        end
-    end
-end
-
-@testitem "onset_report_moments: a later snapshot sees more of one date" begin
-    ## The literal right-truncation proof: for the same onset date and fixed
-    ## hazards, the modelled current-cumulative level is non-decreasing as
-    ## the report day moves later.
-    using BVDOutbreakSize: onset_report_moments
-    using StatsFuns: logit
-
-    onsets = fill(10.0, 60)
-    logit_h0 = fill(logit(0.1), 28)
-    γ = zeros(60)
-    alpha = fill(0.8, 60)
-    u = 20
-    early = onset_report_moments(
-        onsets, logit_h0, γ, 1, alpha, [u], [u + 3],
-        [0]
-    )
-    late = onset_report_moments(
-        onsets, logit_h0, γ, 1, alpha, [u], [u + 10],
-        [0]
-    )
-    @test late.level_cur[1] >= early.level_cur[1]
-end
-
-@testitem "onset_report_G reaches one at D-1, monotone under underflow" begin
-    using BVDOutbreakSize: onset_report_G
-    using Random: seed!
-
-    seed!(20260803)
-    grid_start = 1
-    u = 10
-    for _ in 1:20
-        D = 28
-        logit_h0 = randn(D) .* 1.5 .- 1.0
-        γ = randn(60) .* 0.3
-        vals = [
-            onset_report_G(δ, logit_h0, γ, u, grid_start)
-                for δ in (-3):(D + 5)
-        ]
-        @test all(==(0.0), vals[1:3])
-        @test issorted(vals)
-        @test all(v -> -1.0e-8 <= v <= 1 + 1.0e-8, vals)
-        g_D1 = onset_report_G(D - 1, logit_h0, γ, u, grid_start)
-        @test g_D1 ≈ 1.0 atol = 1.0e-8
-    end
-
-    ## Every hazard underflows to ≈ 0: numerator and denominator both
-    ## underflow together, so the safe-rate guard must return a finite
-    ## ratio rather than `0 / 0 = NaN`.
-    logit_h0 = fill(-40.0, 28)
-    γ = zeros(40)
-    for δ in (0, 5, 27)
-        @test isfinite(onset_report_G(δ, logit_h0, γ, 5, 1))
-    end
-end
-
-@testitem "onset_report_F reaches alpha at D-1 and is zero for delta < 0" begin
-    using BVDOutbreakSize: onset_report_F
-    using Random: seed!
-
-    seed!(20260803)
-    D = 28
-    grid_start = 1
-    u = 7
-    for _ in 1:10
-        logit_h0 = randn(D) .* 1.2 .- 0.8
-        γ = randn(40) .* 0.2
-        α = rand()
-        f_D1 = onset_report_F(D - 1, logit_h0, γ, u, grid_start, α)
-        @test f_D1 ≈ α atol = 1.0e-8
-        @test onset_report_F(-1, logit_h0, γ, u, grid_start, α) == 0.0
-    end
-end
-
-@testitem "onset_report_ascertainment has a finite gradient at 0 or 1" begin
-    using BVDOutbreakSize: onset_report_ascertainment
-    using ForwardDiff: gradient
-
-    ## `logit(0)` is `-Inf`, whose forward value survives but whose
-    ## gradient is `NaN`, and a `NaN` there would spread to the whole
-    ## log-density rather than to this stream alone.
-    f(x) = onset_report_ascertainment([x[1]], 0.0, [0.0])[1]
-    for anchor in (0.0, 1.0e-300, 0.15, 1.0)
-        α = f([anchor])
-        @test isfinite(α)
-        @test 0.0 < α < 1.0
-        @test all(isfinite, gradient(f, [anchor]))
-    end
-
-    ## An anchor inside the guarded range passes through untouched when the
-    ## offset and the walk are both zero, so the guard costs nothing there.
-    @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
-end
-
-@testitem "onset_report_anchor weighted-averages a, exact for constant a" begin
-    using BVDOutbreakSize: onset_report_anchor
-    using Random: seed!
-    using StatsFuns: logit
-
-    seed!(20260803)
-    D = 28
-    grid_start = 1
-    u = 10
-    a = 0.05 .+ 0.5 .* rand(80)
-    for _ in 1:20
-        logit_h0 = randn(D) .* 1.2 .- 0.8
-        γ = randn(80) .* 0.3
-        anc = onset_report_anchor(logit_h0, γ, u, grid_start, a)
-        @test minimum(a) <= anc <= maximum(a)
-    end
-
-    ## A constant anchor series reproduces that constant exactly, since the
-    ## delay weights sum to one regardless of the hazard.
-    logit_h0 = fill(logit(0.15), D)
-    γ = zeros(40)
-    const_a = fill(0.23, 60)
-    @test onset_report_anchor(logit_h0, γ, 10, 1, const_a) ≈ 0.23
-end
-
-@testitem "onset_report_expected_total stays in bounds" begin
-    using BVDOutbreakSize: onset_report_expected_total
-    using StatsFuns: logit
-
-    onsets = fill(5.0, 100)
-    logit_h0 = fill(logit(0.1), 28)
-    for (grid_start, grid_end) in ((1, 100), (1, 10), (5, 40), (50, 55))
-        nt = max(grid_end - grid_start + 1, 1)
-        γ = zeros(nt)
-        alpha = fill(0.3, nt)
-        total = onset_report_expected_total(
-            onsets, logit_h0, γ, grid_start,
-            alpha, grid_end
-        )
-        @test isfinite(total)
-        @test total >= 0
-    end
-end
-
-@testitem "onset_report_expected_total covers dates before grid_start" begin
-    ## `expected_onset_reported_T` must sum the full `1:n` onset series
-    ## like every other stream's `expected_*_T`, not just the triangle's
-    ## own `grid_start:grid_end` window (see `onset_report_G`).
-    using BVDOutbreakSize: onset_report_expected_total, onset_report_F
-    using StatsFuns: logit
-
-    n = 100
-    onsets = fill(5.0, n)
-    logit_h0 = fill(logit(0.2), 28)
-    grid_start = 60
-    grid_end = 90
-    γ = zeros(grid_end - grid_start + 1)
-    alpha = fill(0.4, grid_end - grid_start + 1)
-
-    ## A sum restricted to just `grid_start:grid_end`, for comparison
-    ## against the full total below.
-    restricted = sum(
-        onsets[u] * onset_report_F(
-            grid_end - u, logit_h0, γ, u, grid_start,
-            alpha[u - grid_start + 1]
-        )
-            for u in grid_start:grid_end
-    )
-    total = onset_report_expected_total(
-        onsets, logit_h0, γ, grid_start,
-        alpha, grid_end
-    )
-
-    ## The onset dates before `grid_start` (days 1:59) are old enough by
-    ## `grid_end` that they sit at the ascertainment level and each
-    ## contribute onsets[u] * F(u, D-1) > 0, so the full total must exceed
-    ## the window-restricted sum.
-    @test total > restricted
-    @test isfinite(total)
-
-    ## The extrapolated contribution for a day well before `grid_start`
-    ## should match the flat asymptote computed at the earliest known
-    ## calendar day and ascertainment level (both held flat at index 1).
-    F_edge = onset_report_F(
-        length(logit_h0) - 1, logit_h0, γ, grid_start,
-        grid_start, alpha[1]
-    )
-    @test total ≈ restricted + (grid_start - 1) * 5.0 * F_edge
-end
-
 @testitem "load_onset_curve: a narrower vintage drops the uncovered date" begin
     ## A date one vintage of a pair does not print carries no observation
     ## from that vintage, so the pair cannot form a correction there. The
@@ -707,42 +474,277 @@ end
     @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
 end
 
-@testitem "onset_report_scales: error formula match, grows with magnitude" begin
-    using BVDOutbreakSize: onset_report_scales
+@testitem "load_onset_curve reports each vintage's printed total" begin
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date
 
-    level_cur = [0.0, 100.0, 40.0]
-    level_prev = [0.0, 80.0, 0.0]
-    means = level_cur .- level_prev
-    ## Cells 1 and 3 have a virtual (empty) predecessor and so score a
-    ## level with one read; cell 2 is a correction between two real
-    ## snapshots, so it carries two reads' rounding and read error.
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    ## Three distinct vintages. The third reads a smaller total than the
+    ## second, which late reporting cannot produce and the per-scan level
+    ## error can: the totals are recorded as read rather than made
+    ## monotone.
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,2,0,2
+        001,2026-03-05,2026-03-02,1,0,1
+        002,2026-03-07,2026-03-01,4,0,4
+        002,2026-03-07,2026-03-02,3,0,3
+        002,2026-03-07,2026-03-03,2,0,2
+        003,2026-03-09,2026-03-01,4,0,4
+        003,2026-03-09,2026-03-02,2,0,2
+        003,2026-03-09,2026-03-03,2,0,2
+        """
+    )
+    oc = load_onset_curve(
+        path; cutoff = Date("2026-03-20"),
+        seeding = Date("2026-03-01")
+    )
+    ## Seeding day is grid day 1, so 5/7/9 March are grid days 5/7/9.
+    @test oc.total_days == [5, 7, 9]
+    @test oc.total_counts == [3, 9, 8]
+    @test oc.last_total == 8
+end
+
+@testitem "load_onset_curve totals honour the cut-off and the no-op path" begin
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    write(
+        path, """
+        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+        001,2026-03-05,2026-03-01,2,0,2
+        002,2026-03-09,2026-03-01,5,0,5
+        """
+    )
+    ## The 9 March vintage is past the cut-off, so neither its cells nor its
+    ## total survive.
+    oc = load_onset_curve(
+        path; cutoff = Date("2026-03-06"),
+        seeding = Date("2026-03-01")
+    )
+    @test oc.total_days == [5]
+    @test oc.total_counts == [2]
+    @test oc.last_total == 2
+
+    noop = load_onset_curve(
+        joinpath(dir, "absent.csv");
+        cutoff = Date("2026-03-06"), seeding = Date("2026-03-01")
+    )
+    @test isempty(noop.total_days)
+    @test isempty(noop.total_counts)
+    @test ismissing(noop.last_total)
+end
+
+## --- Hazard reconstruction and the onset nowcast/forecast ---------------
+
+@testitem "onset_report_means: cells with both reads beyond the support score zero" begin
+    ## A cell whose two reads are both beyond the delay support has both
+    ## reads saturated at the same share, so its mean is exactly 0. The
+    ## loader never builds such a cell, so the cells are set here directly.
+    using BVDOutbreakSize: onset_report_means, onset_report_cdf_table,
+        ONSET_REPORT_MAX_DELAY
+
+    D = ONSET_REPORT_MAX_DELAY
+    h = (;
+        onset_days = vcat(1:58, 1:63),
+        report_days = vcat(fill(60, 58), fill(65, 63)),
+        prev_report_days = vcat(fill(0, 58), fill(60, 63)),
+    )
+    grid_end = maximum(h.report_days)
+    onsets = fill(50.0, grid_end)
+    logit_h0 = fill(log(0.15 / 0.85), D)
+    γ = zeros(grid_end)
+    table = onset_report_cdf_table(logit_h0, γ, 1, 1, grid_end)
+    means = onset_report_means(
+        table, 1, onsets, h.onset_days, h.report_days, h.prev_report_days
+    )
+    saturated = findall(
+        i -> h.prev_report_days[i] > 0 &&
+            h.report_days[i] - h.onset_days[i] > D - 1 &&
+            h.prev_report_days[i] - h.onset_days[i] > D - 1,
+        eachindex(h.onset_days)
+    )
+    @test !isempty(saturated)
+    @test all(==(0.0), means[saturated])
+end
+
+@testitem "onset_report_means: a level is onsets times the delay share" begin
+    using BVDOutbreakSize: onset_report_means, onset_report_cdf_table,
+        onset_report_G
+    using StatsFuns: logit
+
+    onsets = fill(10.0, 60)
+    logit_h0 = fill(logit(0.1), 28)
+    γ = collect(range(-0.3, 0.3; length = 60))
+    table = onset_report_cdf_table(logit_h0, γ, 1, 1, 60)
+    u = 20
+    ## A level at delay 3, then a correction from delay 3 to delay 10.
+    means = onset_report_means(
+        table, 1, onsets, [u, u], [u + 3, u + 10], [0, u + 3]
+    )
+    G(δ) = onset_report_G(δ, logit_h0, γ, u, 1)
+    @test means[1] ≈ 10 * G(3)
+    @test means[2] ≈ 10 * (G(10) - G(3))
+    @test means[2] > 0
+end
+
+## --- Hazard / CDF pure functions ------------------------------------------
+
+@testitem "onset_report_cdf: truncation, range and monotonicity" begin
+    using BVDOutbreakSize: onset_report_cdf
+    using StatsFuns: logit
+
+    logit_h0 = fill(logit(0.1), 28)
+    γ = zeros(60)
+    u = 5
+    vals = [onset_report_cdf(δ, logit_h0, γ, u, 1) for δ in (-5):(28 + 5)]
+
+    ## δ < 0 is exact right truncation.
+    @test all(==(0.0), vals[1:5])
+    @test all(v -> 0 <= v <= 1, vals)
+    @test issorted(vals)
+    ## Constant once δ >= D - 1 = 27.
+    i27 = findfirst(==(27), (-5):(28 + 5))
+    i30 = findfirst(==(30), (-5):(28 + 5))
+    @test vals[i27] == vals[i30]
+end
+
+@testitem "onset_report_cdf reads the walk's nearest end outside its span" begin
+    using BVDOutbreakSize: onset_report_cdf
+    using StatsFuns: logit
+
+    logit_h0 = fill(logit(0.15), 28)
+    γ = collect(range(-0.5, 0.5; length = 30))
+    grid_start = 10
+    ## Every report day before the walk reads its first value.
+    @test onset_report_cdf(5, logit_h0, γ, -20, grid_start) ≈
+        onset_report_cdf(5, logit_h0, fill(γ[1], 30), -20, grid_start)
+    for u in (-20, 0, 1, 5000), δ in (0, 10, 27, 40)
+        v = onset_report_cdf(δ, logit_h0, γ, u, grid_start)
+        @test isfinite(v)
+        @test 0 <= v <= 1
+    end
+end
+
+@testitem "onset_report_G reaches one at D-1, monotone under underflow" begin
+    using BVDOutbreakSize: onset_report_G
+    using Random: seed!
+
+    seed!(20260803)
+    grid_start = 1
+    u = 10
+    for _ in 1:20
+        D = 28
+        logit_h0 = randn(D) .* 1.5 .- 1.0
+        γ = randn(60) .* 0.3
+        vals = [
+            onset_report_G(δ, logit_h0, γ, u, grid_start)
+                for δ in (-3):(D + 5)
+        ]
+        @test all(==(0.0), vals[1:3])
+        @test issorted(vals)
+        @test all(v -> -1.0e-8 <= v <= 1 + 1.0e-8, vals)
+        g_D1 = onset_report_G(D - 1, logit_h0, γ, u, grid_start)
+        @test g_D1 ≈ 1.0 atol = 1.0e-8
+    end
+
+    ## Every hazard underflows to ≈ 0: the floored denominator returns a
+    ## finite ratio rather than `0 / 0 = NaN`.
+    logit_h0 = fill(-40.0, 28)
+    γ = zeros(40)
+    for δ in (0, 5, 27)
+        @test isfinite(onset_report_G(δ, logit_h0, γ, 5, 1))
+    end
+end
+
+@testitem "onset_report_F reaches alpha at D-1 and is zero for delta < 0" begin
+    using BVDOutbreakSize: onset_report_F
+    using Random: seed!
+
+    seed!(20260803)
+    D = 28
+    grid_start = 1
+    u = 7
+    for _ in 1:10
+        logit_h0 = randn(D) .* 1.2 .- 0.8
+        γ = randn(40) .* 0.2
+        α = rand()
+        f_D1 = onset_report_F(D - 1, logit_h0, γ, u, grid_start, α)
+        @test f_D1 ≈ α atol = 1.0e-8
+        @test onset_report_F(-1, logit_h0, γ, u, grid_start, α) == 0.0
+    end
+end
+
+@testitem "onset_report_expected_total sums F over every onset date" begin
+    ## `expected_onset_reported_T` sums the full `1:as_of` onset series like
+    ## every other stream's `expected_*_T`, not only the walk's span.
+    using BVDOutbreakSize: onset_report_expected_total, onset_report_F
+    using StatsFuns: logit
+
+    n = 100
+    onsets = fill(5.0, n)
+    logit_h0 = fill(logit(0.2), 28)
+    grid_start = 60
+    as_of = 90
+    γ = collect(range(-0.2, 0.2; length = as_of - grid_start + 1))
+    α = 0.4
+    total = onset_report_expected_total(
+        onsets, logit_h0, γ, grid_start, α, as_of
+    )
+    ref = sum(
+        onsets[u] * onset_report_F(as_of - u, logit_h0, γ, u, grid_start, α)
+            for u in 1:as_of
+    )
+    @test total ≈ ref
+    @test onset_report_expected_total(onsets, Float64[], γ, 1, α, as_of) == 0
+end
+
+@testitem "onset_report_hazard_model: the hazard level lives in η0" begin
+    ## The delay deviations sum to zero and the calendar walk has mean zero,
+    ## so `η0` is the mean logit hazard over delays and report days.
+    using BVDOutbreakSize: onset_report_hazard_model
+    using Turing: @varname
+    using Random: seed!, Xoshiro
+    using Statistics: mean
+
+    model = onset_report_hazard_model(1, 60; D = 12)
+    @test length(rand(Xoshiro(1), model)[@varname(z_h0)]) == 11
+    seed!(20260926)
+    for _ in 1:5
+        out = model()
+        @test length(out.logit_h0) == 12
+        @test mean(out.logit_h0) ≈ out.η0
+        @test abs(mean(out.γ)) < 1.0e-12
+    end
+end
+
+@testitem "onset_report_scales: Student-t variance matches count plus read" begin
+    using BVDOutbreakSize: onset_report_scales
+    using Distributions: TDist, var
+
+    means = [0.0, 20.0, 40.0]
+    ## Cells 1 and 3 are levels with one read; cell 2 is a correction
+    ## between two snapshots, so it carries two reads.
     reads = [1, 2, 1]
-    s = onset_report_scales(means, 1.2, reads)
-    @test s[1] ≈ sqrt(1 / 12 + 1.2^2)
-    @test s[2] ≈ sqrt(20.0 + 2 / 12 + 2 * 1.2^2)
-    ## A level cell carries the counting variation of the cases it reports,
-    ## which for a bar of 40 dominates the read error.
-    @test s[3] ≈ sqrt(40.0 + 1 / 12 + 1.2^2)
-    @test s[3] > sqrt(40.0)
-    ## The scale grows with the modelled magnitude.
-    @test s[2] > s[1]
+    τ, k, ν = 1.2, 5.0, 4.0
+    s = onset_report_scales(means, τ, k, reads, ν)
+    target = means .+ means .^ 2 ./ k .+ reads .* τ^2
+    ## A Student-t with scale `σ` has variance `σ² ν / (ν - 2)`.
+    @test s .^ 2 .* var(TDist(ν)) ≈ target
+    ## A level of 40 is dominated by its count variation, not the read.
+    @test s[3] > s[1] * 4
+    ## A negative mean cannot give a negative variance.
+    @test isfinite(only(onset_report_scales([-5.0], τ, k, [2], ν)))
 end
 
-@testitem "onset_report_scales floors a negative counting term" begin
-    ## `means` is non-negative by construction (F is monotone in δ), but a
-    ## degenerate call must not take the square root of a negative variance.
-    using BVDOutbreakSize: onset_report_scales
-
-    s = onset_report_scales([-5.0], 1.2, [2])
-    @test isfinite(s[1])
-    @test s[1] > 0
-end
-
-@testitem "onset_reporting_model samples one read SD for every read" begin
-    ## A two-vintage triangle: the first vintage's cells difference the
-    ## empty predecessor (one read), the second's correct the first (two
-    ## reads). The scale the likelihood scores each cell with is the
-    ## counting term plus one rounding variance and one `τ²` per read.
+@testitem "onset_reporting_model: scale is count variation plus a read SD per read" begin
+    ## A two-vintage triangle: the first vintage's cells and the date the
+    ## second prints first are levels (one read); the rest are corrections
+    ## (two reads).
     using BVDOutbreakSize: onset_reporting_model
     using Turing: DynamicPPL
     using Random: seed!
@@ -756,12 +758,15 @@ end
     model = onset_reporting_model(oc, fill(30.0, 25))
     names = string.(collect(keys(DynamicPPL.VarInfo(model))))
     @test "τ" in names
+    @test "inv_sqrt_k" in names
     seed!(20260924)
     out = model()
     @test out.τ > 0
+    @test out.k > 0
     reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
+    μ = max.(out.modelled, 0)
     @test out.scales ≈
-        sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
+        sqrt.((out.ν - 2) / out.ν .* (μ .+ μ .^ 2 ./ out.k .+ reads .* out.τ^2))
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin
@@ -865,11 +870,9 @@ end
     @test all(>=(0), et)
 end
 
-@testitem "onsets_only_model: unanchored ascertainment median near 0.15" begin
-    ## No confirmed pipeline to anchor on, so the ascertainment level's
-    ## prior is exactly `logistic(logit(0.15) + β)` with `β ~ Normal(0,
-    ## 0.75)` (the onset-axis walk is near-flat a priori): median ≈ 0.15,
-    ## 90% interval roughly [0.05, 0.38].
+@testitem "onsets_only_model: the ascertainment prior is logit-normal about one half" begin
+    ## `logit(α) ~ Normal(0, 1)`: median one half, 90% interval about
+    ## [0.16, 0.84].
     using BVDOutbreakSize: onsets_only_model
     using Turing: Prior, sample
     using Statistics: median, quantile
@@ -884,10 +887,10 @@ end
         onsets_only_model(40; onset_curve_history = oc), Prior(),
         2000; progress = false
     )
-    flat = reduce(vcat, vec(collect(chn[:onset_ascertainment])))
-    @test isapprox(median(flat), 0.15; atol = 0.05)
-    @test 0.02 < quantile(flat, 0.05) < 0.1
-    @test 0.25 < quantile(flat, 0.95) < 0.55
+    flat = vec(collect(chn[:onset_ascertainment]))
+    @test isapprox(median(flat), 0.5; atol = 0.05)
+    @test 0.12 < quantile(flat, 0.05) < 0.2
+    @test 0.8 < quantile(flat, 0.95) < 0.88
 end
 
 @testitem "AD gradient: onsets_only_model differentiates (Mooncake)" tags = [
@@ -957,73 +960,6 @@ end
 
 ## --- Per-vintage totals ------------------------------------------------
 
-@testitem "load_onset_curve reports each vintage's printed total" begin
-    using BVDOutbreakSize: load_onset_curve
-    using Dates: Date
-
-    dir = mktempdir()
-    path = joinpath(dir, "onset.csv")
-    ## Three distinct vintages. The third reads a smaller total than the
-    ## second, which late reporting cannot produce and the per-scan level
-    ## error can: the totals are recorded as read rather than made
-    ## monotone.
-    write(
-        path, """
-        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-        001,2026-03-05,2026-03-01,2,0,2
-        001,2026-03-05,2026-03-02,1,0,1
-        002,2026-03-07,2026-03-01,4,0,4
-        002,2026-03-07,2026-03-02,3,0,3
-        002,2026-03-07,2026-03-03,2,0,2
-        003,2026-03-09,2026-03-01,4,0,4
-        003,2026-03-09,2026-03-02,2,0,2
-        003,2026-03-09,2026-03-03,2,0,2
-        """
-    )
-    oc = load_onset_curve(
-        path; cutoff = Date("2026-03-20"),
-        seeding = Date("2026-03-01")
-    )
-    ## Seeding day is grid day 1, so 5/7/9 March are grid days 5/7/9.
-    @test oc.total_days == [5, 7, 9]
-    @test oc.total_counts == [3, 9, 8]
-    @test oc.last_total == 8
-end
-
-@testitem "load_onset_curve totals honour the cut-off and the no-op path" begin
-    using BVDOutbreakSize: load_onset_curve
-    using Dates: Date
-
-    dir = mktempdir()
-    path = joinpath(dir, "onset.csv")
-    write(
-        path, """
-        sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
-        001,2026-03-05,2026-03-01,2,0,2
-        002,2026-03-09,2026-03-01,5,0,5
-        """
-    )
-    ## The 9 March vintage is past the cut-off, so neither its cells nor its
-    ## total survive.
-    oc = load_onset_curve(
-        path; cutoff = Date("2026-03-06"),
-        seeding = Date("2026-03-01")
-    )
-    @test oc.total_days == [5]
-    @test oc.total_counts == [2]
-    @test oc.last_total == 2
-
-    noop = load_onset_curve(
-        joinpath(dir, "absent.csv");
-        cutoff = Date("2026-03-06"), seeding = Date("2026-03-01")
-    )
-    @test isempty(noop.total_days)
-    @test isempty(noop.total_counts)
-    @test ismissing(noop.last_total)
-end
-
-## --- Hazard reconstruction and the onset nowcast/forecast ---------------
-
 @testitem "fitted_onset_hazard reads the model's own hazard" begin
     ## The hazard is the fitted model's own state at each draw, so feeding it
     ## back into `onset_report_expected_total` with the chain's onset
@@ -1055,7 +991,7 @@ end
     et = vec(Array(chn[:expected_onset_reported_T]))
     @test length(hz.logit_h0) == 20
     @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
-    @test hz.alpha == [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
+    @test hz.alpha == vec(collect(chn[:onset_ascertainment]))
     rebuilt = [
         onset_report_expected_total(
             daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n
@@ -1079,50 +1015,6 @@ end
     @test size(rows, 1) == 4
     @test rows.value == [10.0, 12.0, 14.0, 9.0]
     @test all(rows.target_date .== Date("2026-08-01"))
-end
-
-@testitem "onset_nowcast closes on the data as the delay runs out" begin
-    using BVDOutbreakSize: onset_nowcast, onset_report_F
-    D = 21
-    logit_h0 = fill(-1.5, D)
-    γ = zeros(60)
-    u, gs, α = 10, 1, 0.4
-    onsets_u = 200.0
-    y = 62.0
-    ## At the longest delay the hazard covers, every case that will ever be
-    ## reported has been, so the nowcast is the observed count exactly.
-    @test onset_nowcast(y, onsets_u, D - 1, logit_h0, γ, u, gs, α) ≈ y
-    ## At delay zero only the first day's hazard has fired, so almost the
-    ## whole ascertained total is still outstanding.
-    n0 = onset_nowcast(y, onsets_u, 0, logit_h0, γ, u, gs, α)
-    @test n0 > y + 0.8 * onsets_u * α
-    ## The correction shrinks monotonically as the delay grows, and never
-    ## takes the nowcast below what is already reported.
-    ns = [
-        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
-            for δ in 0:(D - 1)
-    ]
-    @test all(diff(ns) .<= 1.0e-9)
-    @test all(ns .>= y - 1.0e-9)
-    ## The whole correction is the unreported part of `α`, so the nowcast
-    ## agrees with the closed form it is built from.
-    δ = 5
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α) ≈
-        y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
-    ## `until` targets a delay rather than the eventual total: nothing
-    ## outstanding when it is the delay already reached, the reporting
-    ## between the two delays when it is later, and never less than that.
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ) ≈ y
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ - 2) ≈
-        y
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = 12) ≈
-        y +
-        onsets_u * (
-        onset_report_F(12, logit_h0, γ, u, gs, α) -
-            onset_report_F(δ, logit_h0, γ, u, gs, α)
-    )
-    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
-        onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end
 
 @testitem "summed Student-t likelihood matches one term per cell" begin
@@ -1158,4 +1050,50 @@ end
         DynamicPPL.getlogjoint(vi)
     draw = m(Xoshiro(2)).increments
     @test draw isa Vector{Float64} && length(draw) == 6
+end
+
+@testitem "onset_reporting_model: the calendar walk starts a delay support before the first report" begin
+    ## Report days starting more than D days after the first onset day, so
+    ## the walk's start (`onset_hazard_grid_start`) is later than
+    ## `minimum(onset_days)`, and the tracked cut-off total is
+    ## `onset_report_expected_total` on the walk's own grid.
+    using BVDOutbreakSize: onsets_only_model, fitted_onset_hazard,
+        onset_hazard_grid_start, onset_report_expected_total,
+        ONSET_REPORT_MAX_DELAY
+    using Turing: Prior, sample, returned
+    import FlexiChains
+
+    oc = (;
+        onset_days = [1, 2, 3, 4, 1, 2, 3, 4, 5],
+        report_days = [50, 50, 50, 50, 55, 55, 55, 55, 55],
+        prev_report_days = [0, 0, 0, 0, 50, 50, 50, 50, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    n = 80
+    D = ONSET_REPORT_MAX_DELAY
+    grid_end = maximum(oc.report_days)
+    grid_start = onset_hazard_grid_start(oc.onset_days, oc.report_days; D)
+    @test grid_start == grid_end - 5 - D + 1
+
+    m = onsets_only_model(n; onset_curve_history = oc, breakpoint = 30)
+    chn = sample(
+        m, Prior(), 5; chain_type = FlexiChains.VNChain, progress = false
+    )
+    states = [r.onset_report_state for r in vec(returned(m, chn))]
+    @test all(st.grid_start == grid_start for st in states)
+
+    hz = fitted_onset_hazard(m, chn)
+    @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
+
+    daily = [
+        (v = collect(t); vcat(v[1], diff(v)))
+            for t in vec(collect(chn[:cumulative_onsets]))
+    ]
+    et = vec(Array(chn[:expected_onset_reported_T]))
+    rebuilt = [
+        onset_report_expected_total(
+            daily[i], hz.logit_h0[i], hz.γ[i], grid_start, hz.alpha[i], n
+        ) for i in 1:5
+    ]
+    @test rebuilt ≈ et
 end
