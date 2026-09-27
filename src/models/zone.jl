@@ -300,7 +300,7 @@ after adding `ridge` of each cell's own variance to the diagonal, so that
 posterior on the shared quantity to first order. `Σ` is rank deficient
 whenever the parent carries fewer draws than there are cells. The
 factorisation then blends toward `diag(Σ)` at the smallest weight that
-succeeds ([`_zone_meld_factor`](@ref)). Shrinking toward the diagonal of
+succeeds (`_zone_meld_factor`). Shrinking toward the diagonal of
 `Σ` rather than toward the identity keeps every week's own variance and
 gives up only the correlations, which is the direction the parent's
 posterior supports least.
