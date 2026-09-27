@@ -40,7 +40,7 @@ Changes since v2.1.0.
 
 ### Model
 
-- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#PR).
+- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
   The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites, since a truncated Normal open to 0.01 admitted a mode at shape 0.05 once the complete curve was fitted in #884.
