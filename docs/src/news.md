@@ -40,7 +40,7 @@ Changes since v2.1.0.
 
 ### Model
 
-- The onset reporting hazard's level is identified (#PR).
+- The onset reporting hazard's level is identified (#947).
   Its delay deviations sum to zero and its report-day walk is centred on its mean, so the baseline is the mean logit hazard across delays and report days.
   The walk starts one delay support before the earliest report day and is held at its first value before that.
   Ascertainment stays anchored on the confirmed pipeline.
