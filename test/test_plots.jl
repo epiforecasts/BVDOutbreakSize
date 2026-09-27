@@ -171,6 +171,24 @@ end
     )
 end
 
+@testitem "plot_pair drops non-finite draws with a warning" setup = [
+    HeadlessMakie,
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_pair
+
+    ## An outbreak that exhausts its pool has `R_T = 0` and so `r = -Inf`.
+    rng = MersenneTwister(1)
+    post = (; a = randn(rng, 200), r = randn(rng, 200))
+    prior = (; a = randn(rng, 300), r = [-Inf; randn(rng, 299)])
+    obj = @test_logs (:warn, r"1 non-finite draw.*r") plot_pair(
+        post; prior
+    )
+    @test obj !== nothing
+    obj = @test_logs (:warn, r"1 non-finite draw.*r") plot_pair(prior)
+    @test obj !== nothing
+end
+
 @testitem "plot_correlation_heatmap returns a Makie figure" setup = [
     HeadlessMakie,
 ] begin

@@ -16,6 +16,8 @@ The ones used while making a change:
 - `BVD_FIT_ID=<id> task fit` fits and caches one model, and `task fit-all` fits them all.
   `julia --project=docs docs/fits/list.jl` lists the ids.
 - `task check-convergence` runs the convergence gate CI applies before publishing.
+- `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings.
+  Run it before pushing a model change.
 - `task release-notes` prints the notes the next release would publish.
 
 To render one report page from the cached fits, set `BVD_DOC_PAGE` to its path under `docs/pages/`:
@@ -154,7 +156,7 @@ Edit it in `README.md` only.
 Fits are cached under `logs/fit_cache`, keyed on a content hash.
 `fit_content_hash` in `docs/fits/registry.jl` builds the hash from three inputs.
 
-- The bytes of each file in `FIT_SOURCE_FILES`: the files under `src/models/`, `renewal.jl`, `sampling.jl`, `constants.jl`, `data.jl` and `onset_curve.jl` in `src/`, and the cache code itself.
+- The bytes of each file in `FIT_SOURCE_FILES`: the files under `src/models/`, `renewal.jl`, `sum_to_zero.jl`, `mooncake_rules.jl`, `sampling.jl`, `constants.jl`, `data.jl` and `onset_curve.jl` in `src/`, and the cache code itself.
 - Every file under `data/` except those named in `FIT_DATA_EXCLUDE`.
 - The cache schema version and the sampler settings, including `joint_sampler_args()` for the headline joint and its spatial control.
 
@@ -285,6 +287,8 @@ Open the pull request early and let CI do the long work.
 Run `task format` before every push, then only narrow checks locally: `task test-quick`, a single-file test run, or one rendered page.
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
+The docs build also fits the headline joint to datasets it simulates and checks that it recovers them (`scripts/recovery.jl`).
+A failing recovery comments on a tracking issue on `main` and on the pull request.
 
 On a pull request each of those runs only when the change touches something it is built from.
 The test suite and coverage need `src/`, `ext/`, `test/`, `data/`, `Project.toml`, and `docs/fits/` and `scripts/` because test items include files from both.

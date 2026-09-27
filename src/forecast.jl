@@ -326,8 +326,8 @@ end
     PROVINCE_FORECAST_METHOD
 
 The `method` [`province_forecast_archive`](@ref) records on each row, and the
-only one the release scoring scores. It names the version of
-[`forecast_provinces`](@ref), so archives of an earlier projection are never
+only one the release scoring scores. It names the method of
+[`forecast_provinces`](@ref), so archives of another method are never
 scored alongside it.
 """
 const PROVINCE_FORECAST_METHOD = "predict"
@@ -440,8 +440,7 @@ Only the incident and level quantities are archived: `confirmed cases` and
 `onset reports` new over the horizon, and the supply-limited `isolation beds`
 occupancy. The cumulative totals are revised across data vintages, so they
 are not archived. The reporting triangle's own total is revised by more than
-the rest, since the ≈4% per-scan level error alone moves it by tens of cases
-and the printed total falls between consecutive vintages (2531 to 2523, and
+the rest, since the printed total falls between consecutive vintages (2531 to 2523, and
 2018 to 1996), which late reporting cannot produce.
 
 When the forecast carries the confirmed/suspect ward split
@@ -499,8 +498,7 @@ cut-off, in the [`forecast_archive`](@ref) schema plus a `province` column.
 `(province, stream, horizon, draw)` with columns `made_date`, `horizon`,
 `target_date`, `province`, `stream`, `draw`, `value` and `method`.
 `method` is [`PROVINCE_FORECAST_METHOD`](@ref), so scoring can tell these
-rows from earlier archives: the hand-written projection wrote
-`"projection"`, and the share split before it wrote no `method` column.
+rows from archives of another method or with no `method` column.
 
 The two incident streams the spatial tables report are archived, under the
 same `confirmed cases` and `confirmed deaths` labels `forecast_archive`

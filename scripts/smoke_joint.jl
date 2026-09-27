@@ -66,7 +66,7 @@ println()
 ## Parameters that have split between chains in past fits.
 for n in [
         "cases_state.report_state.α", "onset_to_sample_mean",
-        "onset_report_state.σ_scan", "rt_state.sigma_rw", "σ_δ",
+        "onset_report_state.τ", "rt_state.sigma_rw", "patch_state.σ_drift",
     ]
     try
         v = chn[Symbol(n)]

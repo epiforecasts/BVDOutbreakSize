@@ -152,8 +152,8 @@ province_case_ppc_fig #hide
 
 province_death_ppc_fig #hide
 
-# The three province terms added with the isolation and laboratory data are checked the same way.
-# The laboratory panel is the split of each calendar week's analysed specimens, which the background split identifies.
+# The three province terms for the isolation and laboratory data are checked the same way.
+# The laboratory panel is the split of each calendar week's analysed specimens, which identifies the background split.
 # The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
 # The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's static share of the national capacity.
 # A gap in a panel is a day on which that province printed nothing.
@@ -410,7 +410,8 @@ province_pairs_fig #hide
 # ## Province parameter recovery
 #
 # Whether the model recovers each province's values when fitted to data it simulated itself, from the same runs as the national [parameter recovery](@ref "Parameter recovery").
-# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, and below each quantity by province is on its own scale with the prior in grey, each seed's posterior in its colour and its true value as a dashed line.
+# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value.
+# Below, each quantity by province is on its own scale with the prior in grey, each seed's posterior in its colour and its true value as a dashed line.
 
 #md # ```@raw html
 #md # <details><summary>Recovery figure</summary>

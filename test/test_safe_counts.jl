@@ -6,7 +6,7 @@
     using BVDOutbreakSize: SafePoisson
     using Distributions: Poisson
     using Random: Xoshiro
-    ## The mean the exports forecast reached in #893.
+    ## An exports forecast mean past typemax(Int).
     λ = 9.480115359493294e18
     @test_throws InexactError rand(Xoshiro(1), Poisson(λ))
     @test rand(Xoshiro(1), SafePoisson(λ)) == typemax(Int)

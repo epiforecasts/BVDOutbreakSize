@@ -1279,8 +1279,9 @@ for scoring by [`province_forecast_archive`](@ref).
 `fc` is a [`forecast_provinces`](@ref) frame. A national
 [`forecast_reported`](@ref) result is replaced by the province forecast read
 from the posterior-predictive draws `pp` at `horizon` days, which also labels
-the rows. The table adds each province's new latent infections and its
-reproduction number at the horizon.
+the rows. The table adds each province's patients in isolation and
+isolation beds, its new latent infections and its reproduction number at the
+horizon.
 """
 function province_forecast_table(
         pp, fc;

@@ -374,22 +374,23 @@ full generation interval of differentiable history. The renewal recursion
 `population`. The default is the summed 2019 INS resident population of the
 seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
-The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
+The total outbreak age is `T = m·G + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
 applied to this total `T` at the composer. The renewal start sits a small
 lead after the genetic TMRCA day, past the TMRCA uncertainty where
 sustained transmission is confident, so `τ_obs < tmrca_days` and the
 censored bound `tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays
 informative. It pulls the origin to sit at or before the MRCA, so the
-cryptic duration `m·τ` cannot be too short.
+cryptic duration `m·G` cannot be too short.
 
 The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
 forwarded to the reproduction-number submodel. Returns
-`(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ, R0, r0, r,
-doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`,
-where `r`/`doubling_time` are the current growth derived from the cut-off
-reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
-sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
+`(; infections, cumulative, Rt, g, seed_at_renewal_start, population, m, τ,
+R0, r0, r, doubling_time_initial, T, C_T, C_T_prior, doubling_time,
+seeding_age)`, where `r`/`doubling_time` are the current growth derived from
+the cut-off reproduction number net of depletion ([`adjusted_rt`](@ref))
+through forward Euler–Lotka (so `r` is sign-consistent with that `R_T` by
+construction), `r0` the cryptic rate
 implied by `R0`, and `seeding_age` is diagnostic only.
 
 With `forecast` a [`ForecastHorizon`](@ref) the walk and the renewal run
@@ -782,7 +783,7 @@ s_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{cap} z_p), \\qquad z_1 = 0,
 with the first patch the reference. The printed province bed counts move
 little relative to each other over the series, so a static share carries
 the split; one walk per patch would add some sixty truncated-normal
-innovations for a tenth more gradient cost. The bed split identifies the
+innovations. The bed split identifies the
 shares and the split's overdispersion absorbs the residual drift.
 
 Returns `(; s, pooling_sd)`.
@@ -1313,32 +1314,11 @@ end
 
 ## --- Patch (multi-population) models -----------------------------------
 
-## One knot of the provincial deviations: the previous knot retained by
-## `φ`, plus innovations that are the scales `σ_δ` times the correlation
-## factor `L` times the standard normals `z[offset + 1 : offset + np]`,
-## centred so the patches sum to zero. Shared by the fitted knots and the
-## knots past the cut-off, so both follow one recursion.
-function _deviation_step!(knots, k, innov, L, σ_δ, z, offset, φ)
-    np = size(knots, 1)
-    @inbounds for i in 1:np
-        acc = zero(eltype(innov))
-        for j in 1:i
-            acc += L[i, j] * z[offset + j]
-        end
-        innov[i] = σ_δ[i] * acc
-    end
-    innov_bar = sum(innov) / np
-    @inbounds for i in 1:np
-        knots[i, k] = φ * knots[i, k - 1] + (innov[i] - innov_bar)
-    end
-    return knots
-end
-
 """
-Reproduction numbers for several spatial patches (Ituri, Nord-Kivu,
-Sud-Kivu): a common national trend plus per-patch deviations that are free
-to vary in space and in time, drawn from a multivariate-normal random walk
-with a learned cross-patch correlation.
+Reproduction numbers for the spatial patches ([`PROVINCE_NAMES`](@ref)):
+a common national trend plus per-patch deviations that are free to vary in
+space and in time, drawn from a multivariate-normal AR(1) process with a
+learned cross-patch correlation.
 
 ```math
 \\log R_{p,t} = \\mu(t) + \\delta_p(t), \\qquad
@@ -1360,10 +1340,10 @@ as the national walk, linearly interpolated to the daily grid.
 `μ(t)` is the national weekly-knot walk ([`rt_walk_model`](@ref)), kept
 intact, so the national streams see exactly the `Rt` process the headline
 model fits and it is the target the provinces pool toward. The provinces
-are not equally observed: over the fitted window Nord-Kivu contributes 74
-laboratory positives and Sud-Kivu contributes none at all. Shrinking toward
-a common trend lets them borrow strength from Ituri and deviate only where
-the data insist. With `μ(t)` present the deviation covariance `Σ` is still
+are not equally observed: Ituri carries most of the laboratory positives
+and the pooled `other` patch few. Shrinking toward a common trend lets the
+sparse patches borrow strength from Ituri and deviate only where the data
+insist. With `μ(t)` present the deviation covariance `Σ` is still
 free, so the cross-patch correlation is learned rather than assumed.
 
 ### Sum-to-zero, not a reference patch
@@ -1402,11 +1382,10 @@ the correlation carries information the sds do not.
 ### What the data can and cannot identify here
 
 The composition of the confirmed cases identifies the contrast between
-provinces. With three patches that is essentially one number, the Ituri /
-Nord-Kivu contrast, since Sud-Kivu carries no signal. Expect `Ω` to be
-largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation
-prior rather than by data, which is why `Σ` is given a proper shrinkage
-prior rather than a flat one.
+provinces. The pooled `other` patch carries little signal. Expect `Ω` to
+be largely prior-driven and that patch's `Rt` to be pinned mostly by the
+deviation prior rather than by data, which is why `Σ` is given a proper
+shrinkage prior rather than a flat one.
 
 `σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
 province, a fixed ratio between them. It is a special case of this model rather than an
@@ -1668,8 +1647,9 @@ coupling raise a secondary province's early incidence.
 An all-zero kernel leaves a secondary patch no route to infections at all,
 so the uncoupled path keeps the sampled fractions (`seed_fraction_prior`, a
 `LogNormal` on the fraction of the primary seed). They partition the
-national cryptic seed rather than adding to it, so `C_T` stays the
-country's cryptic size and comparable across any patch count.
+national cryptic seed rather than adding to it, so the growth submodel's
+`C_T` stays the national daily incidence at the renewal start and
+comparable across any patch count.
 
 ### Returns
 
@@ -1769,8 +1749,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     )
     ## The fractions partition the national cryptic seed, they do not add to
     ## it. `growth_state.C_T` is `exp(r·m·G)` and the `m` prior is
-    ## elicited as a national quantity, so it is the size of the whole
-    ## cryptic phase.
+    ## elicited as a national quantity, so it is the national daily
+    ## incidence at the renewal start.
     ## Dividing through by `(1 + Σf)` keeps the national seed at `C_T` for any
     ## number of patches, so `C_T` stays comparable across `n_patches` and the
     ## genetic prior keeps its meaning.
@@ -1868,7 +1848,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         σ_δ = rt_state.σ_δ,
         δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
-        drift_factor = rt_state.drift_factor,
         Rt_national = rt_state.Rt_national,
         g, R0, r0 = r_clock,
         m = growth_state.m, τ = growth_state.τ,

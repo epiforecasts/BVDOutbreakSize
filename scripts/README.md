@@ -18,7 +18,7 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `scan_province_tableau1.jl` | Scans Tableau 1 of the SitRep PDFs for the per-province confirmed cases and deaths and prints the `province_confirmed_history` and `province_death_history` blocks. Fails unless the provinces sum to the national series on every date. Also `task province-tableau1`. |
 | `scan_province_lab.jl` | Scans the laboratory section for the per-province samples analysed and positives and prints the `province_lab_daily_history` block. Fails unless the analysed counts sum to `tests_analysed_daily_history` on every date. Also `task province-lab-data`. |
 | `scan_province_care.jl` | Scans the occupation tables and the care-continuity prose for the per-province patients in isolation, beds and 24h flows into `data/province_care_scanned.csv`, one row per (SitRep, province) with the source text quoted. Exits non-zero on any entry it cannot parse. |
-| `province_care_manifest.jl` | Prints the sparse `province_isolation_history` and `province_bed_capacity_history` blocks from `data/province_care_scanned.csv`. |
+| `province_care_manifest.jl` | Reconciles `data/province_care_scanned.csv` with the blind read `data/province_care_read.csv` and prints the sparse `province_isolation_history` and `province_bed_capacity_history` blocks. Stops on any cell the two reads disagree on. |
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
 The three `scan_province_*.jl` scripts need `pdftotext` on `PATH` and the PDFs from `download_sitreps.jl`.

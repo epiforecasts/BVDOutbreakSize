@@ -631,7 +631,8 @@ end
 PairPlots.jl corner plot over the named posterior parameters, thinned by
 `thin`. Pass `prior`, another chain holding the same parameters, to overlay
 the prior as a second series with a legend, so the data's contribution to
-each marginal is visible.
+each marginal is visible. Draws non-finite in any parameter are left out
+of their series with a warning naming the parameter.
 
 `labels` maps a raw chain symbol to a display name (e.g.
 `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the axis labels
@@ -669,7 +670,7 @@ function plot_pair(
     _name(p) = Symbol(get(labels, p, string(p)))
     _table(d) = DataFrame(
         NamedTuple(_name(p) => v for (p, v) in pairs(d))
-    )[1:thin:end, :]
+    )[_finite_rows(d), :][1:thin:end, :]
     post = _table(draws)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
@@ -680,6 +681,20 @@ function plot_pair(
             color = colours[2]
         )
     )
+end
+
+## The draws finite in every quantity of `draws`. A pool the outbreak
+## exhausts gives `R_T = 0` and so `r = -Inf`, which the density and
+## histogram panels cannot bin. Each quantity with such draws is named.
+function _finite_rows(draws::NamedTuple)
+    keep = trues(length(first(draws)))
+    for (p, v) in pairs(draws)
+        bad = .!isfinite.(v)
+        any(bad) || continue
+        @warn "plot_pair drops $(count(bad)) non-finite draw(s) of $p"
+        keep .&= .!bad
+    end
+    return keep
 end
 
 """
@@ -2193,8 +2208,8 @@ Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 Each day is then scaled by the draw's susceptible fraction at the end of
 the day before, the chain's `susceptible_fraction`, so the trajectory is
-net of depletion ([`adjusted_rt`](@ref)). A chain without that series
-predates depletion and is returned unscaled.
+net of depletion ([`adjusted_rt`](@ref)). A chain without that series is
+returned unscaled.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(
@@ -2764,7 +2779,7 @@ Each province runs its own renewal at its own `Rt` and nothing rescales it,
 so `μ(t) · exp(δ_p(t))` is what the model used. Scaled by the province's
 susceptible fraction the day before (the chain's
 `susceptible_fraction_patch`), it is what `R_T_patch` reports. A chain
-without that series predates depletion and is returned unscaled.
+without that series is returned unscaled.
 The national reproduction number is not `μ` but the value implied by the
 summed infections, which is why [`plot_rt_patches`](@ref) draws it from the
 chain's own national trajectory rather than from these.
@@ -3894,8 +3909,7 @@ densities, since the occupancy carries the fitted reporting-basis offset and
 the shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-The model carries a single national bed capacity, so it cannot represent
-local saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
+This shortfall is national, so it cannot show local saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
 at 21.9%, and beds free in one province cannot serve patients in another, so
 the national shortfall understates the local unmet need.
 """
@@ -4918,7 +4932,7 @@ function plot_recovery(
         CairoMakie.xlims!(axq, lo - pad, hi + pad)
         if logged
             ## Round values on the log axis, spaced to the decades shown, or
-            ## finer when the posteriors span less than a factor of five.
+            ## finer when the axis spans two decades or fewer.
             decades = hi - lo
             ms = decades > 2 ? (1,) : decades > 1 ? (1, 3) : (1, 2, 5)
             steps = [m * 10.0^k for k in -4:9 for m in ms]
