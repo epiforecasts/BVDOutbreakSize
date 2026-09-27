@@ -674,9 +674,8 @@ analysed counts that the laboratory composition in [`bvd_joint`](@ref)
 scores, with the printed day indices `days` and the bin each day falls in
 (`bins`). `every = 1` scores each printed day as its own bin. `every = 7`
 sums the printed days into calendar weeks from the first day, so the
-composition scores a weekly split; the split of a week's volume carries
-the same spatial information at a seventh of the cost of a daily one. A
-pooled patch sums its members' counts (see [`PROVINCE_MEMBERS`](@ref)).
+composition scores a weekly split. A pooled patch sums its members' counts
+(see [`PROVINCE_MEMBERS`](@ref)).
 Every province must be reported on the same days, which the composition
 requires. Returns empty `days` when the history is absent or a patch has
 no analysed series, and the caller skips the term.

@@ -221,8 +221,7 @@ consistency between provinces matters more than the accuracy of any one of
 them. The relative sizes enter the importation kernel and centre the
 province background and bed-capacity shares. The absolute sizes are the pools the renewal depletes
 ([`renewal_infections`](@ref), [`patch_infections`](@ref)), where they only
-bound the outbreak, so a figure out by a few years of growth changes nothing
-at the scale the outbreak has reached.
+bound the outbreak.
 """
 const PROVINCE_SOURCE_POPULATIONS = [
     4_008_000, 7_574_000, 6_565_000,
@@ -258,10 +257,10 @@ const PROVINCE_SOURCE_CAPITALS = [
     PROVINCE_NAMES
 
 The patches of the meta-population model, in patch order. The first entry
-is the primary patch. It is the origin of the outbreak, the reference for
-the per-patch reproduction-number deviations in
-[`patch_rt_model`](@ref), and the reference for the Uganda export
-propensities in [`province_export_pressure_model`](@ref).
+is the primary patch. It is the origin of the outbreak and the reference for
+the Uganda export propensities in [`province_export_pressure_model`](@ref).
+The per-patch reproduction-number deviations in [`patch_rt_model`](@ref)
+sum to zero, so no patch is their reference.
 
 Ituri, Nord-Kivu and Haut-Uele carry enough confirmed cases to be patches
 in their own right. The rest hold a few dozen between them and are pooled
