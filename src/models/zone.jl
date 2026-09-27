@@ -658,20 +658,20 @@ end
 ## Mean over the parent's draws of the ratio of two vector-valued
 ## quantities, empty when the chain does not carry both. Taken per draw and
 ## then averaged, rather than as a ratio of two averages, so it is a share
-## the parent actually held in some draw. Floored at zero and capped just
-## below one, since the numerator is a component of the denominator and only
-## rounding can put the ratio outside that.
-function _mean_parent_ratio(
-        chn, num::Symbol, den::Symbol; cap::Real = 0.95
-    )
+## the parent actually held in some draw. The numerator is a component of
+## the denominator, so each ratio lies in `[0, 1]` and reaches one on a day
+## a patch's infections are all imported. Only rounding can put it above
+## one, and `min` takes that back to one; a zero denominator gives zero.
+function _mean_parent_ratio(chn, num::Symbol, den::Symbol)
     (_has_key(chn, num) && _has_key(chn, den)) || return Float64[]
     ns = _draw_vectors(chn, num)
     ds = _draw_vectors(chn, den)
     (isempty(ns) || length(ns) != length(ds)) && return Float64[]
     length(first(ns)) == length(first(ds)) || return Float64[]
+    share(a, b) = b > 0 ? min(a / b, 1.0) : 0.0
     m = zeros(Float64, length(first(ns)))
     for (a, b) in zip(ns, ds)
-        m .+= clamp.(Float64.(a) ./ max.(Float64.(b), eps()), 0.0, cap)
+        m .+= share.(Float64.(a), Float64.(b))
     end
     return m ./ length(ns)
 end
@@ -2315,9 +2315,9 @@ function _zone_mixing_or_nothing(
     ## and carried per zone so the renewal reads it without a patch lookup.
     ε_bar = parent.origin_epsilon ./ max(mean(parent.origin_epsilon), eps())
     origin_weight = ε_bar[patch_of_zone]
-    ## Arrivals as a fraction of each patch's own infections, below one so
-    ## the locally grown part of a patch's total stays positive under any
-    ## deformation of the shared quantity.
+    ## Arrivals as a fraction of each patch's own infections, at most one,
+    ## so the locally grown part of a patch's total stays non-negative under
+    ## any deformation of the shared quantity.
     import_fraction = reshape(parent.import_fraction, np, n)
     return (;
         blocks.within, blocks.between, origin_weight,
