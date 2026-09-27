@@ -257,8 +257,7 @@ the renewal scaled by the susceptible fraction. `I_t` never exceeds the pool
 left, so an overflowing force takes the pool rather than giving `Inf`.
 `N` is a population size, not an estimate of who can be reached. The models
 pass census counts ([`PROVINCE_POPULATIONS`](@ref)), and at that scale it is
-a light bound that leaves the fitted trajectory unchanged to
-well under one percent and trims only forecasts that run into the millions.
+a light bound.
 `Rt` is therefore the reproduction number in a fully susceptible population.
 
 A pre-computed `seed` of length `L < n` fills the first `L` days (see
@@ -413,22 +412,19 @@ end
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N)
 
 Multi-patch (meta-population) renewal with between-patch importation and
-weak susceptible depletion. Each patch `p` has a renewal force on a shared
-daily grid,
+weak susceptible depletion. Each patch `p` generates infections from its
+own renewal force on a shared daily grid, and importation relocates a share
+of each day's generated infections through a kernel `K`:
 
 ```math
-y_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t},
+G_{p,t} = R_{p,t} \\sum_{s \\ge 1} I_{p,t-s}\\, g_s, \\qquad
+y_{p,t} = \\Bigl(1 - \\varepsilon_{p,t} \\sum_{q \\ne p} K_{q,p}\\Bigr) G_{p,t}
+    + \\sum_{q \\ne p} \\varepsilon_{q,t} K_{p,q}\\, G_{q,t}.
 ```
 
-taken as a rate on its own pool of `N[p]` as in [`renewal_infections`](@ref):
-`I_{p,t} = S_{p,t−1}(1 − e^{−y_{p,t} / N_p})` and
-`S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`. The importation term couples
-patches through a kernel `K`:
-
-```math
-\\text{importation}_{p,t} =
-    \\varepsilon \\sum_{q} K_{p,q}\\, I_{q,t-1}.
-```
+`y_{p,t}` is taken as a rate on the patch's own pool of `N[p]` as in
+[`renewal_infections`](@ref): `I_{p,t} = S_{p,t−1}(1 − e^{−y_{p,t} / N_p})`
+and `S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`.
 
 # Arguments
 
@@ -447,7 +443,8 @@ patches through a kernel `K`:
   off-diagonal sum times `epsilon` must be at most one, so a patch cannot
   export more transmission than it generates. Both hold for
   [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
-- `epsilon`: importation intensity, scaling the whole kernel. Importation
+- `epsilon`: importation intensity of each origin, a scalar for every
+  origin and day or an `n_patches x n_days` matrix. Importation
   is a transfer on the day it happens, so the origin patch is debited exactly
   what the destination patches are credited and coupling is never a source of
   infections. It is not conserved across days. The destination grows at its

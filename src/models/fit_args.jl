@@ -88,8 +88,8 @@ function patch_fit_args(obs)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
-    ## Weekly laboratory bins: the split of a week's analysed volume at a
-    ## seventh of the cost of the daily one.
+    ## Weekly laboratory bins, scoring the split of each week's analysed
+    ## volume.
     prov_lab = province_lab_increment_matrix(
         obs.province_lab_daily_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES); every = 7

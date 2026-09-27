@@ -1,5 +1,5 @@
 # Sum-to-zero deviations across patches, parameterised on the `n - 1`
-# directions a sum-to-zero vector actually has. Plain functions of their
+# free directions of a sum-to-zero vector. Plain functions of their
 # inputs, so they differentiate under Mooncake inside a Turing model.
 
 """

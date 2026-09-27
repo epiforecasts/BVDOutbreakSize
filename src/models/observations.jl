@@ -138,7 +138,7 @@ end
 ## A stream's simulated observation in place of its own, for fitting the
 ## model to data it simulated itself (`simulate_recovery`). `simulated` maps
 ## an observation's name within the stream to its values. With no simulated
-## data the observation is used as given, so a fit to real data is unchanged.
+## data the observation is used as given.
 _sim_obs(::Nothing, ::Symbol, obs) = obs
 function _sim_obs(simulated, name::Symbol, obs)
     return haskey(simulated, name) ? simulated[name] : obs
@@ -2305,8 +2305,8 @@ national non-BVD admissions `A_bg` through the rule-out stay `ruleout_pmf`
 and the abscond rate `κ`. The national stock in [`treatment_flow_model`](@ref)
 carries the confirmation dynamics; the patches share them, so they cancel in
 the shares approximately rather than exactly, and the split needs the stays alone,
-one convolution per patch rather than a copy of the flow machinery, whose
-cost is a fifth of the whole gradient. Returns an `(n_patches × n)` matrix
+one convolution per patch rather than a copy of the flow machinery.
+Returns an `(n_patches × n)` matrix
 whose columns sum to `demand`; an equal split of the reports gives equal
 halves.
 """
@@ -2426,6 +2426,16 @@ supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
 absorbs a between-report measurement-basis discontinuity in the
 isolation series. Empty (the default) is a no-op.
 
+With per-patch reports (`bvd_reports_matrix`) and the province rows
+`province_isolation` and `province_capacity`, the province occupancy and
+bed counts are each scored as a split of the printed sum of the provinces
+present that day ([`province_split_model`](@ref)). The occupancy split is
+on the uncapped per-patch demand, the national demand shared out by each
+patch's stock of admissions through the stays. The bed split is on each
+patch's static share of the national walk
+([`patch_capacity_share_model`](@ref)). The national likelihoods are kept,
+so the splits add only the spatial signal.
+
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
 BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
 sub-stock prevalences and their stay means, the in-care fraction and the daily
@@ -2533,7 +2543,7 @@ series for forecasting and replication.
         "treatment_flow_model: $(length(background_split)) background " *
             "shares for $(np) patches."
     )
-    ## The per-patch demand and capacity walks are built only when a
+    ## The per-patch demand and capacity shares are built only when a
     ## province split scores them; without province rows the stream is the
     ## national one whatever the patch count.
     split_occ = np > 1 && province_isolation !== nothing &&
