@@ -43,6 +43,11 @@ Changes since v2.1.0.
 - The province background and bed-capacity shares take fixed-scale log-ratios against population share, `Normal(0, 2.5)`, in place of a pooling scale over three deviations (#919).
   The data put both simplices several units from population share, so the pooling scale traded off against the deviations along a ridge and set the lowest bulk ESS in the patch model.
   The chain keys `τ_bg`, `z_bg`, `τ_cap` and `z_cap` become `bg_log_ratio` and `cap_log_ratio`, and `province_background_split_sd` is removed.
+- The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
+  The share is recomputed each day, so it moves with the admissions.
+  A pooled static deviation returns, `τ_cap ~ Normal⁺(0, 1)` over `z_cap ~ Normal(0, 1)`, and `cap_log_ratio` is removed.
+  `province_capacity_share` becomes a daily matrix.
+  The background split keeps its population centre.
 - The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
   The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
   Fitted values change.
