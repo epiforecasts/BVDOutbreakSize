@@ -46,7 +46,7 @@ Changes since v2.1.0.
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
   Fitted values change by under 1% while the outbreak is far below the population.
-- The in-care confirmation hazard is the laboratory pipeline's true positives per suspected BVD case rather than the share tested times the pool's positivity (#PRC).
+- The in-care confirmation hazard is the laboratory pipeline's true positives per suspected BVD case rather than the share tested times the pool's positivity (#943).
   Positivity averages over background suspects and false positives, so it understated a BVD case's rate by the pool's time-varying BVD share.
   Fitted values change.
 - The onset stream's read noise is one fitted SD per digitised read plus the rounding variance of an integer read, replacing the fixed pixel floor, the slack multiplier and the per-figure scan level (#881).
