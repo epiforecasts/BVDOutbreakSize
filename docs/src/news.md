@@ -40,7 +40,7 @@ Changes since v2.1.0.
 
 ### Model
 
-- Each onset-curve cell's variance is a negative binomial count about the modelled mean plus one read SD per digitised bar the cell differences (#PR).
+- Each onset-curve cell's variance is a negative binomial count about the modelled mean plus one read SD per digitised bar the cell differences (#946).
   It replaces the Poisson count and the rounding variance of an integer read.
   The Student-t scale is set so its variance matches, and the read SD prior is centred on the digitisation audit's 0.40 cases per settled bar-day.
   Ascertainment stays anchored on the confirmed pipeline.
