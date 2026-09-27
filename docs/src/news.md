@@ -46,7 +46,7 @@ Changes since v2.1.0.
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
   Fitted values change by under 1% while the outbreak is far below the population.
-- The onset stream is simpler (#PRA).
+- The onset stream is simpler (#944).
   Its ascertainment is one fitted share of cases that appear on the curve, `logit(α) ~ Normal(0, 1)`, rather than the confirmed stream's positivity times an offset and an onset-date walk, since the curve and the confirmed stream count the same people.
   Cell noise is a negative binomial count variance plus one read SD per digitised bar, with the read SD prior centred on the digitisation audit's 0.40 cases, replacing the Poisson count and the rounding term.
   The reporting hazard's delay deviations sum to zero and its calendar walk is centred on its mean, starting one delay support before the earliest report day.
@@ -91,7 +91,7 @@ Changes since v2.1.0.
 
 ### Report
 
-- The national page adds the fitted onset-to-report delay distribution over report time (#PRA).
+- The national page adds the fitted onset-to-report delay distribution over report time (#944).
   The in-sample panels show each digitised snapshot against the predicted eventual reported total drawn through the onset likelihood, for the first and the eight most recent snapshots.
 - Every forecast is drawn from the fitted model with `predict` rather than a hand-written projection (#867).
   The national forecast now carries the renewal, each stream's delays and ascertainment and its own likelihood past the cut-off.
