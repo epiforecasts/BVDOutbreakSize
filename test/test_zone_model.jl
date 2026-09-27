@@ -136,8 +136,8 @@
                 [vec(I_bar) for _ in 1:ndraw],
                 ndraw, 1
             ),
-            Symbol("gi_state.α") => fill(2.71, ndraw, 1),
-            Symbol("gi_state.θ") => fill(5.65, ndraw, 1),
+            Symbol("gi_state.gi_mean") => fill(2.71 * 5.65, ndraw, 1),
+            Symbol("gi_state.gi_sd") => fill(sqrt(2.71) * 5.65, ndraw, 1),
             Symbol("inc_state.delay_mean") => fill(6.3, ndraw, 1),
             Symbol("inc_state.delay_sd") => fill(3.5, ndraw, 1),
             Symbol("confirmed_state.receipt_state.d.delay_mean") =>
@@ -934,7 +934,7 @@ end
     )
     @test_throws ErrorException zone_fit_inputs(syn.chain, bare; kw...)
     ## A parent without the patch structure or a delay it needs.
-    for key in (:infections_patch, Symbol("gi_state.α"))
+    for key in (:infections_patch, Symbol("gi_state.gi_mean"))
         chain = copy(syn.chain)
         delete!(chain, key)
         @test_throws ErrorException zone_fit_inputs(chain, syn.obs; kw...)

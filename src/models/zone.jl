@@ -26,8 +26,8 @@ const ZONE_RECEIPT_NMAX = cdf_nmax(lognormal_meansd(4.5, 4.0))
 ## sit under their submodel names, and the receipt delay under the
 ## confirmed stream's.
 const _ZONE_PARENT_KEYS = (
-    gi_alpha = Symbol("gi_state.α"),
-    gi_theta = Symbol("gi_state.θ"),
+    gi_mean = Symbol("gi_state.gi_mean"),
+    gi_sd = Symbol("gi_state.gi_sd"),
     inc_mean = Symbol("inc_state.delay_mean"),
     inc_sd = Symbol("inc_state.delay_sd"),
     receipt_mean = Symbol("confirmed_state.receipt_state.d.delay_mean"),
@@ -1626,10 +1626,10 @@ function _zone_parent_draws(chn, key::Symbol; vectors::Bool = false)
     return vectors ? _draw_vectors(chn, key) : _draws(chn, key)
 end
 
-## Generation-interval PMF (lag 1) of one parent draw, discretised as the
-## parent did.
-function _zone_gi_pmf(α::Real, θ::Real)
-    pmf = discretise_censored(Gamma(α, θ), ZONE_GI_NMAX)
+## Generation-interval PMF (lag 1) of one parent draw from its Gamma mean
+## and SD, discretised as the parent did.
+function _zone_gi_pmf(m::Real, s::Real)
+    pmf = discretise_censored(Gamma((m / s)^2, s^2 / m), ZONE_GI_NMAX)
     return pmf[2:end] ./ sum(pmf[2:end])
 end
 
@@ -1671,13 +1671,13 @@ function zone_parent_inputs(chn)
         end
         acc ./ ndraws
     end
-    α = _zone_parent_draws(chn, keys_.gi_alpha)
-    θ = _zone_parent_draws(chn, keys_.gi_theta)
+    gi_m = _zone_parent_draws(chn, keys_.gi_mean)
+    gi_s = _zone_parent_draws(chn, keys_.gi_sd)
     inc_m = _zone_parent_draws(chn, keys_.inc_mean)
     inc_s = _zone_parent_draws(chn, keys_.inc_sd)
     rec_m = _zone_parent_draws(chn, keys_.receipt_mean)
     rec_s = _zone_parent_draws(chn, keys_.receipt_sd)
-    g = _zone_mean_pmf(i -> _zone_gi_pmf(α[i], θ[i]), ndraws)
+    g = _zone_mean_pmf(i -> _zone_gi_pmf(gi_m[i], gi_s[i]), ndraws)
     inc_pmf(i) = discretise_censored(
         lognormal_meansd(inc_m[i], inc_s[i]),
         ZONE_INCUBATION_NMAX
