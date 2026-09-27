@@ -684,12 +684,11 @@ recovery = recovery_results()
 recovery_national_quantities = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
     "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
-    "region_drift_sd", "rt_state.intervention_effect",
+    "rt_state.intervention_effect",
 ]
 recovery_labels = Dict(
     "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
     "onset_report_state.τ" => "onset read SD",
-    "region_drift_sd" => "province drift SD",
     "rt_state.intervention_effect" => "intervention effect",
 )
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
