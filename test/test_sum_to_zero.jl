@@ -5,8 +5,8 @@
     using Random: Xoshiro, randn
     using Statistics: mean
     using Distributions: LKJCholesky, Normal, Chi, truncated
-    using BVDOutbreakSize: sum_to_zero_basis, sum_to_zero_factor,
-        sum_to_zero, sum_to_zero_moments, bartlett_factor
+    using BVDOutbreakSize: sum_to_zero_basis, sum_to_zero_basis_mul,
+        sum_to_zero_factor, sum_to_zero, sum_to_zero_moments, bartlett_factor
 
     ## Naive dense references, written out entry by entry.
     matmul(A, B) = [
@@ -51,6 +51,21 @@ end
         @test matmul(Q, permutedims(Q)) ≈ centring(n) atol = 1.0e-12
     end
     @test_throws ArgumentError sum_to_zero_basis(0)
+end
+
+@testitem "sum_to_zero_basis_mul: the basis product without the basis" setup = [
+    SumToZeroReference,
+] begin
+    rng = Xoshiro(7)
+    for n in 1:9
+        z = randn(rng, n + 1)
+        ref = matmul(sum_to_zero_basis(n), reshape(z[1:(n - 1)], :, 1))[:, 1]
+        @test sum_to_zero_basis_mul(n, z) ≈ ref atol = 1.0e-12
+        @test length(sum_to_zero_basis_mul(n, z[1:(n - 1)])) == n
+    end
+    @test sum_to_zero_basis_mul(1, Float64[]) == [0.0]
+    @test_throws ArgumentError sum_to_zero_basis_mul(0, Float64[])
+    @test_throws DimensionMismatch sum_to_zero_basis_mul(4, randn(rng, 2))
 end
 
 @testitem "sum_to_zero: every draw sums to zero" setup = [SumToZeroReference] begin
@@ -239,6 +254,9 @@ end
     )
     Mooncake.TestUtils.test_rule(
         rng, sum_to_zero, F, randn(rng, 3); is_primitive = false
+    )
+    Mooncake.TestUtils.test_rule(
+        rng, sum_to_zero_basis_mul, 5, randn(rng, 4); is_primitive = false
     )
     Mooncake.TestUtils.test_rule(
         rng, F -> sum_to_zero_moments(F).cor, F; is_primitive = false

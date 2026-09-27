@@ -34,6 +34,35 @@ function sum_to_zero_basis(n::Integer)
 end
 
 """
+    sum_to_zero_basis_mul(n, z)
+
+`sum_to_zero_basis(n) * z[1:(n - 1)]` in `O(n)`, without forming the
+basis. Entry `i` of the product is the tail sum `Σ_{j ≥ i} Q_{ij} z_j` of
+the constant column entries plus the one negative entry `Q_{i, i-1}`, so
+one backward pass accumulates it. `z` may be longer than `n - 1`, and its
+extra entries are ignored. With `n = 1` it returns `[0]`.
+"""
+function sum_to_zero_basis_mul(n::Integer, z::AbstractVector)
+    n >= 1 || throw(ArgumentError("sum_to_zero_basis_mul: n = $n < 1"))
+    length(z) >= n - 1 || throw(
+        DimensionMismatch(
+            "sum_to_zero_basis_mul: $(length(z)) draws for $(n - 1) directions"
+        )
+    )
+    T = float(eltype(z))
+    out = Vector{T}(undef, n)
+    acc = zero(T)
+    @inbounds for i in n:-1:1
+        if i <= n - 1
+            acc += inv(sqrt(T(i * (i + 1)))) * z[i]
+        end
+        out[i] = i == 1 ? acc :
+            acc + (-(i - 1) * inv(sqrt(T((i - 1) * i)))) * z[i - 1]
+    end
+    return out
+end
+
+"""
 Loading matrix `F = Q diag(s) L` `(n × (n - 1))` of a sum-to-zero vector
 `δ = F z` with `z ~ N(0, I_{n-1})`.
 

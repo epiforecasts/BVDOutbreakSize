@@ -3740,7 +3740,7 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
     z_h0 ~ product_distribution(fill(Normal(0, 1), max(D - 1, 1)))
-    logit_h0 = η0 .+ σ_h0 .* (sum_to_zero_basis(D) * z_h0[1:(D - 1)])
+    logit_h0 = η0 .+ σ_h0 .* sum_to_zero_basis_mul(D, z_h0)
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.
@@ -3822,10 +3822,14 @@ function _onset_walk_on_grid(
         γ::AbstractVector, walk_start::Integer, grid_start::Integer,
         grid_end::Integer
     )
-    idx = clamp.(
-        (Int(grid_start):Int(grid_end)) .- Int(walk_start) .+ 1, 1, length(γ)
-    )
-    return γ[idx]
+    gs = Int(grid_start)
+    ws = Int(walk_start)
+    ng = length(γ)
+    out = Vector{eltype(γ)}(undef, max(Int(grid_end) - gs + 1, 0))
+    @inbounds for k in eachindex(out)
+        out[k] = γ[clamp(gs + k - ws, 1, ng)]
+    end
+    return out
 end
 
 """
@@ -3960,8 +3964,11 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## One delay-CDF table over the onset-date grid, read by both the
     ## anchor series and the per-cell moments, so the reporting hazard is
     ## evaluated once per (delay, onset date) cell for the whole stream.
+    ## The table reads the walk from `walk_start`, and its index clamp holds
+    ## the first value back to `grid_start` exactly as the returned `γ` does.
     cdf_table = onset_report_cdf_table(
-        hazard_state.logit_h0, γ, grid_start, grid_start, grid_end
+        hazard_state.logit_h0, hazard_state.γ, walk_start, grid_start,
+        grid_end
     )
     anchor_series = onset_report_anchor_series(
         cdf_table, grid_start,
