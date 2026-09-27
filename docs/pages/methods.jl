@@ -689,7 +689,7 @@ MarkdownTable(vintage_table) #hide
 # We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty:
 #
 # ```math
-# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
 # ```
 #
@@ -705,7 +705,7 @@ MarkdownTable(vintage_table) #hide
 # We do the same: each component is a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posteriors:
 #
 # ```math
-# \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
+# \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
@@ -720,7 +720,7 @@ MarkdownTable(vintage_table) #hide
 # The export model therefore uses the same line-list onset-to-admission delay [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above, with the same natural shape and scale priors:
 #
 # ```math
-# \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
 # ```
 #
@@ -1733,9 +1733,12 @@ cfr_prior_fig #hide
 # The curve and the confirmed stream count the same people, so borrowing the confirmed stream's level would score that level twice.
 # With $\alpha$ free, the curve informs the timing of onsets and the reporting delay rather than the outbreak's size.
 #
-# The first figure's bars are levels, differenced against an empty predecessor.
-# Each later figure scores a correction against the figure before it, for the onset dates within one delay support of its report day that both figures plot.
-# A date one of the two figures does not plot is unobserved rather than zero, so it gives no cell.
+# Each onset date is scored once.
+# Its first print is a level, differenced against an empty predecessor.
+# Each later figure that prints it while its delay is inside the support scores a correction against the last figure that printed it.
+# A level and its corrections sum to the latest print inside the support.
+# Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
+# A date a figure does not plot is unobserved in that figure rather than zero, so its next correction is taken against the last figure that did plot it.
 #
 # A cell's modelled mean $\mu$ is the difference between the two expected prints.
 # A count likelihood cannot be used, since a later scan can read a bar lower and a correction can be negative.

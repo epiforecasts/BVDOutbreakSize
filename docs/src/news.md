@@ -46,6 +46,10 @@ Changes since v2.1.0.
   Fitted values change.
 - The renewal depletes each province's resident population (2019 INS figures, as in `PROVINCE_POPULATIONS`), so neither a sampler proposal nor a forecast can run past it (#900).
   Fitted values change by under 1% while the outbreak is far below the population.
+- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support, so the fit sees the whole curve rather than the trailing four weeks (#884).
+  A date a figure does not plot is differenced against the last figure that did, rather than dropped.
+  The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites, since a truncated Normal open to 0.01 admitted a mode at shape 0.05 once the complete curve was fitted.
+  Fitted values change.
 - The onset stream is simpler (#944).
   Its ascertainment is one fitted share of cases that appear on the curve, `logit(α) ~ Normal(0, 1)`, rather than the confirmed stream's positivity times an offset and an onset-date walk, since the curve and the confirmed stream count the same people.
   Cell noise is a negative binomial count variance plus one read SD per digitised bar, with the read SD prior centred on the digitisation audit's 0.40 cases, replacing the Poisson count and the rounding term.
