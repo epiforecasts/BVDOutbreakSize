@@ -462,8 +462,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
             confirmed_break_sd, ckw...
         )
     )
-    ## In-care confirmation hazard `τ_test · p_pos` on the daily grid.
-    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
+    ## In-care confirmation hazard: confirmations per suspected BVD case.
+    conf_hazard_daily = confirmed_state.case_confirmation_grid
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,
@@ -1374,7 +1374,7 @@ density there, is the fitted model's.
     patch_asc = isempty(province_days) ? ones(n_patches) :
         composition_state.province_ascertainment
 
-    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
+    conf_hazard_daily = confirmed_state.case_confirmation_grid
     ## Per-patch BVD reports for the province occupancy split, the rows
     ## summing to the national series the flows are built on.
     bvd_reports_matrix = n_patches > 1 ?

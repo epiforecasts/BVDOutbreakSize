@@ -1159,7 +1159,8 @@ cfr_prior_fig #hide
 #
 # The laboratory label carves the census into a confirmed and a suspected sub-stock.
 # Confirmation relabels a true case already in a bed at the daily hazard $\rho\,\tau_{\text{test}}\,p_{\text{pos},t}$.
-# The community confirmation hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ (the share of suspects routed to the laboratory times the day's positivity) is borrowed from the confirmed-case pipeline rather than re-estimated.
+# The confirmation hazard is the laboratory pipeline's true positives per suspected BVD case, borrowed rather than re-estimated ($\varrho\,\tau_{\text{test}}\,s\,q_v / \varphi_v$ in the [laboratory pipeline](@ref "Laboratory pipeline") notation below).
+# The pool's positivity would understate this rate by the pool's time-varying BVD share, since it averages over background suspects and false positives.
 # The in-care confirmed stock is therefore a subset of the total confirmed by construction.
 # The confirmed-in-care stock is tracked by admission cohort.
 # Each true-case admission carries two clocks from the day it enters a bed, a confirmation clock and a clinical-stay clock.

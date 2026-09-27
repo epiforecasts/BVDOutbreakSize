@@ -551,7 +551,7 @@ end
     using BVDOutbreakSize: treatment_only_model
 
     ## A published split census but no lab/confirmed data: the borrowed
-    ## in-care confirmation hazard `τ_test · p_pos` is then structurally
+    ## in-care confirmation hazard is then structurally
     ## zero, so the modelled confirmed sub-stock is empty by construction.
     ## The split-census likelihood must no-op (the split is identified only
     ## in the joint where the lab pipeline exists) rather than score the

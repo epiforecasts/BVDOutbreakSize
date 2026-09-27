@@ -969,24 +969,52 @@ function composition_positivity(
     nw = length(window_days)
     p_pos = Vector{Tt}(undef, nw)
     @inbounds for i in 1:nw
-        ## Pool composition φ = (p_drc·BVD) / pool over the window, with
-        ## pool = p_drc·BVD + λ_bg, guarded against a zero/negative
-        ## denominator.
-        ratio = bvd_window[i] / (pool_window[i] + lo)
-        φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
-        δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
-        ## Severity-enriched tested BVD share, then the assay
-        ## sensitivity/specificity transform to the tested-positive
+        φ, qe = _composition_shares(
+            bvd_window[i], pool_window[i], c_window[i], δ0, dscale, lo, hi
+        )
+        ## Assay sensitivity/specificity transform to the tested-positive
         ## probability so the false-positive term identifies `λ_bg`.
-        q = logistic(logit(φ) + δ_i)
-        qf = isfinite(q) ? q : φ
-        qe = clamp(qf, lo, hi)
         p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
         ## Fall back to the composition on a non-finite value, so the
         ## confirmed BetaBinomial always sees a valid probability.
         p_pos[i] = clamp(isfinite(p) ? p : φ, lo, hi)
     end
     return p_pos
+end
+
+## Per-window true positives per suspected BVD case, `s · q / φ`: the
+## tested BVD share `q` over the pool's BVD share `φ` is how much more often
+## a BVD suspect is tested than the pool average, and `s` the chance its test
+## is positive. False positives are left out, since they confirm no BVD
+## case. Same loop form as `composition_positivity`.
+function composition_case_confirmation(
+        bvd_window, pool_window, c_window, δ0, dscale, s_test, lo, hi
+    )
+    Tt = eltype(bvd_window)
+    s_t = convert(Tt, s_test)
+    nw = length(bvd_window)
+    out = Vector{Tt}(undef, nw)
+    @inbounds for i in 1:nw
+        φ, qe = _composition_shares(
+            bvd_window[i], pool_window[i], c_window[i], δ0, dscale, lo, hi
+        )
+        out[i] = s_t * qe / φ
+    end
+    return out
+end
+
+## The BVD share of one window's pool, `φ = (p_drc·BVD) / pool` guarded
+## against a zero or negative denominator, and the severity-enriched tested
+## BVD share `q = logistic(logit(φ) + δ)`, with `δ` decaying on the
+## cumulative analysed volume `c`.
+function _composition_shares(bvd, pool, c, δ0, dscale, lo, hi)
+    Tt = typeof(bvd)
+    ratio = bvd / (pool + lo)
+    φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+    δ_i = convert(Tt, δ0) * exp(-c / dscale)
+    q = logistic(logit(φ) + δ_i)
+    qe = clamp(isfinite(q) ? q : φ, lo, hi)
+    return φ, qe
 end
 
 """
@@ -1355,15 +1383,25 @@ quantities.
     if eltype(p_pos_daily) === Any
         p_pos_daily = convert(Vector{eltype(analysed_daily)}, p_pos_daily)
     end
-    ## Per-day positivity `p_pos_grid`, exposed with `τ_test` so the treatment
-    ## model can form the in-care confirmation hazard `τ_test · p_pos_grid[t]`.
+    ## Per-day positivity `p_pos_grid` over the whole analysed pool.
     p_pos_grid = expand_vintage_rate(p_pos_daily, window_days, n)
     confirmed_daily = p_pos_grid .* analysed_daily
+    ## Confirmations per suspected BVD case, `κ · τ_test · s · q / φ`, on
+    ## the daily grid, the in-care confirmation hazard of the treatment
+    ## model. Positivity averages over the whole pool, background suspects
+    ## and false positives included, so it understates the rate for a BVD
+    ## case by the pool's time-varying BVD share.
+    case_conf_window = composition_case_confirmation(
+        bvd_window, pool_window, c_window, δ0, dscale, s_test, lo, hi
+    )
+    test_rate = κ_test === nothing ? τ_test : κ_test * τ_test
+    case_confirmation_grid = test_rate .*
+        expand_vintage_rate(case_conf_window, window_days, n)
 
     return (;
         τ_test, κ_test,
         bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
-        confirmed_daily,
+        confirmed_daily, case_confirmation_grid,
         s_test, spec,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
@@ -1901,9 +1939,10 @@ a_\\text{bg}(t) = κ\\,O_\\text{susp}(t-1)\\,
 ```
 
 The confirmation overlay relabels occupied true cases at the daily hazard
-`conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab pipeline, so the
-confirmed sub-stock is the confirmed subset of `O_bvd`, never an extra
-compartment, draining at the confirmed share of the BVD discharges:
+`conf_hazard(t)`, the confirmations per suspected BVD case borrowed from
+the lab pipeline, so the confirmed sub-stock is the confirmed subset of
+`O_bvd`, never an extra compartment, draining at the confirmed share of the
+BVD discharges:
 
 ```math
 O_\\text{conf}(t) = O_\\text{conf}(t-1)
@@ -2070,8 +2109,8 @@ O_\\text{conf}(t) = \\sum_{u \\le t} A_\\text{bvd}(u)\\,
 
 a product of two clocks running from admission. The confirmation clock is
 the per-cohort cumulative confirmation probability under the time-varying
-daily hazard `conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab
-pipeline, with exposure from the day after admission:
+daily hazard `conf_hazard(t)` borrowed from the lab pipeline, with
+exposure from the day after admission:
 
 ```math
 \\text{CDF}_\\text{conf}(u, t) = 1 - \\prod_{j = u+1}^{t}\\bigl(1 -
@@ -2400,8 +2439,8 @@ adjusts the infection CFR to the admitted population by a sampled modifier
 
 A label overlay carves the occupied stock into confirmed and suspect
 sub-stocks without removing anyone from the total. Confirmation relabels
-an occupied true case at the daily hazard `ρ · τ_test · p_pos`, the
-community hazard borrowed from the lab pipeline
+an occupied true case at the daily hazard `ρ · c(t)`, with `c(t)` the
+confirmations per suspected BVD case borrowed from the lab pipeline
 ([`confirmed_cases_model`](@ref)) scaled by a sampled in-care modifier
 `ρ = exp(γ_conf)` the confirmed/suspect census identifies. The suspect
 sub-stock is the remainder `O_susp(t) = D(t) − O_conf(t)`, so a case that
@@ -2457,11 +2496,11 @@ series for forecasting and replication.
         ## they are present, only when the confirmation hazard is non-zero.
         confirmed_incare_history = (; days = Int[], counts = Int[]),
         suspect_incare_history = (; days = Int[], counts = Int[]),
-        ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from
-        ## the lab pipeline ([`confirmed_cases_model`](@ref)). `nothing`
-        ## (standalone, no lab stream) gives a zero hazard, so the confirmed
-        ## sub-stock stays empty and the suspect sub-stock carries the whole
-        ## occupancy.
+        ## Daily in-care confirmation hazard, the confirmations per suspected
+        ## BVD case borrowed from the lab pipeline
+        ## ([`confirmed_cases_model`](@ref)). `nothing` (standalone, no lab
+        ## stream) gives a zero hazard, so the confirmed sub-stock stays empty
+        ## and the suspect sub-stock carries the whole occupancy.
         conf_hazard_daily::Union{Nothing, AbstractVector} = nothing,
         ## The priors and delay submodels the keywords below default to.
         defaults = treatment_flow_defaults(),
@@ -2609,8 +2648,8 @@ series for forecasting and replication.
 
     admit_daily = A_bvd .+ A_bg
 
-    ## Community confirmation hazard `τ_test · p_pos` borrowed from the lab
-    ## pipeline. `nothing` (standalone) gives a zero hazard.
+    ## Confirmations per suspected BVD case borrowed from the lab pipeline.
+    ## `nothing` (standalone) gives a zero hazard.
     borrowed_hazard = if conf_hazard_daily === nothing
         zeros(eltype(A_bvd), n)
     elseif eltype(conf_hazard_daily) === Any
