@@ -44,15 +44,16 @@ priors, so the delay is estimated rather than fixed. Returns
 end
 
 """
-Generation-interval submodel, on the Gamma shape `α` and scale `θ`. The
-source is the Ebola virus disease serial interval as a generation-time
-proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
-maps once to `α ≈ 2.71` and `θ ≈ 5.65` (`α = (mean/sd)²`,
-`θ = sd²/mean`). The priors are centred there,
-`α ~ Normal⁺(2.71, 0.15)` and `θ ~ Normal⁺(5.65, 0.30)`, lower-truncated to
-keep the Gamma well defined. The SDs are set so the implied prior on the
-mean `α·θ` has the source's 95% CI on the serial-interval mean,
-13.0–17.6 d.
+Generation-interval submodel, on the Gamma mean and SD. The source is the
+Ebola virus disease serial interval as a generation-time proxy (fitted
+gamma, mean 15.3 d, SD 9.3 d, n = 92 pairs; WHO Ebola Response Team 2014,
+NEJM, Table 2). The source gives no interval on either, so each prior SD is
+the sampling standard error of that estimate from 92 pairs:
+`9.3 / √92 ≈ 0.97` d for the mean, and `≈ 1.0` d for the SD (the normal
+approximation for a sample SD, with the Gamma's excess kurtosis `6/α`).
+The priors are `gi_mean ~ Normal⁺(15.3, 0.97)`, 13.4–17.2 d at 95%, and
+`gi_sd ~ Normal⁺(9.3, 1.0)`, 7.3–11.3 d, drawn independently. The Gamma
+shape `α = (mean/sd)²` and scale `θ = sd²/mean` follow from them.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
@@ -62,18 +63,17 @@ so an infectee is infected strictly after its infector. Returns
 """
 @model function generation_interval_model(
         nmax::Integer;
-        alpha_prior = truncated(Normal(2.71, 0.15); lower = 0.1),
-        theta_prior = truncated(Normal(5.65, 0.3); lower = 0.1)
+        mean_prior = truncated(Normal(15.3, 0.97); lower = 1),
+        sd_prior = truncated(Normal(9.3, 1.0); lower = 1)
     )
-    α ~ alpha_prior
-    θ ~ theta_prior
+    gi_mean ~ mean_prior
+    gi_sd ~ sd_prior
+    α = (gi_mean / gi_sd)^2
+    θ = gi_sd^2 / gi_mean
     dist = Gamma(α, θ)
     pmf = discretise_censored(dist, nmax)
     g = pmf[2:end] ./ sum(pmf[2:end])
-    return (;
-        g, gi_mean = α * θ, gi_sd = sqrt(α) * θ,
-        gi_alpha = α, gi_theta = θ,
-    )
+    return (; g, gi_mean, gi_sd, gi_alpha = α, gi_theta = θ)
 end
 
 """
@@ -292,14 +292,15 @@ composer ([`infection_model`](@ref)) adds the observation span
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior
-`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.40)`, with median
+`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.30)`, with median
 doubling time (11.7 d) matching the BEAST X estimate (mbalaplacide2026,
-exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than
-the ≈0.24 that HPD implies, because the HPD is conditional on a
+exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.30 is a quarter
+wider than the ≈0.24 that HPD implies, because the HPD is conditional on a
 single-rate coalescent, which the field epidemiology contradicts
-(kupferschmidt2026), and an independent reanalysis puts the doubling time
-at 15.2–24.5 d (cuomodannenburg2026). The induced doubling-time prior is
-`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first reproduction
+(kupferschmidt2026). The earlier ten-genome reanalysis the BEAST X rate
+supersedes put the doubling time at 15.2–24.5 d (cuomodannenburg2026). The
+induced doubling-time prior is `LogNormal(log 11.7, 0.30)`, 6.5–21.1 d at
+95%, which contains the HPD and reaches into that earlier range. The first reproduction
 number is derived forward from this `r` and our generation interval through
 Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)), so the
 cryptic exponential phase and the established renewal share one growth
@@ -325,7 +326,7 @@ Returns `(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(
         g::AbstractVector;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.4),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.3),
         m_prior = truncated(Normal(2.75, 1.2); lower = 0)
     )
     r ~ r_prior
