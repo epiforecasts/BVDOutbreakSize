@@ -40,6 +40,12 @@ Changes since v2.1.0.
 
 ### Model
 
+- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#PR).
+  The fit sees the whole curve rather than the trailing four weeks.
+  A date a figure does not plot is differenced against the last figure that did, rather than dropped.
+  The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites, since a truncated Normal open to 0.01 admitted a mode at shape 0.05 once the complete curve was fitted in #884.
+  Ascertainment stays anchored on the confirmed pipeline.
+  Fitted values change.
 - The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
   The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
   Fitted values change.
