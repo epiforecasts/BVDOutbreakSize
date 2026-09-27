@@ -101,6 +101,8 @@ zone_ppc_cum_fig = plot_zone_shares(
 
 zone_ppc_fig #hide
 
+#-
+
 zone_ppc_cum_fig #hide
 
 # ### Confirmed deaths
@@ -165,6 +167,8 @@ zone_calibration_fig = plot_stream_calibration(zone_calibration_table);
 #md # ```
 
 zone_calibration_fig #hide
+
+#-
 
 zone_calibration_table #hide
 

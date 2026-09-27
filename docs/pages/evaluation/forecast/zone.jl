@@ -115,6 +115,8 @@ zone_validation_table_display = isempty(zone_validation_table) ?
 
 zone_validation_fig #hide
 
+#-
+
 MarkdownTable(zone_validation_scores_table) #hide
 
 #md # ```@raw html
