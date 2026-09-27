@@ -249,6 +249,8 @@ province_scores_note = size(province_scores_df, 1) == 0 ?
 
 province_scores_note #hide
 
+#-
+
 MarkdownTable(province_score_overview_display) #hide
 
 # The relative skill against the baseline by horizon, one panel per stream and province, on a log-scaled skill axis with the reference line at one.
