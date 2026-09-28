@@ -107,12 +107,11 @@ SitRep 105 reprints 104's figure and SitRep 107 reprints 106's; page 4 of 107 ca
 SitRep 108's render (802x479) anti-aliases the baseline and the weekly ticks into the 120 to 180 near-grey range, which is why the reader ranks baseline rows by their longest run under a <180 mask and tries both masks for the tick row.
 SitRep 109 reprints 108's figure.
 SitRep 131 reprints 130's figure (byte-identical embedded JPEG).
-SitRep 133 is not digitised.
-The reader calibrates its count scale at twice the right value and reads every bar at half height (-52% against n = 6 138).
-It and its byte-identical reprint in SitRep 134 are left out until that is fixed (issue #952).
+SitRep 134 reprints 133's figure (byte-identical embedded JPEG).
 SitRep 110 is not digitised: its page-4 caption still reads "par date de début des symptômes" but the embedded chart is titled and axis-labelled "par date de notification" (n = 5 710), a different basis; see issue #644.
 SitReps 111 to 114 resume the onset-date basis.
-SitRep 112's render (771x433) needs the near-grey fallback for the y-axis ticks as well.
+SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
+On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
 SitRep 115's figure draws bars past its last tick inside the "données potentiellement incomplètes" band, so the reader drops rows later than the report date plus one day.
 SitReps 115, 116 and 130 print an onset date past their own report date; `load_onset_curve` bounds each pair's window by the predecessor's report day, which drops the delay-0 cell 115->116 would otherwise score (issue #662 misattributed the R-hat jump that cell caused to 117 and 118).
 SitReps 117 and 118 keep the 07 September tick and plot onsets only to 03 and 04 September, behind their own report dates; the shorter coverage intersection only drops cells.
