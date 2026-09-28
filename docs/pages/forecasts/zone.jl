@@ -202,30 +202,6 @@ CSV.write(
 #md # </details>
 #md # ```
 
-# ## Archiving the zone forecast
-#
-# Each release carries the zone forecast draws in `zone_forecast.csv`, for scoring once the week has been reported.
-
-#md # ```@raw html
-#md # <details><summary>Write the zone forecast archive</summary>
-#md # ```
-
-output_dir = get(
-    ENV, "BVD_OUTPUT_DIR",
-    joinpath(pkgdir(BVDOutbreakSize), "output")
-)
-mkpath(output_dir)
-CSV.write(
-    joinpath(output_dir, "zone_forecast.csv"),
-    zone_forecast_archive(
-        zone_fc, zone_inputs; made_date = zone_inputs.cutoff, thin = 5
-    )
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # ---
 #
 # The full analysis code, data and model definitions are in the
