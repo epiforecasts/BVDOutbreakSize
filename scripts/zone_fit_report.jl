@@ -424,7 +424,7 @@ function stage_b()
         quantity = ["share_T_zone", "delta_T_zone", "R_T_zone (walking)"],
         zones = shown, coverage_90 = cover
     )
-    sd = zone_sampler_diagnostics(chn, sim_inputs; max_depth = 8)
+    sd = zone_sampler_diagnostics(chn, sim_inputs)
     body = """
     <p>One dataset simulated from a known parameter draw on the real design
     (the real patch infections, vintages and allocated totals; counts drawn

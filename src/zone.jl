@@ -1188,7 +1188,7 @@ zones' `R_T_zone` R-hat is reported separately as
 """
 function zone_sampler_diagnostics(
         chn, inputs = nothing;
-        max_depth::Integer = 8
+        max_depth::Integer = 10
     )
     depth = _zone_stat(chn, :tree_depth)
     energy = _zone_stat(chn, :hamiltonian_energy)
