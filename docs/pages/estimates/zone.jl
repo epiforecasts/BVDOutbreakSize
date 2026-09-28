@@ -35,6 +35,9 @@ frozen_zone_inputs = frozen_zone_stage_inputs();
 #md # </details>
 #md # ```
 
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl")) #hide
+MarkdownTable(report_dates(obs.cutoff)) #hide
+
 # ## Estimates by zone
 #
 # The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the bounds of the 90% interval on the forecast confirmed cases over the coming week, and the confirmed cases to date, zone by zone.
@@ -297,9 +300,176 @@ MarkdownTable(zone_diagnostics) #hide
 #md # </details>
 #md # ```
 
+# The figure below sets the reproduction number implied by the zone stage's own patch trajectories against the one implied by the headline joint fit, nationally and for each patch.
+# Both are computed from infections with the generation interval the zone stage fixes.
+# Agreement says the melding stage has kept the joint's patch trajectories rather than moved them to fit the zone data.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number from the zone stage and the joint fit</summary>
+#md # ```
+
+## Each draw's implied reproduction number from its patch trajectories:
+## the joint's draws on one side and the zone stage's deformed patch
+## trajectories on the other, the four patches then their sum.
+function _implied_rt_draws(patch_draws)
+    ndraws = size(first(patch_draws), 1)
+    rt(I) = implied_national_Rt(I, zone_inputs.g)
+    per_patch = [
+        reduce(vcat, (rt(m[i, :])' for i in 1:ndraws))
+            for m in patch_draws
+    ]
+    national = reduce(
+        vcat, (rt(sum(m[i, :] for m in patch_draws))' for i in 1:ndraws)
+    )
+    return vcat([national], per_patch)
+end
+zone_stage_rt = _implied_rt_draws(
+    zone_patch_infections(chn_local, zone_inputs)
+);
+joint_stage_rt = let draws = _patch_infection_draws
+    _implied_rt_draws(
+        [
+            reduce(
+                vcat, (
+                    reshape(Float64.(v), N_PATCHES, obs.n)[p, :]'
+                        for v in draws
+                )
+            )
+                for p in 1:N_PATCHES
+        ]
+    )
+end;
+zone_meld_rt_fig = plot_rt_zones(
+    [m[:, zone_grid] for m in zone_stage_rt],
+    vcat(["National"], zone_inputs.patch_labels),
+    vcat([N_PATCHES + 1], 1:N_PATCHES);
+    patch_labels = vcat(zone_inputs.patch_labels, ["National"]),
+    patch_colours = [:firebrick, :steelblue, :seagreen, :darkorange, :black],
+    dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
+    top = N_PATCHES + 1, ncols = 3,
+    reference_rt = [m[:, zone_grid] for m in joint_stage_rt],
+    reference_label = "Headline joint fit",
+    title = "Reproduction number from the zone stage and the joint fit"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_meld_rt_fig #hide
+
+# ## Health-zone parameters against their priors
+#
+# The table sets the posterior of each zone hyperparameter against its prior, with the ratio of their standard deviations.
+# A ratio near one says the zone data add little to the prior.
+# The drift scale is one per patch.
+# The pair plot overlays the prior on the posterior of the scalar hyperparameters.
+
+#md # ```@raw html
+#md # <details><summary>Draw from the zone model's prior</summary>
+#md # ```
+
+prior_chn_zone = zone_prior_draws(zone_inputs);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Compute the zone prior and posterior table</summary>
+#md # ```
+
+zone_hyper_labels = Dict(
+    :region_sd_zone => "Level spread σ_level",
+    :region_halflife_zone => "Deviation half-life (days)",
+    :correlation_reference_zone => "Correlation ρ_corr",
+    :zone_ascertainment_sd => "Ascertainment spread σ_ascertainment",
+    :zone_severity_sd => "Severity spread σ_severity",
+    :mixing_within_zone => "Within-patch mixing ε_within",
+    :mixing_departure_zone => "Mixing departure τ_mix",
+    :composition_rho_zone => "Case composition ρ",
+    :composition_rho_death_zone => "Death composition ρ_death",
+)
+## The scalar hyperparameters both chains carry; the mixing and correlation
+## blocks are sampled only when their inputs are on.
+zone_hyper_keys = [
+    k for k in (
+            :region_sd_zone, :region_halflife_zone,
+            :correlation_reference_zone, :zone_ascertainment_sd,
+            :zone_severity_sd, :mixing_within_zone, :mixing_departure_zone,
+            :composition_rho_zone, :composition_rho_death_zone,
+        )
+        if BVDOutbreakSize._has_key(chn_local, k) &&
+        BVDOutbreakSize._has_key(prior_chn_zone, k)
+]
+_hyper_draws(chn, k) = Float64.(vec(collect(chn[k])))
+_drift_draws(chn, p) = Float64[
+    v[p] for v in vec(collect(chn[:region_drift_sd_zone]))
+]
+function _prior_posterior_row(label, post, prior)
+    f(x) = string(round(x; sigdigits = 3))
+    ci(v) = string(
+        f(median(v)), " (", f(quantile(v, 0.05)), "–",
+        f(quantile(v, 0.95)), ")"
+    )
+    return (
+        parameter = label, posterior = ci(post), prior = ci(prior),
+        sd_ratio = round(std(post) / std(prior); digits = 2),
+    )
+end
+zone_prior_table = DataFrame(
+    vcat(
+        [
+            _prior_posterior_row(
+                zone_hyper_labels[k], _hyper_draws(chn_local, k),
+                _hyper_draws(prior_chn_zone, k)
+            )
+                for k in zone_hyper_keys
+        ],
+        [
+            _prior_posterior_row(
+                "Drift scale σ_δ ($(zone_inputs.patch_labels[p]))",
+                _drift_draws(chn_local, p), _drift_draws(prior_chn_zone, p)
+            )
+                for p in eachindex(zone_inputs.patch_labels)
+        ]
+    )
+);
+## The pair plot's axes take the symbols alone.
+zone_hyper_pair_fig = plot_pair(
+    chn_local, zone_hyper_keys;
+    prior = prior_chn_zone, labels = Dict(
+        :region_sd_zone => "σ_level",
+        :region_halflife_zone => "half-life (days)",
+        :correlation_reference_zone => "ρ_corr",
+        :zone_ascertainment_sd => "σ_ascertainment",
+        :zone_severity_sd => "σ_severity",
+        :mixing_within_zone => "ε_within",
+        :mixing_departure_zone => "τ_mix",
+        :composition_rho_zone => "ρ",
+        :composition_rho_death_zone => "ρ_death",
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(zone_prior_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Zone hyperparameter pair plot (prior overlaid)</summary>
+#md # ```
+
+zone_hyper_pair_fig #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Change over the past week
 #
-# The [health-zone model](@ref "Health-zone model") conditions on the headline fit's provincial infections and feeds nothing back.
+# The [health-zone model](@ref "Health-zone model") is melded onto the headline fit's patch infections one way, so the zone data do not update the national and province estimates.
 # The comparison below reads the reproduction number of every zone walking in both fits at the frozen and live cut-offs, matched by key.
 # The dot plot shows the fifteen zones the frozen fit ranks highest, the trajectories the twelve with most confirmed cases, and the table the ten with most confirmed cases.
 
@@ -450,7 +620,9 @@ zone_week_rt_fig #hide
 #
 # Each affected health zone coloured by its current reproduction number, with the chance that number exceeds one, the seven-day confirmed-case forecast, the chance of at least a chosen number of cases, the confirmed cases to date and the zone's share of its patch's infections available from the switcher.
 # A filter shows the zones with or without a case over the past one, two or four weeks, and the reproduction number and the forecast can be read at their median or at either bound of the 90% interval.
+# A zone whose reproduction number is inherited from its patch is hatched on the two reproduction-number views, and a reproduction number whose 90% interval spans one is paler.
 # Hover over a zone for its estimate and 90% credible interval, click it for every number, or open the table view for a sortable list.
+# The map gives its data cut-off and links to the estimates as a CSV file.
 # The map needs a browser.
 # It appears only on the documentation site.
 
@@ -476,8 +648,8 @@ mkpath(dashboard_dir)
 ## dashboard, and the per-zone estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number and the chance it exceeds one, the one-week forecast and the
-## share of the patch's infections.
-## A zone below the reporting floor carries no reproduction number.
+## share of the patch's infections, whether the zone walks and the data
+## cut-off. A zone below the reporting floor carries no reproduction number.
 CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
 _zone_deaths = [
     let h = obs.zone_death_history
@@ -512,7 +684,9 @@ zone_estimates = DataFrame(
     p_ge_10 = zone_fc_probs[:, 3], p_ge_20 = zone_fc_probs[:, 4],
     cases_last_7 = zone_recent[7], cases_last_14 = zone_recent[14],
     cases_last_28 = zone_recent[28],
-    last_case_date = [ismissing(d) ? "" : string(d) for d in zone_last_case]
+    last_case_date = [ismissing(d) ? "" : string(d) for d in zone_last_case],
+    walking = Int.(zone_inputs.walking),
+    as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 
