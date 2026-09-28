@@ -835,7 +835,7 @@ forecast.
 
 The columns are the new confirmed cases and confirmed deaths over the week,
 the patients in isolation and the isolation beds at the end of the week, the
-new infections over the week, the reproduction number at the end of the week
+new admissions and new infections over the week, the reproduction number at the end of the week
 and the probability that it is above one, each when `fc` carries it.
 """
 function province_forecast_headline(
@@ -853,6 +853,7 @@ function province_forecast_headline(
             (:confirmed_deaths_new, "New confirmed deaths", 0),
             (:isolation_level, "Patients in isolation", 0),
             (:bed_capacity, "Isolation beds", 0),
+            (:admissions_new, "New admissions", 0),
             (:infections_new, "New infections", 0),
             (:rt_forecast, "R at T+7", 2),
         )
@@ -1204,6 +1205,7 @@ const _PROVINCE_FORECAST_PANELS = (
     (:confirmed_deaths_new, "New confirmed deaths by T+7"),
     (:isolation_level, "Patients in isolation at T+7"),
     (:bed_capacity, "Isolation beds at T+7"),
+    (:admissions_new, "New admissions by T+7"),
     (:infections_new, "New infections by T+7"),
     (:rt_forecast, "Reproduction number at T+7"),
 )
@@ -1302,6 +1304,7 @@ function province_forecast_table(
     for p in 1:np, (col, quantity, dg) in (
                 (:isolation_level, "Patients in isolation at T+$(horizon)", digits),
                 (:bed_capacity, "Isolation beds at T+$(horizon)", digits),
+                (:admissions_new, "New admissions by T+$(horizon)", digits),
                 (:infections_new, "New infections by T+$(horizon)", digits),
                 (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
             )

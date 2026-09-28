@@ -2696,7 +2696,8 @@ series for forecasting and replication.
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     demand = _typed_as(demand_raw, C)
 
-    ## Per-patch bed demand and capacity for the province splits. The
+    ## Per-patch admissions, bed demand and capacity for the province
+    ## splits and the province forecast. The
     ## demand is the national demand shared out by each patch's stock of
     ## admissions through the stays. The capacity is the national walk times
     ## a daily share centred on each patch's cumulative admissions
@@ -2712,15 +2713,13 @@ series for forecasting and replication.
             A_bvd_patch, A_bg, background_split, S_clin,
             ruleout_los_state.pmf, κ, demand
         )
-        cap_share_state ~ to_submodel(
-            patch_capacity(
-                _patch_admissions(A_bvd_patch, A_bg, background_split)
-            )
-        )
+        admit_patch = _patch_admissions(A_bvd_patch, A_bg, background_split)
+        cap_share_state ~ to_submodel(patch_capacity(admit_patch))
         cap_shares = cap_share_state.s
         cap_pooling_sd = cap_share_state.pooling_sd
     else
         demand_patch = reshape(demand, 1, :)
+        admit_patch = reshape(admit_daily, 1, :)
         cap_shares = ones(eltype(C), 1, n)
         cap_pooling_sd = zero(eltype(C))
     end
@@ -2947,7 +2946,8 @@ series for forecasting and replication.
         overall_los, abscond_frac, k_isolation = k,
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
-        demand_patch, capacity_patch = C_patch, capacity_series = C,
+        demand_patch, admit_patch, capacity_patch = C_patch,
+        capacity_series = C,
         capacity_shares = cap_shares, capacity_pooling_sd = cap_pooling_sd,
         occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,

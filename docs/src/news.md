@@ -46,6 +46,7 @@ Changes since v2.1.0.
   `province_capacity_share` becomes a daily matrix.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
+- Forecast admissions are drawn by province and sum to the national forecast, each capped at the province's beds less its previous day's occupancy plus its exits that day (#958).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
@@ -101,6 +102,7 @@ Changes since v2.1.0.
   SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
+- Province beds are the effective beds each recorded day, the largest of the printed beds, the rate-implied beds and the patients held (#958).
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
 - `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
 

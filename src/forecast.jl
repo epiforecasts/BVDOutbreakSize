@@ -351,7 +351,9 @@ province's reproduction number on the last day), and `confirmed_new` and
 `confirmed_deaths_new` when the fit carries the matching composition, and
 `isolation_level` and `bed_capacity` (the province's patients in isolation
 and beds on the last day) when it carries the province occupancy and bed
-splits. These need `horizon` to be a whole number of weeks.
+splits. These need `horizon` to be a whole number of weeks. With the
+province admissions drawn, `admissions_new` is the province's admissions
+over the horizon, each day censored at its available beds.
 """
 function forecast_provinces(
         pp;
@@ -394,6 +396,10 @@ function forecast_provinces(
     end
     iso = level("forecast_province_isolation")
     beds = level("forecast_province_beds")
+    ## Admissions are daily, summed over the first `h` days.
+    adm = _forecast_vectors(pp, "forecast_admissions.province.obs")
+    adm = isnothing(adm) ? nothing :
+        [vec(sum(reshape(x, n_patches, :)[:, 1:h]; dims = 2)) for x in adm]
     nd = length(inf)
     out = DataFrame(
         patch = Int[], province = String[], draw = Int[],
@@ -422,6 +428,8 @@ function forecast_provinces(
         (out.isolation_level = [iso[i][p] for i in 1:nd for p in 1:np])
     isnothing(beds) ||
         (out.bed_capacity = [beds[i][p] for i in 1:nd for p in 1:np])
+    isnothing(adm) ||
+        (out.admissions_new = [adm[i][p] for i in 1:nd for p in 1:np])
     return out
 end
 

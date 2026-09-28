@@ -2102,7 +2102,7 @@ cfr_prior_fig #hide
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
 # The bed occupancy is the censored count the occupancy likelihood scores.
 # Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
-# Admissions are capped at the capacity less the previous day's occupancy, the same headroom rule the fitted days use, so they can fall to near zero when the beds are forecast full.
+# Admissions are capped at the beds available each day, the capacity less the previous day's occupancy plus the day's modelled exits (deaths, recoveries, rule-outs and absconds), so a full centre admits only as many as leave.
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
@@ -2164,7 +2164,12 @@ cfr_prior_fig #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
-# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity.
+# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity, floored at its last recorded beds.
+# Admissions are forecast by province and the national admissions are their sum.
+# Each province's daily admissions take its modelled admissions and are capped at its own available beds, its beds less its previous day's occupancy plus its exits that day.
+# Its previous-day occupancy and exits are the national ones shared out on its share of the previous day's modelled bed demand.
+# The recorded province beds are the effective beds, the largest of the printed beds, the beds implied by the printed occupancy rate and the patients held.
+# A province over its beds, such as Nord-Kivu, can then admit only as many as leave.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
