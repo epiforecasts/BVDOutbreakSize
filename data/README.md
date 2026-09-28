@@ -215,7 +215,18 @@ On 17 August eight case cells and three death cells are one to five below the pr
 The mirror also carries a malformed date `2026-06-25]`.
 The mirror is a cross-check for these blocks, and a source only under the province and health-zone fallbacks below.
 
-On an update run `task zone-tableau2` and then `task confirm-zone-data`.
+On an update run, in this order:
+
+1. Advance `province_confirmed_history` and `province_death_history` first, since the scanner checks the zone rows against the committed province values.
+2. Run `task zone-tableau2` and replace everything from `[zone_confirmed_history]` to the end of `data/observations.toml` with the blocks printed after its `===== paste into data/observations.toml =====` line, leaving one final newline.
+3. Check the change is append-only: the old dates are a prefix of the new dates and every old series is a prefix of its new series.
+4. Have a blind reader transcribe Tableau 2 of each new vintage from the PDFs alone, without the scan output, and compare it cell by cell with the scanner.
+5. Run `task confirm-zone-data`, and take a value from the mirror only under the fallback order below.
+6. Update the SitRep and date in "The series run to" and the agreement counts above from the `confirm-zone-data` output, and edit the existing news line for the zone blocks rather than adding one.
+7. Run the `test/test_health_zones.jl` and `test/test_load_observations.jl` items and read the "Test Summary" line.
+
+If the zone rows match their own printed province row but not the committed province value, the scanner stops.
+Fix the province block or the parse, not the zone blocks.
 The scanner lists every report it could not read with a reason, and `Tableau 2 is present but its caption did not match` says the wording moved rather than the table going away.
 The mirror's `Dates the mirror carries and the manifest does not` line is the second check, since a recent date there and not here means the scan has fallen behind whatever the reason says.
 That is how the 124 caption change was found: the reports had been read as carrying no zone table for five vintages while the mirror carried four of them.
