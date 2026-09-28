@@ -471,38 +471,20 @@ K'_{p,q} = K_{p,q} e^{\\eta_p}
     \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{\\eta_r}}.
 ```
 
-The weights move where an origin's exports land without changing how much
-leaves it, so the outflow debit in [`patch_infections`](@ref) and the
-meaning of the intensity `ε` are unchanged. A shift shared by every
-destination cancels, so `η` is identified only up to a constant and is
-sampled as a sum-to-zero vector in [`patch_infection_model`](@ref).
+The columns keep their totals, so the weights move where an origin's
+exports land and not how much leaves it.
 """
-function destination_weighted_kernel(
-        K::AbstractMatrix, η::AbstractVector
-    )
-    np = size(K, 1)
-    size(K, 2) == np == length(η) || throw(
+function destination_weighted_kernel(K::AbstractMatrix, η::AbstractVector)
+    size(K, 1) == size(K, 2) == length(η) || throw(
         DimensionMismatch(
             "destination_weighted_kernel: a $(size(K)) kernel and " *
                 "$(length(η)) destination weights."
         )
     )
-    T = promote_type(eltype(K), eltype(η))
-    w = exp.(η)
-    Kw = zeros(T, np, np)
-    @inbounds for q in 1:np
-        total = zero(T)
-        weighted = zero(T)
-        for p in 1:np
-            total += K[p, q]
-            weighted += K[p, q] * w[p]
-        end
-        weighted > 0 || continue
-        for p in 1:np
-            Kw[p, q] = K[p, q] * w[p] * total / weighted
-        end
-    end
-    return Kw
+    Kη = K .* exp.(η)
+    weighted = sum(Kη; dims = 1)
+    ## An all-zero column stays zero rather than dividing by zero.
+    return Kη .* (sum(K; dims = 1) ./ ifelse.(weighted .> 0, weighted, one.(weighted)))
 end
 
 """

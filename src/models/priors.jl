@@ -1849,12 +1849,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the likelihood cannot see. Time-varying because the
     ##    outbreak being known changes movement, and the provinces that arrive
     ##    either side of the breakpoint are what separates `β_ε`.
-    ##
-    ##    A second pooled deviation per destination weights where an origin's
-    ##    exports land ([`destination_weighted_kernel`](@ref)). Each origin
-    ##    column keeps its total, so the weights move the split and not the
-    ##    volume. A shift shared by every destination cancels, so the
-    ##    deviations sum to zero on the same basis.
+    ##    Per-destination weights on the kernel, sum-to-zero on the same
+    ##    basis ([`destination_weighted_kernel`](@ref)).
     ε_matrix = zeros(Tp, n_patches, ng)
     kernel = importation_kernel
     if coupled

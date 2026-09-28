@@ -1067,6 +1067,21 @@ end
     end
     ## Arrivals stay a proper fraction of a patch's own infections.
     @test all(0 .<= mix.import_fraction .< 1)
+    ## A parent destination weighting reaches the blocks through
+    ## `destination_weighted_kernel`: a wrong-length effect throws there
+    ## rather than being skipped. With two patches each origin has one
+    ## destination, so a valid weighting leaves the flows unchanged.
+    function tilted(effect)
+        chain = copy(syn.chain)
+        chain[:importation_destination_effect] = reshape(
+            [effect for _ in 1:4], 4, 1
+        )
+        return zone_inputs(
+            merge(syn, (; chain)); zones = zone_metadata(syn)
+        ).model_data.mixing
+    end
+    @test_throws DimensionMismatch tilted([0.5, 0.0, -0.5])
+    @test tilted([0.6, -0.6]).between ≈ mix.between
     chn = sample(
         bvd_zone(zd), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false

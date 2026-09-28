@@ -2314,7 +2314,7 @@ function _zone_mixing_or_nothing(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
     dest = get(parent, :destination_effect, Float64[])
-    length(dest) == np &&
+    isempty(dest) ||
         (parent_kernel = destination_weighted_kernel(parent_kernel, dest))
     blocks = zone_importation_blocks(
         pops, coords, patch_of_zone, parent_kernel
