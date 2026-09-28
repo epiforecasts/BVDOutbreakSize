@@ -99,9 +99,12 @@ through the likelihood the fitted days are scored with. The occupancy is
 the censored negative binomial around the modelled demand plus the
 reclassification offset. Its cap is the modelled bed capacity, which the
 capacity walk carries past the cut-off, floored at the last fitted cap
-([`censoring_cap`](@ref)). Admissions, in-care deaths and rule-outs are
-daily negative binomials. The latent bed demand and
-capacity are tracked alongside. With no recorded capacity or occupancy the
+([`censoring_cap`](@ref)). Admissions are censored at the free beds, that
+cap less the previous day's occupancy: the last recorded occupancy on the
+first day, then the drawn one. The fit scores admissions uncensored, so this
+bound applies to the forecast only. In-care deaths and rule-outs are daily
+negative binomials. The latent bed demand and capacity are tracked
+alongside. With no recorded capacity or occupancy the
 fitted days are uncensored, and so are the future ones.
 """
 @model function treatment_forecast_model(
@@ -124,8 +127,19 @@ fitted days are uncensored, and so are the future ones.
     forecast_isolation ~ to_submodel(
         censored_occupancy_model(occupancy, ceilings, missing, k)
     )
+    occ = forecast_isolation.obs
+    head = if have_cap && have_occ
+        prev = vcat(
+            float(isolation_history.counts[end]),
+            [float(occ[j]) for j in 1:(length(fd) - 1)]
+        )
+        max.(ceilings .- prev, 0.5)
+    else
+        fill(nocap, length(fd))
+    end
+    admissions = state.admit_daily[fd]
     forecast_admissions ~ to_submodel(
-        _forecast_counts(state.admit_daily, fd, k)
+        censored_occupancy_model(admissions, head, missing, k)
     )
     forecast_incare_deaths ~ to_submodel(
         _forecast_counts(state.deaths_daily, fd, k)
@@ -136,8 +150,7 @@ fitted days are uncensored, and so are the future ones.
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := state.C[fd]
     return (;
-        isolation = occupancy, admissions = state.admit_daily[fd],
-        occupancy = forecast_isolation.obs,
+        isolation = occupancy, admissions, occupancy = occ,
         incare_deaths = state.deaths_daily[fd],
         ruleouts = state.ruleout_daily[fd],
     )
@@ -1535,7 +1548,7 @@ density there, is the fitted model's.
         province_bed_demand := treatment_state.demand_patch[:, n]
         occupied_patch = treatment_state.expected_isolation .*
             treatment_state.demand_patch[:, n] ./
-            sum(treatment_state.demand_patch[:, n])
+            safe_rate(sum(treatment_state.demand_patch[:, n]))
         province_expected_isolation := occupied_patch
         province_bed_utilisation := occupied_patch ./
             treatment_state.capacity_patch[:, n]

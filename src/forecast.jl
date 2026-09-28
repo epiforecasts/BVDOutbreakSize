@@ -171,7 +171,7 @@ function forecast_reported(
         df.bed_shortfall = max.(
             df.bed_demand .- round.(at("forecast_bed_capacity")), 0.0
         )
-        df.admissions_fc = at("forecast_admissions.increments")
+        df.admissions_fc = round.(Int, at("forecast_admissions.obs"))
         df.incare_deaths_fc = at("forecast_incare_deaths.increments")
         df.ruleouts_fc = at("forecast_ruleouts.increments")
     end
