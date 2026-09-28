@@ -3488,8 +3488,8 @@ end
 Posterior predictive check on a province split scored on the provinces
 present each day ([`province_split_logpdf`](@ref)): the isolation
 occupancy (`share_key = :province_occupancy_share`, a daily share matrix)
-and the beds (`share_key = :province_capacity_share`, one static share per
-patch). Each panel shows the modelled share of that province among the
+and the beds (`share_key = :province_capacity_share`, also a daily share
+matrix; a static share vector per patch is also read). Each panel shows the modelled share of that province among the
 provinces printed that day, with the observed share as black points, over
 the days the split is scored (`rows`, the long format from
 `province_care_observations` the fit was given). The grey band is the

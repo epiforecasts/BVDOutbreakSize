@@ -159,7 +159,7 @@ province_death_ppc_fig #hide
 # The three province terms for the isolation and laboratory data are checked the same way.
 # The laboratory panel is the split of each calendar week's analysed specimens, which identifies the background split.
 # The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
-# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's static share of the national capacity.
+# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's modelled share of the national capacity.
 # A gap in a panel is a day on which that province printed nothing.
 
 #md # ```@raw html
@@ -459,7 +459,7 @@ isempty(province_recovery_results.params) ? Markdown.parse("No parameter-recover
 # The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
 
 #md # ```@raw html
-#md # <details><summary>Summary across seeds</summary>
+#md # <details><summary>Summary table across seeds</summary>
 #md # ```
 
 province_recovery_summary = isempty(province_recovery_results.params) ?
@@ -470,11 +470,11 @@ province_recovery_summary_display = isempty(province_recovery_summary) ?
     Markdown.parse("No parameter-recovery run is available for this build.") :
     MarkdownTable(province_recovery_summary);
 
+province_recovery_summary_display #hide
+
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-province_recovery_summary_display #hide
 
 #md # ```@raw html
 #md # <details><summary>Each seed's recovered province values</summary>

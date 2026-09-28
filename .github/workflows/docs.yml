@@ -380,8 +380,8 @@ jobs:
     steps: *fit-steps
 
   # Parameter recovery: a few datasets simulated from the headline joint at
-  # fixed seeds, each fitted at the headline joint's sampler settings and
-  # scored against the values that generated it, with its forecasts scored
+  # fixed seeds, each fitted at the headline joint's sampler settings with
+  # four chains in place of two and scored against the values that generated it, with its forecasts scored
   # against the simulated future (`scripts/recovery.jl`). It runs beside the
   # headline fits and is cached on the fit hash plus the recovery code, so
   # an unchanged model reruns nothing.
@@ -389,12 +389,13 @@ jobs:
     name: Recovery seed ${{ matrix.seed }}
     needs: list
     runs-on: ubuntu-latest
-    # Each seed is fitted with the headline joint's sampler settings, so it
-    # takes about as long as the joint and gets the same headroom.
+    # Four chains on the runner's two cores take about 1.5 times as long
+    # as the joint's two.
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
+        # Keep in step with BVD_RECOVERY_SEEDS in `recovery_report`.
         seed: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
@@ -482,6 +483,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The `recovery` matrix's seeds, so a seed that timed out or
+          # failed is reported rather than dropped.
+          BVD_RECOVERY_SEEDS: '1 2 3'
         run: |
           post=""
           if [ "${{ github.event_name }}" = "push" ] &&

@@ -47,7 +47,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
-# Their relative sizes set the importation kernel and centre the background and bed-capacity shares, and their absolute sizes are the susceptible pools the renewal depletes.
+# Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
 # Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -691,7 +691,7 @@ MarkdownTable(vintage_table) #hide
 # We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty:
 #
 # ```math
-# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
 # ```
 #
@@ -707,7 +707,7 @@ MarkdownTable(vintage_table) #hide
 # We do the same: each component is a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posteriors:
 #
 # ```math
-# \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
+# \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
@@ -722,7 +722,7 @@ MarkdownTable(vintage_table) #hide
 # The export model therefore uses the same line-list onset-to-admission delay [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above, with the same natural shape and scale priors:
 #
 # ```math
-# \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
 # ```
 #
@@ -1255,7 +1255,22 @@ cfr_prior_fig #hide
 #
 # $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
-# Each patch's capacity is a static share $s_p$ of the national capacity walk, a simplex of the same form as the background share $w_p$ (defined with the laboratory composition below) with its own scale $\tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1.5)$.
+# Each patch's capacity on day $t$ is a share $s_{p,t}$ of the national capacity walk.
+# Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
+#
+# ```math
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp(\tau_{\text{cap}} z^{\text{cap}}_p),
+# \qquad
+# z^{\text{cap}}_1 = 0,
+# \qquad
+# z^{\text{cap}}_p \sim \mathrm{Normal}(0, 1),
+# \qquad
+# \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
+# ```
+#
+# normalised over the patches each day, with Ituri as the reference.
+# The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
+# The deviations are static, and the share moves over time only through its centre.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
@@ -1265,7 +1280,7 @@ cfr_prior_fig #hide
 # \qquad
 # B_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
 #     \textstyle\sum_{q \in \mathcal{P}_j,\, q \ge p} B_{q,j},\;
-#     \frac{s_p}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_q},\; \rho^{\text{cap}} \Bigr),
+#     \frac{s_{p,t_j}}{\sum_{q \in \mathcal{P}_j,\, q \ge p} s_{q,t_j}},\; \rho^{\text{cap}} \Bigr),
 # ```
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
@@ -1295,7 +1310,7 @@ cfr_prior_fig #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.patch_capacity_share_model(4)), "\n```"))
+#md #     (@code_string BVDOutbreakSize.patch_capacity_share_model(ones(4, 2))), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1731,8 +1746,11 @@ cfr_prior_fig #hide
 # The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
 # The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
-# The likelihood scores the difference between consecutive snapshots at each onset date, in a trailing $D$-day window of the newer snapshot's report day.
-# This avoids double-counting a case already reported earlier, and drops the older onset dates that carry only noise by then.
+# The likelihood scores each onset date once.
+# Its first print is a level, differenced against an empty predecessor.
+# Each later figure $R_s$ that prints it while its delay is inside the support scores a correction against the last figure $R_{s-1}$ that printed it.
+# A level and its corrections sum to the latest print inside the support, so no case is counted twice.
+# Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
 # A count likelihood cannot be used, since a re-dated case can move a bar down in a later scan even though the true running total cannot fall.
 # The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
@@ -1750,8 +1768,7 @@ cfr_prior_fig #hide
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
 # $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
 #
-# The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
-# That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
+# The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #
 # Three things stay weak.
 # The ascertainment walk $\omega$ shares the onset axis with the reproduction-number walk, and both are least constrained over the final fortnight.
