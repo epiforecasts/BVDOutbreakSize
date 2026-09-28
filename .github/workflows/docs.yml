@@ -554,14 +554,15 @@ jobs:
       # them over its own checkout, so an untouched file is replaced by an
       # identical copy. None of them enters a fit cache key (each basename is
       # in `FIT_DATA_EXCLUDE`), so the render's strict cache lookups still
-      # hit. data/ is the paths' common root, so data/province/ keeps its
-      # place in the artifact.
+      # hit. data/ is the paths' common root, so data/province/ and data/zone/
+      # keep their places in the artifact.
       - uses: actions/upload-artifact@v7
         with:
           name: overlays
           path: |
             data/*.csv
             data/province/*.csv
+            data/zone/*.csv
           if-no-files-found: error
           retention-days: 3
 
