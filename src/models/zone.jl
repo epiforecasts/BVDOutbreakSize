@@ -1101,9 +1101,9 @@ One forward pass of the zone model from its fixed data `zd` (the
 `ε` (`nothing` when mixing is off): the daily deviations (the
 interpolation weights times the knots), the share renewal and the binned
 expected reports ([`zone_binned_increments`](@ref)). `def` is the patch
-trajectory the draw's shared quantity implies ([`zone_deformation`](@ref)); its default is the cut, the
-province model's posterior mean. Called by the model and, per draw, by the
-render. Returns
+trajectory the draw's shared quantity implies
+([`zone_deformation`](@ref)); its default is the cut, the province model's
+posterior mean. Called by the model and, per draw, by the render. Returns
 `(; shares, forces, infections, imports, increments)`.
 """
 function zone_forward(
