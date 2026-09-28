@@ -72,7 +72,7 @@ I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
 I_t = \sum_p I_{p,t}.
 $$ {#eq-province}
 
-The generation interval $g$ is a gamma distribution whose shape and scale priors are centred on the serial interval of Ebola virus disease in West Africa [@who_ebola_response_2014].
+The generation interval $g$ is a gamma distribution whose mean and standard deviation carry priors centred on the serial interval of Ebola virus disease in West Africa, with widths from a Bundibugyo cohort [@who_ebola_response_2014; @akilimali2026]. <!-- PRs 909, 910, 926: Normal+ priors on the mean and SD at the release analysed -->
 
 National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves the onsets with its own delay, scales them by its ascertainment and adds any stream-specific term.
 Every delay is sampled and discretised with double interval censoring [@charniga2024].

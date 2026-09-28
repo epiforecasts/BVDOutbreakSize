@@ -16,7 +16,7 @@ Finally, the whole model definition lives in one versioned document that others 
 The main limitation is that the delays, the case-fatality ratio and the laboratory parameters rest on priors from other outbreaks or from judgement.
 The data do little to move them, so the size interval inherits their width and any error in them moves the estimate the same way.
 Almost every count is report-dated, so the timing of the epidemic is recovered through those assumed delays rather than observed.
-At the release analysed the generation-interval prior was wider than documented, and the fitted mean sat far below the serial interval the prior was centred on, which feeds into every reproduction number reported here. <!-- PRs 907 and 909 -->
+The generation-interval prior was for a time wider than documented and the fitted mean sat far below its centre, and although the release analysed carries the corrected prior the fitted mean still sits at its lower edge, which feeds into every reproduction number reported here. <!-- PRs 907, 909, 910; release national page GI mean 12.6 to 15.6 against a prior 13.4 to 17.2 -->
 The reproduction of the first model has not been checked against the original authors' code.
 The data are aggregate national and provincial counts, with no line list in the released model.
 

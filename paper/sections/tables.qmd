@@ -1,4 +1,4 @@
-<!-- Streams and model versions. First and last dates are read from data/observations.toml at the worktree HEAD (as_of 22 September 2026); breaks from occupancy_break_dates and confirmed_break_dates; likelihood descriptions checked against src/models/ at the release analysed. All dates are 2026. -->
+<!-- Streams and model versions. First and last dates are read from data/observations.toml at the worktree HEAD (as_of 25 September 2026); breaks from occupancy_break_dates and confirmed_break_dates; likelihood descriptions checked against src/models/ at the release analysed. All dates are 2026. -->
 
 | Stream | Observes | Likelihood | First | Last | Breaks and gaps |
 |---|---|---|---|---|---|
