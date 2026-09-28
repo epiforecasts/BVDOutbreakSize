@@ -29,7 +29,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
 - The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
-- The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's (#978).
+- The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's, and its diagnostics print no per-zone warnings (#978).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 
@@ -45,7 +45,6 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Fixed
 
-- The zone diagnostics no longer print a warning per zone whose reproduction number is undefined in some draw (#978).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 
