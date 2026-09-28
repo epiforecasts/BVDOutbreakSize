@@ -92,6 +92,16 @@ end
 ## The counts are `missing`, so `predict` draws them.
 _forecast_counts(daily, fd, k) = vintage_increments_model(daily[fd], missing, k)
 
+## Beds available for admissions on each forecast day: the cap less the
+## previous day's occupancy (`last_occ` on the first day, then `occ`) plus
+## the day's exits, floored at half a patient.
+function _admission_ceilings(ceilings, last_occ, occ, exits)
+    prev = vcat(
+        float(last_occ), [float(occ[j]) for j in 1:(length(ceilings) - 1)]
+    )
+    return max.(ceilings .- prev .+ exits, 0.5)
+end
+
 """
 Future observations of the isolation and treatment flows, from a fitted
 [`treatment_flow_model`](@ref) state run past the cut-off. Each is drawn
@@ -130,13 +140,11 @@ fitted days are uncensored, and so are the future ones.
     )
     occ = forecast_isolation.obs
     head = if have_cap && have_occ
-        prev = vcat(
-            float(isolation_history.counts[end]),
-            [float(occ[j]) for j in 1:(length(fd) - 1)]
-        )
         exits = state.deaths_daily[fd] .+ state.recover_daily[fd] .+
             state.ruleout_daily[fd] .+ state.abscond_daily[fd]
-        max.(ceilings .- prev .+ exits, 0.5)
+        _admission_ceilings(
+            ceilings, isolation_history.counts[end], occ, exits
+        )
     else
         fill(nocap, length(fd))
     end
