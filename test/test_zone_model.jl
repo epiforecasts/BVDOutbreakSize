@@ -820,9 +820,10 @@ end
     @test Set(propertynames(arch)) == Set(
         [
             :made_date, :horizon, :target_date,
-            :province, :zone, :stream, :draw, :value,
+            :province, :zone, :stream, :draw, :value, :method,
         ]
     )
+    @test all(arch.method .== ZONE_FORECAST_METHOD)
     @test nrow(arch) == syn.nz * length(1:5:8)
     @test all(arch.target_date .== made + Day(7))
 end
