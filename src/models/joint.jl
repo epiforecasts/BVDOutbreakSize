@@ -124,15 +124,8 @@ fitted days are uncensored, and so are the future ones.
     nocap = 1.0e6
     have_cap = !isempty(capacity_history.counts)
     have_occ = !isempty(isolation_history.counts)
-    last_cap = have_occ ?
-        only(
-            censoring_cap(
-                isolation_history.days[end:end],
-                isolation_history.counts[end:end], capacity_history
-            )
-        ) : 0.0
     ceilings = have_cap ?
-        [max(float(c), last_cap) for c in state.C[fd]] :
+        [max(float(c), state.last_cap) for c in state.C[fd]] :
         fill(nocap, length(fd))
     occupancy = state.occupancy_mean[fd]
     forecast_isolation ~ to_submodel(
@@ -159,7 +152,7 @@ fitted days are uncensored, and so are the future ones.
         _forecast_counts(state.ruleout_daily, fd, k)
     )
     forecast_bed_demand := state.demand[fd]
-    forecast_bed_capacity := state.C[fd]
+    forecast_bed_capacity := max.(state.C[fd], state.last_cap)
     return (;
         isolation = occupancy, admissions, occupancy = occ,
         incare_deaths = state.deaths_daily[fd],

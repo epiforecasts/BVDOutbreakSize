@@ -194,7 +194,7 @@ Changes since v2.1.0.
 - `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 - The delay and tree-prior sensitivity re-fits are built from the headline's keywords, so they keep its provinces and in-care split and differ from it only in the delay or the common-ancestor date (#916).
 - Admissions are a plain negative binomial in the fit and its predictive checks, and are censored at the beds available, including those freed that day, only in the forecast (#918).
-- The cut-off occupancy is on the reported scale, the demand plus the reclassification offset capped at the cut-off beds, and the bed shortfall is the demand above them. The cut-off beds are the modelled capacity floored at the last recorded capacity (#640).
+- The cut-off occupancy is on the reported scale, the demand plus the reclassification offset capped at the cut-off beds, and the bed shortfall is the same quantity above them. The cut-off beds are the modelled capacity floored at the last recorded capacity (#640).
 - Province occupied beds are the national occupancy split on the demand shares, as the split likelihood and the forecast use, rather than the demand capped at the printed beds (#920).
 
 ### Infrastructure

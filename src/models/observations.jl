@@ -2795,7 +2795,8 @@ series for forecasting and replication.
     ## offset, capped at the bed capacity. Bed demand is the latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
-    occ_T = isempty(occ_obs_total) ? z0 : min(occ_obs_total[nc], beds_T)
+    occ_rep = isempty(occ_obs_total) ? z0 : occ_obs_total[nc]
+    occ_T = min(occ_rep, beds_T)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
@@ -2817,8 +2818,8 @@ series for forecasting and replication.
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
-    ## Unmet demand: the latent demand above the modelled bed capacity.
-    shortfall_T = safe_rate(max(dem_T - beds_T, z0))
+    ## Unmet demand: the reported-scale demand above the cut-off beds.
+    shortfall_T = safe_rate(max(occ_rep - beds_T, z0))
     bed_shortfall := shortfall_T
     bed_utilisation := isolation_T / safe_rate(beds_T)
     isolation_severity := sev_state.δ_iso
@@ -2845,7 +2846,7 @@ series for forecasting and replication.
 
     return (;
         p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
-        CFR_iso, β_iso, capacity = beds_T,
+        CFR_iso, β_iso, capacity = beds_T, last_cap,
         death_los_mean = death_los_state.mean,
         recovery_los_mean = recovery_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
