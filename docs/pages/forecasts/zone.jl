@@ -158,7 +158,7 @@ MarkdownTable(zone_quiet_display) #hide
 
 # ## Saving zone forecast assets
 #
-# The summary dashboard shows the zone forecast figure.
+# The summary dashboard shows the zone forecast figure and the summary bullets.
 
 #md # ```@raw html
 #md # <details><summary>Write the zone forecast asset</summary>
@@ -172,6 +172,31 @@ CairoMakie.save(
     joinpath(dashboard_dir, "zone_forecast.png"),
     zone_forecast_fig
 )
+write(joinpath(dashboard_dir, "zone_forecast.md"), zone_forecast_bullets);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Archiving the zone forecast
+#
+# Each release carries the zone forecast draws in `zone_forecast.csv`, for scoring once the week has been reported.
+
+#md # ```@raw html
+#md # <details><summary>Write the zone forecast archive</summary>
+#md # ```
+
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+CSV.write(
+    joinpath(output_dir, "zone_forecast.csv"),
+    zone_forecast_archive(
+        zone_fc, zone_inputs; made_date = zone_inputs.cutoff, thin = 5
+    )
+);
 
 #md # ```@raw html
 #md # </details>

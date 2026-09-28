@@ -176,7 +176,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 131 (22 September).
+The series run to SitRep 134 (25 September).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 
 The unallocated row is the report's own count of cases and deaths it has not attributed to a zone.
@@ -202,7 +202,7 @@ SitRep 080 prints the table with the Létalité column displaced one row down an
 SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 3306 case cells and 3308 death cells the two transcriptions share, 3292 and 3298 agree.
+Of the 3369 case cells and 3371 death cells the two transcriptions share, 3355 and 3361 agree.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
 On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).
@@ -213,7 +213,7 @@ On 23 July it gives Rimba 7 cases against the printed 8.
 On 24 August it gives Boga 1 death against the printed 2.
 On 17 August eight case cells and three death cells are one to five below the printed SitRep 095 values, consistent with the mirror's 17 August row having been filed before the PDF was published (the mirror-only point described under the inclusion rules).
 The mirror also carries a malformed date `2026-06-25]`.
-The mirror is a cross-check only and never a source for these blocks.
+The mirror is a cross-check for these blocks, and a source only under the province and health-zone fallbacks below.
 
 On an update run `task zone-tableau2` and then `task confirm-zone-data`.
 The scanner lists every report it could not read with a reason, and `Tableau 2 is present but its caption did not match` says the wording moved rather than the table going away.
@@ -311,6 +311,31 @@ Advancing the headlines while leaving these behind both drops data and can break
 Always cross-check the confirmed/death/recovered/isolation headline against the INRB-UMIE `national_*` CSV for the same date.
 Note any disagreement in the `source =` string and prefer the auditable value.
 
+## Province and health-zone fallbacks
+
+A province or health-zone confirmed-case or death value comes from the first of these that carries it for the reporting date.
+
+1. The INSP SitRep PDF.
+2. The INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs for the same reporting date.
+   A province value is the sum of its zones, which is exact only when the mirror's `NA` row is zero.
+   For health zones the mirror must be used when INSP does not publish the zone table.
+3. The INRB-UMIE dashboard, only for what it publishes (confirmed cases by symptom-onset date), and only its observed layer.
+   Its imputed onsets are biased and never used.
+   Its line list lags or leads the SitRep at the reporting edge, so compare it with the nearest SitRep block first.
+
+If none of them carries the value, leave the date out.
+Never interpolate.
+
+The mirror needs care.
+It has filed a row under its publication date rather than its reporting date, filed a row before the PDF with values one to five below the printed ones, and carried plain transcription errors (#624 and the zone cross-check above).
+Check a mirror row against the neighbouring vintages, and hold mirror zone cells to the same sum validation as scanned ones.
+
+A fallback value is marked in its stream's `source =` string with the source and the dates it supplies, as for the 17 August mirror-only point under the inclusion rules.
+No row is added to `insp_sitrep_scanned.csv`, since no PDF was read.
+When INSP publishes the PDF for that date, re-read the value from it and upgrade the `source =` string, as for SitRep 095.
+No script tracks mirror-sourced values, so this check is manual.
+`scripts/scan_zone_tableau2.jl` writes only the dates it scanned from PDFs, so pasting its output drops any mirror-only zone date that has no PDF yet.
+
 ## Inclusion rules and conventions
 
 - **Cut-off 28 May 2026 (SitRep 014)**: the last vintage with a coherent national laboratory total.
@@ -399,7 +424,8 @@ Note any disagreement in the `source =` string and prefer the auditable value.
   **2026-08-25 (SitRep 103), deaths, mirror 2755 against our 2744**: SitRep 103 gives 2744 in its page-1 headline, in its Total row and as its province sum (2133+512+89+8+1+1), three independent agreements.
   The value 2755 appears nowhere in SitReps 101-104, so it is a mirror transcription error with no basis in any adjacent vintage.
   This closes the cross-check the SitRep 103 addition deferred in its `source =` string.
-  **The mirror is a cross-check, not a source**: it carries 86 of the 102 report dates the manifest holds and four values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
+  **The mirror is a cross-check for the national series, not a source**: it carries 86 of the 102 report dates the manifest holds and four values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
+  Province and health-zone values the PDF does not print follow the fallback order in the section above.
   `scripts/confirm_insp_data.jl` no longer prints ready-to-paste TOML blocks; its stale "upstream-primary" header, and the matching prose in the root README, `scripts/README.md`, `Taskfile.yml` and the manifest's own header, are corrected to match section 2 above and the header of `scripts/download_sitreps.jl`.
 - **No break-date entry for SitRep 090's mixed-direction harmonisation (12 August)**: the open question in issue #569, resolved against the SitRep 065 precedent already recorded under `confirmed_break_dates`.
   The whole national discrepancy is 2 cases and 3 deaths, localised to Wamba (cases 43 → 41) and Pawa (deaths 11 → 14) in the bullet above.

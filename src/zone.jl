@@ -252,6 +252,23 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Daily patch infections as the zone stage draws them: each draw's own
+patch trajectory, the province model's mean curve deformed by that draw's
+shared quantity. The zone infections of [`zone_infections`](@ref) sum to
+it within each patch. Returns one `(ndraws × n)` matrix per patch.
+"""
+function zone_patch_infections(chn, inputs)
+    states = _zone_states(chn, inputs)
+    np = length(inputs.patch_names)
+    return [
+        Float64[st.def.I_bar[p, t] for st in states, t in 1:inputs.n]
+            for p in 1:np
+    ]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Posterior-predictive draws of the zone forecast: `predict` on
 [`bvd_zone`](@ref) run past the cut-off ([`forecast_draws`](@ref)) over the
 zone chain `chn`. `inputs` must carry the parent's forecast
@@ -1107,6 +1124,35 @@ function zone_composition_calibration(
     return _prettify(DataFrame(rows))
 end
 
+## The chain split into every key but `R_T_zone`, and `R_T_zone` alone. A
+## zone below the reporting floor in some draw holds `NaN` there, which
+## FlexiChains cannot summarise and warns about once per zone. The tables
+## here mark those zones undefined, so that key is summarised on its own
+## with the warning off and every other key keeps it.
+function _zone_rt_split(chn)
+    ps = FlexiChains.parameters(chn)
+    is_rt(p) = string(p) == "R_T_zone"
+    rest = [FlexiChains.Parameter(p) for p in ps if !is_rt(p)]
+    rt = [FlexiChains.Parameter(p) for p in ps if is_rt(p)]
+    return (;
+        rest = chn[vcat(rest, collect(FlexiChains.extras(chn)))],
+        rt = isempty(rt) ? nothing : chn[rt],
+    )
+end
+
+## R-hat and bulk and tail ESS of `chn` as three FlexiChains summaries,
+## with `R_T_zone` summarised apart (see `_zone_rt_split`) and merged back.
+function _zone_convergence(chn)
+    parts = _zone_rt_split(chn)
+    stat(f; kw...) = parts.rt === nothing ? f(parts.rest; kw...) :
+        merge(f(parts.rest; kw...), f(parts.rt; warn = false, kw...))
+    return (
+        rhat = stat(FlexiChains.rhat),
+        bulk = stat(FlexiChains.ess; kind = :bulk),
+        tail = stat(FlexiChains.ess; kind = :tail),
+    )
+end
+
 ## Per-element diagnostic values of a vector deterministic from a
 ## FlexiChains summary, as a length-`nz` vector; `NaN` where absent.
 function _zone_summary_vector(summary, key::Symbol, nz::Integer)
@@ -1146,9 +1192,7 @@ function zone_diagnostics_table(chn, inputs = nothing)
     else
         length(inputs.zone_keys)
     end
-    rhat = FlexiChains.rhat(chn)
-    bulk = FlexiChains.ess(chn; kind = :bulk)
-    tail = FlexiChains.ess(chn; kind = :tail)
+    rhat, bulk, tail = _zone_convergence(chn)
     df = DataFrame(
         zone = inputs === nothing ? string.(1:nz) :
             inputs.zone_labels
@@ -1209,9 +1253,10 @@ function zone_sampler_diagnostics(
     ebfmi(E) = sum(abs2, diff(E)) / max(sum(abs2, E .- mean(E)), floatmin())
     exclude = (_DIAGNOSTIC_EXCLUDE..., "R_T_zone")
     finite(v) = filter(isfinite, v)
-    rhats = finite(_scalar_stats(FlexiChains.rhat(chn); exclude))
-    bulk = finite(_scalar_stats(FlexiChains.ess(chn; kind = :bulk); exclude))
-    tail = finite(_scalar_stats(FlexiChains.ess(chn; kind = :tail); exclude))
+    conv = _zone_convergence(chn)
+    rhats = finite(_scalar_stats(conv.rhat; exclude))
+    bulk = finite(_scalar_stats(conv.bulk; exclude))
+    tail = finite(_scalar_stats(conv.tail; exclude))
     base = (
         max_rhat = isempty(rhats) ? NaN : maximum(rhats),
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
@@ -1222,7 +1267,7 @@ function zone_sampler_diagnostics(
         NaN
     else
         nz = length(inputs.zone_keys)
-        r = _zone_summary_vector(FlexiChains.rhat(chn), :R_T_zone, nz)
+        r = _zone_summary_vector(conv.rhat, :R_T_zone, nz)
         keep = collect(inputs.walking) .& _zone_rt_defined(chn, nz)
         v = finite(r[keep])
         isempty(v) ? NaN : maximum(v)
