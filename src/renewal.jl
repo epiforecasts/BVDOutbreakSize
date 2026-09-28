@@ -821,11 +821,10 @@ relative_multiplier_dims(groups::AbstractVector{<:UnitRange}) =
     sum((max(length(us) - 1, 0) for us in groups); init = 0)
 
 """
-Group-centred AR(1) deviation knots, the log-transmission deviation process
-of both spatial levels. The units are the patches of
-[`patch_rt_model`](@ref) or the health zones of [`bvd_zone`](@ref), and
-`groups` are the index ranges the deviations are centred within: one range
-over every patch at province level, one range per patch at zone level.
+Group-centred AR(1) deviation knots over the health zones of
+[`bvd_zone`](@ref), the construction of the province deviations in
+[`patch_rt_model`](@ref) applied within each group. `groups` are the index
+ranges the deviations are centred within, one per patch.
 
 The first knot is a level and the later knots revert toward zero at
 retention `φ`,

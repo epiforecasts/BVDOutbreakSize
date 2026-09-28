@@ -1266,7 +1266,7 @@ mixing block (`ε_w`, `τ`, `z^m`) is sampled only where `zd.mixing` carries
 the kernel, the correlation `ρ_corr` only where `zd.zone_distances` does,
 and the shared draw `η` only where `zd.meld_d` is positive.
 The deviation knots `δ_z(k)` are [`deviation_knots`](@ref), the province
-model's own process, called with one group per patch and the zones of a
+model's construction, applied with one group per patch and the zones of a
 patch as its units: the level and the innovations are correlated within a
 patch by [`zone_correlation_factors`](@ref) and centred within it, so every
 patch sums to zero at every knot.
@@ -1514,8 +1514,9 @@ quantity is computed on the fitted days as without a forecast.
     end
     w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
     φ = exp2(-zd.week / δ_halflife)
-    ## The province model's deviation process ([`deviation_knots`](@ref)),
-    ## called with one group per patch and the zones of a patch as its units.
+    ## The province model's deviation construction
+    ## ([`deviation_knots`](@ref)), with one group per patch and the zones of
+    ## a patch as its units.
     Kf = H == 0 ? 0 : zf.n_future_knots
     if Kf > 0 && zd.n_walking > 0
         z_drift_future ~ product_distribution(

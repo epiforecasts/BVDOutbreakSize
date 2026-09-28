@@ -103,9 +103,8 @@ The fits in `JOINT_SAMPLER_FITS` are also keyed on `joint_sampler_args()`
 and those in `ZONE_SAMPLER_FITS` on `zone_sampler_args()`, so a run with the
 `BVD_JOINT_*` overrides set writes its own cache entry.
 
-The health-zone fits are keyed this way because they sample at the joint's
-settings: without it an override moves the joint's key while leaving theirs
-alone, and a zone chain melded from one joint is served for another.
+The health-zone fits take the joint's warm-up and target acceptance, so an
+override of either moves their key with the joint's.
 """
 function fit_key(id; samples::Integer = 500, chains::Integer = 2)
     sampler = if id in JOINT_SAMPLER_FITS
@@ -732,9 +731,7 @@ function build_fit_specs(
             cache_dir = cache_dir, strict = true
         )
     end
-    ## The zone stage samples at the headline joint's settings, so a
-    ## difference between the two levels is the model rather than the
-    ## sampler.
+    ## The zone stage takes the joint's warm-up and target acceptance.
     function fit_zone_from(parent_chn, o, name)
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
         return fitter(
@@ -747,8 +744,6 @@ function build_fit_specs(
     ## joint's sampler overrides (`ZONE_SAMPLER_FITS`), but says nothing
     ## about the parent chain's bytes, so a parent refit under an unchanged
     ## key pairs with the zone chain already cached against the old parent.
-    ## The fixed per-chain seed keeps such a refit near-identical, so the
-    ## pairing holds.
     push!(
         specs,
         ## The health-zone fit on the current data, melded from the headline.
