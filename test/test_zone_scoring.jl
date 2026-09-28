@@ -237,7 +237,8 @@ end
     @test baseline_window_covered(obs, grid_date, beni, grid_date(24), 7)
 
     ## The step pool leaves out the vintage whose window is (17, 24], so the
-    ## one step runs from the day-17 total to the day-31 total.
+    ## one step runs from the day-17 week total, 20 - 10 = 10, to the day-31
+    ## week total, 40 - 36 = 4, over the 14 days between them.
     h = first(stream_history(obs, bunia))
     steps = _window_total_steps(obs, grid_date, bunia, h, grid_date(31), 7)
     @test steps ≈ [(4 - 10) / sqrt(14)]

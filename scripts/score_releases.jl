@@ -1747,7 +1747,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
             @warn "skipping $tag zone forecast scoring" exception = e
             zcount(:failed)
             nothing
-            nothing
         end
         zresult === :no_method && zcount(:no_method)
         if zresult isa NamedTuple
