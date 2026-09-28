@@ -32,9 +32,10 @@ const CONVERGENCE_WARN = (
 )
 
 ## The fits the gate covers by default. The joint fit carries the headline
-## estimate; the single-stream fits are diagnostics of it and are allowed to
-## be worse.
-const CONVERGENCE_IDS = ["joint"]
+## estimate and the health-zone fit the split of it that the zone maps and
+## the zone forecast report. The single-stream fits are diagnostics of the
+## joint and are allowed to be worse.
+const CONVERGENCE_IDS = ["joint", "local"]
 
 ## A threshold read from the environment. A malformed value names the
 ## variable it came from: the parse failure alone says only that some number

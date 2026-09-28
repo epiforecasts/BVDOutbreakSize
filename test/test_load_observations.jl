@@ -467,6 +467,30 @@ end
     @test occursin("matches no", err.msg)
 end
 
+@testitem "load_observations refuses a zone series of the wrong length" begin
+    using BVDOutbreakSize
+    using TOML
+
+    ## A zone series one entry short of the block's dates names its key.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["zone_confirmed_history"]
+    prov = first(sort([k for k in keys(blk) if blk[k] isa AbstractDict]))
+    zone = first(sort(collect(keys(blk[prov]))))
+    blk[prov][zone] = blk[prov][zone][1:(end - 1)]
+    tmp = joinpath(mktempdir(), "observations.toml")
+    open(io -> TOML.print(io, raw), tmp, "w")
+    err = try
+        load_observations(tmp)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ErrorException
+    @test occursin("zone_confirmed_history: $prov.$zone", err.msg)
+    @test occursin("$(length(blk["dates"])) dates", err.msg)
+end
+
 @testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()
@@ -559,4 +583,71 @@ end
 
     ## A Date argument is equivalent to the ISO string.
     @test freeze_observations(Date("2026-05-23")).n == frozen.n
+end
+
+@testitem "the stream registry carries the province and zone blocks" begin
+    using DataFrames: nrow
+    using BVDOutbreakSize: load_observations, stream_report_status,
+        stream_last_date, OBSERVATION_STREAMS
+    obs = load_observations()
+
+    ## Every entry names a spatial level and a field the loader returns.
+    @test all(
+        e -> e.stratum in (:national, :province, :zone), OBSERVATION_STREAMS
+    )
+    @test all(e -> hasproperty(obs, e.field), OBSERVATION_STREAMS)
+
+    ## A stratum keeps its own streams and nothing else, and no stratum
+    ## drops one.
+    stratum_of = Dict(e.id => e.stratum for e in OBSERVATION_STREAMS)
+    for s in (:national, :province, :zone)
+        status = stream_report_status(obs; stratum = s)
+        @test nrow(status) ==
+            count(e -> e.stratum === s, OBSERVATION_STREAMS)
+        @test all(id -> stratum_of[id] === s, status.stream)
+    end
+    @test nrow(stream_report_status(obs)) == length(OBSERVATION_STREAMS)
+
+    ## The blocks are dated, run to the cut-off and are read from the
+    ## nested series rather than from a `days` field they do not have.
+    for id in (
+            :province_confirmed, :province_deaths, :province_lab_daily,
+            :zone_confirmed, :zone_deaths,
+        )
+        @test stream_last_date(obs, id) == obs.cutoff
+    end
+end
+
+@testitem "a block's first and last vintage read off one series" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: stream_first_date, stream_last_date
+    cutoff = Date("2026-09-19")
+    n = 100
+    series(day) = (; days = [day - 1, day], counts = [1, 2])
+
+    ## A province block is one level of nesting and a zone block two. The
+    ## block's last vintage is the latest any of its series reports, so a
+    ## block that stops updating reads back before the cut-off.
+    obs = (;
+        cutoff = cutoff, n = n,
+        province_confirmed_history = Dict(
+            "ituri" => series(n), "nord_kivu" => series(n - 3)
+        ),
+        zone_confirmed_history = Dict(
+            "ituri" => Dict("bunia" => series(n - 5), "irumu" => series(n - 5))
+        ),
+        zone_death_history = Dict{String, Dict{String, Any}}(),
+    )
+    @test stream_last_date(obs, :province_confirmed) == cutoff
+    @test stream_last_date(obs, :zone_confirmed) == cutoff - Day(5)
+    ## The block flattens to one dated series, so its first vintage falls
+    ## out of the same helper: the day the block was first printed.
+    @test stream_first_date(obs, :province_confirmed) == cutoff - Day(4)
+    @test stream_first_date(obs, :zone_confirmed) == cutoff - Day(6)
+    ## An empty block, and one absent from the observation set, report no
+    ## date rather than an error, at either end.
+    for f in (stream_first_date, stream_last_date)
+        @test ismissing(f(obs, :zone_deaths))
+        @test ismissing(f(obs, :province_deaths))
+    end
 end

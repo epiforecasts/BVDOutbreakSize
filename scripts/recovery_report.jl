@@ -10,6 +10,7 @@
 #
 # BVD_RECOVERY_SEEDS (e.g. "1 2 3") lists the seeds that were run. A seed
 # with no results, because its fit timed out or failed, counts as
+# unconverged. With no results at all, the report lists every seed as
 # unconverged.
 
 using BVDOutbreakSize, CSV, DataFrames
@@ -24,12 +25,37 @@ read_all(pattern) = begin
 end
 params = read_all(r"^recovery_\d+\.csv$")
 forecasts = read_all(r"^forecast_recovery_\d+\.csv$")
-isempty(params) && error("no recovery results in $dir")
+listed = parse.(Int, split(get(ENV, "BVD_RECOVERY_SEEDS", "")))
+isempty(params) && isempty(listed) &&
+    error("no recovery results in $dir and no seeds listed")
+missing_row(s) =
+    "| $s | no result (timed out or failed) | – | – | – | – | – | – |"
+seed_header = """
+| Seed | Verdict | 90% coverage | Outside 99% | Fit (min) | Max R-hat | Min bulk ESS | Divergences |
+|---|---|---|---|---|---|---|---|"""
+
+if isempty(params)
+    status = recovery_overall(fill(:unconverged, length(listed)))
+    body = """
+    ### Parameter recovery: $status ($(length(listed)) seeds)
+
+    0 of $(length(listed)) fits converged: no seed returned results.
+
+    <details><summary>Fit per seed</summary>
+
+    $seed_header
+    $(join(missing_row.(listed), "\n"))
+
+    </details>
+    """
+    write(joinpath(dir, "report.md"), body)
+    write(joinpath(dir, "status"), string(status))
+    println(status)
+    exit(0)
+end
 
 seeds = recovery_seed_verdicts(params)
-missing_seeds = setdiff(
-    parse.(Int, split(get(ENV, "BVD_RECOVERY_SEEDS", ""))), seeds.seed
-)
+missing_seeds = setdiff(listed, seeds.seed)
 n_seeds = nrow(seeds) + length(missing_seeds)
 status = recovery_overall(
     [seeds.status; fill(:unconverged, length(missing_seeds))]
@@ -86,13 +112,7 @@ seed_rows = [
         "$(r.divergences) |"
         for r in eachrow(seeds)
 ]
-append!(
-    seed_rows,
-    [
-        "| $s | no result (timed out or failed) | – | – | – | – | – | – |"
-            for s in missing_seeds
-    ]
-)
+append!(seed_rows, missing_row.(missing_seeds))
 
 body = """
 ### Parameter recovery: $status ($n_seeds seeds)
@@ -116,8 +136,7 @@ $(table(province))
 
 <details><summary>Fit per seed</summary>
 
-| Seed | Verdict | 90% coverage | Outside 99% | Fit (min) | Max R-hat | Min bulk ESS | Divergences |
-|---|---|---|---|---|---|---|---|
+$seed_header
 $(join(seed_rows, "\n"))
 
 </details>

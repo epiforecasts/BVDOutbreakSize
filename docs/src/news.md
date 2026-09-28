@@ -3,6 +3,53 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## v3.0.0
+
+Changes since v2.2.0.
+
+A major version: the report gains a health-zone level below the provinces, with its own estimates, forecasts and evaluation.
+
+### Performance
+
+- A hand-written Mooncake rule differentiates the health-zone renewal (#779).
+
+### Model
+
+- A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
+- The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
+- The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
+
+### Data
+
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
+
+### Report
+
+- The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
+- The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
+- The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
+- The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
+- The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's, and its diagnostics print no per-zone warnings (#978).
+- The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+- The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
+- The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
+
+### Infrastructure
+
+- Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
+- `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
+- A release whose zone scoring fails is counted in the scoring log (#986).
+- The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
+- The fit summary leaves out any quantity that is not finite in some draw (#779).
+- Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
+- The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+
+### Fixed
+
+- The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
+- The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
+
 ## v2.2.0
 
 Changes since v2.1.0.
@@ -45,6 +92,7 @@ Changes since v2.1.0.
   The walk starts one delay support before the earliest report day and is held at its first value before that.
   Fitted values change.
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
+- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
   The share is recomputed each day, so it moves with the admissions.
   The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.

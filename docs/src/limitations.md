@@ -21,15 +21,23 @@
   The laboratory analysed-specimen series covers only part of the window ([laboratory pipeline](@ref "Laboratory pipeline")).
 - Later situation reports can revise earlier totals up or down as suspects are reclassified and newly-reporting health zones are added, and we do not model this revision process.
 - The onset curve is digitised from a figure that each report redraws, so the counts carry scan error that the model treats as noise at a fixed scale.
+- The reports also print surveillance-effort indicators, such as contact-tracing follow-up and alert investigation.
+  They also print community suspect-death alerts that continue after 11 July.
+  We record these signals but do not fit them.
 
 ### Model
 
 - The streams observe overlapping people but are fitted as conditionally independent given latent incidence, which can understate uncertainty.
   The [outbreak size estimated by each data stream](@ref "Outbreak size estimated by each data stream") checks whether they agree.
-- The DRC ascertainment and the testing fraction are each one value over the window, although ascertainment probably rose, so a change in either is read as a change in incidence.
+- The DRC ascertainment, the testing fraction and the specimens analysed per suspect are each one value over the window, although ascertainment probably rose, so a change in any of them is read as a change in incidence.
+- The severity-enrichment priors are not set from data.
+  Under the decay-scale prior the enrichment is spent within about the first thousand analysed specimens, so it shapes only the earliest laboratory windows.
 - The model inherits McCabe et al.'s assumptions of a single zoonotic seed, a generation interval from earlier Ebola outbreaks and no depletion of susceptibles, which help constrain the estimated outbreak age and early reproduction number.
   The onset-to-death delay and the [genetic seeding bound](@ref "Genetic bound on outbreak age") do not propagate cross-outbreak or clock uncertainty.
+- The export model counts every border crossing by an undetected infection as a possible detection in Uganda, so a traveller who returns to the DRC before detection is over-counted.
+  A constant share of such round trips is absorbed into the Uganda ascertainment, but a share that changes over the window is not.
 - The intervention ramp in the [reproduction number](@ref "Reproduction number") is fixed in time, with an assumed start and three-week duration, and only its size is estimated.
+- The share of reported suspects admitted to a treatment-centre bed has a weakly-informative prior that no external evidence sets.
 - Occupancy shows demand only up to the beds filled, so the bed shortfall above capacity is not measured and comes from the [treatment-centre flow](@ref "Treatment-centre flow") model and its priors.
 
 ### Evaluation
@@ -54,3 +62,17 @@
 - Provincial testing enters the prior, not the likelihood, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model carries one national bed capacity and demand, so it cannot represent local saturation.
   Ituri holds most of the occupied beds, so the national bed shortfall understates local unmet need.
+
+## Health zones
+
+### Data
+
+- A zone table can lag the cut-off, since a zone's count moves only when a report prints it.
+  The [data currency](@ref zone-data-currency) table lists each zone block that stops before the cut-off.
+
+### Model
+
+- A zone below the walking threshold has no transmission walk of its own, so its reproduction number is from its province, not modelled separately ([health-zone model](@ref "Health-zone model")).
+- The zone stage is melded one way onto the joint fit, so the zone data do not update the national and province estimates ([health-zone model](@ref "Health-zone model")).
+  A patch estimate that the zone data contradict is not corrected by them.
+- The zone forecast splits each patch's forecast across its zones, so it inherits the patch forecast's level and adds only the split.

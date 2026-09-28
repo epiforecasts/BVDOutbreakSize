@@ -211,7 +211,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
         validation_cutoff = validation_cutoff,
-        run_sensitivity = RUN_SENSITIVITY
+        run_sensitivity = RUN_SENSITIVITY,
+        cache_dir = _fit_cache_dir
     )
     _fit_spec_by_id = Dict(s.id => s for s in _fit_specs)
     _loaded_fits = Dict{String, Any}()
@@ -364,6 +365,61 @@ if !@isdefined(_BVD_SETUP_LOADED)
             sample(Xoshiro(20260518), m, Prior(), 1_000; progress = false)
         end
         _patch_prior_cache[] = (obs, chn)
+        return chn
+    end
+
+    ## The health-zone stage's fixed inputs from the headline joint: the
+    ## patch trajectories the zone model conditions on, the zone units and
+    ## their observed counts, and with `forecast` the joint's own forecast
+    ## the zone forecast is drawn from. Kept after the first call.
+    _zone_inputs_cache = Dict{Bool, Any}()
+    function zone_stage_inputs(; forecast::Bool = false)
+        return get!(_zone_inputs_cache, forecast) do
+            _timed("zone inputs") do
+                zone_fit_inputs(
+                    load_fit("joint"), obs;
+                    parent_forecast = forecast ? fit_forecast("joint") : nothing
+                )
+            end
+        end
+    end
+
+    ## The same inputs for the frozen fits, rebuilt from the frozen joint and
+    ## the observations the frozen zone fit was fitted to, with the frozen
+    ## joint's forecast under `forecast`. The zone estimates page compares
+    ## the two cut-offs and the zone forecast evaluation scores the frozen
+    ## split.
+    _frozen_zone_inputs_cache = Dict{Bool, Any}()
+    function frozen_zone_stage_inputs(; forecast::Bool = false)
+        return get!(_frozen_zone_inputs_cache, forecast) do
+            _timed("frozen zone inputs") do
+                zone_fit_inputs(
+                    load_fit("frozen_validation").chn,
+                    load_fit("local_frozen_validation").o;
+                    parent_forecast = forecast ?
+                        fit_forecast("frozen_validation") : nothing
+                )
+            end
+        end
+    end
+
+    ## Draws from the health-zone prior, on the same fixed inputs the fit
+    ## takes, for the outer band of the zone composition checks. A function
+    ## rather than an eager draw, since every page includes this file and
+    ## only the zone in-sample page needs it. The draw is kept after the
+    ## first call and takes its own seeded generator, as the other prior
+    ## draws here do.
+    _zone_prior_cache = Ref{Any}(nothing)
+    function zone_prior_draws(inputs)
+        cached = _zone_prior_cache[]
+        cached !== nothing && first(cached) === inputs && return last(cached)
+        chn = _timed("zone prior draws") do
+            sample(
+                Xoshiro(20260518), bvd_zone(inputs.model_data), Prior(), 500;
+                progress = false
+            )
+        end
+        _zone_prior_cache[] = (inputs, chn)
         return chn
     end
 

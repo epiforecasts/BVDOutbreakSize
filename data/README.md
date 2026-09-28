@@ -12,6 +12,8 @@ Nothing in the model hardcodes counts.
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
 | `province_care_scanned.csv` | Per-province isolation occupancy, beds and 24h patient flows read from the occupation tables and the care-continuity prose, one row per (SitRep, province) with the source text quoted. Feeds the `province_isolation_history` and `province_bed_capacity_history` blocks. |
 | `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
+| `health_zones.csv` | One row per health zone that has reported a confirmed case: manifest key, label, province, WorldPop population, polygon centroid and DHIS2 code. Read by `load_health_zones()`. See the health-zone section below. |
+| `health_zones.geojson` | Simplified boundaries of every health zone in the seven affected provinces, for maps. Not read by the model. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's inline SVG charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
@@ -107,12 +109,11 @@ SitRep 105 reprints 104's figure and SitRep 107 reprints 106's; page 4 of 107 ca
 SitRep 108's render (802x479) anti-aliases the baseline and the weekly ticks into the 120 to 180 near-grey range, which is why the reader ranks baseline rows by their longest run under a <180 mask and tries both masks for the tick row.
 SitRep 109 reprints 108's figure.
 SitRep 131 reprints 130's figure (byte-identical embedded JPEG).
-SitRep 133 is not digitised.
-The reader calibrates its count scale at twice the right value and reads every bar at half height (-52% against n = 6 138).
-It and its byte-identical reprint in SitRep 134 are left out until that is fixed (issue #952).
+SitRep 134 reprints 133's figure (byte-identical embedded JPEG).
 SitRep 110 is not digitised: its page-4 caption still reads "par date de début des symptômes" but the embedded chart is titled and axis-labelled "par date de notification" (n = 5 710), a different basis; see issue #644.
 SitReps 111 to 114 resume the onset-date basis.
-SitRep 112's render (771x433) needs the near-grey fallback for the y-axis ticks as well.
+SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
+On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
 SitRep 115's figure draws bars past its last tick inside the "données potentiellement incomplètes" band, so the reader drops rows later than the report date plus one day.
 SitReps 115, 116 and 130 print an onset date past their own report date; `load_onset_curve` bounds each pair's window by the predecessor's report day, which drops the delay-0 cell 115->116 would otherwise score (issue #662 misattributed the R-hat jump that cell caused to 117 and 118).
 SitReps 117 and 118 keep the 07 September tick and plot onsets only to 03 and 04 September, behind their own report dates; the shorter coverage intersection only drops cells.
@@ -157,6 +158,87 @@ Treat them as indicative.
 The model now carries the noise through.
 The fitted reporting-delay hazard in `onset_reporting_model` scores the increments under a heavy-tailed likelihood whose scale is built from the measured digitisation error, and the analysis report quotes the delay with its posterior interval.
 Prefer that estimate over the arithmetic above.
+
+## Health-zone confirmed cases and deaths (`zone_confirmed_history`, `zone_death_history`)
+
+From SitRep 018 (1 June 2026) the reports carry a table of cumulative confirmed cases and deaths per health zone within each province (Tableau 2, `Répartition des cas et décès confirmés par province et zone de santé`; the wording and numbering vary by era).
+`scripts/scan_zone_tableau2.jl` reads it from every PDF and writes the two blocks (`task zone-tableau2`).
+Each block shares one `dates` array and has one dotted `province.zone` array per series, plus a `province.unallocated` array for every province.
+Zone keys are the folded ASCII form of the SitRep name (`boma_mangbetu`, `nia_nia`, `makiso_kisangani`, `wanie_rukula`).
+A zone absent from a vintage's table has no confirmed case yet and is recorded as 0, the same convention as the province blocks.
+
+The table has been printed in four layouts.
+SitReps 018 to 032 head each province with a bare name and close it with a `Sous-total` row, and print the Létalité without a `%` sign before 021.
+SitReps 034 to 058 put the province totals on the province row itself.
+SitReps 059 to 083 add the 24h columns to the right of the Létalité.
+SitReps 088 onward add an `A ventiler` row of deaths in the province's treatment centres not yet attributed to a zone, with `NA` in its cases cell.
+SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no zone table, and 087 prints the 24h flow with no cumulative columns.
+None of those four is scanned.
+From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
+The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
+The series run to SitRep 134 (25 September).
+SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
+
+The unallocated row is the report's own count of cases and deaths it has not attributed to a zone.
+It is worded `Autres ZS (données non ventilées)` (018 to 032, 94 cases and 10 deaths throughout), `Autres zones non encore identifiées` (034 to 058, 17 cases), `Non identifiées` (059 to 068, 17 cases) and `A ventiler` (088 onward, deaths only).
+It is kept as `<province>.unallocated`, with a printed `NA` recorded as 0, so that the zone rows plus the unallocated row partition the province.
+Only Ituri has ever printed one.
+Its count falls twice: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17 and 0, and on 22 July (SitRep 069) from 17 cases to 0.
+Each fall is a reattribution of counts the report had carried as unallocated into named zones, so on those dates the zone rows rise by more than the province (163 zone cases against a province increment of 86 on 18 June, and 374 clamped zone cases against 347 on 22 July).
+The composition model leaves those two Ituri vintages out: `zone_increment_matrix` zeroes the patch's column on any date its unallocated count falls and lists the dates, and since the increments are differences of cumulative counts the next vintage is unaffected.
+
+Spelling varies between vintages.
+The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).
+Hyphen, space and accent differences need no entry.
+The scanner prints every zone key per province with the spellings behind it, so a new variant shows up as a second key rather than a silent second series.
+Tshopo province has a health zone named Tshopo (from SitRep 091); the scanner reads a province name met again inside its own section as that zone.
+
+Validation admits a vintage only when, in every province, the zone rows plus the unallocated row sum exactly to the committed `province_confirmed_history` and `province_death_history` value, and the provinces to the national totals.
+On the 14 dates the province blocks do not carry (SitReps 018 to 031, before Tableau 1 existed, and SitRep 073, whose Tableau 1 contradicts itself) the check is against the printed province rows and the national totals instead.
+Six vintages are left out because their zone rows do not sum to their own printed province row, so the split cannot be trusted:
+034 (Ituri 818/187 against a printed 817/186), 055 (Nord-Kivu 155/88 against 158/89), 059 (every province, the report's own footnote saying the zone split is the consolidated distribution of 10 July while the province rows are current), 081 and 083 (Nord-Kivu deaths two and one short) and 089 (Ituri deaths one short).
+SitRep 053 is kept: its zone rows match the committed Nord-Kivu value (149/88) while its printed province row (144/81) does not.
+SitRep 080 prints the table with the Létalité column displaced one row down and the province row without one, which the parse tolerates; its cases and deaths reconcile.
+SitRep 116 prints `1` in Buta's Létalité cell.
+
+`scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
+Of the 3369 case cells and 3371 death cells the two transcriptions share, 3355 and 3361 agree.
+Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
+On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
+On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).
+On 11 June its Goma, Kyondo and Masereka deaths are each one above the printed 0, 1 and 0.
+On 15 June it gives Rwampara 192 cases against the printed 159.
+On 17 July it gives Makiso-Kisangani 2 cases against the printed 3, and swaps the Lubunga and Mangobo deaths (printed 0 and 1).
+On 23 July it gives Rimba 7 cases against the printed 8.
+On 24 August it gives Boga 1 death against the printed 2.
+On 17 August eight case cells and three death cells are one to five below the printed SitRep 095 values, consistent with the mirror's 17 August row having been filed before the PDF was published (the mirror-only point described under the inclusion rules).
+The mirror also carries a malformed date `2026-06-25]`.
+The mirror is a cross-check for these blocks, and a source only under the province and health-zone fallbacks below.
+
+On an update run, in this order:
+
+1. Advance `province_confirmed_history` and `province_death_history` first, since the scanner checks the zone rows against the committed province values.
+2. Run `task zone-tableau2` and replace everything from `[zone_confirmed_history]` to the end of `data/observations.toml` with the blocks printed after its `===== paste into data/observations.toml =====` line, leaving one final newline.
+3. Check the change is append-only: the old dates are a prefix of the new dates and every old series is a prefix of its new series.
+4. Have a blind reader transcribe Tableau 2 of each new vintage from the PDFs alone, without the scan output, and compare it cell by cell with the scanner.
+5. Run `task confirm-zone-data`, and take a value from the mirror only under the fallback order below.
+6. Update the SitRep and date in "The series run to" and the agreement counts above from the `confirm-zone-data` output, and edit the existing news line for the zone blocks rather than adding one.
+7. Run the `test/test_health_zones.jl` and `test/test_load_observations.jl` items and read the "Test Summary" line.
+
+If the zone rows match their own printed province row but not the committed province value, the scanner stops.
+Fix the province block or the parse, not the zone blocks.
+The scanner lists every report it could not read with a reason, and `Tableau 2 is present but its caption did not match` says the wording moved rather than the table going away.
+The mirror's `Dates the mirror carries and the manifest does not` line is the second check, since a recent date there and not here means the scan has fallen behind whatever the reason says.
+That is how the 124 caption change was found: the reports had been read as carrying no zone table for five vintages while the mirror carried four of them.
+A zone new to the table needs `task health-zones` re-run against a fresh `build/drc_health_zones.geojson`, or its key matches no row in `health_zones.csv`.
+
+`health_zones.csv` and `health_zones.geojson` are written by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson`, build of 21 September 2026, commit `f489a92`).
+That build joins the Ministry of Health `DRC_Health_zones` shapefile from the Humanitarian Data Exchange (<https://data.humdata.org/dataset/drc-health-data>) with WorldPop population counts aggregated per zone (WorldPop 2025, University of Southampton, <https://www.worldpop.org>, CC BY 4.0).
+The 63 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
+Population is the WorldPop count rounded to a whole person and the centroid is the area-weighted centroid of the zone's largest ring.
+The centroid is what the zone model's distance kernel and its gravity pull read; nothing else in the model uses the geometry.
+The GeoJSON keeps the seven affected provinces' 167 zones with coordinates rounded to four decimals and rings simplified independently by Douglas-Peucker at 0.005 degrees (less for a small ring, capped at 5% of the square root of its area), so a shared boundary can show a hairline gap; its properties are `zone` (the manifest key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
+Reuse of both files carries the shapefile's and WorldPop's attribution; the INRB-UMIE repository asks that its own epidemiological data be cited through its README, which these files do not use.
 
 ### Fetching a SitRep from INSP directly
 
@@ -239,6 +321,31 @@ Advancing the headlines while leaving these behind both drops data and can break
 
 Always cross-check the confirmed/death/recovered/isolation headline against the INRB-UMIE `national_*` CSV for the same date.
 Note any disagreement in the `source =` string and prefer the auditable value.
+
+## Province and health-zone fallbacks
+
+A province or health-zone confirmed-case or death value comes from the first of these that carries it for the reporting date.
+
+1. The INSP SitRep PDF.
+2. The INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs for the same reporting date.
+   A province value is the sum of its zones, which is exact only when the mirror's `NA` row is zero.
+   For health zones the mirror must be used when INSP does not publish the zone table.
+3. The INRB-UMIE dashboard, only for what it publishes (confirmed cases by symptom-onset date), and only its observed layer.
+   Its imputed onsets are biased and never used.
+   Its line list lags or leads the SitRep at the reporting edge, so compare it with the nearest SitRep block first.
+
+If none of them carries the value, leave the date out.
+Never interpolate.
+
+The mirror needs care.
+It has filed a row under its publication date rather than its reporting date, filed a row before the PDF with values one to five below the printed ones, and carried plain transcription errors (#624 and the zone cross-check above).
+Check a mirror row against the neighbouring vintages, and hold mirror zone cells to the same sum validation as scanned ones.
+
+A fallback value is marked in its stream's `source =` string with the source and the dates it supplies, as for the 17 August mirror-only point under the inclusion rules.
+No row is added to `insp_sitrep_scanned.csv`, since no PDF was read.
+When INSP publishes the PDF for that date, re-read the value from it and upgrade the `source =` string, as for SitRep 095.
+No script tracks mirror-sourced values, so this check is manual.
+`scripts/scan_zone_tableau2.jl` writes only the dates it scanned from PDFs, so pasting its output drops any mirror-only zone date that has no PDF yet.
 
 ## Inclusion rules and conventions
 
@@ -328,7 +435,8 @@ Note any disagreement in the `source =` string and prefer the auditable value.
   **2026-08-25 (SitRep 103), deaths, mirror 2755 against our 2744**: SitRep 103 gives 2744 in its page-1 headline, in its Total row and as its province sum (2133+512+89+8+1+1), three independent agreements.
   The value 2755 appears nowhere in SitReps 101-104, so it is a mirror transcription error with no basis in any adjacent vintage.
   This closes the cross-check the SitRep 103 addition deferred in its `source =` string.
-  **The mirror is a cross-check, not a source**: it carries 86 of the 102 report dates the manifest holds and four values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
+  **The mirror is a cross-check for the national series, not a source**: it carries 86 of the 102 report dates the manifest holds and four values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
+  Province and health-zone values the PDF does not print follow the fallback order in the section above.
   `scripts/confirm_insp_data.jl` no longer prints ready-to-paste TOML blocks; its stale "upstream-primary" header, and the matching prose in the root README, `scripts/README.md`, `Taskfile.yml` and the manifest's own header, are corrected to match section 2 above and the header of `scripts/download_sitreps.jl`.
 - **No break-date entry for SitRep 090's mixed-direction harmonisation (12 August)**: the open question in issue #569, resolved against the SitRep 065 precedent already recorded under `confirmed_break_dates`.
   The whole national discrepancy is 2 cases and 3 deaths, localised to Wamba (cases 43 → 41) and Pawa (deaths 11 → 14) in the bullet above.

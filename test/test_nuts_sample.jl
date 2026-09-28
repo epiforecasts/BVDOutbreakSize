@@ -9,6 +9,7 @@
 ] begin
     using Distributions: Normal
     using Turing: @model
+    using Turing.DynamicPPL: InitFromPrior, InitFromUniform
     using BVDOutbreakSize: nuts_sample
 
     ## kept: a trivial one-parameter Gaussian is the cheapest target
@@ -24,4 +25,16 @@
     xs = vec(Array(chn[:x]))
     @test length(xs) == 50 * 2
     @test all(isfinite, xs)
+
+    ## One initialisation strategy per chain, and the refusal when the
+    ## vector and the chain count disagree.
+    per_chain = nuts_sample(
+        _nuts_model(); samples = 50, chains = 2,
+        init = [InitFromPrior(), InitFromUniform()]
+    )
+    @test length(vec(Array(per_chain[:x]))) == 50 * 2
+    @test_throws ArgumentError nuts_sample(
+        _nuts_model(); samples = 50, chains = 2,
+        init = [InitFromPrior()]
+    )
 end

@@ -1,4 +1,4 @@
-@testitem "Enzyme AD extension (isolated env)" tags = [:quality] begin
+@testitem "Enzyme AD extension (isolated env)" tags = [:enzyme] begin
     using Pkg
     enzyme_env = joinpath(@__DIR__, "..", "enzyme")
     ## Enzyme reverse-mode is not viable on Windows for this model (the
@@ -26,8 +26,7 @@
         ##
         ## Measured on a 4-core machine: the components take about 18 min
         ## on Julia 1.13.1, and the joint throws after 15 min on 1.13.0.
-        ## Each bound is several times that, and the two together fit the
-        ## quality job's timeout on a cold depot.
+        ## Each bound is several times that.
         components_min = 60
         joint_min = 40
         function run_part(part, limit_min)

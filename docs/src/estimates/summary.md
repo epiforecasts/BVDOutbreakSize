@@ -9,7 +9,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
-See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province page alongside.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province and a health-zone page alongside.
 See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
 
 ## Headline estimates
@@ -100,6 +100,28 @@ These are the underlying outbreak, upstream of the testing and reporting that pr
 The detail is on the [National estimates](national.md) page.
 
 ![Estimated cumulative infections, onsets and deaths over time](../summary_assets/infections.png)
+
+## Health zones
+
+The split of each patch's infections across its health zones, with the zone maps and the interactive map, is on the [Health zones](zone.md) page.
+The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
+
+The week-ahead forecast by health zone:
+
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "zone_forecast.md"), String))
+```
+
+The map panels give each zone's reproduction number at the cut-off, the 90% interval on its confirmed cases over the coming week and its confirmed cases to date.
+A reproduction number whose 90% interval spans one is washed towards white.
+
+![Health zones at the cut-off](../summary_assets/zone_rt_map.png)
+
+The fifteen zones with the largest forecast confirmed cases over the coming week.
+
+![One-week-ahead confirmed-case forecast by health zone](../summary_assets/zone_forecast.png)
 
 ---
 
