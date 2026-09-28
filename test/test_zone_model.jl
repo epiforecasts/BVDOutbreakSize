@@ -623,6 +623,12 @@ end
     for i in 1:20, t in 1:inputs.n, (p, zs) in enumerate(inputs.patch_ranges)
         @test sum(inf[z][i, t] for z in zs) ≈ syn.I_bar[p, t] rtol = 1.0e-8
     end
+    ## The zone stage's patch trajectories are the ones the zones split.
+    pinf = zone_patch_infections(chn, inputs)
+    @test length(pinf) == length(inputs.patch_ranges)
+    for i in 1:20, t in 1:inputs.n, (p, zs) in enumerate(inputs.patch_ranges)
+        @test pinf[p][i, t] ≈ sum(inf[z][i, t] for z in zs) rtol = 1.0e-8
+    end
 end
 
 @testitem "zone forecast: the fitted model is unchanged and the split is proper" setup = [
@@ -1280,6 +1286,14 @@ end
     ## Without inputs the zones are numbered and the walking column absent.
     bare = zone_diagnostics_table(chn)
     @test bare.zone == string.(1:syn.nz)
+    ## A zone undefined in some draw is marked in the table, not warned
+    ## about once per zone.
+    @test_logs min_level = Base.CoreLogging.Warn zone_diagnostics_table(
+        chn, inputs
+    )
+    @test_logs min_level = Base.CoreLogging.Warn zone_sampler_diagnostics(
+        chn, inputs
+    )
     @test !("walking" in names(bare))
     @test bare.rhat_share_T == diag.rhat_share_T
     ## Sampler statistics are absent from a prior chain, so the per-chain
