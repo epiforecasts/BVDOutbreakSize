@@ -5,11 +5,13 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 ## Unreleased
 
-Changes since v2.2.0.
-
 ### Fixed
 
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
+
+### Infrastructure
+
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 
 ## v2.2.0
 
