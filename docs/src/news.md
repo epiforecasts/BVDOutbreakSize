@@ -27,6 +27,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
+- The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
 - The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's (#978).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).

@@ -164,7 +164,7 @@ zone_rt_fig = plot_rt_zones(
 zone_rt_fig #hide
 
 # The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
-# A zone below the walking threshold is drawn hollow, since its estimate comes from its patch rather than its own data.
+# A zone whose reproduction number is from its province, not modelled separately, is drawn hollow in grey.
 
 #md # ```@raw html
 #md # <details><summary>Zone ranking</summary>
@@ -176,10 +176,15 @@ zone_ranking_fig = plot_zone_ranking(
 );
 ## The overview as displayed: the interval strings, without the numeric
 ## columns the figure reads.
-zone_overview_display = zone_overview[
-    :,
-    [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T, :walking],
-];
+zone_overview_display = let d = zone_overview[
+        :,
+        [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T],
+    ]
+    d[!, "R modelled separately"] = [
+        w ? "yes" : "no" for w in zone_overview.walking
+    ]
+    d
+end;
 
 #md # ```@raw html
 #md # </details>
@@ -187,7 +192,8 @@ zone_overview_display = zone_overview[
 
 zone_ranking_fig #hide
 
-# The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether it walks.
+# The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether its reproduction number is modelled separately.
+# A zone whose reproduction number is not modelled separately takes it from its province.
 # The share, the reproduction number and the deviation are each a median with a 90% interval.
 # Every zone is listed in the fold below it.
 
@@ -252,7 +258,7 @@ zone_currency #hide
 # The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity but the zone reproduction number, and the divergences.
 # Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
 # The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
-# The walking rows are the ones to read.
+# The rows whose reproduction number is modelled separately are the ones to read.
 
 #md # ```@raw html
 #md # <details><summary>Zone fit diagnostics</summary>
@@ -281,7 +287,14 @@ zone_diagnostics = let d = zone_diagnostics_table(chn_local, zone_inputs)
     for c in names(d)[3:end]
         d[!, c] = round.(d[!, c]; digits = startswith(c, "rhat") ? 3 : 0)
     end
-    d
+    DataFrame(
+        [
+            n == "walking" ?
+                "R modelled separately" => [w ? "yes" : "no" for w in d[!, n]] :
+                n => d[!, n]
+                for n in names(d)
+        ]
+    )
 end;
 
 #md # ```@raw html
@@ -621,7 +634,10 @@ zone_week_rt_fig #hide
 #
 # Each affected health zone coloured by its current reproduction number, with the chance that number exceeds one, the seven-day confirmed-case forecast, the chance of at least a chosen number of cases, the confirmed cases to date and the zone's share of its patch's infections available from the switcher.
 # A filter shows the zones with or without a case over the past one, two or four weeks, and the reproduction number and the forecast can be read at their median or at either bound of the 90% interval.
-# Hover over a zone for its estimate and 90% credible interval, click it for every number, or open the table view for a sortable list.
+# A zone whose reproduction number is from its province, not modelled separately, is hatched, and a filter shows either kind alone.
+# A reproduction number whose 90% interval spans one is paler, and province outlines are drawn over the zones.
+# Hover over a zone for its estimate and 90% credible interval, click it for every number, or open the table view to sort by any column.
+# The map header gives the data cut-off and a link to download the estimates as a CSV file.
 # The map needs a browser.
 # It appears only on the documentation site.
 
@@ -647,8 +663,9 @@ mkpath(dashboard_dir)
 ## dashboard, and the per-zone estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number and the chance it exceeds one, the one-week forecast and the
-## share of the patch's infections.
-## A zone below the reporting floor carries no reproduction number.
+## share of the patch's infections, whether the zone's reproduction number
+## is modelled separately (`walking`) and the data cut-off. A zone below the
+## reporting floor carries no reproduction number.
 CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
 _zone_deaths = [
     let h = obs.zone_death_history
@@ -683,9 +700,18 @@ zone_estimates = DataFrame(
     p_ge_10 = zone_fc_probs[:, 3], p_ge_20 = zone_fc_probs[:, 4],
     cases_last_7 = zone_recent[7], cases_last_14 = zone_recent[14],
     cases_last_28 = zone_recent[28],
-    last_case_date = [ismissing(d) ? "" : string(d) for d in zone_last_case]
+    last_case_date = [ismissing(d) ? "" : string(d) for d in zone_last_case],
+    walking = Int.(zone_inputs.walking),
+    as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
+## The same frame into the release outputs.
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+CSV.write(joinpath(output_dir, "zone_estimates.csv"), zone_estimates)
 
 #md # ```@raw html
 #md # </details>
