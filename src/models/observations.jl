@@ -2490,7 +2490,17 @@ series for forecasting and replication.
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
-    C_T = isempty(C) ? zero(eltype(C)) : C[nc]
+    ## Cut-off beds: the modelled capacity floored at the recorded cap on the
+    ## last occupancy day, the bound the forecast carries forward.
+    last_cap = isempty(capacity_history.counts) ||
+        isempty(isolation_history.counts) ? 0.0 :
+        only(
+            censoring_cap(
+                isolation_history.days[end:end],
+                isolation_history.counts[end:end], capacity_history
+            )
+        )
+    beds_T = isempty(C) ? zero(eltype(C)) : max(C[nc], last_cap)
     ## With province splits, each patch holds a static share of the
     ## national walk ([`patch_capacity_share_model`](@ref)).
     cap_shares = ones(1)
@@ -2785,7 +2795,7 @@ series for forecasting and replication.
     ## offset, capped at the bed capacity. Bed demand is the latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
-    occ_T = isempty(occ_obs_total) ? z0 : min(occ_obs_total[nc], C_T)
+    occ_T = isempty(occ_obs_total) ? z0 : min(occ_obs_total[nc], beds_T)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
@@ -2808,9 +2818,9 @@ series for forecasting and replication.
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
     ## Unmet demand: the latent demand above the modelled bed capacity.
-    shortfall_T = safe_rate(max(dem_T - C_T, z0))
+    shortfall_T = safe_rate(max(dem_T - beds_T, z0))
     bed_shortfall := shortfall_T
-    bed_utilisation := isolation_T / safe_rate(C_T)
+    bed_utilisation := isolation_T / safe_rate(beds_T)
     isolation_severity := sev_state.δ_iso
     isolation_bvd_admission := p_iso_bvd
     incare_cfr := CFR_iso
@@ -2835,7 +2845,7 @@ series for forecasting and replication.
 
     return (;
         p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
-        CFR_iso, β_iso, capacity = C_T,
+        CFR_iso, β_iso, capacity = beds_T,
         death_los_mean = death_los_state.mean,
         recovery_los_mean = recovery_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
