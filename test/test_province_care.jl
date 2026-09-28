@@ -366,3 +366,34 @@ end
     patch = convolve_delay(A_bg, _background_stay_survival(f, κ))
     @test patch ≈ national rtol = 1.0e-10
 end
+
+@testitem "province effective beds: printed, implied or patients held" begin
+    using BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts", "province_effective_beds.jl"
+        )
+    )
+
+    ## Nord-Kivu, 15 July: 171 patients at 118.8% of 141 beds. The rate
+    ## gives back the printed beds, and the patients exceed both.
+    @test effective_beds(141, 171, 118.8) == 171
+    ## 21 September: 338 patients at 66.2% against a stale 308.
+    @test effective_beds(308, 338, 66.2) == 511
+    ## A province under its printed beds keeps them.
+    @test effective_beds(25, 10, 40.0) == 25
+    ## No rate, or no patients, printed.
+    @test effective_beds(20, 24, nothing) == 24
+    @test effective_beds(20, nothing, nothing) == 20
+
+    ## Every recorded bed entry holds at least that day's patients.
+    obs = load_observations()
+    for (name, h) in obs.province_bed_capacity_history
+        haskey(obs.province_isolation_history, name) || continue
+        iso = obs.province_isolation_history[name]
+        held = Dict(zip(iso.days, iso.counts))
+        @test all(
+            b >= get(held, d, 0) for (d, b) in zip(h.days, h.counts)
+        )
+    end
+end

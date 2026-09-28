@@ -48,7 +48,11 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_history]` carry the occupancy and bed series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
-Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total and the beds are the normed count the printed rate refers to.
+Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total.
+Each bed entry is the province's effective beds that day, the largest of the printed beds, the beds implied by the printed occupancy rate (patients / rate x 100) and the patients held (`scripts/province_effective_beds.jl`).
+A province holding more patients than its printed beds has at least that many beds in practice.
+Nord-Kivu prints rates of 119 to 143% from 15 July to 9 September, and from 16 September patients above a stale bed count (about 390 to 420 implied beds, 511 on 21 September).
+The CSVs keep the printed counts, and the two reads' rates need agree only as far as the effective beds do.
 The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
 
 ## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)

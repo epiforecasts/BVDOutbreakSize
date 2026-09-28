@@ -14,7 +14,10 @@
 # Table-era bed counts (to SitRep 080) come from the scan alone: the scan
 # reads the printed `Nombre de lits` row, while the blind read's table-era bed
 # figures are implied from the printed occupancy rate and the national
-# `bed_capacity_history` already carries that derivation. SitReps with no
+# `bed_capacity_history` already carries that derivation. Each bed entry is
+# the province's effective beds that day (scripts/province_effective_beds.jl):
+# the largest of the printed beds, the beds implied by the printed occupancy
+# rate and the patients held. The CSVs keep what was printed. SitReps with no
 # row in data/insp_sitrep_scanned.csv have no report date and are skipped,
 # as the laboratory scan skips them.
 #
@@ -31,6 +34,8 @@
 using CSV
 using DataFrames
 using Dates
+
+include(joinpath(@__DIR__, "province_effective_beds.jl"))
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const SCAN_CSV = length(ARGS) >= 1 ? ARGS[1] :
@@ -67,15 +72,18 @@ function dated_sitreps()
     return out
 end
 
-function read_cells(path, column)
-    df = CSV.read(path, DataFrame; types = Dict(column => Union{Missing, Int}, :sitrep => Int))
-    out = Dict{Tuple{Int, String}, Int}()
+function read_cells(path, column, T::Type = Int)
+    df = CSV.read(
+        path, DataFrame; types = Dict(column => Union{Missing, T}, :sitrep => Int),
+        ntasks = 1
+    )
+    out = Dict{Tuple{Int, String}, T}()
     for row in eachrow(df)
         v = row[column]
         ismissing(v) && continue
         key = get(KEYS, String(row.province), nothing)
         key === nothing && error("$(path): unknown province `$(row.province)`")
-        out[(Int(row.sitrep), key)] = Int(v)
+        out[(Int(row.sitrep), key)] = T(v)
     end
     return out
 end
@@ -85,7 +93,7 @@ Union of the two reads for one field, with the agreement rules above.
 `table_era_scan_only` drops the blind read's table-era cells (the beds).
 """
 function reconcile(scan, read, dates; table_era_scan_only::Bool = false)
-    out = Dict{String, Vector{Tuple{Date, Int}}}()
+    out = Dict{String, Vector{Tuple{Date, valtype(scan)}}}()
     conflicts = String[]
     for key in union(keys(scan), keys(read))
         sr, prov = key
@@ -102,7 +110,7 @@ function reconcile(scan, read, dates; table_era_scan_only::Bool = false)
             a === nothing ? b : a
         end
         v === nothing && continue
-        push!(get!(out, prov, Tuple{Date, Int}[]), (dates[sr], v))
+        push!(get!(out, prov, Tuple{Date, valtype(scan)}[]), (dates[sr], v))
     end
     isempty(conflicts) || error(
         "the two reads disagree; settle these against the PDF and record " *
@@ -113,6 +121,47 @@ function reconcile(scan, read, dates; table_era_scan_only::Bool = false)
         ds = first.(pairs)
         allunique(ds) || error("more than one figure on one date: $(ds)")
     end
+    return out
+end
+
+## The figure `data` carries for `prov` on date `d`, or `nothing`.
+function lookup(data, prov, d)
+    for (dd, v) in get(data, prov, ())
+        dd == d && return v
+    end
+    return nothing
+end
+
+"""
+Effective beds on each day a province has a bed entry, from its patients
+and the occupancy rate each read carries (`effective_beds`). The two reads'
+rates need agree only as far as the effective beds do: a day whose beds
+differ between them stops the script like any other disagreement.
+"""
+function effective_bed_block(printed_beds, isolation, scan_rates, read_rates, dates)
+    by_date(rates) = Dict((dates[sr], prov) => v for ((sr, prov), v) in rates if haskey(dates, sr))
+    sr_rate = by_date(scan_rates)
+    rd_rate = by_date(read_rates)
+    conflicts = String[]
+    out = Dict{String, Vector{Tuple{Date, Int}}}()
+    for (prov, pairs) in printed_beds
+        out[prov] = map(pairs) do (d, b)
+            patients = lookup(isolation, prov, d)
+            a = get(sr_rate, (d, prov), nothing)
+            r = get(rd_rate, (d, prov), nothing)
+            ea = effective_beds(b, patients, a === nothing ? r : a)
+            er = effective_beds(b, patients, r === nothing ? a : r)
+            ea == er || push!(
+                conflicts, "$(d) $(prov): rate scan $(a) gives $(ea) beds, read $(r) gives $(er)"
+            )
+            (d, ea)
+        end
+    end
+    isempty(conflicts) || error(
+        "the two reads' occupancy rates give different beds; settle these " *
+            "against the PDF and record the decision in the CSV:\n  " *
+            join(conflicts, "\n  ")
+    )
     return out
 end
 
@@ -137,9 +186,14 @@ function main()
         read_cells(SCAN_CSV, :patients_isolated),
         read_cells(READ_CSV, :patients_isolated), dates
     )
-    beds = reconcile(
+    printed_beds = reconcile(
         read_cells(SCAN_CSV, :beds), read_cells(READ_CSV, :beds), dates;
         table_era_scan_only = true
+    )
+    beds = effective_bed_block(
+        printed_beds, isolation,
+        read_cells(SCAN_CSV, :occupancy_rate_pct, Float64),
+        read_cells(READ_CSV, :occupancy_rate_pct, Float64), dates
     )
     println("===== paste into data/observations.toml =====\n")
     emit(
@@ -165,19 +219,21 @@ function main()
     emit(
         stdout, "province_bed_capacity_history",
         """
-        # Per-province isolation and treatment beds (`lits`), from the
-        # `Nombre de lits` row of the occupation table (from SitRep 062) and
-        # the bed counts in the care-continuity prose from SitRep 081.
-        # Generated by `julia --project=scripts scripts/province_care_manifest.jl`
-        # from the same two reads as the occupancy block; table-era counts are
-        # the scan's, since the blind read's table-era figures are implied
-        # from the printed rate. The national bed_capacity_history is the sum
-        # over the provinces that print a figure on a day; this block keeps
-        # the split. Nord-Kivu's count from SitRep 124 is the beds in normed
-        # structures, the figure its printed rate refers to. Fitted as a split
-        # of the printed sum of the provinces present each day, over
-        # static per-patch shares of the national capacity walk.""",
-        "INSP situation reports, per-province bed counts (lits) from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read by scripts/province_care_manifest.jl.",
+        # Per-province effective isolation and treatment beds, on each day a
+        # province prints a bed count (`lits`): the `Nombre de lits` row of
+        # the occupation table (from SitRep 062) and the bed counts in the
+        # care-continuity prose from SitRep 081. Generated by
+        # `julia --project=scripts scripts/province_care_manifest.jl` from the
+        # same two reads as the occupancy block; table-era counts are the
+        # scan's, since the blind read's table-era figures are implied from
+        # the printed rate. Each value is the largest of the printed beds, the
+        # beds implied by the printed occupancy rate (patients / rate x 100)
+        # and the patients held (scripts/province_effective_beds.jl), so a
+        # province holding more patients than its printed beds has at least
+        # that many. The CSVs keep the printed counts. Fitted as a split of
+        # the sum of the provinces present each day, over per-patch shares of
+        # the national capacity walk.""",
+        "INSP situation reports, per-province bed counts (lits), occupancy rates and patients in isolation from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read, and the effective beds taken, by scripts/province_care_manifest.jl.",
         beds
     )
     for (name, data) in (("isolation", isolation), ("beds", beds))
