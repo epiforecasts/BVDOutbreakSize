@@ -15,6 +15,7 @@ The ones used while making a change:
 - `task fetch-fits` downloads the fits from the latest successful docs build, and `task docs` renders the site from them.
 - `BVD_FIT_ID=<id> task fit` fits and caches one model, and `task fit-all` fits them all.
   `julia --project=docs docs/fits/list.jl` lists the ids.
+  `task fit-dependent` fits only the models melded from a cached parent; `BVD_FIT_STAGE` selects `base`, `dependent` or `all`.
 - `task check-convergence` runs the convergence gate CI applies before publishing.
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings.
   Run it before pushing a model change.
@@ -116,9 +117,11 @@ Tags split the suite across CI jobs.
 - `:quality` marks the Aqua, JET, formatting and doctest items.
 - `:ad` marks the AD gradient checks.
 - `:slow` marks the items that run full NUTS fits.
+- `:enzyme` marks the sweep of the opt-in Enzyme backend.
 
 `runtests.jl` reads test arguments to choose among them.
-`skip_quality` drops the quality and AD items, `quality_only` and `ad_only` run one tag, and `fast` and `downgrade` drop all three.
+`skip_quality` drops the quality and AD items, `quality_only`, `ad_only` and `enzyme_only` run one tag, and `fast` and `downgrade` drop the quality, AD and slow items.
+Every run leaves out the Enzyme items unless `enzyme_only` asks for them.
 
 To run one file, point `TestItemRunner.run_tests` at the `test/` directory with a filter and run it with `--project=test`:
 

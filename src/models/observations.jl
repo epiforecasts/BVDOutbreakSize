@@ -479,7 +479,7 @@ ascertainment and the background CFR for reuse by
         ## Gammas moment-matched to a single Gamma only for the truncation).
         onset_to_death = onset_to_death_model(
             cdf_nmax(Gamma(3.33, 3.83));
-            oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            oa_alpha_prior = LogNormal(log(1.178), 0.25),
             oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
@@ -594,7 +594,7 @@ sitrep.
         ## though what it captures is uncertain.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
-            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            alpha_prior = LogNormal(log(1.178), 0.25),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
@@ -1444,7 +1444,7 @@ rate and the daily at-risk prevalence for reuse by
         ## point of entry when first formally seen, ~4 days after onset.
         onset_to_detection = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
-            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            alpha_prior = LogNormal(log(1.178), 0.25),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
@@ -1838,7 +1838,6 @@ function abscond_thinned_flows(
     @inbounds for t in 1:n
         a1 = adm1[t]
         a2 = adm2[t]
-        (iszero(a1) && iszero(a2)) && continue
         dmax1 = min(nmax1 - 1, n - t)
         dmax2 = min(nmax2 - 1, n - t)
         ## Both schedules run to `dboth`; only the longer one runs past it.
@@ -2296,36 +2295,22 @@ function _background_stay_survival(ruleout_pmf::AbstractVector, κ::Real)
 end
 
 """
-Per-patch latent bed demand for the province splits: the national demand
-`demand` shared out by each patch's approximate stock, its share of the
-national BVD admissions (each patch's reports through the admission delay
-at `p_iso_bvd · p_drc`, re-split by the relative ascertainment `asc`) and
-then the clinical-stay survival `S_clin`, plus its share `w[p]` of the
-national non-BVD admissions `A_bg` through the rule-out stay `ruleout_pmf`
-and the abscond rate `κ`. The national stock in [`treatment_flow_model`](@ref)
-carries the confirmation dynamics; the patches share them, so they cancel in
-the shares approximately rather than exactly, and the split needs the stays alone,
-one convolution per patch rather than a copy of the flow machinery.
-Returns an `(n_patches × n)` matrix
-whose columns sum to `demand`; an equal split of the reports gives equal
-halves.
+Per-patch latent BVD admissions for the province splits: each patch's reports
+through the admission delay `adm_pmf` at `p_iso_bvd · p_drc`, then the
+national BVD admissions (their sum) re-split by the relative ascertainment
+`asc`, so the BVD-to-background proportion stays national. Returns an
+`(n_patches × n)` matrix whose columns sum to the national BVD admissions.
 """
-function _patch_demand(
-        reports_matrix::AbstractMatrix, A_bg::AbstractVector,
-        w::AbstractVector, asc::AbstractVector, p_iso_bvd::Real, p_drc::Real,
-        adm_pmf::AbstractVector, S_clin::AbstractVector,
-        ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
+function _patch_bvd_admissions(
+        reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
+        p_drc::Real, adm_pmf::AbstractVector
     )
     np, n = size(reports_matrix)
     T = promote_type(
-        eltype(reports_matrix), eltype(A_bg), eltype(w), eltype(asc),
-        typeof(p_iso_bvd), typeof(p_drc), eltype(adm_pmf), eltype(S_clin),
-        eltype(ruleout_pmf), typeof(κ), eltype(demand)
+        eltype(reports_matrix), eltype(asc), typeof(p_iso_bvd),
+        typeof(p_drc), eltype(adm_pmf)
     )
     scale = p_iso_bvd * p_drc
-    ## Each patch's BVD admissions through the admission delay, then the
-    ## national BVD admissions (their sum) re-split by ascertainment-weighted
-    ## admissions, so the BVD-to-background proportion stays national.
     A_raw = Matrix{T}(undef, np, n)
     @inbounds for p in 1:np
         A_raw[p, :] = convolve_delay(scale .* reports_matrix[p, :], adm_pmf)
@@ -2343,6 +2328,41 @@ function _patch_demand(
                 total * asc[p] * A_raw[p, t] / weighted : total / np
         end
     end
+    return A_bvd
+end
+
+## Per-patch daily admissions into isolation: the patch's BVD admissions
+## `A_bvd[p, t]` plus its share `w[p]` of the national background admissions
+## `A_bg[t]`. The columns sum to the national admissions.
+function _patch_admissions(
+        A_bvd::AbstractMatrix, A_bg::AbstractVector, w::AbstractVector
+    )
+    return A_bvd .+ w .* reshape(A_bg, 1, :)
+end
+
+"""
+Per-patch latent bed demand for the province splits: the national demand
+`demand` shared out by each patch's approximate stock. The stock is the
+patch's BVD admissions `A_bvd` (`_patch_bvd_admissions`) through the
+clinical-stay survival
+`S_clin`, plus its share `w[p]` of the national non-BVD admissions `A_bg`
+through the rule-out stay `ruleout_pmf` and the abscond rate `κ`. The national
+stock in [`treatment_flow_model`](@ref) carries the confirmation dynamics; the
+patches share them, so they cancel in the shares approximately rather than
+exactly, and the split needs the stays alone, one convolution per patch rather
+than a copy of the flow machinery. Returns an `(n_patches × n)` matrix whose
+columns sum to `demand`; an equal split of the reports gives equal halves.
+"""
+function _patch_demand(
+        A_bvd::AbstractMatrix, A_bg::AbstractVector, w::AbstractVector,
+        S_clin::AbstractVector, ruleout_pmf::AbstractVector, κ::Real,
+        demand::AbstractVector
+    )
+    np, n = size(A_bvd)
+    T = promote_type(
+        eltype(A_bvd), eltype(A_bg), eltype(w), eltype(S_clin),
+        eltype(ruleout_pmf), typeof(κ), eltype(demand)
+    )
     stock = Matrix{T}(undef, np, n)
     bg_stock = convolve_delay(A_bg, _background_stay_survival(ruleout_pmf, κ))
     @inbounds for p in 1:np
@@ -2432,8 +2452,8 @@ bed counts are each scored as a split of the printed sum of the provinces
 present that day ([`province_split_model`](@ref)). The occupancy split is
 on the uncapped per-patch demand, the national demand shared out by each
 patch's stock of admissions through the stays. The bed split is on each
-patch's static share of the national walk
-([`patch_capacity_share_model`](@ref)). The national likelihoods are kept,
+patch's daily share of the national walk, centred on its cumulative
+admissions ([`patch_capacity_share_model`](@ref)). The national likelihoods are kept,
 so the splits add only the spatial signal.
 
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
@@ -2557,14 +2577,6 @@ series for forecasting and replication.
     )
     C = cap_state.C
     C_T = isempty(C) ? zero(eltype(C)) : C[nc]
-    ## With province splits, each patch holds a static share of the
-    ## national walk ([`patch_capacity_share_model`](@ref)).
-    cap_shares = ones(1)
-    if by_patch
-        cap_share_state ~ to_submodel(patch_capacity(np))
-        cap_shares = cap_share_state.s
-    end
-    C_patch = cap_shares .* reshape(C, 1, :)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2683,15 +2695,35 @@ series for forecasting and replication.
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     demand = _typed_as(demand_raw, C)
 
-    ## Per-patch bed demand for the province splits: the national demand
-    ## shared out by each patch's stock of admissions through the stays.
-    ## With one patch it is the national demand as one row.
-    demand_patch = by_patch ?
-        _patch_demand(
-            bvd_reports_matrix, A_bg, background_split, patch_ascertainment,
-            p_iso_bvd, p_drc, adm_delay_state.pmf, S_clin,
+    ## Per-patch bed demand and capacity for the province splits. The
+    ## demand is the national demand shared out by each patch's stock of
+    ## admissions through the stays. The capacity is the national walk times
+    ## a daily share centred on each patch's cumulative admissions
+    ## ([`patch_capacity_share_model`](@ref)). The stock falls as patients
+    ## leave; the cumulative admissions never fall. With one patch both are
+    ## the national series as one row.
+    if by_patch
+        A_bvd_patch = _patch_bvd_admissions(
+            bvd_reports_matrix, patch_ascertainment, p_iso_bvd, p_drc,
+            adm_delay_state.pmf
+        )
+        demand_patch = _patch_demand(
+            A_bvd_patch, A_bg, background_split, S_clin,
             ruleout_los_state.pmf, κ, demand
-        ) : reshape(demand, 1, :)
+        )
+        cap_share_state ~ to_submodel(
+            patch_capacity(
+                _patch_admissions(A_bvd_patch, A_bg, background_split)
+            )
+        )
+        cap_shares = cap_share_state.s
+        cap_pooling_sd = cap_share_state.pooling_sd
+    else
+        demand_patch = reshape(demand, 1, :)
+        cap_shares = ones(eltype(C), 1, n)
+        cap_pooling_sd = zero(eltype(C))
+    end
+    C_patch = cap_shares .* reshape(C, 1, :)
 
     ## Reclassification offset Δ(t), added to the modelled census total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
@@ -2915,7 +2947,7 @@ series for forecasting and replication.
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
         demand_patch, capacity_patch = C_patch, capacity_series = C,
-        capacity_shares = cap_shares,
+        capacity_shares = cap_shares, capacity_pooling_sd = cap_pooling_sd,
         occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,
@@ -3373,7 +3405,7 @@ with `δ = report_idx - u_i` and [`onset_report_F`](@ref) supplying `F`,
 `alpha` indexed at onset date `u_i` (clamped into `1:length(alpha)`, the
 `grid_start:grid_end` ascertainment grid) for its `α` argument (so
 `δ_prev < 0` at the sentinel `prev_report_idx = 0`, the virtual empty
-predecessor for the very first scored vintage, contributes `ℓ_prev = 0` with
+predecessor of an onset date's first print, contributes `ℓ_prev = 0` with
 no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
 level_prev)`, each a length-`length(onset_idx)` vector, with
@@ -3510,9 +3542,7 @@ towards overconfidence on cells that happen to undershoot. Pure,
 top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
-parameter. The test is the empirical over modelled residual ratio across
-bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
-the report's symptom-onset reporting-delay section.
+parameter.
 """
 function onset_report_scales(
         means::AbstractVector, τ::Real, reads::AbstractVector{<:Integer}
@@ -3832,8 +3862,9 @@ a flat departure the default the data has to argue away from (see
 
 Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
 by levels, not by corrections, since corrections constrain only differences
-of `F`. What breaks the tie is the first snapshot's cells (differenced
-against an empty predecessor, see [`load_onset_curve`](@ref)) together with
+of `F`. What breaks the tie is each onset date's level cell, its first
+print differenced against an empty predecessor (see
+[`load_onset_curve`](@ref)), together with
 the onset series being pinned by the other streams. A single-stream
 [`onsets_only_model`](@ref) fit has neither, so its ascertainment and `C_T`
 stay close to prior-driven. Second, the hazard at the shortest delays is

@@ -124,3 +124,24 @@ end
         end
     end
 end
+
+@testitem "audit fails a vintage outside the gap band or off shift 0" default_imports = false begin
+    using Test
+    root = normpath(joinpath(@__DIR__, ".."))
+    include(joinpath(root, "scripts", "audit_onset_curve.jl"))
+
+    row(sr, gap) = Dict{String, Any}(
+        "sitrep" => sr, "gap_pct" => gap, "printed_n" => 6138
+    )
+    rows = [row("132", 0.4), row("133", -52.1), row("134", nothing)]
+    pairs = [
+        (; from = "131", to = "132", best = 0),
+        (; from = "132", to = "133", best = -2),
+        (; from = "133", to = "134", best = nothing),
+    ]
+    failures = audit_failures(rows, pairs)
+    @test length(failures) == 2
+    @test occursin("SitRep 133", failures[1])
+    @test occursin("132->133", failures[2])
+    @test isempty(audit_failures(rows[[1, 3]], pairs[[1, 3]]))
+end
