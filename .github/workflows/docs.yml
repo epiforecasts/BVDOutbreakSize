@@ -930,10 +930,11 @@ jobs:
   # The health-zone pages read the zone melds alongside the joint and frozen
   # chains they were melded from. `fit_zone` already waits on both parent
   # groups, so waiting on it is enough for all four artifacts to be in the
-  # run. None of these pages reads the rescored release overlays.
+  # run. The zone forecast and its evaluation read the rescored release
+  # overlays.
   render_zone:
     name: Render ${{ matrix.id }}
-    needs: fit_zone
+    needs: [fit_zone, overlays]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -947,7 +948,7 @@ jobs:
           - id: forecasts/zone
             slug: forecasts-zone
             fits: fit-{joint,local}
-            overlays: false
+            overlays: true
           - id: evaluation/insample/zone
             slug: evaluation-insample-zone
             fits: fit-{joint,local}
@@ -955,7 +956,7 @@ jobs:
           - id: evaluation/forecast/zone
             slug: evaluation-forecast-zone
             fits: fit-{frozen_validation,local_frozen_validation}
-            overlays: false
+            overlays: true
     steps: *render-steps
 
   # These two pages read every group. The sensitivity group is skipped on
