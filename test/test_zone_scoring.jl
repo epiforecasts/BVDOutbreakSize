@@ -166,6 +166,10 @@ end
             (made, target, "ituri", "ituri.rwampara", 0.0:4.0),
             (made, target, "nord_kivu", "nord_kivu.beni", 3.0:7.0),
             (grid_date(17), grid_date(24), "ituri", "ituri.bunia", 2.0:6.0),
+            (
+                grid_date(14), grid_date(21), "nord_kivu",
+                "nord_kivu.beni", 3.0:7.0,
+            ),
         ]
     )
     result = score_zone_release("results-1", path, obs, grid_date)
@@ -181,8 +185,10 @@ end
     @test sort(unique(r.fit for r in result.rows)) == ["baseline", "joint"]
     @test Set(r.stream for r in result.overlay) ==
         Set(r.stream for r in joint)
-    ## The week into the reattribution is counted apart for the log.
+    ## The week into the reattribution and the week ending on a day with no
+    ## zone table are each counted for the log.
     @test result.spans_reattribution == 1
+    @test result.no_target_vintage == 1
 
     ## Only rows of the zone forecast's own method are scored.
     other = _zone_archive(
@@ -212,4 +218,31 @@ end
         method = nothing
     )
     @test score_zone_release("results-1", bare, obs, grid_date) === :no_method
+end
+
+@testitem "the zone baseline skips a window holding a reattribution" setup = [
+    ZoneScoringFixture,
+] begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    obs = (; cutoff = grid_date(35), zone_confirmed_history = _zone_fixture())
+    bunia = "confirmed cases {ituri.bunia}"
+    beni = "confirmed cases {nord_kivu.beni}"
+
+    ## A baseline centred on (17, 24] would count `ituri`'s reattribution.
+    @test !baseline_window_covered(obs, grid_date, bunia, grid_date(24), 7)
+    @test baseline_window_covered(obs, grid_date, beni, grid_date(24), 7)
+
+    ## The step pool leaves out the vintage whose window is (17, 24], so the
+    ## one step runs from the day-17 total to the day-31 total.
+    h = first(stream_history(obs, bunia))
+    steps = _window_total_steps(obs, grid_date, bunia, h, grid_date(31), 7)
+    @test steps ≈ [(4 - 10) / sqrt(14)]
+    hb = first(stream_history(obs, beni))
+    @test length(
+        _window_total_steps(obs, grid_date, beni, hb, grid_date(31), 7)
+    ) == 2
 end
