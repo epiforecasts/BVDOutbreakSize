@@ -97,8 +97,8 @@ Changes since v2.1.0.
 ### Data
 
 - The model cut-off advances to SitRep 134, 25 September.
-  The onset curve adds SitRep 132.
-  SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
+  The onset curve adds SitReps 132 to 134.
+- The onset reader takes the y-axis ticks from whichever of its two masks reads the finer grid, and `task onset-audit` exits non-zero when a vintage falls outside its acceptance bands (#959).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
