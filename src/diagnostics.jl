@@ -49,7 +49,8 @@ Per-parameter fit diagnostics for one chain, one row per scalar parameter
 element. A vector-valued parameter contributes one row per element, numbered
 in `index` from one, and `parameter` carries the name without the index; a
 scalar parameter carries index zero. Trajectories named in `exclude` are
-skipped, as they are in the headline [`fit_diagnostics`](@ref) summary.
+skipped, as they are in the headline [`fit_diagnostics`](@ref) summary,
+and so is any quantity that is not finite in some draw.
 
 Columns are `:parameter`, `:index`, `:rhat`, `:ess_bulk` and `:ess_tail`.
 Rows whose R-hat is undefined are dropped, so a fixed or degenerate quantity
@@ -64,9 +65,11 @@ function parameter_diagnostics(chn; exclude = _DIAGNOSTIC_EXCLUDE)
     rhat = Float64[]
     ess_bulk = Float64[]
     ess_tail = Float64[]
+    nonfinite = _nonfinite_keys(chn)
     for p in FlexiChains.parameters(rh)
         name = string(p)
         any(b -> startswith(name, b), exclude) && continue
+        any(b -> name == b || startswith(name, b * "["), nonfinite) && continue
         r, b, t = rh[p], eb[p], et[p]
         if r isa Number
             base, idx = _split_index(name)
