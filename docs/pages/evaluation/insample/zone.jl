@@ -170,7 +170,7 @@ zone_calibration_fig #hide
 
 #-
 
-zone_calibration_table #hide
+MarkdownTable(zone_calibration_table) #hide
 
 # ## Saving zone in-sample outputs
 
