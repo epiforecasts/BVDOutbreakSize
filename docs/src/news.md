@@ -196,6 +196,8 @@ Changes since v2.1.0.
 
 ### Fixed
 
+- A generation-interval proposal whose mean overflows gives a density of `-Inf`, which the sampler rejects, instead of throwing a `DomainError` at a Gamma scale of zero.
+  The step-size search at the start of warm-up could hit this and crash a fit.
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
 - Every other count draw saturates the same way, including the export totals, the late confirmed days and the province split (#905).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
