@@ -234,7 +234,7 @@ end
     @test ylims[1][1] == 0
     @test count(x -> x isa Mk.Legend, fig.content) == 1
     ## Without a patch reference or a cut-off, and with explicit dates,
-    ## every zone in the order given.
+    ## the first `top` zones grouped by patch.
     using Dates: Date, Day
     dates = [Date(2026, 6, 1) + Day(d - 1) for d in 1:n]
     plain = plot_rt_zones(rt, labels, patch; dates, top = 10)

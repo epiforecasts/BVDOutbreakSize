@@ -370,8 +370,8 @@ end
 $(TYPEDSIGNATURES)
 
 Long-format archive of the zone forecast draws `fc` ([`zone_forecast`](@ref))
-made from the cut-off `made_date`, in the
-[`province_forecast_archive`](@ref) schema plus a `zone` column. `province`
+made from the cut-off `made_date`, in the [`forecast_archive`](@ref)
+schema plus `province` and `zone` columns. `province`
 is the patch key and `zone` the manifest's dotted `province.zone` key, and
 each value is one draw of the zone's new confirmed cases over the forecast
 horizon, under the `confirmed cases` stream label. `thin` keeps every

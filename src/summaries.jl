@@ -289,8 +289,7 @@ end
 ## Names of the chain's parameters that hold a non-finite value in any
 ## draw. A quantity undefined in some draws (a zone reproduction number
 ## below its reporting floor) gets a finite but meaningless R-hat and ESS
-## from the rank normalisation. It is left out of the fit summary by name
-## rather than by value.
+## from the rank normalisation. It is left out of the fit summary by name.
 function _nonfinite_keys(chn)
     out = String[]
     for k in FlexiChains.parameters(chn)

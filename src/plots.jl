@@ -1,8 +1,8 @@
 # All package figures: posterior densities of `C_T`, posterior- and
 # prior-predictive panel grids, pair plots, point-and-interval
 # comparison, CFR prior, start-date and no-onward-transmission
-# densities, the one-week-ahead forecast figures, and the health-zone maps
-# and summaries at the end.
+# densities, the one-week-ahead forecast figures, and the health-zone
+# summaries at the end.
 
 """
 Kernel density for a quantity that cannot fall below `lower`, with the axis
@@ -4514,7 +4514,7 @@ function _zone_days(dates, as_of_date, n::Integer)
 end
 
 ## Date ticks every `step` days across `x` (a whole number of weeks, at
-## most six ticks, when `nothing`), labelled as dates.
+## most seven ticks, when `nothing`), labelled as dates.
 function _zone_date_axis!(ax, x; step = nothing)
     lo = floor(Int, minimum(x))
     hi = ceil(Int, maximum(x))
@@ -4568,8 +4568,8 @@ end
 $(TYPEDSIGNATURES)
 
 Faceted reproduction number by health zone for the `top` zones by
-`cumulative` (every zone in the order given when `cumulative` is
-`nothing`), grouped and coloured by patch. `rt_draws[z]` is the
+`cumulative` (the first `top` zones when `cumulative` is `nothing`),
+grouped and coloured by patch. `rt_draws[z]` is the
 `ndraws × n` daily trajectory of zone `z` (`missing` where a day is not
 established), `zone_labels` names the zones and `zone_patch[z]` indexes the
 patch the zone belongs to.

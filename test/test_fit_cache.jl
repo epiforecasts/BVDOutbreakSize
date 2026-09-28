@@ -356,13 +356,8 @@ end
         @test c.chains == 2
         @test c.callback === nothing
 
-        ## The draw counts follow the joint overrides, since the zone stage
-        ## samples at the headline joint's settings. Both keys move with
-        ## them: the joint's through `JOINT_SAMPLER_FITS` and the zone's
-        ## through `ZONE_SAMPLER_FITS`, so a zone chain melded from one
-        ## joint is never served for another. The joint is cached again
-        ## under its overridden key because that is the parent the zone fit
-        ## then loads.
+        ## The draw counts and both fit keys follow the joint overrides, so a
+        ## zone chain melded from one joint is never served for another.
         joint_key, zone_key = fit_key("joint"), fit_key("local")
         withenv("BVD_JOINT_SAMPLES" => "50", "BVD_JOINT_WARMUP" => "25") do
             @test fit_key("joint") != joint_key
@@ -397,9 +392,5 @@ end
     ## thunk runs.
     lazy = build_fit_specs(obs; run_sensitivity = false, cache_dir = dir)
     @test any(s -> s.id == "local", lazy)
-    if !isdefined(BVDOutbreakSize, :fit_zone)
-        @test_throws Exception default_zone_fitter()
-    else
-        @test default_zone_fitter() === BVDOutbreakSize.fit_zone
-    end
+    @test default_zone_fitter() === BVDOutbreakSize.fit_zone
 end
