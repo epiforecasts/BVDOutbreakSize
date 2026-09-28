@@ -177,6 +177,8 @@ CONFIG = {
     "130": ("2026-09-21", "2026-09-21"),
     "131": ("2026-09-22", "2026-09-21"),
     "132": ("2026-09-23", "2026-09-21"),
+    "133": ("2026-09-24", "2026-09-21"),
+    "134": ("2026-09-25", "2026-09-21"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -230,6 +232,8 @@ Y_AXIS_STEP = {
     "130": 25,
     "131": 25,
     "132": 25,
+    "133": 25,
+    "134": 25,
 }
 
 
@@ -388,6 +392,34 @@ def _y_axis_ticks(dark, base, W):
     return best[1]
 
 
+def _y_tick_rows(dark, line, base, W):
+    # The y-axis tick rows from the strict dark mask, or from the near-gray
+    # `line` mask when that reads a finer grid. The small renders
+    # anti-alias the tick marks into the 120-180 range, so the strict mask
+    # can find no regular strip at all (SitRep 112) or keep every other
+    # tick and take a title glyph above the plot for the top one (SitRep
+    # 133, spacing 144-155 against the line mask's 72). Only a spacing
+    # finer by more than the strip tolerance counts, so the strict rows
+    # stay wherever both masks read the same grid.
+    ticks = []
+    for mask in (dark, line):
+        try:
+            ticks.append(_y_axis_ticks(mask, base, W))
+        except ValueError:
+            ticks.append(None)
+    strict, near = ticks
+    if strict is None and near is None:
+        raise ValueError("no y-axis tick strip found")
+    if strict is None:
+        return near
+    if near is None:
+        return strict
+    finer = 1.15 * float(np.median(np.diff(near))) < float(
+        np.median(np.diff(strict))
+    )
+    return near if finer else strict
+
+
 def _pixel_classes(im):
     # Page is white (with JPEG chroma noise) and the pink `donnees
     # potentiellement incompletes` band. Neutral is gridline gray. Light is
@@ -501,14 +533,7 @@ def calibrate(im, y_step=20):
     line = (R < 180) & (G < 180) & (B < 180)
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
-    try:
-        yt = _y_axis_ticks(dark, base, W)
-    except ValueError:
-        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
-        # and the axis line into the 120-180 near-gray range, so the strict
-        # <120 mask finds three of the four ticks but not the one sitting on
-        # the baseline itself. Only tried when the strict mask finds nothing.
-        yt = _y_axis_ticks(line, base, W)
+    yt = _y_tick_rows(dark, line, base, W)
     ppc = float(np.median(np.diff(yt))) / float(y_step)
     # x scale from the weekly tick marks 2-6 rows below the baseline. Both
     # masks are tried at every cut and the tick row whose regular weekly
