@@ -51,27 +51,12 @@ parameters and no more. With a scalar `s` and no `L`, `Σ = s² (I - J / n)`,
 the covariance of a centred vector of independent `N(0, s²)` draws.
 """
 function sum_to_zero_factor(Q::AbstractMatrix, s, L = nothing)
-    n, k = size(Q)
-    T = promote_type(
-        eltype(Q), eltype(s), isnothing(L) ? Bool : eltype(L)
-    )
-    F = zeros(T, n, k)
-    @inbounds for i in 1:n, j in 1:k
-        acc = zero(T)
-        if isnothing(L)
-            acc = Q[i, j] * _stz_scale(s, j)
-        else
-            for m in j:k
-                acc += Q[i, m] * _stz_scale(s, m) * L[m, j]
-            end
-        end
-        F[i, j] = acc
-    end
-    return F
+    isnothing(L) && return Q .* _stz_row(s)
+    return Q * (s .* L)
 end
 
-@inline _stz_scale(s::Real, ::Integer) = s
-@inline _stz_scale(s::AbstractVector, j::Integer) = @inbounds s[j]
+_stz_row(s::Real) = s
+_stz_row(s::AbstractVector) = transpose(s)
 
 """
 Lower-triangular `k × k` Bartlett factor with diagonal `d` and strictly
@@ -109,20 +94,11 @@ Sum-to-zero vector `F z` for a loading matrix `F` from
 [`sum_to_zero_factor`](@ref) and `n - 1` standard-normal draws `z`.
 """
 function sum_to_zero(F::AbstractMatrix, z::AbstractVector)
-    n, k = size(F)
+    k = size(F, 2)
     length(z) == k || throw(
         DimensionMismatch("sum_to_zero: $(length(z)) draws for $k directions")
     )
-    T = promote_type(eltype(F), eltype(z))
-    δ = zeros(T, n)
-    @inbounds for i in 1:n
-        acc = zero(T)
-        for j in 1:k
-            acc += F[i, j] * z[j]
-        end
-        δ[i] = acc
-    end
-    return δ
+    return F * z
 end
 
 """
@@ -182,10 +158,7 @@ function sum_to_zero_knots(
         typeof(φ)
     )
     knots = zeros(T, size(F_level, 1), size(Z, 2) + 1)
-    lvl = sum_to_zero(F_level, z_level)
-    @inbounds for i in eachindex(lvl)
-        knots[i, 1] = lvl[i]
-    end
+    knots[:, 1] = sum_to_zero(F_level, z_level)
     return sum_to_zero_ar1!(knots, F_drift, Z, φ, 1)
 end
 
@@ -199,8 +172,9 @@ function sum_to_zero_ar1!(
         φ::Real, k0::Integer
     )
     innovations = F * Z
-    @inbounds for j in axes(Z, 2), i in axes(knots, 1)
-        knots[i, k0 + j] = φ * knots[i, k0 + j - 1] + innovations[i, j]
+    for j in axes(Z, 2)
+        knots[:, k0 + j] = φ .* view(knots, :, k0 + j - 1) .+
+            view(innovations, :, j)
     end
     return knots
 end

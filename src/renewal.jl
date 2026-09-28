@@ -806,8 +806,8 @@ function relative_multiplier(
     for us in groups
         k = length(us) - 1
         k >= 1 || continue
-        zg = view(z, (off + 1):(off + k))
-        out[us] = exp.(σ .* (sum_to_zero_basis(k + 1) * zg))
+        F = sum_to_zero_factor(sum_to_zero_basis(k + 1), σ)
+        out[us] = exp.(sum_to_zero(F, view(z, (off + 1):(off + k))))
         off += k
     end
     return out
@@ -834,7 +834,7 @@ on the `n^W_g - 1` directions of the basis `Q^W_g` over its walking units
 δ_g(k) = φ\\, δ_g(k-1) + σ_{δ,g} Q^W_g A^W_g z^δ_{g,k},
 ```
 
-as in [`sum_to_zero_knots`](@ref), so every group sums to zero at every
+through [`sum_to_zero_knots`](@ref), so every group sums to zero at every
 knot. `level_factors[g]` is `A_g`, the lower
 Cholesky factor of `Q_gᵀ C_g Q_g` for the units' correlation `C_g`, and
 `drift_factors[g]` is `A^W_g`, the same over the walking units
@@ -882,10 +882,7 @@ function deviation_knots(
         eltype(σ_δ), typeof(float(φ)),
         _factor_eltype(level_factors), _factor_eltype(drift_factors)
     )
-    ## Each group's level and innovations as matrix products, then the
-    ## recursion over the knots as one product with `Φ_{ij} = φ^{j - i}`
-    ## for `j ≥ i`.
-    D = zeros(Tp, length(walking), n_knots)
+    δ = zeros(Tp, length(walking), n_knots)
     off_level = 0
     off_drift = 0
     for (g, us) in enumerate(groups)
@@ -893,26 +890,21 @@ function deviation_knots(
         n >= 2 || continue
         pos = [a for (a, u) in enumerate(us) if walking[u]]
         k = max(length(pos) - 1, 0)
-        z = view(z_level, (off_level + 1):(off_level + n - 1))
-        D[us, 1] = σ_level .*
-            (sum_to_zero_basis(n) * _group_load(level_factors, g, z))
-        if k > 0
-            Zg = view(Z, (off_drift + 1):(off_drift + k), :)
-            D[us, 2:n_knots] = σ_δ[g] .*
-                (_embedded_basis(n, pos) * _group_load(drift_factors, g, Zg))
-        end
+        F_level = sum_to_zero_factor(
+            sum_to_zero_basis(n), σ_level, _group_factor(level_factors, g)
+        )
+        F_drift = sum_to_zero_factor(
+            _embedded_basis(n, pos), σ_δ[g], _group_factor(drift_factors, g)
+        )
+        knots = sum_to_zero_knots(
+            F_level, F_drift, z_level[(off_level + 1):(off_level + n - 1)],
+            Z[(off_drift + 1):(off_drift + k), :], φ
+        )
+        δ[us, :] = knots
         off_level += n - 1
         off_drift += k
     end
-    Φ = φ .^ [max(j - i, 0) for i in 1:n_knots, j in 1:n_knots] .*
-        [j >= i for i in 1:n_knots, j in 1:n_knots]
-    return D * Φ
-end
-
-## `A z` for group `g`'s correlation factor `A`, or `z` for none.
-function _group_load(factors::AbstractVector, g::Integer, z)
-    A = _group_factor(factors, g)
-    return A === nothing ? z : A * z
+    return δ
 end
 
 """
