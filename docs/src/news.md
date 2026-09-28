@@ -200,6 +200,8 @@ Changes since v2.1.0.
 
 ### Fixed
 
+- A generation-interval proposal whose mean overflows gives a density of `-Inf`, which the sampler rejects, instead of throwing a `DomainError` at a Gamma scale of zero (#956).
+  The step-size search at the start of warm-up could hit this and crash a fit.
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
 - Every other count draw saturates the same way, including the export totals, the late confirmed days and the province split (#905).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
@@ -215,6 +217,7 @@ Changes since v2.1.0.
   A failing recovery comments on a tracking issue on main and on the pull request.
 - A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30, and a seed fails only when more truths miss their 99% interval than chance allows (#911).
 - The parameter recovery checks the intervention effect (#928).
+- Each parameter-recovery seed runs four chains, a seed that did not finish counts as unconverged, and the recovery tables sit in dropdowns (#954).
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit (#880).
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).

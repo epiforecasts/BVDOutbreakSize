@@ -668,7 +668,7 @@ stream_pairs_fig #hide
 # ## Parameter recovery
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
-# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
+# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings but four chains in place of two.
 # The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
 # The growth rate is shown as the ratio of daily growth factors, $\exp(r - r_{\text{true}})$.
 # The intervention effect, a change in $\log R_t$, is shown the same way, as the ratio of the $R_t$ multipliers it implies.
@@ -715,7 +715,7 @@ isempty(recovery.params) ? Markdown.parse("No parameter-recovery run is availabl
 # The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
 
 #md # ```@raw html
-#md # <details><summary>Summary across seeds</summary>
+#md # <details><summary>Summary table across seeds</summary>
 #md # ```
 
 recovery_summary_national = isempty(recovery.params) ? DataFrame() :
@@ -725,11 +725,11 @@ recovery_summary_national_display = isempty(recovery_summary_national) ?
     Markdown.parse("No parameter-recovery run is available for this build.") :
     MarkdownTable(recovery_summary_national);
 
+recovery_summary_national_display #hide
+
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-recovery_summary_national_display #hide
 
 #md # ```@raw html
 #md # <details><summary>Each seed's fit and recovered values</summary>
@@ -760,7 +760,7 @@ recovery_national_display #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Forecasts from the recovery fits</summary>
+#md # <details><summary>Forecast scores from the recovery fits</summary>
 #md # ```
 
 recovery_forecasts = isempty(recovery.forecasts) ? DataFrame() :
@@ -775,11 +775,11 @@ recovery_forecasts_display = isempty(recovery_forecasts) ?
     Markdown.parse("No recovery forecast is available for this build.") :
     MarkdownTable(recovery_forecasts);
 
+recovery_forecasts_display #hide
+
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-recovery_forecasts_display #hide
 
 # ## Saving in-sample outputs
 

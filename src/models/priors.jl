@@ -70,7 +70,10 @@ so an infectee is infected strictly after its infector. Returns
     gi_sd ~ sd_prior
     α = (gi_mean / gi_sd)^2
     θ = gi_sd^2 / gi_mean
-    dist = Gamma(α, θ)
+    ## Unchecked, so a proposal that overflows `gi_mean` (as the step-size
+    ## search at the start of warm-up can) gives a non-finite density the
+    ## sampler rejects rather than a `DomainError` at `θ = 0`.
+    dist = Gamma(α, θ; check_args = false)
     pmf = discretise_censored(dist, nmax)
     g = pmf[2:end] ./ sum(pmf[2:end])
     return (; g, gi_mean, gi_sd, gi_alpha = α, gi_theta = θ)

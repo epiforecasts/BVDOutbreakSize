@@ -22,3 +22,16 @@
     ## independently.
     @test abs(cor(gi_mean, gi_sd)) < 0.05
 end
+
+@testitem "generation_interval_model: an overflowed mean is rejected, not thrown" begin
+    ## The step-size search at the start of warm-up can push `gi_mean` to
+    ## `Inf`, so the Gamma scale `sd^2 / mean` is exactly zero. The density
+    ## is then `-Inf`, which the sampler rejects, rather than a DomainError.
+    using BVDOutbreakSize: generation_interval_model, cdf_nmax
+    using Distributions: Gamma
+    using Turing: logjoint
+
+    m = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))
+    @test logjoint(m, (gi_mean = Inf, gi_sd = 9.3)) == -Inf
+    @test isfinite(logjoint(m, (gi_mean = 15.3, gi_sd = 9.3)))
+end
