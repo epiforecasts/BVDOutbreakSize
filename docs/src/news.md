@@ -42,7 +42,7 @@ Changes since v2.1.0.
 
 - The onset reporting hazard's level is identified (#947).
   Its delay deviations sum to zero and its report-day walk is zero on its first day, so the baseline is the mean logit hazard across delays on that day.
-  The walk starts one delay support before the earliest report day and is held at its first value before that.
+  The walk starts on the earliest report day and is held at zero before it.
   Fitted values change.
 - The province background and bed-capacity shares take fixed-scale log-ratios against population share, `Normal(0, 2.5)`, in place of a pooling scale over three deviations (#919).
   The data put both simplices several units from population share, so the pooling scale traded off against the deviations along a ridge and set the lowest bulk ESS in the patch model.

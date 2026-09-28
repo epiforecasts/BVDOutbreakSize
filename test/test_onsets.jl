@@ -807,13 +807,12 @@ end
     end
 end
 
-@testitem "onset_reporting_model: the calendar walk starts a delay support before the first report" begin
-    ## Report days start more than D days after the first onset day, so the
-    ## walk is sampled from one delay support before the first report day
-    ## and held at its first value back to the first onset day.
+@testitem "onset_reporting_model: the calendar walk starts on the first report day" begin
+    ## Report days start well after the first onset day, so the walk starts
+    ## on the first report day and is held at zero back to the first onset
+    ## day.
     using BVDOutbreakSize: BVDOutbreakSize, onsets_only_model,
-        fitted_onset_hazard, onset_report_expected_total,
-        ONSET_REPORT_MAX_DELAY
+        fitted_onset_hazard, onset_report_expected_total
     using Turing: Prior, sample, returned
     using Statistics: mean
     import FlexiChains
@@ -825,12 +824,10 @@ end
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
     n = 80
-    D = ONSET_REPORT_MAX_DELAY
     grid_end = maximum(oc.report_days)
-    walk_start = minimum(oc.report_days) - D + 1
-    @test BVDOutbreakSize._onset_hazard_walk_start(
-        oc.onset_days, oc.report_days, D
-    ) == walk_start
+    walk_start = minimum(oc.report_days)
+    @test BVDOutbreakSize._onset_hazard_walk_start(oc.report_days) ==
+        walk_start
 
     m = onsets_only_model(n; onset_curve_history = oc)
     chn = sample(
