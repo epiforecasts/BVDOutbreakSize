@@ -14,6 +14,9 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `check_new_sitreps.jl` | Lists INSP SitReps not yet in `data/insp_sitrep_scanned.csv`. Exits non-zero if any are missing. |
 | `download_sitreps.jl` | Downloads the INSP SitRep PDFs into `data/sitrep_pdfs/` (git-ignored). Also `task download-sitreps`. |
 | `confirm_insp_data.jl` | Cross-checks the scanned confirmed-case and confirmed-death totals against the INRB-UMIE mirror, and reports the dates each source carries alone. Also `task confirm-data`. |
+| `scan_zone_tableau2.jl` | Scans Tableau 2 of the PDFs (per-health-zone confirmed cases and deaths within each province) into the `[zone_confirmed_history]` and `[zone_death_history]` blocks, admitting a vintage only when its zone rows partition the committed province cumulatives. Also `task zone-tableau2`. |
+| `confirm_zone_data.jl` | Cross-checks the two zone blocks against the INRB-UMIE mirror's per-zone CSVs and lists every disagreement. Also `task confirm-zone-data`. |
+| `build_health_zones.py` | Writes `data/health_zones.csv` and `data/health_zones.geojson` from the INRB-UMIE health-zone GeoJSON (Python standard library only; pass the GeoJSON path). Also `task health-zones`. |
 | `refresh_releases.jl` | Pulls each tagged results release's headline estimate into `data/released_estimates.csv`. Also `task refresh-releases`. |
 | `scan_province_tableau1.jl` | Scans Tableau 1 of the SitRep PDFs for the per-province confirmed cases and deaths and prints the `province_confirmed_history` and `province_death_history` blocks. Fails unless the provinces sum to the national series on every date. Also `task province-tableau1`. |
 | `scan_province_lab.jl` | Scans the laboratory section for the per-province samples analysed and positives and prints the `province_lab_daily_history` block. Fails unless the analysed counts sum to `tests_analysed_daily_history` on every date. Also `task province-lab-data`. |
@@ -22,6 +25,8 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
 The three `scan_province_*.jl` scripts need `pdftotext` on `PATH` and the PDFs from `download_sitreps.jl`.
+`scan_zone_tableau2.jl` needs `pdftotext` on `PATH` and the PDFs, as the `scan_province_*.jl` scripts do.
+`confirm_zone_data.jl` needs only `TOML`, `Printf` and `Downloads`.
 `refresh_releases.jl` also needs the `gh` CLI, authenticated against the repo.
 
 ### Onset-curve digitiser
@@ -69,9 +74,26 @@ In the axis-coverage table, `cases before` is 0, so the block starts where the a
 When a check fails, the row says which input is wrong.
 A `best shift` of +1 or -1 means the new last-tick date or the previous vintage's is off by a day: re-read both ticks with two fresh readers before anything else.
 A gap beyond 2.1% with shift 0 means the count scale: check `Y_AXIS_STEP`, then the printed `n` itself (the OCR misreads a digit now and then; the `note` column says when the title and source strips disagreed), then look at the check panels.
+A misread `n` goes into `PRINTED_N_HAND` in `audit_onset_curve.jl` with the value read off the title by eye.
 Many falls with shift 0 and a gap inside 2.1% mean the day grid inside the block has moved: compare `pixels_per_day` and `pixels_per_day_fit` for the vintage in `data/onset_curve_figures.csv` and run the vision check.
 `cases before` above 0 means the reader's day loop started after the axis: the loop runs from a week before the first chain tick, so a lost tick at the left end is the usual cause.
-A block that fails after the ticks and the scale have been re-read is not committed; remove its `CONFIG` row and open an issue with the audit rows.
+`task onset-audit` exits non-zero when any vintage's gap is past 2.1% or any pair's `best shift` is not 0, and names the failing rows.
+A block that still fails after the ticks, the step and the printed `n` have been re-read is a reader fault, and the run fixes the reader.
+
+#### Fixing the reader
+
+The INSP figure changes render size and anti-aliasing from time to time, and the reader's thresholds are fitted to the renders seen so far.
+When a new render breaks it, the data run changes the reader in the same PR as the new vintage, as SitRep 133 did (issue #952).
+1. Find the step that misreads: run `baseline_row`, `y_tick_rows` and `tick_chain` on the new figure and compare their rows and columns against the extracted image.
+2. Add a synthetic chart to `test/test_onset_digitiser.jl` that reproduces the failure, and check that it fails on the current reader.
+3. Change the Julia reference, then carry the same change into the port.
+   Prefer a rule that picks between readings the reader already makes over a new threshold, and keep the change as narrow as the failure allows.
+4. Rebuild everything (below) and run `task onset-port-check` and `task onset-audit`.
+   The change is accepted when every earlier block is byte-identical in `data/onset_curve_scanned.csv`, or when the before and after audits show the gaps tightening and the falls dropping across vintages.
+5. Run the vision check on the new vintage.
+6. Commit the test, the reader change and the data separately, and put the audit rows for the new vintage in the PR.
+
+Open an issue with the audit rows and leave the vintage out of `CONFIG` only when no change passes step 4.
 
 #### Vision check
 
@@ -125,7 +147,7 @@ Edge differences measure reporting lag between the two line lists; they are expe
 
 | Script | What it does |
 | --- | --- |
-| `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. |
+| `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. The national, province and health-zone forecasts are scored into their own tables, the zone ones under `data/zone/`. |
 
 It also runs under `--project=.`.
 CI uses `--project=docs` because that environment is already instantiated at that point in the build.
@@ -158,4 +180,6 @@ Each documents its own invocation in its header comment.
 | `bench_discretise.jl` | Times the Mooncake gradient of the censored delay discretisation. Documents the reasoning behind the CDF-difference form in `src/renewal.jl`. |
 | `summarise_chain.jl` | Prints posterior summaries and fit diagnostics for a saved chain. |
 | `prior_vs_posterior.jl` | Samples the prior and sets it beside a saved posterior, so a parameter the data does not inform is visible. |
+| `fit_zone.jl` | Fits the health-zone model from a parent joint chain or extract outside the docs build, writing the chain, its diagnostics and a fit summary under `--out`. Runs under `--project=docs`; see its header for the flags. |
+| `zone_fit_report.jl` | Builds a self-contained HTML fit report for the health-zone model from a joint parent chain: prior predictive check, simulation-based recovery, sampler diagnostics, posterior predictive checks, ranking and map, under `logs/zone_report/`. Runs under `--project=docs`; see its header for the flags. |
 | `fit_joint_stream.jl` | Fits the full joint model outside the fit cache and CI, streaming live progress to `logs/joint_fit.log` so a long fit can be watched with `tail -f`. Writes the chain to `logs/joint_chain.jls`. The name refers to the streamed progress, not to fitting a single data stream. |

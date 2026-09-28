@@ -416,3 +416,20 @@ end
             vi[@varname(τ_sev)] .* apply(vi[@varname(z_sev)]) rtol = 1.0e-12
     end
 end
+
+@testitem "relative_multiplier: identified contrasts within each group" begin
+    using BVDOutbreakSize: relative_multiplier, relative_multiplier_dims,
+        sum_to_zero_basis
+
+    groups = [1:3, 4:4, 5:8, 9:8]
+    @test relative_multiplier_dims(groups) == 2 + 0 + 3
+    z = [0.4, -1.1, 0.7, 0.2, -0.5]
+    m = relative_multiplier(z, 0.3, groups)
+    @test length(m) == 8
+    @test sum(log.(m[1:3])) ≈ 0 atol = 1.0e-12
+    @test m[4] == 1
+    @test sum(log.(m[5:8])) ≈ 0 atol = 1.0e-12
+    @test log.(m[1:3]) ≈ 0.3 .* (sum_to_zero_basis(3) * z[1:2])
+    @test log.(m[5:8]) ≈ 0.3 .* (sum_to_zero_basis(4) * z[3:5])
+    @test_throws DimensionMismatch relative_multiplier(zeros(8), 0.3, groups)
+end

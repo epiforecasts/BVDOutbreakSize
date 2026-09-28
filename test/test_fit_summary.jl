@@ -37,3 +37,36 @@
     end
     @test occursin("### Fit `frozen_demo`", read(path, String))
 end
+
+@testitem "write_fit_bundle writes the three diagnostics files" tags = [
+    :slow,
+] begin
+    using Distributions: Normal
+    using Turing: @model
+    using BVDOutbreakSize: nuts_sample
+    include(joinpath(@__DIR__, "..", "docs", "fits", "summary.jl"))
+
+    @model function _bundle_synthetic()
+        a ~ Normal(0, 1)
+        b ~ Normal(0, 1)
+    end
+    chn = nuts_sample(_bundle_synthetic(); samples = 60, chains = 2)
+    dir = mktempdir()
+    write_fit_bundle("demo", chn, dir)
+    for f in ("parameters.csv", "sampler_by_chain.csv", "summary.csv")
+        @test isfile(joinpath(dir, f))
+    end
+    params = readlines(joinpath(dir, "parameters.csv"))
+    @test params[1] == "parameter,index,rhat,ess_bulk,ess_tail"
+    @test length(params) == 3
+    summary = readlines(joinpath(dir, "summary.csv"))
+    @test startswith(summary[1], "fit,max_rhat,min_ess_bulk")
+    @test startswith(summary[2], "demo,")
+    @test length(readlines(joinpath(dir, "sampler_by_chain.csv"))) == 3
+    ## The extras writer adds the bundle and, for a chain without the patch
+    ## structure, no extract.
+    cache = mktempdir()
+    write_fit_extras("demo", "demo__abc", chn, cache)
+    @test isfile(joinpath(cache, "demo__abc_diagnostics", "summary.csv"))
+    @test !isfile(joinpath(cache, "demo__abc.parent.jls"))
+end
