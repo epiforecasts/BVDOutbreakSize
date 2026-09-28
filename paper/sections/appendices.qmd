@@ -18,5 +18,4 @@ The release analysed here is {{< meta release_tag >}}, and its archived report s
 Claude Code sessions (https://www.anthropic.com/claude) drafted the model code, priors, tests, analysis text and this manuscript, transcribed the situation reports, and reviewed pull requests through an automated reviewer.
 The commit trailers record Claude Sonnet 4.6, Opus 4.8, Fable 5, Opus 5, Sonnet 5, Fable 5.1 and Opus 5.5, and the model behind the automated reviewer is not recorded.
 The authors set the modelling decisions, reviewed and revised all of it, and take responsibility for the content.
-Convergence and fit to the data gated every merge, by review of the diagnostics and, from 21 September, by a check in continuous integration.
 Every quoted number is read from a released output or from the pull request that recorded it, rather than typed.

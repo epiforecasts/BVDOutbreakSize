@@ -27,6 +27,6 @@
 | v1.3.0 | 9 June | As above | Per-report increments; confirmed cases and deaths through a laboratory queue | The laboratory model was not identified by the throughput counts and the joint estimate sat above every single stream |
 | v1.4.0 to v1.18.0 | 9 June to 9 September | Daily renewal with a weekly random walk on the reproduction number and a cryptic seeding phase | Every stream in @tbl-streams except the province compositions, added over the window | To fit the counts by province that the reports had begun to carry |
 | v2.0.0 to v2.1.0 | 16 to 18 September | One renewal process per province, coupled by importation | Adds the province compositions | The first provincial fit did not converge, and centring the background and bed-capacity walks restored it |
-| v2.2.0 | Unreleased | As above, with the province deviations on a sum-to-zero basis and hand-written gradient rules | As above | The version analysed here; main has since added susceptible depletion and province splits of the laboratory and isolation counts |
+| v2.2.0 | Unreleased | As above, with the province deviations on a sum-to-zero basis and hand-written gradient rules | As above | The version analysed here; main has since added susceptible depletion, province splits of the laboratory and isolation counts, a prior on the size of the province deviations and a narrower generation-interval prior |
 
 : Model versions, the release tags they span, and the reason each gave way to the next. {#tbl-models}

@@ -28,20 +28,17 @@ Genetic estimates of the time to the most recent common ancestor and of the earl
 Each stream is listed with its observation model, its first and last fitted report and the dates at which its reporting changed or was absent in @tbl-streams.
 
 The cumulative streams are fitted as the increments between successive reports, with a fitted level offset at each documented reclassification or harmonisation date.
-The other streams take their own forms, among them dated Poisson counts for the exports, a censored level for isolation occupancy and triangle cells for the onset curve.
 A stream that stops being published is frozen at its last report and stays in the likelihood.
 
 ### Model development
 
-The first model reproduced the approach of McCabe et al. [@mccabe2026] as one posterior rather than a set of scenarios, fitting the four streams listed in @tbl-models with an ascertainment component.
-It kept their continuous-time constant-growth latent process, replaced their two closed-form approximations with exact convolutions and gave every fixed quantity a prior [@bdbv_linelist_analysis_2026].
+The first model reproduced the approach of McCabe et al. [@mccabe2026] as one posterior rather than a set of scenarios, keeping their constant-growth latent process but replacing their closed-form approximations with exact convolutions and giving every fixed quantity a prior [@bdbv_linelist_analysis_2026].
 The national situation reports then became the data source, and they publish running totals that are revised and reclassified between reports.
-
-The second model fitted the per-report increments of those totals and added the confirmed series through a model of the laboratory queue.
-The throughput counts did not identify the parameters the laboratory model added, so both the latent process and the confirmed-case pipeline were replaced.
+The second model fitted the per-report increments of those totals and added the confirmed series through a model of the laboratory queue, which the throughput counts did not identify, so both the latent process and the confirmed-case pipeline were replaced.
 
 The renewal model kept the observation streams and replaced the latent process with a discrete daily renewal equation and a time-varying reproduction number [@fraser2007; @cori2013].
-We prototyped five latent processes, an explicit convolution, a deterministic renewal, a stochastic renewal, a particle-filtered state space and a compartmental model, and kept the deterministic renewal because the compartmental model was not viable under the model and data constraints and the stochastic variants were closed once it had been chosen.
+We prototyped five latent processes, among them an explicit convolution, a stochastic renewal, a particle-filtered state space and a compartmental model.
+We kept the deterministic renewal because the compartmental model was not viable under the model and data constraints, and the stochastic variants were closed once it had been chosen.
 Every remaining published stream was then added with its own observation model, and the reports began to carry counts by province that a single national process could not use.
 Divergent transitions in the occupancy stream and funnels in the pooled dispersion, background and bed-capacity random walks were reduced by censoring occupancy at the recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015]. <!-- VERIFY: diagnosis and fixes rest on agent PRs 319, 352, 358, 743 and 745 -->
 
@@ -49,15 +46,14 @@ The provincial model runs one renewal process per province so that those counts 
 Since the last tagged version the province deviations have moved onto an identified basis, every forecast is drawn from the fitted model, and each digitised onset bar carries a fitted read error. <!-- PRs 855, 867 and 881 -->
 A centred form of the reproduction-number random walk was tried and reverted, because it split the chains of the joint fit. <!-- PRs 880 and 892 -->
 This version is the one fitted at the release analysed, and its definition follows.
-The model has changed again since that release, and those changes are not in the results below. <!-- PRs 784, 900, 907 and 909 -->
-Infections now deplete a susceptible pool set at each province's census population, a light upper bound that does not bind at the size estimated here [@bhatt2023].
-The analysed laboratory volume and the isolation counts are now scored by province, the size of the province deviations has its own prior, and the generation-interval prior has been narrowed because it was much wider than the interval it was documented to carry.
+The model has changed again since that release, and those later changes are listed in @tbl-models rather than reported below. <!-- PRs 784, 900, 907 and 909 -->
+Among them infections now deplete a susceptible pool set at each province's census population, an upper bound that does not bind at the size estimated here [@bhatt2023].
 
 ### Current model
 
 The full model definition and every prior are given in the Supporting Information (*Methods*).
-The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces.
-The provinces are coupled by a gravity kernel with same-day transfer, and every national stream is fitted against the sum over provinces.
+The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces, coupled by a gravity kernel with same-day transfer.
+Every national stream is fitted against the sum over provinces.
 Each province $p$ generates infections from its reproduction number $R_{p,t}$ and the generation interval $g$, with the log reproduction number the national trend plus a province deviation that sums to zero across provinces
 
 $$
@@ -66,9 +62,7 @@ G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
 \sum_p \delta_{p,t} = 0.
 $$ {#eq-renewal}
 
-The deviations revert toward zero at each weekly knot and are drawn on the directions of an orthonormal sum-to-zero basis [@egozcue2003; @stan_refman_2026].
-A Wishart prior sets the covariance of their innovations, including the correlation between provinces.
-The deviations are scored through the per-province compositions of confirmed cases and deaths.
+The national trend follows a weekly random walk, and the deviations revert toward zero at each knot on an orthonormal sum-to-zero basis and are scored through the per-province compositions of confirmed cases and deaths [@egozcue2003; @stan_refman_2026].
 A single import grows through a cryptic phase to the renewal start, with the genetic bound flooring the outbreak age and the number of cryptic generations given a prior.
 Importation relocates a share of what each province generates, with $K$ the gravity kernel and $\varepsilon_{q,t}$ the share leaving origin $q$, and national infections $I_t$ are the sum over provinces
 
@@ -82,9 +76,7 @@ The generation interval $g$ is a gamma distribution whose shape and scale priors
 
 National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves the onsets with its own delay, scales them by its ascertainment and adds any stream-specific term.
 Every delay is sampled and discretised with double interval censoring [@charniga2024].
-The daily analysed laboratory volume anchors test positivity, and the recovered counts follow the form of the secondary-observation model of EpiNow2 [@epinow2].
-Isolation occupancy is a running balance of admissions, discharges and abscondings, censored at the recorded bed capacity, which itself follows a random walk on the log scale.
-The treatment-centre flows carry an in-care case-fatality ratio, and the digitised onset curve is a reporting triangle with time-varying ascertainment and a fitted read error for each digitised bar.
+The daily analysed laboratory volume anchors test positivity, and the digitised onset curve is a reporting triangle with time-varying ascertainment and a fitted read error for each bar.
 
 For the suspected cases the delay is the onset-to-report distribution $f_{\text{rep}}$, the ascertainment is $p_{\text{DRC}}$ and the added term is a non-BVD background rate $\lambda_{\text{bg},t}$ on a weekly random walk.
 The increment between the reports on days $d_{i-1}$ and $d_i$ is scored with a negative binomial whose dispersion $k_s$ is partially pooled across the four passive-surveillance streams
@@ -102,7 +94,7 @@ Every release forecasts each still-reported stream one to four weeks ahead, and 
 Forecasts are drawn from the fitted model by running it past the cut-off with the fitted parameters fixed, so each future count comes from its stream's own likelihood, and the national forecast is split across provinces by the fitted compositions.
 The scored releases predate this method and projected each stream from its rate at the cut-off under the continued reproduction-number walk.
 We score with the continuous ranked probability score, where lower is better, on the count scale and on a log scale that stops the largest counts dominating [@gneiting2007; @bosse2023transformed].
-We also report coverage of the 50% and 90% predictive intervals and the sample-based bias statistic, which runs from $-1$ for forecasts below the observation to $1$ for those above it [@bosse2022scoringutils].
+We also report coverage of the 50% and 90% predictive intervals [@bosse2022scoringutils].
 
 The persistence baseline carries the increment over the preceding window forward, with a spread drawn from the stream's own past differences.
 It was checked to read only the reports available on the day the forecast was made, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
@@ -125,12 +117,12 @@ Builds after the release analysed also fit the joint model to a dataset simulate
 
 ### Development process
 
-Language-model agents drafted the model, its priors, the analysis text and the data transcriptions, and we directed the work from issues and pull-request reviews and took each modelling decision.
+Language-model agents drafted the code, the priors and the analysis, and we directed the work from issues and pull-request reviews and took each modelling decision.
 We worked this way because one modeller's time was set against a live outbreak, because we aimed to fit every published count, and to learn what the workflow could and could not do. <!-- author steer, 28 Sep -->
 An agent opened a pull request for each change, and the lead author reviewed it locally before anything was recorded on the request. <!-- steering-and-data.md section 0: the "do not review until I have pinged" convention from PR 32 -->
 Later an automated reviewer commented on each pull request, and the author accepted or rejected each of its findings on the request. <!-- steering-and-data.md section 2: the review app from 17 August; "Close see bot review and my inline points" on PR 677 -->
 A change that did not converge or did not fit its stream was not merged, judged by review of the diagnostics and later by a check in continuous integration. <!-- steering-and-data.md section 3: PRs 344, 350, 400 and 402 closed on 8 July; the CI gate in PR 764 -->
-Each data update refit the affected models and released the result, and the first releases were signed off by every author on a release issue opened for the purpose. <!-- steering-and-data.md section 3: issues 93, 134 and 144 -->
+The first releases were signed off by every author on a release issue opened for the purpose. <!-- steering-and-data.md section 3: issues 93, 134 and 144 -->
 Between changes the agents ran wide searches over parameterisations, samplers and gradient backends, and most of these measured as null and were not merged. <!-- author steer: "very wider performance searches" -->
 
 Beyond the review of single changes, one check applied to the transcribed data and another to the released model as a whole.
@@ -144,8 +136,7 @@ The sources were the issues, the pull-request bodies and review comments, the au
 An item opened under a human login counted as agent-written where its body carried the marker the agents leave, since the human accounts also ran agent sessions. <!-- steering-and-data.md section 0, caveat 1 -->
 We classified each event by kind, as a model change, a data change, a data-quality decision or a defect, and by the route through which it was first recorded.
 We also recorded who decided the response, a person, an agent or the two jointly, and kept the evidence link for every row (@tbl-events).
-An agent counted as the finder when the first record was an issue, pull-request body or comment from an agent account.
-It counted as the decider when the record held only agent text and at most an approval without a body.
+An agent counted as the finder when the first record was an issue, pull-request body or comment from an agent account, and as the decider when the record held only agent text and at most an approval without a body.
 Where releases fell on both sides of an event we recorded the two released medians, marked whether other changes shared that window, and estimated no effect ourselves.
 
 From the same record we counted commits and merged pull requests per week by account, human-authored issues, review submissions and inline comments, and the automated reviewer's submissions and inline comments (@fig-journey B).

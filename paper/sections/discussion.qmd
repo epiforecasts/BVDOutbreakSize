@@ -38,26 +38,24 @@ More generally, the model belongs to the class of multi-stream renewal models wi
 
 <!-- Lessons -->
 
-Changes in reporting were the main source of change to the model, and most of them were absorbed without a change to the latent process. <!-- RECOLLECTION: tick, strike or add -->
-The disagreement between streams is itself the result to report, because the size estimate follows from how that disagreement is resolved.
-Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation.
-The agent workflow also made engineering feasible that we would not have attempted alone, the hand-written adjoints, the wide performance searches and the release tooling. <!-- author statement, 24 Sep -->
+Changes in reporting, rather than changes in the epidemic itself, were the main source of change to the model. <!-- RECOLLECTION: tick, strike or add -->
+Most were absorbed by a fitted level offset or by freezing the affected stream, and the latent process was replaced only when a stream could not be fitted at all.
+The disagreement between the streams is itself a result to report, because the size estimate follows from how that disagreement is resolved.
 
 The record answers, for this project and its authors, where a person was needed, and the answer follows the kind of event. <!-- Sebastian, PR 883 -->
-Most model changes were raised and decided by a person, most defects were first reported and fixed by the agents, and the defects that neither found were caught by the prospective evaluation (@tbl-events).
+Most model changes were raised and decided by a person, most implementation defects were first reported and fixed by the agents, and the defects that neither found were caught by the prospective evaluation (@tbl-events).
 The data-quality decisions, where a stream was frozen, given a level offset or excluded, went to a person in most cases, and in one a person overruled the agent's reading of the series. <!-- evidence: change_events.csv row 22 -->
-This may say that a person was needed at each change of model structure, data rule and prior, and at the reading of the diagnostics.
-The agents could find and fix most implementation defects, and a check outside the review loop was still needed for what neither saw.
+This may say that a person was needed at each change of model structure, data rule and prior and at the reading of the diagnostics, while the agents could carry the implementation.
+Working this way also made engineering feasible that we would not have attempted alone, among it the hand-written adjoints, the wide performance searches and the release tooling. <!-- author statement, 24 Sep -->
 Whether the same division would hold for another team, another outbreak or a later stage of this one, the record cannot say.
 
-Several defects were of a kind a human author would be unlikely to write.
-Two were found by the prospective evaluation of a release and the others in review of the pull request that carried them.
+Several defects were of a kind a human author would be unlikely to write, and each passed the tests and the in-sample checks of the release that carried it.
 The forecast extrapolated the last random-walk innovation as a fixed slope, so its intervals widened with the horizon and covered every observation. <!-- issue 606 (Sam), issue 622 (Sam), news v1.15.0 -->
 Reporting-break corrections were applied in the fit but not in the scoring, so forecasts from fits fixed at each release date scored an order of magnitude out. <!-- issue 623 (Sam) -->
+Both of those reached a released output and were read from the forecast panels rather than from any review.
 The posterior predictive was generated without the provincial arguments, so every case-driven stream came out short while the background-driven streams were unaffected. <!-- news v2.0.0 Fixed; how it was found is not recorded -->
-A chain initialised from a fixed seed sat on a prior tail and returned the same R-hat on successive datasets. <!-- issue 671 and news v2.0.0; Sam raised the R-hat on PR 661 -->
-A generation-interval prior documented as matching a published interval on the mean was much wider than that interval, and the fit pulled the mean far below the prior centre. <!-- PRs 907 and 909 -->
-Each passed the tests and the in-sample checks of the release that carried it.
+A chain initialised from a fixed seed sat on a prior tail and returned the same R-hat on successive datasets, and a generation-interval prior documented as matching a published interval was much wider than that interval. <!-- issue 671 and news v2.0.0; Sam raised the R-hat on PR 661; PRs 907 and 909 -->
+The last two were caught in review of the pull request that carried them, and the record does not say how the posterior predictive defect was found.
 
 <!-- Further work -->
 
@@ -76,4 +74,5 @@ How agent-driven modelling should be directed, and how a team may share work tha
 A joint estimate of outbreak size can be produced in real time from published situation reports alone.
 Its value lies in making the agreement and the conflict between surveillance streams explicit rather than in any one number.
 Scoring releases against the data that arrived next found defects that review and tests did not.
+Agent-drafted modelling of this kind can work at outbreak speed when a person holds the modelling decisions.
 We aim to support real-time size estimation from published surveillance in future outbreaks.
