@@ -48,7 +48,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
 # Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
-# Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
+# The distances in the importation kernel are between provincial population centres, the mean of each province's health-zone centroids weighted by WorldPop population [worldpop_2025](@cite), from the INRB-UMIE health-zone map [inrb_umie_health_zones_2026](@cite).
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
 # It has no accompanying data table, so we digitise it directly from the figure.
@@ -500,8 +500,9 @@ MarkdownTable(vintage_table) #hide
 
 # #### Mixing and importation
 #
-# We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial capitals.
-# A pooled province takes the population-weighted mean of its members' capitals.
+# We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial population centres.
+# Each centre sits where the province's people live rather than at its capital.
+# A pooled province takes the population-weighted mean of its members' centres.
 # Each origin column is scaled so that the share of its transmission that leaves is the population share of the rest of the country, $1 - N_q / N$:
 #
 # ```math

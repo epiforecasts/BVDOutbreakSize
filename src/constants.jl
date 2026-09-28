@@ -229,28 +229,35 @@ const PROVINCE_SOURCE_POPULATIONS = [
 ]
 
 """
-    PROVINCE_SOURCE_CAPITALS
+    PROVINCE_SOURCE_CENTRES
 
-Latitude and longitude of each province's capital in
+Population-weighted centre of each province in
 [`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in
-decimal degrees north and east. Bunia, Goma, Bukavu, Isiro, Kisangani,
-Buta and Gemena. Coordinates from GeoNames (<https://www.geonames.org>),
-the source for the distance term in
-[`province_importation_kernel`](@ref).
+decimal degrees north and east, the points the distance term in
+[`province_importation_kernel`](@ref) reads. Each is the mean of the
+province's health-zone centroids weighted by the zones' WorldPop counts
+(WorldPop 2025, University of Southampton, <https://www.worldpop.org>,
+CC BY 4.0), with the zone boundaries from the Ministry of Health
+`DRC_Health_zones` shapefile on the Humanitarian Data Exchange
+(<https://data.humdata.org/dataset/drc-health-data>). Both come from the
+INRB-UMIE build of the health-zone map
+(<https://github.com/INRB-UMIE/BDBV2026-Data>, `build/drc_health_zones.geojson`
+at commit `f7d3907`, 28 September 2026), and
+`scripts/build_province_centres.py` (`task province-centres`) prints this
+literal from it.
 
-The capital stands in for the province. That is coarse, but it is the
-level the data are reported at, and the provinces are far enough apart
-that the ordering of the distances between them does not depend on the
-choice of point within each one.
+A capital can sit far from where a province's people live. Goma is at the
+southern tip of Nord-Kivu, about 110 km further from Bunia than Nord-Kivu's
+population centre.
 """
-const PROVINCE_SOURCE_CAPITALS = [
-    (1.56667, 30.25),    # Bunia, Ituri
-    (-1.67918, 29.22195),   # Goma, Nord-Kivu
-    (-2.5, 28.86667),   # Bukavu, Sud-Kivu
-    (2.77374, 27.61674),    # Isiro, Haut-Uele
-    (0.51528, 25.19099),    # Kisangani, Tshopo
-    (2.78594, 24.73876),    # Buta, Bas-Uele
-    (3.25651, 19.77234),     # Gemena, Sud-Ubangi
+const PROVINCE_SOURCE_CENTRES = [
+    (2.0929, 30.3385),    # Ituri, 36 zones
+    (-0.5754, 29.1574),   # Nord-Kivu, 34 zones
+    (-2.869, 28.6843),    # Sud-Kivu, 34 zones
+    (2.915, 28.5755),     # Haut-Uele, 13 zones
+    (0.6072, 24.8468),    # Tshopo, 23 zones
+    (3.3937, 25.1094),    # Bas-Uele, 11 zones
+    (3.0653, 19.4528),    # Sud-Ubangi, 16 zones
 ]
 
 """
@@ -297,7 +304,7 @@ const PROVINCE_MEMBERS = Dict(
 )
 
 ## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
-## once so the pooled population and capital below, and the pooled increments
+## once so the pooled population and centre below, and the pooled increments
 ## in `province_increment_matrix`, all read the same membership.
 const _PROVINCE_MEMBER_IDX = [
     [
@@ -321,29 +328,24 @@ const PROVINCE_POPULATIONS = [
 ]
 
 """
-    PROVINCE_CAPITALS
+    PROVINCE_CENTRES
 
 Representative point of each patch, in [`PROVINCE_NAMES`](@ref) order, as
 `(latitude, longitude)` in decimal degrees north and east. A patch holding
-one province takes its capital from [`PROVINCE_SOURCE_CAPITALS`](@ref); a
-pooled patch takes the population-weighted mean of its members' capitals.
-
-A weighted mean rather than a member's capital, because the pooled patch is
-a stand-in for several places at once and the kernel asks where its
-population is. The pooled patch here spans Bukavu, Kisangani, Buta and
-Gemena, so its point sits between them and its distance to the epicentre is
-a weighted compromise rather than any one province's.
+one province takes its centre from [`PROVINCE_SOURCE_CENTRES`](@ref); a
+pooled patch takes the mean of its members' centres weighted by
+[`PROVINCE_SOURCE_POPULATIONS`](@ref), the populations the kernel reads.
 """
-const PROVINCE_CAPITALS = [
+const PROVINCE_CENTRES = [
     (
         sum(
             PROVINCE_SOURCE_POPULATIONS[i] *
-                PROVINCE_SOURCE_CAPITALS[i][1]
+                PROVINCE_SOURCE_CENTRES[i][1]
                 for i in idx
         ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
         sum(
             PROVINCE_SOURCE_POPULATIONS[i] *
-                PROVINCE_SOURCE_CAPITALS[i][2]
+                PROVINCE_SOURCE_CENTRES[i][2]
                 for i in idx
         ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
     )
@@ -376,21 +378,21 @@ function haversine_km(a::Tuple{<:Real, <:Real}, b::Tuple{<:Real, <:Real})
 end
 
 """
-    province_distance_matrix(capitals = PROVINCE_CAPITALS)
+    province_distance_matrix(centres = PROVINCE_CENTRES)
 
 Great-circle distances in kilometres between every pair of province
-capitals, as a symmetric matrix with a zero diagonal. Built from
-[`PROVINCE_CAPITALS`](@ref) by [`haversine_km`](@ref).
+centres, as a symmetric matrix with a zero diagonal. Built from
+[`PROVINCE_CENTRES`](@ref) by [`haversine_km`](@ref).
 """
 function province_distance_matrix(
-        capitals::AbstractVector = PROVINCE_CAPITALS
+        centres::AbstractVector = PROVINCE_CENTRES
     )
-    np = length(capitals)
+    np = length(centres)
     D = zeros(Float64, np, np)
     @inbounds for p in 1:np, q in 1:np
 
         p == q && continue
-        D[p, q] = haversine_km(capitals[p], capitals[q])
+        D[p, q] = haversine_km(centres[p], centres[q])
     end
     return D
 end
@@ -406,7 +408,7 @@ matters here.
 
 This is a gravity kernel. Travel from `q` to `p` scales with the
 destination population and falls with the distance between the two
-capitals,
+population centres,
 
 ```math
 K_{p,q} \\propto \\frac{N_p}{d_{p,q}^{\\gamma}},
@@ -433,7 +435,7 @@ is not.
 function province_importation_kernel(
         pops::AbstractVector = PROVINCE_POPULATIONS;
         distances::AbstractMatrix = province_distance_matrix(
-            PROVINCE_CAPITALS[1:min(length(pops), end)]
+            PROVINCE_CENTRES[1:min(length(pops), end)]
         ),
         decay::Real = PROVINCE_DISTANCE_DECAY
     )
