@@ -104,10 +104,11 @@ ascertainment, and each stream's own likelihood. Columns:
   counterparts, present when `obs_confirmed` and `obs_confirmed_deaths` are
   supplied.
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the horizon.
-- `:isolation_level`: the reported isolation occupancy on the last day, the
-  censored negative binomial around the modelled demand plus the
-  reclassification offset. `:bed_demand` is the modelled demand that day
-  and `:bed_shortfall` its excess over the modelled bed capacity.
+- `:isolation_level`: the reported isolation occupancy on the last day,
+  the sum over the patches of the occupancy censored at each patch's beds
+  ([`treatment_forecast_model`](@ref)). `:bed_demand` is the modelled
+  demand that day and `:bed_shortfall` its excess over the beds, summed
+  over the patches.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the daily
   isolation flows on the last day.
 - `:recovered_cum`, `:recovered_new`: recovered among confirmed. The
@@ -168,9 +169,7 @@ function forecast_reported(
         ## floats: a prior draw far in the tail can overflow an integer.
         df.bed_demand = round.(at("forecast_bed_demand"))
         df.isolation_level = round.(Int, iso)
-        df.bed_shortfall = max.(
-            df.bed_demand .- round.(at("forecast_bed_capacity")), 0.0
-        )
+        df.bed_shortfall = round.(at("forecast_bed_shortfall"))
         df.admissions_fc = round.(Int, at("forecast_admissions.obs"))
         df.incare_deaths_fc = at("forecast_incare_deaths.increments")
         df.ruleouts_fc = at("forecast_ruleouts.increments")
@@ -349,11 +348,11 @@ Returns one row per province and draw, with columns `patch`, `province`
 (its label in `patch_labels`), `draw`, `infections_new`, `rt_forecast` (the
 province's reproduction number on the last day), and `confirmed_new` and
 `confirmed_deaths_new` when the fit carries the matching composition, and
-`isolation_level` and `bed_capacity` (the province's patients in isolation
-and beds on the last day) when it carries the province occupancy and bed
-splits. These need `horizon` to be a whole number of weeks. With the
-province admissions drawn, `admissions_new` is the province's admissions
-over the horizon, each day censored at its available beds.
+`isolation_level`, `bed_capacity` and `admissions_new` when it carries the
+province occupancy and bed splits: the province's patients in isolation and
+beds on the last day, and its admissions over the horizon
+([`treatment_forecast_model`](@ref)), each adding up to the national
+forecast. The weekly counts need `horizon` to be a whole number of weeks.
 """
 function forecast_provinces(
         pp;
@@ -388,18 +387,19 @@ function forecast_provinces(
     end
     conf = weekly("forecast_province_confirmed")
     conf_deaths = weekly("forecast_province_deaths")
-    ## Occupancy and beds are levels, read at the vintage `h` days on.
-    function level(key)
+    ## The occupancy, beds and admissions are drawn daily by patch: the
+    ## levels are read `h` days on and the admissions summed over those days.
+    ## A fit with no province rows draws them nationally, as one patch.
+    function daily(key, f)
         v = _forecast_vectors(pp, key)
-        (isnothing(v) || isnothing(j)) && return nothing
-        return [reshape(x, n_patches, :)[:, j] for x in v]
+        (isnothing(v) || length(first(v)) != n_patches * H) && return nothing
+        return [f(reshape(x, n_patches, :)) for x in v]
     end
-    iso = level("forecast_province_isolation")
-    beds = level("forecast_province_beds")
-    ## Admissions are daily, summed over the first `h` days.
-    adm = _forecast_vectors(pp, "forecast_admissions.province.obs")
-    adm = isnothing(adm) ? nothing :
-        [vec(sum(reshape(x, n_patches, :)[:, 1:h]; dims = 2)) for x in adm]
+    iso = daily("forecast_isolation.province.obs", x -> x[:, h])
+    beds = daily("forecast_province_beds", x -> x[:, h])
+    adm = daily(
+        "forecast_admissions.province.obs", x -> vec(sum(x[:, 1:h]; dims = 2))
+    )
     nd = length(inf)
     out = DataFrame(
         patch = Int[], province = String[], draw = Int[],

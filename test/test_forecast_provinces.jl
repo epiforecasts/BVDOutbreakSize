@@ -207,11 +207,14 @@ end
     for d in 1:nd
         rows = fc.draw .== d
         ## The provinces' patients in isolation add up to the national
-        ## occupancy forecast on the same day. Their beds are their shares
-        ## of the national capacity, each floored at its last recorded beds.
-        @test sum(fc.isolation_level[rows]) == nat.isolation_level[d]
+        ## occupancy forecast on the same day, and their beds, each floored
+        ## at its last recorded beds, to the national beds. No province
+        ## holds more than its beds.
+        @test round(Int, sum(fc.isolation_level[rows])) ==
+            nat.isolation_level[d]
         @test all(fc.bed_capacity[rows][1:3] .>= [40, 15, 5])
-        @test sum(fc.bed_capacity[rows]) >= capacity[d][7] * (1 - 1.0e-10)
+        @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7]
+        @test all(fc.isolation_level[rows] .<= fc.bed_capacity[rows])
         ## The provinces' admissions add up to the national admissions on
         ## every day.
         @test vec(sum(reshape(province[d], NP, :); dims = 1)) ≈ national[d]
@@ -219,44 +222,47 @@ end
     end
 end
 
-@testitem "province admissions are capped at each province's free beds" begin
-    using BVDOutbreakSize: treatment_forecast_model,
-        province_admission_ceilings
+@testitem "the province forecast stays within each province's beds" begin
+    using BVDOutbreakSize: treatment_forecast_model, cutoff_occupancy
     using Turing: returned
     using Random: Xoshiro
 
-    ## Three patches over twelve days, forecast from day 11. Patch 1 is
-    ## over its beds, so it can admit only as many as leave.
+    ## Three patches over twelve days, forecast from day 11. At the cut-off
+    ## patch 1 holds 60 of the 100 occupied against 35 beds, so 25 are its
+    ## shortfall and it can admit only as many as leave.
     n = 12
     fd = 11:12
     admit_patch = [fill(40.0, 1, n); fill(5.0, 1, n); fill(1.0, 1, n)]
     demand_patch = [fill(60.0, 1, n); fill(20.0, 1, n); fill(20.0, 1, n)]
     capacity_patch = [fill(30.0, 1, n); fill(40.0, 1, n); fill(30.0, 1, n)]
+    floors = [35.0, 40.0, 20.0]
+    cut = cutoff_occupancy(100.0, demand_patch[:, 10], capacity_patch[:, 10], floors)
+    @test cut.beds ≈ [35.0, 40.0, 30.0]
+    @test cut.occupancy ≈ [35.0, 20.0, 20.0]
+    @test cut.shortfall ≈ [25.0, 0.0, 0.0]
     flow = fill(1.0, n)
     state = (;
-        C = fill(100.0, n), occupancy_mean = fill(100.0, n),
-        admit_daily = vec(sum(admit_patch; dims = 1)), admit_patch,
-        demand_patch, capacity_patch, deaths_daily = flow,
-        recover_daily = flow, ruleout_daily = flow, abscond_daily = flow,
-        demand = fill(100.0, n),
+        occupancy_mean = fill(100.0, n), admit_patch, demand_patch,
+        capacity_patch, deaths_daily = flow, recover_daily = flow,
+        ruleout_daily = flow, abscond_daily = flow, demand = fill(100.0, n),
+        bed_floors = floors, beds_patch_T = cut.beds,
+        occupancy_patch_T = cut.occupancy, shortfall_patch_T = cut.shortfall,
     )
     cap = (; days = [5, 10], counts = [100, 100])
-    iso = (; days = [5, 10], counts = [90, 100])
-    beds = (; days = [10, 10, 10], patches = [1, 2, 3], counts = [35, 40, 20])
-    m = treatment_forecast_model(state, fd, cap, iso, 10.0, beds)
+    m = treatment_forecast_model(state, fd, cap, 10.0)
     for seed in 1:20
         r = returned(m, rand(Xoshiro(seed), m))
-        ## The national admissions are the provinces' sum.
-        prov = reshape(r.admission_draws.province, 3, :)
-        @test vec(sum(prov; dims = 1)) ≈ r.admission_draws.obs
-        ## No province admits more than its ceiling.
-        @test all(prov .<= r.admission_draws.ceilings)
+        ## The mean path never holds more than the beds, and admits no more
+        ## than the free beds.
+        @test all(r.path.occupancy .<= r.beds .+ 1.0e-10)
+        @test all(r.path.admissions .<= max.(r.path.free, 0) .+ 1.0e-10)
+        ## Drawn occupancy and admissions by province respect the same
+        ## bounds and sum to the national counts.
+        for d in (r.occupancy_draws, r.admission_draws)
+            prov = reshape(d.province, 3, :)
+            @test vec(sum(prov; dims = 1)) ≈ d.obs
+            @test all(prov .<= d.ceilings)
+        end
+        @test all(reshape(r.occupancy_draws.province, 3, :) .<= r.beds)
     end
-    ## The first day's ceilings: beds floored at the last record (35, 40,
-    ## 30), less each province's share (0.6, 0.2, 0.2) of the recorded
-    ## occupancy 100 less the four exits.
-    head = province_admission_ceilings(
-        [35.0; 40.0; 30.0;;], demand_patch[:, 10:10], [100.0], [4.0]
-    )
-    @test vec(head) ≈ [0.5, 40 - 19.2, 30 - 19.2]
 end

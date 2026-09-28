@@ -2167,6 +2167,40 @@ function _incare_census(
     return record ? (y, unconf, flags) : y
 end
 
+## Last effective beds recorded for each of `np` patches on or before day
+## `nc`, from the province bed rows (sorted by day); zero for a patch with
+## none. Data only.
+function _province_bed_floors(rows, np::Integer, nc::Integer)
+    floors = zeros(np)
+    rows === nothing && return floors
+    for (d, p, c) in zip(rows.days, rows.patches, rows.counts)
+        d <= nc && p <= np && (floors[p] = c)
+    end
+    return floors
+end
+
+"""
+    cutoff_occupancy(occupied, demand, capacity, floors)
+
+Cut-off beds, occupancy and shortfall by patch. Each patch's beds are its
+modelled `capacity` floored at its recorded beds `floors`. The national
+`occupied`, floored at zero, is shared out on the patches' `demand`, and
+each patch's share is capped at its beds, the rest its shortfall. The
+occupancy never exceeds the beds in any patch, and patients above the beds
+are not moved to another patch.
+"""
+function cutoff_occupancy(occupied, demand, capacity, floors)
+    np = length(demand)
+    tot = sum(demand)
+    shares = tot > 0 ? demand ./ tot : one.(demand) ./ np
+    held = max(occupied, zero(occupied)) .* shares
+    beds = max.(capacity, floors)
+    return (;
+        beds, occupancy = min.(held, beds),
+        shortfall = max.(held .- beds, zero(eltype(held))),
+    )
+end
+
 """
 Default priors and delay submodels of [`treatment_flow_model`](@ref), as
 one named tuple. A composer builds it once, when its model is constructed,
@@ -2510,17 +2544,20 @@ series for forecasting and replication.
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
-    ## Cut-off beds: the modelled capacity floored at the recorded cap on the
-    ## last occupancy day, the bound the forecast carries forward.
-    last_cap = isempty(capacity_history.counts) ||
-        isempty(isolation_history.counts) ? 0.0 :
-        only(
-            censoring_cap(
-                isolation_history.days[end:end],
-                isolation_history.counts[end:end], capacity_history
-            )
-        )
-    beds_T = isempty(C) ? zero(eltype(C)) : max(C[nc], last_cap)
+    ## Recorded beds the cut-off and forecast beds are floored at: each
+    ## province's last effective beds with province rows, else the national
+    ## recorded cap on the last occupancy day.
+    bed_floors = by_patch ? _province_bed_floors(province_capacity, np, nc) :
+        [
+            isempty(capacity_history.counts) ||
+            isempty(isolation_history.counts) ? 0.0 :
+            only(
+                censoring_cap(
+                    isolation_history.days[end:end],
+                    isolation_history.counts[end:end], capacity_history
+                )
+            ),
+        ]
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2821,13 +2858,21 @@ series for forecasting and replication.
         )
     )
 
-    ## Cut-off reported quantities. Occupancy is the mean the reported
-    ## occupancy is scored around, the demand plus the reclassification
-    ## offset, capped at the bed capacity. Bed demand is the latent stock.
+    ## Cut-off reported quantities, by patch and summed to national. Each
+    ## patch's beds are its modelled capacity floored at its recorded beds.
+    ## Its occupancy is its demand share of the mean the reported occupancy
+    ## is scored around (the demand plus the reclassification offset,
+    ## floored at zero), capped at its beds; the rest is its shortfall.
+    ## Patients do not move between patches, so the national occupancy is
+    ## the sum of the capped patches. Bed demand is the latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
-    occ_rep = isempty(occ_obs_total) ? z0 : occ_obs_total[nc]
-    occ_T = min(occ_rep, beds_T)
+    cut = cutoff_occupancy(
+        isempty(occ_obs_total) ? z0 : occ_obs_total[nc],
+        demand_patch[:, nc], C_patch[:, nc], bed_floors
+    )
+    beds_T = sum(cut.beds)
+    occ_T = sum(cut.occupancy)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
@@ -2849,8 +2894,8 @@ series for forecasting and replication.
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
-    ## Unmet demand: the reported-scale demand above the cut-off beds.
-    shortfall_T = safe_rate(max(occ_rep - beds_T, z0))
+    ## Unmet demand: the reported-scale demand above each patch's beds.
+    shortfall_T = safe_rate(sum(cut.shortfall))
     bed_shortfall := shortfall_T
     bed_utilisation := isolation_T / safe_rate(beds_T)
     isolation_severity := sev_state.δ_iso
@@ -2877,7 +2922,9 @@ series for forecasting and replication.
 
     return (;
         p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
-        CFR_iso, β_iso, capacity = beds_T, last_cap,
+        CFR_iso, β_iso, capacity = beds_T, bed_floors,
+        beds_patch_T = cut.beds, occupancy_patch_T = cut.occupancy,
+        shortfall_patch_T = cut.shortfall,
         death_los_mean = death_los_state.mean,
         recovery_los_mean = recovery_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,

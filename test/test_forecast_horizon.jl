@@ -254,7 +254,9 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    @test fm.isolation == rh.treatment_state.occupancy_mean[fd]
+    ## The occupancy is the capped stock, at or below the beds.
+    st = rh.treatment_state
+    @test all(fm.isolation .<= max.(st.C[fd], st.capacity) .+ 1.0e-8)
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [
@@ -390,16 +392,28 @@ end
     end
 end
 
-@testitem "forecast admissions ceiling counts the beds freed that day" begin
-    using BVDOutbreakSize: _admission_ceilings
-    ## Capacity 100: day 1 follows the last recorded occupancy (90), later
-    ## days the drawn occupancy. Exits add to the beds free that day.
-    head = _admission_ceilings(
-        [100.0, 100.0, 100.0], 90, [95.0, 99.0, 80.0], [5.0, 0.0, 10.0]
+@testitem "the forecast stock admits up to its free beds" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## Two patches over three days. Patch 1 starts full, so it admits only
+    ## as many as leave; patch 2 has room for all its admissions.
+    beds = [100.0 100.0 100.0; 50.0 50.0 50.0]
+    admit = [30.0 30.0 30.0; 5.0 5.0 5.0]
+    ## National demand 200 the day before each day, and ten of each of the
+    ## four exit flows each day.
+    flows = fill(10.0, 3, 4)
+    path = capped_stock_forecast(
+        [100.0, 20.0], beds, admit, fill(200.0, 3), flows
     )
-    @test head ≈ [15.0, 5.0, 11.0]
-    @test _admission_ceilings([100.0], 90, [0.0], [7.0])[1] >
-        _admission_ceilings([100.0], 90, [0.0], [0.0])[1]
-    ## An over-full day leaves half a patient, not a negative bound.
-    @test only(_admission_ceilings([50.0], 80, [0.0], [2.0])) == 0.5
+    ## The flows are scaled to the occupied beds over the demand, 120/200,
+    ## and shared by occupancy: patch 1 loses 20 of the 24 exits.
+    @test path.scale[1] ≈ 0.6
+    @test path.admissions[:, 1] ≈ [20.0, 5.0]
+    @test path.occupancy[:, 1] ≈ [100.0, 21.0]
+    @test all(path.occupancy .<= beds .+ 1.0e-10)
+    @test all(path.admissions .<= max.(path.free, 0) .+ 1.0e-10)
+    ## An empty stock loses nothing and admits everything that fits.
+    empty = capped_stock_forecast(
+        [0.0], [10.0;;], [4.0;;], [0.0], fill(1.0, 1, 4)
+    )
+    @test empty.occupancy[1] ≈ 4.0
 end
