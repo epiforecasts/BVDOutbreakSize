@@ -45,25 +45,23 @@ Every panel shares one date axis, with each release tag a vertical line labelled
 (A) Lines of model and test code between tags, with the number of fitted streams as a dashed step on the right axis.
 (B) Commits per week from human, agent and other accounts, stacked, with merged pull requests per week as a line.
 (C) The released estimate of cumulative infections as the median with its 90% interval at each release's data cut-off on a log scale, with the data events beneath coloured by whether a human decision followed.
-(D) Joint gradient time from the benchmark records, open markers before and filled after the same pull request, one pull request recorded only before its change, and the single recorded fit wall-clock as a diamond whose height carries no value.
+(D) The recorded change events by kind and by the route through which each was first recorded, with bar length the number of events, its segments the share decided by a person, by an agent or jointly, and the count at the bar's end.
 Tags without a results release are absent from (C).](figures/fig-journey){#fig-journey width=75%}
 
 The released estimate rose by more than an order of magnitude, from {{< meta first_release_median >}} at the first release to {{< meta last_release_median >}} at the last tagged release (@fig-journey C).
 The largest step came with the move to situation-report increments and the laboratory model, where the median rose by a factor of {{< meta closed_form_step_ratio >}} between the last two releases of the closed-form model.
-The estimate then fell at the release after the isolation step and again at the release after the local peak that followed, before rising over the remaining renewal releases (@fig-journey C).
-Over the same window the number of fitted streams rose from four to eleven, most commits came from the agent account, and the recorded joint gradient time fell across the benchmarked pull requests (@fig-journey A, B and D).
-Under the provincial model the two released estimates plateaued, and the release analysed, which postdates the last version tag and is not drawn, sat above them at {{< meta cumulative_infections_median >}}.
+Over the same window the number of fitted streams rose from four to eleven and most commits came from the agent account (@fig-journey A and B).
+Under the provincial model the two released estimates plateaued, and the release analysed, which postdates the last version tag and is not drawn, sat above them.
 
-### What changed the estimates and how it was found
+### Where a person was needed
 
 {{< include generated/events_table.qmd >}}
 
 <!-- evidence comments below count the data rows of paper/data/change_events.csv from 1, excluding the header -->
-The record held {{< meta n_events >}} events, of which {{< meta n_events_model >}} were model changes, {{< meta n_events_defect >}} defects, {{< meta n_events_data_quality >}} data-quality decisions and {{< meta n_events_data >}} data changes (@tbl-events).
-The agents first recorded {{< meta n_found_agent >}} of them, a person reading a pull request or an issue {{< meta n_found_human_review >}}, a person bringing outside evidence {{< meta n_found_human_data >}}, the prospective evaluation {{< meta n_found_prospective >}} and the automated reviewer {{< meta n_found_review_bot >}}, and for the remaining {{< meta n_found_unrecorded >}} the record shows no route.
+The record held {{< meta n_events >}} events, of which {{< meta n_events_model >}} were model changes, {{< meta n_events_defect >}} defects, {{< meta n_events_data_quality >}} data-quality decisions and {{< meta n_events_data >}} data changes (@fig-journey D).
+The agents first recorded {{< meta n_found_agent >}} of them and a person {{< meta n_found_human >}}, with the prospective evaluation {{< meta n_found_prospective >}}, the automated reviewer {{< meta n_found_review_bot >}} and no route recorded for the remaining {{< meta n_found_unrecorded >}}.
 The routes differed by kind, with {{< meta n_model_found_human >}} of the {{< meta n_events_model >}} model changes first raised by a person and {{< meta n_defects_found_agent >}} of the {{< meta n_events_defect >}} defects first reported by the agents.
-A person decided {{< meta n_decided_human >}} of the events, an agent {{< meta n_decided_agent >}} and the two jointly {{< meta n_decided_joint >}}.
-That split ran the same way by kind, with a person deciding {{< meta n_model_decided_human >}} of the model changes, {{< meta n_data_decided_human >}} of the data changes and {{< meta n_data_quality_decided_human >}} of the data-quality decisions, and an agent deciding {{< meta n_defects_decided_agent >}} of the defects.
+A person decided {{< meta n_decided_human >}} of the events, an agent {{< meta n_decided_agent >}} and the two jointly {{< meta n_decided_joint >}}, and the agent count is an upper bound because the lead author's local first-pass reviews appear on the record only as an approval (@fig-journey D).
 
 The largest moves in the released median each straddled several changes merged between the same two releases, so none can be attributed to one event (@fig-journey C).
 The largest, reported above, followed the reclassification of the suspected counts, which an agent reported and the lead author answered by freezing those streams and fitting the confirmed ones alongside the laboratory model. <!-- evidence: change_events.csv row 2 -->
@@ -76,9 +74,12 @@ Three agent explanations were later withdrawn or overturned, a diagnosis on whic
 The {{< meta n_found_review_bot >}} findings of the automated reviewer both came in the pull request that corrected the scoring, a break-day correction that had not reached the bed stream and a shortfall that could go negative, and the agent accepted the first and declined the second (@tbl-events). <!-- evidence: change_events.csv rows 28 and 29 -->
 The reviewer declined {{< meta n_bot_declined_prs >}} further pull requests over its line cap. <!-- detection_summary.csv record row: review-bot declined PRs -->
 The {{< meta n_found_prospective >}} defects found only by the prospective evaluation were the compounded forecast innovation and the scoring without break corrections, both read by the lead author from the forecast panels of the validation page (@tbl-events). <!-- evidence: change_events.csv rows 25 and 27 -->
+The defects that reached the forecasts were carried by as many as {{< meta forecast_defect_releases_live >}} releases before the scoring exposed them (@tbl-events). <!-- evidence: change_events.csv column n_releases_live over the forecast defect rows -->
 
-Over the window the agent accounts made {{< meta n_commits_agent >}} commits, opened {{< meta n_agent_prs >}} pull requests and {{< meta n_agent_issues >}} issues and had {{< meta n_prs_merged_agent >}} requests merged, against {{< meta n_commits_human >}} commits, {{< meta n_human_issues >}} issues and {{< meta n_prs_merged_human >}} merged requests from the human accounts (@fig-journey B).
+Over the window the agent accounts made {{< meta n_commits_agent >}} commits and had {{< meta n_prs_merged_agent >}} pull requests merged, against {{< meta n_commits_human >}} commits and {{< meta n_prs_merged_human >}} merged requests from the human accounts (@fig-journey B).
 The human accounts submitted {{< meta n_human_reviews >}} reviews with {{< meta n_human_inline_comments >}} inline comments and the automated reviewer {{< meta n_bot_reviews >}} reviews with {{< meta n_bot_inline_comments >}} inline comments.
+Over the {{< meta n_weeks >}} weeks of the record that is {{< meta human_reviews_per_week >}} reviews and {{< meta human_inline_comments_per_week >}} inline comments a week from the human accounts against {{< meta agent_prs_per_week >}} agent pull requests, and it is the only measure of a person's time the record holds.
+The window carried {{< meta n_releases >}} releases, {{< meta releases_per_week >}} a week, each refitting every affected model, against one recorded joint fit wall-clock of {{< meta joint_fit_minutes_recorded >}} minutes.
 
 ### Forecast evaluation
 
