@@ -335,3 +335,19 @@ n_commits_agent: "542"
 n_prs_merged_human: "21"
 # commits_weekly.csv: sum of n_prs_merged_agent over the weeks
 n_prs_merged_agent: "422"
+# commits_weekly.csv: rows (ISO weeks)
+n_weeks: "19"
+# detection_summary.csv: record row `human review submissions` divided by the number of weeks in commits_weekly.csv
+human_reviews_per_week: "29"
+# detection_summary.csv: record row `human inline review comments` divided by the number of weeks in commits_weekly.csv
+human_inline_comments_per_week: "9.6"
+# detection_summary.csv: record row `agent PRs opened` divided by the number of weeks in commits_weekly.csv
+agent_prs_per_week: "28"
+# fit_cost.csv: joint_fit_minutes, the one recorded value (#716, wall-clock of the last headline fit job before the PR)
+joint_fit_minutes_recorded: "320"
+# gh release list -R epiforecasts/BVDOutbreakSize --limit 500 --json tagName,publishedAt: tags starting results- published up to the pinned release's date (2026-09-28)
+n_releases: "153"
+# n_releases divided by the number of weeks in commits_weekly.csv
+releases_per_week: "8.1"
+# change_events.csv: largest n_releases_live among the defect rows whose event or effect mentions a forecast (#606, #623, #637, #637, #742)
+forecast_defect_releases_live: "13"

@@ -9,9 +9,11 @@
 # release window. The evidence link and the human quote stay in the CSV.
 # Each kept row's Event cell is the short label keyed by its evidence link
 # below; its Effect cell is read from the CSV's stated move where there is
-# one and otherwise from the label. The script stops if a kept row has no
-# label, if a label carries a number the CSV row does not, or if more rows
-# qualify than the cap.
+# one and otherwise from the label; its Releases live cell, for a defect,
+# is the CSV's n_releases_live with the first release that carried it and
+# the release that fixed it. The script stops if a kept row has no label,
+# if a label carries a number the CSV row does not, if a defect row has no
+# release span, or if more rows qualify than the cap.
 
 using CSV
 using DataFrames
@@ -124,13 +126,13 @@ const LABELS = Dict(
         (
         "Onset digitiser read 10 to 23% short of the printed total " *
             "and mis-dated bars",
-        "Onset curve data from v1.17.0 to v2.1.0",
+        "Onset curve data from v1.16.0 to v2.1.0",
     ),
     "https://github.com/epiforecasts/BVDOutbreakSize/issues/888#issuecomment-5822068785" =>
         (
         "Comparison table printed the current confirmed total as " *
             "observed at the calibration date of Chamla et al.",
-        "Released sensitivity page, still open",
+        "Released sensitivity page, fix not yet released",
     ),
 )
 
@@ -179,6 +181,18 @@ function effect_cell(row, label_effect)
         "$(fmt_count(parse(Int, b))) ($from to $to)"
 end
 
+## The tagged releases that carried a defect, from the first that did to
+## the one before its fix; blank for the other rows.
+function releases_live_cell(row)
+    row.kind == "defect" || return ""
+    n = row.n_releases_live
+    ismissing(n) && error("no n_releases_live for `$(row.evidence_url)`")
+    n == 0 && return "0, found before release"
+    from, fix = row.live_from_release, row.fixed_in_release
+    startswith(fix, "unreleased") && return "$n, from $from, fix unreleased"
+    return "$n, from $from, fixed in $fix"
+end
+
 paper_dir() = normpath(joinpath(@__DIR__, ".."))
 
 events = CSV.read(
@@ -193,8 +207,8 @@ lines = String[
     "<!-- Written by paper/scripts/events_table.jl from " *
         "paper/data/change_events.csv; never edited by hand. -->",
     "",
-    "| Date | Event | Effect | Found by | Decided by |",
-    "|---|---|---|---|---|",
+    "| Date | Event | Effect | Found by | Decided by | Releases live |",
+    "|---|---|---|---|---|---|",
 ]
 for row in eachrow(kept)
     haskey(LABELS, row.evidence_url) ||
@@ -208,7 +222,7 @@ for row in eachrow(kept)
             [
                 Dates.format(row.date, "d U"), event,
                 effect_cell(row, effect), FOUND_BY[row.detected_by],
-                row.decided_by,
+                row.decided_by, releases_live_cell(row),
             ],
             " | "
         ) * " |"
@@ -217,15 +231,19 @@ end
 push!(lines, "")
 push!(
     lines,
-    ": Events in the development record that changed the released " *
-        "estimate or were defects in a released output, ordered by date " *
-        "(all 2026). " *
-        "The rows are the defects whose effect reached a released output " *
-        "and the changes whose move between two released medians the " *
-        "record states with no other change sharing the release window. " *
+    ": Events in the development record whose effect reached a released " *
+        "output, ordered by date (all 2026). " *
+        "The $(nrow(kept)) rows are the subset of the $(nrow(events)) " *
+        "recorded events that are defects in a released output or changes " *
+        "whose move between two released medians the record states with " *
+        "no other change sharing the release window; the full record is " *
+        "in the repository (paper/data/change_events.csv). " *
         "Found by is the first record of the event on GitHub and " *
-        "decided by is who set the response, with the evidence link for " *
-        "every row in the repository. {#tbl-events}"
+        "decided by is who set the response. " *
+        "Releases live is the number of tagged releases that carried a " *
+        "defect, from the first that did to the one before its fix, and " *
+        "is blank for the other rows. " *
+        "The evidence link for every row is in the record. {#tbl-events}"
 )
 
 out = joinpath(paper_dir(), "generated", "events_table.qmd")

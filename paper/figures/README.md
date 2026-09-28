@@ -22,6 +22,7 @@ It also counts the change events in `paper/data/change_events.csv` by kind, dete
 
 `paper/scripts/events_table.jl` writes `paper/generated/events_table.qmd`, the table the manuscript includes as `@tbl-events`, from `paper/data/change_events.csv`.
 It keeps the defects whose effect reached a released output and the changes whose move between two released medians the CSV states without another change sharing the release window, at most twenty rows ordered by date.
+For each defect row it adds the number of tagged releases that carried the defect, from the CSV's `n_releases_live`, `live_from_release` and `fixed_in_release` columns, and its caption reads the row and record counts from the CSV.
 The short cell text is keyed by each row's evidence link inside the script, and the script stops if a kept row has no label or a label carries a number the CSV row does not.
 Regenerate with `julia --project=paper paper/scripts/events_table.jl`.
 
@@ -35,16 +36,22 @@ The release's posterior-predictive check for the four streams exists only as an 
 
 ## fig-journey (Figure 3)
 
-`paper/scripts/fig_journey.jl` draws the development journey into `fig-journey.pdf` and `fig-journey.png` (180 mm wide, 600 dpi) from the CSVs in `paper/data/` described in `paper/data/README.md`, not from a release.
+`paper/scripts/fig_journey.jl` draws the development journey into `fig-journey.pdf` and `fig-journey.png` (180 mm wide, 600 dpi) from the CSVs in `paper/data/` described in `paper/data/README.md` and `paper/.notes/change-events-notes.md`, not from a release.
 Unlike the other figure scripts it runs in the root environment, `julia --project=. paper/scripts/fig_journey.jl`, and needs only CairoMakie and the standard library.
-Four panels share one date axis from 18 May 2026 to the end of the last week in `commits_weekly.csv`, with every release tag as a thin vertical line, labelled in the strip above panel A, and the three model versions as background bands.
+Panels A to C and the event strip share one date axis from 18 May 2026 to the end of the last week in `commits_weekly.csv`, with every release tag as a thin vertical line, labelled in the strip above panel A, and the three model versions as background bands.
 Panel A steps `loc_src` and `loc_test` from `code_size.csv` between tags, with `n_streams_fitted` as a dashed step on the right axis.
 Panel B stacks the weekly human, agent and other commits from `commits_weekly.csv` and draws the weekly total of merged pull requests as a line on the same count axis.
 Panel C places each release's median and 90% interval from `release_estimates.csv` at its data cut-off, on a log axis; releases sharing a cut-off are drawn 0.7 days either side of it, and the three tags without a results release do not appear.
 The strip under panel C marks each row of `data_events.csv` at its date, coloured by `human_decision`, with a hand-shortened label from the `event` column.
-Panel D draws every `joint_gradient_ms` value in `fit_cost.csv` whose `model` is a production joint or the CI benchmark suite, open markers for the before arm and filled for the after arm of the same PR, joined by a line; the two `synthetic joint` rows of #810 are not drawn.
-The one `joint_fit_minutes` value, 320 minutes at #716, is a labelled diamond whose height on the ms axis carries no value.
+Panel D is not on the date axis: it tallies the rows of `change_events.csv` by kind (rows) and detection route (columns), each cell a bar whose length is the number of events and whose segments are the decider (person, agent, joint), with the count printed at the bar's end; the script stops on a kind, route or decider it does not know.
 Colours are Makie's Wong palette, as in `src/plots.jl`.
+
+## fig-gradient-si (supplementary)
+
+`paper/scripts/fig_gradient_si.jl` draws the recorded joint gradient times into `fig-gradient-si.pdf` and `fig-gradient-si.png` (180 mm wide, 600 dpi) from `paper/data/fit_cost.csv` and `code_size.csv`, in the style of fig-journey: the same date axis, release-tag lines and labels, and model-version bands.
+It runs in the root environment, `julia --project=. paper/scripts/fig_gradient_si.jl`, and needs only CairoMakie and the standard library.
+It draws every `joint_gradient_ms` value whose `model` is a production joint or the CI benchmark suite, open markers for the before arm and filled for the after arm of the same PR, joined by a line; the two `synthetic joint` rows of #810 are not drawn.
+The one `joint_fit_minutes` value, 320 minutes at #716, is a labelled diamond whose height on the ms axis carries no value.
 
 ## fig-evaluation (Figure 4)
 

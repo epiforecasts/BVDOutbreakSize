@@ -896,6 +896,77 @@ for (key, col) in (
     )
 end
 
+## --- Cost of the record ----------------------------------------------------
+## Per-week rates divide the record totals above by the number of ISO weeks
+## in commits_weekly.csv. The fit wall-clock is the one such figure in
+## paper/data/fit_cost.csv, quoted from its pull request. The release count
+## is every `results-*` release on GitHub published up to the pinned
+## release's date, read with `gh release list`.
+
+n_weeks = nrow(weekly)
+add!("n_weeks", string(n_weeks), "commits_weekly.csv: rows (ISO weeks)")
+per_week(n) = fmt2(n / n_weeks)
+for (key, group) in (
+        ("human_reviews_per_week", "human review submissions"),
+        ("human_inline_comments_per_week", "human inline review comments"),
+        ("agent_prs_per_week", "agent PRs opened"),
+    )
+    add!(
+        key, per_week(recorded_count("record", group)),
+        "$record_src: record row `$group` divided by the number of weeks " *
+            "in commits_weekly.csv"
+    )
+end
+fit_cost = CSV.read(
+    joinpath(paper_dir(), "data", "fit_cost.csv"), DataFrame
+)
+wall = fit_cost[.!ismissing.(fit_cost.joint_fit_minutes), :]
+nrow(wall) == 1 || error("fit_cost.csv should carry one joint_fit_minutes")
+add!(
+    "joint_fit_minutes_recorded", string(only(wall.joint_fit_minutes)),
+    "fit_cost.csv: joint_fit_minutes, the one recorded value " *
+        "($(only(wall.tag_or_pr)), $(only(wall.note)))"
+)
+release_cmd = "gh release list -R $REPO --limit 500 --json " *
+    "tagName,publishedAt"
+release_jq = raw".[]|\"\(.publishedAt) \(.tagName)\""
+release_lines = readlines(
+    `gh release list -R $REPO --limit 500 --json tagName,publishedAt
+    --jq $release_jq`
+)
+length(release_lines) < 500 || error("more releases than the gh limit")
+n_releases = count(release_lines) do l
+    published, tag = split(l)
+    startswith(tag, "results-") && Date(published[1:10]) <= meta.date
+end
+add!(
+    "n_releases", string(n_releases),
+    "$release_cmd: tags starting results- published up to the pinned " *
+        "release's date ($(meta.date))"
+)
+add!(
+    "releases_per_week", per_week(n_releases),
+    "n_releases divided by the number of weeks in commits_weekly.csv"
+)
+## The released defects whose event or effect concerns the forecasts, and
+## the longest span of tagged releases any of them was live for.
+forecast_defects = events[
+    events.kind .== "defect" .&&
+        occursin.("forecast", events.event .* " " .* events.effect) .&&
+        .!ismissing.(events.n_releases_live),
+    :,
+]
+defect_refs = [
+    "#" * match(r"(?:issues|pull)/(\d+)", u).captures[1]
+    for u in forecast_defects.evidence_url
+]
+add!(
+    "forecast_defect_releases_live",
+    string(maximum(forecast_defects.n_releases_live)),
+    "$events_src: largest n_releases_live among the defect rows whose " *
+        "event or effect mentions a forecast ($(join(defect_refs, ", ")))"
+)
+
 ## --- Write ---------------------------------------------------------------
 
 out = joinpath(paper_dir(), "generated", "numbers.yml")

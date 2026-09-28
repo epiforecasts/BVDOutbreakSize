@@ -5,13 +5,14 @@
 #     julia --project=. paper/scripts/fig_journey.jl
 #
 # Reads paper/data/{code_size,commits_weekly,release_estimates,
-# data_events,fit_cost}.csv and writes paper/figures/fig-journey.pdf
-# and fig-journey.png (180 mm wide, 600 dpi). Colours are Makie's Wong
-# palette, as in src/plots.jl.
+# data_events,change_events}.csv and writes paper/figures/fig-journey.pdf
+# and fig-journey.png (180 mm wide, 600 dpi). Panels A to C share one
+# date axis; panel D tallies the change events by kind and detection
+# route, shaded by decider. The gradient benchmarks are drawn by
+# fig_gradient_si.jl. Colours are Makie's Wong palette, as in src/plots.jl.
 
 using CairoMakie
 using Dates
-using Statistics: mean
 
 const REPO = normpath(joinpath(@__DIR__, "..", ".."))
 const DATA = joinpath(REPO, "paper", "data")
@@ -60,7 +61,7 @@ code = read_csv("code_size.csv")
 weekly = read_csv("commits_weekly.csv")
 rel = read_csv("release_estimates.csv")
 events = read_csv("data_events.csv")
-cost = read_csv("fit_cost.csv")
+changes = read_csv("change_events.csv")
 
 # ---------------------------------------------------------------------
 # Date axis: days since 18 May 2026
@@ -73,8 +74,7 @@ last_date = maximum(
         [Date(r.date) for r in code],
         [Date(r.week_start) + Day(7) for r in weekly],
         [Date(r.cutoff) for r in rel if !isempty(r.cutoff)],
-        [Date(r.date) for r in events],
-        [Date(r.date) for r in cost]
+        [Date(r.date) for r in events]
     )
 )
 xlims = (dnum(D0) - 1, dnum(last_date) + 1)
@@ -89,6 +89,7 @@ const C_SRC = wong[1]      # blue
 const C_TEST = wong[2]     # orange
 const C_HUMAN = wong[6]    # vermillion
 const C_AGENT = wong[3]    # green
+const C_JOINT = wong[4]    # reddish purple
 const C_OTHER = :grey60
 const C_TAG = (:black, 0.25)
 const BANDS = [
@@ -308,8 +309,8 @@ const EVENT_LABELS = Dict(
     "2026-09-07" => "onset past report date",
     "2026-09-16" => "suspects resumed",
 )
-axe = Axis(fig[5, 1]; axkw...)
-hidedecorations!(axe); hidespines!(axe, :l, :r, :t)
+axe = Axis(fig[5, 1]; xlabel = "Date (2026)", axkw...)
+hideydecorations!(axe); hidespines!(axe, :l, :r, :t)
 decorate!(axe)
 ex = [dnum(r.date) for r in events]
 ecol = [r.human_decision == "yes" ? C_HUMAN : C_AGENT for r in events]
@@ -328,72 +329,81 @@ end
 ylims!(axe, 0, 1)
 
 # ---------------------------------------------------------------------
-# D: joint gradient time per PR, and the one wall-clock figure
+# D: change events by kind and detection route, shaded by decider
 # ---------------------------------------------------------------------
-axd = Axis(
-    fig[6, 1]; ylabel = "Joint gradient (ms, log scale)",
-    xlabel = "Date (2026)", yscale = log10, yticks = [1, 2, 5, 10, 20],
-    ytickformat = v -> string.(round.(Int, v)), axkw...
-)
-decorate!(axd)
-is_prod(r) = startswith(r.model, "production joint")
-is_ci(r) = startswith(r.model, "CI benchmark")
-series = [
-    ("production joint", is_prod, wong[1], :circle),
-    ("CI benchmark joint", is_ci, wong[2], :rect),
+# One cell per kind (row) and detection route (column); the bar length is
+# the number of events in the cell and its segments are the deciders.
+const KINDS = [
+    ("model change", "model change"), ("data change", "data change"),
+    ("data-quality decision", "data-quality\ndecision"),
+    ("defect", "defect"),
 ]
-for (name, pred, col, mk) in series
-    rows = filter(r -> pred(r) && r.joint_gradient_ms != "", cost)
-    for (k, pr) in enumerate(unique(r.tag_or_pr for r in rows))
-        rr = filter(r -> r.tag_or_pr == pr, rows)
-        x = dnum(rr[1].date)
-        ys = [num(r.joint_gradient_ms) for r in rr]
-        length(ys) == 2 && lines!(
-            axd, [x, x], ys; color = col,
-            linewidth = 0.8
-        )
-        for r in rr
-            y = num(r.joint_gradient_ms)
-            scatter!(
-                axd, [x], [y]; marker = mk, markersize = 5,
-                color = r.arm == "after" ? col : :white,
-                strokecolor = col, strokewidth = 0.8
-            )
-        end
-        # PRs a day apart: label above, then right, then below.
-        pos, al, off = (k % 3 == 1) ? ((x, maximum(ys)), (:center, :bottom), (0, 2)) :
-            (k % 3 == 2) ? ((x + 1.0, exp(mean(log.(ys)))), (:left, :center), (0, 0)) :
-            ((x, minimum(ys)), (:center, :top), (0, -2))
-        text!(
-            axd, pos...; text = pr, fontsize = FS_SMALL, align = al,
-            offset = off
-        )
-    end
+const ROUTES = [
+    ("agent self-report", "agent\nself-report"),
+    ("human review", "human\nreview"),
+    ("human data check", "human\ndata check"),
+    ("prospective evaluation", "prospective\nevaluation"),
+    ("automated review bot", "automated\nreviewer"),
+    ("unrecorded", "unrecorded"),
+]
+const DECIDERS = [
+    ("human", C_HUMAN, "decided by a person"),
+    ("agent", C_AGENT, "decided by an agent"),
+    ("joint", C_JOINT, "decided jointly"),
+]
+for r in changes
+    r.kind in first.(KINDS) || error("unknown kind `$(r.kind)`")
+    r.detected_by in first.(ROUTES) ||
+        error("unknown route `$(r.detected_by)`")
+    r.decided_by in first.(DECIDERS) ||
+        error("unknown decider `$(r.decided_by)`")
 end
-wall = only(filter(r -> r.joint_fit_minutes != "", cost))
-wy = 4.0   # the wall-clock has no ms value; its height is arbitrary
-scatter!(
-    axd, [dnum(wall.date)], [wy]; marker = :diamond, markersize = 6,
-    color = :black
+tally(kind, route, who) = count(
+    r -> r.kind == kind && r.detected_by == route && r.decided_by == who,
+    changes
 )
-text!(
-    axd, dnum(wall.date) - 1.5, wy;
-    text = "$(wall.tag_or_pr): $(wall.joint_fit_minutes) min fit wall-clock",
-    fontsize = FS_SMALL, align = (:right, :center)
+cell_total(kind, route) = sum(tally(kind, route, d[1]) for d in DECIDERS)
+cell_max = maximum(
+    cell_total(k[1], rt[1]) for k in KINDS, rt in ROUTES
 )
-ylims!(axd, 0.8, 28)
+nk, nr = length(KINDS), length(ROUTES)
+axd = Axis(
+    fig[6, 1]; xlabel = "Found by", ylabel = "Kind of event",
+    xticks = ((1:nr) .- 0.5, last.(ROUTES)),
+    yticks = ((1:nk) .- 0.5, reverse(last.(KINDS))),
+    xgridvisible = false, ygridvisible = false, xticksvisible = false,
+    yticksvisible = false, xticklabelsize = FS, yticklabelsize = FS,
+    xlabelsize = FS, ylabelsize = FS, spinewidth = 0.6
+)
+hlines!(axd, 1:(nk - 1); color = (:black, 0.15), linewidth = 0.4)
+vlines!(axd, 1:(nr - 1); color = (:black, 0.15), linewidth = 0.4)
+const BAR_MAX = 0.78     # bar length of the fullest cell, in cell widths
+const BAR_H = 0.56
+for (j, k) in enumerate(KINDS), (i, rt) in enumerate(ROUTES)
+    n = cell_total(k[1], rt[1])
+    n == 0 && continue
+    x0 = i - 1 + 0.08
+    y = nk - j + 0.5
+    for (who, col, _) in DECIDERS
+        m = tally(k[1], rt[1], who)
+        m == 0 && continue
+        w = BAR_MAX * m / cell_max
+        poly!(
+            axd, Rect(x0, y - BAR_H / 2, w, BAR_H); color = col,
+            strokecolor = :white, strokewidth = 0.4
+        )
+        x0 += w
+    end
+    text!(
+        axd, x0 + 0.03, y; text = string(n), fontsize = FS_SMALL,
+        align = (:left, :center)
+    )
+end
+xlims!(axd, 0, nr)
+ylims!(axd, 0, nk)
 inset_legend!(
-    fig[6, 1],
-    [
-        MarkerElement(; color = wong[1], marker = :circle, markersize = 5),
-        MarkerElement(; color = wong[2], marker = :rect, markersize = 5),
-        MarkerElement(;
-            color = :white, strokecolor = :black,
-            strokewidth = 0.8, marker = :circle, markersize = 5
-        ),
-        MarkerElement(; color = :black, marker = :circle, markersize = 5),
-    ],
-    ["production joint", "CI benchmark joint", "before PR", "after PR"]
+    fig[6, 1], [PolyElement(; color = d[2]) for d in DECIDERS],
+    [d[3] for d in DECIDERS]; halign = :right
 )
 
 # ---------------------------------------------------------------------
@@ -402,13 +412,13 @@ inset_legend!(
 for (row, s) in zip((2, 3, 4, 6), ["A", "B", "C", "D"])
     panel_letter(row, s)
 end
-for ax in (axl, axa, axb, axc, axe, axd)
+for ax in (axl, axa, axb, axc, axe)
     xlims!(ax, xlims...)
 end
 for ax in (axa, axb, axc)
     hidexdecorations!(ax; ticks = false, minorticks = false)
 end
-linkxaxes!(axl, axa, axb, axc, axe, axd)
+linkxaxes!(axl, axa, axb, axc, axe)
 rowsize!(fig.layout, 1, Fixed(16 * MM))
 rowsize!(fig.layout, 2, Auto(1.0))
 rowsize!(fig.layout, 3, Auto(1.0))
