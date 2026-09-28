@@ -1851,11 +1851,9 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    either side of the breakpoint are what separates `β_ε`.
     ##
     ##    A second pooled deviation per destination weights where an origin's
-    ##    exports land ([`destination_weighted_kernel`](@ref)). The gravity
-    ##    kernel fixes that split by population and distance, so without it
-    ##    seeding one province harder seeds every other one too. Each origin
-    ##    column keeps its total, so the destinations move the split and not
-    ##    the volume. A shift shared by every destination cancels, so the
+    ##    exports land ([`destination_weighted_kernel`](@ref)). Each origin
+    ##    column keeps its total, so the weights move the split and not the
+    ##    volume. A shift shared by every destination cancels, so the
     ##    deviations sum to zero on the same basis.
     ε_matrix = zeros(Tp, n_patches, ng)
     kernel = importation_kernel

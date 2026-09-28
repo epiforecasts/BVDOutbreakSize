@@ -1777,10 +1777,10 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
 [`province_importation_kernel`](@ref) weighted by its fitted destination
-deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of a patch,
-the zone stage's between-patch flow is the province model's for the same
-origin intensity, which is what keeps one movement from being counted at
-both levels.
+deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
+a patch, the zone stage's between-patch flow is the province model's for
+the same origin intensity, which is what keeps one movement from being
+counted at both levels.
 """
 function zone_importation_blocks(
         pops::AbstractVector, coords::AbstractVector,

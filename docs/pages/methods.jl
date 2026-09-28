@@ -528,8 +528,7 @@ MarkdownTable(vintage_table) #hide
 #
 # with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 #
-# The gravity kernel fixes where each origin's exports land, so seeding one province harder would seed every other one too.
-# A partially pooled weight per destination moves that split, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
+# A partially pooled weight per destination moves where each origin's exports land, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
 #
 # ```math
 # K'_{p,q} = K_{p,q}\, e^{\eta_p} \frac{\sum_r K_{r,q}}{\sum_r K_{r,q}\, e^{\eta_r}},
