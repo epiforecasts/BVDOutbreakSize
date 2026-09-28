@@ -15,6 +15,7 @@ The ones used while making a change:
 - `task fetch-fits` downloads the fits from the latest successful docs build, and `task docs` renders the site from them.
 - `BVD_FIT_ID=<id> task fit` fits and caches one model, and `task fit-all` fits them all.
   `julia --project=docs docs/fits/list.jl` lists the ids.
+  `task fit-dependent` fits only the models melded from a cached parent; `BVD_FIT_STAGE` selects `base`, `dependent` or `all`.
 - `task check-convergence` runs the convergence gate CI applies before publishing.
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings.
   Run it before pushing a model change.

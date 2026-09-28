@@ -46,6 +46,13 @@ end
     ## `Bool` reads as a label rather than a quantity, so it stays left.
     @test split(strip(markdown_table(DataFrame("ok" => [true]))), "\n")[2] ==
         "| --- |"
+
+    ## A missing cell renders empty, so a zone with no allocated case
+    ## leaves the column blank rather than printing `missing`.
+    gapped = DataFrame("Last case" => [missing, "2026-07-15"])
+    gl = split(strip(markdown_table(gapped)), "\n")
+    @test gl[3] == "|  |"
+    @test gl[4] == "| 2026-07-15 |"
 end
 
 @testitem "MarkdownTable shows as markdown and not as html" begin

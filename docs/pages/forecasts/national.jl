@@ -4,7 +4,7 @@
 # The forecast is drawn from the fitted model run past the cut-off, as the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section describes.
 # How these forecasts have scored against the data that arrived afterwards is
 # on the [evaluation](@ref "Forecast evaluation") page.
-# The split by province is on the [province forecasts](@ref "Province forecasts") page.
+# The split by province is on the [province forecasts](@ref "Province forecasts") page and the split by health zone on the [health-zone forecasts](@ref "Health-zone forecasts") page.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
