@@ -318,9 +318,7 @@ end
 ##     outk[t+d] += admk[t] · pmfk[d+1] · s[d]
 ##
 ## The pullback recomputes `u` and `s` for one cohort into scratch buffers,
-## then walks the cohort backwards carrying `s̄` and `ū`. It walks the
-## cohorts the forward pass skips (both admissions zero) too: their output
-## is zero but its derivative in the admissions is not.
+## then walks the cohort backwards carrying `s̄` and `ū`.
 function Mooncake.rrule!!(
         ::CoDual{typeof(abscond_thinned_flows)},
         adm1::CoDual{<:Array{<:Mooncake.IEEEFloat}},

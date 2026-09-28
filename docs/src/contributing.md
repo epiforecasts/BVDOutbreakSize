@@ -117,9 +117,11 @@ Tags split the suite across CI jobs.
 - `:quality` marks the Aqua, JET, formatting and doctest items.
 - `:ad` marks the AD gradient checks.
 - `:slow` marks the items that run full NUTS fits.
+- `:enzyme` marks the sweep of the opt-in Enzyme backend.
 
 `runtests.jl` reads test arguments to choose among them.
-`skip_quality` drops the quality and AD items, `quality_only` and `ad_only` run one tag, and `fast` and `downgrade` drop all three.
+`skip_quality` drops the quality and AD items, `quality_only`, `ad_only` and `enzyme_only` run one tag, and `fast` and `downgrade` drop the quality, AD and slow items.
+Every run leaves out the Enzyme items unless `enzyme_only` asks for them.
 
 To run one file, point `TestItemRunner.run_tests` at the `test/` directory with a filter and run it with `--project=test`:
 

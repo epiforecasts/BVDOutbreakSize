@@ -35,6 +35,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
+- The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+
+### Fixed
+
+- The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
+- The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 
 ## v2.2.0
 

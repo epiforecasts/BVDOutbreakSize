@@ -1838,7 +1838,6 @@ function abscond_thinned_flows(
     @inbounds for t in 1:n
         a1 = adm1[t]
         a2 = adm2[t]
-        (iszero(a1) && iszero(a2)) && continue
         dmax1 = min(nmax1 - 1, n - t)
         dmax2 = min(nmax2 - 1, n - t)
         ## Both schedules run to `dboth`; only the longer one runs past it.
@@ -3543,9 +3542,7 @@ towards overconfidence on cells that happen to undershoot. Pure,
 top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
-parameter. The test is the empirical over modelled residual ratio across
-bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
-the report's symptom-onset reporting-delay section.
+parameter.
 """
 function onset_report_scales(
         means::AbstractVector, τ::Real, reads::AbstractVector{<:Integer}
