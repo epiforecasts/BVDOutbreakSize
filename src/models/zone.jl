@@ -130,8 +130,7 @@ $(TYPEDSIGNATURES)
 The linear map from knot values to the days `t0 … n`, as an `(n_days ×
 n_knots)` weight matrix `W` with `δ_daily = W δ_knotsᵀ`, so the
 interpolation of every zone is one matrix product. Each column is
-[`interpolate_knots`](@ref) applied to a unit vector. The reverse pass
-over a per-day interpolation loop costs far more than the product.
+[`interpolate_knots`](@ref) applied to a unit vector.
 """
 function zone_interpolation_weights(
         knots::AbstractVector{<:Integer},
@@ -909,12 +908,9 @@ function zone_share_renewal_with_state(
         ## other patches, weighted by the province model's own per-origin
         ## intensity.
         ##
-        ## Both are one matrix-vector product rather than a nested loop. The
-        ## within block is zero on the diagonal and across patches and the
-        ## between block is zero within a patch, so the whole matrix times
-        ## the weighted force is exactly the restricted sum, and the reverse
-        ## pass sees one product per day instead of `n_zones^2` scalar
-        ## multiplies.
+        ## The within block is zero on the diagonal and across patches and
+        ## the between block is zero within a patch, so each full product is
+        ## exactly the restricted sum.
         for z in 1:nz
             eu[z] = ε[z] * u[z]
             wu[z] = mix.origin_weight[z] * u[z]
@@ -1091,7 +1087,7 @@ $(TYPEDSIGNATURES)
 
 One forward pass of the zone model from its fixed data `zd` (the
 `model_data` of [`zone_fit_inputs`](@ref)) and a draw's deviation knots
-`(n_zones × n_knots)`, initial shares `w0` and per-patch mixing fractions
+`(n_zones × n_knots)`, initial shares `w0` and per-zone mixing fractions
 `ε` (`nothing` when mixing is off): the daily deviations (the
 interpolation weights times the knots), the share renewal and the binned
 expected reports (the delay operator times the infections plus the
@@ -1359,9 +1355,9 @@ there, so the zone stage only distributes them over the destination
 patch's zones and the same movement is not counted at both levels. Within
 a patch the spill is the zone stage's own mechanism and carries its own
 intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation
-`τ (z − z̄)` on the logit scale. Mixing is off, and the correlation below with it, when
-the health-zone metadata does not cover every zone or the parent chain
-carries no between-patch movement (`zd.mixing === nothing`).
+`τ (z − z̄)` on the logit scale. Mixing is off when the health-zone
+metadata does not cover every zone or the parent chain carries no
+between-patch movement (`zd.mixing === nothing`).
 
 ### Deterministics
 
@@ -1454,14 +1450,10 @@ quantity is computed on the fitted days as without a forecast.
         z_drift = Float64[]
     end
     if mix_on
-        ## Within-patch spill only. The province model's own intensity is a
-        ## between-province one that its data pulled four orders of
-        ## magnitude below one, and a boundary between two neighbouring
-        ## zones is not that quantity, so this carries its own prior. The
-        ## between-patch flows take the province model's intensity instead,
-        ## fixed, inside the kernel's between block. `τ_mix` is how far one
-        ## origin may depart from the shared level, on the logit scale so a
-        ## departure never leaves the unit interval.
+        ## Within-patch spill, with its own prior. The between-patch flows
+        ## take the province model's intensity, fixed, inside the kernel's
+        ## between block. `τ_mix` is how far one origin may depart from the
+        ## shared level, on the logit scale.
         ε_within ~ mixing_within_prior
         τ_mix ~ mixing_departure_prior
         z_mix ~ product_distribution(fill(offset_prior, nz))
@@ -1735,8 +1727,6 @@ function zone_parent_inputs(chn)
     )
 end
 
-## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
-## zero when the zone is absent from the block.
 ## One zone's cumulative series, or `nothing` when the table omits it.
 function _zone_history_series(
         history, prov::AbstractString,
@@ -1747,6 +1737,8 @@ function _zone_history_series(
     return history[prov][zone]
 end
 
+## Cumulative count of `zone` in `prov` at the last vintage of `history`, or
+## zero when the zone is absent from the block.
 function _zone_last_cumulative(
         history, prov::AbstractString,
         zone::AbstractString

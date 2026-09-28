@@ -10,7 +10,7 @@
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
 ## quantity and the patch trajectory it implies, and, with mixing, the
-## per-patch mixing fractions. A chain with no kept meld cell carries an
+## per-zone mixing fractions. A chain with no kept meld cell carries an
 ## empty `η` and every draw reads the province model's mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
     zd = inputs.model_data
