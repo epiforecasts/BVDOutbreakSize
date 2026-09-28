@@ -479,7 +479,7 @@ ascertainment and the background CFR for reuse by
         ## Gammas moment-matched to a single Gamma only for the truncation).
         onset_to_death = onset_to_death_model(
             cdf_nmax(Gamma(3.33, 3.83));
-            oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            oa_alpha_prior = LogNormal(log(1.178), 0.25),
             oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
@@ -594,7 +594,7 @@ sitrep.
         ## though what it captures is uncertain.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
-            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            alpha_prior = LogNormal(log(1.178), 0.25),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
@@ -1444,7 +1444,7 @@ rate and the daily at-risk prevalence for reuse by
         ## point of entry when first formally seen, ~4 days after onset.
         onset_to_detection = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
-            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            alpha_prior = LogNormal(log(1.178), 0.25),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
@@ -3373,7 +3373,7 @@ with `δ = report_idx - u_i` and [`onset_report_F`](@ref) supplying `F`,
 `alpha` indexed at onset date `u_i` (clamped into `1:length(alpha)`, the
 `grid_start:grid_end` ascertainment grid) for its `α` argument (so
 `δ_prev < 0` at the sentinel `prev_report_idx = 0`, the virtual empty
-predecessor for the very first scored vintage, contributes `ℓ_prev = 0` with
+predecessor of an onset date's first print, contributes `ℓ_prev = 0` with
 no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
 level_prev)`, each a length-`length(onset_idx)` vector, with
@@ -3811,8 +3811,9 @@ a flat departure the default the data has to argue away from (see
 
 Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
 by levels, not by corrections, since corrections constrain only differences
-of `F`. What breaks the tie is the first snapshot's cells (differenced
-against an empty predecessor, see [`load_onset_curve`](@ref)) together with
+of `F`. What breaks the tie is each onset date's level cell, its first
+print differenced against an empty predecessor (see
+[`load_onset_curve`](@ref)), together with
 the onset series being pinned by the other streams. A single-stream
 [`onsets_only_model`](@ref) fit has neither, so its ascertainment and `C_T`
 stay close to prior-driven. Second, the hazard at the shortest delays is
