@@ -32,28 +32,17 @@ A stream that stops being published is frozen at its last report and stays in th
 
 ### Model development
 
-The first model reproduced the approach of McCabe et al. [@mccabe2026] as one posterior rather than a set of scenarios, keeping their constant-growth latent process but replacing their closed-form approximations with exact convolutions and giving every fixed quantity a prior [@bdbv_linelist_analysis_2026].
-The national situation reports then became the data source, and they publish running totals that are revised and reclassified between reports.
-The second model fitted the per-report increments of those totals and added the confirmed series through a model of the laboratory queue, which the throughput counts did not identify, so both the latent process and the confirmed-case pipeline were replaced.
-
-The renewal model kept the observation streams and replaced the latent process with a discrete daily renewal equation and a time-varying reproduction number [@fraser2007; @cori2013].
-We prototyped five latent processes, among them an explicit convolution, a stochastic renewal, a particle-filtered state space and a compartmental model.
-We kept the deterministic renewal because the compartmental model was not viable under the model and data constraints, and the stochastic variants were closed once it had been chosen.
-Every remaining published stream was then added with its own observation model, and the reports began to carry counts by province that a single national process could not use.
-Divergent transitions in the occupancy stream and funnels in the pooled dispersion, background and bed-capacity random walks were reduced by censoring occupancy at the recorded capacity and by centred parameterisations [@papaspiliopoulos2007; @betancourt2015]. <!-- VERIFY: diagnosis and fixes rest on agent PRs 319, 352, 358, 743 and 745 -->
-
-The provincial model runs one renewal process per province so that those counts enter the likelihood directly, and it adds the province compositions as a stream.
-Since the last tagged version the province deviations have moved onto an identified basis, every forecast is drawn from the fitted model, and each digitised onset bar carries a fitted read error. <!-- PRs 855, 867 and 881 -->
-A centred form of the reproduction-number random walk was tried and reverted, because it split the chains of the joint fit. <!-- PRs 880 and 892 -->
-This version is the one fitted at the release analysed, and its definition follows.
-The model has changed again since that release, and those later changes are listed in @tbl-models rather than reported below. <!-- PRs 784, 900, 907 and 909 -->
-Among them infections now deplete a susceptible pool set at each province's census population, an upper bound that does not bind at the size estimated here [@bhatt2023].
+The work began as a reproduction of the approach of McCabe et al. as one posterior rather than a set of scenarios, with exact delay convolutions in place of their closed-form approximations and a prior on every fixed quantity [@mccabe2026].
+The national situation reports then became the data source, so the observation model moved to the per-report increments of running totals and added the confirmed series through a laboratory model that the throughput counts did not identify.
+A discrete daily renewal equation with a time-varying reproduction number replaced the latent process, chosen from five prototyped processes that included an explicit convolution, a stochastic renewal, a particle-filtered state space and a compartmental model [@fraser2007; @cori2013].
+Every remaining published stream was then added with its own observation model, so that each published count entered the likelihood on its own terms.
+One renewal process per province replaced the single national process when the reports began to carry counts by province that a national process could not use.
+The versions, the streams each of them fitted and the reason each gave way to the next are given in @tbl-models, and the estimate each released in @fig-journey.
 
 ### Current model
 
 The full model definition and every prior are given in the Supporting Information (*Methods*).
-The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces, coupled by a gravity kernel with same-day transfer.
-Every national stream is fitted against the sum over provinces.
+The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces, coupled by a gravity kernel with same-day transfer, and every national stream is fitted against the sum over provinces.
 Each province $p$ generates infections from its reproduction number $R_{p,t}$ and the generation interval $g$, with the log reproduction number the national trend plus a province deviation that sums to zero across provinces
 
 $$
@@ -74,10 +63,7 @@ $$ {#eq-province}
 
 The generation interval $g$ is a gamma distribution whose mean and standard deviation carry priors centred on the serial interval of Ebola virus disease in West Africa, with widths from a Bundibugyo cohort [@who_ebola_response_2014; @akilimali2026]. <!-- PRs 909, 910, 926: Normal+ priors on the mean and SD at the release analysed -->
 
-National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves the onsets with its own delay, scales them by its ascertainment and adds any stream-specific term.
-Every delay is sampled and discretised with double interval censoring [@charniga2024].
-The daily analysed laboratory volume anchors test positivity, and the digitised onset curve is a reporting triangle with time-varying ascertainment and a fitted read error for each bar.
-
+National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves those onsets with its own sampled and double-censored delay, scales them by its ascertainment and adds any stream-specific term [@charniga2024].
 For the suspected cases the delay is the onset-to-report distribution $f_{\text{rep}}$, the ascertainment is $p_{\text{DRC}}$ and the added term is a non-BVD background rate $\lambda_{\text{bg},t}$ on a weekly random walk.
 The increment between the reports on days $d_{i-1}$ and $d_i$ is scored with a negative binomial whose dispersion $k_s$ is partially pooled across the four passive-surveillance streams
 
