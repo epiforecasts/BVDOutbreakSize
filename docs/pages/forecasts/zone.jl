@@ -172,7 +172,9 @@ CairoMakie.save(
     joinpath(dashboard_dir, "zone_forecast.png"),
     zone_forecast_fig
 )
-write(joinpath(dashboard_dir, "zone_forecast.md"), zone_forecast_bullets);
+open(joinpath(dashboard_dir, "zone_forecast.md"), "w") do io
+    print(io, zone_forecast_bullets)
+end
 
 #md # ```@raw html
 #md # </details>
