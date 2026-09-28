@@ -414,6 +414,42 @@ function zone_forecast_archive(
     return out
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+The zone key of a per-zone scored stream label, `"<stream> {<zone key>}"`
+as `scripts/score_releases.jl` writes it, or `nothing` for any other label.
+"""
+function zone_score_key(stream::AbstractString)
+    m = match(r"\{([^{}]+)\}$", stream)
+    return m === nothing ? nothing : String(m[1])
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The rows of a per-zone score or overlay table `tbl` (`data/zone/`, written by
+`scripts/score_releases.jl`) for the zones `zone_keys`, in that order, with
+each `stream` replaced by the zone's entry in `zone_labels`. Rows of any
+other zone are dropped.
+"""
+function zone_score_rows(
+        tbl::DataFrame, zone_keys::AbstractVector,
+        zone_labels::AbstractVector
+    )
+    rank = Dict(String(k) => i for (i, k) in enumerate(zone_keys))
+    r = [
+        let k = zone_score_key(s)
+            k === nothing ? 0 : get(rank, k, 0)
+        end
+            for s in tbl.stream
+    ]
+    keep = findall(>(0), r)
+    out = tbl[keep[sortperm(r[keep]; alg = Base.Sort.DEFAULT_STABLE)], :]
+    out.stream = [String(zone_labels[i]) for i in sort(r[keep])]
+    return out
+end
+
 ## Per-zone draws of a vector deterministic, one vector per zone.
 function _zone_draws(chn, key::Symbol, nz::Integer)
     vs = _draw_vectors(chn, key)
