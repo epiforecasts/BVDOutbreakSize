@@ -206,7 +206,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The direction of the change at the renewal switch, at the arrival of the onset curve and at the provincial model, read from the released estimates.
   - The direction of the change at each frozen stream and reporting break.
 
-### Where a person was needed
+### Development record
 
 - Of the events that changed the released estimate or the forecasts, most were data changes and most were found by a person reading the reports or the diagnostics, while the defects in released outputs were found by the prospective evaluation and in review (@tbl-events). <!-- counts from paper/data/detection_summary.csv -->
   - The largest moves in the released estimate and what caused each (@fig-timeline C).
@@ -268,7 +268,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
   - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
 
-- The record shows, for this project, where a person was needed: at every change of model structure, data rule and prior, and at the reading of diagnostics, while the agents found and fixed most implementation defects and the prospective evaluation caught what neither did. <!-- Sebastian, PR 883; state as what the record shows, not "may say" -->
+- The record shows which decisions fell to a person and which to the agents: a person at every change of model structure, data rule and prior, and at the reading of diagnostics, while the agents found and fixed most implementation defects and the prospective evaluation caught what neither did. <!-- Sebastian, PR 883; state as what the record shows, not "may say" -->
   - What the reviewing person had to be able to do here: read sampler diagnostics, judge a prior against the literature, and know the surveillance system well enough to spot a reclassification.
   - The checks ranked by what they caught: the prospective scoring found the two released forecast defects nothing else did, review of diagnostics gated most changes, the automated reviewer contributed two findings against its volume of comments, and the continuous-integration gate postdates every failure it would have caught.
   - What we would not delegate again on this evidence, each tied to a record item: prior choices, the structure of the latent process, and any agent diagnosis of why a fit behaves as it does.
