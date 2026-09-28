@@ -955,15 +955,11 @@ end
 $(TYPEDSIGNATURES)
 
 The delay convolution and its binning into the vintage windows
-`(d_{v−1}, d_v]` of the grid days `days`, the first window opening on day
-one, as one fixed operator. `F` is the delay operator
-([`zone_delay_operator`](@ref)), `pre_rows` its pre-`t0` rows
-([`zone_report_pre_rows`](@ref)) and `pre_cum` each patch's accrual before
-the grid start `t0` ([`zone_fixed_terms`](@ref)). Returns
-`(; weights, pre)`: `weights` `(n_days × n_vintages)` sums the rows of `F`
-over each window, and `pre` `(n_zones × n_vintages)` is each window's
-pre-`t0` term at unit initial share, for
-[`zone_binned_increments`](@ref).
+`(d_{v−1}, d_v]` of `days` as one fixed operator. `weights`
+`(n_days × n_vintages)` sums the rows of the delay operator `F` over each
+window. `pre` `(n_zones × n_vintages)` is each window's pre-`t0` term at
+unit initial share, from the pre-`t0` rows `pre_rows` and each patch's
+accrual before `t0`, `pre_cum` ([`zone_fixed_terms`](@ref)).
 """
 function zone_binned_operator(
         F::AbstractMatrix, pre_rows::AbstractMatrix,
@@ -977,10 +973,9 @@ function zone_binned_operator(
     for v in 1:nv
         lo = v == 1 ? 1 : Int(days[v - 1]) + 1
         hi = Int(days[v])
-        for j in (max(lo, t0) - t0 + 1):min(hi - t0 + 1, nd)
-            weights[:, v] .+= view(F, j, :)
-            pre[:, v] .+= view(pre_rows, j, :)
-        end
+        rows = (max(lo, t0) - t0 + 1):min(hi - t0 + 1, nd)
+        weights[:, v] = vec(sum(view(F, rows, :); dims = 1))
+        pre[:, v] = vec(sum(view(pre_rows, rows, :); dims = 1))
         ## Accrued before the grid start, by difference of the cumulative.
         lo < t0 || continue
         top = min(hi, t0 - 1)

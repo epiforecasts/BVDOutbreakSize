@@ -2020,8 +2020,29 @@ end
     end
     @test size(zf.I_bar, 2) == zd.n + horizon
 
-    ## A term shorter than the grid is refused.
+    ## The forecast week's operator sums the delayed reports over
+    ## `(n, n + H]`, and the extended operators bin the fitted vintages as
+    ## the fitted ones do.
     nd = zd.n + horizon - zd.t0 + 1
+    fx = zone_fixed_terms(zf.I_bar, zd.g, zd.f, zd.t0)
+    I_ext = rand(Xoshiro(3), nd, nz)
+    w = rand(Xoshiro(4), nz)
+    daily = zone_delay_operator(zd.f, nd) * I_ext .+
+        zone_report_pre_rows(
+        fx.report_pre, zd.patch_of_zone, zd.t0, zd.n + horizon
+    ) .* transpose(w)
+    week = (zd.n - zd.t0 + 2):nd
+    @test vec(zone_binned_increments(zf.report_future, I_ext, w)) ≈
+        vec(sum(daily[week, :]; dims = 1)) rtol = 1.0e-12
+    fitted = 1:(zd.n - zd.t0 + 1)
+    for s in (:report_bin, :death_bin)
+        @test zone_binned_increments(getproperty(zf, s), I_ext, w) ≈
+            zone_binned_increments(
+            getproperty(zd, s), I_ext[fitted, :], w
+        ) rtol = 1.0e-12
+    end
+
+    ## A term shorter than the grid is refused.
     def = zone_deformation(merge(zd, zf), nothing)
     short = merge(
         zf.mixing, (; import_fraction = zd.mixing.import_fraction)
