@@ -464,6 +464,33 @@ end
     end
 end
 
+@testitem "sum_to_zero_knots: the AR(1) recursion by hand" begin
+    using BVDOutbreakSize: sum_to_zero_knots, sum_to_zero_ar1!
+
+    F_level = [1.0 0.0; -0.5 0.5; -0.5 -0.5]
+    F_drift = [0.2 0.1; 0.0 -0.3; -0.2 0.2]
+    z_level = [0.4, -1.2]
+    Z = [0.5 -0.1; 1.5 0.7]
+    φ = 0.8
+    δ1 = F_level * z_level
+    δ2 = φ .* δ1 .+ F_drift * Z[:, 1]
+    δ3 = φ .* δ2 .+ F_drift * Z[:, 2]
+    @test sum_to_zero_knots(F_level, F_drift, z_level, Z[:, 1:1], φ) ≈
+        hcat(δ1, δ2)
+    @test sum_to_zero_knots(F_level, F_drift, z_level, Z, φ) ≈
+        hcat(δ1, δ2, δ3)
+    ## No innovation columns: the level alone.
+    @test sum_to_zero_knots(F_level, F_drift, z_level, zeros(2, 0), φ) ≈
+        reshape(δ1, 3, 1)
+    ## No drift directions: the level decays.
+    @test sum_to_zero_knots(F_level, zeros(3, 0), z_level, zeros(0, 2), φ) ≈
+        hcat(δ1, φ .* δ1, φ^2 .* δ1)
+    ## Continuing from knot `k0 > 1` leaves the earlier knots alone.
+    knots = hcat(δ1, δ2, zeros(3))
+    sum_to_zero_ar1!(knots, F_drift, Z[:, 2:2], φ, 2)
+    @test knots ≈ hcat(δ1, δ2, δ3)
+end
+
 @testitem "relative_multiplier: identified contrasts within each group" begin
     using BVDOutbreakSize: relative_multiplier, relative_multiplier_dims,
         sum_to_zero_basis

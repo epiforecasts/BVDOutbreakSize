@@ -161,8 +161,8 @@ function sum_to_zero_moments(F::AbstractMatrix)
 end
 
 """
-Mean-reverting AR(1) knots of a sum-to-zero vector, an `(n × (m + 1))`
-matrix,
+Mean-reverting AR(1) knots of a sum-to-zero vector, one column per knot,
+`size(Z, 2) + 1` in all,
 
 ```math
 δ(1) = F_L z_L, \\qquad δ(k) = φ\\, δ(k - 1) + F_δ Z_{k-1},
@@ -170,8 +170,7 @@ matrix,
 
 with `F_L` and `F_δ` loading matrices from [`sum_to_zero_factor`](@ref),
 `z_L` the level's draws and `Z` the innovation draws, one column per later
-knot. Every knot sums to zero, since each term does and `φ` is a scalar.
-A drift loading with no columns leaves the knots decaying along
+knot. A drift loading with no columns leaves the knots decaying along
 `φ^{k-1} δ(1)`.
 """
 function sum_to_zero_knots(

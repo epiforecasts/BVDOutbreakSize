@@ -838,7 +838,7 @@ on the `n^W_g - 1` directions of the basis `Q^W_g` over its walking units
 ```
 
 through [`sum_to_zero_knots`](@ref), so every group sums to zero at every
-knot and no unit is privileged. `level_factors[g]` is `A_g`, the lower
+knot. `level_factors[g]` is `A_g`, the lower
 Cholesky factor of `Q_gᵀ C_g Q_g` for the units' correlation `C_g`, and
 `drift_factors[g]` is `A^W_g`, the same over the walking units
 ([`zone_correlation_factors`](@ref)). An empty list, or a group past its

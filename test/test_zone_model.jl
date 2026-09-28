@@ -501,6 +501,16 @@ end
     for z in findall(!, walking), k in 1:K
         @test δ[z, k] ≈ φ^(k - 1) * δ[z, 1] atol = 1.0e-14
     end
+    ## One knot takes no innovation draw and is the level alone.
+    δ1 = deviation_knots(
+        ones(dims.level), Float64[], σ_level, σ_δ, φ, groups, A, Aw,
+        walking, 1
+    )
+    @test δ1 ≈ knots(ones(dims.level), zeros(nδ))[:, 1:1]
+    @test_throws DimensionMismatch deviation_knots(
+        ones(dims.level), ones(dims.drift), σ_level, σ_δ, φ, groups, A, Aw,
+        walking, 1
+    )
     @test_throws DimensionMismatch knots(zeros(10), zeros(nδ))
     @test_throws DimensionMismatch knots(zeros(dims.level), zeros(10))
 end
