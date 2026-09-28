@@ -44,15 +44,12 @@ Changes since v2.1.0.
   Its delay deviations sum to zero and its report-day walk is zero on its first day, so the baseline is the mean logit hazard across delays on that day.
   The walk starts on the earliest report day and is held at zero before it.
   Fitted values change.
-- The province background and bed-capacity shares take fixed-scale log-ratios against population share, `Normal(0, 2.5)`, in place of a pooling scale over three deviations (#919).
-  The data put both simplices several units from population share, so the pooling scale traded off against the deviations along a ridge and set the lowest bulk ESS in the patch model.
-  The chain keys `τ_bg`, `z_bg`, `τ_cap` and `z_cap` become `bg_log_ratio` and `cap_log_ratio`, and `province_background_split_sd` is removed.
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
   The share is recomputed each day, so it moves with the admissions.
-  A pooled static deviation returns, `τ_cap ~ Normal⁺(0, 1)` over `z_cap ~ Normal(0, 1)`, and `cap_log_ratio` is removed.
+  The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
-  The background split keeps its population centre.
+  The background split keeps its partially pooled population centre.
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
