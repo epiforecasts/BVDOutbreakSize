@@ -12,7 +12,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Performance
 
 - A hand-written Mooncake rule differentiates the health-zone renewal (#779).
-- The health-zone deviations and multipliers are built as matrix products, halving their gradient and cutting the zone gradient by about 6% (#988).
+- The sum-to-zero loadings, deviations and AR(1) knots are array products, cutting the zone deviations' gradient by about 30% and the zone gradient by about 3% (#988).
 
 ### Model
 
