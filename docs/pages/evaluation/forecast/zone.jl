@@ -216,8 +216,7 @@ zone_release_note = Markdown.parse(
     size(zone_release_scores_df, 1) == 0 ? _zone_release_empty :
         string(
             "Scores run from the forecast made on ",
-            minimum(zone_release_scores_df.made_date), ", over ",
-            length(unique(zone_release_scores_df.release)), " release(s)."
+            minimum(zone_release_scores_df.made_date), "."
         )
 );
 
