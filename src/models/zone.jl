@@ -1793,6 +1793,13 @@ function zone_importation_blocks(
         pops; distances = province_distance_matrix(coords), decay
     )
     np = size(parent_kernel, 1)
+    length(patch_of_zone) == nz && all(p -> 1 <= p <= np, patch_of_zone) ||
+        throw(
+        DimensionMismatch(
+            "zone_importation_blocks: every zone's patch must index the " *
+                "$np-patch parent kernel."
+        )
+    )
     within = zeros(Float64, nz, nz)
     between = zeros(Float64, nz, nz)
     col = zeros(Float64, np)
