@@ -9,6 +9,10 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 
+### Infrastructure
+
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
+
 ## v2.2.0
 
 Changes since v2.1.0.
