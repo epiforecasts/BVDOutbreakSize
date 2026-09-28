@@ -204,7 +204,7 @@ MarkdownTable(zone_overview_display) #hide
 #
 # Whether the model reproduces each zone's observed share of its patch's confirmed cases and deaths is on the [in-sample checks](@ref zone-compositions) page.
 
-# ## Data currency
+# ## [Data currency](@id zone-data-currency)
 #
 # The zone blocks are the per-zone confirmed-case and confirmed-death tables of the situation reports.
 # Each is read here against the cut-off, so a block that stops being picked up shows as a date before it rather than as a flat series.
@@ -299,7 +299,7 @@ MarkdownTable(zone_diagnostics) #hide
 
 # ## Change over the past week
 #
-# The [health-zone model](@ref "Health-zone model") conditions on the headline fit's provincial infections and feeds nothing back.
+# The [health-zone model](@ref "Health-zone model") is melded onto the headline fit's patch infections one way, so the zone data do not update the national and province estimates.
 # The comparison below reads the reproduction number of every zone walking in both fits at the frozen and live cut-offs, matched by key.
 # The dot plot shows the fifteen zones the frozen fit ranks highest, the trajectories the twelve with most confirmed cases, and the table the ten with most confirmed cases.
 
