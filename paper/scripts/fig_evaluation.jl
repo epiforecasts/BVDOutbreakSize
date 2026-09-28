@@ -3,14 +3,16 @@
 #
 # Run from the worktree root:
 #
-#     julia --project=. paper/scripts/fig_evaluation.jl
+#     julia --project=. paper/scripts/fig_evaluation.jl [tag]
 #
 # Reads data/forecast_scores.csv (the cross-release scores the scoring
-# script writes), the latest results release's stream_estimates.csv,
+# script writes), the pinned results release's stream_estimates.csv,
 # frozen_matched_cutoffs.csv, observations.toml and site.zip under
 # paper/data/release/ (git-ignored; paper/scripts/release_assets.jl
-# downloads them), and the published scenario constants in
-# src/constants.jl. Writes paper/figures/fig-evaluation.pdf and
+# downloads them, and paper_numbers.jl or fig_current.jl must have run
+# for `tag` first, which defaults to DEFAULT_TAG in release_assets.jl;
+# the script stops if the cached assets belong to another tag), and the
+# published scenario constants in src/constants.jl. Writes paper/figures/fig-evaluation.pdf and
 # fig-evaluation.png (180 mm wide, 600 dpi). Colours are Makie's Wong
 # palette, as in src/plots.jl and fig_journey.jl.
 
@@ -23,6 +25,25 @@ const DATA = joinpath(REPO, "paper", "data")
 const RELEASE = joinpath(DATA, "release")
 const FIGS = joinpath(REPO, "paper", "figures")
 mkpath(FIGS)
+
+# The release the cached assets must belong to: the argument, or the
+# DEFAULT_TAG release_assets.jl pins (read as text, since that file needs
+# CSV and DataFrames, which this script does not load).
+const TAG = let
+    m = match(
+        r"const DEFAULT_TAG = \"([^\"]+)\"",
+        read(joinpath(@__DIR__, "release_assets.jl"), String)
+    )
+    m === nothing && error("no DEFAULT_TAG in release_assets.jl")
+    isempty(ARGS) ? m.captures[1] : ARGS[1]
+end
+let marker = joinpath(RELEASE, "TAG")
+    cached = isfile(marker) ? strip(read(marker, String)) : ""
+    cached == TAG || error(
+        "paper/data/release/ holds the assets of \"$cached\", not $TAG; " *
+            "run paper_numbers.jl $TAG first"
+    )
+end
 
 # ---------------------------------------------------------------------
 # CSV reading (quoted fields, no embedded newlines)

@@ -139,14 +139,18 @@ axb = Axis(
     yticks = (1:5, [PROVINCES; "National"]), yreversed = true
 )
 vlines!(axb, [1.0]; color = (:black, 0.5), linestyle = :dash, linewidth = 0.8)
+rt_lower = Float64[]
 for (i, label) in enumerate(PROVINCES)
     r = table_row([detail[label]], "Reproduction number")
     interval_bars!(axb, i, parse.(Float64, r[2:7]), PATCH_COLOURS[i])
+    push!(rt_lower, parse(Float64, r[2]))
 end
 rt_summary = summary_row(summary, "R_T")
 interval_bars!(axb, 5, [rt_summary[k] for k in SUMMARY_COLUMNS], :black)
 median_dot!(axb, stream_row(streams, "joint", "R_T").median, 5, :black)
-xlims!(axb, 0.6, nothing)
+push!(rt_lower, rt_summary["Lower 90%"])
+## Start the axis just below the lowest 90% bound so no bar is clipped.
+xlims!(axb, min(0.6, 0.1 * floor(10 * minimum(rt_lower)) - 0.05), nothing)
 panel_label!(fig[2, 1, TopLeft()], "B")
 
 ## --- C: ascertainment by stream ----------------------------------------

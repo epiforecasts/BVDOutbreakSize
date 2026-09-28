@@ -13,9 +13,9 @@ using TOML
 const REPO = "epiforecasts/BVDOutbreakSize"
 
 ## The release the paper quotes. Newest `results-*` release at the time of
-## writing (26 September 2026), built from 337fef5 with data to SitRep 131.
-## Later main builds to this date failed a render job and cut no release.
-const DEFAULT_TAG = "results-2416"
+## writing (28 September 2026), built from 609d6ae with data to SitRep 134
+## (25 September).
+const DEFAULT_TAG = "results-2536"
 
 ## Assets every script reads. `site.zip` is the rendered report site; the
 ## diagnostics and province tables are only published inside it.
@@ -33,6 +33,17 @@ release_dir() = joinpath(paper_dir(), "data", "release")
 asset_path(name) = joinpath(release_dir(), name)
 
 """
+    cached_tag() -> String
+
+The tag whose assets `release_dir()` holds, from its `TAG` marker, or the
+empty string when nothing has been downloaded.
+"""
+function cached_tag()
+    marker = asset_path("TAG")
+    return isfile(marker) ? strip(read(marker, String)) : ""
+end
+
+"""
     ensure_assets(tag)
 
 Download every asset in `ASSETS` of release `tag` into `release_dir()`
@@ -41,13 +52,17 @@ first run only.
 """
 function ensure_assets(tag::AbstractString)
     mkpath(release_dir())
-    ## The directory holds one release at a time; clear another tag's assets.
-    marker = asset_path("TAG")
-    if isfile(marker) && strip(read(marker, String)) != tag
-        @info "clearing the assets of $(strip(read(marker, String)))"
-        foreach(n -> rm(asset_path(n); force = true), [ASSETS; "release.toml"])
+    ## The directory holds one release at a time, named by the `TAG` marker.
+    ## Every top-level file of another tag (or of no recorded tag) is
+    ## removed, so no script can pair one release's draws with another's
+    ## metadata; the per-tag subdirectories of `ensure_tag_assets` stay.
+    if cached_tag() != tag
+        @info "clearing the cached assets of \"$(cached_tag())\""
+        for name in readdir(release_dir())
+            isfile(asset_path(name)) && rm(asset_path(name))
+        end
     end
-    write(marker, tag)
+    write(asset_path("TAG"), tag)
     for name in ASSETS
         isfile(asset_path(name)) && continue
         @info "downloading $name from $tag"
