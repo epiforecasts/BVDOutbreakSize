@@ -236,7 +236,7 @@ tasks:
 
   docs-zone:
     desc: >
-      Render just the health-zone page (docs/src/estimates/zone.md) from the
+      Render just the health-zone estimates page (docs/src/estimates/zone.md) from the
       cached fits, without assembling the site.
     cmds:
       - BVD_DOC_PAGE=estimates/zone julia --project=docs docs/execute.jl

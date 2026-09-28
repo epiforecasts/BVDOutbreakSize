@@ -1,7 +1,7 @@
 # # Health-zone forecast evaluation
 #
 # How the health-zone split on the [health-zone forecasts](@ref "Health-zone forecasts") page has scored against what each zone went on to report.
-# Scoring follows the national [forecast evaluation](@ref "Forecast evaluation"), against the same persistence baseline.
+# The patch totals are scored as in the national [forecast evaluation](@ref "Forecast evaluation") and the zone split against two persistence rules of its own.
 # The same scoring by province is on the [province forecast evaluation](@ref "Province forecast evaluation") page.
 # The in-sample zone checks are on the [health-zone in-sample checks](@ref "Health-zone in-sample checks") page.
 
@@ -36,9 +36,11 @@ frozen_local = load_fit("local_frozen_validation");
 #
 # The one-week-ahead forecast split by health zone, scored against what each zone went on to report.
 # Each zone's forecast is drawn from the [health-zone model](@ref "Health-zone model") melded from the frozen fit, run a week past the frozen cut-off.
-# The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the current data, clamped at zero.
+# The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the vintage a week later, clamped at zero.
 # The week is scored only when the zone tables carry a vintage on its last day.
-# The scores and the two persistence rules they are set against are those of the [zone forecast scoring](@ref "Forecast scoring against a persistence baseline") in the analysis methods.
+# The split of each patch's weekly total is scored by its multinomial log score at the forecast shares.
+# It is set against share persistence, the cumulative zone shares at the cut-off, and naive persistence, the zone split of the last seven days, each with a pseudo-count of 0.5 per zone.
+# The patch total is scored against a naive persistence total with negative-binomial noise, as in the [forecast scoring](@ref "Forecast scoring against a persistence baseline") of the analysis methods.
 # The figure shows the fifteen zones with the largest forecast medians and the fold below the scores holds every zone.
 
 #md # ```@raw html

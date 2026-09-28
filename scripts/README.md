@@ -25,7 +25,8 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
 The three `scan_province_*.jl` scripts need `pdftotext` on `PATH` and the PDFs from `download_sitreps.jl`.
-`scan_zone_tableau2.jl` and `confirm_zone_data.jl` need only `TOML`, `Printf` and `Downloads`.
+`scan_zone_tableau2.jl` needs `pdftotext` on `PATH` and the PDFs, as the `scan_province_*.jl` scripts do.
+`confirm_zone_data.jl` needs only `TOML`, `Printf` and `Downloads`.
 `refresh_releases.jl` also needs the `gh` CLI, authenticated against the repo.
 
 ### Onset-curve digitiser
@@ -162,5 +163,6 @@ Each documents its own invocation in its header comment.
 | `bench_discretise.jl` | Times the Mooncake gradient of the censored delay discretisation. Documents the reasoning behind the CDF-difference form in `src/renewal.jl`. |
 | `summarise_chain.jl` | Prints posterior summaries and fit diagnostics for a saved chain. |
 | `prior_vs_posterior.jl` | Samples the prior and sets it beside a saved posterior, so a parameter the data does not inform is visible. |
+| `fit_zone.jl` | Fits the health-zone model from a parent joint chain or extract outside the docs build, writing the chain, its diagnostics and a fit summary under `--out`. Runs under `--project=docs`; see its header for the flags. |
 | `zone_fit_report.jl` | Builds a self-contained HTML fit report for the health-zone model from a joint parent chain: prior predictive check, simulation-based recovery, sampler diagnostics, posterior predictive checks, ranking and map, under `logs/zone_report/`. Runs under `--project=docs`; see its header for the flags. |
 | `fit_joint_stream.jl` | Fits the full joint model outside the fit cache and CI, streaming live progress to `logs/joint_fit.log` so a long fit can be watched with `tail -f`. Writes the chain to `logs/joint_chain.jls`. The name refers to the streamed progress, not to fitting a single data stream. |

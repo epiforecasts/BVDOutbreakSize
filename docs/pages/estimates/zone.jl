@@ -5,7 +5,7 @@
 # probability of at least a few cases, zone by zone.
 # The [health-zone model](@ref "Health-zone model") on the methods page gives the maths.
 # This page carries its results, the checks of the fit and the interactive map.
-# The change in each zone's estimate over the past week is at the end of the page.
+# The change in each zone's estimate over the past week has its own section below.
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
 #md # ```@raw html
@@ -18,11 +18,10 @@ using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
 ## The fits this page reads, loaded from the cache here: the headline joint,
-## the zone fit melded from it, and the frozen pair the week-on-week
+## the zone fit melded from it, and the frozen zone fit the week-on-week
 ## comparison reads.
 chn_joint = load_fit("joint");
 chn_local = load_fit("local");
-frozen_lastweek = load_fit("frozen_validation");
 frozen_local = load_fit("local_frozen_validation");
 
 ## The zone stage's fixed inputs with the joint's forecast, and the frozen
@@ -44,7 +43,7 @@ frozen_zone_inputs = frozen_zone_stage_inputs();
 # Zones with no confirmed case, or too few infections for a reproduction number, are grey.
 # The four maps share the zone boundaries.
 # A zone's forecast can be read against its reproduction number and its cases to date.
-# The interactive map on the summary page adds the probability of at least $K$ cases at a chosen $K$ and a filter for zones with or without a case over the past one, two or four weeks.
+# The interactive map below adds the probability of at least $K$ cases at a chosen $K$ and a filter for zones with or without a case over the past one, two or four weeks.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -58,8 +57,8 @@ zone_map_keys = [
 ## Daily zone reproduction numbers over the zone grid, each zone draw on
 ## its own draw of the patch trajectory so the patch uncertainty is
 ## carried, and the cut-off values the map and ranking read. A zone's
-## reproduction number is reported only in the draws where its cumulative
-## infections reach the floor. The rest are undefined.
+## reproduction number is reported from the day its cumulative infections
+## reach the floor in the median draw.
 zone_rt_traj = reconstruct_zone_rt(chn_local, zone_inputs);
 zone_RT_finite = [filter(isfinite, m[:, obs.n]) for m in zone_rt_traj];
 zone_RT_reported = findall(!isempty, zone_RT_finite);
@@ -214,8 +213,7 @@ MarkdownTable(zone_overview_display) #hide
 #md # <details><summary>Zone block currency</summary>
 #md # ```
 
-## Every zone block whose last vintage falls before the cut-off, from the
-## shared stream registry rather than a per-page list of dates. The grace
+## Every zone block whose last vintage falls before the cut-off. The grace
 ## the national table allows is not applied here: one vintage behind is
 ## already worth reading.
 zone_currency = let
@@ -248,7 +246,7 @@ zone_currency #hide
 
 # ## Health-zone fit diagnostics
 #
-# The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity and the divergences.
+# The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity but the zone reproduction number, and the divergences.
 # Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
 # The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
 # The walking rows are the ones to read.
@@ -301,19 +299,13 @@ MarkdownTable(zone_diagnostics) #hide
 
 # ## Change over the past week
 #
-# The [health-zone model](@ref "Health-zone model") takes the headline fit's provincial infections as fixed and feeds nothing back.
-# The comparison below reads every zone's reproduction number at the frozen and live cut-offs, matched by key.
-# The figures show the fifteen zones the headline zone fit ranks highest on each quantity, and the tables the ten with most confirmed cases.
+# The [health-zone model](@ref "Health-zone model") conditions on the headline fit's provincial infections and feeds nothing back.
+# The comparison below reads the reproduction number of every zone walking in both fits at the frozen and live cut-offs, matched by key.
+# The dot plot shows the fifteen zones the frozen fit ranks highest, the trajectories the twelve with most confirmed cases, and the table the ten with most confirmed cases.
 
 #md # ```@raw html
 #md # <details><summary>Zone cut-off summaries shared by the comparisons</summary>
 #md # ```
-
-## Per-zone draw vectors of a cut-off quantity stored on a zone chain, one
-## vector per zone in input order.
-function _zone_cutoff_draws(chn, key, nz)
-    return [[Float64(v[z]) for v in vec(collect(chn[key]))] for z in 1:nz]
-end
 
 ## One row per zone in `zs` with the median and the 50% and 90% intervals
 ## of its draws (one vector per zone), in the schema the zone dot plots
@@ -332,9 +324,8 @@ function _zone_cutoff_summary(draws, inputs, zs = eachindex(draws))
 end
 
 ## The `top` zones by confirmed cases in the first variant, one column per
-## variant for each quantity the variants carry: the reproduction number
-## and, where present, the share of the province in percent. Each cell is
-## a median with its 90% interval. Variants are matched by zone key.
+## variant for the reproduction number. Each cell is a median with its 90%
+## interval. Variants are matched by zone key.
 function _zone_comparison_table(variants; top::Integer = 10)
     function cell(t, key, d, scale)
         i = findfirst(==(key), t.key)
@@ -349,7 +340,7 @@ function _zone_comparison_table(variants; top::Integer = 10)
         "Province" => [PROVINCE_LABELS[p] for p in base.patch[order]],
         "Cases" => base.cases[order]
     )
-    for (q, name, d, scale) in ((:R, "R", 2, 1), (:share, "Share %", 1, 100)),
+    for (q, name, d, scale) in ((:R, "R", 2, 1),),
             (label, s) in variants
 
         haskey(s, q) || continue
@@ -470,8 +461,7 @@ zone_week_rt_fig #hide
 
 # ## Saving zone assets
 #
-# The summary dashboard shows the zone maps and its interactive map reads the per-zone estimates.
-# Both are written here.
+# The interactive map above reads the per-zone estimates written here.
 # The zone forecast figure is written by the [health-zone forecasts](@ref "Health-zone forecasts") page and the frozen zone forecast and its scores by the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
 
 #md # ```@raw html

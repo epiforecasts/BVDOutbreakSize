@@ -46,7 +46,7 @@ We also digitise the epidemic curve by symptom-onset date as intermittently repo
 Finally, we fit to data on initial exports of cases and deaths to Uganda, taken from the WHO situation reports and Disease Outbreak News.
 The same infection process generates all of them, staged to daily symptom onsets and routed into every observation stream.
 A second stage splits each patch across its health zones, fitted to the per-zone confirmed cases and deaths jointly as a composition within the patch.
-It is steered by the full posterior of the province fit and does not feed back into it.
+It conditions on the province fit's posterior weekly patch infections and does not feed back into it.
 A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
 From these it estimates the infections and deaths to date, reported and unreported, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
 Every release projects each DRC stream a week ahead.
