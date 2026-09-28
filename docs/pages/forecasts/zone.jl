@@ -98,7 +98,7 @@ Markdown.parse(zone_forecast_bullets) #hide
 # The figure and table below give the fifteen zones with the largest forecasts.
 # The patch totals in the table are the projections on the [province forecasts](@ref "Province forecasts") page.
 # Each zone's count is drawn from the zone model run a week past the cut-off, splitting a draw of its province's forecast total over the province's zones.
-# The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week (Equation (70)).
+# The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week (Equation (71)).
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead zone forecast</summary>

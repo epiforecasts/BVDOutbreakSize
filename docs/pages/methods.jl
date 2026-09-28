@@ -2161,10 +2161,10 @@ cfr_prior_fig #hide
 #
 # A ridge of $10^{-6}$ on the diagonal of $C$ conditions its Cholesky factorisation.
 #
-# Zones enter through the distance between their centroids rather than through shared borders, so the correlation is the exponential covariance of model-based geostatistics [diggle1998](@cite), a Mat\'ern kernel at $\nu = 1/2$.
+# Zones enter through the distance between their centroids rather than through shared borders, so the correlation is the exponential covariance of model-based geostatistics [diggle1998](@cite), a Matérn kernel at $\nu = 1/2$.
 # Only walking zones carry innovations, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones.
 # Every other zone decays along the mean path $\phi_{\text{z}}^{k-1}\,\delta_{z,1}$ from its level.
-# The level scale and half-life keep the province model's priors, $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$ and $h_{\text{z}} \sim \mathrm{LogNormal}(\log 42, 0.6)$ with $\phi_{\text{z}} = 2^{-7/h_{\text{z}}}$.
+# The level scale takes $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$, twice the province model's, and the half-life keeps the province model's prior $h_{\text{z}} \sim \mathrm{LogNormal}(\log 42, 0.6)$ with $\phi_{\text{z}} = 2^{-7/h_{\text{z}}}$.
 # Each patch has its own drift scale $\sigma_{\delta,p}$ as in Equation (7).
 #
 # Every scale the two levels share takes its prior from the joint model's posterior for the same quantity between provinces, fitted to its draws: a log-normal for each positive scale and a beta for each correlation and overdispersion.
@@ -2250,9 +2250,6 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ### Model fitting and evaluation
-#
-
 # ## Model fitting and evaluation
 #
 # ### Fitting the models
@@ -2287,7 +2284,7 @@ cfr_prior_fig #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{55}
+#         \Pr(X_d - X_c \le T - t)}, \tag{68}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
@@ -2392,7 +2389,7 @@ cfr_prior_fig #hide
 # \begin{pmatrix} \mathbf a \\ \mathbf a^{\text{fc}} \end{pmatrix}
 # = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
 # \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
-# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{68}
+# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{69}
 # ```
 #
 # The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
@@ -2400,7 +2397,7 @@ cfr_prior_fig #hide
 # Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
 #
 # ```math
-# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{69}
+# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{70}
 # ```
 #
 # Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (64) at $\pi^{\text{fc}}$.
@@ -2409,7 +2406,7 @@ cfr_prior_fig #hide
 # Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
 #
 # ```math
-# P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{70}
+# P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{71}
 # ```
 #
 # The results report this at $K = 1$, $5$, $10$ and $20$, and the health-zone map colours zones by it at a chosen $K$, with a filter for zones that did or did not report a case over a past window.
@@ -2446,7 +2443,7 @@ cfr_prior_fig #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{56}
+#     \tag{72}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
@@ -2467,14 +2464,14 @@ cfr_prior_fig #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{57}
+# \end{cases} \tag{73}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{58}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{74}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2485,7 +2482,7 @@ cfr_prior_fig #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{59}
+#     \tag{75}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$,.
