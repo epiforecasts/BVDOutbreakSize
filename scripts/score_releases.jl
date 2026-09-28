@@ -417,8 +417,9 @@ end
 
 ## Whether `(from_date, to_date]` holds a reattribution day for a per-zone
 ## stream. The zones' cumulative counts rise on that day by the counts moved
-## out of the unallocated row, so the window is dropped, as the zone model's
-## composition drops that vintage (see `zone_increment_matrix`).
+## out of the unallocated row, not by new cases, so the truth, the baseline
+## centre and the baseline's step pool all drop such a window, as the zone
+## model's composition drops that vintage (see `zone_increment_matrix`).
 function spans_zone_reattribution(obs, grid_date, stream, from_date, to_date)
     for d in zone_reattribution_dates(obs, grid_date, stream)
         from_date < d <= to_date && return true
@@ -426,10 +427,9 @@ function spans_zone_reattribution(obs, grid_date, stream, from_date, to_date)
     return false
 end
 
-## Whether a per-zone stream's history has no vintage on `date`. The zone
-## week is scored only against a zone table dated on its last day, since the
-## nearest vintage either side would count a different week (see
-## `zone_forecast_truth`). False for every other stream.
+## Whether a per-zone stream's history has no vintage on `date`. The nearest
+## vintage either side would count a different week (see
+## `zone_forecast_truth`).
 function lacks_zone_vintage(obs, grid_date, stream, date)
     p = parse_zone_stream(stream)
     isnothing(p) && return false
@@ -719,10 +719,9 @@ end
 ## holding one of those days instead, since the correction is published
 ## nationally only (see `spans_confirmed_break`).
 ##
-## A per-zone stream also returns `:no_target_vintage` when its history has
-## no vintage on `target_date` (see `lacks_zone_vintage`) and
-## `:spans_reattribution` for a window holding a reattribution day (see
-## `spans_zone_reattribution`).
+## A per-zone stream also returns `:spans_reattribution` (see
+## `spans_zone_reattribution`) and `:no_target_vintage` (see
+## `lacks_zone_vintage`).
 function truth_at(obs, grid_date, stream, made_date, target_date)
     target_date > obs.cutoff && return :not_yet_observed
     target_date > stream_coverage_end(obs, grid_date, stream) &&
@@ -803,9 +802,8 @@ end
 ## window. So is a per-province or per-zone vintage whose window holds a
 ## harmonisation-break day, which is not a day of the walk and cannot be
 ## corrected province by province (see `spans_confirmed_break`), and a
-## per-zone vintage whose window holds a reattribution day (see
-## `spans_zone_reattribution`), so the baseline reads the same days the
-## truth does. The occupancy reclassification
+## per-zone reattribution window (see `spans_zone_reattribution`), so the
+## baseline reads the same days the truth does. The occupancy reclassification
 ## days need no handling here: they belong to the level streams, which take
 ## the `_history_diffs` pool instead.
 function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
@@ -1045,10 +1043,9 @@ end
 ## target not yet observed (`.skipped`), one past the stream's own
 ## reporting coverage (`.stopped`, see `truth_at`), and, for the
 ## per-province and per-zone archives, a window holding a harmonisation
-## break (`.spans_break`, see `spans_confirmed_break`). For the per-zone
-## archive (`zone_stream_label`), a week with no zone vintage on its last day
-## (`.no_target_vintage`) and a week holding a reattribution
-## (`.spans_reattribution`) are counted too. A
+## break (`.spans_break`, see `spans_confirmed_break`), and, for the
+## per-zone archive, `.spans_reattribution` and `.no_target_vintage` (see
+## `truth_at`). A
 ## group whose baseline window is uncovered (`baseline_window_covered`)
 ## keeps its fits' scores and gets no baseline row (`.no_baseline`).
 function score_release(
@@ -1748,6 +1745,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             )
         catch e
             @warn "skipping $tag zone forecast scoring" exception = e
+            zcount(:failed)
             nothing
         end
         zresult === :no_method && zcount(:no_method)
