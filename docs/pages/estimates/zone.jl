@@ -207,7 +207,7 @@ MarkdownTable(zone_overview_display) #hide
 #
 # Whether the model reproduces each zone's observed share of its patch's confirmed cases and deaths is on the [in-sample checks](@ref zone-compositions) page.
 
-# ## Data currency
+# ## [Data currency](@id zone-data-currency)
 #
 # The zone blocks are the per-zone confirmed-case and confirmed-death tables of the situation reports.
 # Each is read here against the cut-off, so a block that stops being picked up shows as a date before it rather than as a flat series.
@@ -362,6 +362,7 @@ zone_meld_rt_fig #hide
 #
 # The table sets the posterior of each zone hyperparameter against its prior, with the ratio of their standard deviations.
 # A ratio near one says the zone data add little to the prior.
+# A ratio above one says the posterior is wider than the prior, which happens when the data move a parameter into the prior's wider tail.
 # The drift scale is one per patch.
 # The pair plot overlays the prior on the posterior of the scalar hyperparameters.
 

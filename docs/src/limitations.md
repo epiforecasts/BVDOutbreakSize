@@ -68,7 +68,7 @@
 ### Data
 
 - A zone table can lag the cut-off, since a zone's count moves only when a report prints it.
-  The [data currency](estimates/zone.md#Data-currency) table lists each zone block that stops before the cut-off.
+  The [data currency](@ref zone-data-currency) table lists each zone block that stops before the cut-off.
 
 ### Model
 

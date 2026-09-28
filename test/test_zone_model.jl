@@ -1288,6 +1288,7 @@ end
     @test bare.zone == string.(1:syn.nz)
     ## A zone undefined in some draw is marked in the table, not warned
     ## about once per zone.
+    @test any(v -> any(!isfinite, v), vec(collect(chn[:R_T_zone])))
     @test_logs min_level = Base.CoreLogging.Warn zone_diagnostics_table(
         chn, inputs
     )
