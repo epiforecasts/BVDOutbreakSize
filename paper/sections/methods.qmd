@@ -128,5 +128,5 @@ The record cannot show decisions taken off GitHub, and the lead author's local f
 
 The model is written in Julia with `Turing` and differentiated with `Mooncake` [@ge2018turing; @mooncake_jl].
 The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against central finite differences and against the backend's own derivation of an unregistered copy.
-The agents wrote those rules and a precompile workload that compiles the fit the report runs, and the benchmarks recorded for both are in the Supporting Information (*Gradient and build benchmarks*). <!-- VERIFY: the Supporting Information title for the gradient and build benchmarks; fig-gradient-si is drawn and not yet placed -->
+The agents wrote those rules and a precompile workload that compiles the fit the report runs, and the benchmarks recorded for both are in the Supporting Information (*Gradient and build benchmarks*).
 Each data update refits every affected model in continuous integration, renders the report and publishes a versioned release with the model definition, thinned draws and forecasts.

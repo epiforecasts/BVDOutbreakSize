@@ -313,6 +313,7 @@ tasks:
       - "generated/**"
     cmds:
       - quarto render main.qmd --to pdf
+      - quarto render si.qmd --to pdf
 
   paper-html:
     desc: Render the preprint to HTML only
@@ -325,6 +326,7 @@ tasks:
       - "generated/**"
     cmds:
       - quarto render main.qmd --to html
+      - quarto render si.qmd --to html
 
   paper-preview:
     desc: Live-preview the preprint in the browser while editing
