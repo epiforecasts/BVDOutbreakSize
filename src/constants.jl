@@ -461,6 +461,51 @@ function province_importation_kernel(
 end
 
 """
+    destination_weighted_kernel(K, η)
+
+Importation kernel `K` with each destination `p` weighted by `exp(η_p)` and
+each origin column rescaled to its original total,
+
+```math
+K'_{p,q} = K_{p,q} e^{\\eta_p}
+    \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{\\eta_r}}.
+```
+
+The weights move where an origin's exports land without changing how much
+leaves it, so the outflow debit in [`patch_infections`](@ref) and the
+meaning of the intensity `ε` are unchanged. A shift shared by every
+destination cancels, so `η` is identified only up to a constant and is
+sampled as a sum-to-zero vector in [`patch_infection_model`](@ref).
+"""
+function destination_weighted_kernel(
+        K::AbstractMatrix, η::AbstractVector
+    )
+    np = size(K, 1)
+    size(K, 2) == np == length(η) || throw(
+        DimensionMismatch(
+            "destination_weighted_kernel: a $(size(K)) kernel and " *
+                "$(length(η)) destination weights."
+        )
+    )
+    T = promote_type(eltype(K), eltype(η))
+    w = exp.(η)
+    Kw = zeros(T, np, np)
+    @inbounds for q in 1:np
+        total = zero(T)
+        weighted = zero(T)
+        for p in 1:np
+            total += K[p, q]
+            weighted += K[p, q] * w[p]
+        end
+        weighted > 0 || continue
+        for p in 1:np
+            Kw[p, q] = K[p, q] * w[p] * total / weighted
+        end
+    end
+    return Kw
+end
+
+"""
     gravity_pull(pops; distances, decay)
 
 Unnormalised gravity pull, `pull[p, q]` the relative attraction of

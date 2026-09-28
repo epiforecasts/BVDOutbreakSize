@@ -2009,3 +2009,66 @@ end
     @test fr[2, end] == 0
     @test fr[1, :] ≈ 1 .- cumsum(I[1, :]) ./ 1000
 end
+
+@testitem "destination_weighted_kernel: moves the split, not the volume" begin
+    using BVDOutbreakSize: destination_weighted_kernel,
+        province_importation_kernel
+
+    K = province_importation_kernel()
+    np = size(K, 1)
+    ## No weighting is the kernel itself.
+    @test destination_weighted_kernel(K, zeros(np)) ≈ K
+    η = [0.4, 0.9, -0.3, -1.0]
+    Kw = destination_weighted_kernel(K, η)
+    ## Each origin sends the same total, so the outflow and `ε` keep their
+    ## meaning, and no province imports from itself.
+    @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
+    @test all(iszero, [Kw[q, q] for q in 1:np])
+    ## A shift shared by every destination cancels.
+    @test destination_weighted_kernel(K, η .+ 2.5) ≈ Kw
+    ## Raising one destination's weight raises its share from every origin.
+    up = copy(η)
+    up[2] += 0.5
+    Ku = destination_weighted_kernel(K, up)
+    for q in 1:np
+        q == 2 && continue
+        @test Ku[2, q] > Kw[2, q]
+    end
+    @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3))
+end
+
+@testitem "patch_infection_model: a pooled destination deviation when coupled" begin
+    using BVDOutbreakSize: patch_infection_model
+    using Turing: DynamicPPL, returned, sample, Prior
+    using Random: Xoshiro
+
+    n, np, rt_start, bp = 60, 4, 30, 10
+    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
+    @test "σ_dest" in vnames(coupled)
+    @test "z_dest" in vnames(coupled)
+    ## An all-zero kernel has no split to weight, so nothing is sampled.
+    uncoupled = patch_infection_model(
+        n, np; breakpoint = bp, rt_start,
+        importation_kernel = zeros(np, np)
+    )
+    @test !("σ_dest" in vnames(uncoupled))
+
+    ## With no spread the deviations vanish and the arrivals are the
+    ## gravity kernel's; with spread they move and sum to zero.
+    function run(; σ_dest, z_dest = [1.0, -0.5, 0.5])
+        m = DynamicPPL.fix(coupled; σ_dest, z_dest)
+        return m, returned(m, rand(Xoshiro(7), m))
+    end
+    _, flat = run(σ_dest = 0.0)
+    _, other = run(σ_dest = 0.0, z_dest = [-2.0, 1.0, 3.0])
+    @test flat.importation_matrix ≈ other.importation_matrix
+    m, tilted = run(σ_dest = 0.7)
+    @test !(tilted.importation_matrix ≈ flat.importation_matrix)
+    chn = sample(Xoshiro(1), m, Prior(), 2; progress = false)
+    for eff in vec(collect(chn[:importation_destination_effect]))
+        @test length(eff) == np
+        @test sum(eff) ≈ 0 atol = 1.0e-12
+        @test !all(iszero, eff)
+    end
+end

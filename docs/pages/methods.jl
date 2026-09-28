@@ -528,6 +528,21 @@ MarkdownTable(vintage_table) #hide
 #
 # with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 #
+# The gravity kernel fixes where each origin's exports land, so seeding one province harder would seed every other one too.
+# A partially pooled weight per destination moves that split, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
+#
+# ```math
+# K'_{p,q} = K_{p,q}\, e^{\eta_p} \frac{\sum_r K_{r,q}}{\sum_r K_{r,q}\, e^{\eta_r}},
+# \qquad
+# \boldsymbol\eta = \sigma_{\text{dest}}\, Q \mathbf{z}^{\text{dest}},
+# \qquad
+# \mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \qquad
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 0.5).
+# ```
+#
+# A shift shared by every destination cancels, so the weights sum to zero, and the renewal uses $K'$ in place of $K$.
+#
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_importation_kernel</summary>

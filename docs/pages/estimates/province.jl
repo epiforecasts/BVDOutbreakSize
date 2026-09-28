@@ -243,6 +243,7 @@ spatial_labels = Dict(
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
     :province_ascertainment_sd => "Ascertainment spread",
     :importation_epsilon => "Importation intensity",
+    :importation_destination_sd => "Importation destination spread",
     :province_cfr_sd => "Lethality spread",
     :province_death_ascertainment_sd => "Death-confirmation spread",
     :province_capacity_share_sd => "Bed-capacity share spread"
@@ -330,7 +331,8 @@ spatial_pair_fig = plot_pair(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :importation_epsilon, :province_cfr_sd,
+        :province_ascertainment_sd, :importation_epsilon,
+        :importation_destination_sd, :province_cfr_sd,
         :province_death_ascertainment_sd, :province_capacity_share_sd,
     ];
     prior = prior_patch_chn, labels = spatial_labels

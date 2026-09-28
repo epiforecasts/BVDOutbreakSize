@@ -1677,6 +1677,11 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
+A partially pooled sum-to-zero deviation per destination reweights where
+each origin's exports land ([`destination_weighted_kernel`](@ref)), with
+each origin's total held, so the data can move the split the gravity
+kernel fixes by population and distance.
+
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
 never touches, and each secondary patch is explained by its own seed and
@@ -1734,6 +1739,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
+        importation_destination_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
@@ -1843,7 +1849,16 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the likelihood cannot see. Time-varying because the
     ##    outbreak being known changes movement, and the provinces that arrive
     ##    either side of the breakpoint are what separates `β_ε`.
+    ##
+    ##    A second pooled deviation per destination weights where an origin's
+    ##    exports land ([`destination_weighted_kernel`](@ref)). The gravity
+    ##    kernel fixes that split by population and distance, so without it
+    ##    seeding one province harder seeds every other one too. Each origin
+    ##    column keeps its total, so the destinations move the split and not
+    ##    the volume. A shift shared by every destination cancels, so the
+    ##    deviations sum to zero on the same basis.
     ε_matrix = zeros(Tp, n_patches, ng)
+    kernel = importation_kernel
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
@@ -1864,6 +1879,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        σ_dest ~ importation_destination_sd_prior
+        z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
+        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_dest)
+        kernel = destination_weighted_kernel(importation_kernel, dest_dev)
+        importation_destination_sd := σ_dest
+        importation_destination_effect := dest_dev
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
@@ -1872,8 +1893,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix, populations
+        Rt_matrix, g, seeds_matrix, kernel, ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation

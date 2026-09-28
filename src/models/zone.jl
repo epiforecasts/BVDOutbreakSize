@@ -36,6 +36,7 @@ const _ZONE_PARENT_KEYS = (
     death_confirmation = :onset_to_death_confirmation_pmf,
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
+    importation_destination = :importation_destination_effect,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
     province_ascertainment = :province_ascertainment,
@@ -1696,6 +1697,11 @@ function zone_parent_inputs(chn)
     ## elsewhere, so the between-patch flows it applies are the province
     ## model's rather than a second estimate of them.
     origin_epsilon = _mean_parent_vector(chn, keys_.importation_epsilon)
+    ## The province model's destination weighting of its kernel, empty for a
+    ## chain fitted without one.
+    destination_effect = _mean_parent_vector(
+        chn, keys_.importation_destination
+    )
     ## The province model's own relative ascertainment and fatality, at its
     ## posterior mean. A factor common to a patch cancels in a within-patch
     ## composition, so these never reach the likelihood; they carry the
@@ -1723,7 +1729,7 @@ function zone_parent_inputs(chn)
     )
     return (;
         log_infections = logI, g, f, death_pmf,
-        origin_epsilon, import_fraction, priors,
+        origin_epsilon, destination_effect, import_fraction, priors,
         province_ascertainment, province_severity,
     )
 end
@@ -1770,7 +1776,8 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
-[`province_importation_kernel`](@ref). Summed over the zones of a patch,
+[`province_importation_kernel`](@ref) weighted by its fitted destination
+deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of a patch,
 the zone stage's between-patch flow is the province model's for the same
 origin intensity, which is what keeps one movement from being counted at
 both levels.
@@ -2303,11 +2310,14 @@ function _zone_mixing_or_nothing(
     length(parent.import_fraction) == np * n || return nothing
     pops = Float64[r.population for r in rows]
     coords = [(r.lat, r.lon) for r in rows]
+    parent_kernel = province_importation_kernel(
+        PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
+    )
+    dest = get(parent, :destination_effect, Float64[])
+    length(dest) == np &&
+        (parent_kernel = destination_weighted_kernel(parent_kernel, dest))
     blocks = zone_importation_blocks(
-        pops, coords, patch_of_zone,
-        province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
-        )
+        pops, coords, patch_of_zone, parent_kernel
     )
     ## The intensity is a relative weight across origin patches inside a
     ## pattern that is normalised over the destination patch, so its overall
