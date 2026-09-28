@@ -459,7 +459,7 @@ isempty(province_recovery_results.params) ? Markdown.parse("No parameter-recover
 # The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
 
 #md # ```@raw html
-#md # <details><summary>Summary across seeds</summary>
+#md # <details><summary>Summary table across seeds</summary>
 #md # ```
 
 province_recovery_summary = isempty(province_recovery_results.params) ?
@@ -470,11 +470,11 @@ province_recovery_summary_display = isempty(province_recovery_summary) ?
     Markdown.parse("No parameter-recovery run is available for this build.") :
     MarkdownTable(province_recovery_summary);
 
+province_recovery_summary_display #hide
+
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-province_recovery_summary_display #hide
 
 #md # ```@raw html
 #md # <details><summary>Each seed's recovered province values</summary>
