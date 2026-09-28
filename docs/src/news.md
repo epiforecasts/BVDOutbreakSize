@@ -3,6 +3,14 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## Unreleased
+
+Changes since v2.2.0.
+
+### Fixed
+
+- The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
+
 ## v2.2.0
 
 Changes since v2.1.0.
