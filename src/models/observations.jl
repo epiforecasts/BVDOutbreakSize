@@ -2782,10 +2782,10 @@ series for forecasting and replication.
 
     ## Cut-off reported quantities. Occupancy is the mean the reported
     ## occupancy is scored around, the demand plus the reclassification
-    ## offset. Bed demand is the latent stock.
+    ## offset, capped at the bed capacity. Bed demand is the latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
-    occ_T = isempty(occ_obs_total) ? z0 : occ_obs_total[nc]
+    occ_T = isempty(occ_obs_total) ? z0 : min(occ_obs_total[nc], C_T)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and

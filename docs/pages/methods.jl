@@ -1215,8 +1215,7 @@ cfr_prior_fig #hide
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
-# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset), the cut-off bed demand (the need under unconstrained supply), the demand above the modelled capacity (the bed shortfall) and the utilisation.
-# The utilisation is the reported-scale occupancy over the modelled capacity, so it can exceed 100%.
+# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, capped at the modelled capacity), the cut-off bed demand (the need under unconstrained supply), the demand above the modelled capacity (the bed shortfall) and the utilisation.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
