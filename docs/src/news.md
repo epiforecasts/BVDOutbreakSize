@@ -37,6 +37,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
+- A release whose zone scoring fails is counted in the scoring log (#986).
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
