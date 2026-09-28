@@ -605,10 +605,7 @@ vintages by more than `min_fall`, as a vector of named tuples
 its own, so each entry is a revision: the report has moved counts
 between zones, provinces or the unallocated row. `min_fall` guards
 against a single-unit correction being read as a revision.
-
-[`zone_increment_matrix`](@ref) clamps a negative increment to zero, so
-without this the revision is absorbed silently. Report these rather than
-let the clamp hide them.
+[`zone_increment_matrix`](@ref) clamps these falls to zero.
 """
 function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
     out = @NamedTuple{
@@ -650,9 +647,7 @@ leaving the unallocated row flat or rising. That vintage is a revision
 just as much, but the unallocated rule does not see it. With
 `include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
 added, so any vintage on which a named zone loses more than `min_fall`
-is left out too. It is off by default: the confirmed-case composition
-was fitted under the unallocated rule alone, and widening it there
-changes that stream rather than this one.
+is left out too. It is off by default.
 """
 function zone_reattribution_days(
         zone_history;
@@ -691,10 +686,9 @@ Each patch pools the source provinces `members` gives it (a name with no
 entry is its own province), and its matrix has one row per zone of those
 provinces, the `unallocated` rows left out, and one column per vintage.
 Every zone must be reported on the same vintage days, which the tables
-guarantee by sharing one `dates` array; a mismatch is an error rather
-than a silent reshape. Increments are the differences of consecutive
-cumulative counts, the first from zero, clamped at zero as for the
-provinces since a zone's cumulative can fall when cases are reattributed.
+guarantee by sharing one `dates` array; a mismatch is an error.
+Increments are the differences of consecutive cumulative counts, the
+first from zero, clamped at zero as for the provinces.
 
 A vintage on which a member province's unallocated count falls
 (`reattribution`, the days per province of
@@ -728,6 +722,7 @@ function zone_increment_matrix(
     }[]
     isempty(zone_history) && return out
     days = nothing
+    ref = ("", "")
     for nm in patch_names
         provs = get(members, nm, [nm])
         keys_ = Tuple{String, String}[]
@@ -751,10 +746,10 @@ function zone_increment_matrix(
         end
         for (prov, zone) in keys_
             h = zone_history[prov][zone]
-            days === nothing && (days = h.days)
+            days === nothing && ((days, ref) = (h.days, (prov, zone)))
             h.days == days || error(
                 "zone `$(prov).$(zone)` is reported on different vintage " *
-                    "days to `$(keys_[1][1]).$(keys_[1][2])`; the zone " *
+                    "days to `$(ref[1]).$(ref[2])`; the zone " *
                     "composition needs every zone on the same vintages."
             )
         end

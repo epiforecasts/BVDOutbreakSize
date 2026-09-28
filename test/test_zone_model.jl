@@ -514,8 +514,8 @@ end
     nz = syn.nz
     nc = relative_multiplier_dims(zd.patch_ranges)
     ## Only the zones the inputs mark as walking carry innovations; the
-    ## synthetic truth walks the first three zones, which is the marked set
-    ## whenever the counts clear the threshold.
+    ## synthetic truth walks every zone, which is the marked set whenever
+    ## the counts clear the threshold.
     @test inputs.walking == truth.walking
     ## The counts are multinomial, so the composition is evaluated near its
     ## multinomial limit (`ρ → 0`): at a coarser `ρ` the
@@ -960,6 +960,7 @@ end
         e
     end
     @test occursin("same vintages", days_err.msg)
+    @test occursin("days to `a.", days_err.msg)
     ## No zones at all.
     empty = merge(
         syn.obs,
@@ -1465,8 +1466,8 @@ end
     sT = [collect(v) for v in vec(collect(chn[:share_T_zone]))]
     nd = inputs.n - inputs.t0 + 1
     truth = syn.truth.shares[nd, :]
-    ## Every zone's cut-off share sits near the truth: within 0.05 absolute
-    ## for the big patch's zones, which carry hundreds of cases per vintage.
+    ## The big patch's cut-off shares sit within 0.05 absolute of the truth;
+    ## its zones carry hundreds of cases per vintage.
     for z in 1:5
         med = median([s[z] for s in sT])
         @test abs(med - truth[z]) < 0.05
@@ -1939,8 +1940,7 @@ end
     end
     @test size(zf.I_bar, 2) == zd.n + horizon
 
-    ## A term that stops short is read past its end under `@inbounds`, so
-    ## the renewal refuses it rather than returning whatever follows.
+    ## A term shorter than the grid is refused.
     nd = zd.n + horizon - zd.t0 + 1
     def = zone_deformation(merge(zd, zf), nothing)
     short = merge(
