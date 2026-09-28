@@ -159,7 +159,7 @@ province_death_ppc_fig #hide
 # The three province terms for the isolation and laboratory data are checked the same way.
 # The laboratory panel is the split of each calendar week's analysed specimens, which identifies the background split.
 # The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
-# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's static share of the national capacity.
+# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's modelled share of the national capacity.
 # A gap in a panel is a day on which that province printed nothing.
 
 #md # ```@raw html

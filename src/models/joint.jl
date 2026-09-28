@@ -1073,7 +1073,7 @@ A third composition scores the per-province analysed-specimen volume
 conditional on the national total in each laboratory bin. The modelled
 split is each patch's BVD suspects (its onsets through the
 onset-to-confirmation kernel, thinned by `p_drc`) plus its share of the
-non-BVD background, the share a partially pooled simplex
+non-BVD background, the share a simplex
 ([`background_split_model`](@ref)) carries and this term identifies.
 The BVD suspects carry the case composition's
 relative ascertainment, so the two compositions agree on how many of a
@@ -1309,7 +1309,6 @@ density there, is the fitted model's.
     ## patch takes the whole background and samples nothing.
     bg_split_state ~ to_submodel(background_split(n_patches))
     province_background_split := bg_split_state.w
-    province_background_split_sd := bg_split_state.pooling_sd
 
     ## The anchor stops at the cut-off, so a longer grid leaves the fitted
     ## ascertainment where it was.
@@ -1558,6 +1557,7 @@ density there, is the fitted model's.
             0.0
         )
         province_capacity_share := treatment_state.capacity_shares
+        province_capacity_share_sd := treatment_state.capacity_pooling_sd
         ## Daily share of the national bed demand by patch, the modelled
         ## centre of the occupancy split.
         province_occupancy_share := treatment_state.demand_patch ./
@@ -1805,7 +1805,7 @@ density there, is the fitted model's.
         end
         ## Each province's occupancy at each future vintage, the national
         ## occupancy split by the fitted occupancy split over the per-patch
-        ## demand, and its beds, its static share of the national capacity.
+        ## demand, and its beds, its modelled share of the national capacity.
         if _has_province_rows(province_isolation)
             vj = vintages .- n
             forecast_province_isolation_split ~ to_submodel(
@@ -1826,10 +1826,9 @@ density there, is the fitted model's.
                 forecast_province_isolation_split.obs_increments
             )
         end
-        if length(treatment_state.capacity_shares) == n_patches
+        if size(treatment_state.capacity_patch, 1) == n_patches
             forecast_province_beds := vec(
-                treatment_state.capacity_shares .*
-                    reshape(treatment_state.capacity_series[vintages], 1, :)
+                treatment_state.capacity_patch[:, vintages]
             )
         end
         forecast_means = (;
