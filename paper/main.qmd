@@ -49,6 +49,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
 @fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) joint fit wall-clock and gradient time per release where recorded. Source: git log, gh api, released_estimates.csv, the benchmark job records.
 @fig-evaluation Figure 4. Evaluation. (A) forecast skill against the persistence baseline by stream and release; (B) outbreak size by single-stream fit against the joint; (C) comparison with McCabe et al. at matched cut-offs. Source: forecast_scores.csv, size_by_release_by_stream.csv, frozen_matched_cutoffs.csv.
 @tbl-streams    Streams fitted: stream, what it observes, observation model, first and last fitted report, break dates.
+@tbl-events     Events that changed the estimates or forecasts, or were defects in a released output: date, event, effect, detected by, decided by (from paper/data/change_events.csv).
 @tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change; main since v2.1.0 is one row, unreleased at the release analysed.
 -->
 
@@ -73,6 +74,8 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The core idea is that one latent infection process, staged through explicit delays and stream-specific ascertainment, generates every published count, so all streams inform one posterior.
   - We started from the approach of McCabe et al. [@mccabe2026] and replaced it with a discrete renewal model with a time-varying reproduction number [@fraser2007; @cori2013], then with one renewal process per province.
   - We fit each count as the increment between successive reports, with a break at each documented change in reporting, and we release each update with the model definition, the draws and the forecasts.
+  - The model, its priors, its analysis and this text were drafted by language-model agents under the authors' direction, with the authors taking each modelling decision, and we treat that workflow as part of what is reported.
+  - We read the development record to ask which events changed the estimates or forecasts and how each was found, which speaks to where a person is needed in agent-driven modelling. <!-- Sebastian, PR 883 review comment, 28 Sep -->
   - We evaluate the model on the situation reports [@insp_sitrep_2026] by one-week-ahead forecasts against a persistence baseline, by fitting each stream alone, and against the estimates of McCabe et al. and Chamla et al. [@mccabe2026; @chamla2026].
 
 ## Methods
@@ -161,6 +164,20 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The validation and sensitivity joints share the joint's sampler budget (PR 887).
   - Each build also fits the joint to data it simulated from one prior draw and checks that the posterior recovers the generating values and the simulated future (PR 882).
 
+### Development process
+
+- The work was done by language-model agents drafting code, priors, analysis text and data transcriptions, with the authors directing it from issues and pull-request reviews and taking every modelling decision. <!-- author steer, 28 Sep: heavy theme on why and how -->
+  - Why this way: one modeller's time against a live outbreak, the aim of fitting every count the reports publish, and the chance to learn what the workflow can and cannot do.
+  - How it ran: an agent opens a pull request per change; the lead author reviews locally first, then an automated reviewer comments and the author accepts or rejects each finding on the pull request; convergence and fit to the data gate the merge, by review of the diagnostics and later by a check in continuous integration; each data update refits and releases; the first releases were signed off by all authors on release issues.
+  - Data were read by one agent and re-read by a second, with disagreements settled against the PDF, and every fitted stream advances on every update by the lead author's rule.
+  - The prospective evaluation, scoring each release against the data that arrived next, was the check outside the loop.
+
+- To ask where a person was needed we read the development record for the events that changed the released estimate, the reproduction-number trajectory or the forecasts, or that were defects in a released output.
+  - Sources: issues, pull-request bodies and review comments, the automated reviewer's comments and the release notes, with the author account of each item recorded.
+  - Each event is classified by kind (model change, data change, defect, data-quality decision), by how it was detected (human review, human data check, agent self-report, prospective evaluation, continuous-integration gate, automated reviewer, outside contributor) and by who decided the response (human, agent, joint), with the evidence link kept for every row (@tbl-events).
+  - Activity by account (commits and merged pull requests per week, human-authored issues, review submissions, automated-review findings accepted and rejected) is counted from the same record (@fig-timeline B).
+  - What the record cannot show: decisions taken off GitHub, and local first-pass reviews logged only as an approval.
+
 ### Implementation
 
 - The model is written in Julia with Turing, sampled with NUTS and differentiated with Mooncake [@ge2018turing; @hoffman2014nuts; @mooncake_jl].
@@ -188,6 +205,14 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The reproduction of McCabe et al. against their scenario range at their cut-off.
   - The direction of the change at the renewal switch, at the arrival of the onset curve and at the provincial model, read from the released estimates.
   - The direction of the change at each frozen stream and reporting break.
+
+### What changed the estimates and how it was found
+
+- Of the events that changed the released estimate or the forecasts, most were data changes and most were found by a person reading the reports or the diagnostics, while the defects in released outputs were found by the prospective evaluation and in review (@tbl-events). <!-- counts from paper/data/detection_summary.csv -->
+  - The largest moves in the released estimate and what caused each (@fig-timeline C).
+  - The events the agents found and reported themselves, and the agent explanations later retracted by the agents.
+  - The automated reviewer's findings accepted and rejected, and the two defects only the prospective evaluation caught.
+  - Activity by account over the window (@fig-timeline B).
 
 ### Forecast evaluation
 
@@ -241,6 +266,10 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The disagreement between streams is the result to report, because the headline size follows from how that disagreement is resolved.
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
   - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
+
+- The record answers, for this project, where a person was needed: at every change of model structure, data rule and prior, and at the reading of diagnostics, while the agents found and fixed most implementation defects and the prospective evaluation caught what neither did. <!-- Sebastian, PR 883; state only what @tbl-events shows -->
+  - Which detection routes caught which kinds of event, from the table.
+  - What that implies for who should direct such work and what checks must sit outside the loop.
 
 - Several defects were of a kind a human author would be unlikely to write, and two were found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
   - The forecast compounded the last random-walk innovation over the horizon, so the intervals widened with each release until coverage sat at one (issue 622).
