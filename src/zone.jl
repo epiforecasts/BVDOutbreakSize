@@ -445,7 +445,7 @@ function zone_score_rows(
             for s in tbl.stream
     ]
     keep = findall(>(0), r)
-    out = tbl[keep[sortperm(r[keep]; alg = Base.Sort.DEFAULT_STABLE)], :]
+    out = tbl[keep[sortperm(r[keep])], :]
     out.stream = [String(zone_labels[i]) for i in sort(r[keep])]
     return out
 end
