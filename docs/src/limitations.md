@@ -44,7 +44,6 @@
 
 - The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error rather than the epidemic.
 - The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks, so it can see later corrections ([details](@ref "Forecast scoring against a persistence baseline")).
-- The single-stream model of each still-reported stream is refitted only at the one-week-back cut-off, so the joint model is not compared with the single-stream models at the earlier frozen cut-offs.
 - Past forecasts that were not stored are rebuilt from each release's own code but with current dependency versions, so they are not exact.
 
 ## Provinces
