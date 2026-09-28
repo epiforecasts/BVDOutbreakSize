@@ -115,8 +115,9 @@ tasks:
       figure's page, image size and md5, the pixel scales, the printed n,
       the digitised total, the gap and any reprint) and
       output/onset_curve_audit.md (the gap table, the settled-bar checks
-      between consecutive snapshots and the worst vintages). Needs the
-      PDFs (`task download-sitreps`), poppler and tesseract.
+      between consecutive snapshots and the worst vintages). Exits
+      non-zero when a gap is past 2.1% or a pair aligns off shift 0.
+      Needs the PDFs (`task download-sitreps`), poppler and tesseract.
     cmds:
       - julia --project=scripts scripts/audit_onset_curve.jl {{.CLI_ARGS}}
 

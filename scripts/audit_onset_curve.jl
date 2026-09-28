@@ -731,13 +731,45 @@ function main(
     mkpath(dirname(audit_md))
     write(audit_md, report)
     println("wrote $audit_md")
-    return nothing
+    return audit_failures(rows, pairs)
+end
+
+## The acceptance bands every committed block meets: the digitised total
+## within `GAP_TOLERANCE_PCT` of the printed n, and each consecutive pair's
+## settled bars aligned best at shift 0. A render the reader misreads
+## breaks one of them.
+const GAP_TOLERANCE_PCT = 2.1
+
+function audit_failures(rows, pairs)
+    failures = String[]
+    for r in rows
+        r["gap_pct"] === nothing && continue
+        abs(r["gap_pct"]) > GAP_TOLERANCE_PCT || continue
+        push!(
+            failures,
+            "SitRep $(r["sitrep"]): gap $(pct(r["gap_pct"]))% against " *
+                "printed n $(r["printed_n"])"
+        )
+    end
+    for p in pairs
+        (p.best === nothing || p.best == 0) && continue
+        push!(
+            failures,
+            "$(p.from)->$(p.to): settled bars align best at shift $(p.best)"
+        )
+    end
+    return failures
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     crops = filter(a -> startswith(a, "--crops="), ARGS)
-    main(
+    failures = main(
         filter(a -> !startswith(a, "--crops="), ARGS)...;
         crop_dir = isempty(crops) ? nothing : last(split(crops[end], "=", limit = 2))
     )
+    if !isempty(failures)
+        println(stderr, "onset audit failed:")
+        foreach(f -> println(stderr, "  ", f), failures)
+        exit(1)
+    end
 end
