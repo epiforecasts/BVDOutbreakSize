@@ -3,6 +3,12 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## Unreleased
+
+### Fixed
+
+- The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
+
 ## v2.2.0
 
 Changes since v2.1.0.
@@ -210,7 +216,6 @@ Changes since v2.1.0.
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 - `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 - The delay and tree-prior sensitivity re-fits are built from the headline's keywords, so they keep its provinces and in-care split and differ from it only in the delay or the common-ancestor date (#916).
-- The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 
 ### Infrastructure
 
