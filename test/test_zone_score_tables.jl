@@ -40,3 +40,15 @@ end
         tbl, ["ituri.bunia", "ituri.aru"], ["Bunia"]
     )
 end
+
+@testitem "zone_score_key reads the labels the release scorer writes" begin
+    using BVDOutbreakSize
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    label = zone_stream_label("confirmed cases", "nord_kivu.beni")
+    @test zone_score_key(label) == "nord_kivu.beni"
+    @test isnothing(
+        zone_score_key(province_stream_label("confirmed cases", "ituri"))
+    )
+end
