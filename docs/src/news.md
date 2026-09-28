@@ -42,7 +42,7 @@ Changes since v2.1.0.
 
 - The onset reporting hazard's level is identified (#947).
   Its delay deviations sum to zero and its report-day walk is zero on its first day, so the baseline is the mean logit hazard across delays on that day.
-  The walk starts on the earliest report day and is held at zero before it.
+  The walk starts one delay support before the earliest report day and is held at its first value before that.
   Fitted values change.
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
   The share is recomputed each day, so it moves with the admissions.

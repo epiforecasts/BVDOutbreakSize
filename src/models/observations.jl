@@ -3836,12 +3836,15 @@ max(grid_end - grid_start + 1, 1)`.
     return (; alpha, β, σ_a, z_a, ω)
 end
 
-## Report day the reporting hazard's calendar walk starts from: the
-## earliest report day, bounded below by grid day 1. Returns `1` for an
-## empty history.
-function _onset_hazard_walk_start(report_days::AbstractVector{<:Integer})
-    isempty(report_days) && return 1
-    return max(minimum(report_days), 1)
+## Report day the reporting hazard's calendar walk starts from: one delay
+## support before the earliest report day, bounded below by the earliest
+## scored onset date and by grid day 1. Returns `1` for an empty history.
+function _onset_hazard_walk_start(
+        onset_days::AbstractVector{<:Integer},
+        report_days::AbstractVector{<:Integer}, D::Integer
+    )
+    isempty(onset_days) && return 1
+    return max(minimum(onset_days), minimum(report_days) - Int(D) + 1, 1)
 end
 
 ## The calendar walk `γ`, indexed from report day `walk_start`, re-indexed
@@ -3920,11 +3923,11 @@ been checked. All three act on overlapping calendar windows and are least
 constrained over the final fortnight, so any change here should report
 `R_t` over the final fortnight and `C_T` either side.
 
-The calendar walk `γ` starts on the earliest report day and is zero there.
-Report days before it enter the likelihood only through the first printed
-totals, so the walk is held at zero back to the earliest scored onset
-date, and the returned `γ` is indexed from `grid_start` like the
-ascertainment walk.
+The calendar walk `γ` is sampled from one delay support before the
+earliest report day, since only the shortest delays of the first printed
+onset dates read report days before that. It is then held at its first
+value back to the earliest scored onset date, so the returned `γ` is
+indexed from `grid_start` like the ascertainment walk.
 
 The alive/dead split the raw triangle carries is not modelled separately:
 only `confirmed_total` is fitted, since the confirmed-death stream already
@@ -3983,7 +3986,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## surfaces them as a flat `onset_report_state.η0` at the composer level
     ## rather than the double-nested form a prefixed attachment would give.
     ## The pairs-plot summary indexes the flat names.
-    walk_start = _onset_hazard_walk_start(report_days)
+    walk_start = _onset_hazard_walk_start(onset_days, report_days, D)
     hazard_state ~ to_submodel(hazard(walk_start, grid_end; D), false)
     γ = _onset_walk_on_grid(hazard_state.γ, walk_start, grid_start, grid_end)
 

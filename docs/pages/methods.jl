@@ -1719,7 +1719,7 @@ cfr_prior_fig #hide
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
 # It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed.
-# The walk starts on the earliest report day, $t_0$, and is zero there:
+# The walk starts one delay support before the earliest report day, $t_0$, and is zero there:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
@@ -1730,9 +1730,10 @@ cfr_prior_fig #hide
 # \tag{51}
 # ```
 #
-# An earlier report day reads zero, since the data see those days only through the first printed totals.
-# So $\eta_0$ is the mean logit hazard across delays on the first report day.
+# An earlier report day reads the walk's first value.
+# So $\eta_0$ is the mean logit hazard across delays on day $t_0$.
 # Without the sum-to-zero constraint the hazard's level trades against the mean delay deviation, which the data cannot see.
+# Pinning the walk at $t_0$ puts its anchor where the reports start, so the data see its level.
 # Neither change alters which hazards the model can express.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
