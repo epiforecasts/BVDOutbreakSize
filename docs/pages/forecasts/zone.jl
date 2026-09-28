@@ -158,7 +158,7 @@ MarkdownTable(zone_quiet_display) #hide
 
 # ## Saving zone forecast assets
 #
-# The summary dashboard shows the zone forecast figure.
+# The summary dashboard shows the zone forecast figure and the summary bullets.
 
 #md # ```@raw html
 #md # <details><summary>Write the zone forecast asset</summary>
@@ -172,6 +172,7 @@ CairoMakie.save(
     joinpath(dashboard_dir, "zone_forecast.png"),
     zone_forecast_fig
 )
+write(joinpath(dashboard_dir, "zone_forecast.md"), zone_forecast_bullets);
 
 #md # ```@raw html
 #md # </details>

@@ -30,6 +30,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
 - The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's (#978).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+- The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 
 ### Infrastructure
 
