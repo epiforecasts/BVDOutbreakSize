@@ -188,9 +188,13 @@ zone_release_top = first(zone_release_keys, 10)
 _zone_release(tbl, keys = zone_release_keys) = zone_score_rows(
     tbl, keys, zone_release_labels[indexin(keys, zone_release_keys)]
 )
-_zone_release_display(tbl) = drop_degenerate_fit_column(
-    drop_individual_fit_columns(tbl)
-)
+## Zones in the order of `zone_release_keys`, under a `zone` column.
+_zone_release_display(tbl) = let t = drop_degenerate_fit_column(
+        drop_individual_fit_columns(tbl)
+    )
+    t = t[sortperm(indexin(t.stream, zone_release_labels)), :]
+    DataFrame([(c == "stream" ? "zone" : c) => t[!, c] for c in names(t)])
+end
 zone_release_by_horizon = forecast_score_by_horizon(
     _zone_release(zone_release_scores_df, zone_release_top)
 )
@@ -223,17 +227,7 @@ zone_release_note = Markdown.parse(
 
 zone_release_note #hide
 
-# The relative skill against the baseline, one panel per zone, on a log-scaled skill axis with the reference line at one.
-
-zone_release_skill_fig = plot_forecast_relative_skill(
-    zone_release_by_horizon;
-    title = "Relative skill against the baseline, by health zone",
-    empty_message = _zone_release_empty
-);
-
-zone_release_skill_fig #hide
-
-# What that error is made of: the mean CRPS split into its width, its overprediction and its underprediction.
+# What the error is made of, one panel per zone: the mean CRPS split into its width, its overprediction and its underprediction.
 
 zone_release_crps_fig = plot_forecast_crps_by_horizon(
     zone_release_by_horizon;
@@ -243,7 +237,7 @@ zone_release_crps_fig = plot_forecast_crps_by_horizon(
 
 zone_release_crps_fig #hide
 
-# The same relative skill release by release.
+# The relative skill against the baseline release by release, on a log-scaled skill axis with the reference line at one.
 
 zone_release_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     zone_release_by_release;
