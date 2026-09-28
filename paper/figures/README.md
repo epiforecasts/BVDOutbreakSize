@@ -16,6 +16,14 @@ Regenerate with `julia --project=paper paper/scripts/fig_current.jl [tag]` from 
 `paper/scripts/paper_numbers.jl` is not a figure script but shares the inputs above.
 It writes `paper/generated/numbers.yml`, the quoted numbers the manuscript reads through Quarto meta shortcodes, each with a comment naming its source column.
 Regenerate with `julia --project=paper paper/scripts/paper_numbers.jl [tag]`.
+It also counts the change events in `paper/data/change_events.csv` by kind, detection route and decider, checks each tally against `paper/data/detection_summary.csv`, and reads the record totals and the weekly commit sums from those files.
+
+## events_table.qmd
+
+`paper/scripts/events_table.jl` writes `paper/generated/events_table.qmd`, the table the manuscript includes as `@tbl-events`, from `paper/data/change_events.csv`.
+It keeps the defects whose effect reached a released output and the changes whose move between two released medians the CSV states without another change sharing the release window, at most twenty rows ordered by date.
+The short cell text is keyed by each row's evidence link inside the script, and the script stops if a kept row has no label or a label carries a number the CSV row does not.
+Regenerate with `julia --project=paper paper/scripts/events_table.jl`.
 
 ## fig-first (Figure 1)
 

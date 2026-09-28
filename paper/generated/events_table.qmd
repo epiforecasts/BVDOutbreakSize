@@ -1,0 +1,26 @@
+<!-- Written by paper/scripts/events_table.jl from paper/data/change_events.csv; never edited by hand. -->
+
+| Date | Event | Effect | Found by | Decided by |
+|---|---|---|---|---|
+| 26 May | Data source moved to the INSP situation reports | Released median 925 to 1,391 (v1.1.0 to v1.2.0) | human review | human |
+| 6 June | Joint laboratory-queue fit sat above every single-stream fit | Released with a warning banner, then replaced by the renewal model | agent | human |
+| 9 June | Renewal model with a weekly random walk on R replaced the constant-growth model | Released median 4,509 to 4,161 (v1.3.0 to v1.4.0) | human review | human |
+| 10 June | 24h analysed laboratory volume fitted to anchor positivity | Released median 4,161 to 4,490 (v1.4.0 to v1.5.0) | human data check | human |
+| 10 July | Molecular-clock and growth priors updated to the outbreak-specific genomic analysis | Released median 4,380 to 4,791 (v1.8.0 to v1.9.0) | human data check | human |
+| 4 August | Growth-rate prior widened | Released median 7,446 to 8,672 (v1.12.0 to V1.13.1) | human data check | human |
+| 10 August | Brief-format reports dropped the treatment flows and the daily suspects, both frozen | Released median 8,672 to 9,147 (V1.13.1 to v1.13.2) | agent | human |
+| 26 August | Five defects in the one-week-ahead forecast, among them the last innovation compounded over the horizon | 90% forecast coverage sat at one until the fix | prospective evaluation | joint |
+| 28 August | Reporting-break corrections applied in the fit but not in the scoring | Frozen-fit forecasts scored an order of magnitude out | prospective evaluation | human |
+| 3 September | Scoring fix carried confirmed but not occupancy break days onto frozen fits | Bed-stream scoring across breaks | automated reviewer | agent |
+| 3 September | Bed shortfall could go negative under a positive offset | Forecast bed-shortfall column | automated reviewer | agent |
+| 4 September | Onset triangle given a per-scan level error | Released median 12,910 to 12,100 (v1.16.0 to v1.17.0) | agent | joint |
+| 14 September | Analysed laboratory volume capped below the modelled suspect inflow, against the published methods | Released fits before the provincial model carried the cap | agent | joint |
+| 15 September | Four-province model became the headline | Released median 13,771 to 14,578 (v1.18.0 to V2.0.0) | human review | human |
+| 17 September | Provincial release published with an unconverged headline fit | Released median 14,578 to 13,314 (V2.0.0 to v2.1.0) | agent | agent |
+| 17 September | Matched forecast scoring keyed without the made date | Frozen confirmed-death skill 3.18 to 1.76 | agent | agent |
+| 18 September | Provincial confirmed composition missed the report leg of the delay | Provincial split attributed to earlier days than the national total | agent | agent |
+| 21 September | Sensitivity page still described the headline as three provinces | Released report text | agent | agent |
+| 24 September | Onset digitiser read 10 to 23% short of the printed total and mis-dated bars | Onset curve data from v1.17.0 to v2.1.0 | agent | joint |
+| 24 September | Comparison table printed the current confirmed total as observed at the calibration date of Chamla et al. | Released sensitivity page, still open | agent | human |
+
+: Events in the development record that changed the released estimate or were defects in a released output, ordered by date (all 2026). The rows are the defects whose effect reached a released output and the changes whose move between two released medians the record states with no other change sharing the release window. Found by is the first record of the event on GitHub and decided by is who set the response, with the evidence link for every row in the repository. {#tbl-events}

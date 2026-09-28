@@ -245,3 +245,93 @@ chamla_frozen_projection_median: "1,498"
 chamla_frozen_projection_interval90: "1,041 to 2,683"
 # observations.toml: confirmed_case_history, value at chamla_week12_date
 observed_confirmed_week12: "1,155"
+# change_events.csv: rows
+n_events: "49"
+# change_events.csv: rows with kind model change
+n_events_model: "17"
+# change_events.csv: rows with kind defect
+n_events_defect: "16"
+# change_events.csv: rows with kind data-quality decision
+n_events_data_quality: "11"
+# change_events.csv: rows with kind data change
+n_events_data: "5"
+# change_events.csv: rows with detected_by agent self-report
+n_found_agent: "26"
+# change_events.csv: rows with detected_by human review
+n_found_human_review: "11"
+# change_events.csv: rows with detected_by human data check
+n_found_human_data: "7"
+# change_events.csv: rows with detected_by prospective evaluation
+n_found_prospective: "2"
+# change_events.csv: rows with detected_by automated review bot
+n_found_review_bot: "2"
+# change_events.csv: rows with detected_by unrecorded
+n_found_unrecorded: "1"
+# change_events.csv: rows with detected_by human review or human data check
+n_found_human: "18"
+# change_events.csv: rows with decided_by human
+n_decided_human: "23"
+# change_events.csv: rows with decided_by agent
+n_decided_agent: "17"
+# change_events.csv: rows with decided_by joint
+n_decided_joint: "9"
+# change_events.csv: rows with kind defect and detected_by agent self-report
+n_defects_found_agent: "10"
+# change_events.csv: rows with kind defect and detected_by prospective evaluation
+n_defects_found_prospective: "2"
+# change_events.csv: rows with kind defect and detected_by automated review bot
+n_defects_found_review_bot: "2"
+# change_events.csv: rows with kind defect and detected_by human review
+n_defects_found_human_review: "1"
+# change_events.csv: rows with kind model change and detected_by agent self-report
+n_model_found_agent: "6"
+# change_events.csv: rows with kind data-quality decision and detected_by agent self-report
+n_data_quality_found_agent: "7"
+# change_events.csv: rows with kind data change and detected_by agent self-report
+n_data_found_agent: "3"
+# change_events.csv: rows with kind model change and detected_by human review or human data check
+n_model_found_human: "11"
+# change_events.csv: rows with kind model change and decided_by human
+n_model_decided_human: "9"
+# change_events.csv: rows with kind model change and decided_by agent
+n_model_decided_agent: "3"
+# change_events.csv: rows with kind model change and decided_by joint
+n_model_decided_joint: "5"
+# change_events.csv: rows with kind defect and decided_by agent
+n_defects_decided_agent: "10"
+# change_events.csv: rows with kind defect and decided_by human
+n_defects_decided_human: "3"
+# change_events.csv: rows with kind defect and decided_by joint
+n_defects_decided_joint: "3"
+# change_events.csv: rows with kind data-quality decision and decided_by human
+n_data_quality_decided_human: "7"
+# change_events.csv: rows with kind data change and decided_by human
+n_data_decided_human: "4"
+# release_estimates.csv: the larger of the medians of v1.6.0 and v1.7.0 over the smaller
+occupancy_offset_step_ratio: "2.9"
+# release_estimates.csv: the larger of the medians of v1.5.0 and v1.6.0 over the smaller
+background_prior_step_ratio: "2.0"
+# detection_summary.csv: record row `human-authored issues (not PRs, not bot-marked)`
+n_human_issues: "70"
+# detection_summary.csv: record row `human review submissions`
+n_human_reviews: "556"
+# detection_summary.csv: record row `human inline review comments`
+n_human_inline_comments: "183"
+# detection_summary.csv: record row `agent PRs opened`
+n_agent_prs: "541"
+# detection_summary.csv: record row `agent issues opened (not PRs)`
+n_agent_issues: "253"
+# detection_summary.csv: record row `review-bot inline review comments`
+n_bot_inline_comments: "244"
+# detection_summary.csv: record row `review-bot review submissions`
+n_bot_reviews: "175"
+# detection_summary.csv: record row `review-bot declined PRs over the 3000-line cap`
+n_bot_declined_prs: "3"
+# commits_weekly.csv: sum of n_commits_human over the weeks
+n_commits_human: "59"
+# commits_weekly.csv: sum of n_commits_agent over the weeks
+n_commits_agent: "542"
+# commits_weekly.csv: sum of n_prs_merged_human over the weeks
+n_prs_merged_human: "21"
+# commits_weekly.csv: sum of n_prs_merged_agent over the weeks
+n_prs_merged_agent: "422"

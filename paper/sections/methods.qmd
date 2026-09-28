@@ -123,11 +123,38 @@ Each chain starts from the first of a batch of prior draws whose log density is 
 The build fails if the joint fit exceeds an R-hat of {{< meta convergence_fail_rhat >}} or a divergent fraction of {{< meta convergence_fail_divergent_fraction >}}, or falls below a bulk or tail effective sample size of {{< meta convergence_fail_ess_bulk >}}, and it warns at a tighter tier.
 Builds after the release analysed also fit the joint model to a dataset simulated from one of its prior draws, with the same sampler settings, and check that the posterior recovers the generating values and the simulated future. <!-- PR 882 -->
 
+### Development process
+
+Language-model agents drafted the model, its priors, the analysis text and the data transcriptions, and we directed the work from issues and pull-request reviews and took each modelling decision.
+We worked this way because one modeller's time was set against a live outbreak, because we aimed to fit every published count, and to learn what the workflow could and could not do. <!-- author steer, 28 Sep -->
+An agent opened a pull request for each change, and the lead author reviewed it locally before anything was recorded on the request. <!-- steering-and-data.md section 0: the "do not review until I have pinged" convention from PR 32 -->
+Later an automated reviewer commented on each pull request, and the author accepted or rejected each of its findings on the request. <!-- steering-and-data.md section 2: the review app from 17 August; "Close see bot review and my inline points" on PR 677 -->
+A change that did not converge or did not fit its stream was not merged, judged by review of the diagnostics and later by a check in continuous integration. <!-- steering-and-data.md section 3: PRs 344, 350, 400 and 402 closed on 8 July; the CI gate in PR 764 -->
+Each data update refit the affected models and released the result, and the first releases were signed off by every author on a release issue opened for the purpose. <!-- steering-and-data.md section 3: issues 93, 134 and 144 -->
+Between changes the agents ran wide searches over parameterisations, samplers and gradient backends, and most of these measured as null and were not merged. <!-- author steer: "very wider performance searches" -->
+
+Beyond the review of single changes, one check applied to the transcribed data and another to the released model as a whole.
+The second read of each transcribed value, described under Data, checked the transcriptions, and by the lead author's rule every fitted stream advanced on every data update so that no stream was left behind. <!-- steering-and-data.md section 3: PRs 393, 405, 409, 440 and 461 -->
+The prospective evaluation, which scored each release against the data that arrived next, checked the released model on data that no review or test had seen.
+
+### Analysis of the development record
+
+To ask where a person was needed we read the development record for the events that changed the released estimate, the reproduction-number trajectory or the forecasts, and for the defects in released outputs.
+The sources were the issues, the pull-request bodies and review comments, the automated reviewer's comments and the release notes, with the account behind each item recorded.
+An item opened under a human login counted as agent-written where its body carried the marker the agents leave, since the human accounts also ran agent sessions. <!-- steering-and-data.md section 0, caveat 1 -->
+We classified each event by kind, as a model change, a data change, a data-quality decision or a defect, and by the route through which it was first recorded.
+We also recorded who decided the response, a person, an agent or the two jointly, and kept the evidence link for every row (@tbl-events).
+An agent counted as the finder when the first record was an issue, pull-request body or comment from an agent account.
+It counted as the decider when the record held only agent text and at most an approval without a body.
+Where releases fell on both sides of an event we recorded the two released medians, marked whether other changes shared that window, and estimated no effect ourselves.
+
+From the same record we counted commits and merged pull requests per week by account, human-authored issues, review submissions and inline comments, and the automated reviewer's submissions and inline comments (@fig-journey B).
+The record cannot show decisions taken off GitHub, and the lead author's local first-pass reviews appear on it only as an approval.
+
 ### Implementation
 
 The model is written in Julia with `Turing` and differentiated with `Mooncake` [@ge2018turing; @mooncake_jl].
 The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against central finite differences and against the backend's own derivation of an unregistered copy.
 The benchmarks recorded with those rules give a cut of about {{< meta gradient_speedup_joint_percent >}}% in the joint gradient time, and the treatment-flow, occupancy and onset-reporting kernels run {{< meta gradient_speedup_kernels_min >}} to {{< meta gradient_speedup_kernels_max >}} times faster when timed on their own.
-Language-model agents ran wide searches over parameterisations, samplers and gradient backends, most of them null results that were not merged.
 A precompile workload that compiles the fit the report runs cuts the cold build of the joint fit by a factor of {{< meta precompile_cold_build_factor >}} in the same records.
 Each data update refits every affected model in continuous integration, renders the report and publishes a versioned release with the model definition, thinned draws and forecasts.

@@ -24,6 +24,7 @@ The streams share one case pool but are treated as conditionally independent giv
 The fitted streams may look sub-exponential while the reproduction number sits above one, so the model may misstate growth over the window. <!-- Sebastian, issue 243 -->
 The forecast intervals covered nearly every observation, so they are too wide to separate one plausible week from another.
 However, the aggregate design still supports the per-stream ascertainment and the forecast evaluation reported here.
+The analysis of the development record cannot see the lead author's local first-pass reviews, which the record logs only as approvals, so some changes it counts as agent decisions may have been reshaped by a person.
 
 <!-- Comparison to the literature -->
 
@@ -41,6 +42,13 @@ Changes in reporting were the main source of change to the model, and most of th
 The disagreement between streams is itself the result to report, because the size estimate follows from how that disagreement is resolved.
 Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation.
 The agent workflow also made engineering feasible that we would not have attempted alone, the hand-written adjoints, the wide performance searches and the release tooling. <!-- author statement, 24 Sep -->
+
+The record answers, for this project and its authors, where a person was needed, and the answer follows the kind of event. <!-- Sebastian, PR 883 -->
+Most model changes were raised and decided by a person, most defects were first reported and fixed by the agents, and the defects that neither found were caught by the prospective evaluation (@tbl-events).
+The data-quality decisions, where a stream was frozen, given a level offset or excluded, went to a person in most cases, and in one a person overruled the agent's reading of the series. <!-- evidence: change_events.csv row 22 -->
+This may say that a person was needed at each change of model structure, data rule and prior, and at the reading of the diagnostics.
+The agents could find and fix most implementation defects, and a check outside the review loop was still needed for what neither saw.
+Whether the same division would hold for another team, another outbreak or a later stage of this one, the record cannot say.
 
 Several defects were of a kind a human author would be unlikely to write.
 Two were found by the prospective evaluation of a release and the others in review of the pull request that carried them.

@@ -712,6 +712,190 @@ add!(
     "observations.toml: confirmed_case_history, value at chamla_week12_date"
 )
 
+## --- Development record ---------------------------------------------------
+## paper/data/change_events.csv holds one row per event that changed the
+## released estimate or the forecasts or was a defect in a released output,
+## with its kind, the route through which it was first recorded and who
+## decided the response. Its tallies are counted here and checked against
+## the ones paper/data/detection_summary.csv records; the record totals
+## (issues, reviews, pull requests and comments by account) are read from
+## that file, which quotes the gh commands that produced them.
+
+events = CSV.read(
+    joinpath(paper_dir(), "data", "change_events.csv"), DataFrame
+)
+detection = CSV.read(
+    joinpath(paper_dir(), "data", "detection_summary.csv"), DataFrame;
+    comment = "#",
+)
+function recorded_count(table, group, subgroup = missing)
+    rows = detection[detection.table .== table .&& detection.group .== group, :]
+    ismissing(subgroup) ||
+        (rows = rows[coalesce.(rows.subgroup .== subgroup, false), :])
+    nrow(rows) == 1 ||
+        error("no single detection_summary.csv row for $table / $group")
+    return only(rows.count)
+end
+function event_count(; kind = missing, found = missing, decided = missing)
+    keep = trues(nrow(events))
+    ismissing(kind) || (keep .&= events.kind .== kind)
+    ismissing(found) || (keep .&= events.detected_by .== found)
+    ismissing(decided) || (keep .&= events.decided_by .== decided)
+    return count(keep)
+end
+## The tallies the summary file records must match the CSV they describe.
+function checked_count(recorded; kwargs...)
+    n = event_count(; kwargs...)
+    n == recorded ||
+        error(
+        "change_events.csv gives $n where detection_summary.csv " *
+            "records $recorded for $(kwargs)"
+    )
+    return n
+end
+events_src = "change_events.csv"
+add!(
+    "n_events", string(checked_count(recorded_count("events", "total"))),
+    "$events_src: rows"
+)
+for (key, kind) in (
+        ("n_events_model", "model change"), ("n_events_defect", "defect"),
+        ("n_events_data_quality", "data-quality decision"),
+        ("n_events_data", "data change"),
+    )
+    n = checked_count(recorded_count("events by kind", kind); kind = kind)
+    add!(key, string(n), "$events_src: rows with kind $kind")
+end
+for (key, route) in (
+        ("n_found_agent", "agent self-report"),
+        ("n_found_human_review", "human review"),
+        ("n_found_human_data", "human data check"),
+        ("n_found_prospective", "prospective evaluation"),
+        ("n_found_review_bot", "automated review bot"),
+        ("n_found_unrecorded", "unrecorded"),
+    )
+    n = checked_count(
+        recorded_count("events by detected_by", route); found = route
+    )
+    add!(key, string(n), "$events_src: rows with detected_by $route")
+end
+add!(
+    "n_found_human",
+    string(
+        event_count(found = "human review") +
+            event_count(found = "human data check")
+    ),
+    "$events_src: rows with detected_by human review or human data check"
+)
+for (key, who) in (
+        ("n_decided_human", "human"), ("n_decided_agent", "agent"),
+        ("n_decided_joint", "joint"),
+    )
+    n = checked_count(
+        recorded_count("events by decided_by", who); decided = who
+    )
+    add!(key, string(n), "$events_src: rows with decided_by $who")
+end
+## Route and decider by kind, for the kinds the text describes.
+for (key, kind, found) in (
+        ("n_defects_found_agent", "defect", "agent self-report"),
+        ("n_defects_found_prospective", "defect", "prospective evaluation"),
+        ("n_defects_found_review_bot", "defect", "automated review bot"),
+        ("n_defects_found_human_review", "defect", "human review"),
+        ("n_model_found_agent", "model change", "agent self-report"),
+        (
+            "n_data_quality_found_agent", "data-quality decision",
+            "agent self-report",
+        ),
+        ("n_data_found_agent", "data change", "agent self-report"),
+    )
+    n = checked_count(
+        recorded_count("events by kind and detected_by", kind, found);
+        kind = kind, found = found,
+    )
+    add!(
+        key, string(n),
+        "$events_src: rows with kind $kind and detected_by $found"
+    )
+end
+add!(
+    "n_model_found_human",
+    string(
+        event_count(kind = "model change", found = "human review") +
+            event_count(kind = "model change", found = "human data check")
+    ),
+    "$events_src: rows with kind model change and detected_by human " *
+        "review or human data check"
+)
+for (key, kind, who) in (
+        ("n_model_decided_human", "model change", "human"),
+        ("n_model_decided_agent", "model change", "agent"),
+        ("n_model_decided_joint", "model change", "joint"),
+        ("n_defects_decided_agent", "defect", "agent"),
+        ("n_defects_decided_human", "defect", "human"),
+        ("n_defects_decided_joint", "defect", "joint"),
+        ("n_data_quality_decided_human", "data-quality decision", "human"),
+        ("n_data_decided_human", "data change", "human"),
+    )
+    add!(
+        key, string(event_count(kind = kind, decided = who)),
+        "$events_src: rows with kind $kind and decided_by $who"
+    )
+end
+## The two moves in the released median that follow the largest step, as
+## ratios of the medians that straddle the events (rows dated 2026-06-15
+## and 2026-07-03 of change_events.csv), checked to be the next two largest
+## steps between consecutive released medians after the closed-form one.
+ranked = sortperm(abs.(log.(step_ratios)); rev = true)
+ranked[1] == istep || error("the closed-form step is no longer the largest")
+for (rank, key, from, to) in (
+        (2, "occupancy_offset_step_ratio", "v1.6.0", "v1.7.0"),
+        (3, "background_prior_step_ratio", "v1.5.0", "v1.6.0"),
+    )
+    i = ranked[rank]
+    (with_median.tag[i], with_median.tag[i + 1]) == (from, to) ||
+        error("step $rank is no longer $from to $to")
+    ratio = step_ratios[i]
+    add!(
+        key, fmt2(ratio < 1 ? 1 / ratio : ratio),
+        "release_estimates.csv: the larger of the medians of $from and $to " *
+            "over the smaller"
+    )
+end
+record_src = "detection_summary.csv"
+for (key, group) in (
+        ("n_human_issues", "human-authored issues (not PRs, not bot-marked)"),
+        ("n_human_reviews", "human review submissions"),
+        ("n_human_inline_comments", "human inline review comments"),
+        ("n_agent_prs", "agent PRs opened"),
+        ("n_agent_issues", "agent issues opened (not PRs)"),
+        ("n_bot_inline_comments", "review-bot inline review comments"),
+        ("n_bot_reviews", "review-bot review submissions"),
+        (
+            "n_bot_declined_prs",
+            "review-bot declined PRs over the 3000-line cap",
+        ),
+    )
+    add!(
+        key, fmt_count(recorded_count("record", group)),
+        "$record_src: record row `$group`"
+    )
+end
+weekly = CSV.read(
+    joinpath(paper_dir(), "data", "commits_weekly.csv"), DataFrame
+)
+for (key, col) in (
+        ("n_commits_human", :n_commits_human),
+        ("n_commits_agent", :n_commits_agent),
+        ("n_prs_merged_human", :n_prs_merged_human),
+        ("n_prs_merged_agent", :n_prs_merged_agent),
+    )
+    add!(
+        key, fmt_count(sum(weekly[!, col])),
+        "commits_weekly.csv: sum of $col over the weeks"
+    )
+end
+
 ## --- Write ---------------------------------------------------------------
 
 out = joinpath(paper_dir(), "generated", "numbers.yml")
