@@ -74,9 +74,26 @@ In the axis-coverage table, `cases before` is 0, so the block starts where the a
 When a check fails, the row says which input is wrong.
 A `best shift` of +1 or -1 means the new last-tick date or the previous vintage's is off by a day: re-read both ticks with two fresh readers before anything else.
 A gap beyond 2.1% with shift 0 means the count scale: check `Y_AXIS_STEP`, then the printed `n` itself (the OCR misreads a digit now and then; the `note` column says when the title and source strips disagreed), then look at the check panels.
+A misread `n` goes into `PRINTED_N_HAND` in `audit_onset_curve.jl` with the value read off the title by eye.
 Many falls with shift 0 and a gap inside 2.1% mean the day grid inside the block has moved: compare `pixels_per_day` and `pixels_per_day_fit` for the vintage in `data/onset_curve_figures.csv` and run the vision check.
 `cases before` above 0 means the reader's day loop started after the axis: the loop runs from a week before the first chain tick, so a lost tick at the left end is the usual cause.
-A block that fails after the ticks and the scale have been re-read is not committed; remove its `CONFIG` row and open an issue with the audit rows.
+`task onset-audit` exits non-zero when any vintage's gap is past 2.1% or any pair's `best shift` is not 0, and names the failing rows.
+A block that still fails after the ticks, the step and the printed `n` have been re-read is a reader fault, and the run fixes the reader.
+
+#### Fixing the reader
+
+The INSP figure changes render size and anti-aliasing from time to time, and the reader's thresholds are fitted to the renders seen so far.
+When a new render breaks it, the data run changes the reader in the same PR as the new vintage, as SitRep 133 did (issue #952).
+1. Find the step that misreads: run `baseline_row`, `y_tick_rows` and `tick_chain` on the new figure and compare their rows and columns against the extracted image.
+2. Add a synthetic chart to `test/test_onset_digitiser.jl` that reproduces the failure, and check that it fails on the current reader.
+3. Change the Julia reference, then carry the same change into the port.
+   Prefer a rule that picks between readings the reader already makes over a new threshold, and keep the change as narrow as the failure allows.
+4. Rebuild everything (below) and run `task onset-port-check` and `task onset-audit`.
+   The change is accepted when every earlier block is byte-identical in `data/onset_curve_scanned.csv`, or when the before and after audits show the gaps tightening and the falls dropping across vintages.
+5. Run the vision check on the new vintage.
+6. Commit the test, the reader change and the data separately, and put the audit rows for the new vintage in the PR.
+
+Open an issue with the audit rows and leave the vintage out of `CONFIG` only when no change passes step 4.
 
 #### Vision check
 

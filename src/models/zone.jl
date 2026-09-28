@@ -1498,7 +1498,7 @@ quantity is computed on the fitted days as without a forecast.
     def = zone_deformation(zx, scale)
     ## The correlation of two zones a reference distance apart, the prior
     ## taken from the province model's own learned correlation between its
-    ## patches at the distance between their capitals.
+    ## patches at the distance between their population centres.
     on = !isempty(zd.zone_distances)
     level_factors = Matrix{Float64}[]
     drift_factors = Matrix{Float64}[]
@@ -2186,11 +2186,11 @@ function zone_fit_inputs(
         patch_ranges; keep = walking
     )
     ## The distance the inherited deviation correlation refers to: the mean
-    ## great-circle distance between the province capitals, which is the
-    ## separation the province model's own correlation was learned at.
+    ## great-circle distance between the province population centres, which
+    ## is the separation the province model's own correlation was learned at.
     correlation_distance = _mean_offdiagonal(
         province_distance_matrix(
-            PROVINCE_CAPITALS[1:min(np, length(PROVINCE_CAPITALS))]
+            PROVINCE_CENTRES[1:min(np, length(PROVINCE_CENTRES))]
         )
     )
     ## The zone mixing structure: the two kernel blocks, the province

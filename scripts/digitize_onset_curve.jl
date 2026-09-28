@@ -17,7 +17,9 @@
 # Method (per figure, all self-calibrated from the image):
 #   * baseline (count 0) = the widest dark horizontal row in the lower panel;
 #   * count scale = the y-axis tick marks (0/20/40/60 or 0/25/50/75), evenly
-#     spaced, giving pixels-per-count = tick-spacing / y_step;
+#     spaced, giving pixels-per-count = tick-spacing / y_step. The ticks
+#     come from the strict dark mask, or from the near-gray mask when that
+#     reads a grid finer by more than the strip tolerance;
 #   * date scale = the weekly x-axis tick marks. Candidate tick rows come
 #     from a strict and a near-gray mask at several cuts, and the one whose
 #     regular chain from the rightmost tick is longest wins. Pixels per day
@@ -190,6 +192,8 @@ const CONFIG = [
     ("130", Date(2026, 9, 21), Date(2026, 9, 21)),
     ("131", Date(2026, 9, 22), Date(2026, 9, 21)),
     ("132", Date(2026, 9, 23), Date(2026, 9, 21)),
+    ("133", Date(2026, 9, 24), Date(2026, 9, 21)),
+    ("134", Date(2026, 9, 25), Date(2026, 9, 21)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -246,7 +250,9 @@ const Y_AXIS_STEP = Dict(
     "129" => 25,
     "130" => 25,
     "131" => 25,
-    "132" => 25
+    "132" => 25,
+    "133" => 25,
+    "134" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -401,6 +407,35 @@ function y_axis_ticks(dark, base, H, W)
     return best[2]
 end
 
+# The y-axis tick rows from the strict dark mask, or from the near-gray
+# `line` mask when that reads a finer grid. The small renders anti-alias
+# the tick marks into the 120-180 range, so the strict mask can find no
+# regular strip at all (SitRep 112) or keep every other tick and take a
+# title glyph above the plot for the top one (SitRep 133, spacing 144-155
+# against the line mask's 72). Only a spacing finer by more than the strip
+# tolerance counts, so the strict rows stay wherever both masks read the
+# same grid.
+function y_tick_rows(dark, line, base, H, W)
+    strict = try
+        y_axis_ticks(dark, base, H, W)
+    catch e
+        e isa ErrorException || rethrow()
+        nothing
+    end
+    near = try
+        y_axis_ticks(line, base, H, W)
+    catch e
+        e isa ErrorException || rethrow()
+        nothing
+    end
+    strict === nothing && near === nothing &&
+        error("no y-axis tick strip found")
+    strict === nothing && return near
+    near === nothing && return strict
+    finer = 1.15 * median(diff(near)) < median(diff(strict))
+    return finer ? near : strict
+end
+
 # Pixel classes. Page is white (with JPEG chroma noise) and the pink
 # `donnees potentiellement incompletes` band. Neutral is gridline gray.
 # Light is the pale, low-saturation pixel a bar's top edge leaves above
@@ -528,18 +563,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     line = (R .< 180) .& (G .< 180) .& (B .< 180)
-    yt = try
-        y_axis_ticks(dark, base, H, W)
-    catch e
-        e isa ErrorException || rethrow()
-        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
-        # and the axis line into the 120-180 near-gray range, below every
-        # earlier vintage's border but still far darker than surrounding
-        # text, so the strict <120 mask finds three of the four ticks but
-        # not the one sitting on the baseline itself. Only tried when the
-        # strict mask finds nothing.
-        y_axis_ticks(line, base, H, W)
-    end
+    yt = y_tick_rows(dark, line, base, H, W)
     ppc = median(diff(yt)) / float(y_step) # pixels per count
     y0 = yt[end]
     # x scale from the weekly tick marks 2-6 rows below the baseline. The

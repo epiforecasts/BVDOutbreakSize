@@ -17,7 +17,8 @@
 # strip of the embedded image are upscaled and read with tesseract. The
 # title reading is the value and the source reading corroborates it.
 # `printed_n_source` records which path produced the value; `note` says
-# why one is missing or where the two strips disagreed.
+# why one is missing or where the two strips disagreed. A misread is
+# corrected by entering the n read off the title in `PRINTED_N_HAND`.
 #
 # The audit itself (printed, and written to output/onset_curve_audit.md)
 # holds the gap table, and, for each consecutive pair of distinct
@@ -108,11 +109,19 @@ function ocr_rows(R, G, B, rows; keep = nothing)
     end
 end
 
+## The printed n read by eye off the figure title, for vintages where the
+## OCR misreads a digit. The value wins over every automatic reading.
+const PRINTED_N_HAND = Dict(
+    "133" => 6138,
+    "134" => 6138,
+)
+
 """
 The n printed on the onset figure of `pdf`, as `(n, source, note)`. `n` is
 `nothing` when no reading was found; `source` names where it came from.
 """
 function printed_n(pdf, page, R, G, B; crop_dir = nothing, sr = "")
+    haskey(PRINTED_N_HAND, sr) && return (PRINTED_N_HAND[sr], "hand read", "")
     txt = read(`pdftotext -layout -f $page -l $page $pdf -`, String)
     found = parse_printed_n(txt)
     isempty(found) || return (found[1], "text layer", "")
@@ -295,12 +304,7 @@ function calibration(R, G, B, y_step; span_days = 100)
     m = masks(R, G, B)
     line = (R .< 180) .& (G .< 180) .& (B .< 180)
     base = baseline_row(R, G, B, H)
-    yt = try
-        y_axis_ticks(m.dark, base, H, W)
-    catch e
-        e isa ErrorException || rethrow()
-        y_axis_ticks(line, base, H, W)
-    end
+    yt = y_tick_rows(m.dark, line, base, H, W)
     xt = reader_ticks(R, G, B, base)
     ks, xs = tick_chain(xt)
     n = length(xs)
@@ -736,13 +740,45 @@ function main(
     mkpath(dirname(audit_md))
     write(audit_md, report)
     println("wrote $audit_md")
-    return nothing
+    return audit_failures(rows, pairs)
+end
+
+## The acceptance bands every committed block meets: the digitised total
+## within `GAP_TOLERANCE_PCT` of the printed n, and each consecutive pair's
+## settled bars aligned best at shift 0. A render the reader misreads
+## breaks one of them.
+const GAP_TOLERANCE_PCT = 2.1
+
+function audit_failures(rows, pairs)
+    failures = String[]
+    for r in rows
+        r["gap_pct"] === nothing && continue
+        abs(r["gap_pct"]) > GAP_TOLERANCE_PCT || continue
+        push!(
+            failures,
+            "SitRep $(r["sitrep"]): gap $(pct(r["gap_pct"]))% against " *
+                "printed n $(r["printed_n"])"
+        )
+    end
+    for p in pairs
+        (p.best === nothing || p.best == 0) && continue
+        push!(
+            failures,
+            "$(p.from)->$(p.to): settled bars align best at shift $(p.best)"
+        )
+    end
+    return failures
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     crops = filter(a -> startswith(a, "--crops="), ARGS)
-    main(
+    failures = main(
         filter(a -> !startswith(a, "--crops="), ARGS)...;
         crop_dir = isempty(crops) ? nothing : last(split(crops[end], "=", limit = 2))
     )
+    if !isempty(failures)
+        println(stderr, "onset audit failed:")
+        foreach(f -> println(stderr, "  ", f), failures)
+        exit(1)
+    end
 end

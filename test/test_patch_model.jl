@@ -1509,8 +1509,8 @@ end
 @testitem "province kernel: distance should redistribute, not change volume" begin
     using BVDOutbreakSize: province_importation_kernel,
         province_distance_matrix, haversine_km,
-        PROVINCE_POPULATIONS, PROVINCE_CAPITALS,
-        PROVINCE_SOURCE_CAPITALS
+        PROVINCE_POPULATIONS, PROVINCE_CENTRES,
+        PROVINCE_SOURCE_CENTRES
 
     pops = PROVINCE_POPULATIONS
     np = length(pops)
@@ -1536,23 +1536,24 @@ end
     ## gains share against the population-only kernel and the further one
     ## loses it. Stated as the property rather than as a named pair, because
     ## which patch is nearest changes with the patch set.
-    D = province_distance_matrix(PROVINCE_CAPITALS)
+    D = province_distance_matrix(PROVINCE_CENTRES)
     near, far = argmin(D[2:np, 1]) + 1, argmax(D[2:np, 1]) + 1
     @test D[near, 1] < D[far, 1]
     @test K[near, 1] / K[far, 1] > flat[near, 1] / flat[far, 1]
     ## Symmetric with a zero diagonal, and the pairwise distances are the
-    ## great-circle ones to the nearest kilometre. Bunia to Goma and Goma to
-    ## Bukavu are read off the source capitals, since the patches pool them.
+    ## great-circle ones to the nearest kilometre. Ituri to Nord-Kivu and
+    ## Nord-Kivu to Sud-Kivu are read off the source centres, since the
+    ## patches pool them.
     @test D ≈ D'
     @test all(iszero, [D[i, i] for i in 1:np])
     @test haversine_km(
-        PROVINCE_SOURCE_CAPITALS[1],
-        PROVINCE_SOURCE_CAPITALS[2]
-    ) ≈ 379 atol = 5
+        PROVINCE_SOURCE_CENTRES[1],
+        PROVINCE_SOURCE_CENTRES[2]
+    ) ≈ 324 atol = 5
     @test haversine_km(
-        PROVINCE_SOURCE_CAPITALS[2],
-        PROVINCE_SOURCE_CAPITALS[3]
-    ) ≈ 99 atol = 5
+        PROVINCE_SOURCE_CENTRES[2],
+        PROVINCE_SOURCE_CENTRES[3]
+    ) ≈ 260 atol = 5
     ## A steeper decay concentrates exports on the nearer destination.
     steep = province_importation_kernel(pops; decay = 2.0)
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
@@ -1779,9 +1780,9 @@ end
 @testitem "the patches should partition the provinces the reports carry" begin
     using BVDOutbreakSize: PROVINCE_NAMES, PROVINCE_LABELS,
         PROVINCE_MEMBERS, PROVINCE_POPULATIONS,
-        PROVINCE_CAPITALS, PROVINCE_SOURCE_NAMES,
+        PROVINCE_CENTRES, PROVINCE_SOURCE_NAMES,
         PROVINCE_SOURCE_POPULATIONS,
-        PROVINCE_SOURCE_CAPITALS,
+        PROVINCE_SOURCE_CENTRES,
         province_increment_matrix
 
     ## Every province the reports carry belongs to exactly one patch. If one
@@ -1794,7 +1795,7 @@ end
     @test length(PROVINCE_LABELS) == length(PROVINCE_NAMES)
 
     ## A pooled patch takes the summed population of its members and the
-    ## population-weighted mean of their capitals, so its point sits among
+    ## population-weighted mean of their centres, so its point sits among
     ## them rather than on any one.
     @test sum(PROVINCE_POPULATIONS) == sum(PROVINCE_SOURCE_POPULATIONS)
     other = findfirst(==("other"), PROVINCE_NAMES)
@@ -1803,10 +1804,10 @@ end
             for m in PROVINCE_MEMBERS["other"]
     ]
     @test PROVINCE_POPULATIONS[other] == sum(PROVINCE_SOURCE_POPULATIONS[idx])
-    lats = [PROVINCE_SOURCE_CAPITALS[i][1] for i in idx]
-    @test minimum(lats) < PROVINCE_CAPITALS[other][1] < maximum(lats)
-    ## A patch holding one province keeps that province's capital exactly.
-    @test PROVINCE_CAPITALS[1] == PROVINCE_SOURCE_CAPITALS[1]
+    lats = [PROVINCE_SOURCE_CENTRES[i][1] for i in idx]
+    @test minimum(lats) < PROVINCE_CENTRES[other][1] < maximum(lats)
+    ## A patch holding one province keeps that province's centre exactly.
+    @test PROVINCE_CENTRES[1] == PROVINCE_SOURCE_CENTRES[1]
 
     ## Pooling happens on the cumulative counts before differencing, so a
     ## member revised down cannot be clamped away while another member rises.

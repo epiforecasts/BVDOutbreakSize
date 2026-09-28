@@ -34,6 +34,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 
 ## v2.2.0
 
@@ -73,6 +74,7 @@ Changes since v2.1.0.
 ### Model
 
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
+- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
   The share is recomputed each day, so it moves with the admissions.
   The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.

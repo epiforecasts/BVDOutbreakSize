@@ -83,6 +83,14 @@ tasks:
     cmds:
       - python3 scripts/build_health_zones.py {{.CLI_ARGS}}
 
+  province-centres:
+    desc: >
+      Print the PROVINCE_SOURCE_CENTRES literal for src/constants.jl from the
+      INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
+      only.
+    cmds:
+      - python3 scripts/build_province_centres.py {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for
@@ -145,8 +153,9 @@ tasks:
       figure's page, image size and md5, the pixel scales, the printed n,
       the digitised total, the gap and any reprint) and
       output/onset_curve_audit.md (the gap table, the settled-bar checks
-      between consecutive snapshots and the worst vintages). Needs the
-      PDFs (`task download-sitreps`), poppler and tesseract.
+      between consecutive snapshots and the worst vintages). Exits
+      non-zero when a gap is past 2.1% or a pair aligns off shift 0.
+      Needs the PDFs (`task download-sitreps`), poppler and tesseract.
     cmds:
       - julia --project=scripts scripts/audit_onset_curve.jl {{.CLI_ARGS}}
 
