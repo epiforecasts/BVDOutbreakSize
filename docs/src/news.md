@@ -9,7 +9,7 @@ Changes since v2.2.0.
 
 ### Infrastructure
 
-- The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend.
+- The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 
 ## v2.2.0
 
