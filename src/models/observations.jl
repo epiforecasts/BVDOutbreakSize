@@ -3542,9 +3542,7 @@ towards overconfidence on cells that happen to undershoot. Pure,
 top-level, single indexed loop.
 
 The counting term is Poisson-like, with no separate overdispersion
-parameter. The test is the empirical over modelled residual ratio across
-bins of `means`, against the `sqrt(ν/(ν-2))` a Student-t implies. It is in
-the report's symptom-onset reporting-delay section.
+parameter.
 """
 function onset_report_scales(
         means::AbstractVector, τ::Real, reads::AbstractVector{<:Integer}
