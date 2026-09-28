@@ -2379,7 +2379,7 @@ cfr_prior_fig #hide
 # Admissions are forecast by province and the national admissions are their sum.
 # Each province's daily admissions take its modelled admissions and are capped at its own available beds, its beds less its previous day's occupancy plus its exits that day.
 # Its previous-day occupancy and exits are the national ones shared out on its share of the previous day's modelled bed demand.
-# The recorded province beds are the effective beds, the largest of the printed beds, the beds implied by the printed occupancy rate and the patients held.
+# The recorded province beds are the effective beds: the printed beds, or where more patients are held, the larger of the patients and the beds implied by the printed occupancy rate.
 # A province over its beds, such as Nord-Kivu, can then admit only as many as leave.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.

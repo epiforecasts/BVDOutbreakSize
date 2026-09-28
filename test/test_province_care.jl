@@ -389,8 +389,12 @@ end
     @test effective_beds(141, 171, 118.8) == 171
     ## 21 September: 338 patients at 66.2% against a stale 308.
     @test effective_beds(308, 338, 66.2) == 511
-    ## A province under its printed beds keeps them.
+    ## A province under its printed beds keeps them, whatever its rounded
+    ## rate implies (Ituri, 15 July: 686 at 98.99% would give 693 + 2).
     @test effective_beds(25, 10, 40.0) == 25
+    @test effective_beds(693, 686, 98.7) == 693
+    ## Haut-Uélé, 6 September: a rate that disagrees with the printed beds.
+    @test effective_beds(128, 68, 50.8) == 128
     ## No rate, or no patients, printed.
     @test effective_beds(20, 24, nothing) == 24
     @test effective_beds(20, nothing, nothing) == 20
