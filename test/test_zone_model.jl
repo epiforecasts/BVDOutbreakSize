@@ -10,8 +10,8 @@
 @testsnippet ZoneSynthetic begin
     using BVDOutbreakSize
     using BVDOutbreakSize: zone_initial_shares, deviation_knots,
-        deviation_knot_dims, zone_fixed_terms, zone_report_increments,
-        zone_forward, discretise_censored,
+        deviation_knot_dims, zone_fixed_terms, zone_binned_operator,
+        zone_binned_increments, zone_forward, discretise_censored,
         lognormal_meansd, convolve_pmf, knot_days,
         zone_interpolation_weights, zone_delay_operator,
         zone_report_pre_rows, future_knot_days
@@ -78,13 +78,12 @@
         fixed = zone_fixed_terms(I_bar, g, f, t0)
         zd = (;
             I_bar, g, f, patch_ranges, knots, t0, n, days,
-            fixed.force_pre, fixed.report_pre_cum,
-            fixed.infections_pre, mixing = nothing,
+            fixed.force_pre, fixed.infections_pre, mixing = nothing,
             interp = zone_interpolation_weights(knots, t0, n),
-            report_matrix = zone_delay_operator(f, n - t0 + 1),
-            report_pre_rows = zone_report_pre_rows(
-                fixed.report_pre,
-                patch_of_zone, t0, n
+            report_bin = zone_binned_operator(
+                zone_delay_operator(f, n - t0 + 1),
+                zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n),
+                fixed.report_pre_cum, days, t0, patch_of_zone
             ),
         )
         fw = zone_forward(zd, δ_knots, w0, nothing)
@@ -359,8 +358,10 @@ end
         zd.I_bar, zd.g, δd, w0, zd.patch_ranges, t0,
         zd.force_pre
     )
-    r_op = zd.report_matrix * st.infections .+
-        zd.report_pre_rows .* transpose(w0)
+    fixed = zone_fixed_terms(zd.I_bar, zd.g, zd.f, t0)
+    r_op = zone_delay_operator(zd.f, nd) * st.infections .+
+        zone_report_pre_rows(fixed.report_pre, zd.patch_of_zone, t0, n) .*
+        transpose(w0)
     for (p, zs) in enumerate(zd.patch_ranges), z in zs, j in 1:7:nd
         t = t0 + j - 1
         explicit = 0.0
@@ -898,7 +899,7 @@ end
     @test all(arch.target_date .== made + Day(7))
 end
 
-@testitem "zone_report_increments: the explicit window sums" setup = [
+@testitem "zone_binned_increments: the explicit window sums" setup = [
     ZoneSynthetic,
 ] begin
     syn = zone_synthetic()
@@ -906,9 +907,12 @@ end
     n = size(syn.I_bar, 2)
     nd = n - t0 + 1
     fixed = zone_fixed_terms(syn.I_bar, syn.g, syn.f, t0)
-    reports = rand(Xoshiro(2), nd, nz)
+    infections = rand(Xoshiro(2), nd, nz)
     w0 = syn.truth.w0
     patch_of_zone = [p for (p, zs) in enumerate(syn.patch_ranges) for _ in zs]
+    F = zone_delay_operator(syn.f, nd)
+    pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n)
+    reports = F * infections .+ pre_rows .* transpose(w0)
     ## Each window `(d_{v−1}, d_v]` sums the pre-`t0` patch term at the
     ## initial share and the zone's own daily reports from `t0`.
     explicit(days, v) = begin
@@ -931,10 +935,10 @@ end
     ## The fit's windows (the first opens before `t0`), windows entirely
     ## before `t0`, and windows that open after it.
     for days in (syn.days, [t0 - 10, t0 - 3, t0 + 5, n], [t0 + 3, t0 + 20, n])
-        C = zone_report_increments(
-            reports, w0, syn.patch_ranges, days, t0,
-            fixed.report_pre_cum
+        op = zone_binned_operator(
+            F, pre_rows, fixed.report_pre_cum, days, t0, patch_of_zone
         )
+        C = zone_binned_increments(op, infections, w0)
         @test size(C) == (nz, length(days))
         for v in eachindex(days)
             @test C[:, v] ≈ explicit(days, v) rtol = 1.0e-12
@@ -1224,7 +1228,7 @@ end
     ## Deaths are scored per vintage, on the same grid as the cases, and
     ## the rows sum to the cumulative the table ends on.
     @test size(zd.death_counts) == size(zd.counts)
-    @test zd.death_days == zd.days
+    @test size(zd.death_bin.weights, 2) == length(zd.days)
     @test vec(sum(zd.death_counts; dims = 2)) == cld.(inputs.cumulative, 10)
     @test length(zd.death_cell_patch) == length(zd.death_cell_vintage)
     @test length(zd.death_cell_patch) > 2
@@ -1251,12 +1255,7 @@ end
         zd.cell_vintage, zd.cell_total, zd.cell_const,
         zd.patch_ranges, _zone_kappa(0.05)
     )
-    daily = zd.death_matrix * fw.infections .+
-        zd.death_pre_rows .* transpose(truth.w0)
-    D = zone_report_increments(
-        daily, truth.w0, zd.patch_ranges,
-        zd.death_days, zd.t0, zd.death_pre_cum
-    )
+    D = zone_binned_increments(zd.death_bin, fw.infections, truth.w0)
     extra = zone_composition_logpdf(
         zd.death_counts, D, zd.death_cell_patch,
         zd.death_cell_vintage, zd.death_cell_total, zd.death_cell_const,
@@ -1901,7 +1900,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_composition_draws,
-        zone_composition_calibration, zone_report_increments, safe_rate,
+        zone_composition_calibration, zone_binned_increments, safe_rate,
         _zone_composition, _zone_observed_counts,
         _zone_allocated_increments, _zone_multiplier_draws,
         _zone_modelled_shares, _zone_states
@@ -1970,10 +1969,8 @@ end
     @test size(death_inc) == size(case_inc)
     @test death_inc != case_inc
     fw = BVDOutbreakSize.zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
-    expected_death = zone_report_increments(
-        zd.death_matrix * fw.infections .+
-            st.def.death_pre_rows .* transpose(st.w0),
-        st.w0, zd.patch_ranges, zd.death_days, zd.t0, st.def.death_pre_cum
+    expected_death = zone_binned_increments(
+        zd.death_bin, fw.infections, st.def.zone_pre .* st.w0
     )
     @test death_inc ≈ expected_death
     @test case_inc ≈ fw.increments
