@@ -80,13 +80,15 @@ Changes since v2.1.0.
 ### Model
 
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
-- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
   The share is recomputed each day, so it moves with the admissions.
   The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
-- Forecast admissions are drawn by province and sum to the national forecast, each capped at the province's beds less its previous day's occupancy plus its exits that day (#958).
+- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
+- Occupancy never exceeds the beds, per province and nationally: each province's cut-off occupancy is capped at its beds, the rest its shortfall, and the national figures are the sums (#958).
+- The treatment forecast runs each province as a stock capped at its beds, admitting up to its free beds and losing the in-care exits scaled to the occupied beds; occupancy, admissions and beds are drawn by province and sum to national (#958).
+- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.

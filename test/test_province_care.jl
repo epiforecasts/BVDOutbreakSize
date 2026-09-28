@@ -236,6 +236,56 @@ end
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
 end
 
+@testitem "bvd_joint: province admissions enter as a split" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    obs = load_observations()
+    adm = obs.treatment_admissions_history
+    function build(adm_h)
+        return bvd_joint(
+            obs.n,
+            obs.exported_cases, obs.total_deaths, obs.reported_cases,
+            obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            treatment_admissions_history = adm,
+            breakpoint = obs.who_first_sitrep_days,
+            n_patches = length(PROVINCE_NAMES),
+            province_admissions = province_care_observations(
+                adm_h, PROVINCE_NAMES
+            ),
+            tmrca_days = obs.tmrca_days
+        )
+    end
+    ## Synthetic province rows on the national admission days.
+    adm_h = Dict(
+        "ituri" => (; days = adm.days, counts = round.(Int, 0.7 .* adm.counts)),
+        "nord_kivu" => (;
+            days = adm.days, counts = round.(Int, 0.3 .* adm.counts),
+        ),
+    )
+    m = build(adm_h)
+    vi = DynamicPPL.VarInfo(Xoshiro(7), m)
+    base = DynamicPPL.logjoint(m, vi)
+    @test isfinite(base)
+    @test any(contains("admissions_split_rho"), string.(keys(vi)))
+    ## Moving admissions between provinces at a fixed sum moves the density.
+    mv = round.(Int, 0.2 .* adm.counts)
+    shifted = Dict(
+        "ituri" => (; days = adm.days, counts = adm_h["ituri"].counts .- mv),
+        "nord_kivu" => (;
+            days = adm.days, counts = adm_h["nord_kivu"].counts .+ mv,
+        ),
+    )
+    @test !isapprox(
+        DynamicPPL.logjoint(build(shifted), vi), base; rtol = 1.0e-8
+    )
+end
+
 @testitem "province_bed_table: beds, demand and occupancy by province" tags = [
     :slow,
 ] begin

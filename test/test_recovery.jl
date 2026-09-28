@@ -205,7 +205,7 @@ end
         simulate_recovery, recovery_data, recovery_density_check
 
     ## Every stream the headline fit scores, the province laboratory,
-    ## occupancy and bed splits included, is simulated by the generator and
+    ## occupancy, bed and admission splits included, is simulated by the generator and
     ## reaches the rebuilt model, so the two score the true draw alike.
     obs = load_observations()
     breakpoint = default_breakpoint(obs)
@@ -215,6 +215,7 @@ end
     )
     @test any(vn -> occursin("occupancy_split", string(vn)), observed)
     @test any(vn -> occursin("capacity_split", string(vn)), observed)
+    @test any(vn -> occursin("admissions_split", string(vn)), observed)
     @test any(vn -> occursin("lab_composition_state", string(vn)), observed)
     sim = simulate_recovery(generator, observed; seed = 3)
     data = recovery_data(sim)

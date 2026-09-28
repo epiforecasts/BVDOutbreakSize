@@ -1179,12 +1179,12 @@ triangle's future vintages ([`onset_forecast_model`](@ref)). With province
 data, each future week's national confirmed cases and deaths are split
 across the provinces by the fitted compositions
 ([`composition_split_model`](@ref)), as `forecast_province_confirmed` and
-`forecast_province_deaths`, and the national isolation and bed forecasts
-likewise as `forecast_province_isolation` and `forecast_province_beds`. The
-admissions are drawn by province, as `forecast_admissions.province.obs`,
-and sum to the national `forecast_admissions.obs`
-([`treatment_forecast_model`](@ref)). Every quantity up to the cut-off, and
-the density there, is the fitted model's.
+`forecast_province_deaths`. With province care data, the occupancy and
+admissions are drawn daily by province, as
+`forecast_isolation.province.obs` and `forecast_admissions.province.obs`,
+with the beds as `forecast_province_beds`, and each sums to the national
+forecast ([`treatment_forecast_model`](@ref)). Every quantity up to the
+cut-off, and the density there, is the fitted model's.
 """
 @model function bvd_joint(
         n::Integer,
@@ -1245,6 +1245,7 @@ the density there, is the fitted model's.
         background_split = background_split_model,
         province_isolation = nothing,
         province_capacity = nothing,
+        province_admissions = nothing,
         province_death_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1287,7 +1288,8 @@ the density there, is the fitted model's.
             !isempty(province_days) || !isempty(province_death_days) ||
                 !isempty(province_lab_days) ||
                 _has_province_rows(province_isolation) ||
-                _has_province_rows(province_capacity)
+                _has_province_rows(province_capacity) ||
+                _has_province_rows(province_admissions)
         )
         error(
             "per-province data was supplied but n_patches = 1. The " *
@@ -1462,7 +1464,7 @@ the density there, is the fitted model's.
             bvd_reports_matrix,
             background_split = bg_split_state.w,
             patch_ascertainment = patch_asc,
-            province_isolation, province_capacity,
+            province_isolation, province_capacity, province_admissions,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
             deaths_history = treatment_deaths_history,
@@ -1630,7 +1632,12 @@ the density there, is the fitted model's.
         province_occupancy_share := treatment_state.demand_patch ./
             sum(treatment_state.demand_patch; dims = 1)
         province_occupancy_split_rho := treatment_state.occupancy_split_rho
+        ## Daily share of the national admissions by patch, the modelled
+        ## centre of the admissions split.
+        province_admissions_share := treatment_state.admit_patch ./
+            sum(treatment_state.admit_patch; dims = 1)
         province_capacity_split_rho := treatment_state.capacity_split_rho
+        province_admissions_split_rho := treatment_state.admissions_split_rho
     end
     C_T_patch := patch_state.C_T_patch
     ## Each province's reproduction number net of its own depletion, built
