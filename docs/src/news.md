@@ -3,6 +3,12 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## Unreleased
+
+### Infrastructure
+
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
+
 ## v2.2.0
 
 Changes since v2.1.0.
@@ -221,7 +227,6 @@ Changes since v2.1.0.
 - A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30, and a seed fails only when more truths miss their 99% interval than chance allows (#911).
 - The parameter recovery checks the intervention effect (#928).
 - Each parameter-recovery seed runs four chains, a seed that did not finish counts as unconverged, and the recovery tables sit in dropdowns (#954).
-- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit (#880).
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
