@@ -789,8 +789,8 @@ end
 end
 
 @testitem "onset_report_hazard_model: the hazard level lives in η0" begin
-    ## The delay deviations sum to zero and the calendar walk has mean zero,
-    ## so `η0` is the mean logit hazard over delays and report days.
+    ## The delay deviations sum to zero and the calendar walk is zero on the
+    ## grid's first day, so `η0` is the mean logit hazard over delays there.
     using BVDOutbreakSize: onset_report_hazard_model
     using Turing: @varname
     using Random: seed!, Xoshiro
@@ -803,7 +803,7 @@ end
         out = model()
         @test length(out.logit_h0) == 12
         @test mean(out.logit_h0) ≈ out.η0
-        @test abs(mean(out.γ)) < 1.0e-12
+        @test out.γ[1] == 0
     end
 end
 
@@ -828,7 +828,7 @@ end
     D = ONSET_REPORT_MAX_DELAY
     grid_end = maximum(oc.report_days)
     walk_start = minimum(oc.report_days) - D + 1
-    @test BVDOutbreakSize._onset_hazard_grid_start(
+    @test BVDOutbreakSize._onset_hazard_walk_start(
         oc.onset_days, oc.report_days, D
     ) == walk_start
 
@@ -843,8 +843,8 @@ end
     k0 = walk_start - 1
     for g in hz.γ
         @test length(g) == grid_end
-        @test all(==(g[k0 + 1]), g[1:k0])
-        @test abs(mean(g[(k0 + 1):end])) < 1.0e-12
+        @test g[k0 + 1] == 0
+        @test all(iszero, g[1:k0])
     end
 
     daily = [

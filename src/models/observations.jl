@@ -3678,23 +3678,23 @@ and drifting over calendar time. Two non-centred random effects:
     ```
   - a calendar-time random walk on report date, weekly knots linearly
     interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
-    cumulative-sum walk, same construction), then centred on its mean
-    over the grid:
+    cumulative-sum walk, same construction), zero on the grid's first day:
     ```math
     \\sigma_\\gamma \\sim \\text{walk\\_sigma\\_prior}, \\quad
     z_{\\gamma,k} \\sim \\mathcal N(0,1), \\quad
-    w_{\\text{knot},1} = 0, \\
-    w_{\\text{knot},k+1} = w_{\\text{knot},k} + \\sigma_\\gamma z_{\\gamma,k},
-    \\quad \\gamma = w - \\bar w.
+    \\gamma_{\\text{knot},1} = 0, \\
+    \\gamma_{\\text{knot},k+1} = \\gamma_{\\text{knot},k} +
+        \\sigma_\\gamma z_{\\gamma,k}.
     ```
 
 Both constraints fix where the hazard's level lives, so `η0` is the mean
-logit hazard across delays and across the report days the walk spans. Left
-free, the level trades against the mean of the delay deviations, which the
-likelihood cannot see at all, and against a shift of the whole walk, which
-it barely sees. Neither constraint changes the family of hazards the model
-can express. `Q z` has the distribution of `D` independent standard normals
-centred on their mean, so the delay prior stays exchangeable.
+logit hazard across delays on the grid's first day. Left free, the level
+trades against the mean of the delay deviations, which the likelihood cannot
+see at all. The walk is pinned at zero on its first day rather than centred
+on its mean, so each step moves only the days after it. Neither constraint
+changes the family of hazards the model can express. `Q z` has the
+distribution of `D` independent standard normals centred on their mean, so
+the delay prior stays exchangeable.
 
 The walk is indexed on the report-date grid `[grid_start, grid_end]`, not
 the onset/infection-date axis [`rt_walk_model`](@ref) already carries a
@@ -3751,8 +3751,7 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     z_γ ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     steps = σ_γ .* z_γ[1:max(nb - 1, 0)]
     γ_knots = vcat(zero(σ_γ), cumsum(steps))
-    w = interpolate_knots(γ_knots, days, nt)
-    γ = w .- mean(w)
+    γ = interpolate_knots(γ_knots, days, nt)
 
     return (; logit_h0, γ, grid_start = Int(grid_start), η0, σ_h0, σ_γ)
 end
@@ -3807,7 +3806,7 @@ end
 ## Report day the reporting hazard's calendar walk starts from: one delay
 ## support before the earliest report day, bounded below by the earliest
 ## scored onset date and by grid day 1. Returns `1` for an empty history.
-function _onset_hazard_grid_start(
+function _onset_hazard_walk_start(
         onset_days::AbstractVector{<:Integer},
         report_days::AbstractVector{<:Integer}, D::Integer
     )
@@ -3954,7 +3953,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## surfaces them as a flat `onset_report_state.η0` at the composer level
     ## rather than the double-nested form a prefixed attachment would give.
     ## The pairs-plot summary indexes the flat names.
-    walk_start = _onset_hazard_grid_start(onset_days, report_days, D)
+    walk_start = _onset_hazard_walk_start(onset_days, report_days, D)
     hazard_state ~ to_submodel(hazard(walk_start, grid_end; D), false)
     γ = _onset_walk_on_grid(hazard_state.γ, walk_start, grid_start, grid_end)
 
