@@ -7,9 +7,9 @@
 # data/insp_sitrep/processed).
 #
 # The PDFs are the source of truth and scripts/scan_zone_tableau2.jl reads
-# them directly; the mirror is a second pair of eyes, never a replacement
-# (data/README.md, and the header of scripts/confirm_insp_data.jl for the
-# national series). The mirror carries its own transcription artefacts: on
+# them directly; the mirror is a second pair of eyes, and a source only for
+# the cells the PDF does not print (the fallback order in data/README.md,
+# and the header of scripts/confirm_insp_data.jl for the national series). The mirror carries its own transcription artefacts: on
 # some dates its zone rows do not sum to the province total the report
 # prints, and it records the unallocated row under the zone name NA
 # without a province.
