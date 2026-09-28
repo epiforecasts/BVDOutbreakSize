@@ -1,10 +1,8 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, cov, std, var
-using LinearAlgebra: cholesky, Symmetric, I, Diagonal, diag,
+using LinearAlgebra: axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
     issuccess, mul!, LowerTriangular
-using Statistics: quantile, mean, cor, median, std
-using LinearAlgebra: axpy!, dot
 using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
@@ -20,7 +18,6 @@ using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
     is_extracting_colon_eq_values, logjoint, link
-using LogDensityProblems: LogDensityProblems
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -102,9 +99,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_infections_patches, plot_imports_patches,
     plot_patch_summary,
     plot_province_composition_ppc, plot_province_split_ppc,
-    ZONE_MAP_PROVINCES, zone_key, zone_geojson_path,
-    load_health_zones_geojson,
-    plot_zone_map, plot_zone_map_panels, plot_rt_zones,
+    plot_rt_zones,
     plot_zone_shares, plot_zone_forecast, plot_zone_ranking,
     plot_zone_comparison, zone_summary_table,
     plot_rhat_spread, plot_parameter_index_diagnostics,
