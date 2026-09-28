@@ -31,7 +31,7 @@ using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
 using StatsFuns: logit, logistic, logaddexp
-using SpecialFunctions: beta_inc, loggamma
+using SpecialFunctions: beta_inc, digamma, loggamma
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots

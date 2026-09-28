@@ -1052,9 +1052,38 @@ function zone_composition_logpdf(
         cell_const::AbstractVector{<:Real},
         patch_ranges::AbstractVector{<:UnitRange}, κ::Real
     )
+    return first(
+        _zone_composition_logpdf!(
+            nothing, counts, C, cell_patch, cell_vintage, cell_total,
+            cell_const, patch_ranges, κ
+        )
+    )
+end
+
+## `zone_composition_logpdf` and, when `dC` is an array of zeros the size of
+## `C`, its gradient in `C` written into `dC` and its derivative in `κ`,
+## returned as `(lp, dκ)`. With `α_z = κ c_z / T` for `c_z = safe_rate(C_z)`
+## and `T` their sum over the cell,
+##
+##     ∂ℓ/∂κ = ψ(κ) − ψ(N + κ) + Σ_z a_z c_z / T,
+##     ∂ℓ/∂c_w = κ / T (a_w − Σ_z a_z c_z / T),
+##
+## with `a_z = ψ(y_z + α_z) − ψ(α_z)`, zero for a zone that counts zero. A
+## clamped `C_z` passes no derivative. The reverse rule in
+## `mooncake_rules.jl` calls this so the mass is written once.
+function _zone_composition_logpdf!(
+        dC, counts::AbstractMatrix{<:Integer}, C::AbstractMatrix,
+        cell_patch::AbstractVector{<:Integer},
+        cell_vintage::AbstractVector{<:Integer},
+        cell_total::AbstractVector{<:Integer},
+        cell_const::AbstractVector{<:Real},
+        patch_ranges::AbstractVector{<:UnitRange}, κ::Real
+    )
     Tp = promote_type(eltype(C), typeof(float(κ)))
     lp = zero(Tp)
+    dκ = zero(Tp)
     lgκ = loggamma(κ)
+    ψκ = dC === nothing ? zero(Tp) : digamma(κ)
     @inbounds for c in eachindex(cell_patch)
         v = cell_vintage[c]
         zs = patch_ranges[cell_patch[c]]
@@ -1063,15 +1092,28 @@ function zone_composition_logpdf(
             tot += safe_rate(C[z, v])
         end
         acc = lgκ - loggamma(cell_total[c] + κ) + cell_const[c]
+        sa = zero(Tp)
         for z in zs
             y = counts[z, v]
             y == 0 && continue
-            α = κ * safe_rate(C[z, v]) / tot
+            cz = safe_rate(C[z, v])
+            α = κ * cz / tot
             acc += loggamma(y + α) - loggamma(α)
+            dC === nothing && continue
+            a = digamma(y + α) - digamma(α)
+            dC[z, v] = a
+            sa += a * cz
         end
         lp += acc
+        dC === nothing && continue
+        sa /= tot
+        dκ += ψκ - digamma(cell_total[c] + κ) + sa
+        for z in zs
+            dC[z, v] = _safe_rate_on(C[z, v]) ? κ / tot * (dC[z, v] - sa) :
+                zero(Tp)
+        end
     end
-    return lp
+    return lp, dκ
 end
 
 ## `log N! − Σ_z log y_z!` for the counts in one column of `counts` over the

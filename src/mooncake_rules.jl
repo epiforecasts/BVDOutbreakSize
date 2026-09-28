@@ -14,7 +14,6 @@
 # backend upgrade, delete this file rather than maintain it.
 
 using Mooncake: CoDual, NoFData, NoRData, primal, tangent, zero_fcodual
-using SpecialFunctions: digamma
 
 ## An array argument a rule accepts: a float array, or a view into one (a
 ## row of a per-patch matrix). A view's tangent is its parent's tangent, so
@@ -1199,6 +1198,47 @@ function Mooncake.rrule!!(
         return NoRData(), d̄, NoRData()
     end
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
+end
+
+## The health-zone composition likelihood, a Dirichlet-multinomial per
+## scored cell. The gradient is taken in the forward pass by
+## `_zone_composition_logpdf!`, the same loop as the log density.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_composition_logpdf), Array{<:Integer, 2},
+        Array{<:Mooncake.IEEEFloat, 2}, Vector{<:Integer}, Vector{<:Integer},
+        Vector{<:Integer}, Array{<:Mooncake.IEEEFloat, 1},
+        Vector{<:UnitRange}, Mooncake.IEEEFloat,
+    },
+)
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_composition_logpdf)},
+        counts::CoDual{<:Array{<:Integer, 2}},
+        C::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
+        cell_patch::CoDual{<:Vector{<:Integer}},
+        cell_vintage::CoDual{<:Vector{<:Integer}},
+        cell_total::CoDual{<:Vector{<:Integer}},
+        cell_const::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
+        patch_ranges::CoDual{<:Vector{<:UnitRange}},
+        κ::CoDual{<:Mooncake.IEEEFloat}
+    )
+    dC = zero(primal(C))
+    lp, dκ = _zone_composition_logpdf!(
+        dC, primal(counts), primal(C), primal(cell_patch),
+        primal(cell_vintage), primal(cell_total), primal(cell_const),
+        primal(patch_ranges), primal(κ)
+    )
+    C̄ = tangent(C)
+    c̄ = tangent(cell_const)
+    function zone_composition_pullback!!(l̄)
+        C̄ .+= l̄ .* dC
+        ## The constant enters each cell's mass once.
+        c̄ .+= l̄
+        return ntuple(_ -> NoRData(), 8)..., l̄ * dκ
+    end
+    return CoDual(lp, NoFData()), zone_composition_pullback!!
 end
 
 ## The health-zone renewal is a coupled loop: every zone's own force first,

@@ -25,7 +25,7 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r,
-        zone_share_renewal_kernel
+        zone_share_renewal_kernel, zone_composition_logpdf, _zone_cell_const
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -112,6 +112,30 @@
             lh, γ, tab, oi, ri, pri,
             onsets = abs.(randn(rng, n)) .* 20,
             alpha = abs.(randn(rng, nu)) .* 0.3,
+        )
+    end
+
+    ## Health-zone composition inputs: `sizes` zones per patch over `nv`
+    ## vintages, with counts up to `ymax` and a cell for every patch and
+    ## vintage that counts any.
+    function composition_args(rng, sizes, nv; ymax = 6, κ = 19.0)
+        ranges = UnitRange{Int}[]
+        for k in sizes
+            s0 = isempty(ranges) ? 0 : last(last(ranges))
+            push!(ranges, (s0 + 1):(s0 + k))
+        end
+        nz = sum(sizes)
+        C = 0.5 .+ 10 .* rand(rng, nz, nv)
+        y = rand(rng, 0:ymax, nz, nv)
+        cells = [
+            (p, v) for v in 1:nv for p in eachindex(ranges)
+                if sum(y[ranges[p], v]) > 0
+        ]
+        return (
+            y, C, first.(cells), last.(cells),
+            [sum(y[ranges[p], v]) for (p, v) in cells],
+            [_zone_cell_const(y, ranges[p], v) for (p, v) in cells],
+            ranges, κ,
         )
     end
 
@@ -489,6 +513,26 @@
             perf = true
         )
 
+        ## The health-zone composition over two patches, with zero counts,
+        ## which add no mass, an expectation below the floor, which passes
+        ## no derivative, and a patch of one zone. The perf case is the
+        ## zone fit's size.
+        comp = zone_composition_logpdf
+        crng = Xoshiro(980)
+        add!("2 patches", comp, composition_args(crng, [4, 3], 5)...)
+        clamped = composition_args(crng, [4, 3], 5)
+        clamped[2][2, 1] = -1.0
+        add!("clamped expectation", comp, clamped...)
+        add!("one-zone patch", comp, composition_args(crng, [4, 1], 5)...)
+        add!(
+            "concentration 0.5", comp,
+            composition_args(crng, [4, 3], 5; κ = 0.5)...
+        )
+        add!(
+            "63 zones, 95 vintages", comp,
+            composition_args(crng, [28, 16, 7, 12], 95)...; perf = true
+        )
+
         ## The data-only helpers pass no derivative. Their inputs are the
         ## integer day indices and counts the histories carry, including a
         ## `missing` observation vector and a capacity history with no
@@ -657,6 +701,27 @@ end
         @test isapprox(a.lp, b.lp; rtol = 1.0e-8)
         ## Each component, with a floor scaled to the largest for entries
         ## near zero.
+        floor = 1.0e-10 * maximum(abs, b.g)
+        @test all(@. abs(a.g - b.g) <= 1.0e-8 * abs(b.g) + floor)
+    end
+end
+
+@testitem "Mooncake rules: the zone model matches the rules-off derivation" tags = [
+    :ad,
+] setup = [RulesOff, ZoneSynthetic] begin
+    ## The synthetic zone fit with mixing and the correlated deviations on,
+    ## so the renewal takes its mixed branch.
+    syn = zone_synthetic()
+    zd = zone_inputs(syn; zones = zone_metadata(syn)).model_data
+    xs = prior_points(BVDOutbreakSize.bvd_zone(zd))
+    on = zone_values(zd, xs)
+    off = rules_off("result = zone_values(input...)", (zd, xs))
+    @test zd.mixing !== nothing && !isempty(zd.zone_distances)
+    @test rules_loaded()
+    @test !off.rules_loaded
+    for (a, b) in zip(on, off.result)
+        @test isfinite(a.lp)
+        @test isapprox(a.lp, b.lp; rtol = 1.0e-8)
         floor = 1.0e-10 * maximum(abs, b.g)
         @test all(@. abs(a.g - b.g) <= 1.0e-8 * abs(b.g) + floor)
     end

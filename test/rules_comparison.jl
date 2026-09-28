@@ -43,6 +43,17 @@ function joint_values(ldf, xs)
     end
 end
 
+## The health-zone model's log density and gradient at each point, from
+## its fixed inputs `zd`.
+function zone_values(zd, xs)
+    model = BVDOutbreakSize.bvd_zone(zd)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint_internal, vi; adtype = default_adtype()
+    )
+    return joint_values(ldf, xs)
+end
+
 ## Fastest time per call over batches of about 20 µs.
 function fastest(run; seconds = 0.3)
     run()
