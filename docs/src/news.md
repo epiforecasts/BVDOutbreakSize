@@ -48,6 +48,12 @@ Changes since v2.1.0.
   A pooled static deviation returns, `τ_cap ~ Normal⁺(0, 1)` over `z_cap ~ Normal(0, 1)`, and `cap_log_ratio` is removed.
   `province_capacity_share` becomes a daily matrix.
   The background split keeps its population centre.
+- Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
+  The fit sees the whole curve rather than the trailing four weeks.
+  A date a figure does not plot is differenced against the last figure that did, rather than dropped.
+  The onset-to-admission shape prior is `LogNormal(log(1.178), 0.25)` at its three sites, since a truncated Normal open to 0.01 admitted a mode at shape 0.05 once the complete curve was fitted in #884.
+  Ascertainment stays anchored on the confirmed pipeline.
+  Fitted values change.
 - The generation-interval prior is on the Gamma mean and SD, `Normal⁺(15.3, 0.97)` and `Normal⁺(9.3, 1.0)`, each width the sampling error of the NEJM estimate from 92 pairs (#910).
   The implied 95% interval on the mean is 13.4–17.2 d, and the SD is no longer tied to the mean.
   Fitted values change.
@@ -92,7 +98,9 @@ Changes since v2.1.0.
 
 ### Data
 
-- The model cut-off advances to SitRep 131, 22 September (#885).
+- The model cut-off advances to SitRep 134, 25 September.
+  The onset curve adds SitRep 132.
+  SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
@@ -210,6 +218,7 @@ Changes since v2.1.0.
   A density check first confirms the simulated data reach the right streams.
   A failing recovery comments on a tracking issue on main and on the pull request.
 - A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30, and a seed fails only when more truths miss their 99% interval than chance allows (#911).
+- The parameter recovery checks the intervention effect (#928).
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit (#880).
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
