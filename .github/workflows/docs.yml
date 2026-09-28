@@ -339,9 +339,8 @@ jobs:
     steps: *fit-steps
 
   # Parameter recovery: a few datasets simulated from the headline joint at
-  # fixed seeds, each fitted at the headline joint's sampler settings (with
-  # four chains in place of two) and
-  # scored against the values that generated it, with its forecasts scored
+  # fixed seeds, each fitted at the headline joint's sampler settings with
+  # four chains in place of two and scored against the values that generated it, with its forecasts scored
   # against the simulated future (`scripts/recovery.jl`). It runs beside the
   # headline fits and is cached on the fit hash plus the recovery code, so
   # an unchanged model reruns nothing.
@@ -349,13 +348,13 @@ jobs:
     name: Recovery seed ${{ matrix.seed }}
     needs: list
     runs-on: ubuntu-latest
-    # Four chains on the runner's two cores take about 1.5 times the
-    # joint's two, so the slowest seed so far (209 min at two chains, 18 of
-    # them compiling) would take about 305 min.
+    # Four chains on the runner's two cores take about 1.5 times as long
+    # as the joint's two.
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
+        # Keep in step with BVD_RECOVERY_SEEDS in `recovery_report`.
         seed: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7

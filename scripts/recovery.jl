@@ -15,8 +15,7 @@
 #   BVD_RECOVERY_MAX_DEPTH (10): the headline joint's own settings, since a
 #   shorter run does not converge on this model and would test the sampler
 #   rather than the model,
-#   BVD_RECOVERY_CHAINS (4): twice the headline joint's, since at two chains
-#   one seed in three falls short of a bulk ESS of 30,
+#   BVD_RECOVERY_CHAINS (4): twice the headline joint's,
 #   BVD_RECOVERY_HORIZON (14)
 #   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
 #   fit
