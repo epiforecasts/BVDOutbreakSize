@@ -295,12 +295,7 @@ function calibration(R, G, B, y_step; span_days = 100)
     m = masks(R, G, B)
     line = (R .< 180) .& (G .< 180) .& (B .< 180)
     base = baseline_row(R, G, B, H)
-    yt = try
-        y_axis_ticks(m.dark, base, H, W)
-    catch e
-        e isa ErrorException || rethrow()
-        y_axis_ticks(line, base, H, W)
-    end
+    yt = y_tick_rows(m.dark, line, base, H, W)
     xt = reader_ticks(R, G, B, base)
     ks, xs = tick_chain(xt)
     n = length(xs)
