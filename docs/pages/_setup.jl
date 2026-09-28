@@ -543,8 +543,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## being ragged with Monte Carlo error.
     function onset_bar_replicator(chn, rng; ν = 4.0)
         τ = vec(collect(chn[Symbol("onset_report_state.τ")]))
-        isk = vec(collect(chn[Symbol("onset_report_state.inv_sqrt_k")]))
-        k = [1 / (x^2 + eps(x)) for x in isk]
+        k = vec(collect(chn[Symbol("onset_report_state.disp_state.k")]))
         return draws -> [
             begin
                 μ = draws[i]

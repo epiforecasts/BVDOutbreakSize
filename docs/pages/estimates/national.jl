@@ -667,7 +667,7 @@ _onset_labels = merge(
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
         Symbol("onset_report_state.τ") => "onset-report read SD (cases)",
-        Symbol("onset_report_state.inv_sqrt_k") =>
+        Symbol("onset_report_state.disp_state.inv_sqrt_k") =>
             "onset-report count dispersion (1/sqrt k)"
     )
 );
@@ -714,7 +714,7 @@ onset_summary = vcat(
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
             Symbol("onset_report_state.τ"),
-            Symbol("onset_report_state.inv_sqrt_k"),
+            Symbol("onset_report_state.disp_state.inv_sqrt_k"),
         ];
         digits = 3, labels = _onset_labels
     ),
@@ -746,7 +746,7 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.τ"),
-        Symbol("onset_report_state.inv_sqrt_k"),
+        Symbol("onset_report_state.disp_state.inv_sqrt_k"),
     ];
     prior = prior_chn, labels = _onset_labels
 );

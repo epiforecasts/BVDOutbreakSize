@@ -778,7 +778,7 @@ end
     model = onset_reporting_model(oc, fill(30.0, 25))
     names = string.(collect(keys(DynamicPPL.VarInfo(model))))
     @test "τ" in names
-    @test "inv_sqrt_k" in names
+    @test "disp_state.inv_sqrt_k" in names
     seed!(20260924)
     out = model()
     @test out.τ > 0

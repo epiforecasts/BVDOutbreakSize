@@ -3846,7 +3846,7 @@ sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood. The scale
 ([`onset_report_scales`](@ref)) matches a negative binomial count variance
-with dispersion `1/sqrt(k) ~ dispersion_prior` plus a read SD
+with dispersion `k` from the `dispersion` submodel plus a read SD
 `τ ~ read_sd_prior` for each digitised bar the cell differences. Both are
 needed: the count term sets the spread of large cells and the read term
 that of the small late corrections. The read SD prior is centred on the
@@ -3869,7 +3869,9 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
         read_sd_prior = LogNormal(log(0.4), 0.5),
-        dispersion_prior = truncated(Normal(0, 1); lower = 0),
+        dispersion = surveillance_dispersion_model(;
+            inv_sqrt_k_prior = truncated(Normal(0, 1); lower = 0)
+        ),
         ν::Real = 4.0
     )
     onset_days = onset_curve_history.onset_days
@@ -3917,8 +3919,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     τ ~ read_sd_prior
     reads = [p == 0 ? 1 : 2 for p in prev_report_days]
     ## Negative binomial count dispersion, on `1/sqrt(k)`.
-    inv_sqrt_k ~ dispersion_prior
-    k = 1 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+    disp_state ~ to_submodel(dispersion)
+    k = disp_state.k
 
     moments = onset_report_moments(
         cdf_table, grid_start, onsets,
