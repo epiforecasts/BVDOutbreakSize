@@ -24,7 +24,7 @@
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
-        BetaBinomialVector, censoring_cap, admission_headroom, euler_lotka_r,
+        BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel
 
     ## A positive PMF of length `L` with total mass `mass`.
@@ -496,19 +496,12 @@
         days = collect(100:219)
         counts = rand(rng, 150:400, 120)
         cap = (; days = collect(100:3:219), counts = rand(rng, 300:500, 40))
-        occ = (; days, counts)
         add!("120 days", censoring_cap, days, counts, cap; perf = true)
         add!("missing counts", censoring_cap, days, missing, cap)
         add!(
             "no recorded capacity", censoring_cap, days, counts,
             (; days = Int[], counts = Int[])
         )
-        admitted = rand(rng, 0:40, 120)
-        add!(
-            "120 days", admission_headroom, days, admitted, cap, occ;
-            perf = true
-        )
-        add!("missing counts", admission_headroom, days, missing, cap, occ)
 
         ## The growth rate below, at and above `R = 1`, at the model's
         ## generation-interval truncation.

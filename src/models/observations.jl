@@ -248,30 +248,6 @@ function nearest_recorded(
 end
 
 """
-    last_recorded_before(days, counts, day, fallback)
-
-Entry of `counts` at the latest `days` value strictly before `day`, ties
-going to the earliest, or `fallback` when there is no such record. A data
-lookup with no sampled input, written as a scan so that it allocates
-nothing on the gradient path.
-"""
-function last_recorded_before(
-        days::AbstractVector{<:Integer},
-        counts::AbstractVector, day::Integer, fallback
-    )
-    best = 0
-    best_day = 0
-    @inbounds for j in eachindex(days)
-        dj = days[j]
-        if dj < day && (best == 0 || dj > best_day)
-            best_day = dj
-            best = j
-        end
-    end
-    return best == 0 ? fallback : counts[best]
-end
-
-"""
     censoring_cap(iso_days, iso_obs, capacity_history)
 
 Per-report-day right-censoring bound for the isolation-occupancy
@@ -2192,47 +2168,6 @@ function _incare_census(
 end
 
 """
-    admission_headroom(adm_days, capacity_history, isolation_history)
-
-Per-admission-day right-censoring bound for the admissions likelihood, built
-from data alone, the admissions analogue of [`censoring_cap`](@ref). Each
-admission day takes the recorded free-bed headroom `C_fix(t) − occupancy(t-1)`:
-the nearest recorded implied-capacity value (`capacity_history`) less the
-previous day's observed occupancy (`isolation_history`, forward-filled). Days
-before any occupancy record and days with no recorded capacity get a large
-no-op bound. The bound is kept strictly above each day's observed admissions
-(floored at `obs + 0.5`), so a day whose admissions exceeded the headroom is
-scored as a plain count rather than on the censoring boundary. Returns a
-length-`length(adm_days)` `Float64` vector.
-"""
-function admission_headroom(
-        adm_days, adm_obs, capacity_history,
-        isolation_history
-    )
-    cdays = Int.(capacity_history.days)
-    ccounts = Float64.(capacity_history.counts)
-    idays = Int.(isolation_history.days)
-    icounts = Float64.(isolation_history.counts)
-    nocap = 1.0e6
-    have_cap = !isempty(ccounts)
-    have_occ = !isempty(icounts)
-    m = length(adm_days)
-    head = Vector{Float64}(undef, m)
-    @inbounds for (i, d) in enumerate(adm_days)
-        di = Int(d)
-        cap = have_cap ? nearest_recorded(cdays, ccounts, di) : nocap
-        ## Previous day's observed occupancy, the most recent record strictly
-        ## before this admission day. No prior record ⇒ a large no-op headroom.
-        prev_occ = have_occ ?
-            last_recorded_before(idays, icounts, di, -nocap) : -nocap
-        h = cap - prev_occ
-        o = adm_obs === missing ? 0.0 : Float64(adm_obs[i])
-        head[i] = max(h, o + 0.5)
-    end
-    return head
-end
-
-"""
 Default priors and delay submodels of [`treatment_flow_model`](@ref), as
 one named tuple. A composer builds it once, when its model is constructed,
 and passes it as `treatment_flow_model`'s `defaults`, so it is not rebuilt
@@ -2430,11 +2365,10 @@ dies before confirmation is a suspect death in the combined deaths flow.
 Capacity enters only as a fixed, data-derived censoring bound, the latent
 demand staying uncapped. The occupancy likelihood is a NegativeBinomial
 around the demand, right-censored at the recorded implied-capacity series
-([`censoring_cap`](@ref), [`censored_occupancy_model`](@ref)). Admissions
-are censored at the recorded free-bed headroom `C_fix(t) − occupancy(t-1)`.
-The capacity walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries the
-implied-capacity likelihood, and unmet demand `D(t) − censored occupancy`
-is a returned diagnostic.
+([`censoring_cap`](@ref), [`censored_occupancy_model`](@ref)). The
+capacity walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries the
+implied-capacity likelihood, and unmet demand, the demand above `C(t)`, is
+a returned diagnostic.
 
 The daily in-care outcome flows (deaths, rule-outs, admissions,
 absconds) are each an optional NegativeBinomial stream scored against
@@ -2576,7 +2510,17 @@ series for forecasting and replication.
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
-    C_T = isempty(C) ? zero(eltype(C)) : C[nc]
+    ## Cut-off beds: the modelled capacity floored at the recorded cap on the
+    ## last occupancy day, the bound the forecast carries forward.
+    last_cap = isempty(capacity_history.counts) ||
+        isempty(isolation_history.counts) ? 0.0 :
+        only(
+            censoring_cap(
+                isolation_history.days[end:end],
+                isolation_history.counts[end:end], capacity_history
+            )
+        )
+    beds_T = isempty(C) ? zero(eltype(C)) : max(C[nc], last_cap)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2840,7 +2784,6 @@ series for forecasting and replication.
         )
     )
     ## Optional daily Tableau 6 flow likelihoods, each a no-op on empty history.
-    ## Admissions are right-censored at the recorded free-bed headroom.
     dth_days = deaths_history.days
     dth_obs = isempty(deaths_history.counts) ? missing :
         collect(Int.(deaths_history.counts))
@@ -2862,14 +2805,9 @@ series for forecasting and replication.
     adm_h_days = admissions_history.days
     adm_h_obs = isempty(admissions_history.counts) ? missing :
         collect(Int.(admissions_history.counts))
-    adm_means = [admit_daily[clamp(Int(d), 1, n)] for d in adm_h_days]
-    adm_ceil = admission_headroom(
-        adm_h_days, adm_h_obs, capacity_history,
-        isolation_history
-    )
     admissions ~ to_submodel(
-        censored_occupancy_model(
-            adm_means, adm_ceil,
+        vintage_increments_model(
+            [admit_daily[clamp(Int(d), 1, n)] for d in adm_h_days],
             _sim_obs(simulated, :admissions, adm_h_obs), k
         )
     )
@@ -2883,12 +2821,13 @@ series for forecasting and replication.
         )
     )
 
-    ## Cut-off reported quantities. Occupancy is the censored stock, the
-    ## demand capped at the bed count. Bed demand is the uncapped latent
-    ## stock.
+    ## Cut-off reported quantities. Occupancy is the mean the reported
+    ## occupancy is scored around, the demand plus the reclassification
+    ## offset, capped at the bed capacity. Bed demand is the latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
-    occ_T = min(dem_T, C_T)
+    occ_rep = isempty(occ_obs_total) ? z0 : occ_obs_total[nc]
+    occ_T = min(occ_rep, beds_T)
     overall_los = CFR_iso * death_los_state.mean +
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
@@ -2910,9 +2849,10 @@ series for forecasting and replication.
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
-    ## Unmet demand: the uncapped demand above the censored occupancy.
-    bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
-    bed_utilisation := isolation_T / safe_rate(C_T)
+    ## Unmet demand: the reported-scale demand above the cut-off beds.
+    shortfall_T = safe_rate(max(occ_rep - beds_T, z0))
+    bed_shortfall := shortfall_T
+    bed_utilisation := isolation_T / safe_rate(beds_T)
     isolation_severity := sev_state.δ_iso
     isolation_bvd_admission := p_iso_bvd
     incare_cfr := CFR_iso
@@ -2937,13 +2877,13 @@ series for forecasting and replication.
 
     return (;
         p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
-        CFR_iso, β_iso, capacity = C_T,
+        CFR_iso, β_iso, capacity = beds_T, last_cap,
         death_los_mean = death_los_state.mean,
         recovery_los_mean = recovery_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
         admission_delay_mean = adm_delay_state.mean,
         overall_los, abscond_frac, k_isolation = k,
-        demand, occupancy = min.(demand, C), isolation, C,
+        demand, isolation, C,
         occupancy_mean = occ_obs_total,
         demand_patch, admit_patch, capacity_patch = C_patch,
         capacity_series = C,
@@ -2960,6 +2900,7 @@ series for forecasting and replication.
         expected_suspect_incare = susp_incare_rate,
         expected_isolation = isolation_T,
         expected_bed_demand = bed_demand_T,
+        bed_shortfall = shortfall_T,
         expected_admissions = admissions_T,
         expected_incare_deaths = incare_deaths_T,
         expected_ruleouts = ruleouts_T,

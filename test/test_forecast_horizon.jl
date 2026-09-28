@@ -389,3 +389,17 @@ end
             logjoint(m0, θ0)
     end
 end
+
+@testitem "forecast admissions ceiling counts the beds freed that day" begin
+    using BVDOutbreakSize: _admission_ceilings
+    ## Capacity 100: day 1 follows the last recorded occupancy (90), later
+    ## days the drawn occupancy. Exits add to the beds free that day.
+    head = _admission_ceilings(
+        [100.0, 100.0, 100.0], 90, [95.0, 99.0, 80.0], [5.0, 0.0, 10.0]
+    )
+    @test head ≈ [15.0, 5.0, 11.0]
+    @test _admission_ceilings([100.0], 90, [0.0], [7.0])[1] >
+        _admission_ceilings([100.0], 90, [0.0], [0.0])[1]
+    ## An over-full day leaves half a patient, not a negative bound.
+    @test only(_admission_ceilings([50.0], 80, [0.0], [2.0])) == 0.5
+end
