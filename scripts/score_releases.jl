@@ -2,20 +2,23 @@
 #
 # Score every past release's saved forecasts against the now-observed
 # data, plus a persistence baseline, and write tidy score tables to
-# `data/forecast_scores.csv` and `data/province_forecast_scores.csv`.
+# `data/forecast_scores.csv`, `data/province_forecast_scores.csv` and
+# `data/zone/forecast_scores.csv`.
 # Each row carries `log_rel_to_baseline`, its log-CRPS relative skill to
 # that baseline. Also refreshed are the per-release posterior summaries
 # `data/rt_by_release.csv` and `data/r0_by_release.csv`, in the style of
 # `data/released_estimates.csv` (see `scripts/refresh_releases.jl`), and
 # the per-fit `rt_`, `size_` and `r0_by_release_by_stream.csv` overlays.
 # The forecast overlays go to `data/forecast_overlay.csv` and, per province,
-# `data/province/forecast_overlay.csv`.
+# `data/province/forecast_overlay.csv`, and per health zone,
+# `data/zone/forecast_overlay.csv`.
 #
 # The inputs are the assets of every results release on GitHub: a
 # forecast archive (`stream_forecasts.csv`, `forecast.csv`, or a
 # reconstruction on the optional `forecasts-backfill` release), the
 # frozen archive `forecast_frozen.csv`, the per-province
-# `province_forecast.csv`, each release's own `observations.toml`
+# `province_forecast.csv`, the per-zone `zone_forecast.csv`, each
+# release's own `observations.toml`
 # vintage, `posterior_draws.csv` and `stream_estimates.csv`. Both
 # `results-vX.Y.Z` from a version tag and `results-<run number>` from a
 # push to `main` are scored, at most one release per data day (see
@@ -61,6 +64,7 @@ const FORECAST_ASSET = "forecast.csv"
 const FROZEN_FORECAST_ASSET = "forecast_frozen.csv"
 const STREAM_FORECAST_ASSET = "stream_forecasts.csv"
 const PROVINCE_FORECAST_ASSET = "province_forecast.csv"
+const ZONE_FORECAST_ASSET = "zone_forecast.csv"
 const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
@@ -361,13 +365,86 @@ function province_stream_history(obs, stream, province)
     return (; days, counts = reduce(.+, (collect(h.counts) for h in hs)))
 end
 
+## The national stream the per-zone archive splits, mapped to the manifest's
+## per-zone cumulative histories (a `Dict` from source province to a `Dict`
+## from zone name to a `(; days, counts)` history).
+const ZONE_STREAM_HISTORY = Dict(
+    "confirmed cases" => :zone_confirmed_history
+)
+
+## The scored label for one `(stream, zone)` pair of the per-zone archive: the
+## national label with the dotted `province.zone` key in braces. No national
+## or per-province label carries braces, so the labels cannot collide.
+zone_stream_label(stream, zone) = string(stream, " {", zone, "}")
+
+## `(; stream, province, zone)` for a composed per-zone label, `nothing` for
+## every other label. The key splits at its first dot into the source
+## province and the zone name. A label naming a stream the archive does not
+## split, or a key with no province, has no truth source.
+function parse_zone_stream(label)
+    m = match(r"^(.*) \{([^{}.]+)\.([^{}]+)\}$", label)
+    isnothing(m) && return nothing
+    haskey(ZONE_STREAM_HISTORY, m[1]) || return nothing
+    return (;
+        stream = String(m[1]), province = String(m[2]), zone = String(m[3]),
+    )
+end
+
+## The `(; days, counts)` cumulative history of one zone, empty when the
+## manifest carries no per-zone block or not that zone.
+function zone_stream_history(obs, stream, province, zone)
+    field = ZONE_STREAM_HISTORY[stream]
+    empty = (; days = Int[], counts = Int[])
+    hasproperty(obs, field) || return empty
+    hists = getproperty(obs, field)
+    (haskey(hists, province) && haskey(hists[province], zone)) || return empty
+    return hists[province][zone]
+end
+
+## Dates on which the source province of a per-zone stream moved counts it
+## had carried as unallocated into named zones (`zone_reattribution_days` in
+## `src/data.jl`). Empty for every other stream.
+function zone_reattribution_dates(obs, grid_date, stream)
+    p = parse_zone_stream(stream)
+    isnothing(p) && return Date[]
+    field = ZONE_STREAM_HISTORY[p.stream]
+    hasproperty(obs, field) || return Date[]
+    days = get(
+        zone_reattribution_days(getproperty(obs, field)), p.province, Int[]
+    )
+    return Date[grid_date(d) for d in days]
+end
+
+## Whether `(from_date, to_date]` holds a reattribution day for a per-zone
+## stream. The zones' cumulative counts rise on that day by the counts moved
+## out of the unallocated row, so the window is dropped, as the zone model's
+## composition drops that vintage (see `zone_increment_matrix`).
+function spans_zone_reattribution(obs, grid_date, stream, from_date, to_date)
+    for d in zone_reattribution_dates(obs, grid_date, stream)
+        from_date < d <= to_date && return true
+    end
+    return false
+end
+
+## Whether a per-zone stream's history has no vintage on `date`. The zone
+## week is scored only against a zone table dated on its last day, since the
+## nearest vintage either side would count a different week (see
+## `zone_forecast_truth`). False for every other stream.
+function lacks_zone_vintage(obs, grid_date, stream, date)
+    p = parse_zone_stream(stream)
+    isnothing(p) && return false
+    h = zone_stream_history(obs, p.stream, p.province, p.zone)
+    return !any(d -> grid_date(d) == date, h.days)
+end
+
 ## Whether this script has a truth source for `stream`, i.e. it is a named
-## history, an assembled one, or a composed per-province label. An archived
-## label that is none of those (schema drift, a future stream) has no truth
-## and is skipped, never scored against a wrong one.
+## history, an assembled one, or a composed per-province or per-zone label.
+## An archived label that is none of those (schema drift, a future stream)
+## has no truth and is skipped, never scored against a wrong one.
 function has_stream_truth(stream)
     return haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream) ||
-        !isnothing(parse_province_stream(stream))
+        !isnothing(parse_province_stream(stream)) ||
+        !isnothing(parse_zone_stream(stream))
 end
 
 ## The `(; days, counts)` cumulative history a stream is scored against and
@@ -375,6 +452,10 @@ end
 ## another shape. Errors on a stream with no truth source; callers guard
 ## with `has_stream_truth` first.
 function stream_history(obs, stream)
+    z = parse_zone_stream(stream)
+    if !isnothing(z)
+        return (zone_stream_history(obs, z.stream, z.province, z.zone), :incident)
+    end
     p = parse_province_stream(stream)
     if !isnothing(p)
         return (
@@ -462,6 +543,8 @@ end
 function baseline_window_covered(obs, grid_date, stream, made_date, horizon)
     _, kind = stream_history(obs, stream)
     from = window_start(kind, made_date, horizon)
+    spans_zone_reattribution(obs, grid_date, stream, from, made_date) &&
+        return false
     return from >= stream_coverage_start(obs, grid_date, stream)
 end
 
@@ -533,8 +616,8 @@ function confirmed_break_dates(obs, grid_date)
 end
 
 ## Whether `(from_date, to_date]` holds a harmonisation-break day for a
-## per-province stream. False for every national stream, which corrects such
-## a window instead (see `break_correction`).
+## per-province or per-zone stream. False for every national stream, which
+## corrects such a window instead (see `break_correction`).
 ##
 ## The correction is the net vintage step less the printed 24h count, and
 ## both are published nationally only. No per-province split of a break day's
@@ -545,7 +628,8 @@ end
 ## `spans_occupancy_break`): an unscored window is a gap, a window scored
 ## against a base integration is a wrong number.
 function spans_confirmed_break(obs, grid_date, stream, from_date, to_date)
-    isnothing(parse_province_stream(stream)) && return false
+    isnothing(parse_province_stream(stream)) &&
+        isnothing(parse_zone_stream(stream)) && return false
     for d in confirmed_break_dates(obs, grid_date)
         from_date < d <= to_date && return true
     end
@@ -631,9 +715,14 @@ end
 ## #511). Every other stream is unaffected: `break_correction` is zero for
 ## them.
 ##
-## A per-province stream returns `:spans_break` for a window holding one of
-## those days instead, since the correction is published nationally only (see
-## `spans_confirmed_break`).
+## A per-province or per-zone stream returns `:spans_break` for a window
+## holding one of those days instead, since the correction is published
+## nationally only (see `spans_confirmed_break`).
+##
+## A per-zone stream also returns `:no_target_vintage` when its history has
+## no vintage on `target_date` (see `lacks_zone_vintage`) and
+## `:spans_reattribution` for a window holding a reattribution day (see
+## `spans_zone_reattribution`).
 function truth_at(obs, grid_date, stream, made_date, target_date)
     target_date > obs.cutoff && return :not_yet_observed
     target_date > stream_coverage_end(obs, grid_date, stream) &&
@@ -642,6 +731,11 @@ function truth_at(obs, grid_date, stream, made_date, target_date)
         return :not_yet_reporting
     spans_confirmed_break(obs, grid_date, stream, made_date, target_date) &&
         return :spans_break
+    spans_zone_reattribution(
+        obs, grid_date, stream, made_date, target_date
+    ) && return :spans_reattribution
+    lacks_zone_vintage(obs, grid_date, stream, target_date) &&
+        return :no_target_vintage
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
     return window_total_at(
@@ -706,10 +800,12 @@ end
 ##
 ## Vintages whose window opens before the stream began reporting are skipped,
 ## since their total saturates at the whole cumulative rather than measuring a
-## window. So is a per-province vintage whose window holds a
+## window. So is a per-province or per-zone vintage whose window holds a
 ## harmonisation-break day, which is not a day of the walk and cannot be
-## corrected province by province (see `spans_confirmed_break`), so the
-## baseline reads the same days the truth does. The occupancy reclassification
+## corrected province by province (see `spans_confirmed_break`), and a
+## per-zone vintage whose window holds a reattribution day (see
+## `spans_zone_reattribution`), so the baseline reads the same days the
+## truth does. The occupancy reclassification
 ## days need no handling here: they belong to the level streams, which take
 ## the `_history_diffs` pool instead.
 function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
@@ -722,6 +818,9 @@ function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
         date > made_date && break
         date - Day(horizon) < covered && continue
         spans_confirmed_break(
+            obs, grid_date, stream, date - Day(horizon), date
+        ) && continue
+        spans_zone_reattribution(
             obs, grid_date, stream, date - Day(horizon), date
         ) && continue
         total = window_total_at(obs, grid_date, stream, hist, date, horizon)
@@ -945,8 +1044,11 @@ end
 ## Groups that are not scored are counted apart for the caller to log: a
 ## target not yet observed (`.skipped`), one past the stream's own
 ## reporting coverage (`.stopped`, see `truth_at`), and, for the
-## per-province archive (`province_stream_label`), a window holding a
-## harmonisation break (`.spans_break`, see `spans_confirmed_break`). A
+## per-province and per-zone archives, a window holding a harmonisation
+## break (`.spans_break`, see `spans_confirmed_break`). For the per-zone
+## archive (`zone_stream_label`), a week with no zone vintage on its last day
+## (`.no_target_vintage`) and a week holding a reattribution
+## (`.spans_reattribution`) are counted too. A
 ## group whose baseline window is uncovered (`baseline_window_covered`)
 ## keeps its fits' scores and gets no baseline row (`.no_baseline`).
 function score_release(
@@ -961,6 +1063,7 @@ function score_release(
     val_i = col(header, "value")
     fit_i = findfirst(==("fit"), header)
     prov_i = findfirst(==("province"), header)
+    zone_i = findfirst(==("zone"), header)
 
     ## Group rows by (made_date, horizon, target_date, stream) and fit; a
     ## plain `Dict` keeps this independent of DataFrame group-by quirks. A
@@ -974,8 +1077,13 @@ function score_release(
     unknown = 0
     seen_unknown = Set{String}()
     for r in rows
-        stream = isnothing(prov_i) ? r[str_i] :
+        stream = if !isnothing(zone_i)
+            zone_stream_label(r[str_i], r[zone_i])
+        elseif !isnothing(prov_i)
             province_stream_label(r[str_i], r[prov_i])
+        else
+            r[str_i]
+        end
         if !has_stream_truth(stream)
             unknown += 1
             push!(seen_unknown, stream)
@@ -998,6 +1106,8 @@ function score_release(
     unstarted = 0
     no_baseline = 0
     spans_break = 0
+    spans_reattribution = 0
+    no_target_vintage = 0
     for (key, byfit) in groups
         made_date, horizon, target_date, stream = key
         truth = truth_at(obs, grid_date, stream, made_date, target_date)
@@ -1012,6 +1122,12 @@ function score_release(
             continue
         elseif truth === :spans_break
             spans_break += length(byfit)
+            continue
+        elseif truth === :spans_reattribution
+            spans_reattribution += length(byfit)
+            continue
+        elseif truth === :no_target_vintage
+            no_target_vintage += length(byfit)
             continue
         end
         for fit in sort(collect(keys(byfit)))
@@ -1044,7 +1160,7 @@ function score_release(
     end
     return (;
         rows = out, overlay, skipped, stopped, unstarted, no_baseline,
-        spans_break,
+        spans_break, spans_reattribution, no_target_vintage,
     )
 end
 
@@ -1068,14 +1184,44 @@ function score_province_release(
         vintage_obs_path = nothing
     )
     isnothing(forecast_path) && return nothing
+    kept = _method_rows(forecast_path, PROVINCE_FORECAST_METHOD)
+    isnothing(kept) && return :no_projection
+    return score_release(tag, kept, obs, grid_date; vintage_obs_path)
+end
+
+## A copy of the archive at `forecast_path` holding only the rows of
+## `method`, or `nothing` when the archive has no `method` column.
+function _method_rows(forecast_path, method)
     header, rows = read_simple_csv(forecast_path)
     method_i = findfirst(==("method"), header)
-    isnothing(method_i) && return :no_projection
-    kept_rows = filter(r -> r[method_i] == PROVINCE_FORECAST_METHOD, rows)
+    isnothing(method_i) && return nothing
+    kept_rows = filter(r -> r[method_i] == method, rows)
     kept = joinpath(mktempdir(), basename(forecast_path))
     write_simple_csv(
         kept, [h => [r[i] for r in kept_rows] for (i, h) in enumerate(header)]
     )
+    return kept
+end
+
+## The method whose zone forecasts are scored is the package's
+## `ZONE_FORECAST_METHOD`, the one `zone_forecast_archive` writes.
+using BVDOutbreakSize: ZONE_FORECAST_METHOD
+
+## Score one release's per-zone forecast archive: `nothing` when the release
+## does not carry one, and `:no_method` when its archive holds no `method`
+## column. Each zone is scored as its own stream (`zone_stream_label`)
+## against its own history, and only the rows of `ZONE_FORECAST_METHOD`.
+##
+## Every release published before the zone archive existed carries no
+## `zone_forecast.csv`, so an absent asset is the ordinary case and a quiet
+## skip.
+function score_zone_release(
+        tag, forecast_path, obs, grid_date;
+        vintage_obs_path = nothing
+    )
+    isnothing(forecast_path) && return nothing
+    kept = _method_rows(forecast_path, ZONE_FORECAST_METHOD)
+    isnothing(kept) && return :no_method
     return score_release(tag, kept, obs, grid_date; vintage_obs_path)
 end
 
@@ -1269,6 +1415,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## forecast in with the forecast it is a share of.
     province_score_rows = NamedTuple[]
     province_overlay_rows = NamedTuple[]
+    ## Per-zone scores likewise, apart from both.
+    zone_score_rows = NamedTuple[]
+    zone_overlay_rows = NamedTuple[]
     rt_rows = NamedTuple[]
     r0_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
@@ -1292,6 +1441,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_province_no_projection = 0
     n_province_breaks = 0
     n_province_no_baseline = 0
+    n_zone_scored = 0
+    n_zone_no_asset = 0
+    n_zone_no_method = 0
+    n_zone_breaks = 0
+    n_zone_reattributions = 0
+    n_zone_no_vintage = 0
+    n_zone_no_baseline = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
     ## `observations.toml` fetched for the selection is still there when its
@@ -1354,7 +1510,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
             n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
             n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction,
             n_province_scored, n_province_no_asset, n_province_breaks,
-            n_province_no_baseline, n_province_no_projection
+            n_province_no_baseline, n_province_no_projection,
+            n_zone_scored, n_zone_no_asset, n_zone_no_method, n_zone_breaks,
+            n_zone_reattributions, n_zone_no_vintage, n_zone_no_baseline
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -1536,6 +1694,30 @@ if abspath(PROGRAM_FILE) == @__FILE__
             )
         end
 
+        ## The per-zone split, scored zone by zone into its own table. Absent
+        ## on every release published before the asset existed.
+        zone_path = fetch_asset(repo, tag, ZONE_FORECAST_ASSET, tagdir(tag))
+        isnothing(zone_path) && (n_zone_no_asset += 1)
+        zresult = try
+            score_zone_release(
+                tag, zone_path, obs, grid_date;
+                vintage_obs_path = tag_obs_path
+            )
+        catch e
+            @warn "skipping $tag zone forecast scoring" exception = e
+            nothing
+        end
+        zresult === :no_method && (n_zone_no_method += 1)
+        if zresult isa NamedTuple
+            append!(zone_score_rows, zresult.rows)
+            append!(zone_overlay_rows, zresult.overlay)
+            n_zone_scored += 1
+            n_zone_breaks += zresult.spans_break
+            n_zone_reattributions += zresult.spans_reattribution
+            n_zone_no_vintage += zresult.no_target_vintage
+            n_zone_no_baseline += zresult.no_baseline
+        end
+
         draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
         r = try
             rt_row(tag, draws_path, cutoffs[tag])
@@ -1616,6 +1798,15 @@ if abspath(PROGRAM_FILE) == @__FILE__
             "per-province projection), dropping $n_province_breaks group(s) whose window " *
             "holds a harmonisation-break day and drawing no baseline for " *
             "$n_province_no_baseline."
+    )
+    println(
+        "Scored per-zone forecasts for $n_zone_scored/$(length(tags)) " *
+            "releases ($n_zone_no_asset without the asset, " *
+            "$n_zone_no_method without a method column), dropping " *
+            "$n_zone_breaks group(s) whose window holds a harmonisation-" *
+            "break day, $n_zone_reattributions holding a reattribution and " *
+            "$n_zone_no_vintage with no zone vintage on the target date, " *
+            "and drawing no baseline for $n_zone_no_baseline."
     )
     println(
         "R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
@@ -1855,6 +2046,61 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println(
         "Wrote $(nrow(province_overlay)) per-province overlay rows to " *
             "data/province/forecast_overlay.csv"
+    )
+
+    ## `data/zone/forecast_scores.csv` and `data/zone/forecast_overlay.csv`:
+    ## the per-zone forecasts scored and summarised the same way, in the
+    ## province tables' schemas, with each row's `stream` the composed
+    ## `"<stream> {<province>.<zone>}"` label. Both basenames are already in
+    ## `FIT_DATA_EXCLUDE`, so they stay out of the fit key. Written even when
+    ## empty (header only), since the docs build reads them.
+    zone_scores = _score_frame(zone_score_rows)
+    zone_base = rel_to_baseline_columns(zone_scores)
+    zone_scores_dest = joinpath(
+        @__DIR__, "..", "data", "zone", "forecast_scores.csv"
+    )
+    mkpath(dirname(zone_scores_dest))
+    write_simple_csv(
+        zone_scores_dest,
+        [
+            :release => zone_scores.release,
+            :made_date => string.(zone_scores.made_date),
+            :stream => zone_scores.stream,
+            :horizon => zone_scores.horizon,
+            :target_date => string.(zone_scores.target_date),
+            :fit => zone_scores.fit,
+            :crps => zone_scores.crps,
+            :log_crps => zone_scores.log_crps,
+            :dispersion => zone_scores.dispersion,
+            :overprediction => zone_scores.overprediction,
+            :underprediction => zone_scores.underprediction,
+            :coverage_50 => zone_scores.coverage_50,
+            :coverage_90 => zone_scores.coverage_90,
+            :bias => zone_scores.bias,
+            :n_samples => zone_scores.n_samples,
+            :log_rel_to_baseline => rel_to_baseline_cell.(zone_base),
+        ]
+    )
+    zone_overlay = _overlay_frame(zone_overlay_rows)
+    write_simple_csv(
+        joinpath(@__DIR__, "..", "data", "zone", "forecast_overlay.csv"),
+        [
+            :release => zone_overlay.release,
+            :made_date => string.(zone_overlay.made_date),
+            :stream => zone_overlay.stream,
+            :horizon => zone_overlay.horizon,
+            :target_date => string.(zone_overlay.target_date),
+            :fit => zone_overlay.fit,
+            :observed => zone_overlay.observed,
+            :median => zone_overlay.median,
+            :lo30 => zone_overlay.lo30, :hi30 => zone_overlay.hi30,
+            :lo60 => zone_overlay.lo60, :hi60 => zone_overlay.hi60,
+            :lo90 => zone_overlay.lo90, :hi90 => zone_overlay.hi90,
+        ]
+    )
+    println(
+        "Wrote $(nrow(zone_scores)) per-zone scores over $n_zone_scored " *
+            "release(s) and $(nrow(zone_overlay)) overlay rows to data/zone/"
     )
 
     ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
