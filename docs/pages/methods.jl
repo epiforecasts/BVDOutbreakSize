@@ -2083,9 +2083,9 @@ cfr_prior_fig #hide
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
 # The bed occupancy is the censored count the occupancy likelihood scores.
 # Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
-# Admissions are drawn from the negative binomial the fitted days use, right-censored at the free beds, the capacity less the previous day's occupancy.
+# Admissions are drawn from the negative binomial the fitted days use, right-censored at the beds available that day.
+# These are the capacity less the previous day's occupancy, plus the day's modelled deaths, recoveries, rule-outs and absconds, since a bed freed during the day can be refilled.
 # The fit leaves admissions uncensored, so this bound applies to the forecast only.
-# Admissions can therefore fall to near zero when the beds are forecast full.
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.

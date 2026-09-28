@@ -99,10 +99,11 @@ through the likelihood the fitted days are scored with. The occupancy is
 the censored negative binomial around the modelled demand plus the
 reclassification offset. Its cap is the modelled bed capacity, which the
 capacity walk carries past the cut-off, floored at the last fitted cap
-([`censoring_cap`](@ref)). Admissions are censored at the free beds, that
-cap less the previous day's occupancy: the last recorded occupancy on the
-first day, then the drawn one. The fit scores admissions uncensored, so this
-bound applies to the forecast only. In-care deaths and rule-outs are daily
+([`censoring_cap`](@ref)). Admissions are censored at the beds available
+that day: the cap less the previous day's occupancy (the last recorded
+occupancy on the first day, then the drawn one) plus the day's modelled
+exits (deaths, recoveries, rule-outs and absconds). The fit scores
+admissions uncensored, so this bound applies to the forecast only. In-care deaths and rule-outs are daily
 negative binomials. The latent bed demand and capacity are tracked
 alongside. With no recorded capacity or occupancy the
 fitted days are uncensored, and so are the future ones.
@@ -133,7 +134,9 @@ fitted days are uncensored, and so are the future ones.
             float(isolation_history.counts[end]),
             [float(occ[j]) for j in 1:(length(fd) - 1)]
         )
-        max.(ceilings .- prev, 0.5)
+        exits = state.deaths_daily[fd] .+ state.recover_daily[fd] .+
+            state.ruleout_daily[fd] .+ state.abscond_daily[fd]
+        max.(ceilings .- prev .+ exits, 0.5)
     else
         fill(nocap, length(fd))
     end
