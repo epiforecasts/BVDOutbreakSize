@@ -326,14 +326,17 @@ end
     @test df.Province == collect(PROVINCE_LABELS[1:np])
     ## Every cell is a median with an interval.
     @test all(contains("("), df[!, "Beds"])
-    ## Occupied beds split the national occupancy on the demand shares, so
-    ## they sum to it and stay in proportion to the demand.
+    ## Each province's occupied beds are capped at its beds, the rest its
+    ## shortfall, and the national occupancy, beds and shortfall are the
+    ## provinces' sums.
     occ = BVDOutbreakSize._per_patch(chn, :province_expected_isolation, np)
-    dem = BVDOutbreakSize._per_patch(chn, :province_bed_demand, np)
-    iso = vec(Array(chn[:expected_isolation_T]))
-    @test all(isapprox.(sum(occ), iso; rtol = 1.0e-6))
+    beds = BVDOutbreakSize._per_patch(chn, :province_bed_capacity, np)
+    short = BVDOutbreakSize._per_patch(chn, :province_bed_shortfall, np)
+    @test all(isapprox.(sum(occ), vec(Array(chn[:expected_isolation_T])); rtol = 1.0e-6))
+    @test all(isapprox.(sum(beds), vec(Array(chn[:bed_capacity])); rtol = 1.0e-6))
+    @test all(isapprox.(sum(short), vec(Array(chn[:bed_shortfall_T])); rtol = 1.0e-6, atol = 1.0e-8))
     for p in 1:np
-        @test all(isapprox.(occ[p], iso .* dem[p] ./ sum(dem); rtol = 1.0e-6))
+        @test all(occ[p] .<= beds[p] .* (1 + 1.0e-10))
     end
 
     ## A single-population chain carries no per-province beds.
