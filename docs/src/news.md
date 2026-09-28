@@ -3,13 +3,17 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
-## v2.2.1
+## v3.0.0
 
 Changes since v2.2.0.
 
 ### Infrastructure
 
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+
+### Infrastructure
+
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 
 ## v2.2.0
 
