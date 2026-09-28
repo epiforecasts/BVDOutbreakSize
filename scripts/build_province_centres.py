@@ -73,10 +73,9 @@ def main(path):
             lon += pop * zlon
         rows.append((key, len(zones), total, lat / total, lon / total))
     print("const PROVINCE_SOURCE_CENTRES = [")
-    for key, n, total, lat, lon in rows:
+    for (_, name), (_, n, _, lat, lon) in zip(PROVINCES, rows):
         print(
-            f"    ({lat:.4f}, {lon:.4f}),  "
-            f"# {key}, {n} zones, WorldPop {total / 1e6:.2f}M"
+            f"    ({round(lat, 4)}, {round(lon, 4)}),  # {name}, {n} zones"
         )
     print("]")
 
