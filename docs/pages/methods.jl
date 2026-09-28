@@ -1885,17 +1885,14 @@ cfr_prior_fig #hide
 # The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\ell^{\text{bg}}_p),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
 # \qquad
-# \ell^{\text{bg}}_1 = 0,
+# z^{\text{bg}}_1 = 0,
 # \qquad
-# \ell^{\text{bg}}_p \sim \mathrm{Normal}(0,\ 2.5).
+# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
+# \qquad
+# \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```
-#
-# The log-ratios take a fixed scale rather than a pooling scale.
-# Ituri sends over half the specimens analysed from 15% of the population, so the simplex sits several units from its population centre and the data pin each log-ratio.
-# A scale pooled over three such log-ratios is barely identified, and in the fits it traded off against them along a ridge that slowed mixing.
-# A standard deviation of 2.5 places every observed share within two prior standard deviations of its centre.
 #
 # The laboratory composition identifies it, since the background dominates the specimens analysed where positivity is low, and the same split feeds each patch's non-BVD admissions in the treatment-centre flow.
 

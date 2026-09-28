@@ -3,6 +3,7 @@
 
     res = background_split_model(1)()
     @test res.w == [1.0]
+    @test res.pooling_sd == 0.0
 end
 
 @testitem "background_split_model: a simplex centred on population share" begin
@@ -15,19 +16,13 @@ end
     @test length(res.w) == 4
     @test sum(res.w) ≈ 1.0
     @test all(>(0), res.w)
+    @test res.pooling_sd >= 0
 
-    ## With every log-ratio at zero each patch sits on its population share,
-    ## so the prior centre is the population split.
-    flat = DynamicPPL.fix(m; bg_log_ratio = zeros(3))()
+    ## With the pooling scale at zero every patch sits on its population
+    ## share, so the prior centre is the population split and the sampled
+    ## deviations carry the rest.
+    flat = DynamicPPL.fix(m; τ_bg = 0.0)()
     @test flat.w ≈ pops ./ sum(pops)
-
-    ## A log-ratio moves its patch against the reference by exactly that
-    ## factor, and a wide one cannot overflow the normalisation.
-    moved = DynamicPPL.fix(m; bg_log_ratio = [log(2.0), 0.0, 0.0])()
-    @test moved.w[2] / moved.w[1] ≈ 2 * pops[2] / pops[1]
-    wide = DynamicPPL.fix(m; bg_log_ratio = [800.0, 0.0, -800.0])()
-    @test all(isfinite, wide.w)
-    @test sum(wide.w) ≈ 1.0
 end
 
 @testitem "patch_capacity_share_model: daily shares centred on cumulative admissions" begin
@@ -234,7 +229,7 @@ end
 
     ## The background split is sampled once the country has patches.
     names = string.(keys(vi))
-    @test any(contains("bg_log_ratio"), names)
+    @test any(contains("τ_bg"), names)
     @test any(contains("lab_composition_state"), names)
 
     ## Moving analysed specimens between provinces at a fixed daily total
@@ -255,7 +250,7 @@ end
 
     ## One patch has no split to sample.
     single = build(none; n_patches = 1)
-    @test !any(contains("bg_log_ratio"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
+    @test !any(contains("τ_bg"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
 
     ## Province laboratory data with one patch would be dropped silently.
     @test_throws ErrorException build(labh; n_patches = 1)()
