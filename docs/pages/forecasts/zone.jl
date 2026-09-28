@@ -178,6 +178,49 @@ write(joinpath(dashboard_dir, "zone_forecast.md"), zone_forecast_bullets);
 #md # </details>
 #md # ```
 
+# ## Past zone forecasts against what was observed
+#
+# Each release archives its zone forecast, and later releases score it against what each zone went on to report.
+# The figure shows the ten zones with the largest forecasts in this build, one panel per zone.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the zone went on to report.
+# A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
+# The scores are in the [forecast by health zone across releases](@ref "Forecast by health zone across releases") evaluation.
+
+#md # ```@raw html
+#md # <details><summary>Load the archived zone forecasts and their outcomes</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `zone_forecast.csv`, in the national overlay's schema. A missing file
+## reads as an empty table, which the figure reports as nothing scored.
+zone_overlay_df = _release_data(
+    joinpath("zone", "forecast_overlay.csv"),
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
+zone_past_keys = zone_inputs.zone_keys[
+    first(sortperm([median(v) for v in zone_fc_draws.zones]; rev = true), 10),
+]
+zone_past_fig = plot_forecast_overlay(
+    zone_score_rows(
+        scored_overlay(zone_overlay_df), zone_past_keys,
+        zone_inputs.zone_labels[indexin(zone_past_keys, zone_inputs.zone_keys)]
+    );
+    empty_message = "No zone forecast has been scored yet. Scores appear " *
+        "from the first release that archives the zone forecast onwards."
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_past_fig #hide
+
 # ## Archiving the zone forecast
 #
 # Each release carries the zone forecast draws in `zone_forecast.csv`, for scoring once the week has been reported.
