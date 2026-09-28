@@ -46,10 +46,10 @@ Authors: Sam Abbott and Sebastian Funk; Katharine Sherratt and Samuel Brand in t
 FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and the GitHub record; scripts under paper/scripts/, outputs under paper/figures/ committed as pdf and png).
 @fig-model      Figure 1. Where the work started: the first model's outputs. Panels: (A) the McCabe et al. scenario estimates against the v1.0.0 joint posterior of cumulative infections at the 18 May cut-off; (B) the four streams fitted then, observed and posterior predictive; (C) the constant-growth latent curve. Source: the v1.0.0 results release and released_estimates.csv.
 @fig-estimates  Figure 2. Where the work is now: the current model's outputs. Panels: (A) national infections, deaths and the reproduction number over time with the data streams; (B) provincial reproduction numbers and infections, with the health-zone stratum if merged; (C) ascertainment by stream against its prior; (D) one-week-ahead forecast against what was reported. Source: the pinned results release (posterior_draws.csv, stream_draws.csv, forecast.csv, province_forecast.csv).
-@fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) joint fit wall-clock and gradient time per release where recorded. Source: git log, gh api, released_estimates.csv, the benchmark job records.
+@fig-timeline   Figure 3. The development journey measured from GitHub. Panels: (A) lines of model code and number of fitted streams over time, with release tags; (B) commits and merged pull requests per week, split human and agent account; (C) the released outbreak-size estimate by release with the model version and each reporting change marked; (D) the record events as kind by detection route, shaded by who decided (from detection_summary.csv). The gradient-time benchmarks move to the Supporting Information. Source: git log, gh api, released_estimates.csv, change_events.csv.
 @fig-evaluation Figure 4. Evaluation. (A) forecast skill against the persistence baseline by stream and release; (B) outbreak size by single-stream fit against the joint; (C) comparison with McCabe et al. at matched cut-offs. Source: forecast_scores.csv, size_by_release_by_stream.csv, frozen_matched_cutoffs.csv.
 @tbl-streams    Streams fitted: stream, what it observes, observation model, first and last fitted report, break dates.
-@tbl-events     Events that changed the estimates or forecasts, or were defects in a released output: date, event, effect, detected by, decided by (from paper/data/change_events.csv).
+@tbl-events     The subset of record events with a released effect (about 20 of 49; the full record is in the repository): date, event, effect, releases live for defects, detected by, decided by (from paper/data/change_events.csv).
 @tbl-models     Model versions: version tag, dates, latent process, streams, reason for the change; main since v2.1.0 is one row, unreleased at the release analysed.
 -->
 
@@ -181,7 +181,7 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
 ### Implementation
 
 - The model is written in Julia with Turing, sampled with NUTS and differentiated with Mooncake [@ge2018turing; @hoffman2014nuts; @mooncake_jl].
-  - The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against finite differences and against the backend's own derivation of an unregistered copy, which cut the joint gradient by about a fifth and the delay-heavy kernels by several fold. <!-- {{ meta }} from PRs 810, 837, 856; author statement: not something the lead author could have written without the agent -->
+  - The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules checked against finite differences, written by the agents; the measured speed-ups are in the Supporting Information. <!-- reader review: gradient milliseconds do not inform the decision to use agents -->
   - Agents ran wide searches over parameterisations, samplers and gradient backends, most of which measured as null and were not merged, and a precompile workload covering the fit the report runs cuts the cold build to a quarter. <!-- cite the benchmark PRs; author steer: "very wider performance searches" -->
   - Each data update refits every affected model in continuous integration, renders the report, and publishes a versioned release with the model definition, thinned draws and forecasts; only the jobs a change can reach run, and a release is cut from a comment.
   - Model code, priors and analysis text were drafted by a language-model agent from the McCabe et al. report and the delay reanalysis and were reviewed and revised by the authors, with convergence and fit to data as the gate on every change.
@@ -206,13 +206,14 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - The direction of the change at the renewal switch, at the arrival of the onset curve and at the provincial model, read from the released estimates.
   - The direction of the change at each frozen stream and reporting break.
 
-### What changed the estimates and how it was found
+### Where a person was needed
 
 - Of the events that changed the released estimate or the forecasts, most were data changes and most were found by a person reading the reports or the diagnostics, while the defects in released outputs were found by the prospective evaluation and in review (@tbl-events). <!-- counts from paper/data/detection_summary.csv -->
   - The largest moves in the released estimate and what caused each (@fig-timeline C).
   - The events the agents found and reported themselves, and the agent explanations later retracted by the agents.
   - The automated reviewer's findings accepted and rejected, and the two defects only the prospective evaluation caught.
-  - Activity by account over the window (@fig-timeline B).
+  - Activity by account over the window (@fig-timeline B), the human review load per week and the compute per release as the only cost figures the record holds, and the agent-decided count stated as an upper bound at the number because local first-pass reviews appear on the record only as approvals.
+  - For each defect that reached a released output, the releases it was live in before it was found (@tbl-events).
 
 ### Forecast evaluation
 
@@ -267,9 +268,12 @@ FIGURES AND TABLES (all drawn in Julia with CairoMakie from release assets and t
   - Agent-drafted code needs the authors at each modelling decision, a convergence and fit-to-data gate on every change, and an independent check of each agent explanation, several of which the agents corrected themselves within days.
   - The agent workflow also made engineering feasible that the authors would not have attempted alone, the hand-written adjoints and the release tooling, and each production check was added after the failure it now prevents. <!-- author statement in chat, 24 Sep: "not something I could have done without llm" -->
 
-- The record answers, for this project, where a person was needed: at every change of model structure, data rule and prior, and at the reading of diagnostics, while the agents found and fixed most implementation defects and the prospective evaluation caught what neither did. <!-- Sebastian, PR 883; state only what @tbl-events shows -->
-  - Which detection routes caught which kinds of event, from the table.
-  - What that implies for who should direct such work and what checks must sit outside the loop.
+- The record shows, for this project, where a person was needed: at every change of model structure, data rule and prior, and at the reading of diagnostics, while the agents found and fixed most implementation defects and the prospective evaluation caught what neither did. <!-- Sebastian, PR 883; state as what the record shows, not "may say" -->
+  - What the reviewing person had to be able to do here: read sampler diagnostics, judge a prior against the literature, and know the surveillance system well enough to spot a reclassification.
+  - The checks ranked by what they caught: the prospective scoring found the two released forecast defects nothing else did, review of diagnostics gated most changes, the automated reviewer contributed two findings against its volume of comments, and the continuous-integration gate postdates every failure it would have caught.
+  - What we would not delegate again on this evidence, each tied to a record item: prior choices, the structure of the latent process, and any agent diagnosis of why a fit behaves as it does.
+  - What the estimate's width supports for a response: it separates an outbreak twice the confirmed count from one ten times it, and the forecast intervals do not separate one plausible week from another.
+  - Token and wall-clock cost were not logged, so the workflow cannot be priced here.
 
 - Several defects were of a kind a human author would be unlikely to write, and two were found by the prospective evaluation rather than by review. <!-- one or two paragraphs; every item needs its issue or PR as evidence; human-confirmed ones first -->
   - The forecast compounded the last random-walk innovation over the horizon, so the intervals widened with each release until coverage sat at one (issue 622).
