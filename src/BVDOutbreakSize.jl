@@ -209,6 +209,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     zone_last_case_dates, zone_parent_extract, zone_subset,
     zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,
     zone_forecast_scores, zone_composition_ppc, zone_composition_draws,
+    zone_score_key, zone_score_rows,
     zone_composition_calibration, plot_zone_composition_ppc,
     zone_diagnostics_table, zone_sampler_diagnostics
 

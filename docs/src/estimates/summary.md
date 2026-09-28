@@ -106,13 +106,15 @@ The detail is on the [National estimates](national.md) page.
 The split of each patch's infections across its health zones, with the zone maps and the interactive map, is on the [Health zones](zone.md) page.
 The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
 
+The week-ahead forecast by health zone:
+
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "zone_forecast.md"), String))
 ```
 
-The maps give each zone's reproduction number at the cut-off, the 90% interval on its confirmed cases over the coming week and its confirmed cases to date.
+The map panels give each zone's reproduction number at the cut-off, the 90% interval on its confirmed cases over the coming week and its confirmed cases to date.
 A reproduction number whose 90% interval spans one is washed towards white.
 
 ![Health zones at the cut-off](../summary_assets/zone_rt_map.png)
