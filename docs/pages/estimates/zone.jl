@@ -308,36 +308,26 @@ MarkdownTable(zone_diagnostics) #hide
 #md # <details><summary>Reproduction number from the zone stage and the joint fit</summary>
 #md # ```
 
-## Each draw's implied reproduction number from its patch trajectories:
-## the joint's draws on one side and the zone stage's deformed patch
-## trajectories on the other, the four patches then their sum.
-function _implied_rt_draws(patch_draws)
-    ndraws = size(first(patch_draws), 1)
-    rt(I) = implied_national_Rt(I, zone_inputs.g)
-    per_patch = [
-        reduce(vcat, (rt(m[i, :])' for i in 1:ndraws))
-            for m in patch_draws
-    ]
-    national = reduce(
-        vcat, (rt(sum(m[i, :] for m in patch_draws))' for i in 1:ndraws)
-    )
-    return vcat([national], per_patch)
+## The implied reproduction number of each row of `draws` (draws × days).
+function _implied_rt_matrix(draws::AbstractMatrix)
+    m = similar(draws, Float64)
+    for i in axes(draws, 1)
+        m[i, :] .= implied_national_Rt(view(draws, i, :), zone_inputs.g)
+    end
+    return m
 end
-zone_stage_rt = _implied_rt_draws(
-    zone_patch_infections(chn_local, zone_inputs)
-);
+## The zone stage's deformed patch trajectories on one side and the joint's
+## draws on the other, nationally then per patch. The joint's per-patch
+## values are the grey references of the trajectory panels above.
+zone_stage_rt = let I = zone_patch_infections(chn_local, zone_inputs)
+    vcat([_implied_rt_matrix(sum(I))], _implied_rt_matrix.(I))
+end;
 joint_stage_rt = let draws = _patch_infection_draws
-    _implied_rt_draws(
-        [
-            reduce(
-                vcat, (
-                    reshape(Float64.(v), N_PATCHES, obs.n)[p, :]'
-                        for v in draws
-                )
-            )
-                for p in 1:N_PATCHES
-        ]
-    )
+    national = Float64[
+        sum(reshape(Float64.(v), N_PATCHES, obs.n)[:, t])
+            for v in draws, t in 1:obs.n
+    ]
+    vcat([_implied_rt_matrix(national)], patch_implied_rt)
 end;
 zone_meld_rt_fig = plot_rt_zones(
     [m[:, zone_grid] for m in zone_stage_rt],
@@ -380,29 +370,25 @@ prior_chn_zone = zone_prior_draws(zone_inputs);
 #md # <details><summary>Compute the zone prior and posterior table</summary>
 #md # ```
 
-zone_hyper_labels = Dict(
-    :region_sd_zone => "Level spread σ_level",
-    :region_halflife_zone => "Deviation half-life (days)",
-    :correlation_reference_zone => "Correlation ρ_corr",
-    :zone_ascertainment_sd => "Ascertainment spread σ_ascertainment",
-    :zone_severity_sd => "Severity spread σ_severity",
-    :mixing_within_zone => "Within-patch mixing ε_within",
-    :mixing_departure_zone => "Mixing departure τ_mix",
-    :composition_rho_zone => "Case composition ρ",
-    :composition_rho_death_zone => "Death composition ρ_death",
-)
-## The scalar hyperparameters both chains carry; the mixing and correlation
+## Each scalar zone hyperparameter with its table label and pair-plot axis
+## label, kept where both chains carry it: the mixing and correlation
 ## blocks are sampled only when their inputs are on.
-zone_hyper_keys = [
-    k for k in (
-            :region_sd_zone, :region_halflife_zone,
-            :correlation_reference_zone, :zone_ascertainment_sd,
-            :zone_severity_sd, :mixing_within_zone, :mixing_departure_zone,
-            :composition_rho_zone, :composition_rho_death_zone,
+zone_hyper = [
+    h for h in (
+            (:region_sd_zone, "Level spread", "σ_level"),
+            (:region_halflife_zone, "Deviation", "half-life (days)"),
+            (:correlation_reference_zone, "Correlation", "ρ_corr"),
+            (:zone_ascertainment_sd, "Ascertainment spread", "σ_ascertainment"),
+            (:zone_severity_sd, "Severity spread", "σ_severity"),
+            (:mixing_within_zone, "Within-patch mixing", "ε_within"),
+            (:mixing_departure_zone, "Mixing departure", "τ_mix"),
+            (:composition_rho_zone, "Case composition", "ρ"),
+            (:composition_rho_death_zone, "Death composition", "ρ_death"),
         )
-        if BVDOutbreakSize._has_key(chn_local, k) &&
-        BVDOutbreakSize._has_key(prior_chn_zone, k)
+        if BVDOutbreakSize._has_key(chn_local, h[1]) &&
+        BVDOutbreakSize._has_key(prior_chn_zone, h[1])
 ]
+zone_hyper_keys = first.(zone_hyper)
 _hyper_draws(chn, k) = Float64.(vec(collect(chn[k])))
 _drift_draws(chn, p) = Float64[
     v[p] for v in vec(collect(chn[:region_drift_sd_zone]))
@@ -422,10 +408,10 @@ zone_prior_table = DataFrame(
     vcat(
         [
             _prior_posterior_row(
-                zone_hyper_labels[k], _hyper_draws(chn_local, k),
+                "$(label) $(sym)", _hyper_draws(chn_local, k),
                 _hyper_draws(prior_chn_zone, k)
             )
-                for k in zone_hyper_keys
+                for (k, label, sym) in zone_hyper
         ],
         [
             _prior_posterior_row(
@@ -439,17 +425,8 @@ zone_prior_table = DataFrame(
 ## The pair plot's axes take the symbols alone.
 zone_hyper_pair_fig = plot_pair(
     chn_local, zone_hyper_keys;
-    prior = prior_chn_zone, labels = Dict(
-        :region_sd_zone => "σ_level",
-        :region_halflife_zone => "half-life (days)",
-        :correlation_reference_zone => "ρ_corr",
-        :zone_ascertainment_sd => "σ_ascertainment",
-        :zone_severity_sd => "σ_severity",
-        :mixing_within_zone => "ε_within",
-        :mixing_departure_zone => "τ_mix",
-        :composition_rho_zone => "ρ",
-        :composition_rho_death_zone => "ρ_death",
-    )
+    prior = prior_chn_zone,
+    labels = Dict(k => sym for (k, _, sym) in zone_hyper)
 );
 
 #md # ```@raw html
