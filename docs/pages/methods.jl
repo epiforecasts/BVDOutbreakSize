@@ -691,7 +691,7 @@ MarkdownTable(vintage_table) #hide
 # We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty:
 #
 # ```math
-# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
 # ```
 #
@@ -707,7 +707,7 @@ MarkdownTable(vintage_table) #hide
 # We do the same: each component is a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posteriors:
 #
 # ```math
-# \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
+# \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
@@ -722,7 +722,7 @@ MarkdownTable(vintage_table) #hide
 # The export model therefore uses the same line-list onset-to-admission delay [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above, with the same natural shape and scale priors:
 #
 # ```math
-# \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
 # \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
 # ```
 #
@@ -1731,8 +1731,11 @@ cfr_prior_fig #hide
 # The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
 # The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
-# The likelihood scores the difference between consecutive snapshots at each onset date, in a trailing $D$-day window of the newer snapshot's report day.
-# This avoids double-counting a case already reported earlier, and drops the older onset dates that carry only noise by then.
+# The likelihood scores each onset date once.
+# Its first print is a level, differenced against an empty predecessor.
+# Each later figure $R_s$ that prints it while its delay is inside the support scores a correction against the last figure $R_{s-1}$ that printed it.
+# A level and its corrections sum to the latest print inside the support, so no case is counted twice.
+# Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
 # A count likelihood cannot be used, since a re-dated case can move a bar down in a later scan even though the true running total cannot fall.
 # The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
@@ -1750,8 +1753,7 @@ cfr_prior_fig #hide
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
 # $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
 #
-# The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
-# That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
+# The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #
 # Three things stay weak.
 # The ascertainment walk $\omega$ shares the onset axis with the reproduction-number walk, and both are least constrained over the final fortnight.
