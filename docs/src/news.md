@@ -23,16 +23,21 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 131 (22 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 
 ### Report
 
+- The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
+- The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
+- The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's (#978).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+- The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 
 ### Infrastructure
 
+- Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
@@ -41,6 +46,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Fixed
 
+- The zone diagnostics no longer print a warning per zone whose reproduction number is undefined in some draw (#978).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 

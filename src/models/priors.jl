@@ -1572,8 +1572,7 @@ and `Rt_matrix` covers the horizon.
     z_drift ~ product_distribution(
         fill(region_offset_prior, max(nd * (nb - 1), 1))
     )
-    ## Every knot's innovation in one product, column `k - 1` for knot `k`,
-    ## then the AR(1) retention as a scan over the knots.
+    ## One innovation column per knot after the first.
     Z = nb > 1 ? reshape(z_drift, nd, nb - 1) : zeros(eltype(z_drift), nd, 0)
     δ_knots = sum_to_zero_knots(F_level, F_drift, z_level, Z, φ)
     ## Interpolate each patch's deviation to the daily grid and build Rt.

@@ -600,12 +600,9 @@ C_{zq} = \\exp(-d_{zq} / \\ell),
 ```
 
 so `ρ_ref` is the correlation of two zones a reference distance `d̄` apart.
-Each factor is the lower Cholesky factor `A` of `Qᵀ C Q`, with `Q` the
-sum-to-zero basis over the patch's `m` zones ([`sum_to_zero_basis`](@ref)),
-so `Q A Aᵀ Qᵀ = P C P` with `P = I - J / m` and the deviations have the
-covariance of correlated draws centred within the patch. A patch of fewer
-than two zones gets an empty factor. A `ridge` on the diagonal of `C`
-conditions each factorisation.
+Each factor is the lower Cholesky factor of `Qᵀ C Q`, over the sum-to-zero
+basis `Q` of the patch's zones, and empty for fewer than two zones. A
+`ridge` on the diagonal of `C` conditions each factorisation.
 `distances` holds one matrix per patch, over its zones for the level and
 over its walking zones for the innovations. The meld carries correlation
 between patches, through the parent draw every zone of a patch shares.
