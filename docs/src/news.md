@@ -11,6 +11,10 @@ Changes since v2.2.0.
 
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 
+### Fixed
+
+- The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
+
 ### Infrastructure
 
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).

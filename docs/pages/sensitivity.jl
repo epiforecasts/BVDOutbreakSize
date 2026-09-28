@@ -816,6 +816,11 @@ end
 ours_10jun = _fan_at("2026-06-10")
 ours_24jun = _fan_at("2026-06-24")
 
+## Observed confirmed totals on Chamla's forward report dates, read from the
+## confirmed-case history frozen at each date.
+observed_10jun = freeze_observations("2026-06-10").confirmed_cases
+observed_24jun = freeze_observations("2026-06-24").confirmed_cases
+
 ## Observed confirmed cases over the comparison window: the daily cumulative
 ## series read off the chain's grid from 18 May (Chamla's first projected point)
 ## to the cut-off.
@@ -857,8 +862,8 @@ chamla_w12_rows = vcat(
     [("Our projection (from 8 June)", ours_24jun...)],
     [
         (
-            "Observed by 23 June cut-off", obs.confirmed_cases,
-            obs.confirmed_cases, obs.confirmed_cases,
+            "Observed by 24 June", observed_24jun,
+            observed_24jun, observed_24jun,
         ),
     ]
 )
@@ -905,8 +910,8 @@ chamla_comparison_table = let
         ],
         "Our projection (90% CrI)" => [fmt(ours_10jun), fmt(ours_24jun)],
         "Observed confirmed" => [
-            string(freeze_observations("2026-06-10").confirmed_cases),
-            string(obs.confirmed_cases) * " (23 June)",
+            string(observed_10jun),
+            string(observed_24jun),
         ]
     )
 end;
