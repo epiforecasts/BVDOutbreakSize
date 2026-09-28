@@ -614,6 +614,29 @@ end
     end
 end
 
+@testitem "Mooncake rules: the derived abscond flows pass zero admissions a derivative" tags = [
+    :ad,
+] setup = [ADRuleCases, RulesOff] begin
+    ## Both flows admit nothing on the leading days and on one interior day.
+    ## The rule and the rules-off derivation agree on those admissions.
+    rng = Xoshiro(20260928)
+    adm(n) = (a = abs.(randn(rng, n)) .+ 0.5; a[[1, 2, 3, 17]] .= 0; a)
+    cases = [
+        (;
+            name = "zero admissions", f = abscond_thinned_flows,
+            args = (
+                adm(40), pmf(rng, 15), adm(40), pmf(rng, 9), 0.07,
+                0.05 .+ 0.3 .* rand(rng, 40),
+            ),
+        ),
+    ]
+    on = pullback_times(cases)
+    off = rules_off("result = pullback_times(input)", cases)
+    @test rules_loaded()
+    @test !off.rules_loaded
+    @test agrees(only(on).result, only(off.result).result; rtol = 1.0e-8)
+end
+
 @testitem "Mooncake rules: pullbacks leave the output tangent as given" tags = [
     :ad,
 ] begin
