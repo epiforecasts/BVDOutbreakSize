@@ -16,8 +16,11 @@ Runtime inputs, fetched by relative URL from this directory:
                         exceeds one, in [0,1], may be empty below the
                         reporting floor),
                         cases_last_7/cases_last_14/cases_last_28 (confirmed
-                        cases allocated to the zone over the past N days)
-                        and last_case_date (ISO date or empty)
+                        cases allocated to the zone over the past N days),
+                        last_case_date (ISO date or empty), walking (1 when
+                        the zone carries its own transmission walk, 0 when
+                        its reproduction number is its patch's scaled by a
+                        level) and as_of (ISO data cut-off date)
   health_zones.geojson copied from data/health_zones.geojson by docs/make.jl
 
 Leaflet comes from cdnjs with subresource-integrity hashes computed from the
@@ -32,18 +35,21 @@ Nothing else is fetched.
     --bg: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #d9d8d3;
     --panel: #ffffff; --accent: #2a78d6; --map-bg: #e9e8e3;
     --neutral: #cfcdc6; --nodata: #fbfaf8; --edge: #d2d0ca;
+    --hidden: #dcdad4; --hatch: #52514e;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #1a1a19; --ink: #f2f2f0; --ink-2: #c3c2b7; --line: #3d3d3a;
       --panel: #242423; --accent: #3987e5; --map-bg: #2a2a28;
       --neutral: #8d8c86; --nodata: #3f3f3c; --edge: #161615;
+      --hidden: #2f2f2d; --hatch: #e0dfd8;
     }
   }
   :root[data-theme="dark"] {
     --bg: #1a1a19; --ink: #f2f2f0; --ink-2: #c3c2b7; --line: #3d3d3a;
     --panel: #242423; --accent: #3987e5; --map-bg: #2a2a28;
     --neutral: #8d8c86; --nodata: #3f3f3c; --edge: #161615;
+    --hidden: #2f2f2d; --hatch: #e0dfd8;
   }
   html, body { height: 100%; margin: 0; }
   body {
@@ -56,7 +62,11 @@ Nothing else is fetched.
     display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
     padding: 8px 12px; border-bottom: 1px solid var(--line);
   }
-  header .title { font-weight: 600; margin-right: auto; }
+  header .title { font-weight: 600; }
+  header .asof { color: var(--ink-2); margin-right: auto; }
+  header a { color: var(--accent); }
+  #hatch-defs { position: absolute; width: 0; height: 0; }
+  #hatch-defs line { stroke: var(--hatch); stroke-width: 1.5; }
   .switch { display: flex; gap: 4px; flex-wrap: wrap; }
   .switch label {
     padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
@@ -106,6 +116,7 @@ Nothing else is fetched.
   .legend .sw {
     width: 18px; height: 12px; border: 1px solid rgba(0,0,0,.25); flex: none;
   }
+  .legend .note { color: var(--ink-2); margin-top: 4px; }
   .prov-label {
     background: none; border: none; box-shadow: none; color: var(--ink-2);
     font-size: 12px; font-weight: 700; letter-spacing: .05em;
@@ -126,6 +137,7 @@ Nothing else is fetched.
 <body>
 <header>
   <span class="title">Health-zone estimates</span>
+  <span class="asof" id="asof"></span>
   <div class="switch" role="radiogroup" aria-label="Metric">
     <label><input type="radio" name="metric" value="R_T" checked><span>Reproduction number</span></label>
     <label><input type="radio" name="metric" value="forecast"><span>7-day forecast</span></label>
@@ -159,7 +171,17 @@ Nothing else is fetched.
     <option value="28">28 days</option>
   </select>
   <button class="plain" id="toggle-table" aria-pressed="false">Table</button>
+  <a href="zone_estimates.csv" download>CSV</a>
+  <a href="../methods#Health-zone-model" target="_blank" rel="noopener">Methods</a>
 </header>
+<svg id="hatch-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse"
+      patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6"></line>
+    </pattern>
+  </defs>
+</svg>
 <div id="stage">
   <div id="map" role="application" aria-label="Map of health zones"></div>
   <div id="status">Loading the health-zone estimates.</div>
@@ -234,8 +256,24 @@ Nothing else is fetched.
     { max: Infinity, c: "#a8302f", l: "90% and above" }
   ];
   var NODATA = { c: "nodata", l: "no estimate" };
-  // The neutral midpoint and the no-data fill come from the theme.
-  function paint(c) { return c === "neutral" || c === "nodata" ? cssVar("--" + c) : c; }
+  var HIDDEN = { c: "hidden", l: "hidden by filter" };
+  // The neutral midpoint, the no-data and the filtered fills come from the
+  // theme.
+  function paint(c) {
+    return c === "neutral" || c === "nodata" || c === "hidden" ?
+      cssVar("--" + c) : c;
+  }
+  // A #rrggbb colour moved a fraction t of the way towards another.
+  function mix(c, to, t) {
+    var a = parseInt(c.slice(1), 16), b = parseInt(to.slice(1), 16);
+    var out = [16, 8, 0].map(function (s) {
+      var x = (a >> s) & 255, y = (b >> s) & 255;
+      return Math.round(x + (y - x) * t);
+    });
+    return "#" + out.map(function (x) {
+      return (x < 16 ? "0" : "") + x.toString(16);
+    }).join("");
+  }
 
   var METRICS = {
     R_T: {
@@ -250,6 +288,11 @@ Nothing else is fetched.
         return "Reproduction number " + fmt2(r.R_T_median) +
           " (90% interval " + fmt2(r.R_T_lower) + " to " +
           fmt2(r.R_T_upper) + ")";
+      },
+      // The interval spans one, so the direction is uncertain.
+      straddles: function (r) {
+        return num(r.R_T_lower) && num(r.R_T_upper) &&
+          r.R_T_lower < 1 && r.R_T_upper > 1;
       }
     },
     forecast: {
@@ -278,7 +321,9 @@ Nothing else is fetched.
       kind: "sequential", fmt: fmtPct,
       value: function (r) { return r.share_median; },
       text: function (r) {
-        return "Share of the patch's infections " + fmtPct(r.share_median);
+        return "Share of the patch's infections " + fmtPct(r.share_median) +
+          " (90% interval " + fmtPct(r.share_lower) + " to " +
+          fmtPct(r.share_upper) + ")";
       }
     },
     p_ge: {
@@ -417,7 +462,8 @@ Nothing else is fetched.
   };
   legend.addTo(map);
 
-  var byZone = {}, rows = [], layer = null, metric = "R_T", bins = [];
+  var byZone = {}, rows = [], layer = null, hatch = null, metric = "R_T";
+  var bins = [];
   var threshold = "10", filterMode = "all", windowDays = "14", summary = "median";
   // The posterior-summary selector only has meaning for the two metrics
   // that carry an interval; other metrics ignore it.
@@ -472,6 +518,11 @@ Nothing else is fetched.
   function visibleRows() {
     return rows.filter(function (r) { return !isHidden(r); });
   }
+  // A level-only zone's reproduction number is its patch's, scaled by a
+  // level, so the two reproduction-number metrics hatch it.
+  function levelOnly(r) { return !!r && r.walking === 0; }
+  function rtMetric() { return metric === "R_T" || metric === "p_rt"; }
+  var LEVEL_ONLY_TEXT = "Level only: R inherited from its patch";
   // Extra tooltip lines specific to the chance-of-cases metric.
   function pGeLines(r) {
     var v = r["p_ge_" + threshold];
@@ -513,9 +564,24 @@ Nothing else is fetched.
   }
   function styleFor(f) {
     var r = featureRow(f);
-    var b = (!r || isHidden(r)) ? NODATA : pick(bins, METRICS[metric].value(r));
-    return { fillColor: paint(b.c), fillOpacity: 1, color: cssVar("--edge"),
+    var b = !r ? NODATA : isHidden(r) ? HIDDEN :
+      pick(bins, METRICS[metric].value(r));
+    var fill = paint(b.c);
+    // As on the static map, a reproduction number whose 90% interval
+    // spans one is washed out towards the background.
+    if (metric === "R_T" && b !== NODATA && b !== HIDDEN &&
+        METRICS.R_T.straddles(r)) {
+      fill = mix(fill, cssVar("--bg"), 0.6);
+    }
+    return { fillColor: fill, fillOpacity: 1, color: cssVar("--edge"),
              weight: 0.8, opacity: 1 };
+  }
+  function hatchStyle(f) {
+    var r = featureRow(f);
+    var on = rtMetric() && levelOnly(r) && !isHidden(r) &&
+      num(METRICS[metric].value(r));
+    return { fillColor: "url(#hatch)", fillOpacity: on ? 1 : 0,
+             stroke: false, interactive: false };
   }
   function tipHTML(f) {
     var p = f.properties || {}, r = featureRow(f);
@@ -524,9 +590,11 @@ Nothing else is fetched.
       "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
     if (!r) { return s + "<div class=\"tip-s\">No confirmed cases reported.</div>"; }
     if (isHidden(r)) { return s + "<div class=\"tip-s\">Hidden by filter.</div>"; }
+    var note = rtMetric() && levelOnly(r) ?
+      "<div class=\"tip-s\">" + esc(LEVEL_ONLY_TEXT) + ".</div>" : "";
     if (metric === "p_ge") { return s + pGeLines(r); }
-    if (metric === "p_rt") { return s + pRtLines(r); }
-    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>";
+    if (metric === "p_rt") { return s + pRtLines(r) + note; }
+    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>" + note;
   }
   function popupHTML(f) {
     var p = f.properties || {}, r = featureRow(f);
@@ -534,8 +602,27 @@ Nothing else is fetched.
     var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
       "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
     if (!r) { return s + "<div>No confirmed cases reported.</div>"; }
-    return s + ["R_T", "forecast", "cases", "share"].map(function (k) {
-      return "<div>" + esc(METRICS[k].text(r)) + ".</div>";
+    var lines = [
+      METRICS.R_T.text(r),
+      levelOnly(r) ? LEVEL_ONLY_TEXT : "Walking: the zone carries its own " +
+        "transmission walk",
+      METRICS.p_rt.text(r),
+      METRICS.forecast.text(r),
+      "Chance of at least 1, 5, 10 and 20 cases in the next 7 days: " +
+        ["1", "5", "10", "20"].map(function (k) {
+          return fmtPct(r["p_ge_" + k]);
+        }).join(", "),
+      METRICS.cases.text(r),
+      "Cases in the past 7, 14 and 28 days: " +
+        ["7", "14", "28"].map(function (k) {
+          return fmt0(r["cases_last_" + k]);
+        }).join(", "),
+      r.last_case_date ? "Last case " + r.last_case_date :
+        "No dated last case",
+      METRICS.share.text(r)
+    ];
+    return s + lines.map(function (l) {
+      return "<div>" + esc(l) + ".</div>";
     }).join("");
   }
   function computeBins() {
@@ -550,12 +637,24 @@ Nothing else is fetched.
     var m = METRICS[metric];
     computeBins();
     if (layer) { layer.setStyle(styleFor); }
+    if (hatch) { hatch.setStyle(hatchStyle); }
     var d = legend.getContainer();
     var legendText = typeof m.legend === "function" ? m.legend() : m.legend;
+    var extra = filterMode === "all" ? [NODATA] : [NODATA, HIDDEN];
+    var notes = [];
+    if (metric === "R_T") {
+      notes.push("Paler: the 90% interval spans one.");
+    }
+    if (rtMetric()) {
+      notes.push("Hatched: level only, R inherited from its patch.");
+    }
     d.innerHTML = "<div class=\"t\">" + esc(legendText) + "</div>" +
-      bins.concat([NODATA]).map(function (b) {
+      bins.concat(extra).map(function (b) {
         return "<div class=\"row\"><span class=\"sw\" style=\"background:" +
           paint(b.c) + "\"></span><span>" + esc(b.l) + "</span></div>";
+      }).join("") +
+      notes.map(function (n) {
+        return "<div class=\"note\">" + esc(n) + "</div>";
       }).join("");
     renderTable();
   }
@@ -676,11 +775,30 @@ Nothing else is fetched.
         });
       }
     }).addTo(map);
+    // The hatching sits in its own pane above the zones and passes the
+    // pointer through, so hover and click still reach the zone beneath.
+    var pane = map.createPane("hatch");
+    pane.style.zIndex = 450;
+    pane.style.pointerEvents = "none";
+    hatch = L.geoJSON(geo, {
+      style: hatchStyle, interactive: false, pane: "hatch",
+      renderer: L.svg({ pane: "hatch" })
+    }).addTo(map);
     map.fitBounds(layer.getBounds(), { padding: [10, 10] });
     labelProvinces(geo);
     recolour();
   }
 
+  // The data cut-off, from the first row, in the site's date style.
+  function showAsOf() {
+    var d = rows.length && rows[0].as_of;
+    if (!d) { return; }
+    var t = new Date(d + "T00:00:00Z");
+    document.getElementById("asof").textContent = "Data as of " +
+      (isNaN(t) ? d : t.toLocaleDateString("en-GB", {
+        day: "numeric", month: "long", year: "numeric", timeZone: "UTC"
+      })) + ".";
+  }
   function fetchText(url) {
     return fetch(url, { cache: "no-cache" }).then(function (r) {
       if (!r.ok) { throw new Error(url + " returned " + r.status); }
@@ -694,6 +812,7 @@ Nothing else is fetched.
     var geo = res[0];
     rows = res[1] || [];
     rows.forEach(function (r) { byZone[r.zone] = r; });
+    showAsOf();
     draw(geo);
     if (rows.length) { status.hidden = true; return; }
     say("This build carries no health-zone estimates, so the map shows " +
