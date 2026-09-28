@@ -10,6 +10,10 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 - The onset curve adds SitReps 133 and 134 (#959).
   The onset reader takes the y-axis ticks from whichever of its two masks reads the finer grid, and `task onset-audit` exits non-zero when a vintage falls outside its acceptance bands.
 
+### Infrastructure
+
+- With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
+
 ## v2.2.0
 
 Changes since v2.1.0.
