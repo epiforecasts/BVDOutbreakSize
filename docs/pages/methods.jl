@@ -1271,9 +1271,6 @@ cfr_prior_fig #hide
 # normalised over the patches each day, with Ituri as the reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
-# The pooling scale is our choice, and it places a two-fold gap between a patch's share of beds and its share of admissions well inside the prior.
-# The centre differs from the stock that splits the demand.
-# The stock falls as patients leave, whereas the cumulative admissions never fall, as the national capacity never does.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
 #
 # ```math
