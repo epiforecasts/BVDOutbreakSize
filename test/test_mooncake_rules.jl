@@ -253,9 +253,9 @@
         add!("κ = 0", abscond_thinned, pmf(rng, 15), 0.0)
         add!("L = 45", abscond_thinned, pmf(rng, 45), 0.05; perf = true)
 
-        ## Leading zero admissions skip those cohorts. The first two cases
-        ## swap which schedule is longer. In the third the first schedule is
-        ## longer than the series, so every cohort it admits is truncated.
+        ## Leading zero admissions. The first two cases swap which schedule
+        ## is longer. In the third the first schedule is longer than the
+        ## series, so every cohort it admits is truncated.
         adm(n) = [zeros(3); abs.(randn(rng, n - 3)) .+ 0.5]
         for (l1, l2) in ((15, 9), (9, 15), (50, 12))
             add!(
@@ -264,9 +264,6 @@
                 0.05 .+ 0.3 .* rand(rng, 40)
             )
         end
-        ## The forward pass skips a cohort with no admissions, so Mooncake's
-        ## own derivation passes those admissions no derivative where the
-        ## rule does. The timed case admits on every day, so the two agree.
         add!(
             "n = 220", abscond_thinned_flows, rand(rng, 220) .+ 0.5,
             pmf(rng, 35), rand(rng, 220) .+ 0.5, pmf(rng, 45), 0.05,

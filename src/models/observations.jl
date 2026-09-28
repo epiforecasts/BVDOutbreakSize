@@ -1838,7 +1838,6 @@ function abscond_thinned_flows(
     @inbounds for t in 1:n
         a1 = adm1[t]
         a2 = adm2[t]
-        (iszero(a1) && iszero(a2)) && continue
         dmax1 = min(nmax1 - 1, n - t)
         dmax2 = min(nmax2 - 1, n - t)
         ## Both schedules run to `dboth`; only the longer one runs past it.
