@@ -2718,9 +2718,11 @@ series for forecasting and replication.
             )
         )
         cap_shares = cap_share_state.s
+        cap_pooling_sd = cap_share_state.pooling_sd
     else
         demand_patch = reshape(demand, 1, :)
         cap_shares = ones(eltype(C), 1, n)
+        cap_pooling_sd = zero(eltype(C))
     end
     C_patch = cap_shares .* reshape(C, 1, :)
 
@@ -2946,7 +2948,7 @@ series for forecasting and replication.
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
         demand_patch, capacity_patch = C_patch, capacity_series = C,
-        capacity_shares = cap_shares,
+        capacity_shares = cap_shares, capacity_pooling_sd = cap_pooling_sd,
         occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,

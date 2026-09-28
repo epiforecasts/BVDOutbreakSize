@@ -47,6 +47,7 @@ Changes since v2.1.0.
   The share is recomputed each day, so it moves with the admissions.
   A pooled static deviation returns, `τ_cap ~ Normal⁺(0, 1)` over `z_cap ~ Normal(0, 1)`, and `cap_log_ratio` is removed.
   `province_capacity_share` becomes a daily matrix.
+  `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its population centre.
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.

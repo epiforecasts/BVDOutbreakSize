@@ -124,6 +124,8 @@ end
     ## The capacity share is daily, a simplex on each day.
     @test size(res.capacity_shares) == (2, n)
     @test vec(sum(res.capacity_shares; dims = 1)) ≈ ones(n)
+    ## The pooled deviation scale is returned for diagnostics.
+    @test res.capacity_pooling_sd >= 0
 
     ## One patch is the national model and exposes no split.
     single = treatment_flow_model(iso, bvd, bg, 0.5, 0.3)()

@@ -1557,6 +1557,7 @@ density there, is the fitted model's.
             0.0
         )
         province_capacity_share := treatment_state.capacity_shares
+        province_capacity_share_sd := treatment_state.capacity_pooling_sd
         ## Daily share of the national bed demand by patch, the modelled
         ## centre of the occupancy split.
         province_occupancy_share := treatment_state.demand_patch ./
