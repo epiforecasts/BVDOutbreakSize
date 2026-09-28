@@ -28,6 +28,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+- The health-zone forecast and evaluation pages show past zone forecasts against what was reported and score them across releases (#972).
 
 ### Infrastructure
 
@@ -36,6 +37,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- Each release archives the zone forecast as `zone_forecast.csv`, and `scripts/score_releases.jl` scores it zone by zone into `data/zone/` (#972).
 
 ### Fixed
 
