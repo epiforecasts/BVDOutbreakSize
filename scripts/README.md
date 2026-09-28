@@ -69,6 +69,7 @@ In the axis-coverage table, `cases before` is 0, so the block starts where the a
 When a check fails, the row says which input is wrong.
 A `best shift` of +1 or -1 means the new last-tick date or the previous vintage's is off by a day: re-read both ticks with two fresh readers before anything else.
 A gap beyond 2.1% with shift 0 means the count scale: check `Y_AXIS_STEP`, then the printed `n` itself (the OCR misreads a digit now and then; the `note` column says when the title and source strips disagreed), then look at the check panels.
+A misread `n` goes into `PRINTED_N_HAND` in `audit_onset_curve.jl` with the value read off the title by eye.
 Many falls with shift 0 and a gap inside 2.1% mean the day grid inside the block has moved: compare `pixels_per_day` and `pixels_per_day_fit` for the vintage in `data/onset_curve_figures.csv` and run the vision check.
 `cases before` above 0 means the reader's day loop started after the axis: the loop runs from a week before the first chain tick, so a lost tick at the left end is the usual cause.
 `task onset-audit` exits non-zero when any vintage's gap is past 2.1% or any pair's `best shift` is not 0, and names the failing rows.

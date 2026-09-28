@@ -17,7 +17,8 @@
 # strip of the embedded image are upscaled and read with tesseract. The
 # title reading is the value and the source reading corroborates it.
 # `printed_n_source` records which path produced the value; `note` says
-# why one is missing or where the two strips disagreed.
+# why one is missing or where the two strips disagreed. A misread is
+# corrected by entering the n read off the title in `PRINTED_N_HAND`.
 #
 # The audit itself (printed, and written to output/onset_curve_audit.md)
 # holds the gap table, and, for each consecutive pair of distinct
@@ -108,11 +109,19 @@ function ocr_rows(R, G, B, rows; keep = nothing)
     end
 end
 
+## The printed n read by eye off the figure title, for vintages where the
+## OCR misreads a digit. The value wins over every automatic reading.
+const PRINTED_N_HAND = Dict(
+    "133" => 6138,
+    "134" => 6138,
+)
+
 """
 The n printed on the onset figure of `pdf`, as `(n, source, note)`. `n` is
 `nothing` when no reading was found; `source` names where it came from.
 """
 function printed_n(pdf, page, R, G, B; crop_dir = nothing, sr = "")
+    haskey(PRINTED_N_HAND, sr) && return (PRINTED_N_HAND[sr], "hand read", "")
     txt = read(`pdftotext -layout -f $page -l $page $pdf -`, String)
     found = parse_printed_n(txt)
     isempty(found) || return (found[1], "text layer", "")
