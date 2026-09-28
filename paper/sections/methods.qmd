@@ -113,7 +113,7 @@ The prospective evaluation, which scored each release against the data that arri
 
 ### Analysis of the development record
 
-To ask where a person was needed we read the development record for the events that changed the released estimate, the reproduction-number trajectory or the forecasts, and for the defects in released outputs.
+We read the development record for the events that changed the released estimate, the reproduction-number trajectory or the forecasts, and for the defects in released outputs, to establish how each was found and who decided the response.
 The sources were the issues, the pull-request bodies and review comments, the automated reviewer's comments and the release notes, with the account behind each item recorded.
 An item opened under a human login counted as agent-written where its body carried the marker the agents leave, since the human accounts also ran agent sessions. <!-- steering-and-data.md section 0, caveat 1 -->
 We classified each event by kind, as a model change, a data change, a data-quality decision or a defect, and by the route through which it was first recorded.

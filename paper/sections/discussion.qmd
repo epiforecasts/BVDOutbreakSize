@@ -36,10 +36,10 @@ More generally, the model belongs to the class of multi-stream renewal models wi
 Changes in reporting, rather than changes in the epidemic itself, were the main source of change to the model. <!-- RECOLLECTION: tick, strike or add -->
 Most were absorbed by a fitted level offset or by freezing the affected stream, and the latent process was replaced only when a stream could not be fitted at all.
 
-The record answers, for this project and its authors, where a person was needed, and the answer follows the kind of event (@fig-journey D). <!-- Sebastian, PR 883 -->
+The record shows which decisions fell to a person and which to the agents, and the split follows the kind of event (@fig-journey D). <!-- Sebastian, PR 883 -->
 Most model changes were raised and decided by a person, most implementation defects were first reported and fixed by the agents, and the defects that neither found were caught by the prospective evaluation (@tbl-events).
 The data-quality decisions, where a stream was frozen, given a level offset or excluded, went to a person in most cases, and in one a person overruled the agent's reading of the series. <!-- evidence: change_events.csv row 22 -->
-For this project the record shows that a person was needed at each change of model structure, data rule and prior and at the reading of the diagnostics, while the agents could carry the implementation.
+In this project a person took each change of model structure, data rule and prior and read the diagnostics, while the agents carried the implementation.
 The person holding those decisions here had to read sampler diagnostics, weigh a prior against the published literature and know the surveillance system well enough to see a reclassification in a series.
 Working this way also made engineering feasible that we would not have attempted alone, among it the hand-written adjoints, the wide performance searches and the release tooling. <!-- author statement, 24 Sep -->
 We did not log token use or wall-clock time, so we cannot price this way of working here. <!-- author statement, 28 Sep -->

@@ -53,7 +53,7 @@ The largest step came with the move to situation-report increments and the labor
 Over the same window the number of fitted streams rose from four to eleven and most commits came from the agent account (@fig-journey A and B).
 Under the provincial model the two released estimates plateaued, and the release analysed, which postdates the last version tag and is not drawn, sat above them.
 
-### Where a person was needed
+### Development record
 
 {{< include generated/events_table.qmd >}}
 

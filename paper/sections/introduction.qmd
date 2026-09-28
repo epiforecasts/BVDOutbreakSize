@@ -21,5 +21,5 @@ The core idea is that one latent infection process, staged through explicit dela
 We started from the approach of McCabe et al. [@mccabe2026], replaced it with a discrete renewal model in which the reproduction number varies over time [@fraser2007; @cori2013], and then ran one renewal process per province.
 We release each update with the model definition, the draws and the forecasts.
 The model, its priors, its analysis and this text were drafted by language-model agents under our direction, with each modelling decision taken by us, and we treat that workflow as part of what we report.
-We read the development record to ask which events changed the estimates or forecasts and how each was found, which speaks to where a person is needed in agent-driven modelling. <!-- Sebastian, PR 883 review comment, 28 Sep -->
+We read the development record for the events that changed the estimates or forecasts, how each was found and whether a person or an agent decided the response. <!-- Sebastian, PR 883 review comment, 28 Sep -->
 We evaluate the model on the situation reports [@insp_sitrep_2026] by one-week-ahead forecasts against a persistence baseline, by fitting each stream alone, and against the estimates of McCabe et al. and Chamla et al. [@mccabe2026; @chamla2026].
