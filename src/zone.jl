@@ -788,8 +788,9 @@ function _zone_modelled_shares(chn, inputs; stream::Symbol = :cases)
     out = zeros(Float64, length(states), nz, nv)
     for (i, st) in enumerate(states)
         inc = _zone_allocated_increments(zd, st, stream)
-        rate(z, v) = safe_rate(inc[z, v]) *
-            (mult === nothing ? 1.0 : Float64(mult[i][z]))
+        rate(z, v) = safe_rate(
+            inc[z, v] * (mult === nothing ? 1.0 : Float64(mult[i][z]))
+        )
         for zs in inputs.patch_ranges, v in 1:nv
 
             isempty(zs) && continue
@@ -1022,11 +1023,13 @@ function zone_composition_draws(
             for v in 1:nv
                 N[v] > 0 || continue
                 π = shares[i, zs, v]
-                ## Floored as the likelihood floors its rates: a zone whose
-                ## share underflows to zero would otherwise fail the draw.
-                y[:, v] = rand(
-                    rng, DirichletMultinomial(N[v], max.(κ .* π, eps()))
-                )
+                ## Floored so a zone whose share underflows to zero keeps a
+                ## positive concentration. Drawn as a Dirichlet then a
+                ## multinomial, the draw `DirichletMultinomial` makes, since
+                ## its constructor tests `sum(α) == sum(abs, α)` exactly and
+                ## the two sums can round apart on a positive `α`.
+                α = max.(κ .* π, eps())
+                y[:, v] = rand(rng, Multinomial(N[v], rand(rng, Dirichlet(α))))
                 e[:, v] = N[v] .* π
             end
             if cumulative

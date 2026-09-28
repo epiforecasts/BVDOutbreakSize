@@ -30,7 +30,7 @@ using Distributions: Distribution, pdf, cdf, logpdf, Poisson,
     NegativeBinomial, BetaBinomial, Binomial, Normal,
     LogNormal, Beta, Chi,
     Gamma, TDist, Uniform, truncated, censored, product_distribution,
-    DirichletMultinomial, DiscreteUniform
+    Dirichlet, Multinomial, DiscreteUniform
 using CensoredDistributions: AnalyticalSolver, primary_censored,
     primarycensored_cdf
 using StatsFuns: logit, logistic, logaddexp
