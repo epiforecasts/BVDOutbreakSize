@@ -131,6 +131,159 @@ MarkdownTable(zone_validation_table_display) #hide
 #md # </details>
 #md # ```
 
+# ## Forecast by health zone across releases
+#
+# The archived zone forecast of each release, scored against what each zone went on to report.
+# The scores are those of the [province forecast evaluation](@ref "Province forecast evaluation"), with each zone scored as its own stream against a persistence baseline built from the zone's own history.
+# A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
+# The figures show the ten zones with the most observed cases over the scored weeks, and the folds hold every zone.
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the zone forecast scores</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `zone_forecast.csv`. Missing files read as empty tables.
+zone_release_scores_df = _release_data(
+    joinpath("zone", "forecast_scores.csv"),
+    (;
+        release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, crps = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
+        bias = Float64, n_samples = Int,
+        log_rel_to_baseline = Float64,
+    )
+)
+zone_release_overlay_df = scored_overlay(
+    _release_data(
+        joinpath("zone", "forecast_overlay.csv"),
+        (;
+            release = String, made_date = Date, stream = String,
+            horizon = Int, target_date = Date, fit = String,
+            observed = Float64, median = Float64, lo30 = Float64,
+            hi30 = Float64, lo60 = Float64, hi60 = Float64, lo90 = Float64,
+            hi90 = Float64,
+        )
+    )
+)
+## Every scored zone, ordered by its observed cases over the scored weeks.
+zone_release_keys = let o = zone_release_overlay_df[
+        zone_release_overlay_df.fit .== JOINT_FIT, :,
+    ]
+    tot = Dict{String, Float64}()
+    for r in eachrow(o)
+        k = zone_score_key(r.stream)
+        k === nothing || (tot[k] = get(tot, k, 0.0) + r.observed)
+    end
+    sort!(collect(keys(tot)); by = k -> (-tot[k], k))
+end
+zone_release_labels = let lab = Dict(
+        zip(frozen_zone_inputs.zone_keys, frozen_zone_inputs.zone_labels)
+    )
+    [get(lab, k, k) for k in zone_release_keys]
+end
+zone_release_top = first(zone_release_keys, 10)
+_zone_release(tbl, keys = zone_release_keys) = zone_score_rows(
+    tbl, keys, zone_release_labels[indexin(keys, zone_release_keys)]
+)
+_zone_release_display(tbl) = drop_degenerate_fit_column(
+    drop_individual_fit_columns(tbl)
+)
+zone_release_by_horizon = forecast_score_by_horizon(
+    _zone_release(zone_release_scores_df, zone_release_top)
+)
+zone_release_by_release = forecast_score_by_release(
+    _zone_release(zone_release_scores_df, zone_release_top)
+)
+zone_release_overview_display = _zone_release_display(
+    forecast_score_overview(_zone_release(zone_release_scores_df))
+)
+zone_release_by_release_display = _zone_release_display(
+    forecast_score_by_release(_zone_release(zone_release_scores_df))
+);
+
+_zone_release_empty = "No zone forecast has been scored yet. Scores " *
+    "appear from the first release that archives the zone forecast onwards.";
+## A plain statement above the tables: when nothing is scored yet, and
+## otherwise the first cut-off scored.
+zone_release_note = Markdown.parse(
+    size(zone_release_scores_df, 1) == 0 ? _zone_release_empty :
+        string(
+            "Scores run from the forecast made on ",
+            minimum(zone_release_scores_df.made_date), ", over ",
+            length(unique(zone_release_scores_df.release)), " release(s)."
+        )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_release_note #hide
+
+# The relative skill against the baseline, one panel per zone, on a log-scaled skill axis with the reference line at one.
+
+zone_release_skill_fig = plot_forecast_relative_skill(
+    zone_release_by_horizon;
+    title = "Relative skill against the baseline, by health zone",
+    empty_message = _zone_release_empty
+);
+
+zone_release_skill_fig #hide
+
+# What that error is made of: the mean CRPS split into its width, its overprediction and its underprediction.
+
+zone_release_crps_fig = plot_forecast_crps_by_horizon(
+    zone_release_by_horizon;
+    title = "CRPS decomposition, by health zone",
+    empty_message = _zone_release_empty
+);
+
+zone_release_crps_fig #hide
+
+# The same relative skill release by release.
+
+zone_release_by_cutoff_fig = plot_forecast_skill_by_cutoff(
+    zone_release_by_release;
+    title = "Relative skill against the baseline by release, by health zone",
+    empty_message = _zone_release_empty
+);
+
+zone_release_by_cutoff_fig #hide
+
+# Each release's zone forecasts against what each zone went on to report.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the observed count.
+
+zone_release_overlay_fig = plot_forecast_overlay(
+    _zone_release(zone_release_overlay_df, zone_release_top);
+    empty_message = _zone_release_empty
+);
+
+zone_release_overlay_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Zone scores across releases, every zone</summary>
+#md # ```
+
+MarkdownTable(zone_release_overview_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Zone scores by release, every zone</summary>
+#md # ```
+
+MarkdownTable(zone_release_by_release_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Saving zone forecast outputs
 #
 # The frozen zone fit's one-week-ahead forecast against the observed zone increments, and its scores against the two persistence rules, are written as release assets.
@@ -234,6 +387,33 @@ write(
     joinpath(dashboard_dir, "evaluation_forecast_zone.md"),
     evaluation_forecast_zone_summary
 );
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Add the across-release scores to the summary</summary>
+#md # ```
+
+## One bullet on the zone forecasts scored across releases, after the
+## bullets above.
+zone_release_summary = let ov = forecast_score_overview(
+        _zone_release(zone_release_scores_df)
+    )
+    rows = filter(r -> !ismissing(r.rel_to_baseline), ov)
+    size(rows, 1) == 0 ?
+        "- **Across releases:** $(_zone_release_empty)" :
+        string(
+            "- **Across releases:** ", count(<(1), rows.rel_to_baseline),
+            " of ", size(rows, 1), " zones scored beat the persistence ",
+            "baseline, from the forecast made on ",
+            minimum(zone_release_scores_df.made_date), " onwards."
+        )
+end
+open(joinpath(dashboard_dir, "evaluation_forecast_zone.md"), "a") do io
+    write(io, "\n\n", zone_release_summary)
+end;
 
 #md # ```@raw html
 #md # </details>
