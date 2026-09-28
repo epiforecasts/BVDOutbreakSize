@@ -390,16 +390,16 @@ write(
 #md # <details><summary>Add the across-release scores to the summary</summary>
 #md # ```
 
-## One bullet on the zone forecasts scored across releases, after the
-## bullets above.
+## A block on the zone forecasts scored across releases, after the
+## per-province blocks above.
 zone_release_summary = let ov = forecast_score_overview(
         _zone_release(zone_release_scores_df)
     )
     rows = filter(r -> !ismissing(r.rel_to_baseline), ov)
     size(rows, 1) == 0 ?
-        "- **Across releases:** $(_zone_release_empty)" :
+        "**Across releases**\n\n- $(_zone_release_empty)" :
         string(
-            "- **Across releases:** ", count(<(1), rows.rel_to_baseline),
+            "**Across releases**\n\n- ", count(<(1), rows.rel_to_baseline),
             " of ", size(rows, 1), " zones scored beat the persistence ",
             "baseline, from the forecast made on ",
             minimum(zone_release_scores_df.made_date), " onwards."
