@@ -1,11 +1,16 @@
 # Summarise the parameter-recovery runs (scripts/recovery.jl) across seeds as
-# Markdown: one verdict over every seed, a table per level with each
-# quantity's error relative to the truth across seeds, and each seed's fit
-# in a dropdown. Writes the body to `<dir>/report.md` and the overall status
-# to `<dir>/status`, which scripts/recovery_report.sh posts.
+# Markdown: one verdict over every seed, then dropdowns with a table per
+# level of each quantity's error relative to the truth across seeds, each
+# seed's fit and how the verdict is reached. Writes the body to
+# `<dir>/report.md` and the overall status to `<dir>/status`, which
+# scripts/recovery_report.sh posts.
 #
 # Usage:
 #   julia --project=docs scripts/recovery_report.jl <dir with recovery_*.csv>
+#
+# BVD_RECOVERY_SEEDS (e.g. "1 2 3") lists the seeds that were run. A seed
+# with no results, because its fit timed out or failed, counts as
+# unconverged.
 
 using BVDOutbreakSize, CSV, DataFrames
 using Printf: @sprintf
@@ -22,7 +27,13 @@ forecasts = read_all(r"^forecast_recovery_\d+\.csv$")
 isempty(params) && error("no recovery results in $dir")
 
 seeds = recovery_seed_verdicts(params)
-status = recovery_overall(seeds.status)
+missing_seeds = setdiff(
+    parse.(Int, split(get(ENV, "BVD_RECOVERY_SEEDS", ""))), seeds.seed
+)
+n_seeds = nrow(seeds) + length(missing_seeds)
+status = recovery_overall(
+    [seeds.status; fill(:unconverged, length(missing_seeds))]
+)
 summary = recovery_summary(params)
 
 function fmt(x)
@@ -75,18 +86,27 @@ seed_rows = [
         "$(r.divergences) |"
         for r in eachrow(seeds)
 ]
+append!(
+    seed_rows,
+    [
+        "| $s | no result (timed out or failed) | – | – | – | – | – | – |"
+            for s in missing_seeds
+    ]
+)
 
 body = """
-### Parameter recovery: $status ($(nrow(seeds)) seeds)
+### Parameter recovery: $status ($n_seeds seeds)
 
-$n_conv of $(nrow(seeds)) fits converged (R-hat at most 1.1, bulk ESS at least 30).
+$n_conv of $n_seeds fits converged (R-hat at most 1.1, bulk ESS at least 30).
 An unconverged seed's recovery is shown but not judged.
 The truth is inside the 90% interval in $n_in of $n_pairs quantity-seed pairs ($(round(Int, 100 * n_in / n_pairs))%) and outside the 99% interval in $(n_out == 0 ? "none" : n_out).
 $skill
 
-**National**
+<details><summary>National</summary>
 
 $(table(national))
+
+</details>
 
 <details><summary>Province</summary>
 
@@ -102,8 +122,12 @@ $(join(seed_rows, "\n"))
 
 </details>
 
+<details><summary>How the verdict is reached</summary>
+
 A seed fails when more quantities lie outside their 99% interval than the 99th percentile of a Binomial with a 1% chance each ($n_allowed of $(nrow(first_seed))), or fewer than 60% lie inside their 90% interval.
 Relative error is (posterior median − truth) / |truth| and z is (posterior mean − truth) / posterior SD, each the median across seeds with the range in brackets.
+
+</details>
 """
 write(joinpath(dir, "report.md"), body)
 write(joinpath(dir, "status"), string(status))
