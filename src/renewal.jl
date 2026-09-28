@@ -821,98 +821,123 @@ relative_multiplier_dims(groups::AbstractVector{<:UnitRange}) =
     sum((max(length(us) - 1, 0) for us in groups); init = 0)
 
 """
-Group-centred AR(1) deviation knots over the health zones of
+Mean-reverting AR(1) deviation knots over the health zones of
 [`bvd_zone`](@ref), the construction of the province deviations in
 [`patch_rt_model`](@ref) applied within each group. `groups` are the index
-ranges the deviations are centred within, one per patch.
+ranges the deviations sum to zero within, one per patch.
 
-The first knot is a level and the later knots revert toward zero at
-retention `φ`,
+Group `g` of `n_g` units draws its level on the `n_g - 1` directions of its
+sum-to-zero basis `Q_g` ([`sum_to_zero_basis`](@ref)), and its innovations
+on the `n^W_g - 1` directions of the basis `Q^W_g` over its walking units
+`W_g`, zero on the other units,
 
 ```math
-δ_u(1) = σ_L (F_g z^L)_u - \\overline{σ_L (F_g z^L)}_g,
+δ_g(1) = σ_L Q_g A_g z^L_g,
 \\qquad
-δ_u(k) = φ\\, δ_u(k-1) + σ_{δ,u} (F^W_g z^δ_k)_u
-    - \\overline{σ_δ (F^W_g z^δ_k)}_{W_g},
+δ_g(k) = φ\\, δ_g(k-1) + σ_{δ,g} Q^W_g A^W_g z^δ_{g,k},
 ```
 
-so every group sums to zero at every knot and no unit is privileged.
-`factors[i]` is a lower-triangular correlation factor over the units of
-group `i`, and `drift_factors[i]` the same over its walking units;
-`nothing` in either place leaves those draws independent. Scaling comes
-before centring, so a per-unit `σ_δ` still leaves the group sum at zero.
+through [`sum_to_zero_knots`](@ref), so every group sums to zero at every
+knot and no unit is privileged. `level_factors[g]` is `A_g`, the lower
+Cholesky factor of `Q_gᵀ C_g Q_g` for the units' correlation `C_g`, and
+`drift_factors[g]` is `A^W_g`, the same over the walking units
+([`zone_correlation_factors`](@ref)). An empty list, or a group past its
+end, takes `A = I`. As `Q_g Q_gᵀ = I - J / n_g`, the level's covariance is
 
-Only a walking unit carries an innovation and a level-only unit decays
-along the mean path `φ^{k-1} δ_u(1)`. `walk_index[u]` is the unit's
-position among the `n_walking` walking units, zero for a level-only unit,
-and `z_drift` holds the innovations knot by knot at
-`(k - 2) n_walking + walk_index[u]`.
+```math
+σ_L^2\\, Q_g A_g A_g^\\top Q_g^\\top = σ_L^2\\, P_g C_g P_g,
+\\qquad P_g = I - J / n_g,
+```
 
+the covariance of `σ_L L z` centred within the group for `L Lᵀ = C_g` and
+`z ~ N(0, I_{n_g})`, from `n_g - 1` draws instead of `n_g`. The innovations
+are the same over the walking units, and a level-only unit decays along
+the mean path `φ^{k-1} δ_u(1)`.
+
+`σ_δ` holds one drift scale per group. `z_level` holds each group's level
+draws in turn and `z_drift` the innovations knot by knot, each knot's
+block holding each group's in turn, [`deviation_knot_dims`](@ref) of each.
 Returns an `(n_units × n_knots)` matrix.
 """
 function deviation_knots(
         z_level::AbstractVector, z_drift::AbstractVector,
         σ_level::Real, σ_δ::AbstractVector, φ::Real,
         groups::AbstractVector{<:UnitRange},
-        factors::AbstractVector, drift_factors::AbstractVector,
-        walking::AbstractVector{Bool},
-        walk_index::AbstractVector{<:Integer},
-        n_walking::Integer, n_knots::Integer
+        level_factors::AbstractVector, drift_factors::AbstractVector,
+        walking::AbstractVector{Bool}, n_knots::Integer
     )
+    dims = deviation_knot_dims(groups, walking)
+    length(z_level) == dims.level || throw(
+        DimensionMismatch(
+            "deviation_knots: $(length(z_level)) level draws for " *
+                "$(dims.level) directions"
+        )
+    )
+    length(z_drift) == dims.drift * (n_knots - 1) || throw(
+        DimensionMismatch(
+            "deviation_knots: $(length(z_drift)) innovation draws for " *
+                "$(dims.drift) directions over $(n_knots - 1) knots"
+        )
+    )
+    Z = reshape(z_drift, dims.drift, n_knots - 1)
     Tp = promote_type(
         eltype(z_level), eltype(z_drift), typeof(float(σ_level)),
         eltype(σ_δ), typeof(float(φ)),
-        _factor_eltype(factors), _factor_eltype(drift_factors)
+        _factor_eltype(level_factors), _factor_eltype(drift_factors)
     )
-    nu = length(z_level)
-    δ = zeros(Tp, nu, n_knots)
-    scaled = zeros(Tp, nu)
-    @inbounds for (i, us) in enumerate(groups)
-        isempty(us) && continue
-        _correlate!(scaled, z_level, us, i <= length(factors) ? factors[i] : nothing)
-        m = zero(Tp)
-        for u in us
-            scaled[u] *= σ_level
-            m += scaled[u]
+    δ = zeros(Tp, length(walking), n_knots)
+    off_level = 0
+    off_drift = 0
+    for (g, us) in enumerate(groups)
+        n = length(us)
+        n >= 2 || continue
+        pos = [a for (a, u) in enumerate(us) if walking[u]]
+        k = max(length(pos) - 1, 0)
+        F_level = sum_to_zero_factor(
+            sum_to_zero_basis(n), σ_level, _group_factor(level_factors, g)
+        )
+        F_drift = sum_to_zero_factor(
+            _embedded_basis(n, pos), σ_δ[g], _group_factor(drift_factors, g)
+        )
+        knots = sum_to_zero_knots(
+            F_level, F_drift, z_level[(off_level + 1):(off_level + n - 1)],
+            Z[(off_drift + 1):(off_drift + k), :], φ
+        )
+        @inbounds for j in 1:n_knots, (a, u) in enumerate(us)
+            δ[u, j] = knots[a, j]
         end
-        m /= length(us)
-        for u in us
-            δ[u, 1] = scaled[u] - m
-        end
-    end
-    n_knots > 1 || return δ
-    ## The walking units of each group, in order, so a group's innovations
-    ## are one contiguous slice of its drift factor.
-    walkers = [[u for u in us if walking[u]] for us in groups]
-    innov = zeros(Tp, nu)
-    @inbounds for k in 2:n_knots
-        off = (k - 2) * n_walking
-        for (i, us) in enumerate(groups)
-            isempty(us) && continue
-            ws = walkers[i]
-            F = i <= length(drift_factors) ? drift_factors[i] : nothing
-            m = zero(Tp)
-            for (a, u) in enumerate(ws)
-                acc = zero(Tp)
-                if F === nothing
-                    acc = z_drift[off + walk_index[u]]
-                else
-                    for b in 1:a
-                        acc += F[a, b] * z_drift[off + walk_index[ws[b]]]
-                    end
-                end
-                innov[u] = σ_δ[u] * acc
-                m += innov[u]
-            end
-            m = isempty(ws) ? zero(Tp) : m / length(ws)
-            for u in us
-                δ[u, k] = φ * δ[u, k - 1] +
-                    (walking[u] ? innov[u] - m : zero(Tp))
-            end
-        end
+        off_level += n - 1
+        off_drift += k
     end
     return δ
 end
+
+"""
+Draws [`deviation_knots`](@ref) takes over `groups`: `level`, the
+`n_g - 1` level directions summed over the groups, and `drift`, the
+`n^W_g - 1` innovation directions per knot summed over the groups with a
+walking unit.
+"""
+function deviation_knot_dims(
+        groups::AbstractVector{<:UnitRange}, walking::AbstractVector{Bool}
+    )
+    drift = sum(
+        (max(count(u -> walking[u], us) - 1, 0) for us in groups); init = 0
+    )
+    return (; level = relative_multiplier_dims(groups), drift)
+end
+
+## The sum-to-zero basis over the units at positions `pos` of a group of
+## `n`, zero on its other rows.
+function _embedded_basis(n::Integer, pos::AbstractVector{<:Integer})
+    Q = zeros(n, max(length(pos) - 1, 0))
+    length(pos) >= 2 || return Q
+    Q[pos, :] = sum_to_zero_basis(length(pos))
+    return Q
+end
+
+_group_factor(factors::AbstractVector, g::Integer) =
+    g <= length(factors) ? factors[g] : nothing
 
 ## Element type of a list of correlation factors, ignoring the `nothing`
 ## entries that stand for independent draws.
@@ -923,26 +948,6 @@ function _factor_eltype(factors::AbstractVector)
         T = promote_type(T, eltype(F))
     end
     return T
-end
-
-## `out[us] = F * z[us]` for a lower-triangular `F` over the group's units,
-## or a copy when `F` is `nothing`.
-function _correlate!(out, z, us, ::Nothing)
-    @inbounds for u in us
-        out[u] = z[u]
-    end
-    return out
-end
-
-function _correlate!(out, z, us, F::AbstractMatrix)
-    @inbounds for (a, u) in enumerate(us)
-        acc = zero(eltype(out))
-        for b in 1:a
-            acc += F[a, b] * z[first(us) + b - 1]
-        end
-        out[u] = acc
-    end
-    return out
 end
 
 """

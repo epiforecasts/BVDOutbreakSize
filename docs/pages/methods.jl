@@ -2152,7 +2152,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The deviations are the patch deviation process of Equation (6), run with one group per patch and the zones of a patch as its units.
-# The level and the innovations are correlated within a patch and centred within it, so each patch sums to zero at every knot.
+# The level and the innovations are drawn on the sum-to-zero basis of the patch and correlated within it, so each patch sums to zero at every knot.
 # The correlation decays with the distance between zone centroids, and $\rho_{\text{corr}}$ is the correlation of two zones a reference distance $\bar d$ apart, $\bar d$ being the mean distance between the provincial population centres:
 #
 # ```math
@@ -2161,6 +2161,9 @@ cfr_prior_fig #hide
 # ```
 #
 # A ridge of $10^{-6}$ on the diagonal of $C$ conditions its Cholesky factorisation.
+# In place of the Wishart factor of Equation (7), $A_p$ is the Cholesky factor of $Q_p^{\top} C_p Q_p$, with $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$.
+# The level $\sigma_L Q_p A_p \mathbf{z}_p$ then has covariance $\sigma_L^2 P_p C_p P_p$ with $P_p = I - J/n_p$, that of correlated zone draws centred within the patch, from $n_p - 1$ draws.
+# The innovations are built the same way over the walking zones of the patch.
 #
 # Zones enter through the distance between their centroids rather than through shared borders, so the correlation is the exponential covariance of model-based geostatistics [diggle1998](@cite), a Matérn kernel at $\nu = 1/2$.
 # Only walking zones carry innovations, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones.

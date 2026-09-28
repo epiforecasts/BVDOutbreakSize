@@ -159,3 +159,49 @@ function sum_to_zero_moments(F::AbstractMatrix)
     end
     return (; sd, cor)
 end
+
+"""
+Mean-reverting AR(1) knots of a sum-to-zero vector, an `(n × (m + 1))`
+matrix,
+
+```math
+δ(1) = F_L z_L, \\qquad δ(k) = φ\\, δ(k - 1) + F_δ Z_{k-1},
+```
+
+with `F_L` and `F_δ` loading matrices from [`sum_to_zero_factor`](@ref),
+`z_L` the level's draws and `Z` the innovation draws, one column per later
+knot. Every knot sums to zero, since each term does and `φ` is a scalar.
+A drift loading with no columns leaves the knots decaying along
+`φ^{k-1} δ(1)`.
+"""
+function sum_to_zero_knots(
+        F_level::AbstractMatrix, F_drift::AbstractMatrix,
+        z_level::AbstractVector, Z::AbstractMatrix, φ::Real
+    )
+    T = promote_type(
+        eltype(F_level), eltype(F_drift), eltype(z_level), eltype(Z),
+        typeof(φ)
+    )
+    knots = zeros(T, size(F_level, 1), size(Z, 2) + 1)
+    lvl = sum_to_zero(F_level, z_level)
+    @inbounds for i in eachindex(lvl)
+        knots[i, 1] = lvl[i]
+    end
+    return sum_to_zero_ar1!(knots, F_drift, Z, φ, 1)
+end
+
+"""
+Fill knots `k0 + 1, …, k0 + m` of `knots` by the AR(1) of
+[`sum_to_zero_knots`](@ref) from knot `k0`, with the `m` columns of `Z` as
+the innovation draws through the loading `F`.
+"""
+function sum_to_zero_ar1!(
+        knots::AbstractMatrix, F::AbstractMatrix, Z::AbstractMatrix,
+        φ::Real, k0::Integer
+    )
+    innovations = F * Z
+    @inbounds for j in axes(Z, 2), i in axes(knots, 1)
+        knots[i, k0 + j] = φ * knots[i, k0 + j - 1] + innovations[i, j]
+    end
+    return knots
+end

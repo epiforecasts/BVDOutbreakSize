@@ -449,7 +449,7 @@ end
     @test w ≈ w_shift rtol = 1.0e-12
 end
 
-@testitem "zone deviations: the sum-to-zero basis keeps the centred covariance" begin
+@testitem "zone deviations: the basis keeps the centred covariance" begin
     using BVDOutbreakSize: deviation_knots, deviation_knot_dims,
         zone_correlation_factors
     using LinearAlgebra: I
@@ -472,12 +472,10 @@ end
     unit(i, m) = [j == i ? 1.0 : 0.0 for j in 1:m]
     nδ = dims.drift * (K - 1)
     ## Both knots are linear in their draws, so the covariance is `J Jᵀ`.
-    Jl = reduce(
-        hcat, [knots(unit(i, dims.level), zeros(nδ))[:, 1] for i in 1:dims.level]
-    )
-    Jδ = reduce(
-        hcat, [knots(zeros(dims.level), unit(i, nδ))[:, 2] for i in 1:dims.drift]
-    )
+    level(i) = knots(unit(i, dims.level), zeros(nδ))[:, 1]
+    drift(i) = knots(zeros(dims.level), unit(i, nδ))[:, 2]
+    Jl = reduce(hcat, [level(i) for i in 1:dims.level])
+    Jδ = reduce(hcat, [drift(i) for i in 1:dims.drift])
     ## The covariance of the centred construction `σ P L z` with `L Lᵀ = C`:
     ## `σ² P C P` over each group, and over the walking zones for the
     ## innovations.

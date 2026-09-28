@@ -1572,23 +1572,10 @@ and `Rt_matrix` covers the horizon.
     z_drift ~ product_distribution(
         fill(region_offset_prior, max(nd * (nb - 1), 1))
     )
-    Tp = promote_type(
-        eltype(Rt_national), eltype(F_level), eltype(F_drift),
-        eltype(z_level), eltype(z_drift), typeof(φ)
-    )
-    δ_knots = zeros(Tp, n_patches, nb)
-    lvl = sum_to_zero(F_level, z_level)
-    @inbounds for i in 1:n_patches
-        δ_knots[i, 1] = lvl[i]
-    end
     ## Every knot's innovation in one product, column `k - 1` for knot `k`,
     ## then the AR(1) retention as a scan over the knots.
-    if nb > 1
-        innovations = F_drift * reshape(z_drift, nd, nb - 1)
-        @inbounds for k in 2:nb, i in 1:n_patches
-            δ_knots[i, k] = φ * δ_knots[i, k - 1] + innovations[i, k - 1]
-        end
-    end
+    Z = nb > 1 ? reshape(z_drift, nd, nb - 1) : zeros(eltype(z_drift), nd, 0)
+    δ_knots = sum_to_zero_knots(F_level, F_drift, z_level, Z, φ)
     ## Interpolate each patch's deviation to the daily grid and build Rt.
     ## Past the cut-off the deviations carry on reverting on knots a week
     ## apart, with fresh standard-normal draws `z_drift_future` through the
@@ -1600,20 +1587,20 @@ and `Rt_matrix` covers the horizon.
         z_drift_future ~ product_distribution(
             fill(region_offset_prior, nd * nf)
         )
-        Tf = promote_type(Tp, eltype(z_drift_future))
+        Tf = promote_type(eltype(δ_knots), eltype(z_drift_future))
         knots_all = zeros(Tf, n_patches, nb + nf)
         knots_all[:, 1:nb] .= δ_knots
-        innovations_f = F_drift * reshape(z_drift_future, nd, nf)
-        @inbounds for k in 1:nf, i in 1:n_patches
-            knots_all[i, nb + k] = φ * knots_all[i, nb + k - 1] +
-                innovations_f[i, k]
-        end
+        sum_to_zero_ar1!(
+            knots_all, F_drift, reshape(z_drift_future, nd, nf), φ, nb
+        )
         days_all = vcat(days, fdays)
     else
         knots_all = δ_knots
         days_all = days
     end
-    Rt_matrix = zeros(eltype(knots_all), n_patches, ng)
+    Rt_matrix = zeros(
+        promote_type(eltype(knots_all), eltype(Rt_national)), n_patches, ng
+    )
     @inbounds for p in 1:n_patches
         ## A view, not a copy: `interpolate_knots` only reads its knots.
         δ_daily = interpolate_knots(view(knots_all, p, :), days_all, ng)

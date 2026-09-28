@@ -589,9 +589,10 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Lower-triangular correlation factors of the zone deviations, one per patch,
-for [`deviation_knots`](@ref). The correlation between two zones decays
-with the distance between their centroids on one shared length scale,
+Lower-triangular correlation factors of the zone deviations on the
+sum-to-zero basis, one per patch, for [`deviation_knots`](@ref). The
+correlation between two zones decays with the distance between their
+centroids on one shared length scale,
 
 ```math
 C_{zq} = \\exp(-d_{zq} / \\ell),
@@ -599,7 +600,12 @@ C_{zq} = \\exp(-d_{zq} / \\ell),
 ```
 
 so `ρ_ref` is the correlation of two zones a reference distance `d̄` apart.
-A `ridge` on the diagonal conditions each factorisation.
+Each factor is the lower Cholesky factor `A` of `Qᵀ C Q`, with `Q` the
+sum-to-zero basis over the patch's `m` zones ([`sum_to_zero_basis`](@ref)),
+so `Q A Aᵀ Qᵀ = P C P` with `P = I - J / m` and the deviations have the
+covariance of correlated draws centred within the patch. A patch of fewer
+than two zones gets an empty factor. A `ridge` on the diagonal of `C`
+conditions each factorisation.
 `distances` holds one matrix per patch, over its zones for the level and
 over its walking zones for the innovations. The meld carries correlation
 between patches, through the parent draw every zone of a patch shares.
@@ -616,8 +622,10 @@ end
 
 function _zone_correlation_factor(D::AbstractMatrix, ℓ::Real, ridge::Real)
     m = size(D, 1)
+    m >= 2 || return zeros(typeof(float(ℓ)), 0, 0)
+    Q = sum_to_zero_basis(m)
     C = exp.(.-D ./ ℓ) + ridge * Matrix{Float64}(I, m, m)
-    return Matrix(cholesky(Symmetric(C)).L)
+    return Matrix(cholesky(Symmetric(transpose(Q) * C * Q)).L)
 end
 
 ## Great-circle distances between the centroids of the zones in `rows`,
@@ -1246,7 +1254,7 @@ sampled here.
 \\begin{aligned}
 z^w_z &\\sim N(0, 1), &
 w_z(t_0) &= \\mathrm{softmax}_p\\bigl(s\\,(z^w_z − \\bar z^w_p)\\bigr) \\\\
-σ_L &\\sim N^+(0, 0.3),\\; z^L_z \\sim N(0, 1), &
+σ_L &\\sim N^+(0, 0.3),\\; z^L_p \\sim N(0, I_{n_p − 1}), &
 h &\\sim \\mathrm{LogNormal}(\\log 42, 0.6),\\; φ = 2^{−w/h} \\\\
 σ_{δ,p} &\\sim \\mathrm{LogNormal}(\\text{parent}), &
 ρ_{\\text{corr}} &\\sim \\mathrm{Beta}(\\text{parent}),\\;
@@ -1267,9 +1275,11 @@ the kernel, the correlation `ρ_corr` only where `zd.zone_distances` does,
 and the shared draw `η` only where `zd.meld_d` is positive.
 The deviation knots `δ_z(k)` are [`deviation_knots`](@ref), the province
 model's construction, applied with one group per patch and the zones of a
-patch as its units: the level and the innovations are correlated within a
-patch by [`zone_correlation_factors`](@ref) and centred within it, so every
-patch sums to zero at every knot.
+patch as its units: the level and the innovations are drawn on the
+sum-to-zero basis of the patch, `n_p − 1` level draws and `|W_p| − 1`
+innovation draws per knot, and correlated within it by
+[`zone_correlation_factors`](@ref), so every patch sums to zero at every
+knot.
 
 The innovations exist for the walking zones `W_p` only (cumulative
 confirmed cases at the cut-off at or above the threshold, and at least two
@@ -1416,7 +1426,8 @@ quantity is computed on the fitted days as without a forecast.
     mix_on = zd.mixing !== nothing
     z_w ~ product_distribution(fill(offset_prior, nz))
     σ_level ~ region_sd_prior
-    z_level ~ product_distribution(fill(offset_prior, nz))
+    dims = deviation_knot_dims(zd.patch_ranges, zd.walking)
+    z_level ~ product_distribution(fill(offset_prior, dims.level))
     δ_halflife ~ region_halflife_prior
     ## Every scale below takes its prior from the province posterior.
     pp = zd.parent_priors
@@ -1443,7 +1454,7 @@ quantity is computed on the fitted days as without a forecast.
     σ_severity ~ severity_sd_prior
     z_severity ~ product_distribution(fill(offset_prior, n_contrast))
     ## Sampled only when used, or they would be prior-only dimensions.
-    n_drift = zd.n_walking * (K - 1)
+    n_drift = dims.drift * (K - 1)
     if n_drift > 0
         z_drift ~ product_distribution(fill(offset_prior, n_drift))
     else
@@ -1518,18 +1529,17 @@ quantity is computed on the fitted days as without a forecast.
     ## ([`deviation_knots`](@ref)), with one group per patch and the zones of
     ## a patch as its units.
     Kf = H == 0 ? 0 : zf.n_future_knots
-    if Kf > 0 && zd.n_walking > 0
+    if Kf > 0 && dims.drift > 0
         z_drift_future ~ product_distribution(
-            fill(offset_prior, zd.n_walking * Kf)
+            fill(offset_prior, dims.drift * Kf)
         )
         z_drift_all = vcat(z_drift, z_drift_future)
     else
         z_drift_all = z_drift
     end
     δ_knots_all = deviation_knots(
-        z_level, z_drift_all, σ_level, σ_δ[zd.patch_of_zone], φ,
-        zd.patch_ranges, level_factors, drift_factors,
-        zd.walking, zd.walk_index, zd.n_walking, K + Kf
+        z_level, z_drift_all, σ_level, σ_δ, φ, zd.patch_ranges,
+        level_factors, drift_factors, zd.walking, K + Kf
     )
     δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
     fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
@@ -2092,13 +2102,7 @@ function zone_fit_inputs(
         count(eligible[zs]) >= 2 || continue
         walking[zs] .= eligible[zs]
     end
-    walk_index = zeros(Int, nz)
-    n_walking = 0
-    for z in 1:nz
-        walking[z] || continue
-        n_walking += 1
-        walk_index[z] = n_walking
-    end
+    n_walking = count(walking)
     ## Grid and knots.
     t0 = clamp(days[1] - lead_days, 1, n)
     knots = knot_days(n; week, start = t0)
@@ -2222,7 +2226,7 @@ function zone_fit_inputs(
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, patch_of_zone,
         knots, t0, n,
         week, share_scale, rt_floor,
-        walking = collect(walking), walk_index, n_walking,
+        walking = collect(walking), n_walking,
         fixed.force_pre, fixed.report_pre_cum,
         fixed.infections_pre, mixing, interp, report_matrix,
         report_pre_rows,

@@ -448,7 +448,8 @@ end
         nb = length(knot_days(n; start = 10))
         z = vcat(vi[@varname(z_drift)], vi[@varname(z_drift_future)])
         knots = zeros(np, length(days))
-        knots[:, 1] = vi[@varname(σ_level)] * shape .* apply(vi[@varname(z_level)])
+        s_level = vi[@varname(σ_level)] * shape
+        knots[:, 1] = s_level .* apply(vi[@varname(z_level)])
         for k in 2:length(days)
             η = apply(z[((k - 2) * nd + 1):((k - 1) * nd)])
             knots[:, k] = φ .* knots[:, k - 1] .+
@@ -457,7 +458,8 @@ end
         @test r.δ_knots ≈ knots[:, 1:nb] rtol = 1.0e-12 atol = 1.0e-14
         for p in 1:np
             δ = interpolate_knots(knots[p, :], days, n + H)
-            @test log.(r.Rt_matrix[p, :] ./ r.Rt_national) ≈ δ rtol = 1.0e-10 atol = 1.0e-12
+            δr = log.(r.Rt_matrix[p, :] ./ r.Rt_national)
+            @test δr ≈ δ rtol = 1.0e-10 atol = 1.0e-12
         end
     end
 end
