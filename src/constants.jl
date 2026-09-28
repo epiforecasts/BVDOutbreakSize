@@ -219,7 +219,7 @@ as tabulated at
 One source for all seven rather than the best figure for each, so
 consistency between provinces matters more than the accuracy of any one of
 them. The relative sizes enter the importation kernel and centre the
-province background and bed-capacity shares. The absolute sizes are the pools the renewal depletes
+province background share. The absolute sizes are the pools the renewal depletes
 ([`renewal_infections`](@ref), [`patch_infections`](@ref)), where they only
 bound the outbreak.
 """

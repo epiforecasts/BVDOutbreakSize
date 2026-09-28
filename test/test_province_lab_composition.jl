@@ -3,7 +3,6 @@
 
     res = background_split_model(1)()
     @test res.w == [1.0]
-    @test res.pooling_sd == 0.0
 end
 
 @testitem "background_split_model: a simplex centred on population share" begin
@@ -16,13 +15,103 @@ end
     @test length(res.w) == 4
     @test sum(res.w) ≈ 1.0
     @test all(>(0), res.w)
-    @test res.pooling_sd >= 0
 
-    ## With the pooling scale at zero every patch sits on its population
-    ## share, so the prior centre is the population split and the sampled
-    ## deviations carry the rest.
-    flat = DynamicPPL.fix(m; τ_bg = 0.0)()
+    ## With every log-ratio at zero each patch sits on its population share,
+    ## so the prior centre is the population split.
+    flat = DynamicPPL.fix(m; bg_log_ratio = zeros(3))()
     @test flat.w ≈ pops ./ sum(pops)
+
+    ## A log-ratio moves its patch against the reference by exactly that
+    ## factor, and a wide one cannot overflow the normalisation.
+    moved = DynamicPPL.fix(m; bg_log_ratio = [log(2.0), 0.0, 0.0])()
+    @test moved.w[2] / moved.w[1] ≈ 2 * pops[2] / pops[1]
+    wide = DynamicPPL.fix(m; bg_log_ratio = [800.0, 0.0, -800.0])()
+    @test all(isfinite, wide.w)
+    @test sum(wide.w) ≈ 1.0
+end
+
+@testitem "patch_capacity_share_model: daily shares centred on cumulative admissions" begin
+    using BVDOutbreakSize: patch_capacity_share_model
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## One patch holds every bed on every day and samples nothing.
+    @test patch_capacity_share_model(ones(1, 5))().s == ones(1, 5)
+
+    ## Patch 1 admits from day 1, patch 2 from day 4, patch 3 never.
+    n = 10
+    adm = zeros(3, n)
+    adm[1, :] .= 5.0
+    adm[2, 4:end] .= 20.0
+    m = patch_capacity_share_model(adm)
+    names = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
+    @test names == ["τ_cap", "z_cap"]
+
+    ## A drawn share is a simplex on every day.
+    res = m()
+    @test size(res.s) == (3, n)
+    @test all(>(0), res.s)
+    @test vec(sum(res.s; dims = 1)) ≈ ones(n)
+
+    ## With no pooling scale the share is the floored cumulative admissions,
+    ## normalised each day.
+    flat = DynamicPPL.fix(m; τ_cap = 0.0, z_cap = [1.5, -2.0])().s
+    centre = cumsum(adm; dims = 2) .+ 1.0
+    @test flat ≈ centre ./ sum(centre; dims = 1)
+    ## The floor keeps a patch with no admissions yet above zero, and the
+    ## share follows the admissions as they arrive.
+    @test all(>(0), flat[2, 1:3])
+    @test all(>(0), flat[3, :])
+    @test flat[2, 3] < flat[2, 4] < flat[2, n]
+    @test flat[3, n] < flat[3, 1]
+    ## A larger floor pulls the early days towards an equal split.
+    wide = DynamicPPL.fix(
+        patch_capacity_share_model(adm; admission_floor = 100.0);
+        τ_cap = 0.0, z_cap = zeros(2)
+    )().s
+    @test wide[2, 1] > flat[2, 1]
+
+    ## A deviation moves its patch against the reference by exp(τ z) on
+    ## every day, and a wide one cannot overflow the normalisation.
+    moved = DynamicPPL.fix(m; τ_cap = 0.5, z_cap = [log(2.0) / 0.5, 0.0])().s
+    @test moved[2, :] ./ moved[1, :] ≈ 2 .* centre[2, :] ./ centre[1, :]
+    big = DynamicPPL.fix(m; τ_cap = 400.0, z_cap = [2.0, -2.0])().s
+    @test all(isfinite, big)
+    @test vec(sum(big; dims = 1)) ≈ ones(n)
+
+    @test_throws ErrorException patch_capacity_share_model(
+        adm; admission_floor = 0.0
+    )()
+end
+
+@testitem "patch_capacity_share_model: gradients through the shares and the admissions" tags = [:ad] begin
+    using BVDOutbreakSize: patch_capacity_share_model, default_adtype
+    using Turing: Turing, DynamicPPL, @model, to_submodel, LogNormal, Multinomial
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: Xoshiro
+
+    ## The admissions are latent in the joint, so the gradient has to reach
+    ## them as well as the pooling scale and the deviations.
+    base = vcat(
+        fill(5.0, 1, 16), hcat(zeros(1, 4), fill(12.0, 1, 12)),
+        fill(1.0, 1, 16)
+    )
+    @model function scored(base, beds)
+        scale ~ LogNormal(0, 0.5)
+        cap ~ to_submodel(patch_capacity_share_model(scale .* base))
+        beds ~ Multinomial(sum(beds), cap.s[:, end])
+    end
+    model = scored(base, [60, 30, 10])
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(1), model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0) == 4
+    @test all(isfinite, grad)
+    @test all(!iszero, grad)
 end
 
 @testitem "province_lab_increment_matrix: pools members, matches the national" begin
@@ -145,7 +234,7 @@ end
 
     ## The background split is sampled once the country has patches.
     names = string.(keys(vi))
-    @test any(contains("τ_bg"), names)
+    @test any(contains("bg_log_ratio"), names)
     @test any(contains("lab_composition_state"), names)
 
     ## Moving analysed specimens between provinces at a fixed daily total
@@ -166,7 +255,7 @@ end
 
     ## One patch has no split to sample.
     single = build(none; n_patches = 1)
-    @test !any(contains("τ_bg"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
+    @test !any(contains("bg_log_ratio"), string.(keys(DynamicPPL.VarInfo(Xoshiro(7), single))))
 
     ## Province laboratory data with one patch would be dropped silently.
     @test_throws ErrorException build(labh; n_patches = 1)()

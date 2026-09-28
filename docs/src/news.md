@@ -44,6 +44,15 @@ Changes since v2.1.0.
   Its delay deviations sum to zero and its report-day walk is zero on its first day, so the baseline is the mean logit hazard across delays on that day.
   The walk starts one delay support before the earliest report day and is held at its first value before that.
   Fitted values change.
+- The province background and bed-capacity shares take fixed-scale log-ratios against population share, `Normal(0, 2.5)`, in place of a pooling scale over three deviations (#919).
+  The data put both simplices several units from population share, so the pooling scale traded off against the deviations along a ridge and set the lowest bulk ESS in the patch model.
+  The chain keys `τ_bg`, `z_bg`, `τ_cap` and `z_cap` become `bg_log_ratio` and `cap_log_ratio`, and `province_background_split_sd` is removed.
+- The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
+  The share is recomputed each day, so it moves with the admissions.
+  A pooled static deviation returns, `τ_cap ~ Normal⁺(0, 1)` over `z_cap ~ Normal(0, 1)`, and `cap_log_ratio` is removed.
+  `province_capacity_share` becomes a daily matrix.
+  `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
+  The background split keeps its population centre.
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
@@ -200,6 +209,8 @@ Changes since v2.1.0.
 
 ### Fixed
 
+- A generation-interval proposal whose mean overflows gives a density of `-Inf`, which the sampler rejects, instead of throwing a `DomainError` at a Gamma scale of zero (#956).
+  The step-size search at the start of warm-up could hit this and crash a fit.
 - A forecast count whose mean passes `typemax(Int)` saturates there instead of throwing `InexactError` (#897).
 - Every other count draw saturates the same way, including the export totals, the late confirmed days and the province split (#905).
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
@@ -215,6 +226,7 @@ Changes since v2.1.0.
   A failing recovery comments on a tracking issue on main and on the pull request.
 - A recovery fit counts as converged at an R-hat up to 1.1 and a bulk ESS of at least 30, and a seed fails only when more truths miss their 99% interval than chance allows (#911).
 - The parameter recovery checks the intervention effect (#928).
+- Each parameter-recovery seed runs four chains, a seed that did not finish counts as unconverged, and the recovery tables sit in dropdowns (#954).
 - `task smoke-joint` runs a short multi-chain fit of the headline joint at the production sampler settings and prints the diagnostics that decide a CI fit (#880).
 - The contributing guide lists the issues most often flagged in review, to check before asking for one (#854).
 - The hand-written rules are in `src/mooncake_rules.jl`, switched by the `mooncake_rules` preference, and each is checked with `test_rule` and timed against the package loaded with that preference off (#856).
