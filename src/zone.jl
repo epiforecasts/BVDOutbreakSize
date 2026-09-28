@@ -367,15 +367,26 @@ function zone_last_case_dates(inputs)
 end
 
 """
+    ZONE_FORECAST_METHOD
+
+The `method` [`zone_forecast_archive`](@ref) records on each row, and the
+only one the release scoring scores for the health zones. It names the
+method of [`zone_forecast`](@ref).
+"""
+const ZONE_FORECAST_METHOD = "predict"
+
+"""
 $(TYPEDSIGNATURES)
 
 Long-format archive of the zone forecast draws `fc` ([`zone_forecast`](@ref))
-made from the cut-off `made_date`, in the [`forecast_archive`](@ref)
-schema plus `province` and `zone` columns. `province`
-is the patch key and `zone` the manifest's dotted `province.zone` key, and
-each value is one draw of the zone's new confirmed cases over the forecast
-horizon, under the `confirmed cases` stream label. `thin` keeps every
-`thin`-th draw.
+made from the cut-off `made_date`, in the
+[`province_forecast_archive`](@ref) schema plus a `zone` column. `province`
+is the patch key and `zone` the manifest's dotted `province.zone` key, whose
+first part is the source province of the zone histories. Each value is one
+draw of the zone's new confirmed cases over the forecast horizon, the one
+horizon the zone forecast runs to, under the `confirmed cases` stream label.
+`method` is [`ZONE_FORECAST_METHOD`](@ref). `thin` keeps every `thin`-th
+draw.
 """
 function zone_forecast_archive(
         fc, inputs; made_date::Date, thin::Integer = 1
@@ -383,7 +394,7 @@ function zone_forecast_archive(
     out = DataFrame(
         made_date = Date[], horizon = Int[], target_date = Date[],
         province = String[], zone = String[], stream = String[],
-        draw = Int[], value = Float64[]
+        draw = Int[], value = Float64[], method = String[]
     )
     h = inputs.model_data.forecast.horizon
     target = made_date + Day(h)
@@ -395,7 +406,7 @@ function zone_forecast_archive(
             push!(
                 out, (
                     made_date, h, target, prov, inputs.zone_keys[z],
-                    "confirmed cases", d, vals[i],
+                    "confirmed cases", d, vals[i], ZONE_FORECAST_METHOD,
                 )
             )
         end
