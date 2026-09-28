@@ -322,6 +322,30 @@ end
         @test issorted(h.days) && allunique(h.days)
         @test all(>(0), h.counts)
     end
+    adm = obs.province_admissions_history
+    @test length(adm) >= 5
+    for (name, h) in adm
+        @test issorted(h.days) && allunique(h.days)
+        @test all(>=(0), h.counts)
+    end
+    ## On a day every province that has printed prints, the provinces'
+    ## admissions add up to the national admissions.
+    nat = Dict(
+        zip(
+            obs.treatment_admissions_history.days,
+            obs.treatment_admissions_history.counts
+        )
+    )
+    active(d) = [h for h in values(adm) if first(h.days) <= d]
+    full = filter(
+        d -> haskey(nat, d) && all(h -> d in h.days, active(d)),
+        sort!(unique!(reduce(vcat, [h.days for h in values(adm)])))
+    )
+    @test length(full) >= 20
+    for d in full
+        @test sum(h.counts[findfirst(==(d), h.days)] for h in active(d)) ==
+            nat[d]
+    end
     ## The two large provinces print almost every day.
     @test length(iso["ituri"].days) > 60
     @test length(iso["nord_kivu"].days) > 60

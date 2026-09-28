@@ -253,8 +253,8 @@ function load_observations(
     end
 
     ## Sparse province blocks: one `[block.province]` sub-table per province
-    ## with its own `dates` and `values`, since the isolation and bed
-    ## figures are printed for different provinces on different days. A
+    ## with its own `dates` and `values`, since the isolation, bed and
+    ## admissions figures are printed for different provinces on different days. A
     ## province absent on a day has no entry, never a zero.
     function province_sparse_history(key)
         ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
@@ -516,6 +516,8 @@ function load_observations(
             province_sparse_history("province_isolation_history"),
         province_bed_capacity_history =
             province_sparse_history("province_bed_capacity_history"),
+        province_admissions_history =
+            province_sparse_history("province_admissions_history"),
         zone_confirmed_history = zone_history("zone_confirmed_history"),
         zone_death_history = zone_history("zone_death_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),

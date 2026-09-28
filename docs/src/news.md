@@ -142,6 +142,7 @@ Changes since v2.1.0.
   SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
+- `province_admissions_history` block, the provinces' 24h admissions from the same two reads, which sum to the national admissions on every day all provinces print (#958).
 - Province beds are the effective beds each recorded day: the printed beds, or where more patients are held, the larger of the patients and the rate-implied beds (#958).
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
 - `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
