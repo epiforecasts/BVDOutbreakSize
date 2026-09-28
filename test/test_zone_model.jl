@@ -1906,7 +1906,7 @@ end
     for zs in inputs.patch_ranges, v in 1:nv
 
         rates = [
-            safe_rate(death_inc[z, v]) * mult[:deaths][1][z] for z in zs
+            safe_rate(death_inc[z, v] * mult[:deaths][1][z]) for z in zs
         ]
         sum(rates) > eps() || continue
         @test shares[1, zs, v] ≈ rates ./ sum(rates)
