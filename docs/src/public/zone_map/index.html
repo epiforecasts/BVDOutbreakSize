@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health-zone map</title>
+<!--
+Interactive choropleth of the health-zone estimates.
+
+Runtime inputs, fetched by relative URL from this directory:
+  zone_estimates.csv   written by the render step (see docs/make.jl); one row
+                        per zone, columns include p_ge_1/p_ge_5/p_ge_10/
+                        p_ge_20 (chance of at least K confirmed cases in the
+                        next 7 days, in [0,1], may be empty),
+                        p_rt_above_one (chance the reproduction number
+                        exceeds one, in [0,1], may be empty below the
+                        reporting floor),
+                        cases_last_7/cases_last_14/cases_last_28 (confirmed
+                        cases allocated to the zone over the past N days)
+                        and last_case_date (ISO date or empty)
+  health_zones.geojson copied from data/health_zones.geojson by docs/make.jl
+
+Leaflet comes from cdnjs with subresource-integrity hashes computed from the
+served files (the allowlist pragmas keep detect-secrets from flagging them).
+Nothing else is fetched.
+-->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha256-tXCrvaljxgtN5LT/Syb5Mm9T+yzPFGH98JVcoJT7JTk=" crossorigin="anonymous"><!-- pragma: allowlist secret -->
+<style>
+  /* Light palette on :root; the dark block repeats for the system
+     preference and for the parent site's explicit toggle. */
+  :root {
+    --bg: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --line: #d9d8d3;
+    --panel: #ffffff; --accent: #2a78d6; --map-bg: #e9e8e3;
+    --neutral: #cfcdc6; --nodata: #fbfaf8; --edge: #d2d0ca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a19; --ink: #f2f2f0; --ink-2: #c3c2b7; --line: #3d3d3a;
+      --panel: #242423; --accent: #3987e5; --map-bg: #2a2a28;
+      --neutral: #8d8c86; --nodata: #3f3f3c; --edge: #161615;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1a19; --ink: #f2f2f0; --ink-2: #c3c2b7; --line: #3d3d3a;
+    --panel: #242423; --accent: #3987e5; --map-bg: #2a2a28;
+    --neutral: #8d8c86; --nodata: #3f3f3c; --edge: #161615;
+  }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg);
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+  }
+  header .title { font-weight: 600; margin-right: auto; }
+  .switch { display: flex; gap: 4px; flex-wrap: wrap; }
+  .switch label {
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    cursor: pointer; color: var(--ink-2); user-select: none;
+  }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch input:checked + span { color: var(--ink); font-weight: 600; }
+  .switch label:has(input:checked) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .switch label:has(input:focus-visible) { outline: 2px solid var(--accent); }
+  button.plain {
+    font: inherit; color: var(--ink-2); background: none;
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+    cursor: pointer;
+  }
+  select.plain {
+    font: inherit; color: var(--ink-2); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px;
+  }
+  #stage { position: relative; flex: 1; min-height: 320px; }
+  #map { position: absolute; inset: 0; background: var(--map-bg); }
+  #status {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 24px;
+    color: var(--ink-2); background: var(--map-bg); z-index: 500;
+  }
+  #status[hidden] { display: none; }
+  #table {
+    position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%);
+    overflow: auto; background: var(--panel); border-left: 1px solid var(--line);
+    z-index: 600; padding: 8px 12px;
+  }
+  #table[hidden] { display: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .leaflet-container { font: inherit; }
+  .legend {
+    background: var(--panel); color: var(--ink); padding: 8px 10px;
+    border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); font-size: 12px;
+    max-width: 220px;
+  }
+  .legend .t { font-weight: 600; margin-bottom: 4px; }
+  .legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .legend .sw {
+    width: 18px; height: 12px; border: 1px solid rgba(0,0,0,.25); flex: none;
+  }
+  .prov-label {
+    background: none; border: none; box-shadow: none; color: var(--ink-2);
+    font-size: 12px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; pointer-events: none;
+    text-shadow: 0 0 2px var(--panel), 0 0 6px var(--panel);
+  }
+  .prov-label::before { display: none; }
+  .leaflet-tooltip.zone-tip, .leaflet-popup-content-wrapper {
+    background: var(--panel); color: var(--ink); border-color: var(--line);
+  }
+  .leaflet-popup-tip { background: var(--panel); }
+  .leaflet-popup-content { margin: 10px 12px; }
+  .tip-h { font-weight: 600; }
+  .tip-s { color: var(--ink-2); font-size: 12px; }
+  .leaflet-control-attribution { font-size: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">Health-zone estimates</span>
+  <div class="switch" role="radiogroup" aria-label="Metric">
+    <label><input type="radio" name="metric" value="R_T" checked><span>Reproduction number</span></label>
+    <label><input type="radio" name="metric" value="forecast"><span>7-day forecast</span></label>
+    <label><input type="radio" name="metric" value="cases"><span>Cases to date</span></label>
+    <label><input type="radio" name="metric" value="share"><span>Share of patch</span></label>
+    <label><input type="radio" name="metric" value="p_ge"><span>Chance of K+ cases</span></label>
+    <label><input type="radio" name="metric" value="p_rt"><span>Chance R &gt; 1</span></label>
+  </div>
+  <select class="plain" id="threshold"
+    aria-label="Case threshold for the chance-of-cases metric">
+    <option value="1">K = 1</option>
+    <option value="5">K = 5</option>
+    <option value="10" selected>K = 10</option>
+    <option value="20">K = 20</option>
+  </select>
+  <select class="plain" id="summary"
+    aria-label="Posterior summary shown for the reproduction number and forecast metrics"
+    title="Applies only to the reproduction number and forecast metrics; other metrics ignore it">
+    <option value="median" selected>Median</option>
+    <option value="lower">Lower 90%</option>
+    <option value="upper">Upper 90%</option>
+  </select>
+  <select class="plain" id="filter" aria-label="Zone filter">
+    <option value="all">All zones</option>
+    <option value="with">With cases in past N days</option>
+    <option value="without">Without cases in past N days</option>
+  </select>
+  <select class="plain" id="window" aria-label="Filter window">
+    <option value="7">7 days</option>
+    <option value="14" selected>14 days</option>
+    <option value="28">28 days</option>
+  </select>
+  <button class="plain" id="toggle-table" aria-pressed="false">Table</button>
+</header>
+<div id="stage">
+  <div id="map" role="application" aria-label="Map of health zones"></div>
+  <div id="status">Loading the health-zone estimates.</div>
+  <aside id="table" hidden aria-label="Health-zone estimates as a table"></aside>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha256-XJrs/DDkVkUZ29zdzFOkGCJ9zHVo5hnpdi3c7HYJ7Uc=" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
+<script>
+(function () {
+  "use strict";
+  var status = document.getElementById("status");
+  function say(msg) { status.textContent = msg; status.hidden = false; }
+  var params = new URLSearchParams(location.search);
+
+  // Follow the parent site's light/dark toggle (Vitepress puts `.dark` on
+  // its root element) when embedded same-origin; otherwise the system
+  // preference applies. `?theme=light|dark` overrides both.
+  var root = document.documentElement;
+  function syncTheme() {
+    var forced = params.get("theme");
+    if (forced === "light" || forced === "dark") {
+      root.dataset.theme = forced;
+      return;
+    }
+    try {
+      if (window.parent === window) { return; }
+      var cls = window.parent.document.documentElement.classList;
+      root.dataset.theme = cls.contains("dark") ? "dark" : "light";
+    } catch (e) { /* cross-origin parent: leave the system preference */ }
+  }
+  syncTheme();
+  try {
+    if (window.parent !== window) {
+      new MutationObserver(function () {
+        syncTheme();
+        if (window.__recolour) { window.__recolour(); }
+      }).observe(window.parent.document.documentElement,
+                 { attributes: true, attributeFilter: ["class"] });
+    }
+  } catch (e) { /* cross-origin parent */ }
+  function cssVar(name) {
+    return getComputedStyle(root).getPropertyValue(name).trim();
+  }
+  if (typeof L === "undefined") {
+    say("The map library did not load, so the map cannot be drawn. " +
+        "The estimates are still available in the analysis tables.");
+    return;
+  }
+
+  // Colour: a blue-grey-red diverging scale about one for the reproduction
+  // number, and a single blue ramp for the magnitudes.
+  var BLUES = ["#b7d3f6", "#6da7ec", "#2a78d6", "#184f95", "#0d366b", "#062246"];
+  // Fixed cuts for the chance-of-K+-cases metric, so colours stay
+  // comparable when the threshold changes; six classes to match BLUES.
+  var P_GE_CUTS = [0.1, 0.25, 0.5, 0.75, 0.9];
+  var RT_BINS = [
+    { max: 0.7, c: "#256abf", l: "below 0.7" },
+    { max: 0.9, c: "#86b6ef", l: "0.7 to 0.9" },
+    { max: 1.1, c: "neutral", l: "0.9 to 1.1" },
+    { max: 1.3, c: "#f1a4a3", l: "1.1 to 1.3" },
+    { max: 1.6, c: "#e34948", l: "1.3 to 1.6" },
+    { max: Infinity, c: "#a8302f", l: "1.6 and above" }
+  ];
+  // Chance-R-above-one classes reuse the R_T diverging colours on the fixed
+  // p_ge cuts, so "probably shrinking" and "probably growing" read as
+  // opposite colours either side of the 0.5 midpoint.
+  var P_RT_BINS = [
+    { max: 0.1, c: "#256abf", l: "below 10%" },
+    { max: 0.25, c: "#86b6ef", l: "10% to 25%" },
+    { max: 0.5, c: "neutral", l: "25% to 50%" },
+    { max: 0.75, c: "#f1a4a3", l: "50% to 75%" },
+    { max: 0.9, c: "#e34948", l: "75% to 90%" },
+    { max: Infinity, c: "#a8302f", l: "90% and above" }
+  ];
+  var NODATA = { c: "nodata", l: "no estimate" };
+  // The neutral midpoint and the no-data fill come from the theme.
+  function paint(c) { return c === "neutral" || c === "nodata" ? cssVar("--" + c) : c; }
+
+  var METRICS = {
+    R_T: {
+      title: "Reproduction number",
+      legend: function () { return "Current reproduction number" + summarySuffix(); },
+      kind: "diverging", fmt: fmt2,
+      value: function (r) { return summaryValue(r, "R_T"); },
+      text: function (r) {
+        if (!num(r.R_T_median)) {
+          return "No reproduction number estimate (too few infections)";
+        }
+        return "Reproduction number " + fmt2(r.R_T_median) +
+          " (90% interval " + fmt2(r.R_T_lower) + " to " +
+          fmt2(r.R_T_upper) + ")";
+      }
+    },
+    forecast: {
+      title: "7-day forecast",
+      legend: function () {
+        return "Confirmed cases forecast, next 7 days" + summarySuffix();
+      },
+      kind: "sequential", fmt: fmtN,
+      value: function (r) { return summaryValue(r, "forecast"); },
+      text: function (r) {
+        return "Confirmed cases over the next 7 days " + fmtN(r.forecast_median) +
+          " (90% interval " + fmtN(r.forecast_lower) + " to " +
+          fmtN(r.forecast_upper) + ")";
+      }
+    },
+    cases: {
+      title: "Cases to date", legend: "Confirmed cases to date",
+      kind: "sequential", fmt: fmt0,
+      value: function (r) { return r.cases; },
+      text: function (r) {
+        return "Confirmed cases to date " + fmt0(r.cases) + ", deaths " + fmt0(r.deaths);
+      }
+    },
+    share: {
+      title: "Share of patch", legend: "Share of the patch's infections",
+      kind: "sequential", fmt: fmtPct,
+      value: function (r) { return r.share_median; },
+      text: function (r) {
+        return "Share of the patch's infections " + fmtPct(r.share_median);
+      }
+    },
+    p_ge: {
+      title: "Chance of K+ cases",
+      // Legend depends on the selected threshold, so it is a function.
+      legend: function () {
+        return "Probability of at least " + threshold +
+          " confirmed cases in the next 7 days";
+      },
+      kind: "sequential", fmt: fmtPct,
+      value: function (r) { return r["p_ge_" + threshold]; },
+      text: function (r) {
+        var v = r["p_ge_" + threshold];
+        return num(v) ?
+          "Chance of at least " + threshold + " cases in the next 7 days: " +
+            fmtPct(v) :
+          "No chance-of-cases estimate";
+      }
+    },
+    p_rt: {
+      title: "Chance R > 1",
+      legend: "Chance the reproduction number exceeds one",
+      kind: "diverging", fmt: fmtPct,
+      value: function (r) { return r.p_rt_above_one; },
+      text: function (r) {
+        var v = r.p_rt_above_one;
+        return num(v) ?
+          "Chance the reproduction number exceeds one: " + fmtPct(v) :
+          "No estimate of the chance the reproduction number exceeds one";
+      }
+    }
+  };
+
+  // An empty CSV cell is null, never zero: the global isFinite would
+  // coerce "" to 0, so every numeric check goes through this.
+  function num(x) { return typeof x === "number" && isFinite(x); }
+  function fmt0(x) { return num(x) ? Math.round(x).toLocaleString("en-GB") : "–"; }
+  function fmt2(x) { return num(x) ? x.toFixed(2) : "–"; }
+  // Counts under ten keep one decimal, so small forecasts stay distinct.
+  function fmtN(x) { return !num(x) ? "–" : x < 10 ? x.toFixed(1) : fmt0(x); }
+  function fmtPct(x) {
+    return num(x) ? (100 * x).toFixed(x < 0.1 ? 1 : 0) + "%" : "–";
+  }
+  // Province keys arrive snake_case (nord_kivu); show them as Nord-Kivu.
+  function provName(s) {
+    s = String(s || "");
+    if (!/^[a-z0-9_]+$/.test(s)) { return s; }
+    return s.split("_").map(function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join("-");
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[ch];
+    });
+  }
+  // snake_case key from a display name, the fallback join when the geojson
+  // carries no `zone` property (zones without cases, or the raw mirror file).
+  function slug(s) {
+    return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+  function parseCSV(text) {
+    var rows = [], row = [], field = "", q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === "\"" && text[i + 1] === "\"") { field += ch; i++; }
+        else if (ch === "\"") { q = false; }
+        else { field += ch; }
+      } else if (ch === "\"") { q = true; }
+      else if (ch === ",") { row.push(field); field = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") { i++; }
+        row.push(field); rows.push(row); row = []; field = "";
+      } else { field += ch; }
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    var head = rows.shift();
+    return rows.filter(function (r) { return r.length > 1; }).map(function (r) {
+      var o = {};
+      head.forEach(function (h, j) {
+        var v = r[j] === undefined ? "" : r[j];
+        var n = Number(v);
+        o[h] = v === "" ? null : !isNaN(n) ? n : v;
+      });
+      return o;
+    });
+  }
+  function quantile(sorted, p) {
+    var i = (sorted.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+  }
+  function nice(x) {
+    if (!(x > 0)) { return 0; }
+    var e = Math.pow(10, Math.floor(Math.log10(x)) - 1);
+    return Math.round(x / e) * e;
+  }
+  // Classes on the given ascending cuts, formatted with f, coloured along
+  // BLUES from lightest to darkest.
+  function binsFromCuts(cuts, f) {
+    var bins = [], lo = null;
+    cuts.forEach(function (c, i) {
+      bins.push({ max: c, c: BLUES[i],
+                  l: lo === null ? "below " + f(c) : f(lo) + " to " + f(c) });
+      lo = c;
+    });
+    bins.push({ max: Infinity, c: BLUES[bins.length],
+                l: lo === null ? "all" : f(lo) + " and above" });
+    return bins;
+  }
+  // Five quantile classes on the zones with an estimate, rounded to two
+  // significant figures and deduplicated so the legend reads cleanly.
+  function sequentialBins(values, f) {
+    var s = values.filter(num).sort(function (a, b) { return a - b; });
+    if (!s.length) { return []; }
+    var cuts = [0.2, 0.4, 0.6, 0.8].map(function (p) { return nice(quantile(s, p)); });
+    cuts = cuts.filter(function (c, i) { return i === 0 || c > cuts[i - 1]; });
+    return binsFromCuts(cuts, f);
+  }
+  function pick(bins, v) {
+    if (!num(v)) { return NODATA; }
+    for (var i = 0; i < bins.length; i++) { if (v < bins[i].max) { return bins[i]; } }
+    return bins[bins.length - 1];
+  }
+
+  var map = L.map("map", { zoomSnap: 0.25, attributionControl: true });
+  map.attributionControl.setPrefix(false);
+  map.attributionControl.addAttribution(
+    "Health-zone boundaries: DRC health zones, simplified");
+  var legend = L.control({ position: "bottomleft" });
+  legend.onAdd = function () {
+    var d = L.DomUtil.create("div", "legend");
+    L.DomEvent.disableClickPropagation(d);
+    return d;
+  };
+  legend.addTo(map);
+
+  var byZone = {}, rows = [], layer = null, metric = "R_T", bins = [];
+  var threshold = "10", filterMode = "all", windowDays = "14", summary = "median";
+  // The posterior-summary selector only has meaning for the two metrics
+  // that carry an interval; other metrics ignore it.
+  function summaryApplies() { return metric === "R_T" || metric === "forecast"; }
+  function summaryValue(r, prefix) {
+    if (summary === "lower") { return r[prefix + "_lower"]; }
+    if (summary === "upper") { return r[prefix + "_upper"]; }
+    return r[prefix + "_median"];
+  }
+  function summarySuffix() {
+    if (summary === "lower") { return ", lower 90%"; }
+    if (summary === "upper") { return ", upper 90%"; }
+    return "";
+  }
+  function updateSummaryDisabled() {
+    document.getElementById("summary").disabled = !summaryApplies();
+  }
+  // Deep links: `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
+  // `?summary=median|lower|upper`, `?filter=all|with|without`,
+  // `?window=7|14|28` and `?table=1`.
+  if (METRICS[params.get("metric")]) {
+    metric = params.get("metric");
+    document.querySelector("input[name=metric][value=" + metric + "]")
+      .checked = true;
+  }
+  if (["1", "5", "10", "20"].indexOf(params.get("k")) !== -1) {
+    threshold = params.get("k");
+    document.getElementById("threshold").value = threshold;
+  }
+  if (["median", "lower", "upper"].indexOf(params.get("summary")) !== -1) {
+    summary = params.get("summary");
+    document.getElementById("summary").value = summary;
+  }
+  updateSummaryDisabled();
+  if (["all", "with", "without"].indexOf(params.get("filter")) !== -1) {
+    filterMode = params.get("filter");
+    document.getElementById("filter").value = filterMode;
+  }
+  if (["7", "14", "28"].indexOf(params.get("window")) !== -1) {
+    windowDays = params.get("window");
+    document.getElementById("window").value = windowDays;
+  }
+  // A zone is hidden by the filter (drawn no-data, excluded from bins,
+  // legend and the table); zones with no CSV row at all are unaffected
+  // here since featureRow() already returns null for them.
+  function isHidden(r) {
+    if (!r || filterMode === "all") { return false; }
+    var has = num(r["cases_last_" + windowDays]) &&
+      r["cases_last_" + windowDays] > 0;
+    return filterMode === "with" ? !has : has;
+  }
+  function visibleRows() {
+    return rows.filter(function (r) { return !isHidden(r); });
+  }
+  // Extra tooltip lines specific to the chance-of-cases metric.
+  function pGeLines(r) {
+    var v = r["p_ge_" + threshold];
+    var lines = [
+      num(v) ?
+        "Chance of at least " + threshold + " cases in the next 7 days: " +
+          fmtPct(v) :
+        "No chance-of-cases estimate",
+      "cases in past " + windowDays + " days: " +
+        fmt0(r["cases_last_" + windowDays])
+    ];
+    if (r.last_case_date) { lines.push("last case: " + r.last_case_date); }
+    return lines.map(function (l) { return "<div>" + esc(l) + "</div>"; })
+      .join("");
+  }
+  // Extra tooltip lines specific to the chance-R-above-one metric.
+  function pRtLines(r) {
+    var v = r.p_rt_above_one;
+    var lines = [
+      num(v) ?
+        "Chance the reproduction number exceeds one: " + fmtPct(v) :
+        "No estimate of the chance the reproduction number exceeds one",
+      num(r.R_T_median) ?
+        "Reproduction number " + fmt2(r.R_T_median) + " (90% interval " +
+          fmt2(r.R_T_lower) + " to " + fmt2(r.R_T_upper) + ")" :
+        "No reproduction number estimate",
+      "cases in past " + windowDays + " days: " +
+        fmt0(r["cases_last_" + windowDays])
+    ];
+    if (r.last_case_date) { lines.push("last case: " + r.last_case_date); }
+    return lines.map(function (l) { return "<div>" + esc(l) + "</div>"; })
+      .join("");
+  }
+
+  function featureRow(f) {
+    var p = f.properties || {};
+    var key = p.zone || slug(p.label || p.nom);
+    return byZone[key] || null;
+  }
+  function styleFor(f) {
+    var r = featureRow(f);
+    var b = (!r || isHidden(r)) ? NODATA : pick(bins, METRICS[metric].value(r));
+    return { fillColor: paint(b.c), fillOpacity: 1, color: cssVar("--edge"),
+             weight: 0.8, opacity: 1 };
+  }
+  function tipHTML(f) {
+    var p = f.properties || {}, r = featureRow(f);
+    var name = p.label || p.nom || "Unknown zone";
+    var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
+      "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
+    if (!r) { return s + "<div class=\"tip-s\">No confirmed cases reported.</div>"; }
+    if (isHidden(r)) { return s + "<div class=\"tip-s\">Hidden by filter.</div>"; }
+    if (metric === "p_ge") { return s + pGeLines(r); }
+    if (metric === "p_rt") { return s + pRtLines(r); }
+    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>";
+  }
+  function popupHTML(f) {
+    var p = f.properties || {}, r = featureRow(f);
+    var name = p.label || p.nom || "Unknown zone";
+    var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
+      "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
+    if (!r) { return s + "<div>No confirmed cases reported.</div>"; }
+    return s + ["R_T", "forecast", "cases", "share"].map(function (k) {
+      return "<div>" + esc(METRICS[k].text(r)) + ".</div>";
+    }).join("");
+  }
+  function computeBins() {
+    var m = METRICS[metric];
+    if (metric === "p_ge") { bins = binsFromCuts(P_GE_CUTS, fmtPct); }
+    else if (metric === "p_rt") { bins = P_RT_BINS; }
+    else if (m.kind === "diverging") { bins = RT_BINS; }
+    else { bins = sequentialBins(visibleRows().map(m.value), m.fmt); }
+  }
+  window.__recolour = recolour;
+  function recolour() {
+    var m = METRICS[metric];
+    computeBins();
+    if (layer) { layer.setStyle(styleFor); }
+    var d = legend.getContainer();
+    var legendText = typeof m.legend === "function" ? m.legend() : m.legend;
+    d.innerHTML = "<div class=\"t\">" + esc(legendText) + "</div>" +
+      bins.concat([NODATA]).map(function (b) {
+        return "<div class=\"row\"><span class=\"sw\" style=\"background:" +
+          paint(b.c) + "\"></span><span>" + esc(b.l) + "</span></div>";
+      }).join("");
+    renderTable();
+  }
+  // The table's extra columns (beyond zone/province/metric) vary by metric.
+  function extraCols() {
+    if (metric === "R_T") {
+      return [{ title: "90% interval", value: function (r) {
+        return fmt2(r.R_T_lower) + " to " + fmt2(r.R_T_upper);
+      } }];
+    }
+    if (metric === "forecast") {
+      return [{ title: "90% interval", value: function (r) {
+        return fmtN(r.forecast_lower) + " to " + fmtN(r.forecast_upper);
+      } }];
+    }
+    if (metric === "cases") {
+      return [{ title: "Deaths", value: function (r) { return fmt0(r.deaths); } }];
+    }
+    if (metric === "share") {
+      return [{ title: "Patch", value: function (r) { return esc(r.patch); } }];
+    }
+    if (metric === "p_ge" || metric === "p_rt") {
+      return [
+        { title: "Cases past " + windowDays + " days", value: function (r) {
+            return fmt0(r["cases_last_" + windowDays]);
+          } },
+        { title: "Last case", value: function (r) {
+            return r.last_case_date ? esc(r.last_case_date) : "–";
+          } }
+      ];
+    }
+    return [];
+  }
+  function renderTable() {
+    var m = METRICS[metric], t = document.getElementById("table");
+    if (t.hidden) { return; }
+    var sorted = visibleRows().sort(function (a, b) {
+      var x = m.value(a), y = m.value(b);
+      if (!num(x)) { return num(y) ? 1 : 0; }
+      if (!num(y)) { return -1; }
+      return y - x;
+    });
+    var cols = extraCols();
+    var colTitle = m.title +
+      (summaryApplies() && summary !== "median" ?
+        " (" + (summary === "lower" ? "lower 90%" : "upper 90%") + ")" : "");
+    t.innerHTML = "<table><thead><tr><th>Zone</th><th>Province</th>" +
+      "<th class=\"num\">" + esc(colTitle) + "</th>" +
+      cols.map(function (c) { return "<th class=\"num\">" + esc(c.title) + "</th>"; })
+        .join("") +
+      "</tr></thead><tbody>" + sorted.map(function (r) {
+        return "<tr><td>" + esc(r.label || r.zone) + "</td><td>" +
+          esc(provName(r.province)) +
+          "</td><td class=\"num\">" + m.fmt(m.value(r)) + "</td>" +
+          cols.map(function (c) { return "<td class=\"num\">" + c.value(r) + "</td>"; })
+            .join("") + "</tr>";
+      }).join("") + "</tbody></table>";
+  }
+
+  document.querySelectorAll("input[name=metric]").forEach(function (el) {
+    el.addEventListener("change", function () {
+      metric = el.value; updateSummaryDisabled(); recolour();
+    });
+  });
+  document.getElementById("threshold").addEventListener("change", function () {
+    threshold = this.value; recolour();
+  });
+  document.getElementById("summary").addEventListener("change", function () {
+    summary = this.value; recolour();
+  });
+  document.getElementById("filter").addEventListener("change", function () {
+    filterMode = this.value; recolour();
+  });
+  document.getElementById("window").addEventListener("change", function () {
+    windowDays = this.value; recolour();
+  });
+  function toggleTable() {
+    var t = document.getElementById("table");
+    t.hidden = !t.hidden;
+    document.getElementById("toggle-table")
+      .setAttribute("aria-pressed", String(!t.hidden));
+    renderTable();
+  }
+  document.getElementById("toggle-table").addEventListener("click", toggleTable);
+  if (params.get("table") === "1") { toggleTable(); }
+
+  function labelProvinces(geo) {
+    var acc = {};
+    geo.features.forEach(function (f) {
+      var prov = f.properties && f.properties.province;
+      if (!prov) { return; }
+      var b = L.geoJSON(f).getBounds(), c = b.getCenter();
+      acc[prov] = acc[prov] || { lat: 0, lng: 0, n: 0 };
+      acc[prov].lat += c.lat; acc[prov].lng += c.lng; acc[prov].n++;
+    });
+    Object.keys(acc).forEach(function (prov) {
+      var a = acc[prov];
+      L.tooltip({ permanent: true, direction: "center", className: "prov-label",
+                  interactive: false })
+        .setLatLng([a.lat / a.n, a.lng / a.n]).setContent(provName(prov)).addTo(map);
+    });
+  }
+
+  function draw(geo) {
+    computeBins();
+    layer = L.geoJSON(geo, {
+      style: styleFor,
+      onEachFeature: function (f, l) {
+        l.bindTooltip(function () { return tipHTML(f); },
+          { sticky: true, className: "zone-tip", opacity: 1 });
+        l.bindPopup(function () { return popupHTML(f); });
+        l.on({
+          mouseover: function () {
+            l.setStyle({ weight: 2, color: "#333" });
+            l.bringToFront();
+          },
+          mouseout: function () { layer.resetStyle(l); }
+        });
+      }
+    }).addTo(map);
+    map.fitBounds(layer.getBounds(), { padding: [10, 10] });
+    labelProvinces(geo);
+    recolour();
+  }
+
+  function fetchText(url) {
+    return fetch(url, { cache: "no-cache" }).then(function (r) {
+      if (!r.ok) { throw new Error(url + " returned " + r.status); }
+      return r.text();
+    });
+  }
+  Promise.all([
+    fetchText("health_zones.geojson").then(JSON.parse),
+    fetchText("zone_estimates.csv").then(parseCSV).catch(function () { return null; })
+  ]).then(function (res) {
+    var geo = res[0];
+    rows = res[1] || [];
+    rows.forEach(function (r) { byZone[r.zone] = r; });
+    draw(geo);
+    if (rows.length) { status.hidden = true; return; }
+    say("This build carries no health-zone estimates, so the map shows " +
+        "the zone boundaries only.");
+    setTimeout(function () { status.hidden = true; }, 3000);
+  }).catch(function (e) {
+    say("The map could not be drawn: " + e.message);
+  });
+})();
+</script>
+</body>
+</html>

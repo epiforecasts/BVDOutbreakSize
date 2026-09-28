@@ -17,27 +17,35 @@
 # Set `BVD_FIT_CACHE` to choose the cache directory (default `logs/fit_cache`),
 # `BVD_REFIT=all` to ignore existing cache entries, and `BVD_RUN_SENSITIVITY`
 # to include the sensitivity re-fits.
+#
+# The fits run in two passes: the base fits first, then the dependent fits
+# that meld from a cached parent (the health-zone fits from the joints).
+# `BVD_FIT_STAGE=base` or `dependent` runs one pass only; the dependent pass
+# needs its parents already cached.
 using Pkg: Pkg
 Pkg.instantiate()
 
 using BVDOutbreakSize
 include(joinpath(@__DIR__, "registry.jl"))
 
-const CACHE = get(
-    ENV, "BVD_FIT_CACHE",
-    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache")
-)
+const CACHE = fit_cache_dir()
 const REFIT = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
+const STAGE = fit_stage_env(:all)
 
 obs = load_observations()
-specs = build_fit_specs(obs)
-@info "Fitting $(length(specs)) models into the cache" cache = CACHE refit = REFIT threads = Threads.nthreads()
-fit_parallel(
-    [
-        () -> fit_or_load(
-            fit_key(s.id), s.thunk;
-            cache_dir = CACHE, refit = REFIT
-        ) for s in specs
-    ]
-)
-@info "All fits cached" cache = CACHE
+specs = build_fit_specs(obs; cache_dir = CACHE)
+stages = STAGE === :all ? (:base, :dependent) : (STAGE,)
+for stage in stages
+    stage_specs = stage_fit_specs(specs, stage)
+    n = length(stage_specs)
+    @info "Fitting $n $stage models into the cache" cache = CACHE refit = REFIT threads = Threads.nthreads()
+    fit_parallel(
+        [
+            () -> fit_or_load(
+                fit_key(s.id), s.thunk;
+                cache_dir = CACHE, refit = REFIT
+            ) for s in stage_specs
+        ]
+    )
+end
+@info "All fits cached" cache = CACHE stages = stages
