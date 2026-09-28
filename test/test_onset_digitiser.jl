@@ -203,6 +203,34 @@ end
     @test all(r -> (r[2], r[3]) == (10, 5), twentyfive)
 end
 
+@testitem "digitize keeps the finer y grid when the strict mask skips ticks" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## Ticks every 60 px from row 60 to the baseline at 300. Every other
+    ## tick is anti-aliased into the near-grey range, so the strict mask
+    ## reads a regular 120 px grid (SitRep 133) and would halve the counts.
+    R, G, B = _synthetic_chart([(8, 4) for _ in 1:10]; tick_px = 60)
+    for y in (120, 240)
+        R[y, 30:34] .= 150
+        G[y, 30:34] .= 150
+        B[y, 30:34] .= 150
+    end
+    rows = [
+        r for r in digitize(R, G, B, Date(2026, 8, 24), 20)
+            if r[2] + r[3] > 0
+    ]
+    @test length(rows) == 10
+    @test all(r -> (r[2], r[3]) == (8, 4), rows)
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin

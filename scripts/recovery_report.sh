@@ -4,7 +4,8 @@
 # keep a tracking issue in step with the verdict: comment on it (opening it
 # if needed) when recovery fails or a fit does not converge, and close it
 # once recovery passes again. With `pr`, keep one comment on the pull
-# request `PR_NUMBER` up to date with the summary.
+# request `PR_NUMBER` up to date with the summary. With no results, every
+# seed in BVD_RECOVERY_SEEDS is reported as unconverged.
 #
 # Usage: scripts/recovery_report.sh <dir with recovery_*.csv> [post|pr]
 set -euo pipefail
@@ -14,10 +15,11 @@ title="Parameter recovery check failing"
 
 shopt -s nullglob
 files=("$dir"/recovery_[0-9]*.csv)
-if [ ${#files[@]} -eq 0 ]; then
-  echo "No recovery results found; the recovery runs did not finish." >&2
+if [ ${#files[@]} -eq 0 ] && [ -z "${BVD_RECOVERY_SEEDS:-}" ]; then
+  echo "No recovery results found and no seeds listed." >&2
   exit 1
 fi
+mkdir -p "$dir"
 
 julia --project=docs scripts/recovery_report.jl "$dir"
 status=$(cat "$dir/status")
