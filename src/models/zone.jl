@@ -1900,7 +1900,7 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
-[`province_importation_kernel`](@ref) weighted by its fitted per-flow
+[`mobility_importation_kernel`](@ref) weighted by its fitted per-flow
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
 the same origin intensity, which is what keeps one movement from being
@@ -2450,7 +2450,7 @@ function _zone_mixing_or_nothing(
     length(parent.import_log_odds) == np * n || return nothing
     pops = Float64[r.population for r in rows]
     coords = [(r.lat, r.lon) for r in rows]
-    kernel = province_importation_kernel(
+    kernel = mobility_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
     weight = isempty(parent.flow_effect) ? parent.destination_effect :
