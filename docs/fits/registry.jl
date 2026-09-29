@@ -229,6 +229,10 @@ joint_max_depth() = parse(
     get(ENV, "BVD_JOINT_MAX_DEPTH", "10")
 )
 
+## The whole-curve onset score gives the onsets-only fit more parameters
+## than `nuts_sample`'s default of 200 warm-up steps adapts to.
+const ONSETS_WARMUP = 1000
+
 ## The fits that splat `joint_sampler_args()`: the headline, its spatial
 ## control, the one-week-back validation joint and the two sensitivity
 ## re-fits of the joint.
@@ -658,13 +662,9 @@ function build_fit_specs(
                 onset_curve_history = obs.onset_curve_history,
                 breakpoint = breakpoint
             ),
-            ## 1000 adaptation steps rather than `nuts_sample`'s 200. Since
-            ## #948 scores the whole curve the fit has about 70 more
-            ## parameters, and 200 steps left it at R-hat 1.07 and bulk ESS
-            ## 24 where 1000 give 1.03 and 68.
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains, n_adapts = 1000,
+                samples = samples, chains = chains, n_adapts = ONSETS_WARMUP,
                 callback = fit_callback("onsets")
             )
         ),
