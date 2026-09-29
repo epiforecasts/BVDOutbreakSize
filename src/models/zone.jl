@@ -864,8 +864,8 @@ Without mixing a zone takes the share of its patch its own force earns,
 `w_z = u_z / \\sum_{z' ∈ p} u_{z'}` and `I_z = Ī_p w_z`.
 
 With `mix`, the blocks of [`zone_importation_blocks`](@ref) and the
-province model's own per-origin intensity and import fraction, each day
-splits the patch total into what the patch grew and what it received:
+province model's own per-origin intensity and import fraction at one
+shared draw ([`zone_draw_mixing`](@ref)), each day splits the patch total into what the patch grew and what it received:
 
 ```math
 v_z = (1 − ε_z) u_z + \\sum_{q ∈ p,\\, q ≠ z} ε_q K^w_{zq} u_q,
