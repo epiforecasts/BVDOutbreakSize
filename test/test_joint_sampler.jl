@@ -95,3 +95,16 @@ end
         end
     end
 end
+
+@testitem "the onsets-only fit adapts over its own warm-up" tags = [
+    :quality,
+] begin
+    ## The whole-curve onset score gives this fit more parameters than
+    ## `nuts_sample`'s default warm-up of 200 steps adapts to.
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+    @test ONSETS_WARMUP == 1000
+    src = read(
+        joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"), String
+    )
+    @test count("n_adapts = ONSETS_WARMUP", src) == 1
+end
