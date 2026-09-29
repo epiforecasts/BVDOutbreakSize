@@ -1840,9 +1840,9 @@ end
         n, np; breakpoint = bp, rt_start,
         importation_kernel = K
     )
-    ## Everything but the intensity is held at one draw, and the kernel
-    ## deviations at zero since `z_ε` also enters the destination effect, so
-    ## the trajectories differ only through what the intensity does.
+    ## Everything but the intensity is held at one draw, so the trajectories
+    ## differ only through what the intensity does. `z_ε` also enters the
+    ## destination effect, so the kernel spreads are zero.
     function run(;
             ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
             β_ε = 0.0
@@ -2184,6 +2184,13 @@ end
     three = patch_infection_model(n, 3; breakpoint = bp, rt_start)
     @test "z_flow" in vnames(three)
     @test !("ρ_flow_unit" in vnames(three))
+    ## With two patches every weighting cancels and there is no flow term.
+    two = patch_infection_model(n, 2; breakpoint = bp, rt_start)
+    @test !("σ_flow" in vnames(two))
+    chn2 = sample(Xoshiro(1), two, Prior(), 1; progress = false)
+    η2 = first(vec(collect(chn2[:importation_destination_effect])))
+    W2 = first(vec(collect(chn2[:importation_flow_effect])))
+    @test W2 ≈ vec(repeat(η2, 1, 2))
 
     K = province_importation_kernel(PROVINCE_POPULATIONS)
     fixed = (;

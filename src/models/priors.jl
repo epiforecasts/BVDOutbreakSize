@@ -1887,8 +1887,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
         ## Per-flow deviations with the origin and destination effects taken
-        ## out, each flow correlated `ρ_flow` with its reverse. With three
-        ## patches the only such flow is a circulation, so `ρ_flow = -1`.
+        ## out, each flow correlated `ρ_flow` with its reverse.
         n_sym = size(flow_basis.symmetric, 2)
         n_flow = n_sym + size(flow_basis.antisymmetric, 2)
         if n_flow > 0

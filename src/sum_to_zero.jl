@@ -198,8 +198,9 @@ end
 
 ## Orthonormal basis (`m × d`) of the vectors in `R^m` orthogonal to every
 ## vector in `constraints`, by Gram-Schmidt over the constraints and then
-## the unit vectors. Plain loops rather than an SVD, so it runs inside a
-## model that Mooncake differentiates.
+## the unit vectors. Plain loops rather than an SVD, which Mooncake has no
+## rule for, so a model that builds the basis in its body still
+## differentiates.
 function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
     span = Vector{Float64}[]
     function reduce!(v)
