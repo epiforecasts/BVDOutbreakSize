@@ -10,8 +10,9 @@
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
 ## quantity and the patch trajectory and between-patch movement it implies,
-## and, with mixing, the per-zone mixing fractions. A chain with no kept meld cell carries an
-## empty `η` and every draw reads the province model's mean curve.
+## and, with mixing, the per-zone mixing fractions. A chain with no kept
+## meld cell carries an empty `η` and every draw reads the province model's
+## mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
     zd = inputs.model_data
     nz = length(inputs.zone_keys)
@@ -117,9 +118,8 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. The origin intensity cells have no row. `mean_norm_sq`
-is the mean of `‖η‖²` over every component, which is `dimension` when the
-fit reproduces the prior.
+weekly infections there. `mean_norm_sq` is the mean of `‖η‖²` over every
+component, which is `dimension` when the fit reproduces the prior.
 """
 function zone_meld_check(chn, inputs)
     meld = inputs.meld
