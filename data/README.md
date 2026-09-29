@@ -179,6 +179,9 @@ From SitRep 124 the caption drops `de santé` and carries the date instead, read
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
 The series run to SitRep 135 (26 September).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
+SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
+The province blocks carry 1 July from the same mirror zones and 26 July (SitRep 073, whose Tableau 1 contradicts itself) from the committed Tableau 2 zone column.
+A paste of the scanner's output drops 1 July, so append new vintages instead.
 
 The unallocated row is the report's own count of cases and deaths it has not attributed to a zone.
 It is worded `Autres ZS (données non ventilées)` (018 to 032, 94 cases and 10 deaths throughout), `Autres zones non encore identifiées` (034 to 058, 17 cases), `Non identifiées` (059 to 068, 17 cases) and `A ventiler` (088 onward, deaths only).
