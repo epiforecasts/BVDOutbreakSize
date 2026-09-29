@@ -13,6 +13,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - A hand-written Mooncake rule differentiates the health-zone renewal (#779).
 - A hand-written Mooncake rule differentiates the health-zone composition likelihood, about 19% faster than the derived gradient (#995).
+- The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
 
 ### Model
 
