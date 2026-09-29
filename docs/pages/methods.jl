@@ -2059,8 +2059,9 @@ cfr_prior_fig #hide
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
 #
 # The shared quantity is the joint model's weekly infections in each patch, $S_{p,w}$.
-# A window in which a patch's mean infections stay below one is dropped as not yet seeded, leaving $d$ pairs $(p, w)$.
-# Over the joint model's draws the kept $\log S_{p,w}$ have sample covariance $\hat\Sigma$.
+# A window in which a patch's mean infections stay below one is dropped as not yet seeded.
+# When the zones mix, the log importation intensity of each origin patch at the cut-off, $\log \varepsilon_q$ of Equation (15), is appended after the kept pairs $(p, w)$, for $d$ cells in all.
+# Over the joint model's draws the kept cells have sample covariance $\hat\Sigma$.
 # Its Cholesky factor $L$ is taken after adding $10^{-6}$ of each cell's own variance to the diagonal, which conditions the factorisation without rescaling any week.
 # The joint model carries fewer draws than there are cells, so $\hat\Sigma$ can still be singular.
 # The factorisation then blends toward its own diagonal, $(1 - \lambda)\hat\Sigma + \lambda\,\mathrm{diag}(\hat\Sigma)$, at the smallest $\lambda$ that succeeds.
@@ -2073,7 +2074,8 @@ cfr_prior_fig #hide
 # ```
 #
 # Here $a_p(t)$ interpolates patch $p$'s kept week midpoints and holds flat outside them, and $\bar I_{p,t}$ is the exponential of the joint model's posterior mean log infections.
-# One draw moves whole patch trajectories, and moves the patches together where the joint model says they move together.
+# The rows of $a$ for the intensities, $c_q$, give the draw's intensity $\varepsilon_q = \bar\varepsilon_q e^{c_q}$, with $\bar\varepsilon_q$ the exponential of the joint model's posterior mean log intensity.
+# One draw moves whole patch trajectories, and moves the patches and the intensities together where the joint model says they move together.
 # Nothing else in the zone stage carries a second term from that posterior.
 # The zone infections sum to the sampled patch totals by construction, so scoring those sums again would count the same posterior twice, in every direction the draw already sets.
 #
@@ -2122,7 +2124,19 @@ cfr_prior_fig #hide
 # the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
 # Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
 #
-# Within a patch the spill is a transfer, and between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$ at its posterior mean import fraction $f_{p,t}$:
+# Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
+# The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:
+#
+# ```math
+# \operatorname{logit} f_{p,t} = \bar o_{p,t}
+#   + \log \sum_{q \ne p} s_{pq,t}\, e^{c_q + a_q(t)} - a_p(t),
+# \qquad
+# s_{pq,t} = \frac{\bar\varepsilon_q K_{pq} \bar I_{q,t}}
+#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}},
+# ```
+#
+# with $\bar o_{p,t}$ the joint model's posterior mean log odds that an infection in $p$ was imported.
+# Within a patch the spill is a transfer:
 #
 # ```math
 # v_{z,t} = (1 - \varepsilon_z) u_{z,t}
@@ -2132,7 +2146,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \bar\varepsilon_{p(q)}
+# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \varepsilon_{p(q)}
 #     K^{\text{b}}_{zq}\, u_{q,t},
 # \qquad
 # I_{z,t} = c_{p,t}\, v_{z,t}
@@ -2141,7 +2155,7 @@ cfr_prior_fig #hide
 # w_{z,t} = \frac{I_{z,t}}{I_{p,t}}, \tag{61}
 # ```
 #
-# Here $\bar\varepsilon_{p}$ is the joint model's posterior mean per-origin intensity of Equation (15).
+# Here $\varepsilon_{p}$ is the draw's per-origin intensity of Equation (56).
 # It enters only as a relative weight across origin patches.
 # The zone infections of a patch therefore sum to $I_{p,t}$ exactly.
 # The within-patch spill is the zone stage's own mechanism and carries its own intensity, one level with a pooled per-origin deviation:
@@ -2227,8 +2241,9 @@ cfr_prior_fig #hide
 # For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
 # The results rank zones by the posterior probability that the reproduction number exceeds one.
 #
-# We assume the generation interval and the two delays are the joint model's posterior means, and the import fraction and the per-origin intensity likewise.
-# Only the weekly patch infections are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
+# We assume the generation interval and the two delays are the joint model's posterior means.
+# The weekly patch infections and the per-origin intensities are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
+# The import fraction follows from them through the arrivals formula, which leaves out the joint model's change in intensity at detection.
 # Straight-line distance stands for the roads, the lake and the international border that carry movement.
 # We assume the gravity form carries movement between zones as it does between provinces, with no mobility data to check it against.
 # The increments are consecutive-vintage differences clamped at zero.
