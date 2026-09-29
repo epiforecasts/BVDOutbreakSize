@@ -823,6 +823,52 @@ end
     @test all(isfinite, et)
 end
 
+@testitem "onset_report_hazard_model holds the report-date walk at zero before walk_start" begin
+    ## The walk changes the reporting delay by report date, so it can only
+    ## move where a snapshot sees a delay. Before `walk_start` it sits at
+    ## zero on the same calendar grid, so every consumer indexes it as
+    ## before.
+    using BVDOutbreakSize: onset_report_hazard_model
+    using Random: seed!
+
+    seed!(20260929)
+    out = onset_report_hazard_model(1, 60; walk_start = 30)()
+    @test length(out.γ) == 60
+    @test all(iszero, out.γ[1:30])
+    @test any(!iszero, out.γ[31:end])
+    @test out.grid_start == 1
+
+    ## The default keeps the walk starting on the grid's first day.
+    seed!(20260929)
+    full = onset_report_hazard_model(1, 60)()
+    @test length(full.γ) == 60
+    @test iszero(full.γ[1])
+    @test any(!iszero, full.γ[2:30])
+end
+
+@testitem "onset_reporting_model anchors the report-date walk at the first snapshot" begin
+    ## Onset dates reach back well before the first figure (report day 40),
+    ## as they do once every date's first print is scored as a level. No
+    ## delay is observed before that figure, so the walk must not move there.
+    using BVDOutbreakSize: onset_reporting_model
+    using Random: seed!
+
+    oc = (;
+        onset_days = [5, 10, 20, 30, 38, 30, 38, 42],
+        report_days = [40, 40, 40, 40, 40, 45, 45, 45],
+        prev_report_days = [0, 0, 0, 0, 0, 40, 40, 0],
+        increments = [2, 3, 4, 5, 1, 1, 2, 1],
+    )
+    seed!(20260929)
+    out = onset_reporting_model(oc, fill(20.0, 60))()
+    first_report = minimum(oc.report_days)
+    ## `γ` is indexed from the grid start, the earliest onset date scored.
+    before = first_report - out.grid_start + 1
+    @test out.grid_start == minimum(oc.onset_days)
+    @test all(iszero, out.γ[1:before])
+    @test all(isfinite, out.γ)
+end
+
 @testitem "onset_reporting_model conditions on increments, not sampled" begin
     ## Regression test for a silent-failure mode specific to DynamicPPL:
     ## observe-versus-assume is decided by whether the tilde's symbol is one
