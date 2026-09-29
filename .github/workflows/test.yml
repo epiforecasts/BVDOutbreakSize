@@ -7,13 +7,13 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Superseding a run is right on a pull request and destructive on `main`.
-# `github.head_ref` is set only on a pull request, so a push to `main`, a tag
-# or a manual run falls back to `github.run_id`.
-# That gives each of those a group of its own that nothing supersedes.
+# A pull request cancels its own earlier run. On `main` a running suite is
+# left to finish and a newer push replaces only the run still queued behind
+# it, so a burst of merges tests the first and the last rather than each.
+# `github.head_ref` is set only on a pull request.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -52,12 +52,11 @@ jobs:
     # Below GitHub's 6h job ceiling, which a stalled cell otherwise sits on
     # before being reported as cancelled rather than failed.
     timeout-minutes: 150
+    # Julia 1 on Linux is the `coverage` job in codecoverage.yaml, which runs
+    # the same `skip_quality` set, so it has no cell here.
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['1']
-        os: [ubuntu-latest]
-        experimental: [false]
         include:
           - julia-version: 'lts'
             os: ubuntu-latest
@@ -104,15 +103,20 @@ jobs:
           cache-name: test-2026-09-17
       - uses: julia-actions/julia-runtest@v1
         with:
-          # macOS is the portability cell and the slowest runner: give it
-          # the platform-sensitive items only. Everything tagged `:quality`
-          # or `:ad` runs once in the `quality` and `ad-gradients` jobs below
+          # macOS and Windows are the portability cells: give them the
+          # platform-sensitive items only, since the `:slow` NUTS fits do not
+          # vary by platform. The lts cell keeps them, as the one check of
+          # the fits on the older Julia. Everything tagged `:quality` or
+          # `:ad` runs once in the `quality` and `ad-gradients` jobs below
           # rather than on any matrix cell: those items do not vary by
           # platform or Julia version, and carrying them made the one cell
           # that ran them outgrow the timeout. The `:ad` items are ~19 min of
           # Mooncake gradient compilation, which every cell was paying.
           # See test/runtests.jl.
-          test_args: ${{ matrix.os == 'macOS-latest' && 'fast' || 'skip_quality' }}
+          test_args: ${{ matrix.julia-version == 'lts' && 'skip_quality' || 'fast' }}
+          # Only the `coverage` job uploads coverage. Instrumented code
+          # precompiles and runs slower for a result nothing reads.
+          coverage: false
 
   quality:
     name: Quality (package and docstring checks)
@@ -135,9 +139,12 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           test_args: 'quality_only'
+          coverage: false
 
   ad-gradients:
     name: AD gradients (Mooncake)
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     # The `:ad` items are ~20 min on a warm depot; a first run on a cold one
     # pays the package precompile on top, so this is not sized to 20.
@@ -167,6 +174,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     # Pinned pkgimage targets, as on the `test` matrix above.
     env:
       JULIA_CPU_TARGET: >-
@@ -191,3 +199,4 @@ jobs:
           # tolerances drift on the downgraded dep set; the AD plumbing
           # is exercised at the pinned versions in the `ad-gradients` job.
           test_args: downgrade
+          coverage: false
