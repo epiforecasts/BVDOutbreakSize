@@ -117,8 +117,11 @@
 
     ## Health-zone composition inputs: `sizes` zones per patch over `nv`
     ## vintages, with counts up to `ymax` and a cell for every patch and
-    ## vintage that counts any.
-    function composition_args(rng, sizes, nv; ymax = 6, κ = 19.0)
+    ## vintage that counts any. `clamp` puts zone 2's first expectation below
+    ## the floor with a count, so the clamped zone is scored.
+    function composition_args(
+            rng, sizes, nv; ymax = 6, κ = 19.0, clamp = false
+        )
         ranges = UnitRange{Int}[]
         for k in sizes
             s0 = isempty(ranges) ? 0 : last(last(ranges))
@@ -127,6 +130,10 @@
         nz = sum(sizes)
         C = 0.5 .+ 10 .* rand(rng, nz, nv)
         y = rand(rng, 0:ymax, nz, nv)
+        if clamp
+            C[2, 1] = -1.0
+            y[2, 1] = 3
+        end
         cells = [
             (p, v) for v in 1:nv for p in eachindex(ranges)
                 if sum(y[ranges[p], v]) > 0
@@ -520,9 +527,10 @@
         comp = zone_composition_logpdf
         crng = Xoshiro(980)
         add!("2 patches", comp, composition_args(crng, [4, 3], 5)...)
-        clamped = composition_args(crng, [4, 3], 5)
-        clamped[2][2, 1] = -1.0
-        add!("clamped expectation", comp, clamped...)
+        add!(
+            "clamped expectation", comp,
+            composition_args(crng, [4, 3], 5; clamp = true)...
+        )
         add!("one-zone patch", comp, composition_args(crng, [4, 1], 5)...)
         add!(
             "concentration 0.5", comp,

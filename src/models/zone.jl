@@ -1064,7 +1064,8 @@ end
 
 ## `zone_composition_logpdf` and, when `dC` is an array of zeros the size of
 ## `C`, its gradient in `C` written into `dC` and its derivative in `κ`,
-## returned as `(lp, dκ)`. With `α_z = κ c_z / T` for `c_z = safe_rate(C_z)`
+## returned as `(lp, dκ)`. `dC` holds each zone's `a_z` until its cell is
+## done, which relies on each patch and vintage being at most one cell. With `α_z = κ c_z / T` for `c_z = safe_rate(C_z)`
 ## and `T` their sum over the cell,
 ##
 ##     ∂ℓ/∂κ = ψ(κ) − ψ(N + κ) + Σ_z a_z c_z / T,

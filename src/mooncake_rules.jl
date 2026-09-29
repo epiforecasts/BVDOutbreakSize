@@ -1234,7 +1234,8 @@ function Mooncake.rrule!!(
     c̄ = tangent(cell_const)
     function zone_composition_pullback!!(l̄)
         C̄ .+= l̄ .* dC
-        ## The constant enters each cell's mass once.
+        ## The constant enters each cell's mass once. It is data at the call
+        ## sites, but the rule is declared for a float array there.
         c̄ .+= l̄
         return ntuple(_ -> NoRData(), 8)..., l̄ * dκ
     end
