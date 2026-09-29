@@ -1780,7 +1780,8 @@ of `parent_kernel`, the province model's own
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
 the same origin intensity, which is what keeps one movement from being
-counted at both levels.
+counted at both levels. The zone stage weights the parent kernel by the
+posterior mean of η, not the posterior mean of the weighted kernel.
 """
 function zone_importation_blocks(
         pops::AbstractVector, coords::AbstractVector,
@@ -2313,9 +2314,10 @@ function _zone_mixing_or_nothing(
     parent_kernel = province_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
-    dest = get(parent, :destination_effect, Float64[])
-    isempty(dest) ||
-        (parent_kernel = destination_weighted_kernel(parent_kernel, dest))
+    dest = parent.destination_effect
+    if !isempty(dest)
+        parent_kernel = destination_weighted_kernel(parent_kernel, dest)
+    end
     blocks = zone_importation_blocks(
         pops, coords, patch_of_zone, parent_kernel
     )

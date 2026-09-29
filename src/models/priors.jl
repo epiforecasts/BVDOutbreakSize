@@ -1849,10 +1849,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the likelihood cannot see. Time-varying because the
     ##    outbreak being known changes movement, and the provinces that arrive
     ##    either side of the breakpoint are what separates `β_ε`.
-    ##    Per-destination weights on the kernel, sum-to-zero on the same
-    ##    basis ([`destination_weighted_kernel`](@ref)).
     ε_matrix = zeros(Tp, n_patches, ng)
-    kernel = importation_kernel
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
@@ -1873,10 +1870,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        ## Per-destination weights on the kernel, sum-to-zero on the same
+        ## basis ([`destination_weighted_kernel`](@ref)).
         σ_dest ~ importation_destination_sd_prior
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_dest)
-        kernel = destination_weighted_kernel(importation_kernel, dest_dev)
+        weighted = destination_weighted_kernel(importation_kernel, dest_dev)
         importation_destination_sd := σ_dest
         importation_destination_effect := dest_dev
     end
@@ -1887,7 +1886,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix, kernel, ε_matrix, populations
+        Rt_matrix, g, seeds_matrix, coupled ? weighted : importation_kernel,
+        ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation

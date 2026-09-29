@@ -1034,7 +1034,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_importation_blocks, _zone_states,
-        zone_deformation
+        zone_deformation, destination_weighted_kernel
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1069,8 +1069,7 @@ end
     @test all(0 .<= mix.import_fraction .< 1)
     ## A parent destination weighting reaches the blocks through
     ## `destination_weighted_kernel`: a wrong-length effect throws there
-    ## rather than being skipped. With two patches each origin has one
-    ## destination, so a valid weighting leaves the flows unchanged.
+    ## rather than being skipped.
     function tilted(effect)
         chain = copy(syn.chain)
         chain[:importation_destination_effect] = reshape(
@@ -1081,7 +1080,27 @@ end
         ).model_data.mixing
     end
     @test_throws DimensionMismatch tilted([0.5, 0.0, -0.5])
-    @test tilted([0.6, -0.6]).between ≈ mix.between
+    ## With three patches a non-zero weighting changes the between block,
+    ## and its column over a destination patch's zones is the weighted
+    ## kernel's entry.
+    K3 = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    η3 = [0.7, -0.2, -0.5]
+    poz3 = [1, 1, 2, 2, 3, 3]
+    pops3 = [5.0e5, 2.0e5, 3.0e5, 1.0e5, 4.0e5, 1.5e5]
+    coords3 = [
+        (-4.3, 15.3), (-4.6, 15.8), (-5.9, 22.4),
+        (-6.2, 23.6), (0.5, 25.2), (1.2, 24.8),
+    ]
+    Kw3 = destination_weighted_kernel(K3, η3)
+    plain3 = zone_importation_blocks(pops3, coords3, poz3, K3).between
+    tilt3 = zone_importation_blocks(pops3, coords3, poz3, Kw3).between
+    @test !(tilt3 ≈ plain3)
+    for q in eachindex(poz3), p in 1:3
+
+        p == poz3[q] && continue
+        zs = findall(==(p), poz3)
+        @test sum(tilt3[zs, q]) ≈ Kw3[p, poz3[q]] rtol = 1.0e-12
+    end
     chn = sample(
         bvd_zone(zd), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false

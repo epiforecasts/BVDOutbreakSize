@@ -471,8 +471,8 @@ K'_{p,q} = K_{p,q} e^{\\eta_p}
     \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{\\eta_r}}.
 ```
 
-The columns keep their totals, so the weights move where an origin's
-exports land and not how much leaves it.
+Each origin column keeps its total, so η moves where exports land, not how
+much leaves.
 """
 function destination_weighted_kernel(K::AbstractMatrix, η::AbstractVector)
     size(K, 1) == size(K, 2) == length(η) || throw(
@@ -482,9 +482,7 @@ function destination_weighted_kernel(K::AbstractMatrix, η::AbstractVector)
         )
     )
     Kη = K .* exp.(η)
-    weighted = sum(Kη; dims = 1)
-    ## An all-zero column stays zero rather than dividing by zero.
-    return Kη .* (sum(K; dims = 1) ./ ifelse.(weighted .> 0, weighted, one.(weighted)))
+    return Kη .* (sum(K; dims = 1) ./ sum(Kη; dims = 1))
 end
 
 """
