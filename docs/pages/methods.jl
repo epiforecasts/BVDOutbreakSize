@@ -530,6 +530,50 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
+# The gravity kernel is the centre of the flows.
+# A log deviation per directed flow moves where each origin's exports land, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
+#
+# ```math
+# K'_{p,q} = K_{p,q}\, e^{W_{p,q}} \frac{\sum_r K_{r,q}}{\sum_r K_{r,q}\, e^{W_{r,q}}},
+# \qquad
+# W_{p,q} = \eta_p + u_{p,q}.
+# ```
+#
+# The destination effect $\boldsymbol\eta$ sums to zero, and each province's destination effect has correlation $\rho_{\text{od}}$ with its origin deviation in Equation (15):
+#
+# ```math
+# \boldsymbol\eta = \sigma_{\text{dest}}\, Q \Bigl(\rho_{\text{od}}\, \mathbf{z}^{\varepsilon} + \sqrt{1 - \rho_{\text{od}}^2}\, \mathbf{z}^{\text{dest}}\Bigr),
+# \qquad
+# \mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \qquad
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 0.5).
+# ```
+#
+# The flow term $u$ has a zero diagonal and zero row and column sums.
+# A shift shared within an origin's column cancels in $K'$, so $\boldsymbol\eta$ and $u$ together have one direction per share of each origin's exports.
+# $u$ has a symmetric part, which moves $q \to p$ and $p \to q$ together, and an antisymmetric part, which moves them apart:
+#
+# ```math
+# \operatorname{vec}(u) = \sigma_{\text{flow}} \sqrt{\frac{(1 + \rho_{\text{flow}}) M}{d_s}}\, B_s \mathbf{z}^{\text{sym}}
+#     + \sigma_{\text{flow}} \sqrt{\frac{(1 - \rho_{\text{flow}}) M}{d_a}}\, B_a \mathbf{z}^{\text{anti}},
+# \qquad
+# \mathbf{z}^{\text{sym}} \sim \mathrm{Normal}(0, I_{d_s}),
+# \qquad
+# \mathbf{z}^{\text{anti}} \sim \mathrm{Normal}(0, I_{d_a}),
+# ```
+#
+# with $B_s$ and $B_a$ orthonormal bases of the $d_s = P(P-3)/2$ symmetric and $d_a = (P-1)(P-2)/2$ antisymmetric matrices of this form, and $M = P(P-1)/2$ the number of province pairs.
+# Each flow then has standard deviation $\sigma_{\text{flow}}$ and correlation $\rho_{\text{flow}}$ with its reverse.
+#
+# ```math
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
+# \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
+# ```
+#
+# The flow scale's prior is tighter than the destination scale's, so a pattern shared across origins is read as a destination effect.
+# The renewal uses $K'$ in place of $K$.
+#
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_importation_kernel</summary>
