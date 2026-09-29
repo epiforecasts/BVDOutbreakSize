@@ -3,6 +3,7 @@
 This directory is the single source of truth for the observations the analysis conditions on.
 `load_observations()` (in `src/BVDOutbreakSize.jl`) reads it.
 Nothing in the model hardcodes counts.
+The nightly data-update routine follows `DAILY_UPDATE.md` in this directory, which points back here for how to read a report.
 
 ## Files
 
