@@ -5,15 +5,17 @@ on:
     branches:
       - main
   pull_request:
+    # `closed` starts a run only so that it supersedes, through the
+    # concurrency group below, the run of a merged or closed pull request.
+    # Every job is skipped.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
-# Superseding a run is right on a pull request and destructive on `main`.
-# `github.head_ref` is set only on a pull request, so a push to `main`, a tag
-# or a manual run falls back to `github.run_id`.
-# That gives each of those a group of its own that nothing supersedes.
+# As in test.yml: a pull request cancels its own earlier run, and on `main` a
+# newer push replaces only the run still queued.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -22,6 +24,7 @@ jobs:
   # Coverage measures the test suite, so it is gated on the same paths.
   changes:
     name: Decide whether coverage needs to run
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -40,10 +43,19 @@ jobs:
           patterns: >-
             ^(src/|ext/|test/|data/|docs/fits/|scripts/|Project\.toml|\.github/(workflows/(test\.yml|codecoverage\.yaml)|actions/changed-paths/))
 
+  # This is also the Julia 1 Linux cell of the test suite, which test.yml
+  # leaves out of its matrix, so it runs the `:slow` items too.
   coverage:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.needed == 'true'
+    # Below GitHub's 6h job ceiling, as in test.yml.
+    timeout-minutes: 150
+    # Pinned pkgimage targets, as in test.yml, so a restored depot is not
+    # thrown away on a host of another microarchitecture.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3

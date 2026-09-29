@@ -15,9 +15,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The background and bed-capacity splits use sum-to-zero deviations in place of an Ituri reference (#971).
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
 - The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
+- The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 
 ### Data
 
@@ -36,6 +38,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
 - The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
+- The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 
 ### Infrastructure
 
@@ -47,6 +50,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 
 ### Fixed
 

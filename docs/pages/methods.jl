@@ -515,7 +515,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z})_q\bigr)\,
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z}^{\varepsilon})_q\bigr)\,
 #     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
 # ```
 #
@@ -523,10 +523,12 @@ MarkdownTable(vintage_table) #hide
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# \mathbf{z} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
+# \mathbf{z}^{\varepsilon} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
 # ```
 #
-# with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
+# with $Q$ the fixed sum-to-zero basis of Equation (6), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
+# The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
+# Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
 
 #md # ```@raw html
@@ -1260,16 +1262,15 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp(\tau_{\text{cap}} z^{\text{cap}}_p),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl(\tau_{\text{cap}} (Q \mathbf{z}^{\text{cap}})_p\bigr),
 # \qquad
-# z^{\text{cap}}_1 = 0,
-# \qquad
-# z^{\text{cap}}_p \sim \mathrm{Normal}(0, 1),
+# \mathbf{z}^{\text{cap}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
 #
-# normalised over the patches each day, with Ituri as the reference.
+# normalised over the patches each day, with $Q$ the sum-to-zero basis of the Rt deviations.
+# A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
@@ -1832,11 +1833,11 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (Q \mathbf{z})_p, \qquad
+# \log a_p = \tau_a (Q \mathbf{z}^{a})_p, \qquad
 # \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
+# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6), so both log multipliers sum to zero across patches.
 #
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
@@ -1883,14 +1884,12 @@ cfr_prior_fig #hide
 # The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The per-province positives are not fitted.
 #
-# The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
+# The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl(\tau_{\text{bg}} (Q \mathbf{z}^{\text{bg}})_p\bigr),
 # \qquad
-# z^{\text{bg}}_1 = 0,
-# \qquad
-# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
+# \mathbf{z}^{\text{bg}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
 # \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```
@@ -2059,8 +2058,9 @@ cfr_prior_fig #hide
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
 #
 # The shared quantity is the joint model's weekly infections in each patch, $S_{p,w}$.
-# A window in which a patch's mean infections stay below one is dropped as not yet seeded, leaving $d$ pairs $(p, w)$.
-# Over the joint model's draws the kept $\log S_{p,w}$ have sample covariance $\hat\Sigma$.
+# A window in which a patch's mean infections stay below one is dropped as not yet seeded.
+# When the zones mix, the log importation intensity of each origin patch at the cut-off, $\log \varepsilon_q$ of Equation (15), is appended after the kept pairs $(p, w)$, for $d$ cells in all.
+# Over the joint model's draws the kept cells have sample covariance $\hat\Sigma$.
 # Its Cholesky factor $L$ is taken after adding $10^{-6}$ of each cell's own variance to the diagonal, which conditions the factorisation without rescaling any week.
 # The joint model carries fewer draws than there are cells, so $\hat\Sigma$ can still be singular.
 # The factorisation then blends toward its own diagonal, $(1 - \lambda)\hat\Sigma + \lambda\,\mathrm{diag}(\hat\Sigma)$, at the smallest $\lambda$ that succeeds.
@@ -2073,7 +2073,8 @@ cfr_prior_fig #hide
 # ```
 #
 # Here $a_p(t)$ interpolates patch $p$'s kept week midpoints and holds flat outside them, and $\bar I_{p,t}$ is the exponential of the joint model's posterior mean log infections.
-# One draw moves whole patch trajectories, and moves the patches together where the joint model says they move together.
+# The rows of $a$ for the intensities, $c_q$, give the draw's intensity $\varepsilon_q = \bar\varepsilon_q e^{c_q}$, with $\bar\varepsilon_q$ the exponential of the joint model's posterior mean log intensity.
+# One draw moves whole patch trajectories, and moves the patches and the intensities together where the joint model says they move together.
 # Nothing else in the zone stage carries a second term from that posterior.
 # The zone infections sum to the sampled patch totals by construction, so scoring those sums again would count the same posterior twice, in every direction the draw already sets.
 #
@@ -2122,7 +2123,19 @@ cfr_prior_fig #hide
 # the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
 # Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
 #
-# Within a patch the spill is a transfer, and between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$ at its posterior mean import fraction $f_{p,t}$:
+# Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
+# The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:
+#
+# ```math
+# \operatorname{logit} f_{p,t} = \bar o_{p,t}
+#   + \log \sum_{q \ne p} s_{pq,t}\, e^{c_q + a_q(t)} - a_p(t),
+# \qquad
+# s_{pq,t} = \frac{\bar\varepsilon_q K_{pq} \bar I_{q,t}}
+#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}},
+# ```
+#
+# with $\bar o_{p,t}$ the joint model's posterior mean log odds that an infection in $p$ was imported.
+# Within a patch the spill is a transfer:
 #
 # ```math
 # v_{z,t} = (1 - \varepsilon_z) u_{z,t}
@@ -2132,7 +2145,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \bar\varepsilon_{p(q)}
+# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \varepsilon_{p(q)}
 #     K^{\text{b}}_{zq}\, u_{q,t},
 # \qquad
 # I_{z,t} = c_{p,t}\, v_{z,t}
@@ -2141,7 +2154,7 @@ cfr_prior_fig #hide
 # w_{z,t} = \frac{I_{z,t}}{I_{p,t}}, \tag{61}
 # ```
 #
-# Here $\bar\varepsilon_{p}$ is the joint model's posterior mean per-origin intensity of Equation (15).
+# Here $\varepsilon_{p}$ is the draw's per-origin intensity of Equation (56).
 # It enters only as a relative weight across origin patches.
 # The zone infections of a patch therefore sum to $I_{p,t}$ exactly.
 # The within-patch spill is the zone stage's own mechanism and carries its own intensity, one level with a pooled per-origin deviation:
@@ -2227,8 +2240,9 @@ cfr_prior_fig #hide
 # For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
 # The results rank zones by the posterior probability that the reproduction number exceeds one.
 #
-# We assume the generation interval and the two delays are the joint model's posterior means, and the import fraction and the per-origin intensity likewise.
-# Only the weekly patch infections are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
+# We assume the generation interval and the two delays are the joint model's posterior means.
+# The weekly patch infections and the per-origin intensities are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
+# The import fraction follows from them through the arrivals formula, which leaves out the joint model's change in intensity at detection.
 # Straight-line distance stands for the roads, the lake and the international border that carry movement.
 # We assume the gravity form carries movement between zones as it does between provinces, with no mobility data to check it against.
 # The increments are consecutive-vintage differences clamped at zero.
