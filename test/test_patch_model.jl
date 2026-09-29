@@ -2062,7 +2062,7 @@ end
     ## With no spread the deviations vanish and the arrivals are the
     ## gravity kernel's; with spread they move and sum to zero.
     function run(; σ_dest, z_dest = [1.0, -0.5, 0.5])
-        m = DynamicPPL.fix(coupled; σ_dest, z_dest)
+        m = DynamicPPL.fix(coupled; σ_dest, z_dest, σ_flow = 0.0)
         return m, returned(m, rand(Xoshiro(7), m))
     end
     _, flat = run(σ_dest = 0.0)
@@ -2078,7 +2078,7 @@ end
     end
 end
 
-@testitem "flow_pair_basis: double-centred symmetric and antisymmetric flows" begin
+@testitem "flow_pair_basis: double-centred flows, symmetric and not" begin
     using BVDOutbreakSize: flow_pair_basis
     using LinearAlgebra: I
 
@@ -2138,7 +2138,10 @@ end
     ## A matrix whose columns all equal `η` is the destination weighting.
     @test destination_weighted_kernel(K, repeat(η, 1, np)) ≈
         destination_weighted_kernel(K, η)
-    W = [0.3 -0.2 0.5 0.1; 0.8 0.0 -0.4 1.2; -0.6 0.2 0.3 -0.9; 0.1 0.7 -1.1 0.4]
+    W = [
+        0.3 -0.2 0.5 0.1; 0.8 0.0 -0.4 1.2
+        -0.6 0.2 0.3 -0.9; 0.1 0.7 -1.1 0.4
+    ]
     Kw = destination_weighted_kernel(K, W)
     @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
     @test all(iszero, [Kw[q, q] for q in 1:np])
@@ -2149,12 +2152,13 @@ end
     @test !(Kw ≈ destination_weighted_kernel(K, vec(sum(W; dims = 2)) ./ np))
     @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3, 3))
     K0 = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
-    Kw0 = destination_weighted_kernel(K0, [0.0 0.3 -0.1; 0.2 0.0 0.4; -0.5 0.1 0.0])
+    W0 = [0.0 0.3 -0.1; 0.2 0.0 0.4; -0.5 0.1 0.0]
+    Kw0 = destination_weighted_kernel(K0, W0)
     @test Kw0[:, 2:3] == zeros(3, 2)
     @test sum(Kw0[:, 1]) ≈ sum(K0[:, 1])
 end
 
-@testitem "patch_infection_model: correlated origin, destination and flow deviations" begin
+@testitem "patch_infection_model: per-flow importation deviations" begin
     using BVDOutbreakSize: patch_infection_model, sum_to_zero_basis,
         sum_to_zero, sum_to_zero_factor, province_importation_kernel,
         PROVINCE_POPULATIONS
@@ -2163,15 +2167,20 @@ end
 
     n, np, rt_start, bp = 60, 4, 30, 10
     coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
-    names = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), coupled)))
+    vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
     for v in ("σ_flow", "z_flow", "ρ_flow_unit", "ρ_od_unit")
-        @test v in names
+        @test v in vnames(coupled)
     end
     uncoupled = patch_infection_model(
         n, np; breakpoint = bp, rt_start,
         importation_kernel = zeros(np, np)
     )
-    @test !("σ_flow" in string.(keys(DynamicPPL.VarInfo(Xoshiro(3), uncoupled))))
+    @test !("σ_flow" in vnames(uncoupled))
+    ## With three patches the one double-centred flow is a circulation, so
+    ## its reciprocity is -1 and not sampled.
+    three = patch_infection_model(n, 3; breakpoint = bp, rt_start)
+    @test "z_flow" in vnames(three)
+    @test !("ρ_flow_unit" in vnames(three))
 
     K = province_importation_kernel(PROVINCE_POPULATIONS)
     fixed = (;
@@ -2183,19 +2192,20 @@ end
     ## province's destination effect is its origin deviation.
     m1 = DynamicPPL.fix(coupled; fixed..., ρ_od_unit = 1.0)
     chn1 = sample(Xoshiro(1), m1, Prior(), 1; progress = false)
-    η1 = first(vec(collect(chn1[:importation_destination_effect])))
+    only_draw(key) = first(vec(collect(chn1[key])))
+    η1 = only_draw(:importation_destination_effect)
     a = sum_to_zero(sum_to_zero_factor(sum_to_zero_basis(np), 0.6), fixed.z_ε)
     @test η1 ≈ a
-    @test first(vec(collect(chn1[:importation_origin_destination_correlation]))) ≈ 1
-    @test first(vec(collect(chn1[:importation_reciprocity]))) ≈ 0.4
+    @test only_draw(:importation_origin_destination_correlation) ≈ 1
+    @test only_draw(:importation_reciprocity) ≈ 0.4
 
     ## The flow effect is the destination effect plus a double-centred flow
     ## term, and the effective kernel holds each origin's total.
-    W = reshape(first(vec(collect(chn1[:importation_flow_effect]))), np, np)
+    W = reshape(only_draw(:importation_flow_effect), np, np)
     U = W .- η1
     @test maximum(abs, sum(U; dims = 1)) < 1.0e-10
     @test maximum(abs, sum(U; dims = 2)) < 1.0e-10
-    Kw = reshape(first(vec(collect(chn1[:importation_kernel_weighted]))), np, np)
+    Kw = reshape(only_draw(:importation_kernel_weighted), np, np)
     @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
     @test all(iszero, [Kw[q, q] for q in 1:np])
 
