@@ -3697,13 +3697,15 @@ Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
-    partially-pooled non-centred random effect over delay:
+    partially-pooled non-centred random effect over delay whose deviations
+    sum to zero, so `η0` is the mean logit hazard:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
-    z_{h0,d} \\sim \\mathcal N(0,1), \\quad
-    \\text{logit\\_h0}(d) = \\eta_0 + \\sigma_{h0} z_{h0,d};
+    \\mathbf z_{h0} \\sim \\mathcal N(0, I_{D-1}), \\quad
+    \\text{logit\\_h0} = \\eta_0 + \\sigma_{h0} Q \\mathbf z_{h0};
     ```
+    with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)).
   - a calendar-time random walk on report date, weekly knots linearly
     interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
     cumulative-sum walk, same construction):
@@ -3763,12 +3765,16 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
         pooling_prior = truncated(Normal(0.0, 1.0); lower = 0),
         walk_sigma_prior = truncated(Normal(0.0, 0.3); lower = 0),
         week::Integer = 7,
-        walk_start::Integer = grid_start
+        walk_start::Integer = grid_start,
+        basis = sum_to_zero_basis(D)
     )
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
-    z_h0 ~ product_distribution(fill(Normal(0, 1), D))
-    logit_h0 = η0 .+ σ_h0 .* z_h0
+    ## Sum-to-zero deviations, so `η0` is the mean logit hazard. With `D`
+    ## free deviations their mean duplicated `η0` and only the sum of the
+    ## two was identified.
+    z_h0 ~ product_distribution(fill(Normal(0, 1), D - 1))
+    logit_h0 = η0 .+ sum_to_zero(sum_to_zero_factor(basis, σ_h0), z_h0)
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.

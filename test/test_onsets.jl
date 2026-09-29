@@ -854,10 +854,11 @@ end
     using Random: seed!
 
     D = 28
+    ## On a one-day grid the walk samples one scale and one step, so the
+    ## model has `η0`, `σ_h0`, `D - 1` deviations, `σ_γ` and one `z_γ`.
+    @test length(DynamicPPL.VarInfo(onset_report_hazard_model(1, 1; D))[:]) ==
+        D + 3
     model = onset_report_hazard_model(1, 60; D)
-    vi = DynamicPPL.VarInfo(model)
-    zs = [k for k in keys(vi) if occursin("z_h0", string(k))]
-    @test length(vi[only(zs)]) == D - 1
     for s in 1:5
         seed!(s)
         out = model()
