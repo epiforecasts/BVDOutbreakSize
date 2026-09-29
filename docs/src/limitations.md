@@ -62,3 +62,17 @@
 - Provincial testing enters the prior, not the likelihood, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model carries one national bed capacity and demand, so it cannot represent local saturation.
   Ituri holds most of the occupied beds, so the national bed shortfall understates local unmet need.
+
+## Health zones
+
+### Data
+
+- A zone table can lag the cut-off, since a zone's count moves only when a report prints it.
+  The [data currency](@ref zone-data-currency) table lists each zone block that stops before the cut-off.
+
+### Model
+
+- A zone below the walking threshold has no transmission walk of its own, so its reproduction number is from its province, not modelled separately ([health-zone model](@ref "Health-zone model")).
+- The zone stage is melded one way onto the joint fit, so the zone data do not update the national and province estimates ([health-zone model](@ref "Health-zone model")).
+  A patch estimate that the zone data contradict is not corrected by them.
+- The zone forecast splits each patch's forecast across its zones, so it inherits the patch forecast's level and adds only the split.

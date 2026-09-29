@@ -2059,7 +2059,9 @@ cfr_prior_fig #hide
 #
 # The situation reports also give cumulative confirmed cases and deaths per health zone within each province.
 # A second-stage model splits each patch's infections across its zones, conditional on the fitted joint model above.
-# This is a two-stage Markov melding [goudie2019](@cite) in which the zone stage receives the patch posterior and feeds nothing back, a cut [plummer2015](@cite).
+# This is a two-stage Markov melding [goudie2019](@cite) run one way.
+# The zone stage takes the joint model's posterior over the shared quantity as its prior and updates it with the zone data, as the equation below writes.
+# The zone data do not update the joint model, so the national and province estimates are unchanged.
 # Write $\xi$ for the quantity the two stages share, $\psi$ for the zone parameters, $Y_1$ for the national and provincial data and $Y_2$ for the zone tables.
 # The zone stage samples
 #
