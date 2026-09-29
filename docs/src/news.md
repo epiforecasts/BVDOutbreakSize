@@ -44,6 +44,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- Pull requests check one recovery seed with two chains, the benchmark runs once, and the test matrix drops the cell the coverage job repeats (#1004).
 
 ### Fixed
 
