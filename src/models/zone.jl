@@ -429,9 +429,11 @@ posterior conditional on the fitted draw `η`, and the fitted model is
 unchanged. The daily deformation keeps the fitted rows up to `n` and
 interpolates from day `n` to the future midpoints after it. The mean curve
 past `n` is the parent's mean log predicted infections, and every delay
-operator and pre-`t0` term is rebuilt on the longer grid. The mean import
-odds and arrival shares of the mixing hold their value at `n`, and the
-draw's deformation moves them past it as before it.
+operator and pre-`t0` term is rebuilt on the longer grid. Past `n` the
+mean import odds of the mixing are the parent forecast's own
+(`forecast_importation_patch` against its infections), the arrival shares
+follow the mean predicted infections, and the draw's deformation moves
+both as it does before `n`.
 
 `totals` holds each parent draw's predicted confirmed cases per patch over
 `(n, n + horizon]` (`forecast_province_confirmed`), the counts the zone
@@ -511,19 +513,7 @@ function zone_forecast_block(
     nd = n + H - t0 + 1
     knots_ext = vcat(knots, future_knot_days(n, H; week))
     mixing_ext = mixing === nothing ? nothing :
-        merge(
-            mixing, (;
-                import_log_odds = hcat(
-                    mixing.import_log_odds,
-                    repeat(mixing.import_log_odds[:, n], 1, H)
-                ),
-                arrival_shares = cat(
-                    mixing.arrival_shares,
-                    repeat(mixing.arrival_shares[:, :, n:n], 1, 1, H);
-                    dims = 3
-                ),
-            )
-        )
+        _zone_forecast_mixing(mixing, forecast, future, I_ext, np, H)
     conf = _draw_vectors(forecast, :forecast_province_confirmed)
     j = findfirst(==(H), future_knot_days(0, Hp; week))
     j === nothing && error(
@@ -569,6 +559,30 @@ function zone_parent_scale(
     return reshape(exp.(weights * (L * η)), np, n)
 end
 
+## The mixing over the fitted days and the horizon: past the cut-off the
+## mean import odds are the parent forecast's own arrivals against its
+## infections, and the arrival shares follow the mean infections `I_ext`.
+function _zone_forecast_mixing(mixing, forecast, future, I_ext, np, H)
+    _has_key(forecast, :forecast_importation_patch) || error(
+        "zone_forecast_block: the parent forecast carries no " *
+            "`forecast_importation_patch`, which the mixed zones read past " *
+            "the cut-off; draw it from `bvd_joint` with the patch structure on."
+    )
+    imp = [
+        vec(reshape(Float64.(v), np, :)[:, 1:H])
+            for v in _draw_vectors(forecast, :forecast_importation_patch)
+    ]
+    lo = reshape(_mean_log_odds(imp, [vec(M) for M in future]), np, H)
+    return merge(
+        mixing, (;
+            import_log_odds = hcat(mixing.import_log_odds, lo),
+            arrival_shares = _zone_arrival_shares(
+                mixing.patch_epsilon, mixing.kernel, I_ext
+            ),
+        )
+    )
+end
+
 """
 $(TYPEDSIGNATURES)
 
@@ -582,15 +596,12 @@ zone_parent_epsilon(rows::AbstractMatrix, η::AbstractVector) = exp.(rows * η)
 """
 $(TYPEDSIGNATURES)
 
-The between-patch movement of one parent draw, in the form
-[`zone_share_renewal`](@ref) reads, from the mean movement `mix` of
-[`zone_fit_inputs`](@ref), the draw's trajectory multiplier `scale`
-([`zone_parent_scale`](@ref)) and origin intensity multiplier `e`
-([`zone_parent_epsilon`](@ref)), either `nothing` at the parent's centre.
-
-The origin weights are the mean weights times `e` of the origin's patch.
-The import fraction is the province model's arrivals formula on the
-deformed curves, on the log-odds scale so it stays below one:
+The between-patch movement of one parent draw, as
+[`zone_share_renewal`](@ref) reads it. The origin weights are the mean
+weights times `e` ([`zone_parent_epsilon`](@ref)) of the origin's patch,
+and the import fraction is the province model's arrivals formula on the
+curves deformed by `scale` ([`zone_parent_scale`](@ref)), on the log-odds
+scale so it stays below one:
 
 ```math
 \\operatorname{logit} f_p(t) = \\bar o_p(t)
@@ -763,8 +774,12 @@ function _mean_parent_log_odds(chn, num::Symbol, den::Symbol)
     ds = _draw_vectors(chn, den)
     (isempty(ns) || length(ns) != length(ds)) && return Float64[]
     length(first(ns)) == length(first(ds)) || return Float64[]
-    fl = floatmin(Float64)
-    lodds(a, b) = log(max(a, fl)) - log(max(b - a, fl))
+    return _mean_log_odds(ns, ds)
+end
+
+## `_mean_parent_log_odds` over per-draw vectors already read.
+function _mean_log_odds(ns::AbstractVector, ds::AbstractVector)
+    lodds(a, b) = _floored_log(a) - _floored_log(b - a)
     m = zeros(Float64, length(first(ns)))
     for (a, b) in zip(ns, ds)
         m .+= lodds.(Float64.(a), Float64.(b))
@@ -780,9 +795,23 @@ function _geomean_parent_vector(chn, key::Symbol)
     isempty(vs) && return Float64[]
     m = zeros(Float64, length(first(vs)))
     for v in vs
-        m .+= log.(max.(Float64.(v), floatmin(Float64)))
+        m .+= _floored_log.(v)
     end
     return exp.(m ./ length(vs))
+end
+
+## Log floored at `floatmin`, so a zero reads as about −708 rather than −Inf.
+_floored_log(x::Real) = log(max(Float64(x), floatmin(Float64)))
+
+## Per-draw log importation intensity of each origin patch, one row per
+## draw, the columns the meld appends when the zones mix.
+function _zone_log_epsilon_draws(chn, np::Integer)
+    vs = _draw_vectors(chn, _ZONE_PARENT_KEYS.importation_epsilon)
+    all(v -> length(v) == np, vs) || error(
+        "zone_fit_inputs: `importation_epsilon_patch` does not hold one " *
+            "intensity per patch in every parent draw."
+    )
+    return [_floored_log(vs[i][q]) for i in eachindex(vs), q in 1:np]
 end
 
 ## Mean over the parent's draws of a vector-valued quantity, empty when the
@@ -865,7 +894,8 @@ Without mixing a zone takes the share of its patch its own force earns,
 
 With `mix`, the blocks of [`zone_importation_blocks`](@ref) and the
 province model's own per-origin intensity and import fraction at one
-shared draw ([`zone_draw_mixing`](@ref)), each day splits the patch total into what the patch grew and what it received:
+shared draw ([`zone_draw_mixing`](@ref)), each day splits the patch total
+into what the patch grew and what it received:
 
 ```math
 v_z = (1 − ε_z) u_z + \\sum_{q ∈ p,\\, q ≠ z} ε_q K^w_{zq} u_q,
@@ -2329,16 +2359,8 @@ function zone_fit_inputs(
     inf_draws = _zone_parent_draws(
         parent_chain, _ZONE_PARENT_KEYS.infections; vectors = true
     )
-    log_eps = zeros(Float64, length(inf_draws), 0)
-    if mixing !== nothing
-        eps_draws = _draw_vectors(
-            parent_chain, _ZONE_PARENT_KEYS.importation_epsilon
-        )
-        log_eps = [
-            log(max(Float64(eps_draws[i][q]), floatmin(Float64)))
-                for i in eachindex(eps_draws), q in 1:np
-        ]
-    end
+    log_eps = mixing === nothing ? zeros(Float64, length(inf_draws), 0) :
+        _zone_log_epsilon_draws(parent_chain, np)
     meld = zone_meld_block(
         inf_draws, np, n, knots, I_bar, t0;
         extra = log_eps, min_infections = meld_min_infections
@@ -2448,23 +2470,33 @@ function _zone_mixing_or_nothing(
     ## and carried per zone so the renewal reads it without a patch lookup.
     ε_bar = parent.origin_epsilon ./ max(mean(parent.origin_epsilon), eps())
     origin_weight = ε_bar[patch_of_zone]
-    ## The share of each patch's mean arrivals each origin sends, the
-    ## province model's arrivals `ε_q K_pq I_q(t)` at the centres.
-    arrival_shares = zeros(Float64, np, np, n)
+    return (;
+        blocks.within, blocks.between, origin_weight, patch_of_zone,
+        import_log_odds = reshape(parent.import_log_odds, np, n),
+        arrival_shares = _zone_arrival_shares(ε_bar, kernel, I_bar),
+        patch_epsilon = ε_bar, kernel,
+    )
+end
+
+## The share of each patch's mean arrivals each origin sends on every day
+## of `I`, the province model's arrivals `ε_q K_pq I_q(t)` at the centres,
+## as an `(n_patches × n_patches × n_days)` array; zero where a patch
+## receives nothing.
+function _zone_arrival_shares(
+        ε::AbstractVector, kernel::AbstractMatrix, I::AbstractMatrix
+    )
+    np, n = size(I)
+    s = zeros(Float64, np, np, n)
     for t in 1:n, p in 1:np
         tot = 0.0
         for q in 1:np
             q == p && continue
-            arrival_shares[p, q, t] = ε_bar[q] * kernel[p, q] * I_bar[q, t]
-            tot += arrival_shares[p, q, t]
+            s[p, q, t] = ε[q] * kernel[p, q] * I[q, t]
+            tot += s[p, q, t]
         end
-        tot > 0 && (arrival_shares[p, :, t] ./= tot)
+        tot > 0 && (s[p, :, t] ./= tot)
     end
-    return (;
-        blocks.within, blocks.between, origin_weight, patch_of_zone,
-        import_log_odds = reshape(parent.import_log_odds, np, n),
-        arrival_shares,
-    )
+    return s
 end
 
 ## --- Fitting -------------------------------------------------------------
