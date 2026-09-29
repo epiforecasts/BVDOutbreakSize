@@ -37,6 +37,7 @@ const _ZONE_PARENT_KEYS = (
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
     importation_destination = :importation_destination_effect,
+    importation_flow = :importation_flow_effect,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
     province_ascertainment = :province_ascertainment,
@@ -1697,8 +1698,9 @@ function zone_parent_inputs(chn)
     ## elsewhere, so the between-patch flows it applies are the province
     ## model's rather than a second estimate of them.
     origin_epsilon = _mean_parent_vector(chn, keys_.importation_epsilon)
-    ## The province model's destination weighting of its kernel, empty for a
-    ## chain fitted without one.
+    ## The province model's per-flow and destination weightings of its
+    ## kernel, each empty for a chain fitted without it.
+    flow_effect = _mean_parent_vector(chn, keys_.importation_flow)
     destination_effect = _mean_parent_vector(
         chn, keys_.importation_destination
     )
@@ -1729,7 +1731,8 @@ function zone_parent_inputs(chn)
     )
     return (;
         log_infections = logI, g, f, death_pmf,
-        origin_epsilon, destination_effect, import_fraction, priors,
+        origin_epsilon, flow_effect, destination_effect, import_fraction,
+        priors,
         province_ascertainment, province_severity,
     )
 end
@@ -1776,12 +1779,13 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
-[`province_importation_kernel`](@ref) weighted by its fitted destination
+[`province_importation_kernel`](@ref) weighted by its fitted per-flow
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
 the same origin intensity, which is what keeps one movement from being
 counted at both levels. The zone stage weights the parent kernel by the
-posterior mean of η, not the posterior mean of the weighted kernel.
+posterior mean of the log deviation, not the posterior mean of the weighted
+kernel.
 """
 function zone_importation_blocks(
         pops::AbstractVector, coords::AbstractVector,
@@ -2314,9 +2318,10 @@ function _zone_mixing_or_nothing(
     parent_kernel = province_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
-    dest = parent.destination_effect
-    if !isempty(dest)
-        parent_kernel = destination_weighted_kernel(parent_kernel, dest)
+    weight = isempty(parent.flow_effect) ? parent.destination_effect :
+        reshape(parent.flow_effect, np, :)
+    if !isempty(weight)
+        parent_kernel = destination_weighted_kernel(parent_kernel, weight)
     end
     blocks = zone_importation_blocks(
         pops, coords, patch_of_zone, parent_kernel
