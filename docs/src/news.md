@@ -102,8 +102,7 @@ Changes since v2.1.0.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
 - The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
-- Occupancy never exceeds the beds, per province and nationally: each province's cut-off occupancy is capped at its beds, the rest its shortfall, and the national figures are the sums (#958).
-- The treatment forecast runs each province as a stock capped at its beds, admitting up to its free beds and losing the in-care exits scaled to the occupied beds; occupancy, admissions and beds are drawn by province and sum to national (#958).
+- Each province's occupancy is capped at its beds at the cut-off and in the forecast, where it admits up to its free beds; the national figures are the province sums (#958).
 - The provinces' 24h admissions are fitted as a split of the national admissions (#958).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
@@ -160,8 +159,7 @@ Changes since v2.1.0.
   SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
-- `province_admissions_history` block, the provinces' 24h admissions from the same two reads, which sum to the national admissions on every day all provinces print (#958).
-- Province beds are the effective beds each recorded day: the printed beds, or where more patients are held, the larger of the patients and the rate-implied beds (#958).
+- `province_admissions_history` block, and province beds raised to the patients held or the rate-implied beds where the patients exceed the printed beds (#958).
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
 - `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
 
@@ -270,9 +268,9 @@ Changes since v2.1.0.
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 - `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 - The delay and tree-prior sensitivity re-fits are built from the headline's keywords, so they keep its provinces and in-care split and differ from it only in the delay or the common-ancestor date (#916).
-- Admissions are a plain negative binomial in the fit and its predictive checks, and are censored at the beds available, including those freed that day, only in the forecast (#918).
-- The cut-off occupancy is on the reported scale, the demand plus the reclassification offset capped at the cut-off beds, and the bed shortfall is the same quantity above them. The cut-off beds are the modelled capacity floored at the last recorded capacity (#640).
-- Province occupied beds are the national occupancy split on the demand shares, as the split likelihood and the forecast use, rather than the demand capped at the printed beds (#920).
+- Admissions are uncensored in the fit and capped at the free beds only in the forecast (#918).
+- The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
+- Province beds cover the patients each report counts, so Nord-Kivu shows no spurious shortfall (#920).
 
 ### Infrastructure
 

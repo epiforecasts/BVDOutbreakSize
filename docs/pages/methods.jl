@@ -2334,8 +2334,10 @@ cfr_prior_fig #hide
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
 # The occupied beds are forecast as a stock that never exceeds the beds, per province with province care data and nationally otherwise.
-# The beds are the modelled capacity floored at the cut-off beds, and the stock starts from the cut-off occupancy.
-# Each day's in-care deaths, recoveries, rule-outs and absconds are the modelled flows scaled by the occupied beds over the bed demand the day before, so they leave the capped stock, and each province loses them in proportion to its occupancy.
+# The beds are the modelled capacity floored at the cut-off beds, and they never fall.
+# The stock starts from the cut-off occupancy.
+# Each day's in-care deaths, recoveries, rule-outs and absconds are the modelled flows scaled by the occupied beds over the uncapped occupancy the day before, and each province loses them in proportion to its occupancy.
+# Below the beds the stock follows the fitted occupancy and the flows are unscaled.
 # Each province admits its modelled admissions up to its free beds, its beds less its previous day's occupancy plus its exits that day, so a full province admits only as many as leave.
 # The occupancy is drawn by province as a negative binomial censored at its beds, the admissions censored at its free beds, and the in-care deaths and rule-outs are the scaled flows.
 # The national counts are the sums over the provinces.

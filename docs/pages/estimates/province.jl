@@ -133,9 +133,9 @@ province_detail_tables[4] #hide
 # #### Isolation beds
 #
 # Beds, bed demand, occupied beds, utilisation and demand above the beds by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
-# Occupied beds are the national modelled occupancy split on the province demand shares, so they sum to the national figure.
-# A province can hold more patients than its printed beds, as Nord-Kivu does, so its utilisation can exceed 100%.
-# Each province's beds are a fixed share of the national capacity, an average over the period.
+# Each province's beds are its modelled capacity floored at its last recorded effective beds, which cover the patients each report counts.
+# Its occupied beds are its demand share of the national modelled occupancy, capped at its beds, and the rest is the demand above the beds.
+# The provinces sum to the national figures, and no province's utilisation exceeds 100%.
 
 #md # ```@raw html
 #md # <details><summary>Province bed table</summary>
