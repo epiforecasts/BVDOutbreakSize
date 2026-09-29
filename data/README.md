@@ -112,6 +112,7 @@ SitRep 131 reprints 130's figure (byte-identical embedded JPEG).
 SitRep 134 reprints 133's figure (byte-identical embedded JPEG).
 SitRep 110 is not digitised: its page-4 caption still reads "par date de début des symptômes" but the embedded chart is titled and axis-labelled "par date de notification" (n = 5 710), a different basis; see issue #644.
 SitReps 111 to 114 resume the onset-date basis.
+SitRep 135 is not digitised for the same reason: its page-4 caption is unchanged, but the embedded chart is titled and axis-labelled "par date de notification" (n = 7 368).
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
 SitRep 115's figure draws bars past its last tick inside the "données potentiellement incomplètes" band, so the reader drops rows later than the report date plus one day.
@@ -176,7 +177,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 134 (25 September).
+The series run to SitRep 135 (26 September).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 
 The unallocated row is the report's own count of cases and deaths it has not attributed to a zone.
@@ -202,7 +203,7 @@ SitRep 080 prints the table with the Létalité column displaced one row down an
 SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 3369 case cells and 3371 death cells the two transcriptions share, 3355 and 3361 agree.
+Of the 3432 case cells and 3434 death cells the two transcriptions share, 3418 and 3424 agree.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
 On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).

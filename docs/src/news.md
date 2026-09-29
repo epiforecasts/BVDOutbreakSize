@@ -21,7 +21,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
+- The model cut-off advances to SitRep 135, 26 September.
+  SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
 
 ### Report
 
