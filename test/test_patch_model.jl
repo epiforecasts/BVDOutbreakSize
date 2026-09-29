@@ -2248,3 +2248,18 @@ end
     sym_only = (; B.symmetric, antisymmetric = zeros(16, 0))
     @test flow_draws(importation_flow_basis = sym_only) == 2
 end
+
+@testitem "patch_infection_model: flow scale prior below the destination's" begin
+    using BVDOutbreakSize: patch_infection_model
+    using Random: Xoshiro
+    using Statistics: quantile
+
+    priors = patch_infection_model(60, 4).defaults
+    dest = rand(Xoshiro(1), priors.importation_destination_sd_prior, 20_000)
+    flow = rand(Xoshiro(2), priors.importation_flow_sd_prior, 20_000)
+    ## A pattern shared across origins should read as a destination effect,
+    ## so the flow scale sits below the destination scale in the prior.
+    @test quantile(flow, 0.9) < quantile(dest, 0.9)
+    @test quantile(dest, 0.5) ≈ 0.674 atol = 0.03
+    @test quantile(flow, 0.5) ≈ 0.337 atol = 0.02
+end

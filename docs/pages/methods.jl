@@ -546,7 +546,7 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
-# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 0.5).
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 1).
 # ```
 #
 # The flow term $u$ has a zero diagonal and zero row and column sums.
@@ -566,7 +566,7 @@ MarkdownTable(vintage_table) #hide
 # Each flow then has standard deviation $\sigma_{\text{flow}}$ and correlation $\rho_{\text{flow}}$ with its reverse.
 #
 # ```math
-# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
 # \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
 # ```
