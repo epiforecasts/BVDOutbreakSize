@@ -254,9 +254,10 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    ## The occupancy is the capped stock, at or below the beds.
-    st = rh.treatment_state
-    @test all(fm.isolation .<= max.(st.C[fd], st.capacity) .+ 1.0e-8)
+    ## The occupancy is a live stock at or below the beds, which never fall.
+    @test all(fm.isolation .<= vec(sum(fm.beds; dims = 1)) .+ 1.0e-8)
+    @test all(fm.isolation .> 0)
+    @test all(diff(fm.beds; dims = 2) .>= 0)
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [
@@ -398,14 +399,15 @@ end
     ## as many as leave; patch 2 has room for all its admissions.
     beds = [100.0 100.0 100.0; 50.0 50.0 50.0]
     admit = [30.0 30.0 30.0; 5.0 5.0 5.0]
-    ## National demand 200 the day before each day, and ten of each of the
-    ## four exit flows each day.
+    ## An uncapped occupancy of 200 the day before each day, and ten of each
+    ## of the four exit flows each day.
     flows = fill(10.0, 3, 4)
     path = capped_stock_forecast(
         [100.0, 20.0], beds, admit, fill(200.0, 3), flows
     )
-    ## The flows are scaled to the occupied beds over the demand, 120/200,
-    ## and shared by occupancy: patch 1 loses 20 of the 24 exits.
+    ## The flows are scaled to the occupied beds over the uncapped
+    ## occupancy, 120/200, and shared by occupancy: patch 1 loses 20 of the
+    ## 24 exits.
     @test path.scale[1] ≈ 0.6
     @test path.admissions[:, 1] ≈ [20.0, 5.0]
     @test path.occupancy[:, 1] ≈ [100.0, 21.0]
@@ -416,4 +418,18 @@ end
         [0.0], [10.0;;], [4.0;;], [0.0], fill(1.0, 1, 4)
     )
     @test empty.occupancy[1] ≈ 4.0
+end
+
+@testitem "the forecast stock follows the uncapped occupancy below its beds" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## Beds that never bind. The uncapped occupancy gains the admissions
+    ## less the exits each day, 12 - 8, and the stock starts on it.
+    beds = fill(1000.0, 2, 3)
+    admit = [8.0 8.0 8.0; 4.0 4.0 4.0]
+    flows = fill(2.0, 3, 4)
+    uncapped = [100.0, 104.0, 108.0]
+    path = capped_stock_forecast([60.0, 40.0], beds, admit, uncapped, flows)
+    @test path.scale ≈ ones(3)
+    @test vec(sum(path.occupancy; dims = 1)) ≈ uncapped .+ 4.0
+    @test path.admissions ≈ admit
 end

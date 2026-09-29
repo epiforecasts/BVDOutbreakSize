@@ -2179,6 +2179,14 @@ function _province_bed_floors(rows, np::Integer, nc::Integer)
     return floors
 end
 
+## The national `occupied`, floored at zero, shared out on the patches'
+## `demand`, equally when there is no demand.
+function _held_by_patch(occupied, demand)
+    tot = sum(demand)
+    shares = tot > 0 ? demand ./ tot : one.(demand) ./ length(demand)
+    return max(occupied, zero(occupied)) .* shares
+end
+
 """
     cutoff_occupancy(occupied, demand, capacity, floors)
 
@@ -2190,10 +2198,7 @@ occupancy never exceeds the beds in any patch, and patients above the beds
 are not moved to another patch.
 """
 function cutoff_occupancy(occupied, demand, capacity, floors)
-    np = length(demand)
-    tot = sum(demand)
-    shares = tot > 0 ? demand ./ tot : one.(demand) ./ np
-    held = max(occupied, zero(occupied)) .* shares
+    held = _held_by_patch(occupied, demand)
     beds = max.(capacity, floors)
     return (;
         beds, occupancy = min.(held, beds),
@@ -2950,7 +2955,7 @@ series for forecasting and replication.
 
     return (;
         p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
-        CFR_iso, β_iso, capacity = beds_T, bed_floors,
+        CFR_iso, β_iso, capacity = beds_T,
         beds_patch_T = cut.beds, occupancy_patch_T = cut.occupancy,
         shortfall_patch_T = cut.shortfall,
         death_los_mean = death_los_state.mean,

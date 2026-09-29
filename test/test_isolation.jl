@@ -769,9 +769,9 @@ end
     )
     brk = vec(Array(chn[brk_key]))
     short = vec(Array(chn[:bed_shortfall_T]))
-    @test all(isapprox.(iso, max.(min.(dem .+ brk, cap), eps()); atol = 1.0e-6))
+    @test all(isapprox.(iso .+ short, max.(dem .+ brk, 0.0); atol = 1.0e-6))
     @test all(iso .<= cap .+ 1.0e-6)
-    @test all(isapprox.(short, max.(dem .+ brk .- cap, eps()); atol = 1.0e-6))
+    @test all(short .>= 0)
     ## The severity skew is non-negative and admits BVD suspects at least as
     ## readily as the base (non-BVD rule-out) rate.
     skew = vec(Array(chn[:isolation_severity]))

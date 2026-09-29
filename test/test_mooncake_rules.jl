@@ -25,7 +25,7 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel
+        zone_share_renewal_kernel, _province_bed_floors
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -501,6 +501,15 @@
         add!(
             "no recorded capacity", censoring_cap, days, counts,
             (; days = Int[], counts = Int[])
+        )
+        bed_rows = (;
+            days = [30, 30, 40, 50], patches = [1, 2, 1, 3],
+            counts = [40, 15, 45, 9],
+        )
+        add!("province bed rows", _province_bed_floors, bed_rows, 4, 45)
+        add!(
+            "generated counts", _province_bed_floors,
+            merge(bed_rows, (; counts = missing)), 4, 45
         )
 
         ## The growth rate below, at and above `R = 1`, at the model's

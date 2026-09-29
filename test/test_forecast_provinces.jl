@@ -212,7 +212,7 @@ end
         ## holds more than its beds.
         @test round(Int, sum(fc.isolation_level[rows])) ==
             nat.isolation_level[d]
-        @test all(fc.bed_capacity[rows][1:3] .>= [40, 15, 5])
+        @test all(fc.bed_capacity[rows][beds.patches] .>= beds.counts)
         @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7]
         @test all(fc.isolation_level[rows] .<= fc.bed_capacity[rows])
         ## The provinces' admissions add up to the national admissions on
@@ -245,7 +245,7 @@ end
         occupancy_mean = fill(100.0, n), admit_patch, demand_patch,
         capacity_patch, deaths_daily = flow, recover_daily = flow,
         ruleout_daily = flow, abscond_daily = flow, demand = fill(100.0, n),
-        bed_floors = floors, beds_patch_T = cut.beds,
+        beds_patch_T = cut.beds,
         occupancy_patch_T = cut.occupancy, shortfall_patch_T = cut.shortfall,
     )
     cap = (; days = [5, 10], counts = [100, 100])
@@ -264,5 +264,12 @@ end
             @test all(prov .<= d.ceilings)
         end
         @test all(reshape(r.occupancy_draws.province, 3, :) .<= r.beds)
+        ## Patch 1's 60 of the uncapped 100 stand 25 above its 35 beds.
+        @test r.bed_shortfall ≈ [25.0, 25.0]
     end
+    ## Half the occupancy fits every patch's beds.
+    half = treatment_forecast_model(
+        merge(state, (; occupancy_mean = fill(50.0, n))), fd, cap, 10.0
+    )
+    @test returned(half, rand(Xoshiro(1), half)).bed_shortfall == [0.0, 0.0]
 end

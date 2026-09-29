@@ -69,6 +69,9 @@ Mooncake.@is_primitive(
 Mooncake.@zero_derivative(
     Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
 )
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(_province_bed_floors), Vararg}
+)
 ## Work that reaches only reported quantities (see `_detached`).
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 
