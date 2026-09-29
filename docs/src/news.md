@@ -24,6 +24,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
 - The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
+- The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
 
 ### Data
 
