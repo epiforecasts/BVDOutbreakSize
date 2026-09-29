@@ -958,7 +958,7 @@ forecast_defects = events[
 ]
 defect_refs = [
     "#" * match(r"(?:issues|pull)/(\d+)", u).captures[1]
-    for u in forecast_defects.evidence_url
+        for u in forecast_defects.evidence_url
 ]
 add!(
     "forecast_defect_releases_live",
