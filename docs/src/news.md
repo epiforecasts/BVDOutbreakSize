@@ -46,6 +46,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The onsets-only fit adapts over 1000 warm-up steps rather than 200, since scoring the whole onset curve (#948) added about 70 parameters to adapt to (#PR).
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
