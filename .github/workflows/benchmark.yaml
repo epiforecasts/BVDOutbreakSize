@@ -33,6 +33,10 @@ name: Benchmark
 on:
   pull_request:
     branches: [main]
+    # `closed` starts a run only so that it supersedes, through the
+    # concurrency group below, the benchmark of a merged or closed pull
+    # request. Its job is skipped.
+    types: [opened, synchronize, reopened, closed]
     paths:
       - 'src/**'
       - 'ext/**'
@@ -52,7 +56,8 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -60,8 +65,9 @@ jobs:
     name: Benchmark
     runs-on: ubuntu-latest
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.action != 'closed' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
     # The joint's ~18 min cold compile sits on top of a suite that already
     # ran 42-55 min without it.
     timeout-minutes: 150

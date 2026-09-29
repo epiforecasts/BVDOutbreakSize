@@ -669,8 +669,6 @@ stream_pairs_fig #hide
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
 # Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
-# The build on `main` fits three seeds with four chains in place of the joint's two.
-# A pull request preview fits one seed with two chains.
 # The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
 # The growth rate is shown as the ratio of daily growth factors, $\exp(r - r_{\text{true}})$.
 # The intervention effect, a change in $\log R_t$, is shown the same way, as the ratio of the $R_t$ multipliers it implies.

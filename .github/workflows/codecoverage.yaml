@@ -5,6 +5,10 @@ on:
     branches:
       - main
   pull_request:
+    # `closed` starts a run only so that it supersedes, through the
+    # concurrency group below, the run of a merged or closed pull request.
+    # Every job is skipped.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 # As in test.yml: a pull request cancels its own earlier run, and on `main` a
@@ -20,6 +24,7 @@ jobs:
   # Coverage measures the test suite, so it is gated on the same paths.
   changes:
     name: Decide whether coverage needs to run
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

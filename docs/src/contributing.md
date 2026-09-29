@@ -299,7 +299,6 @@ Run `task format` before every push, then only narrow checks locally: `task test
 
 CI runs the test suite (`.github/workflows/test.yml`) and builds the docs, publishing `output/` as a GitHub Release on each push to `main` (`.github/workflows/docs.yml`).
 The docs build also fits the headline joint to datasets it simulates and checks that it recovers them (`scripts/recovery.jl`).
-A pull request checks one simulated dataset with two chains, and `main` checks three with four.
 A failing recovery comments on a tracking issue on `main` and on the pull request.
 
 On a pull request each of those runs only when the change touches something it is built from.
