@@ -482,7 +482,12 @@ function destination_weighted_kernel(K::AbstractMatrix, η::AbstractVector)
         )
     )
     Kη = K .* exp.(η)
-    return Kη .* (sum(K; dims = 1) ./ sum(Kη; dims = 1))
+    weighted = sum(Kη; dims = 1)
+    ## An origin that exports nothing keeps an all-zero column rather than
+    ## 0/0, which would turn the renewal and its gradient into NaN.
+    return Kη .* (
+        sum(K; dims = 1) ./ ifelse.(weighted .> 0, weighted, one.(weighted))
+    )
 end
 
 """

@@ -2035,6 +2035,11 @@ end
         @test Ku[2, q] > Kw[2, q]
     end
     @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3))
+    ## An origin that exports nothing stays at zero, not NaN.
+    K0 = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
+    Kw0 = destination_weighted_kernel(K0, [0.3, -0.1, -0.2])
+    @test Kw0[:, 2:3] == zeros(3, 2)
+    @test sum(Kw0[:, 1]) ≈ sum(K0[:, 1])
 end
 
 @testitem "patch_infection_model: a pooled destination deviation when coupled" begin
