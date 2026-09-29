@@ -22,7 +22,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
+- The model cut-off advances to SitRep 135, 26 September.
+  SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+- The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
 
 ### Report
 
@@ -45,6 +48,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 
 ### Fixed
 
