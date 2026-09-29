@@ -388,15 +388,18 @@ prior_chn_zone = zone_prior_draws(zone_inputs);
 ## blocks are sampled only when their inputs are on.
 zone_hyper = [
     h for h in (
-            (:region_sd_zone, "Level spread", "σ_level"),
-            (:region_halflife_zone, "Deviation", "half-life (days)"),
-            (:correlation_reference_zone, "Correlation", "ρ_corr"),
-            (:zone_ascertainment_sd, "Ascertainment spread", "σ_ascertainment"),
-            (:zone_severity_sd, "Severity spread", "σ_severity"),
-            (:mixing_within_zone, "Within-patch mixing", "ε_within"),
-            (:mixing_departure_zone, "Mixing departure", "τ_mix"),
-            (:composition_rho_zone, "Case composition", "ρ"),
-            (:composition_rho_death_zone, "Death composition", "ρ_death"),
+            (:region_sd_zone, "Level spread σ_level", "σ_level"),
+            (:region_halflife_zone, "Deviation half-life (days)", "half-life (days)"),
+            (:correlation_reference_zone, "Correlation ρ_corr", "ρ_corr"),
+            (
+                :zone_ascertainment_sd, "Ascertainment spread σ_ascertainment",
+                "σ_ascertainment",
+            ),
+            (:zone_severity_sd, "Severity spread σ_severity", "σ_severity"),
+            (:mixing_within_zone, "Within-patch mixing ε_within", "ε_within"),
+            (:mixing_departure_zone, "Mixing departure τ_mix", "τ_mix"),
+            (:composition_rho_zone, "Case composition ρ", "ρ"),
+            (:composition_rho_death_zone, "Death composition ρ_death", "ρ_death"),
         )
         if BVDOutbreakSize._has_key(chn_local, h[1]) &&
         BVDOutbreakSize._has_key(prior_chn_zone, h[1])
@@ -421,10 +424,10 @@ zone_prior_table = DataFrame(
     vcat(
         [
             _prior_posterior_row(
-                "$(label) $(sym)", _hyper_draws(chn_local, k),
+                label, _hyper_draws(chn_local, k),
                 _hyper_draws(prior_chn_zone, k)
             )
-                for (k, label, sym) in zone_hyper
+                for (k, label, _) in zone_hyper
         ],
         [
             _prior_posterior_row(
