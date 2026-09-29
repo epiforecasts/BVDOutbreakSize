@@ -1,8 +1,7 @@
 # Parameter recovery and simulated forecasts for the headline joint.
 #
 # One run simulates a dataset from the model itself at a fixed seed, fits the
-# model to it at the headline joint's sampler settings with four chains in
-# place of two, and writes how well
+# model to it at the headline joint's sampler settings, and writes how well
 # the fit recovers the values that generated the data, and how its forecasts
 # score against the simulated future and a persistence baseline. See
 # `src/recovery.jl` for the method.
@@ -12,10 +11,9 @@
 #
 # Settings, from the environment:
 #   BVD_RECOVERY_SAMPLES (1000), BVD_RECOVERY_WARMUP (500),
-#   BVD_RECOVERY_MAX_DEPTH (10): the headline joint's own settings, since a
-#   shorter run does not converge on this model and would test the sampler
-#   rather than the model,
-#   BVD_RECOVERY_CHAINS (4): twice the headline joint's,
+#   BVD_RECOVERY_MAX_DEPTH (10), BVD_RECOVERY_CHAINS (2): the headline
+#   joint's own settings, since a shorter run does not converge on this model
+#   and would test the sampler rather than the model,
 #   BVD_RECOVERY_HORIZON (14)
 #   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
 #   fit
@@ -29,7 +27,7 @@ out_dir = get(ARGS, 2, joinpath("output", "recovery"))
 env_int(k, d) = parse(Int, get(ENV, k, string(d)))
 samples = env_int("BVD_RECOVERY_SAMPLES", 1000)
 warmup = env_int("BVD_RECOVERY_WARMUP", 500)
-chains = env_int("BVD_RECOVERY_CHAINS", 4)
+chains = env_int("BVD_RECOVERY_CHAINS", 2)
 max_depth = env_int("BVD_RECOVERY_MAX_DEPTH", 10)
 horizon = env_int("BVD_RECOVERY_HORIZON", 14)
 mkpath(out_dir)

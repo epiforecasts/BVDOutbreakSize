@@ -781,25 +781,31 @@ capacity on day `t` is the national walk `C(t)` times a share centred on
 the patch's modelled cumulative admissions to that day,
 
 ```math
-s_p(t) \\propto \\bigl(A_p(t) + a_0\\bigr) \\exp(\\tau_{cap} z_p),
-\\qquad z_1 = 0, \\qquad z_p \\sim \\mathrm{N}(0, 1),
+s_p(t) \\propto \\bigl(A_p(t) + a_0\\bigr) \\exp(\\delta_p),
+\\qquad \\boldsymbol{\\delta} = \\tau_{cap} Q \\mathbf{z},
+\\qquad z_j \\sim \\mathrm{N}(0, 1),
 \\qquad \\tau_{cap} \\sim \\mathrm{N}^+(0, 1),
 ```
 
-normalised over the patches each day, with the first patch the reference.
+normalised over the patches each day. `Q` is the sum-to-zero basis
+([`sum_to_zero_basis`](@ref)), so the deviations sum to zero and every
+patch has the same prior, with no reference patch. A shift shared by every
+patch cancels in the normalisation, so the constraint removes only that
+direction.
 `A_p(t)` sums the patch's latent admissions into isolation, BVD and
 background, over days `1, …, t`. It is the `admissions` matrix
 `(n_patches × n)` of daily admissions, accumulated here.
 
 Beds are allocated in response to cases, so the centre follows where the
 model sends patients. The share moves over time through the centre alone,
-at no extra parameter cost, and the deviations `z_p` are static. The floor
+at no extra parameter cost, and the deviations `δ_p` are static. The floor
 `a_0` (`admission_floor`, one admission by default) keeps a patch with no
 admissions yet from being given no capacity, so early shares sit near an
 equal split.
 
 The pooling scale `τ_cap` is the typical log-ratio between a patch's share
-of beds and its share of admissions to date. Its half-normal prior with
+of beds and its share of admissions to date, before the deviations are
+centred. Its half-normal prior with
 scale 1 puts a two-fold departure well inside the prior and a seven-fold
 one near its edge. The centre already carries the large gap between beds
 and population, so the deviations left for the pool are modest.
@@ -817,7 +823,8 @@ columns sum to one.
         admissions::AbstractMatrix{<:Real};
         admission_floor::Real = 1.0,
         pooling_sd_prior = truncated(Normal(0, 1); lower = 0),
-        offset_prior = Normal(0, 1)
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(size(admissions, 1), 1))
     )
     np, n = size(admissions)
     if np <= 1
@@ -829,27 +836,20 @@ columns sum to one.
     )
     τ_cap ~ pooling_sd_prior
     z_cap ~ product_distribution(fill(offset_prior, np - 1))
-    s = _admission_centred_shares(admissions, τ_cap, z_cap, admission_floor)
+    dev = sum_to_zero(sum_to_zero_factor(basis, τ_cap), z_cap)
+    s = _admission_centred_shares(admissions, dev, admission_floor)
     return (; s, pooling_sd = τ_cap)
 end
 
 ## Daily simplex centred on cumulative admissions: column `t` is
-## `s_p(t) ∝ (Σ_{u ≤ t} a_{p,u} + a0) exp(τ z_p)`, with `z_1 = 0` and `z`
-## holding `z_2, …, z_n`. Each column is normalised against its largest
-## term, so a wide deviation cannot overflow.
+## `s_p(t) ∝ (Σ_{u ≤ t} a_{p,u} + a0) exp(dev_p)`. Each column is normalised
+## against its largest term, so a wide deviation cannot overflow.
 function _admission_centred_shares(
-        admissions::AbstractMatrix{<:Real}, τ::Real, z::AbstractVector{<:Real},
+        admissions::AbstractMatrix{<:Real}, dev::AbstractVector{<:Real},
         a0::Real
     )
     np, n = size(admissions)
-    T = promote_type(
-        Float64, eltype(admissions), typeof(τ), eltype(z), typeof(a0)
-    )
-    dev = Vector{T}(undef, np)
-    dev[1] = zero(T)
-    @inbounds for p in 2:np
-        dev[p] = τ * z[p - 1]
-    end
+    T = promote_type(Float64, eltype(admissions), eltype(dev), typeof(a0))
     cum = zeros(T, np)
     s = Matrix{T}(undef, np, n)
     @inbounds for t in 1:n
@@ -2013,13 +2013,15 @@ streams. Each share is the patch's population share moved by a pooled log
 deviation,
 
 ```math
-w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\tau_{bg} z_p),
-\\qquad z_1 = 0,
+w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\delta_p),
+\\qquad \\boldsymbol{\\delta} = \\tau_{bg} Q \\mathbf{z},
+\\qquad z_j \\sim \\mathrm{N}(0, 1),
 ```
 
-normalised to sum to one. The first patch is the reference, so with
-`n_patches - 1` free deviations the simplex has no redundant direction.
-`τ_bg → 0` recovers the population split. The per-province
+normalised to sum to one. `Q` is the sum-to-zero basis
+([`sum_to_zero_basis`](@ref)), so the `n_patches - 1` free deviations leave
+the simplex no redundant direction and every patch has the same prior, with
+no reference patch. `τ_bg → 0` recovers the population split. The per-province
 analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
 since the background dominates the specimens analysed where positivity is
 low.
@@ -2036,7 +2038,8 @@ Returns `(; w, pooling_sd)`.
             ),
         ],
         pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1)
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(n_patches, 1))
     )
     if n_patches <= 1
         return (; w = ones(Float64, max(n_patches, 1)), pooling_sd = 0.0)
@@ -2047,13 +2050,9 @@ Returns `(; w, pooling_sd)`.
     )
     τ_bg ~ pooling_sd_prior
     z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
-    Tw = promote_type(typeof(float(τ_bg)), eltype(z_bg))
+    dev = sum_to_zero(sum_to_zero_factor(basis, τ_bg), z_bg)
     total_pop = sum(populations)
-    log_w = Vector{Tw}(undef, n_patches)
-    log_w[1] = log(populations[1] / total_pop)
-    @inbounds for p in 2:n_patches
-        log_w[p] = log(populations[p] / total_pop) + τ_bg * z_bg[p - 1]
-    end
+    log_w = log.(populations ./ total_pop) .+ dev
     ## Softmax against the largest term, so a wide deviation cannot
     ## overflow.
     peak = maximum(log_w)
