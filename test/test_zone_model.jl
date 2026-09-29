@@ -189,7 +189,8 @@
     ## Stand-in parent forecast for the chain of `zone_synthetic`: each draw
     ## holds its patch infections at the cut-off level, a little apart from
     ## draw to draw, for `H` days, and predicts `totals` confirmed cases per
-    ## patch in every forecast week.
+    ## patch in every forecast week. The arrivals into the second patch grow
+    ## from a twentieth of its infections by a fiftieth a day.
     function zone_parent_forecast(syn; H = 28, totals = [80, 20])
         np, n = size(syn.I_bar)
         nw = length(future_knot_days(0, H))
@@ -199,8 +200,18 @@
                 for i in 1:ndraw
         ]
         conf = [vec(repeat(totals, 1, nw)) for _ in 1:ndraw]
+        imp = [
+            vec(
+                [
+                    p == 2 ? 0.05 * (1 + 0.02 * d) * reshape(v, np, H)[p, d] :
+                        0.0 for p in 1:np, d in 1:H
+                ]
+            )
+                for v in inf
+        ]
         return Dict{Symbol, Any}(
             :forecast_infections_patch => reshape(inf, ndraw, 1),
+            :forecast_importation_patch => reshape(imp, ndraw, 1),
             :forecast_province_confirmed => reshape(conf, ndraw, 1),
         )
     end
@@ -1995,17 +2006,26 @@ end
     horizon = zf.horizon
     @test zd.mixing !== nothing
 
-    ## Every per-day term reaches the last day the renewal indexes, the
-    ## mean import odds and arrival shares held at the cut-off over the
-    ## forecast.
+    ## Every per-day term reaches the last day the renewal indexes. Past
+    ## the cut-off the mean import odds are the parent forecast's own, and
+    ## the arrival shares follow its mean infections.
     @test size(zf.mixing.import_log_odds, 2) == zd.n + horizon
     @test size(zf.mixing.arrival_shares, 3) == zd.n + horizon
+    @test zf.mixing.import_log_odds[:, 1:zd.n] == zd.mixing.import_log_odds
     for d in 1:horizon
-        @test zf.mixing.import_log_odds[:, zd.n + d] ==
-            zd.mixing.import_log_odds[:, zd.n]
-        @test zf.mixing.arrival_shares[:, :, zd.n + d] ==
-            zd.mixing.arrival_shares[:, :, zd.n]
+        f = 0.05 * (1 + 0.02 * d)
+        @test zf.mixing.import_log_odds[2, zd.n + d] ≈ log(f / (1 - f))
+        @test all(zf.mixing.import_log_odds[1, zd.n + d] .< -700)
+        for p in 1:2
+            @test sum(zf.mixing.arrival_shares[p, :, zd.n + d]) ≈ 1
+        end
     end
+    ## A parent forecast without the arrivals is refused when the zones mix.
+    no_imports = zone_parent_forecast(syn)
+    delete!(no_imports, :forecast_importation_patch)
+    @test_throws ErrorException zone_inputs(
+        syn; zones = zone_metadata(syn), parent_forecast = no_imports
+    )
     @test size(zf.I_bar, 2) == zd.n + horizon
 
     ## A term shorter than the grid is refused.
