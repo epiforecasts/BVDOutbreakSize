@@ -1353,8 +1353,11 @@ end
     ## Without inputs the zones are numbered and the walking column absent.
     bare = zone_diagnostics_table(chn)
     @test bare.zone == string.(1:syn.nz)
+    @test !("walking" in names(bare))
+    @test bare.rhat_share_T == diag.rhat_share_T
     ## A zone undefined in some draw is marked in the table, not warned
-    ## about once per zone.
+    ## about once per zone, and summarising `R_T_zone` apart leaves every
+    ## value as the whole-chain summary gives it.
     @test any(v -> any(!isfinite, v), vec(collect(chn[:R_T_zone])))
     @test_logs min_level = Base.CoreLogging.Warn zone_diagnostics_table(
         chn, inputs
@@ -1362,8 +1365,13 @@ end
     @test_logs min_level = Base.CoreLogging.Warn zone_sampler_diagnostics(
         chn, inputs
     )
-    @test !("walking" in names(bare))
-    @test bare.rhat_share_T == diag.rhat_share_T
+    whole = FlexiChains.rhat(chn; warn = false)
+    whole_rt = BVDOutbreakSize._zone_summary_vector(whole, :R_T_zone, syn.nz)
+    defined = .!isnan.(diag.rhat_R_T)
+    @test any(defined)
+    @test diag.rhat_R_T[defined] ≈ whole_rt[defined]
+    @test diag.rhat_share_T ≈
+        BVDOutbreakSize._zone_summary_vector(whole, :share_T_zone, syn.nz)
     ## Sampler statistics are absent from a prior chain, so the per-chain
     ## fields are empty and the divergences zero.
     sd = zone_sampler_diagnostics(chn, inputs)

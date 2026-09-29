@@ -864,6 +864,8 @@ function zone_share_renewal_with_state(
     u = zeros(Tp, nz)
     eu = zeros(Tp, nz)
     wu = zeros(Tp, nz)
+    spill = zeros(Tp, nz)
+    h = zeros(Tp, nz)
     L = length(g)
     floor_ = eps(Tp)
     @inbounds for j in 1:nd
@@ -876,8 +878,8 @@ function zone_share_renewal_with_state(
             fp = force_pre[p, t]
             for z in zs
                 acc = w0[z] * fp
-                for s in 1:smax
-                    acc += g[s] * I[j - s, z]
+                @simd for s in 1:smax
+                    acc = muladd(g[s], I[j - s, z], acc)
                 end
                 Λ[j, z] = acc
                 u[z] = exp(δ_daily[j, z]) * acc
@@ -916,8 +918,8 @@ function zone_share_renewal_with_state(
             eu[z] = ε[z] * u[z]
             wu[z] = mix.origin_weight[z] * u[z]
         end
-        spill = mix.within * eu
-        h = mix.between * wu
+        mul!(spill, mix.within, eu)
+        mul!(h, mix.between, wu)
         for z in 1:nz
             V[j, z] = (one(Tp) - ε[z]) * u[z] + spill[z]
             H[j, z] = h[z]

@@ -13,6 +13,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - A hand-written Mooncake rule differentiates the health-zone renewal (#779).
 - The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
+- The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
 
 ### Model
 
