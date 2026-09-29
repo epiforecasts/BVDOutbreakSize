@@ -12,30 +12,23 @@ if "downgrade" in ARGS
     # set; tolerances drift below the package's pinned versions. The
     # `:slow` items are full NUTS fits that likewise need working AD, so
     # skip them too.
-    @run_package_tests verbose = true filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:slow in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "fast" in ARGS
     # Platform-portability cell. The `:slow` NUTS fits do not vary by
     # platform and already run on the Linux cells, so a slower runner
     # re-running them buys no signal and spends hours doing it. What is
     # left still loads the package, the data and every model, which is what
     # a platform check is for.
-    @run_package_tests verbose = true filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:slow in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "skip_quality" in ARGS
-    @run_package_tests verbose = true filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :enzyme))
 elseif "quality_only" in ARGS
-    @run_package_tests verbose = true filter = ti -> :quality in ti.tags
+    test_filter = ti -> :quality in ti.tags
 elseif "ad_only" in ARGS
-    @run_package_tests verbose = true filter = ti -> :ad in ti.tags
+    test_filter = ti -> :ad in ti.tags
 elseif "enzyme_only" in ARGS
-    @run_package_tests verbose = true filter = ti -> :enzyme in ti.tags
+    test_filter = ti -> :enzyme in ti.tags
 else
-    @run_package_tests verbose = true filter = ti -> !(:enzyme in ti.tags)
+    test_filter = ti -> !(:enzyme in ti.tags)
 end
+@run_package_tests verbose = true filter = test_filter
