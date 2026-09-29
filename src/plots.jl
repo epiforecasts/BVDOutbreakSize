@@ -5208,7 +5208,7 @@ function plot_zone_ranking(
                     marker = :circle, color = :white,
                     strokecolor = :grey55, strokewidth = 1.5, markersize = 10
                 ),
-                "Level only (no walk)",
+                "R from its province,\nnot modelled separately",
             ),
         )
     _patch_legend!(
@@ -5219,7 +5219,8 @@ function plot_zone_ranking(
         fig[3, 1:2],
         "Left: posterior probability that the zone's reproduction number " *
             "exceeds one. Right: its median and 90% credible interval. Hollow " *
-            "grey markers are zones carrying a level rather than their own walk.";
+            "grey markers are zones whose reproduction number is from their " *
+            "province, not modelled separately.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
     CairoMakie.Label(fig[0, 1:2], title; fontsize = 16, font = :bold)

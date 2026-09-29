@@ -9,8 +9,8 @@
 
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
-## quantity and the patch trajectory it implies, and, with mixing, the
-## per-zone mixing fractions. A chain with no kept meld cell carries an
+## quantity and the patch trajectory and between-patch movement it implies,
+## and, with mixing, the per-zone mixing fractions. A chain with no kept meld cell carries an
 ## empty `η` and every draw reads the province model's mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
     zd = inputs.model_data
@@ -37,11 +37,15 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
             "entries but the shared quantity has $(zd.meld_d); the chain " *
             "was fitted to different inputs."
     )
-    scale(i) = (eta === nothing || isempty(eta[i])) ? nothing :
+    shared(i) = eta !== nothing && !isempty(eta[i])
+    scale(i) = shared(i) ?
         zone_parent_scale(
             zd.meld_weights, zd.meld_L,
             Float64.(eta[i]), np, zd.n
-        )
+        ) : nothing
+    epsilon(i) = shared(i) && size(zd.meld_epsilon_rows, 1) > 0 ?
+        zone_parent_epsilon(zd.meld_epsilon_rows, Float64.(eta[i])) :
+        nothing
     return [
         (;
             δ_knots = reshape(Float64.(knots[i]), nz, K),
@@ -49,7 +53,7 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
             φ = exp2(-week / halflife[i]),
             ε = eps_ === nothing ? nothing : Float64.(eps_[i]),
             η = eta === nothing ? Float64[] : Float64.(eta[i]),
-            def = zone_deformation(zd, scale(i)),
+            def = zone_deformation(zd, scale(i), epsilon(i)),
         )
             for i in 1:ndraws
     ]
@@ -113,8 +117,9 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. `mean_norm_sq` is the mean of `‖η‖²`, which is
-`dimension` when the fit reproduces the prior.
+weekly infections there. The origin intensity cells have no row. `mean_norm_sq`
+is the mean of `‖η‖²` over every component, which is `dimension` when the
+fit reproduces the prior.
 """
 function zone_meld_check(chn, inputs)
     meld = inputs.meld
@@ -128,7 +133,7 @@ function zone_meld_check(chn, inputs)
     (isempty(draws) || isempty(draws[1])) && return empty_result
     E = reduce(hcat, [Float64.(v) for v in draws])
     parent_sd = sqrt.(vec(sum(abs2, meld.L; dims = 2)))
-    for c in 1:meld.d
+    for c in eachindex(meld.cells_patch)
         mid = meld.midpoints[meld.cells_week[c]]
         push!(
             out,
@@ -252,6 +257,23 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Daily patch infections as the zone stage draws them: each draw's own
+patch trajectory, the province model's mean curve deformed by that draw's
+shared quantity. The zone infections of [`zone_infections`](@ref) sum to
+it within each patch. Returns one `(ndraws × n)` matrix per patch.
+"""
+function zone_patch_infections(chn, inputs)
+    states = _zone_states(chn, inputs)
+    np = length(inputs.patch_names)
+    return [
+        Float64[st.def.I_bar[p, t] for st in states, t in 1:inputs.n]
+            for p in 1:np
+    ]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Posterior-predictive draws of the zone forecast: `predict` on
 [`bvd_zone`](@ref) run past the cut-off ([`forecast_draws`](@ref)) over the
 zone chain `chn`. `inputs` must carry the parent's forecast
@@ -367,15 +389,26 @@ function zone_last_case_dates(inputs)
 end
 
 """
+    ZONE_FORECAST_METHOD
+
+The `method` [`zone_forecast_archive`](@ref) records on each row, and the
+only one the release scoring scores for the health zones. It names the
+method of [`zone_forecast`](@ref).
+"""
+const ZONE_FORECAST_METHOD = "predict"
+
+"""
 $(TYPEDSIGNATURES)
 
 Long-format archive of the zone forecast draws `fc` ([`zone_forecast`](@ref))
-made from the cut-off `made_date`, in the [`forecast_archive`](@ref)
-schema plus `province` and `zone` columns. `province`
-is the patch key and `zone` the manifest's dotted `province.zone` key, and
-each value is one draw of the zone's new confirmed cases over the forecast
-horizon, under the `confirmed cases` stream label. `thin` keeps every
-`thin`-th draw.
+made from the cut-off `made_date`, in the
+[`province_forecast_archive`](@ref) schema plus a `zone` column. `province`
+is the patch key and `zone` the manifest's dotted `province.zone` key, whose
+first part is the source province of the zone histories. Each value is one
+draw of the zone's new confirmed cases over the forecast horizon, the one
+horizon the zone forecast runs to, under the `confirmed cases` stream label.
+`method` is [`ZONE_FORECAST_METHOD`](@ref). `thin` keeps every `thin`-th
+draw.
 """
 function zone_forecast_archive(
         fc, inputs; made_date::Date, thin::Integer = 1
@@ -383,7 +416,7 @@ function zone_forecast_archive(
     out = DataFrame(
         made_date = Date[], horizon = Int[], target_date = Date[],
         province = String[], zone = String[], stream = String[],
-        draw = Int[], value = Float64[]
+        draw = Int[], value = Float64[], method = String[]
     )
     h = inputs.model_data.forecast.horizon
     target = made_date + Day(h)
@@ -395,12 +428,50 @@ function zone_forecast_archive(
             push!(
                 out, (
                     made_date, h, target, prov, inputs.zone_keys[z],
-                    "confirmed cases", d, vals[i],
+                    "confirmed cases", d, vals[i], ZONE_FORECAST_METHOD,
                 )
             )
         end
     end
     return out
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The zone key of a per-zone scored stream label, `"<stream> {<zone key>}"`
+as `scripts/score_releases.jl` writes it, or `nothing` for any other label.
+"""
+function zone_score_key(stream::AbstractString)
+    m = match(r"\{([^{}]+)\}$", stream)
+    return m === nothing ? nothing : String(m[1])
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The rows of a per-zone score or overlay table `tbl` (`data/zone/`, written by
+`scripts/score_releases.jl`) for the zones `zone_keys`, in that order, with
+each `stream` replaced by the zone's entry in `zone_labels`. Rows of any
+other zone are dropped.
+"""
+function zone_score_rows(
+        tbl::DataFrame, zone_keys::AbstractVector,
+        zone_labels::AbstractVector
+    )
+    length(zone_keys) == length(zone_labels) || throw(
+        ArgumentError(
+            "zone_score_rows: $(length(zone_keys)) zone keys but " *
+                "$(length(zone_labels)) labels."
+        )
+    )
+    keys_ = zone_score_key.(tbl.stream)
+    parts = map(zip(zone_keys, zone_labels)) do (k, l)
+        t = tbl[isequal.(keys_, String(k)), :]
+        t.stream = fill(String(l), size(t, 1))
+        t
+    end
+    return reduce(vcat, parts; init = tbl[1:0, :])
 end
 
 ## Per-zone draws of a vector deterministic, one vector per zone.
@@ -1096,6 +1167,35 @@ function zone_composition_calibration(
     return _prettify(DataFrame(rows))
 end
 
+## The chain split into every key but `R_T_zone`, and `R_T_zone` alone. A
+## zone below the reporting floor in some draw holds `NaN` there, which
+## FlexiChains cannot summarise and warns about once per zone. The tables
+## here mark those zones undefined, so that key is summarised on its own
+## with the warning off and every other key keeps it.
+function _zone_rt_split(chn)
+    ps = FlexiChains.parameters(chn)
+    is_rt(p) = string(p) == "R_T_zone"
+    rest = [FlexiChains.Parameter(p) for p in ps if !is_rt(p)]
+    rt = [FlexiChains.Parameter(p) for p in ps if is_rt(p)]
+    return (;
+        rest = chn[vcat(rest, collect(FlexiChains.extras(chn)))],
+        rt = isempty(rt) ? nothing : chn[rt],
+    )
+end
+
+## R-hat and bulk and tail ESS of `chn` as three FlexiChains summaries,
+## with `R_T_zone` summarised apart (see `_zone_rt_split`) and merged back.
+function _zone_convergence(chn)
+    parts = _zone_rt_split(chn)
+    stat(f; kw...) = parts.rt === nothing ? f(parts.rest; kw...) :
+        merge(f(parts.rest; kw...), f(parts.rt; warn = false, kw...))
+    return (
+        rhat = stat(FlexiChains.rhat),
+        bulk = stat(FlexiChains.ess; kind = :bulk),
+        tail = stat(FlexiChains.ess; kind = :tail),
+    )
+end
+
 ## Per-element diagnostic values of a vector deterministic from a
 ## FlexiChains summary, as a length-`nz` vector; `NaN` where absent.
 function _zone_summary_vector(summary, key::Symbol, nz::Integer)
@@ -1135,9 +1235,7 @@ function zone_diagnostics_table(chn, inputs = nothing)
     else
         length(inputs.zone_keys)
     end
-    rhat = FlexiChains.rhat(chn)
-    bulk = FlexiChains.ess(chn; kind = :bulk)
-    tail = FlexiChains.ess(chn; kind = :tail)
+    rhat, bulk, tail = _zone_convergence(chn)
     df = DataFrame(
         zone = inputs === nothing ? string.(1:nz) :
             inputs.zone_labels
@@ -1198,9 +1296,10 @@ function zone_sampler_diagnostics(
     ebfmi(E) = sum(abs2, diff(E)) / max(sum(abs2, E .- mean(E)), floatmin())
     exclude = (_DIAGNOSTIC_EXCLUDE..., "R_T_zone")
     finite(v) = filter(isfinite, v)
-    rhats = finite(_scalar_stats(FlexiChains.rhat(chn); exclude))
-    bulk = finite(_scalar_stats(FlexiChains.ess(chn; kind = :bulk); exclude))
-    tail = finite(_scalar_stats(FlexiChains.ess(chn; kind = :tail); exclude))
+    conv = _zone_convergence(chn)
+    rhats = finite(_scalar_stats(conv.rhat; exclude))
+    bulk = finite(_scalar_stats(conv.bulk; exclude))
+    tail = finite(_scalar_stats(conv.tail; exclude))
     base = (
         max_rhat = isempty(rhats) ? NaN : maximum(rhats),
         min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
@@ -1211,7 +1310,7 @@ function zone_sampler_diagnostics(
         NaN
     else
         nz = length(inputs.zone_keys)
-        r = _zone_summary_vector(FlexiChains.rhat(chn), :R_T_zone, nz)
+        r = _zone_summary_vector(conv.rhat, :R_T_zone, nz)
         keep = collect(inputs.walking) .& _zone_rt_defined(chn, nz)
         v = finite(r[keep])
         isempty(v) ? NaN : maximum(v)

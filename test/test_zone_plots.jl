@@ -462,7 +462,10 @@ end
     @test count(p -> p isa Mk.VLines, axes[2].scene.plots) == 1
     ## The level-only zone is drawn hollow; the legend says so.
     leg = first(x for x in fig.content if x isa Mk.Legend)
-    @test any(e -> occursin("Level only", e.label[]), leg.entrygroups[][1][2])
+    @test any(
+        e -> occursin("not modelled separately", e.label[]),
+        leg.entrygroups[][1][2]
+    )
     ## Without a `walking` column every zone is its own walk, and
     ## `max_zones` truncates the ranking.
     short = plot_zone_ranking(ov[:, Not(:walking)]; max_zones = 2)

@@ -15,32 +15,48 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The background and bed-capacity splits use sum-to-zero deviations in place of an Ituri reference (#971).
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
 - The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
+- The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 131 (22 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779).
+- The model cut-off advances to SitRep 135, 26 September.
+  SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+- The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
 
 ### Report
 
+- The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
+- The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
 - The zone pages give each zone's reproduction number, share of its patch, one-week forecast and probability of at least 1, 5, 10 and 20 cases, a table of quiet zones, maps and an interactive map (#779).
+- The zone estimates page gives the report dates, the zone hyperparameters against their priors and the reproduction number from the zone stage against the joint's, and its diagnostics print no per-zone warnings (#978).
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
+- The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
+- The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
+- The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 
 ### Infrastructure
 
+- Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
+- `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
+- A release whose zone scoring fails is counted in the scoring log (#986).
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 
 ### Fixed
 
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
+- The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).
 
 ## v2.2.0
 
