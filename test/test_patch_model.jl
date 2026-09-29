@@ -1840,13 +1840,16 @@ end
         n, np; breakpoint = bp, rt_start,
         importation_kernel = K
     )
-    ## Everything but the intensity is held at one draw, so the trajectories
-    ## differ only through what the intensity does.
+    ## Everything but the intensity is held at one draw, and the kernel
+    ## deviations at zero since `z_ε` also enters the destination effect, so
+    ## the trajectories differ only through what the intensity does.
     function run(;
             ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
             β_ε = 0.0
         )
-        m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
+        m = DynamicPPL.fix(
+            base; ε_bar, σ_ε, z_ε, β_ε, σ_dest = 0.0, σ_flow = 0.0
+        )
         return returned(m, rand(Xoshiro(7), m))
     end
 
