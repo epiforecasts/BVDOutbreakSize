@@ -515,7 +515,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z})_q\bigr)\,
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z}^{\varepsilon})_q\bigr)\,
 #     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
 # ```
 #
@@ -523,10 +523,12 @@ MarkdownTable(vintage_table) #hide
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# \mathbf{z} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
+# \mathbf{z}^{\varepsilon} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
 # ```
 #
-# with $Q$ the sum-to-zero basis of the Rt deviations, so the origin levels are centred on $\bar\varepsilon$ on the log scale.
+# with $Q$ the fixed sum-to-zero basis of Equation (6), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
+# The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
+# Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
 
 #md # ```@raw html
@@ -1832,11 +1834,11 @@ cfr_prior_fig #hide
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (Q \mathbf{z})_p, \qquad
+# \log a_p = \tau_a (Q \mathbf{z}^{a})_p, \qquad
 # \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the sum-to-zero basis of the Rt deviations, so both log multipliers sum to zero across patches.
+# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6), so both log multipliers sum to zero across patches.
 #
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
