@@ -18,21 +18,19 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Superseding a run is right on a pull request and destructive on `main`.
-# `github.head_ref` is set only on a pull request, so a push to `main`, a tag
-# or a manual run falls back to the commit SHA, and only a pull request
-# cancels the run before it. A cancelled run here also loses the hours of
-# fitting it had done and the results release it would have published.
+# A pull request cancels its own earlier run. Pushes to `main` share one
+# group that never cancels a running build, which loses its fitting and the
+# results release it would publish. A newer push replaces only the build
+# still queued, so a burst of merges builds the first and the last.
 #
-# Keying the non-PR runs on the SHA rather than the run id queues a release
-# tag behind the `main` push of the same commit instead of racing it. The two
-# runs otherwise fit the same content-addressed keys side by side, neither
-# sees the other's cache until its own fit job has finished, and the tag's
-# joint fit, on a slower runner, was the one that hit the job's time limit
-# (v2.1.0). Queued, the tag run starts after the `main` run has written every
-# fit cache and restores all of them.
+# A tag build is a `workflow_dispatch` at the tag (see release.yml) and is
+# keyed on its commit, so a later merge never replaces a queued release. It
+# can run beside the `main` build of the same commit and refit what that
+# build has not cached yet.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  group: >-
+    ${{ github.workflow }}-${{ github.head_ref ||
+    (github.ref == 'refs/heads/main' && 'main') || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Compile pkgimages for a fixed set of x86-64 targets rather than for the
@@ -95,8 +93,6 @@ jobs:
       sensitivity_ids: ${{ steps.ids.outputs.sensitivity_ids }}
       zone_ids: ${{ steps.ids.outputs.zone_ids }}
       fit_hash: ${{ steps.fit_hash.outputs.hash }}
-      recovery_seeds: ${{ steps.recovery.outputs.seeds }}
-      recovery_chains: ${{ steps.recovery.outputs.chains }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -132,17 +128,6 @@ jobs:
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
-      # The parameter-recovery seeds and chains. A pull request fits each
-      # seed at the headline joint's two chains, since four chains on the
-      # runner's two cores more than double the time. `main`, tags and
-      # manual runs keep four.
-      - id: recovery
-        env:
-          FULL: ${{ github.event_name != 'pull_request' }}
-        run: |
-          echo 'seeds=[1,2,3]' >> "$GITHUB_OUTPUT"
-          echo "chains=$([ "$FULL" = true ] && echo 4 || echo 2)" \
-            >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
       # themselves are keyed on, so the Actions cache and the Julia cache
       # cannot disagree about what invalidates a fit.
@@ -392,24 +377,24 @@ jobs:
         include: ${{ fromJSON(needs.list.outputs.zone_ids) }}
     steps: *fit-steps
 
-  # Parameter recovery: datasets simulated from the headline joint at fixed
-  # seeds, each fitted at the headline joint's sampler settings and scored
-  # against the values that generated it, with its forecasts scored against
-  # the simulated future (`scripts/recovery.jl`). The seeds and the chain
-  # count come from `list`. It runs beside the headline fits and is cached on
-  # the fit hash, the chain count and the recovery code, so an unchanged
-  # model reruns nothing.
+  # Parameter recovery: a few datasets simulated from the headline joint at
+  # fixed seeds, each fitted at the headline joint's sampler settings and
+  # scored against the values that generated it, with its forecasts scored
+  # against the simulated future (`scripts/recovery.jl`). It runs beside the
+  # headline fits and is cached on the fit hash plus the recovery code, so
+  # an unchanged model reruns nothing.
   recovery:
     name: Recovery seed ${{ matrix.seed }}
     needs: list
     runs-on: ubuntu-latest
-    # Four chains on the runner's two cores take about 1.5 times as long
-    # as the joint's two.
+    # Four chains on the runner's two cores took up to 314 min of this limit,
+    # so the seeds fit the joint's two.
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
-        seed: ${{ fromJSON(needs.list.outputs.recovery_seeds) }}
+        # Keep in step with BVD_RECOVERY_SEEDS in `recovery_report`.
+        seed: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -426,9 +411,7 @@ jobs:
         with:
           path: output/recovery
           key: >-
-            recovery-${{ matrix.seed }}-${{
-            needs.list.outputs.recovery_chains }}-${{
-            needs.list.outputs.fit_hash }}-${{
+            recovery-${{ matrix.seed }}-${{ needs.list.outputs.fit_hash }}-${{
             hashFiles('src/recovery.jl', 'scripts/recovery.jl') }}
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
@@ -444,7 +427,6 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         env:
           JULIA_NUM_THREADS: '4'
-          BVD_RECOVERY_CHAINS: ${{ needs.list.outputs.recovery_chains }}
         run: |
           set -euo pipefail
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
@@ -503,8 +485,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           # The `recovery` matrix's seeds, so a seed that timed out or
           # failed is reported rather than dropped.
-          BVD_RECOVERY_SEEDS: >-
-            ${{ join(fromJSON(needs.list.outputs.recovery_seeds), ' ') }}
+          BVD_RECOVERY_SEEDS: '1 2 3'
         run: |
           post=""
           if [ "${{ github.event_name }}" = "push" ] &&
