@@ -205,6 +205,30 @@
         )
     end
 
+    ## The chain of `zone_synthetic` with the between-patch movement spread
+    ## over the draws: each draw scales both origins' intensity, and the
+    ## arrivals into the second patch with the first origin's.
+    function zone_spread_chain(syn; scales = [0.5, 1.0, 2.0, 1.5])
+        np, n = size(syn.I_bar)
+        chain = copy(syn.chain)
+        chain[:importation_epsilon_patch] = reshape(
+            [[0.02 * s, 0.01 * sqrt(s)] for s in scales], :, 1
+        )
+        chain[:importation_patch] = reshape(
+            [
+                vec(
+                    [
+                        p == 2 ? 0.05 * s * syn.I_bar[p, t] : 0.0
+                            for p in 1:np, t in 1:n
+                    ]
+                )
+                    for s in scales
+            ],
+            :, 1
+        )
+        return chain
+    end
+
     ## Health-zone metadata rows covering every synthetic zone, for the
     ## mixing kernel.
     function zone_metadata(syn)
@@ -920,6 +944,16 @@ end
     @test p.drift_sd[1] ≈ mean(log.([0.04, 0.05, 0.06, 0.07]))
     @test all(>(0), (p.ascertainment_sd[2], p.drift_sd[2]))
     dp = zone_parent_inputs(with_priors).death_pmf
+    ## The movement is centred as the infections are: the geometric mean of
+    ## the intensity and of the odds that an infection was imported.
+    spread = zone_spread_chain(syn)
+    mv = zone_parent_inputs(spread)
+    eps_draws = [collect(v) for v in vec(spread[:importation_epsilon_patch])]
+    @test mv.origin_epsilon ≈ exp.(mean(e -> log.(e), eps_draws))
+    odds = [0.05 * s / (1 - 0.05 * s) for s in [0.5, 1.0, 2.0, 1.5]]
+    lo = reshape(mv.import_log_odds, 2, :)
+    @test all(lo[2, :] .≈ mean(log.(odds)))
+    @test all(lo[1, :] .< -700)
     @test isempty(avg.death_pmf)
     @test length(dp) > 3
     @test all(>=(0), dp)
@@ -1041,7 +1075,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_importation_blocks, _zone_states,
-        zone_deformation
+        zone_deformation, zone_draw_mixing
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1073,7 +1107,7 @@ end
         @test sum(mix.between[zs, q]) ≈ parent_kernel[p, poz[q]] rtol = 1.0e-12
     end
     ## Arrivals stay a proper fraction of a patch's own infections.
-    @test all(0 .<= mix.import_fraction .< 1)
+    @test all(0 .<= zone_draw_mixing(mix, nothing, nothing).import_fraction .< 1)
     chn = sample(
         bvd_zone(zd), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false
@@ -1231,11 +1265,12 @@ end
     dim = 2 * syn.nz + 2 * nc + zd.n_walking * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
-    ## offset per zone, where the inputs carry the kernel blocks. The same
-    ## metadata gives the zones centroids, so the correlation block switches
-    ## on too and adds its reference correlation.
+    ## offset per zone, where the inputs carry the kernel blocks, and one
+    ## origin intensity per patch to the shared draw. The same metadata gives
+    ## the zones centroids, so the correlation block switches on too and adds
+    ## its reference correlation.
     zdm = zone_inputs(syn; zones = zone_metadata(syn)).model_data
-    @test dimension(bvd_zone(zdm)) == dim + 3 + syn.nz
+    @test dimension(bvd_zone(zdm)) == dim + 3 + syn.nz + np
     ## With no kept meld cell the shared draw is absent.
     zdc = merge(
         zd, (;
@@ -1267,8 +1302,9 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn)
+    ## This seed leaves zones on both sides of `rt_floor`.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), MCMCSerial(), 10, 2;
+        Xoshiro(2), bvd_zone(inputs.model_data), Prior(), MCMCSerial(), 10, 2;
         chain_type = FlexiChains.VNChain, progress = false
     )
     diag = zone_diagnostics_table(chn, inputs)
@@ -1622,12 +1658,14 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn; walk_threshold = 10^6)
+    ## This seed leaves a zone below `rt_floor` in some draw.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), 8;
+        Xoshiro(6), bvd_zone(inputs.model_data), Prior(), 8;
         chain_type = FlexiChains.VNChain, progress = false
     )
     rT = [collect(v) for v in vec(collect(chn[:R_T_zone]))]
     keys_ = _nonfinite_keys(chn)
+    @test "R_T_zone" in keys_
     @test ("R_T_zone" in keys_) == any(v -> any(isnan, v), rT)
     d = fit_diagnostics(chn)
     @test isfinite(d.max_rhat) || isnan(d.max_rhat)
@@ -1711,11 +1749,13 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn; walk_threshold = 10^6)
+    ## This seed leaves a zone below `rt_floor` in some draw.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), 8;
+        Xoshiro(6), bvd_zone(inputs.model_data), Prior(), 8;
         chain_type = FlexiChains.VNChain, progress = false
     )
     defined = _zone_rt_defined(chn, syn.nz)
+    @test any(defined) && !all(defined)
     rT = [collect(v) for v in vec(collect(chn[:R_T_zone]))]
     for z in 1:syn.nz
         @test defined[z] == all(r -> isfinite(r[z]), rT)
@@ -1941,7 +1981,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_forecast, zone_share_renewal,
-        zone_deformation
+        zone_deformation, zone_draw_mixing
     using Turing: sample, Prior
     import FlexiChains
     syn = zone_synthetic()
@@ -1956,20 +1996,22 @@ end
     @test zd.mixing !== nothing
 
     ## Every per-day term reaches the last day the renewal indexes, the
-    ## import fractions held at the cut-off over the forecast.
-    @test size(zf.mixing.import_fraction, 2) == zd.n + horizon
+    ## mean import odds and arrival shares held at the cut-off over the
+    ## forecast.
+    @test size(zf.mixing.import_log_odds, 2) == zd.n + horizon
+    @test size(zf.mixing.arrival_shares, 3) == zd.n + horizon
     for d in 1:horizon
-        @test zf.mixing.import_fraction[:, zd.n + d] ==
-            zd.mixing.import_fraction[:, zd.n]
+        @test zf.mixing.import_log_odds[:, zd.n + d] ==
+            zd.mixing.import_log_odds[:, zd.n]
+        @test zf.mixing.arrival_shares[:, :, zd.n + d] ==
+            zd.mixing.arrival_shares[:, :, zd.n]
     end
     @test size(zf.I_bar, 2) == zd.n + horizon
 
     ## A term shorter than the grid is refused.
     nd = zd.n + horizon - zd.t0 + 1
     def = zone_deformation(merge(zd, zf), nothing)
-    short = merge(
-        zf.mixing, (; import_fraction = zd.mixing.import_fraction)
-    )
+    short = zone_draw_mixing(zd.mixing, nothing, nothing)
     @test_throws DimensionMismatch zone_share_renewal(
         def.I_bar, zd.g, zeros(nd, nz), fill(1 / nz, nz),
         zd.patch_ranges, zd.t0, def.force_pre;
@@ -1985,4 +2027,90 @@ end
     for (p, zs) in enumerate(zd.patch_ranges), i in 1:3
         @test sum(draws.zones[z][i] for z in zs) == draws.patches[p][i]
     end
+end
+
+@testitem "zone meld: the origin intensities join the shared quantity" setup = [
+    ZoneSynthetic,
+] begin
+    syn = zone_synthetic()
+    chain = zone_spread_chain(syn)
+    spread = merge(syn, (; chain))
+    plain = zone_inputs(spread)
+    mixed = zone_inputs(spread; zones = zone_metadata(syn))
+    np = 2
+    d0 = plain.meld.d
+    ## One log intensity per origin patch, after the infection cells, and
+    ## only where the zones mix.
+    @test mixed.meld.d == d0 + np
+    @test mixed.meld.extra_cells == (d0 + 1):(d0 + np)
+    @test isempty(plain.meld.extra_cells)
+    @test mixed.meld.log_sums[:, mixed.meld.extra_cells] ≈ reduce(
+        vcat, [transpose(log.(v)) for v in vec(chain[:importation_epsilon_patch])]
+    )
+    ## The infection block of the shared quantity is unchanged, and the
+    ## intensities do not deform the patch trajectories directly.
+    @test mixed.meld.L[1:d0, 1:d0] ≈ plain.meld.L rtol = 1.0e-12
+    @test mixed.meld.weights[:, 1:d0] == plain.meld.weights
+    @test all(iszero, mixed.meld.weights[:, mixed.meld.extra_cells])
+    zd = mixed.model_data
+    @test zd.meld_d == d0 + np
+    @test zd.meld_epsilon_rows == mixed.meld.L[mixed.meld.extra_cells, :]
+    @test size(plain.model_data.meld_epsilon_rows, 1) == 0
+end
+
+@testitem "zone mixing: each draw's arrivals follow its origin intensities" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_draw_mixing, zone_parent_scale,
+        zone_parent_epsilon, zone_deformation, _zone_states
+    using StatsFuns: logit
+    using Turing: sample, Prior
+    using DataFrames: nrow
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(
+        merge(syn, (; chain = zone_spread_chain(syn)));
+        zones = zone_metadata(syn)
+    )
+    zd = inputs.model_data
+    mix = zd.mixing
+    np, n = size(zd.I_bar)
+    ## At the parent's centre a draw reads the mean movement.
+    base = zone_draw_mixing(mix, nothing, nothing)
+    @test base.origin_weight == mix.origin_weight
+    @test logit.(base.import_fraction[2, :]) ≈ mix.import_log_odds[2, :]
+    ## The second patch receives only from the first, so its odds of an
+    ## imported infection move with the first origin's intensity and the
+    ## ratio of the two deformed trajectories.
+    η = zeros(zd.meld_d)
+    η[end - 1] = 1.5
+    η[1] = 0.7
+    scale = zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n)
+    e = zone_parent_epsilon(zd.meld_epsilon_rows, η)
+    @test e[1] > 1.5
+    draw = zone_draw_mixing(mix, scale, e)
+    @test draw.origin_weight ≈ mix.origin_weight .* e[inputs.patch_of_zone]
+    for t in zd.t0:zd.n
+        @test logit(draw.import_fraction[2, t]) ≈ mix.import_log_odds[2, t] +
+            log(e[1]) + log(scale[1, t]) - log(scale[2, t])
+    end
+    @test all(0 .<= draw.import_fraction .< 1)
+    @test zone_deformation(zd, scale, e).mixing.import_fraction ==
+        draw.import_fraction
+    ## The rebuilt draws read the same movement the model sampled with.
+    chn = sample(
+        bvd_zone(zd), Prior(), 4; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
+    nd = zd.n - zd.t0 + 1
+    shares = [collect(v) for v in vec(collect(chn[:import_share_T_zone]))]
+    for (i, st) in enumerate(_zone_states(chn, inputs))
+        fw = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
+        @test fw.imports[nd, :] ./ fw.infections[nd, :] ≈ shares[i] rtol = 1.0e-8
+    end
+    ## The check reports the patch-week cells and counts every dimension.
+    mc = zone_meld_check(chn, inputs)
+    @test nrow(mc.table) == length(inputs.meld.cells_patch)
+    @test mc.dimension == inputs.meld.d
 end
