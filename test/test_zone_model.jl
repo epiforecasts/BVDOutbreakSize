@@ -1075,7 +1075,8 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_importation_blocks, _zone_states,
-        zone_deformation, zone_draw_mixing, destination_weighted_kernel
+        zone_deformation, zone_draw_mixing, destination_weighted_kernel,
+        mobility_importation_kernel
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1097,9 +1098,7 @@ end
     ## Summed over a destination patch's zones the between block is the
     ## province model's own patch-to-patch flow, so the same movement is
     ## not counted at both levels.
-    parent_kernel = province_importation_kernel(
-        PROVINCE_POPULATIONS[1:2]
-    )
+    parent_kernel = mobility_importation_kernel(PROVINCE_POPULATIONS[1:2])
     for q in 1:syn.nz, p in 1:2
 
         p == poz[q] && continue
