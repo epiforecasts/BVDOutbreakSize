@@ -1087,6 +1087,28 @@ end
         ).model_data.mixing
     end
     @test_throws DimensionMismatch tilted([0.5, 0.0, -0.5])
+    ## A parent per-flow weighting takes precedence over the destination
+    ## one: a well-formed flow effect is used even beside a malformed
+    ## destination effect, and a malformed one throws.
+    function flow_tilted(flow; dest = nothing)
+        chain = copy(syn.chain)
+        chain[:importation_flow_effect] = reshape(
+            [flow for _ in 1:4], 4, 1
+        )
+        if dest !== nothing
+            chain[:importation_destination_effect] = reshape(
+                [dest for _ in 1:4], 4, 1
+            )
+        end
+        return zone_inputs(
+            merge(syn, (; chain)); zones = zone_metadata(syn)
+        ).model_data.mixing
+    end
+    @test_throws DimensionMismatch flow_tilted(zeros(3))
+    ## With two patches each origin has one destination, so any weighting
+    ## cancels and the blocks are the unweighted ones.
+    @test flow_tilted([0.0, 0.4, -0.7, 0.0]; dest = zeros(3)).between ≈
+        mix.between
     ## With three patches a non-zero weighting changes the between block,
     ## and its column over a destination patch's zones is the weighted
     ## kernel's entry.
