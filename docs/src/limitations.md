@@ -73,5 +73,6 @@
 ### Model
 
 - A zone below the walking threshold has no transmission walk of its own, so its reproduction number is from its province, not modelled separately ([health-zone model](@ref "Health-zone model")).
-- The zone stage is melded one way onto the joint fit, so the zone data do not update the national and province estimates.
+- The zone stage is melded one way onto the joint fit, so the zone data do not update the national and province estimates ([health-zone model](@ref "Health-zone model")).
+  A patch estimate that the zone data contradict is not corrected by them.
 - The zone forecast splits each patch's forecast across its zones, so it inherits the patch forecast's level and adds only the split.
