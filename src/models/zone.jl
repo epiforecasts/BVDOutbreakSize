@@ -410,9 +410,11 @@ A fresh `η_f ∼ N(0, I)` then draws the future weeks from the parent's
 posterior conditional on the fitted draw `η`, and the fitted model is
 unchanged. The daily deformation keeps the fitted rows up to `n` and
 interpolates from day `n` to the future midpoints after it. The mean curve
-past `n` is the parent's mean log predicted infections, and every delay
-operator and pre-`t0` term is rebuilt on the longer grid. The import
-fractions hold their value at `n`.
+past `n` is the parent's mean log predicted infections, and each binned
+delay operator ([`zone_binned_operator`](@ref)) is rebuilt on the longer
+grid over the fitted vintage `days`. `report_future` bins the expected
+reports of `(n, n + horizon]`. The import fractions hold their value at
+`n`.
 
 `totals` holds each parent draw's predicted confirmed cases per patch over
 `(n, n + horizon]` (`forecast_province_confirmed`), the counts the zone
@@ -422,7 +424,8 @@ vintages.
 function zone_forecast_block(
         forecast, meld, I_bar::AbstractMatrix, g::AbstractVector,
         f::AbstractVector, death_pmf::AbstractVector, t0::Integer,
-        knots::AbstractVector{<:Integer}, patch_of_zone, mixing;
+        knots::AbstractVector{<:Integer}, days::AbstractVector{<:Integer},
+        patch_of_zone, mixing;
         horizon::Integer = 7, week::Integer = 7,
         min_infections::Real = 1.0, ridge::Real = 1.0e-6
     )
@@ -490,6 +493,13 @@ function zone_forecast_block(
     fixed = zone_fixed_terms(I_ext, g, f, t0)
     death_fixed = zone_fixed_terms(I_ext, g, death_pmf, t0)
     nd = n + H - t0 + 1
+    binned(pmf, fx, ds) = zone_binned_operator(
+        zone_delay_operator(pmf, nd),
+        zone_report_pre_rows(fx.report_pre, patch_of_zone, t0, n + H),
+        fx.report_pre_cum, ds, t0, patch_of_zone
+    )
+    ## The forecast week as the second of the windows `(…, n]`, `(n, n + H]`.
+    week_op = binned(f, fixed, [n, n + H])
     knots_ext = vcat(knots, future_knot_days(n, H; week))
     mixing_ext = mixing === nothing ? nothing :
         merge(
@@ -513,18 +523,13 @@ function zone_forecast_block(
         horizon = H, knots = knots_ext,
         n_future_knots = length(knots_ext) - length(knots),
         meld_weights = weights, meld_L = L, meld_d_future = df,
-        I_bar = I_ext, fixed.force_pre, fixed.report_pre_cum,
-        fixed.infections_pre,
-        report_pre_rows = zone_report_pre_rows(
-            fixed.report_pre, patch_of_zone, t0, n + H
-        ),
-        death_pre_cum = death_fixed.report_pre_cum,
-        death_pre_rows = zone_report_pre_rows(
-            death_fixed.report_pre, patch_of_zone, t0, n + H
-        ),
+        I_bar = I_ext, fixed.force_pre, fixed.infections_pre,
         interp = zone_interpolation_weights(knots_ext, t0, n + H),
-        report_matrix = zone_delay_operator(f, nd),
-        death_matrix = zone_delay_operator(death_pmf, nd),
+        report_bin = binned(f, fixed, days),
+        death_bin = binned(death_pmf, death_fixed, days),
+        report_future = (;
+            weights = week_op.weights[:, 2:2], pre = week_op.pre[:, 2:2],
+        ),
         mixing = mixing_ext, totals,
     )
 end
@@ -553,38 +558,29 @@ parent draw. `scale` is the multiplier of [`zone_parent_scale`](@ref), or
 `nothing` for the cut, which reads the province model's posterior mean and
 carries none of its uncertainty. Because the deformation is constant over
 the days before the grid start, every pre-`t0` term of
-[`zone_fixed_terms`](@ref) is the fixed one times one factor per patch.
+[`zone_fixed_terms`](@ref) is the fixed one times one factor per patch,
+which `zone_pre` holds for each zone.
 """
 function zone_deformation(zd, ::Nothing)
-    base = (;
-        zd.I_bar, zd.force_pre, zd.report_pre_cum, zd.infections_pre,
-        zd.report_pre_rows,
+    return (;
+        zd.I_bar, zd.force_pre, zd.infections_pre,
+        zone_pre = ones(Float64, length(_zone_patch_index(zd))),
     )
-    hasproperty(zd, :death_pre_cum) || return base
-    return merge(base, (; zd.death_pre_cum, zd.death_pre_rows))
 end
 
 function zone_deformation(zd, scale::AbstractMatrix)
-    pre = view(scale, :, 1)
-    poz = hasproperty(zd, :patch_of_zone) ? zd.patch_of_zone :
-        _zone_patch_of_zone(zd.patch_ranges)
-    zpre = transpose(view(pre, poz))
-    base = (;
+    pre = scale[:, 1]
+    return (;
         I_bar = zd.I_bar .* scale,
         force_pre = zd.force_pre .* pre,
-        report_pre_cum = zd.report_pre_cum .* pre,
         infections_pre = zd.infections_pre .* pre,
-        report_pre_rows = zd.report_pre_rows .* zpre,
-    )
-    hasproperty(zd, :death_pre_cum) || return base
-    return merge(
-        base,
-        (;
-            death_pre_cum = zd.death_pre_cum .* pre,
-            death_pre_rows = zd.death_pre_rows .* zpre,
-        )
+        zone_pre = pre[_zone_patch_index(zd)],
     )
 end
+
+## The patch of every zone, from data that may carry the ranges alone.
+_zone_patch_index(zd) = hasproperty(zd, :patch_of_zone) ?
+    zd.patch_of_zone : _zone_patch_of_zone(zd.patch_ranges)
 
 """
 $(TYPEDSIGNATURES)
@@ -960,47 +956,51 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Bin the daily expected reports `(n_days × n_zones)` of
-[`zone_forward`](@ref) into the vintage windows `(d_{v−1}, d_v]`
-given by the grid days `days`, the first window opening on day one. Days
-before the grid start `t0` contribute the initial share times the patch's
-pre-`t0` accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)).
-Returns the `(n_zones × n_vintages)` expected increments.
+The delay convolution and its binning into the vintage windows
+`(d_{v−1}, d_v]` of `days` as one fixed operator. `weights`
+`(n_days × n_vintages)` sums the rows of the delay operator `F` over each
+window. `pre` `(n_zones × n_vintages)` is each window's pre-`t0` term at
+unit initial share, from the pre-`t0` rows `pre_rows` and each patch's
+accrual before `t0`, `pre_cum` ([`zone_fixed_terms`](@ref)).
 """
-function zone_report_increments(
-        reports::AbstractMatrix, w0::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange},
-        days::AbstractVector{<:Integer}, t0::Integer,
-        report_pre_cum::AbstractMatrix
+function zone_binned_operator(
+        F::AbstractMatrix, pre_rows::AbstractMatrix,
+        pre_cum::AbstractMatrix, days::AbstractVector{<:Integer},
+        t0::Integer, patch_of_zone::AbstractVector{<:Integer}
     )
-    nd, nz = size(reports)
+    nd = size(F, 1)
     nv = length(days)
-    Tp = promote_type(eltype(reports), eltype(w0), eltype(report_pre_cum))
-    C = zeros(Tp, nz, nv)
-    @inbounds for v in 1:nv
+    weights = zeros(Float64, nd, nv)
+    pre = zeros(Float64, length(patch_of_zone), nv)
+    for v in 1:nv
         lo = v == 1 ? 1 : Int(days[v - 1]) + 1
         hi = Int(days[v])
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            ## Accrued before the grid start, by difference of the cumulative.
-            pre = zero(Tp)
-            if lo < t0
-                top = min(hi, t0 - 1)
-                pre = report_pre_cum[p, top] -
-                    (lo > 1 ? report_pre_cum[p, lo - 1] : zero(Tp))
-            end
-            jlo = max(lo, t0) - t0 + 1
-            jhi = hi - t0 + 1
-            for z in zs
-                acc = w0[z] * pre
-                for j in jlo:min(jhi, nd)
-                    acc += reports[j, z]
-                end
-                C[z, v] = acc
-            end
+        rows = (max(lo, t0) - t0 + 1):min(hi - t0 + 1, nd)
+        weights[:, v] = vec(sum(view(F, rows, :); dims = 1))
+        pre[:, v] = vec(sum(view(pre_rows, rows, :); dims = 1))
+        ## Accrued before the grid start, by difference of the cumulative.
+        lo < t0 || continue
+        top = min(hi, t0 - 1)
+        for (z, p) in enumerate(patch_of_zone)
+            pre[z, v] += pre_cum[p, top] - (lo > 1 ? pre_cum[p, lo - 1] : 0.0)
         end
     end
-    return C
+    return (; weights, pre)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The expected zone increments `(n_zones × n_vintages)` of a
+[`zone_binned_operator`](@ref) `op` from the daily zone infections
+`(n_days × n_zones)` and each zone's pre-`t0` weight `w`, its initial
+share times its patch's deformation over those days
+([`zone_deformation`](@ref)).
+"""
+function zone_binned_increments(
+        op, infections::AbstractMatrix, w::AbstractVector
+    )
+    return transpose(infections) * op.weights .+ w .* op.pre
 end
 
 """
@@ -1097,12 +1097,11 @@ One forward pass of the zone model from its fixed data `zd` (the
 `(n_zones × n_knots)`, initial shares `w0` and per-zone mixing fractions
 `ε` (`nothing` when mixing is off): the daily deviations (the
 interpolation weights times the knots), the share renewal and the binned
-expected reports (the delay operator times the infections plus the
-pre-`t0` rows). `def` is the patch trajectory the draw's shared quantity
-implies ([`zone_deformation`](@ref)); its default is the cut, the
-province model's posterior mean. Called by the model and, per draw, by the
-render. Returns
-`(; shares, forces, infections, imports, reports, increments)`.
+expected reports ([`zone_binned_increments`](@ref)). `def` is the patch
+trajectory the draw's shared quantity implies
+([`zone_deformation`](@ref)); its default is the cut, the province model's
+posterior mean. Called by the model and, per draw, by the render. Returns
+`(; shares, forces, infections, imports, increments)`.
 """
 function zone_forward(
         zd, δ_knots::AbstractMatrix, w0::AbstractVector,
@@ -1115,16 +1114,10 @@ function zone_forward(
         def.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
         zd.t0, def.force_pre; mix, ε
     )
-    reports = zd.report_matrix * st.infections .+
-        def.report_pre_rows .* transpose(w0)
-    increments = zone_report_increments(
-        reports, w0, zd.patch_ranges,
-        zd.days, zd.t0, def.report_pre_cum
+    increments = zone_binned_increments(
+        zd.report_bin, st.infections, def.zone_pre .* w0
     )
-    return (;
-        st.shares, st.forces, st.infections, st.imports, reports,
-        increments,
-    )
+    return (; st.shares, st.forces, st.infections, st.imports, increments)
 end
 
 ## Cumulative zone infections to the last grid day: the pre-`t0` patch
@@ -1193,11 +1186,13 @@ end
 ## its share of the patch, and a paired parent draw's predicted patch total
 ## is split over the zones by the fitted Dirichlet-multinomial, drawn one
 ## zone at a time as its sequence of Beta-binomials.
-@model function _zone_forecast_counts(zd, zf, fw, asc, ρ, nd::Integer)
+@model function _zone_forecast_counts(
+        zd, zf, fw, future_reports, asc, ρ, nd::Integer
+    )
     nz = length(asc)
     H = zf.horizon
     future = (nd + 1):(nd + H)
-    expected = vec(sum(view(fw.reports, future, :); dims = 1))
+    expected = vec(future_reports)
     Tp = promote_type(eltype(expected), eltype(asc), typeof(float(ρ)))
     π = zeros(Tp, nz)
     for zs in zd.patch_ranges
@@ -1316,8 +1311,8 @@ curve.
 
 The share renewal [`zone_share_renewal`](@ref) gives each zone's
 infections as its share of the sampled patch infections, the delay
-operator ([`zone_delay_operator`](@ref)) and binning
-([`zone_report_increments`](@ref)) give
+operator binned over the vintage windows
+([`zone_binned_increments`](@ref)) gives
 the expected confirmed reports per vintage window, and the observed zone
 increments of each patch and vintage follow a Dirichlet-multinomial on the
 allocated total with concentration `κ π`
@@ -1486,9 +1481,8 @@ quantity is computed on the fitted days as without a forecast.
     zx = H == 0 ? zd :
         merge(
             zd, (;
-                zf.I_bar, zf.force_pre, zf.report_pre_cum, zf.infections_pre,
-                zf.report_pre_rows, zf.death_pre_cum, zf.death_pre_rows,
-                zf.interp, zf.report_matrix, zf.death_matrix, zf.mixing,
+                zf.I_bar, zf.force_pre, zf.infections_pre, zf.interp,
+                zf.report_bin, zf.death_bin, zf.mixing,
             )
         )
     if H > 0 && zf.meld_d_future > 0
@@ -1558,12 +1552,7 @@ quantity is computed on the fitted days as without a forecast.
     )
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
-    death_daily = zx.death_matrix * fw.infections .+
-        def.death_pre_rows .* transpose(w0)
-    D = zone_report_increments(
-        death_daily, w0, zd.patch_ranges,
-        zd.death_days, zd.t0, def.death_pre_cum
-    )
+    D = zone_binned_increments(zx.death_bin, fw.infections, def.zone_pre .* w0)
     sev = relative_multiplier(
         z_severity, σ_severity, zd.patch_ranges
     )
@@ -1586,7 +1575,11 @@ quantity is computed on the fitted days as without a forecast.
     parent_patch_T_zone := def.I_bar[:, zd.n]
     if H > 0
         forecast_zone ~ to_submodel(
-            _zone_forecast_counts(zd, zf, fw, asc, ρ, nd), false
+            _zone_forecast_counts(
+                zd, zf, fw, zone_binned_increments(
+                    zf.report_future, fw.infections, def.zone_pre .* w0
+                ), asc, ρ, nd
+            ), false
         )
     end
     delta_knots_zone := vec(δ_knots)
@@ -2108,10 +2101,10 @@ function zone_fit_inputs(
     fixed = zone_fixed_terms(I_bar, parent.g, parent.f, t0)
     nd = n - t0 + 1
     interp = zone_interpolation_weights(knots, t0, n)
-    report_matrix = zone_delay_operator(parent.f, nd)
-    report_pre_rows = zone_report_pre_rows(
-        fixed.report_pre, patch_of_zone,
-        t0, n
+    report_bin = zone_binned_operator(
+        zone_delay_operator(parent.f, nd),
+        zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n),
+        fixed.report_pre_cum, days, t0, patch_of_zone
     )
     ## Death composition, scored per vintage as the cases are. The rows are
     ## built by looking each zone up by name rather than by restacking the
@@ -2172,10 +2165,10 @@ function zone_fit_inputs(
     end
     death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
     death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
-    death_matrix = zone_delay_operator(death_pmf, nd)
-    death_pre_rows = zone_report_pre_rows(
-        death_fixed.report_pre,
-        patch_of_zone, t0, n
+    death_bin = zone_binned_operator(
+        zone_delay_operator(death_pmf, nd),
+        zone_report_pre_rows(death_fixed.report_pre, patch_of_zone, t0, n),
+        death_fixed.report_pre_cum, days, t0, patch_of_zone
     )
     ## Great-circle distances between the centroids of each patch's zones,
     ## over all of them for the deviation level and over its walking zones
@@ -2217,7 +2210,7 @@ function zone_fit_inputs(
     forecast = parent_forecast === nothing ? nothing :
         zone_forecast_block(
             parent_forecast, meld, I_bar, parent.g, parent.f, death_pmf, t0,
-            knots, patch_of_zone, mixing; horizon, week,
+            knots, days, patch_of_zone, mixing; horizon, week,
             min_infections = meld_min_infections
         )
     model_data = (;
@@ -2226,13 +2219,9 @@ function zone_fit_inputs(
         knots, t0, n,
         week, share_scale, rt_floor,
         walking = collect(walking), n_walking,
-        fixed.force_pre, fixed.report_pre_cum,
-        fixed.infections_pre, mixing, interp, report_matrix,
-        report_pre_rows,
+        fixed.force_pre, fixed.infections_pre, mixing, interp, report_bin,
         death_counts, death_cell_patch, death_cell_vintage,
-        death_cell_total, death_cell_const, death_days = days,
-        death_pre_cum = death_fixed.report_pre_cum, death_matrix,
-        death_pre_rows,
+        death_cell_total, death_cell_const, death_bin,
         meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d,
         zone_distances, zone_walk_distances,
         correlation_distance, parent_priors = parent.priors,
