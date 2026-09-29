@@ -846,6 +846,26 @@ end
     @test any(!iszero, full.γ[2:30])
 end
 
+@testitem "onset_report_hazard_model centres the delay deviations on η0" begin
+    ## The delay deviations sum to zero, so `η0` is the mean logit hazard
+    ## and no direction of the deviations duplicates it.
+    using BVDOutbreakSize: onset_report_hazard_model
+    using Turing: DynamicPPL
+    using Random: seed!
+
+    D = 28
+    model = onset_report_hazard_model(1, 60; D)
+    vi = DynamicPPL.VarInfo(model)
+    zs = [k for k in keys(vi) if occursin("z_h0", string(k))]
+    @test length(vi[only(zs)]) == D - 1
+    for s in 1:5
+        seed!(s)
+        out = model()
+        @test length(out.logit_h0) == D
+        @test sum(out.logit_h0) / D ≈ out.η0
+    end
+end
+
 @testitem "onset_reporting_model anchors the report-date walk at the first snapshot" begin
     ## Onset dates reach back well before the first figure (report day 40),
     ## as they do once every date's first print is scored as a level. No
