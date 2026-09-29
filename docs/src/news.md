@@ -15,7 +15,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#PR).
+- The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
   Fitted values change.
 - The background and bed-capacity splits use sum-to-zero deviations in place of an Ituri reference (#971).
