@@ -59,6 +59,9 @@ jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # The joint's ~18 min cold compile sits on top of a suite that already
     # ran 42-55 min without it.
     timeout-minutes: 150
@@ -66,14 +69,6 @@ jobs:
       # Benchmark the full joint, not just the components. This is the only
       # place its gradient is timed.
       BVD_BENCH_JOINT: 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: pr
-            ref: ${{ github.event.pull_request.head.sha }}
-          - name: main
-            ref: ${{ github.event.pull_request.base.sha }}
     steps:
       # Full history: both revisions become worktrees of this clone, so the
       # base commit has to be in it. Submodules stay uninitialised, which is
@@ -92,9 +87,6 @@ jobs:
           # cancelled mid-`Pkg` never becomes the newest snapshot for the
           # restore key. Matches the test and docs workflows.
           save-always: false
-          # One cache for both arms. The matrix carries each arm's commit,
-          # so keyed on it a new commit always started from an empty depot.
-          include-matrix: false
 
       # On `workflow_dispatch` there is no pull request, so fall back to the
       # default branch against this checkout.
