@@ -1727,6 +1727,9 @@ cfr_prior_fig #hide
 # \tag{51}
 # ```
 #
+# The walk is zero up to the first figure's report date and moves only after it.
+# It changes the reporting delay, and a delay is seen only between figures, so before the first figure a shift in reporting speed cannot be told apart from $h_0$.
+#
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
 #

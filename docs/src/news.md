@@ -15,6 +15,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#PR).
+  Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
+  Fitted values change.
 - The background and bed-capacity splits use sum-to-zero deviations in place of an Ituri reference (#971).
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
