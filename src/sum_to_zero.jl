@@ -175,26 +175,56 @@ directions (circulations) and has `(n - 1)(n - 2) / 2`.
 function flow_pair_basis(n::Integer)
     n >= 1 || throw(ArgumentError("flow_pair_basis: n = $n < 1"))
     idx(p, q) = (q - 1) * n + p
-    A = zeros(3n, n^2)
+    unit(ks...) = (v = zeros(n^2); foreach(k -> v[k] += 1, ks); v)
+    centred = Vector{Float64}[]
     for p in 1:n
-        A[p, idx(p, p)] = 1
-        for q in 1:n
-            A[n + p, idx(p, q)] = 1
-            A[2n + p, idx(q, p)] = 1
-        end
+        push!(centred, unit(idx(p, p)))
+        push!(centred, unit((idx(p, q) for q in 1:n)...))
+        push!(centred, unit((idx(q, p) for q in 1:n)...))
     end
-    transpose_op = zeros(n^2, n^2)
-    for p in 1:n, q in 1:n
-        transpose_op[idx(p, q), idx(q, p)] = 1
-    end
-    symmetric = nullspace(vcat(A, transpose_op - I))
-    antisymmetric = nullspace(vcat(A, transpose_op + I))
+    ## `x_pq = x_qp` for the symmetric part, `x_pq = -x_qp` for the other.
+    swapped(sgn) = [
+        unit(idx(p, q)) .+ sgn .* unit(idx(q, p)) for q in 1:n for p in 1:(q - 1)
+    ]
+    symmetric = _orthonormal_complement(vcat(centred, swapped(-1)), n^2)
+    antisymmetric = _orthonormal_complement(vcat(centred, swapped(1)), n^2)
     ## The diagonal is zero up to rounding; set it exactly.
     for p in 1:n
         symmetric[idx(p, p), :] .= 0
         antisymmetric[idx(p, p), :] .= 0
     end
     return (; symmetric, antisymmetric)
+end
+
+## Orthonormal basis (`m × d`) of the vectors in `R^m` orthogonal to every
+## vector in `constraints`, by Gram-Schmidt over the constraints and then
+## the unit vectors. Plain loops rather than an SVD, so it runs inside a
+## model that Mooncake differentiates.
+function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
+    span = Vector{Float64}[]
+    function reduce!(v)
+        for b in span
+            v .-= dot(b, v) .* b
+        end
+        return v
+    end
+    for c in constraints
+        v = reduce!(copy(c))
+        nv = sqrt(dot(v, v))
+        nv > tol && push!(span, v ./ nv)
+    end
+    basis = Vector{Float64}[]
+    for k in 1:m
+        v = zeros(m)
+        v[k] = 1
+        reduce!(v)
+        for b in basis
+            v .-= dot(b, v) .* b
+        end
+        nv = sqrt(dot(v, v))
+        nv > tol && push!(basis, v ./ nv)
+    end
+    return isempty(basis) ? zeros(m, 0) : reduce(hcat, basis)
 end
 
 """
