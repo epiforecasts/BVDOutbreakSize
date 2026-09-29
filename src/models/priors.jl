@@ -1677,6 +1677,16 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
+The gravity kernel is the centre of the flows, and a log deviation per
+directed flow moves where each origin's exports land
+([`destination_weighted_kernel`](@ref)), with each origin's total held.
+The deviation is a destination effect per province, sum-to-zero and
+correlated `ρ_od` with that province's origin deviation in `ε`, plus a
+double-centred term per flow ([`flow_pair_deviation`](@ref)) with
+reciprocity `ρ_flow` between `q → p` and `p → q`. Together they have one
+direction per share of each origin's exports, so none is invisible to the
+likelihood.
+
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
 never touches, and each secondary patch is explained by its own seed and
@@ -1734,8 +1744,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
+        importation_destination_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_flow_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
+        flow_basis = flow_pair_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1864,6 +1878,39 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        ## Per-destination weights on the kernel, sum-to-zero on the same
+        ## basis and correlated `ρ_od` with each province's origin deviation.
+        σ_dest ~ importation_destination_sd_prior
+        z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
+        ρ_od_unit ~ importation_correlation_prior
+        ρ_od = 2 * ρ_od_unit - 1
+        z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
+        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
+        ## Per-flow deviations with the origin and destination effects taken
+        ## out, each flow correlated `ρ_flow` with its reverse.
+        n_sym = size(flow_basis.symmetric, 2)
+        n_flow = n_sym + size(flow_basis.antisymmetric, 2)
+        if n_flow > 0
+            σ_flow ~ importation_flow_sd_prior
+            z_flow ~ product_distribution(fill(Normal(0, 1), n_flow))
+            if n_sym > 0
+                ρ_flow_unit ~ importation_correlation_prior
+                ρ_flow = 2 * ρ_flow_unit - 1
+            else
+                ρ_flow = -one(Tp)
+            end
+            flow_dev = flow_pair_deviation(flow_basis, σ_flow, ρ_flow, z_flow)
+            importation_flow_sd := σ_flow
+            importation_reciprocity := ρ_flow
+        else
+            flow_dev = zeros(Tp, n_patches, n_patches)
+        end
+        log_weight = dest_dev .+ flow_dev
+        weighted = destination_weighted_kernel(importation_kernel, log_weight)
+        importation_destination_sd := σ_dest
+        importation_destination_effect := dest_dev
+        importation_origin_destination_correlation := ρ_od
+        importation_flow_effect := vec(log_weight)
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
@@ -1872,8 +1919,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix, populations
+        Rt_matrix, g, seeds_matrix, coupled ? weighted : importation_kernel,
+        ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
