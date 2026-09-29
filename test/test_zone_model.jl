@@ -1334,8 +1334,9 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn)
+    ## This seed leaves zones on both sides of `rt_floor`.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), MCMCSerial(), 10, 2;
+        Xoshiro(2), bvd_zone(inputs.model_data), Prior(), MCMCSerial(), 10, 2;
         chain_type = FlexiChains.VNChain, progress = false
     )
     diag = zone_diagnostics_table(chn, inputs)
@@ -1689,12 +1690,14 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn; walk_threshold = 10^6)
+    ## This seed leaves a zone below `rt_floor` in some draw.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), 8;
+        Xoshiro(6), bvd_zone(inputs.model_data), Prior(), 8;
         chain_type = FlexiChains.VNChain, progress = false
     )
     rT = [collect(v) for v in vec(collect(chn[:R_T_zone]))]
     keys_ = _nonfinite_keys(chn)
+    @test "R_T_zone" in keys_
     @test ("R_T_zone" in keys_) == any(v -> any(isnan, v), rT)
     d = fit_diagnostics(chn)
     @test isfinite(d.max_rhat) || isnan(d.max_rhat)
@@ -1778,11 +1781,13 @@ end
 
     syn = zone_synthetic()
     inputs = zone_inputs(syn; walk_threshold = 10^6)
+    ## This seed leaves a zone below `rt_floor` in some draw.
     chn = sample(
-        bvd_zone(inputs.model_data), Prior(), 8;
+        Xoshiro(6), bvd_zone(inputs.model_data), Prior(), 8;
         chain_type = FlexiChains.VNChain, progress = false
     )
     defined = _zone_rt_defined(chn, syn.nz)
+    @test any(defined) && !all(defined)
     rT = [collect(v) for v in vec(collect(chn[:R_T_zone]))]
     for z in 1:syn.nz
         @test defined[z] == all(r -> isfinite(r[z]), rT)

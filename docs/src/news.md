@@ -13,6 +13,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - A hand-written Mooncake rule differentiates the health-zone renewal (#779).
 - The sum-to-zero loadings, deviations and AR(1) knots are array products, cutting the zone deviations' gradient by about 30% and the zone gradient by about 3% (#988).
+- The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
 - The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
 
 ### Model
@@ -24,7 +25,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- The model cut-off advances to SitRep 135, 26 September.
+  SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+- The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 
 ### Report
 
@@ -52,6 +56,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
+- The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).
 
 ## v2.2.0
 

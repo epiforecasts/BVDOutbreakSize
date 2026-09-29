@@ -621,7 +621,7 @@ function _zone_correlation_factor(D::AbstractMatrix, ℓ::Real, ridge::Real)
     m = size(D, 1)
     m >= 2 || return zeros(typeof(float(ℓ)), 0, 0)
     Q = sum_to_zero_basis(m)
-    C = exp.(.-D ./ ℓ) + ridge * Matrix{Float64}(I, m, m)
+    C = exp.(.-D ./ ℓ) + ridge * I
     return Matrix(cholesky(Symmetric(transpose(Q) * C * Q)).L)
 end
 
