@@ -17,13 +17,17 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - Each destination province carries a partially pooled weight on the importation kernel, moving where exports land with each origin's total held (#974).
 - Each directed importation flow carries a double-centred deviation with a reciprocity correlation, and each province's destination weight is correlated with its origin intensity (#1012).
+- The background and bed-capacity splits use sum-to-zero deviations in place of an Ituri reference (#971).
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
 - The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
 
 ### Data
 
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 134 (25 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
+- The model cut-off advances to SitRep 135, 26 September.
+  SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+- The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
 
 ### Report
 
@@ -46,6 +50,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
+- The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 
 ### Fixed
 

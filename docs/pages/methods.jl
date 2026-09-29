@@ -1304,16 +1304,15 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp(\tau_{\text{cap}} z^{\text{cap}}_p),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl(\tau_{\text{cap}} (Q \mathbf{z}^{\text{cap}})_p\bigr),
 # \qquad
-# z^{\text{cap}}_1 = 0,
-# \qquad
-# z^{\text{cap}}_p \sim \mathrm{Normal}(0, 1),
+# \mathbf{z}^{\text{cap}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
 #
-# normalised over the patches each day, with Ituri as the reference.
+# normalised over the patches each day, with $Q$ the sum-to-zero basis of the Rt deviations.
+# A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
 # On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
@@ -1927,14 +1926,12 @@ cfr_prior_fig #hide
 # The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The per-province positives are not fitted.
 #
-# The background share $w_p$ is a simplex centred on population share, with Ituri as the reference:
+# The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp(\tau_{\text{bg}} z^{\text{bg}}_p),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl(\tau_{\text{bg}} (Q \mathbf{z}^{\text{bg}})_p\bigr),
 # \qquad
-# z^{\text{bg}}_1 = 0,
-# \qquad
-# z^{\text{bg}}_p \sim \mathrm{Normal}(0, 1),
+# \mathbf{z}^{\text{bg}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
 # \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```

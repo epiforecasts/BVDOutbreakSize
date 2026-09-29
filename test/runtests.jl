@@ -3,38 +3,32 @@ using TestItemRunner
 ## The suite is split across CI jobs by tag so no single job carries every
 ## cost. `:quality` (Aqua/JET/format/doctest) and `:ad` (Mooncake gradients,
 ## ~19 min) do not vary by platform or Julia version, so each runs once in a
-## job of its own rather than on all four matrix cells. See .github/workflows/
+## job of its own rather than on every platform cell. See .github/workflows/
 ## test.yml. `:enzyme` (the opt-in Enzyme backend, which no fit uses) runs
-## only on request, with `enzyme_only`.
+## only on request, with `enzyme_only`. `verbose` prints each item's time in
+## the closing summary, so the CI log says which items carry the run time.
 if "downgrade" in ARGS
     # AD-gradient items exercise Mooncake against the downgraded dep
     # set; tolerances drift below the package's pinned versions. The
     # `:slow` items are full NUTS fits that likewise need working AD, so
     # skip them too.
-    @run_package_tests filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:slow in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "fast" in ARGS
     # Platform-portability cell. The `:slow` NUTS fits do not vary by
     # platform and already run on the Linux cells, so a slower runner
     # re-running them buys no signal and spends hours doing it. What is
     # left still loads the package, the data and every model, which is what
     # a platform check is for.
-    @run_package_tests filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:slow in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "skip_quality" in ARGS
-    @run_package_tests filter = ti -> !(:quality in ti.tags) &&
-        !(:ad in ti.tags) &&
-        !(:enzyme in ti.tags)
+    test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :enzyme))
 elseif "quality_only" in ARGS
-    @run_package_tests filter = ti -> :quality in ti.tags
+    test_filter = ti -> :quality in ti.tags
 elseif "ad_only" in ARGS
-    @run_package_tests filter = ti -> :ad in ti.tags
+    test_filter = ti -> :ad in ti.tags
 elseif "enzyme_only" in ARGS
-    @run_package_tests filter = ti -> :enzyme in ti.tags
+    test_filter = ti -> :enzyme in ti.tags
 else
-    @run_package_tests filter = ti -> !(:enzyme in ti.tags)
+    test_filter = ti -> !(:enzyme in ti.tags)
 end
+@run_package_tests verbose = true filter = test_filter

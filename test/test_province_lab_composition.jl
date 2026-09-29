@@ -7,7 +7,7 @@
 end
 
 @testitem "background_split_model: a simplex centred on population share" begin
-    using BVDOutbreakSize: background_split_model
+    using BVDOutbreakSize: background_split_model, sum_to_zero_basis
     using Turing: DynamicPPL
 
     pops = [4.0, 2.0, 1.0, 1.0]
@@ -23,10 +23,20 @@ end
     ## deviations carry the rest.
     flat = DynamicPPL.fix(m; τ_bg = 0.0)()
     @test flat.w ≈ pops ./ sum(pops)
+
+    ## The deviations sum to zero, so there is no reference patch: the first
+    ## patch moves off its population share like any other, and the log
+    ## ratios to the centre, less their mean, are the deviations.
+    z = [1.0, -0.5, 0.25]
+    dev = 0.8 .* (sum_to_zero_basis(4) * z)
+    moved = DynamicPPL.fix(m; τ_bg = 0.8, z_bg = z)().w
+    lr = log.(moved ./ (pops ./ sum(pops)))
+    @test lr .- sum(lr) / 4 ≈ dev
+    @test !(moved[1] ≈ pops[1] / sum(pops))
 end
 
 @testitem "patch_capacity_share_model: daily shares centred on cumulative admissions" begin
-    using BVDOutbreakSize: patch_capacity_share_model
+    using BVDOutbreakSize: patch_capacity_share_model, sum_to_zero_basis
     using Turing: DynamicPPL
     using Random: Xoshiro
 
@@ -66,10 +76,16 @@ end
     )().s
     @test wide[2, 1] > flat[2, 1]
 
-    ## A deviation moves its patch against the reference by exp(τ z) on
-    ## every day, and a wide one cannot overflow the normalisation.
-    moved = DynamicPPL.fix(m; τ_cap = 0.5, z_cap = [log(2.0) / 0.5, 0.0])().s
-    @test moved[2, :] ./ moved[1, :] ≈ 2 .* centre[2, :] ./ centre[1, :]
+    ## The deviations are `τ Q z` on the sum-to-zero basis and scale each
+    ## patch's centre by `exp(dev)` on every day, the first patch included,
+    ## and a wide one cannot overflow the normalisation.
+    z = [0.8, -0.4]
+    dev = 0.5 .* (sum_to_zero_basis(3) * z)
+    @test sum(dev) ≈ 0 atol = 1.0e-12
+    moved = DynamicPPL.fix(m; τ_cap = 0.5, z_cap = z)().s
+    target = centre .* exp.(dev)
+    @test moved ≈ target ./ sum(target; dims = 1)
+    @test !(moved[1, :] ≈ flat[1, :])
     big = DynamicPPL.fix(m; τ_cap = 400.0, z_cap = [2.0, -2.0])().s
     @test all(isfinite, big)
     @test vec(sum(big; dims = 1)) ≈ ones(n)
