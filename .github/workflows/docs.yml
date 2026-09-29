@@ -134,8 +134,10 @@ jobs:
         run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
       # The parameter-recovery seeds and chains. `main`, tags and manual runs
       # check three seeds at four chains, ~4.5 h a seed. A pull request
-      # checks one seed at the headline joint's two chains, which finishes
-      # beside the joint rather than holding the in-sample pages back.
+      # checks one seed at the headline joint's two chains, which avoids the
+      # 1.5 times cost of four chains on the runner's two cores. It checks
+      # seed 2, the seed that converges on `main`, so a change in its verdict
+      # is a change the pull request made.
       - id: recovery
         env:
           FULL: ${{ github.event_name != 'pull_request' }}
@@ -144,7 +146,7 @@ jobs:
             echo 'seeds=[1,2,3]'
             echo 'chains=4'
           else
-            echo 'seeds=[1]'
+            echo 'seeds=[2]'
             echo 'chains=2'
           fi >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
@@ -467,7 +469,9 @@ jobs:
   recovery_report:
     name: Report parameter recovery
     needs: [list, recovery]
-    if: ${{ !cancelled() }}
+    # `list` is skipped when the report needs no rebuild, and then there are
+    # no seeds to report on.
+    if: ${{ !cancelled() && needs.list.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
