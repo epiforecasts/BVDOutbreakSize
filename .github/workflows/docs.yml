@@ -95,6 +95,8 @@ jobs:
       sensitivity_ids: ${{ steps.ids.outputs.sensitivity_ids }}
       zone_ids: ${{ steps.ids.outputs.zone_ids }}
       fit_hash: ${{ steps.fit_hash.outputs.hash }}
+      recovery_seeds: ${{ steps.recovery.outputs.seeds }}
+      recovery_chains: ${{ steps.recovery.outputs.chains }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -130,6 +132,21 @@ jobs:
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
+      # The parameter-recovery seeds and chains. `main`, tags and manual runs
+      # check three seeds at four chains, ~4.5 h a seed. A pull request
+      # checks one seed at the headline joint's two chains, which finishes
+      # beside the joint rather than holding the in-sample pages back.
+      - id: recovery
+        env:
+          FULL: ${{ github.event_name != 'pull_request' }}
+        run: |
+          if [ "$FULL" = true ]; then
+            echo 'seeds=[1,2,3]'
+            echo 'chains=4'
+          else
+            echo 'seeds=[1]'
+            echo 'chains=2'
+          fi >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
       # themselves are keyed on, so the Actions cache and the Julia cache
       # cannot disagree about what invalidates a fit.
@@ -379,12 +396,13 @@ jobs:
         include: ${{ fromJSON(needs.list.outputs.zone_ids) }}
     steps: *fit-steps
 
-  # Parameter recovery: a few datasets simulated from the headline joint at
-  # fixed seeds, each fitted at the headline joint's sampler settings with
-  # four chains in place of two and scored against the values that generated it, with its forecasts scored
-  # against the simulated future (`scripts/recovery.jl`). It runs beside the
-  # headline fits and is cached on the fit hash plus the recovery code, so
-  # an unchanged model reruns nothing.
+  # Parameter recovery: datasets simulated from the headline joint at fixed
+  # seeds, each fitted at the headline joint's sampler settings and scored
+  # against the values that generated it, with its forecasts scored against
+  # the simulated future (`scripts/recovery.jl`). The seeds and the chain
+  # count come from `list`. It runs beside the headline fits and is cached on
+  # the fit hash, the chain count and the recovery code, so an unchanged
+  # model reruns nothing.
   recovery:
     name: Recovery seed ${{ matrix.seed }}
     needs: list
@@ -395,8 +413,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep in step with BVD_RECOVERY_SEEDS in `recovery_report`.
-        seed: [1, 2, 3]
+        seed: ${{ fromJSON(needs.list.outputs.recovery_seeds) }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -413,7 +430,9 @@ jobs:
         with:
           path: output/recovery
           key: >-
-            recovery-${{ matrix.seed }}-${{ needs.list.outputs.fit_hash }}-${{
+            recovery-${{ matrix.seed }}-${{
+            needs.list.outputs.recovery_chains }}-${{
+            needs.list.outputs.fit_hash }}-${{
             hashFiles('src/recovery.jl', 'scripts/recovery.jl') }}
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
@@ -429,6 +448,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         env:
           JULIA_NUM_THREADS: '4'
+          BVD_RECOVERY_CHAINS: ${{ needs.list.outputs.recovery_chains }}
         run: |
           set -euo pipefail
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
@@ -485,7 +505,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           # The `recovery` matrix's seeds, so a seed that timed out or
           # failed is reported rather than dropped.
-          BVD_RECOVERY_SEEDS: '1 2 3'
+          BVD_RECOVERY_SEEDS: >-
+            ${{ join(fromJSON(needs.list.outputs.recovery_seeds), ' ') }}
         run: |
           post=""
           if [ "${{ github.event_name }}" = "push" ] &&
