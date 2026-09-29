@@ -461,31 +461,35 @@ function province_importation_kernel(
 end
 
 """
-    destination_weighted_kernel(K, η)
+    destination_weighted_kernel(K, W)
 
-Importation kernel `K` with each destination `p` weighted by `exp(η_p)` and
+Importation kernel `K` with each flow `q → p` weighted by `exp(W_pq)` and
 each origin column rescaled to its original total,
 
 ```math
-K'_{p,q} = K_{p,q} e^{\\eta_p}
-    \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{\\eta_r}}.
+K'_{p,q} = K_{p,q} e^{W_{p,q}}
+    \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{W_{r,q}}}.
 ```
 
-Each origin column keeps its total, so η moves where exports land, not how
-much leaves.
+`W` is an `n × n` matrix of per-flow log weights, or a vector `η` of
+destination weights shared by every origin (`W_{p,q} = η_p`). Each origin
+column keeps its total, so `W` moves where exports land, not how much
+leaves, and a shift shared within a column cancels.
 """
-function destination_weighted_kernel(K::AbstractMatrix, η::AbstractVector)
-    size(K, 1) == size(K, 2) == length(η) || throw(
+function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
+    np = size(K, 1)
+    np == size(K, 2) == size(W, 1) &&
+        (W isa AbstractVector || size(W, 2) == np) || throw(
         DimensionMismatch(
             "destination_weighted_kernel: a $(size(K)) kernel and " *
-                "$(length(η)) destination weights."
+                "$(size(W)) weights."
         )
     )
-    Kη = K .* exp.(η)
-    weighted = sum(Kη; dims = 1)
+    KW = K .* exp.(W)
+    weighted = sum(KW; dims = 1)
     ## An origin that exports nothing keeps an all-zero column rather than
     ## 0/0, which would turn the renewal and its gradient into NaN.
-    return Kη .* (
+    return KW .* (
         sum(K; dims = 1) ./ ifelse.(weighted .> 0, weighted, one.(weighted))
     )
 end

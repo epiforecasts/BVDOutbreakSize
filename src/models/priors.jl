@@ -1677,10 +1677,15 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
-A partially pooled sum-to-zero deviation per destination reweights where
-each origin's exports land ([`destination_weighted_kernel`](@ref)), with
-each origin's total held, so the data can move the split the gravity
-kernel fixes by population and distance.
+The gravity kernel is the centre of the flows, and a log deviation per
+directed flow moves where each origin's exports land
+([`destination_weighted_kernel`](@ref)), with each origin's total held.
+The deviation is a destination effect per province, sum-to-zero and
+correlated `ρ_od` with that province's origin deviation in `ε`, plus a
+double-centred term per flow ([`flow_pair_deviation`](@ref)) with
+reciprocity `ρ_flow` between `q → p` and `p → q`. Together they have one
+direction per share of each origin's exports, so none is invisible to the
+likelihood.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1740,8 +1745,11 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
         importation_destination_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_flow_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
+        flow_basis = flow_pair_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1871,13 +1879,40 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
         ## Per-destination weights on the kernel, sum-to-zero on the same
-        ## basis ([`destination_weighted_kernel`](@ref)).
+        ## basis and correlated `ρ_od` with each province's origin deviation.
         σ_dest ~ importation_destination_sd_prior
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
-        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_dest)
-        weighted = destination_weighted_kernel(importation_kernel, dest_dev)
+        ρ_od_unit ~ importation_correlation_prior
+        ρ_od = 2 * ρ_od_unit - 1
+        z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
+        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
+        ## Per-flow deviations with the origin and destination effects taken
+        ## out, each flow correlated `ρ_flow` with its reverse. With three
+        ## patches the only such flow is a circulation, so `ρ_flow = -1`.
+        n_sym = size(flow_basis.symmetric, 2)
+        n_flow = n_sym + size(flow_basis.antisymmetric, 2)
+        if n_flow > 0
+            σ_flow ~ importation_flow_sd_prior
+            z_flow ~ product_distribution(fill(Normal(0, 1), n_flow))
+            if n_sym > 0
+                ρ_flow_unit ~ importation_correlation_prior
+                ρ_flow = 2 * ρ_flow_unit - 1
+            else
+                ρ_flow = -one(Tp)
+            end
+            flow_dev = flow_pair_deviation(flow_basis, σ_flow, ρ_flow, z_flow)
+            importation_flow_sd := σ_flow
+            importation_reciprocity := ρ_flow
+        else
+            flow_dev = zeros(Tp, n_patches, n_patches)
+        end
+        log_weight = dest_dev .+ flow_dev
+        weighted = destination_weighted_kernel(importation_kernel, log_weight)
         importation_destination_sd := σ_dest
         importation_destination_effect := dest_dev
+        importation_origin_destination_correlation := ρ_od
+        importation_flow_effect := vec(log_weight)
+        importation_kernel_weighted := vec(weighted)
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There

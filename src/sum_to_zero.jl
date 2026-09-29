@@ -159,3 +159,83 @@ function sum_to_zero_moments(F::AbstractMatrix)
     end
     return (; sd, cor)
 end
+
+"""
+Orthonormal bases of the double-centred flows between `n` patches, as
+`(; symmetric, antisymmetric)` matrices of size `n² × d` whose columns
+reshape to `n × n` flow matrices.
+
+A double-centred flow matrix has a zero diagonal and zero row and column
+sums. On the log scale of an importation kernel it is what is left of a
+per-flow deviation once one effect per origin and one per destination are
+taken out. The symmetric part moves `q → p` and `p → q` together and has
+`n (n - 3) / 2` directions. The antisymmetric part moves them in opposite
+directions (circulations) and has `(n - 1)(n - 2) / 2`.
+"""
+function flow_pair_basis(n::Integer)
+    n >= 1 || throw(ArgumentError("flow_pair_basis: n = $n < 1"))
+    idx(p, q) = (q - 1) * n + p
+    A = zeros(3n, n^2)
+    for p in 1:n
+        A[p, idx(p, p)] = 1
+        for q in 1:n
+            A[n + p, idx(p, q)] = 1
+            A[2n + p, idx(q, p)] = 1
+        end
+    end
+    transpose_op = zeros(n^2, n^2)
+    for p in 1:n, q in 1:n
+        transpose_op[idx(p, q), idx(q, p)] = 1
+    end
+    symmetric = nullspace(vcat(A, transpose_op - I))
+    antisymmetric = nullspace(vcat(A, transpose_op + I))
+    ## The diagonal is zero up to rounding; set it exactly.
+    for p in 1:n
+        symmetric[idx(p, p), :] .= 0
+        antisymmetric[idx(p, p), :] .= 0
+    end
+    return (; symmetric, antisymmetric)
+end
+
+"""
+Double-centred flow deviation `U` (`n × n`) from the bases of
+[`flow_pair_basis`](@ref), a scale `σ`, a reciprocity `ρ` and
+standard-normal draws `z` (the symmetric directions first).
+
+The symmetric and antisymmetric parts are scaled so that each directed
+flow has standard deviation `σ` and correlation `ρ` with its reverse,
+
+```math
+U = \\sigma \\sqrt{\\frac{(1 + \\rho) M}{d_s}} B_s z_s
+    + \\sigma \\sqrt{\\frac{(1 - \\rho) M}{d_a}} B_a z_a,
+```
+
+with `M = n (n - 1) / 2` the number of pairs and `d_s`, `d_a` the number of
+directions in each part.
+"""
+function flow_pair_deviation(B::NamedTuple, σ, ρ, z::AbstractVector)
+    S, A = B.symmetric, B.antisymmetric
+    ds, da = size(S, 2), size(A, 2)
+    length(z) == ds + da || throw(
+        DimensionMismatch(
+            "flow_pair_deviation: $(length(z)) draws for $(ds + da) directions"
+        )
+    )
+    n = isqrt(size(S, 1))
+    pairs = n * (n - 1) ÷ 2
+    T = promote_type(typeof(σ), typeof(ρ), eltype(z), eltype(S))
+    s_sym = ds > 0 ? σ * sqrt((1 + ρ) * pairs / ds) : zero(T)
+    s_anti = da > 0 ? σ * sqrt((1 - ρ) * pairs / da) : zero(T)
+    U = zeros(T, n, n)
+    @inbounds for i in 1:(n * n)
+        acc = zero(T)
+        for j in 1:ds
+            acc += s_sym * S[i, j] * z[j]
+        end
+        for j in 1:da
+            acc += s_anti * A[i, j] * z[ds + j]
+        end
+        U[i] = acc
+    end
+    return U
+end
