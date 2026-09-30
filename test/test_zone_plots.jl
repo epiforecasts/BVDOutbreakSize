@@ -278,6 +278,69 @@ end
     )
 end
 
+@testitem "plot_rt_zones ranks, marks province zones and names the unit" begin
+    using CairoMakie: Makie as Mk
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_rt_zones
+    rng = MersenneTwister(5)
+    nd, n = 20, 30
+    function traj(level)
+        m = Matrix{Union{Missing, Float64}}(missing, nd, n)
+        m[:, 5:n] .= level .* exp.(0.1 .* randn(rng, nd, n - 4))
+        return m
+    end
+    rt = [traj(l) for l in (1.5, 0.8, 1.1, 2.0)]
+    labels = ["Z$i" for i in 1:4]
+    patch = [1, 1, 2, 2]
+    caption(f) = only(
+        x.text[] for x in f.content
+            if x isa Mk.Label && startswith(x.text[], "Coloured")
+    )
+    entries(f) = [
+        e.label[] for
+            e in first(x for x in f.content if x isa Mk.Legend).entrygroups[][1][2]
+    ]
+    ## The panels follow `ranking` over `cumulative`, and the caption says
+    ## how they were chosen.
+    fig = plot_rt_zones(
+        rt, labels, patch; as_of_date = "2026-09-10",
+        cumulative = [100, 1, 50, 1], ranking = [1, 100, 1, 50],
+        ranking_label = "infections over the past week", top = 2,
+        patch_rt = [traj(1.0), traj(1.0)],
+        modelled = [true, false, true, true]
+    )
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test [ax.title[] for ax in axes] == ["Z2", "Z4"]
+    @test occursin(
+        "2 zones with the most infections over the past week",
+        caption(fig)
+    )
+    ## A zone whose reproduction number is from its province is drawn
+    ## hollow in grey: the patch reference's bands and median, then the
+    ## zone's 90% edges and median as lines with no fill.
+    @test count(p -> p isa Mk.Band, axes[1].scene.plots) == 3
+    @test count(p -> p isa Mk.Lines, axes[1].scene.plots) == 4
+    @test count(p -> p isa Mk.Band, axes[2].scene.plots) == 6
+    @test Mk.to_color(axes[1].titlecolor[]) == Mk.to_color(:grey55)
+    @test "R from its province" in entries(fig)
+    @test occursin("from their province", caption(fig))
+    ## With every panel modelled separately there is no such entry.
+    all_modelled = plot_rt_zones(
+        rt, labels, patch; cumulative = [100, 1, 50, 1], top = 2,
+        modelled = [true, false, true, true]
+    )
+    @test !("R from its province" in entries(all_modelled))
+    @test !occursin("from their province", caption(all_modelled))
+    ## A figure of patches says so in its caption.
+    ref = plot_rt_zones(
+        rt, labels, patch; top = 2, unit = "patch",
+        reference_rt = [traj(1.0) for _ in 1:4]
+    )
+    @test occursin("the patch's reproduction number", caption(ref))
+    @test occursin("for the same patch", caption(ref))
+    @test !occursin("zone", caption(ref))
+end
+
 @testitem "plot_zone_shares draws the observed over the modelled" setup = [
     ZoneGeojson,
 ] begin
