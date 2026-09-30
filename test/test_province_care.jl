@@ -410,6 +410,13 @@ end
     @test incomplete_capacity_days(gone, stopped) == collect(2:15)
     @test incomplete_capacity_days(gone, stopped; max_silence = 5) ==
         collect(2:6)
+    ## A tolerance outside [0, 1] would silently disable the check.
+    @test_throws ArgumentError incomplete_capacity_days(
+        gone, stopped; tolerance = 1.5
+    )
+    @test_throws ArgumentError incomplete_capacity_days(
+        gone, stopped; tolerance = -0.1
+    )
 end
 
 @testitem "load_observations drops national capacity days a province misses" begin
@@ -418,20 +425,20 @@ end
 
     obs = load_observations()
     kept = Set(grid_date.(Ref(obs), obs.bed_capacity_history.days))
-    ## Nord-Kivu, Haut-Uélé or Tshopo silent (#1040).
-    dropped = vcat(
+    ## Days on which Nord-Kivu is silent and the national figure is its
+    ## provinces' partial sum are among those dropped.
+    dips = vcat(
         Date(2026, 8, 4):Date(2026, 8, 12),
         Date(2026, 9, 10):Date(2026, 9, 15),
         [Date(2026, 9, 23), Date(2026, 9, 25)],
     )
-    @test isempty(intersect(kept, dropped))
-    ## Days the provinces printing beds account for the national figure,
-    ## and 26 August, whose national figure carries Haut-Uélé's beds
-    ## although the province block does not.
-    for d in (
-            Date(2026, 8, 26), Date(2026, 9, 9), Date(2026, 9, 16),
-            Date(2026, 9, 26),
-        )
-        @test d in kept
-    end
+    @test isempty(intersect(kept, dips))
+    ## Days on which every large province prints are kept, as is 26 August,
+    ## whose national figure carries Haut-Uélé's beds although the province
+    ## block does not.
+    complete = (
+        Date(2026, 8, 26), Date(2026, 9, 9), Date(2026, 9, 16),
+        Date(2026, 9, 26),
+    )
+    @test all(in(kept), complete)
 end
