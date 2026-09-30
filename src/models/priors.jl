@@ -1670,8 +1670,7 @@ The deviation is a destination effect per province, sum-to-zero and
 correlated `ρ_od` with that province's origin deviation in `ε`, plus a
 double-centred term per flow ([`flow_pair_deviation`](@ref)) with
 reciprocity `ρ_flow` between `q → p` and `p → q`. Together they have one
-direction per share of each origin's exports, so none is invisible to the
-likelihood.
+direction per share of each origin's exports.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
