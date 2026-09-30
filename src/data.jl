@@ -835,7 +835,8 @@ function load_health_zones(
 end
 
 """
-    incomplete_capacity_days(national, provinces; tolerance = 0.05)
+    incomplete_capacity_days(national, provinces; tolerance = 0.05,
+                             max_silence = 14)
 
 Days of the national implied bed capacity `national`, a `(; days, counts)`
 history, on which a large province that printed beds earlier prints none.
@@ -852,9 +853,15 @@ are silent: Sud-Kivu (25 beds), Tshopo (12 to 31) and Bas-Uélé (3) each
 hold at most 2% of the beds, and Haut-Uélé (68 to 138) at least 6.5%. The
 shortfall keeps a day whose national figure carries a province the block
 does not (Haut-Uélé on 26 August 2026).
+
+A province silent for more than `max_silence` days is treated as no longer
+reporting and leaves the sum, so one that stops printing for good does not
+drop every later day. The longest gap after which a province printed again
+is 10 days (Nord-Kivu, 3 to 13 August 2026).
 """
 function incomplete_capacity_days(
-        national, provinces::AbstractDict; tolerance::Real = 0.05
+        national, provinces::AbstractDict; tolerance::Real = 0.05,
+        max_silence::Integer = 14
     )
     incomplete = Int[]
     for (d, c) in zip(national.days, national.counts)
@@ -862,7 +869,7 @@ function incomplete_capacity_days(
         silent = 0
         for h in values(provinces)
             i = searchsortedlast(h.days, d)
-            i == 0 && continue
+            (i == 0 || d - h.days[i] > max_silence) && continue
             carried += h.counts[i]
             h.days[i] == d || (silent = max(silent, h.counts[i]))
         end
