@@ -8,17 +8,17 @@
 #
 # The INSP site leads the INRB-UMIE GitHub mirror
 # (https://github.com/INRB-UMIE/BDBV2026-Data), which lags by days and has
-# dropped individual vintages, so it is not the primary source. Its copies
-# of the PDFs are byte-identical to INSP's, so it serves as the fallback
-# below, and its processed national CSVs remain a cross-check
-# (scripts/confirm_insp_data.jl).
+# dropped individual vintages, so it is not the source. Some of its PDF
+# copies also differ from INSP's (001, 012, 020, 028, 094, 096, 097, 099,
+# 101 and 102 on 30 September), so it is a last resort only. Its processed
+# national CSVs remain a cross-check (scripts/confirm_insp_data.jl).
 #
 # The media listing has dropped reports and on some days names no MVE PDF
-# at all. So after it the script lists the published MVE posts and
-# fills every report still missing on disk, rather than stopping, so a
-# fresh checkout can rebuild the whole cache. It takes each from the mirror
-# when the mirror holds it, which costs insp.cd nothing, and the rest
-# through the per-post path below, pausing between requests.
+# at all. So the order is: the media listing, then every published MVE
+# report still missing on disk through its insp.cd post (the per-post path
+# below), pausing between requests, and only a report neither insp.cd path
+# serves from the mirror, logged as unverified. An empty listing therefore
+# no longer stops the run, and a fresh checkout can rebuild the cache.
 #
 # Usage:
 #
@@ -75,8 +75,6 @@ const MAX_PAGES = 50
 # Pause between consecutive insp.cd requests on the fallback path, which can
 # make a few dozen of them on a fresh checkout.
 const PAUSE_SECONDS = 5
-const MIRROR_TREE = "https://api.github.com/repos/INRB-UMIE/BDBV2026-Data/" *
-    "git/trees/main?recursive=1"
 const MIRROR_RAW = "https://raw.githubusercontent.com/INRB-UMIE/" *
     "BDBV2026-Data/main/"
 # The mirror keeps its raw PDFs in Git LFS, so the raw URL serves a pointer
@@ -294,25 +292,6 @@ function published_posts(; want = nothing)
     return out
 end
 
-# The MVE SitRep PDFs the INRB-UMIE mirror holds, as number => path, from
-# one GitHub tree listing. Re-issues (`_v2`) are left out, as they are on
-# the INSP path.
-function mirror_urls()
-    res = api_page(MIRROR_TREE)
-    res.status == 200 || error(
-        "mirror tree listing failed after $ATTEMPTS attempts at " *
-            "$MIRROR_TREE: $(page_failure(res))"
-    )
-    urls = Dict{String, String}()
-    for m in eachmatch(
-            r"\"path\":\"(data/insp_sitrep/raw/SitRep_MVE_0*(\d+)[-_]2026\.pdf)\"",
-            res.body
-        )
-        urls[lpad(m.captures[2], 3, '0')] = m.captures[1]
-    end
-    return urls
-end
-
 # Decode the `pdfemb-data` base64 blob embedded in a rendered post (the
 # same mechanism data/README.md's manual fetch recipe documents) to recover
 # the direct, fetchable PDF URL.
@@ -354,17 +333,46 @@ function fetch_to(url, dest, label)
     return false
 end
 
-# Download a mirror file, following its LFS pointer when the raw URL
-# serves one, and keep it only when it is a PDF.
-function fetch_mirror(path, dest, label)
-    fetch_to(MIRROR_RAW * path, dest, "$label (mirror)") || return false
-    if startswith(read(dest, String), "version https://git-lfs")
-        fetch_to(MIRROR_LFS * path, dest, "$label (mirror LFS)") ||
-            return false
+# One GET to `dest` with no retry, returning the HTTP status (0 when no
+# reply came). A missing mirror file is a 404, not a fault to retry.
+function get_once(url, dest)
+    res = try
+        Downloads.request(
+            url; output = dest, throw = false,
+            headers = ["User-Agent" => UA], timeout = REQUEST_TIMEOUT
+        )
+    catch
+        nothing
     end
-    startswith(read(dest, String), "%PDF") && return true
-    rm(dest)
-    println("  not a PDF, discarded")
+    return res isa Downloads.Response ? res.status : 0
+end
+
+# Report `num` from the mirror, under the file names it has used, following
+# the Git LFS pointer the raw URL serves for most of them. Kept only when it
+# is a PDF.
+function fetch_mirror(num, dest)
+    names = unique(
+        [
+            "SitRep_MVE_$(num)_2026.pdf", "SitRep_MVE_$(num)-2026.pdf",
+            "SitRep_MVE_$(lstrip(num, '0'))_2026.pdf",
+        ]
+    )
+    for name in names
+        path = "data/insp_sitrep/raw/$name"
+        get_once(MIRROR_RAW * path, dest) == 200 || continue
+        if startswith(read(dest, String), "version https://git-lfs")
+            get_once(MIRROR_LFS * path, dest) == 200 || continue
+        end
+        if startswith(read(dest, String), "%PDF")
+            println(
+                "mirror SitRep $num ... " *
+                    "$(round(filesize(dest) / 1024; digits = 1)) KiB"
+            )
+            return true
+        end
+    end
+    isfile(dest) && rm(dest)
+    println("mirror SitRep $num ... not found")
     return false
 end
 
@@ -416,34 +424,34 @@ function fetch_selected(numbers, limit)
 end
 
 # Fill the reports the media listing did not give: all of them when it
-# names no MVE PDF at all, and the ones it has dropped otherwise.
-# Every published MVE report still missing on disk is taken from the mirror
-# when the mirror holds it, which costs insp.cd nothing, and through its
-# post otherwise, pausing between insp.cd requests.
+# names no MVE PDF at all, and the ones it has dropped otherwise. Each is
+# taken through its insp.cd post, pausing between requests, and from the
+# mirror only when the post does not serve it.
 function fetch_gaps(limit)
     posts = mve_posts(published_posts())
     todo = missing_numbers(keys(posts), limit)
     isempty(todo) && return nothing
     println(
         "\n$(length(todo)) published report(s) missing after the media " *
-            "listing: taking them from the INRB-UMIE mirror and the posts API"
+            "listing: taking them through their insp.cd posts"
     )
-    mirror = mirror_urls()
     downloaded = 0
-    from_posts = 0
-    for num in todo
-        if haskey(mirror, num)
-            ok = fetch_mirror(mirror[num], dest_for(num), "SitRep $num")
-        else
-            from_posts > 0 && sleep(PAUSE_SECONDS)
-            ok = fetch_from_post(posts[num], dest_for(num))
-            from_posts += 1
+    unverified = String[]
+    for (i, num) in enumerate(todo)
+        i > 1 && sleep(PAUSE_SECONDS)
+        if fetch_from_post(posts[num], dest_for(num))
+            downloaded += 1
+            continue
         end
-        ok && (downloaded += 1)
+        if fetch_mirror(num, dest_for(num))
+            downloaded += 1
+            push!(unverified, num)
+        end
     end
-    return println(
-        "$downloaded of $(length(todo)) filled, $from_posts through the " *
-            "posts API."
+    println("$downloaded of $(length(todo)) filled.")
+    return isempty(unverified) || println(
+        "from the INRB-UMIE mirror, not verified against insp.cd: " *
+            join(unverified, ", ")
     )
 end
 

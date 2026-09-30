@@ -108,7 +108,8 @@ INSP publishes SitReps for floods, measles, Mpox and other events through the sa
 Expect around 58 rejects; that is normal.
 If an MVE report is ever published without MVE in the filename it will appear in that list, which is the signal to fetch it by hand.
 
-When the media listing is empty or short, the script fills the missing reports from the INRB-UMIE mirror and, pausing between requests, from their posts.
+When the media listing is empty or short, the script fills the missing reports through their insp.cd posts, pausing between requests, and takes only a report insp.cd does not serve from the INRB-UMIE mirror, which it names as unverified.
+insp.cd stays the source: new reports come from it first, and some mirror copies differ from it.
 If one is still missing, fetch it as step 4 of "Fixing the reader" in `scripts/README.md` says rather than stopping.
 
 Read PDFs with the Read tool's `pages=` argument.
