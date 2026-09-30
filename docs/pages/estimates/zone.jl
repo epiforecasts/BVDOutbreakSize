@@ -4,7 +4,7 @@
 # reproduction number, the share of the patch, the one-week forecast and the
 # probability of at least a few cases, zone by zone.
 # The [health-zone model](@ref "Health-zone model") on the methods page gives the maths.
-# This page carries its results, the checks of the fit and the interactive map.
+# This page carries its results and the checks of the fit, and the interactive map is on the [dashboard](@ref "Dashboard").
 # The change in each zone's estimate over the past week has its own section below.
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
@@ -46,7 +46,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 # Zones with no confirmed case, or too few infections for a reproduction number, are grey.
 # The four maps share the zone boundaries.
 # A zone's forecast can be read against its reproduction number and its cases to date.
-# The interactive map below adds the probability of at least $K$ cases at a chosen $K$ and a filter for zones with or without a case over the past one, two or four weeks.
+# The interactive map on the [dashboard](@ref "Dashboard") adds the probability of at least $K$ cases at a chosen $K$ and a filter for zones with or without a case over the past one, two or four weeks.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -123,16 +123,18 @@ zone_map_fig = plot_zone_map_panels(
 
 zone_map_fig #hide
 
-# The panels below trace the reproduction number of the twelve zones with most confirmed cases, each against its patch's own implied reproduction number in grey.
-# Where a zone's line departs from the grey patch line, the gap is the zone's fitted deviation from its patch.
+# The panels below trace the reproduction number of the twelve zones with most confirmed cases as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
+# Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
+# The patch line averages all the patch's zones weighted by their recent infections, so it can sit above or below every zone shown when a zone outside the twelve drives the patch.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
 #md # ```
 
 ## Each patch's implied reproduction number from the joint draws with the
-## same generation interval the zone stage fixes, so the grey reference is
-## the quantity the zone values average to.
+## same generation interval the zone stage fixes, so the patch line is close
+## to the quantity the zone values average to (the zone stage's own patch
+## trajectories, compared with these further down the page).
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [
@@ -610,25 +612,9 @@ zone_week_fig #hide
 
 zone_week_rt_fig #hide
 
-# ## Health-zone map
-#
-# Each affected health zone coloured by its current reproduction number, with the chance that number exceeds one, the seven-day confirmed-case forecast, the chance of at least a chosen number of cases, the confirmed cases to date and the zone's share of its patch's infections available from the switcher.
-# A filter shows the zones with or without a case over the past one, two or four weeks, and the reproduction number and the forecast can be read at their median or at either bound of the 90% interval.
-# A zone whose reproduction number is from its province, not modelled separately, is hatched, and a filter shows either kind alone.
-# A reproduction number whose 90% interval spans one is paler, and province outlines are drawn over the zones.
-# Hover over a zone for its estimate and 90% credible interval, click it for every number, or open the table view to sort by any column.
-# The map header gives the data cut-off and a link to download the estimates as a CSV file.
-# The map needs a browser.
-# It appears only on the documentation site.
-
-#md # ```@raw html
-#md # <p><a href="../zone_map/index.html" target="_blank" rel="noopener">Open the map in a new tab</a>.</p>
-#md # <iframe src="../zone_map/index.html" title="Health-zone map" loading="lazy" style="width:100%;height:640px;border:1px solid var(--vp-c-divider);border-radius:8px;background:var(--vp-c-bg)"></iframe>
-#md # ```
-
 # ## Saving zone assets
 #
-# The interactive map above reads the per-zone estimates written here, and the summary dashboard's health-zone table is built from them.
+# The [dashboard](@ref "Dashboard") map reads the per-zone estimates and time series written here, and the summary dashboard's health-zone table is built from them.
 # The zone forecast figure is written by the [health-zone forecasts](@ref "Health-zone forecasts") page and the frozen zone forecast and its scores by the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
 
 #md # ```@raw html
@@ -685,6 +671,27 @@ zone_estimates = DataFrame(
     as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
+## Each zone's daily reproduction number and weekly allocated confirmed
+## cases, for the dashboard map's detail column.
+_with_series(t, s) = (t[!, :series] .= s; t)
+CSV.write(
+    joinpath(dashboard_dir, "zone_timeseries.csv"),
+    vcat(
+        _with_series(
+            rt_quantile_table(
+                zone_rt_traj, zone_map_keys; cutoff = obs.cutoff,
+                n = obs.n, from = zone_inputs.t0
+            ), "rt"
+        ),
+        _with_series(
+            weekly_count_table(
+                zone_inputs.days, zone_inputs.counts, zone_map_keys;
+                cutoff = obs.cutoff, n = zone_inputs.n
+            ), "cases"
+        );
+        cols = :union
+    )
+)
 open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
     print(io, zone_headline(zone_estimates; top = 10))
 end

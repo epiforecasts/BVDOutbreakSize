@@ -64,11 +64,10 @@ Every release is signed off by a person, who cuts it with an `@release` comment 
 
 <!-- SHARED:END -->
 
-## Paper
+## Draft paper (work in progress)
 
-A short preprint describing how this work developed, the current model, its evaluation and the lessons learnt is drafted under [`paper/`](https://github.com/epiforecasts/BVDOutbreakSize/tree/main/paper).
-It is written in Quarto and pinned to a tagged release of this report, which serves as its supplement.
-Render it with `task paper` (needs [Quarto](https://quarto.org)).
+The [draft paper](https://epiforecasts.io/BVDOutbreakSize/dev/paper/) describes how this work developed, the current model, its evaluation and the lessons learnt.
+It is a work in progress, has not been peer reviewed and will change.
 
 ## Installing the package
 

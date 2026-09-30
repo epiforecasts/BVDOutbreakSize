@@ -116,7 +116,7 @@ The detail is on the [National estimates](national.md) page.
 
 ## Health zones
 
-The split of each patch's infections across its health zones, with the zone maps and the interactive map, is on the [Health zones](zone.md) page.
+The split of each patch's infections across its health zones, with the zone maps, is on the [Health zones](zone.md) page, and the interactive map is on the [Dashboard](../dashboard.md).
 The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
 
 The week-ahead forecast by health zone:

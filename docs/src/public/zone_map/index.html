@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Health-zone map</title>
+<title>Health-zone and province map</title>
 <!--
-Interactive choropleth of the health-zone estimates.
+Interactive choropleth of the health-zone and province estimates.
 
 Runtime inputs, fetched by relative URL from this directory:
   zone_estimates.csv   written by the render step (see docs/make.jl); one row
@@ -21,9 +21,28 @@ Runtime inputs, fetched by relative URL from this directory:
                         the zone carries its own transmission walk, 0 when
                         its reproduction number is its patch's scaled by a
                         level) and as_of (ISO data cut-off date)
-  health_zones.geojson copied from src/assets/health_zones.geojson by docs/make.jl
+  province_estimates.csv written by the render step; one row per province
+                        keyed as the geojson's `province` property, with its
+                        patch, pooled (1 when the patch pools several
+                        provinces, whose reproduction number and forecast
+                        are then the pool's), cases and deaths to date,
+                        R_T_median/lower/upper, p_rt_above_one,
+                        forecast_median/lower/upper and as_of
+  national_estimates.csv one row in the province CSV's columns for the
+                        country, shown in the detail column when no area is
+                        selected
+  zone_timeseries.csv,
+  province_timeseries.csv long format, one row per area, series and date:
+                        series "rt" carries the daily reproduction number's
+                        median, lower_90/upper_90 and lower_50/upper_50,
+                        series "cases" the confirmed cases (count) in the
+                        week ending on that date; zones are keyed as in the
+                        zone CSV, provinces by patch label plus "National"
+  health_zones.geojson copied from src/assets/health_zones.geojson by
+                        docs/make.jl; the province shapes are its zones
+                        dissolved by province
 
-Leaflet, and Turf for the province outlines, come from cdnjs with
+Leaflet, and Turf for the province shapes, come from cdnjs with
 subresource-integrity hashes computed from the served files (the allowlist
 pragmas keep detect-secrets from flagging them).
 Nothing else is fetched.
@@ -95,8 +114,44 @@ Nothing else is fetched.
     font: inherit; color: var(--ink-2); background: var(--panel);
     border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px;
   }
-  #stage { position: relative; flex: 1; min-height: 320px; }
+  #stage { position: relative; flex: 1; min-height: 320px; display: flex; }
+  #mapwrap { position: relative; flex: 1; min-width: 0; }
   #map { position: absolute; inset: 0; background: var(--map-bg); }
+  #detail {
+    flex: none; width: min(380px, 40%); overflow: auto; padding: 10px 14px;
+    background: var(--panel); border-left: 1px solid var(--line);
+  }
+  #detail h2 {
+    font-size: 16px; margin: 0; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px;
+  }
+  #detail h2 button { font-size: 12px; font-weight: 400; padding: 2px 8px; }
+  #detail .sub { color: var(--ink-2); font-size: 12px; margin: 2px 0 8px; }
+  #detail .hint { color: var(--ink-2); margin: 0 0 8px; }
+  #detail dl {
+    display: grid; grid-template-columns: auto 1fr; gap: 3px 10px;
+    margin: 0 0 10px; font-size: 13px;
+  }
+  #detail dt { color: var(--ink-2); }
+  #detail dd { margin: 0; font-variant-numeric: tabular-nums; }
+  #detail h3 { font-size: 13px; margin: 12px 0 2px; }
+  #detail .cap { color: var(--ink-2); font-size: 12px; margin: 0 0 4px; }
+  .chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--ink-2); font-size: 11px; }
+  .chart .axis { stroke: var(--line); }
+  .chart .ref { stroke: var(--ink-2); stroke-dasharray: 3 3; }
+  .chart .b90 { fill: var(--accent); opacity: 0.2; }
+  .chart .b50 { fill: var(--accent); opacity: 0.4; }
+  .chart .med { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+  .chart .bar { fill: var(--neutral); }
+  .chart .fc { stroke: var(--accent); stroke-width: 2; }
+  .chart .fcpt { fill: var(--accent); }
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    #stage { flex-direction: column; flex: none; }
+    #mapwrap { flex: none; height: 70vh; min-height: 320px; }
+    #detail { width: auto; border-left: none; border-top: 1px solid var(--line); }
+  }
   #status {
     position: absolute; inset: 0; display: flex; align-items: center;
     justify-content: center; text-align: center; padding: 24px;
@@ -109,6 +164,7 @@ Nothing else is fetched.
     z-index: 600; padding: 8px 12px;
   }
   #table[hidden] { display: none; }
+  .zone-only[hidden] { display: none; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -131,11 +187,10 @@ Nothing else is fetched.
     text-shadow: 0 0 2px var(--panel), 0 0 6px var(--panel);
   }
   .prov-label::before { display: none; }
-  .leaflet-tooltip.zone-tip, .leaflet-popup-content-wrapper {
+  .leaflet-tooltip.zone-tip {
     background: var(--panel); color: var(--ink); border-color: var(--line);
   }
-  .leaflet-popup-tip { background: var(--panel); }
-  .leaflet-popup-content { margin: 10px 12px; }
+  .leaflet-interactive { cursor: pointer; }
   .tip-h { font-weight: 600; }
   .tip-s { color: var(--ink-2); font-size: 12px; }
   .leaflet-control-attribution { font-size: 10px; }
@@ -143,22 +198,26 @@ Nothing else is fetched.
 </head>
 <body>
 <header>
-  <span class="title">Health-zone estimates</span>
+  <span class="title" id="title">Health-zone estimates</span>
   <span class="asof" id="asof"></span>
   <span class="links">
-    <a class="plain" href="zone_estimates.csv" download>Download CSV</a>
-    <a class="plain" href="../methods#Health-zone-model" target="_blank"
-      rel="noopener">Methods</a>
+    <a class="plain" id="csv" href="zone_estimates.csv" download>Download CSV</a>
+    <a class="plain" id="methods" href="../methods#Health-zone-model"
+      target="_blank" rel="noopener">Methods</a>
   </span>
+  <div class="switch" role="radiogroup" aria-label="Layer">
+    <label><input type="radio" name="layer" value="zone" checked><span>Health zones</span></label>
+    <label><input type="radio" name="layer" value="province"><span>Provinces</span></label>
+  </div>
   <div class="switch" role="radiogroup" aria-label="Metric">
     <label><input type="radio" name="metric" value="R_T" checked><span>Reproduction number</span></label>
     <label><input type="radio" name="metric" value="forecast"><span>7-day forecast</span></label>
     <label><input type="radio" name="metric" value="cases"><span>Cases to date</span></label>
-    <label><input type="radio" name="metric" value="share"><span>Share of patch</span></label>
-    <label><input type="radio" name="metric" value="p_ge"><span>Chance of K+ cases</span></label>
+    <label class="zone-only"><input type="radio" name="metric" value="share"><span>Share of patch</span></label>
+    <label class="zone-only"><input type="radio" name="metric" value="p_ge"><span>Chance of K+ cases</span></label>
     <label><input type="radio" name="metric" value="p_rt"><span>Chance R &gt; 1</span></label>
   </div>
-  <select class="plain" id="threshold"
+  <select class="plain zone-only" id="threshold"
     aria-label="Case threshold for the chance-of-cases metric">
     <option value="1">K = 1</option>
     <option value="5">K = 5</option>
@@ -172,17 +231,17 @@ Nothing else is fetched.
     <option value="lower">Lower 90%</option>
     <option value="upper">Upper 90%</option>
   </select>
-  <select class="plain" id="filter" aria-label="Zone filter">
+  <select class="plain zone-only" id="filter" aria-label="Zone filter">
     <option value="all">All zones</option>
     <option value="with">With cases in past N days</option>
     <option value="without">Without cases in past N days</option>
   </select>
-  <select class="plain" id="window" aria-label="Filter window">
+  <select class="plain zone-only" id="window" aria-label="Filter window">
     <option value="7">7 days</option>
     <option value="14" selected>14 days</option>
     <option value="28">28 days</option>
   </select>
-  <select class="plain" id="rsource" aria-label="Zones by how their reproduction number is estimated">
+  <select class="plain zone-only" id="rsource" aria-label="Zones by how their reproduction number is estimated">
     <option value="all">Every R</option>
     <option value="modelled">R modelled separately</option>
     <option value="province">R from its province, not modelled separately</option>
@@ -198,9 +257,12 @@ Nothing else is fetched.
   </defs>
 </svg>
 <div id="stage">
-  <div id="map" role="application" aria-label="Map of health zones"></div>
-  <div id="status">Loading the health-zone estimates.</div>
-  <aside id="table" hidden aria-label="Health-zone estimates as a table"></aside>
+  <div id="mapwrap">
+    <div id="map" role="application" aria-label="Map of health zones and provinces"></div>
+    <div id="status">Loading the estimates.</div>
+    <aside id="table" hidden aria-label="Estimates as a table"></aside>
+  </div>
+  <aside id="detail" aria-live="polite" aria-label="Detail for the selected area"></aside>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha256-XJrs/DDkVkUZ29zdzFOkGCJ9zHVo5hnpdi3c7HYJ7Uc=" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/7.4.0/turf.min.js" integrity="sha384-G+b+P1TXEQX2nQW+hvnd1dWiV2mysujghcENksJYyeXd0Z1Bp23Ac/6IRftCtdmI" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
@@ -478,7 +540,12 @@ Nothing else is fetched.
   };
   legend.addTo(map);
 
-  var byZone = {}, rows = [], layer = null, hatch = null, metric = "R_T";
+  // Per-layer rows keyed by zone or province, and the drawn layers. `rows`
+  // and `byKey` point at the shown layer's.
+  var data = { zone: { rows: [], byKey: {} }, province: { rows: [], byKey: {} } };
+  var rows = [], byKey = {}, level = "zone";
+  var layers = {}, layer = null, hatch = null, metric = "R_T";
+  var provFromZones = false;
   var bins = [];
   var threshold = "10", filterMode = "all", windowDays = "14", summary = "median";
   var rSource = "all";
@@ -500,7 +567,8 @@ Nothing else is fetched.
   function updateSummaryDisabled() {
     document.getElementById("summary").disabled = !summaryApplies();
   }
-  // Deep links: `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
+  // Deep links: `?layer=zone|province`, `?area=<zone or province key>`,
+  // `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
   // `?summary=median|lower|upper`, `?filter=all|with|without`,
   // `?window=7|14|28`, `?r=all|modelled|province` and `?table=1`.
   if (METRICS[params.get("metric")]) {
@@ -533,7 +601,7 @@ Nothing else is fetched.
   // legend and the table); zones with no CSV row at all are unaffected
   // here since featureRow() already returns null for them.
   function isHidden(r) {
-    if (!r) { return false; }
+    if (!r || level === "province") { return false; }
     if (rSource === "modelled" && levelOnly(r)) { return true; }
     if (rSource === "province" && !levelOnly(r)) { return true; }
     if (filterMode === "all") { return false; }
@@ -546,7 +614,18 @@ Nothing else is fetched.
   }
   // A zone without its own walk takes its reproduction number from its
   // province's, scaled by a level, and is hatched on every metric.
-  function levelOnly(r) { return !!r && r.walking === 0; }
+  function levelOnly(r) {
+    return level === "zone" && !!r && r.walking === 0;
+  }
+  // A province pooled with others takes the pool's reproduction number and
+  // forecast, and is hatched on those metrics.
+  function pooled(r) {
+    return level === "province" && !!r && r.pooled === 1 &&
+      metric !== "cases";
+  }
+  function pooledText(r) {
+    return "R and forecast for " + r.patch + " combined";
+  }
   var LEVEL_ONLY_TEXT = "R from its province, not modelled separately";
   var WALKING_TEXT = "R modelled separately";
   // Extra tooltip lines specific to the chance-of-cases metric.
@@ -583,11 +662,12 @@ Nothing else is fetched.
       .join("");
   }
 
-  function featureRow(f) {
+  function featureKey(f) {
     var p = f.properties || {};
-    var key = p.zone || slug(p.label || p.nom);
-    return byZone[key] || null;
+    return level === "province" ? p.province :
+      p.zone || slug(p.label || p.nom);
   }
+  function featureRow(f) { return byKey[featureKey(f)] || null; }
   function styleFor(f) {
     var r = featureRow(f);
     var b = !r ? NODATA : isHidden(r) ? HIDDEN :
@@ -599,17 +679,33 @@ Nothing else is fetched.
         METRICS.R_T.straddles(r)) {
       fill = mix(fill, cssVar("--bg"), 0.6);
     }
+    // Province fills drawn on the zones, when Turf is missing, carry no
+    // zone edges.
+    var edges = level === "zone" || !provFromZones;
+    if (selected && featureKey(f) === selected.key) {
+      return { fillColor: fill, fillOpacity: 1, color: cssVar("--ink"),
+               weight: 2.5, opacity: 1, stroke: true };
+    }
     return { fillColor: fill, fillOpacity: 1, color: cssVar("--edge"),
-             weight: 0.8, opacity: 1 };
+             weight: 0.8, opacity: 1, stroke: edges };
   }
   function hatchStyle(f) {
     var r = featureRow(f);
-    var on = levelOnly(r) && !isHidden(r) &&
+    var on = (levelOnly(r) || pooled(r)) && !isHidden(r) &&
       num(METRICS[metric].value(r));
     return { fillColor: "url(#hatch)", fillOpacity: on ? 1 : 0,
              stroke: false, interactive: false };
   }
+  function provinceTip(f) {
+    var p = f.properties || {}, r = featureRow(f);
+    var s = "<div class=\"tip-h\">" + esc(provName(p.province)) + "</div>";
+    if (!r) { return s + "<div class=\"tip-s\">No province estimate.</div>"; }
+    var note = r.pooled === 1 ?
+      "<div class=\"tip-s\">" + esc(pooledText(r)) + ".</div>" : "";
+    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>" + note;
+  }
   function tipHTML(f) {
+    if (level === "province") { return provinceTip(f); }
     var p = f.properties || {}, r = featureRow(f);
     var name = p.label || p.nom || "Unknown zone";
     var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
@@ -622,33 +718,196 @@ Nothing else is fetched.
     if (metric === "p_rt") { return s + pRtLines(r) + note; }
     return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>" + note;
   }
-  function popupHTML(f) {
-    var p = f.properties || {}, r = featureRow(f);
-    var name = p.label || p.nom || "Unknown zone";
-    var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
-      "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
-    if (!r) { return s + "<div>No confirmed cases reported.</div>"; }
-    var lines = [
-      METRICS.R_T.text(r),
-      levelOnly(r) ? LEVEL_ONLY_TEXT : WALKING_TEXT,
-      METRICS.p_rt.text(r),
-      METRICS.forecast.text(r),
-      "Chance of at least 1, 5, 10 and 20 cases in the next 7 days: " +
-        ["1", "5", "10", "20"].map(function (k) {
-          return fmtPct(r["p_ge_" + k]);
-        }).join(", "),
-      METRICS.cases.text(r),
-      "Cases in the past 7, 14 and 28 days: " +
-        ["7", "14", "28"].map(function (k) {
-          return fmt0(r["cases_last_" + k]);
-        }).join(", "),
-      r.last_case_date ? "Last case " + r.last_case_date :
-        "No dated last case",
-      METRICS.share.text(r)
+  // The detail column: the selected area's key numbers and its reproduction
+  // number and weekly cases over time, or the country's with nothing
+  // selected.
+  var selected = null, series = { zone: {}, province: {} }, national = null;
+  function interval(lo, hi, f) { return f(lo) + " to " + f(hi); }
+  function keyNumbers(r, lvl) {
+    var out = [
+      ["Reproduction number", fmt2(r.R_T_median) + " (" +
+        interval(r.R_T_lower, r.R_T_upper, fmt2) + ")"],
+      ["Chance R > 1", fmtPct(r.p_rt_above_one)],
+      ["Cases next 7 days", fmtN(r.forecast_median) + " (" +
+        interval(r.forecast_lower, r.forecast_upper, fmtN) + ")"],
+      ["Cases to date", fmt0(r.cases)],
+      ["Deaths to date", fmt0(r.deaths)]
     ];
-    return s + lines.map(function (l) {
-      return "<div>" + esc(l) + ".</div>";
+    if (lvl === "zone") {
+      out.push(
+        ["Cases past 7, 14, 28 days", ["7", "14", "28"].map(function (k) {
+          return fmt0(r["cases_last_" + k]);
+        }).join(", ")],
+        ["Last case", r.last_case_date || "–"],
+        ["Chance of 1, 5, 10, 20+ cases", ["1", "5", "10", "20"].map(function (k) {
+          return fmtPct(r["p_ge_" + k]);
+        }).join(", ")],
+        ["Share of patch", fmtPct(r.share_median) + " (" +
+          interval(r.share_lower, r.share_upper, fmtPct) + ")"],
+        ["R modelled separately", levelOnly(r) ? "no" : "yes"]
+      );
+    }
+    if (num(r.ascertainment_median)) {
+      out.push(["Ascertainment, relative to national",
+        fmt2(r.ascertainment_median) + " (" +
+          interval(r.ascertainment_lower, r.ascertainment_upper, fmt2) + ")"]);
+    }
+    return "<dl>" + out.map(function (x) {
+      return "<dt>" + esc(x[0]) + "</dt><dd>" + esc(x[1]) + "</dd>";
+    }).join("") + "</dl>";
+  }
+  function svgEl(w, h, label, body) {
+    return "<svg class=\"chart\" viewBox=\"0 0 " + w + " " + h +
+      "\" role=\"img\" aria-label=\"" + esc(label) + "\">" + body + "</svg>";
+  }
+  function dayOf(d) { return Date.parse(d + "T00:00:00Z") / 864e5; }
+  function shortDate(d) {
+    return new Date(d * 864e5).toLocaleDateString("en-GB",
+      { day: "numeric", month: "short", timeZone: "UTC" });
+  }
+  // Daily reproduction number: 90% and 50% bands, the median, and one.
+  function rtChart(pts) {
+    if (!pts || !pts.length) {
+      return "<p class=\"cap\">No reproduction number over time.</p>";
+    }
+    var W = 340, H = 150, L0 = 30, R0 = 6, T0 = 6, B0 = 20;
+    var x0 = dayOf(pts[0].date), x1 = dayOf(pts[pts.length - 1].date);
+    var top = Math.max(2, Math.ceil(Math.min(5, Math.max.apply(null,
+      pts.map(function (p) { return p.upper_90; }))) * 2) / 2);
+    function X(d) { return L0 + (W - L0 - R0) * (x1 > x0 ? (d - x0) / (x1 - x0) : 0.5); }
+    function Y(v) {
+      return T0 + (H - T0 - B0) * (1 - Math.max(0, Math.min(v, top)) / top);
+    }
+    function band(lo, hi, cls) {
+      var up = pts.map(function (p) { return X(dayOf(p.date)).toFixed(1) + "," + Y(p[hi]).toFixed(1); });
+      var dn = pts.slice().reverse().map(function (p) {
+        return X(dayOf(p.date)).toFixed(1) + "," + Y(p[lo]).toFixed(1);
+      });
+      return "<polygon class=\"" + cls + "\" points=\"" + up.concat(dn).join(" ") + "\"/>";
+    }
+    var med = pts.map(function (p) {
+      return X(dayOf(p.date)).toFixed(1) + "," + Y(p.median).toFixed(1);
+    }).join(" ");
+    var ticks = "";
+    for (var v = 0; v <= top; v += top > 3 ? 1 : 0.5) {
+      ticks += "<text x=\"" + (L0 - 4) + "\" y=\"" + (Y(v) + 4) +
+        "\" text-anchor=\"end\">" + v + "</text>";
+    }
+    var xt = [x0, (x0 + x1) / 2, x1].map(function (d, i) {
+      return "<text x=\"" + X(d) + "\" y=\"" + (H - 4) + "\" text-anchor=\"" +
+        ["start", "middle", "end"][i] + "\">" + shortDate(d) + "</text>";
     }).join("");
+    var last = pts[pts.length - 1];
+    return svgEl(W, H, "Reproduction number from " + shortDate(x0) + " to " +
+        shortDate(x1) + ", " + fmt2(last.median) + " at the end",
+      "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + L0 + "\" y1=\"" + T0 +
+        "\" y2=\"" + (H - B0) + "\"/>" +
+      band("lower_90", "upper_90", "b90") + band("lower_50", "upper_50", "b50") +
+      "<polyline class=\"med\" points=\"" + med + "\"/>" +
+      "<line class=\"ref\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
+        Y(1) + "\" y2=\"" + Y(1) + "\"/>" + ticks + xt);
+  }
+  // Weekly confirmed cases as bars, then next week's forecast as a point
+  // with its 90% interval.
+  function casesChart(weeks, r) {
+    var hasFc = r && num(r.forecast_median);
+    if ((!weeks || !weeks.length) && !hasFc) {
+      return "<p class=\"cap\">No weekly counts.</p>";
+    }
+    weeks = weeks || [];
+    var W = 340, H = 150, L0 = 30, R0 = 6, T0 = 6, B0 = 20;
+    var nb = weeks.length + (hasFc ? 1 : 0);
+    var top = Math.max(1, Math.max.apply(null, weeks.map(function (w) {
+      return w.count;
+    }).concat(hasFc ? [r.forecast_upper] : [0])));
+    var step = Math.pow(10, Math.floor(Math.log10(top * 1.05)) - 1);
+    top = Math.ceil(top * 1.05 / step) * step;
+    var bw = (W - L0 - R0) / nb;
+    function Y(v) { return T0 + (H - T0 - B0) * (1 - v / top); }
+    var bars = weeks.map(function (w, i) {
+      var y = Y(w.count);
+      return "<rect class=\"bar\" x=\"" + (L0 + i * bw + 1).toFixed(1) +
+        "\" y=\"" + y.toFixed(1) + "\" width=\"" + Math.max(bw - 2, 1).toFixed(1) +
+        "\" height=\"" + (H - B0 - y).toFixed(1) + "\"><title>" +
+        esc("Week to " + w.date + ": " + fmt0(w.count)) + "</title></rect>";
+    }).join("");
+    var fc = "";
+    if (hasFc) {
+      var cx = L0 + (nb - 0.5) * bw;
+      fc = "<line class=\"fc\" x1=\"" + cx + "\" x2=\"" + cx + "\" y1=\"" +
+        Y(r.forecast_lower) + "\" y2=\"" + Y(r.forecast_upper) + "\"/>" +
+        "<circle class=\"fcpt\" cx=\"" + cx + "\" cy=\"" + Y(r.forecast_median) +
+        "\" r=\"3.5\"><title>" + esc("Next 7 days: " + fmtN(r.forecast_median) +
+        " (90% interval " + interval(r.forecast_lower, r.forecast_upper, fmtN) +
+        ")") + "</title></circle>" +
+        "<text x=\"" + cx + "\" y=\"" + (H - 4) + "\" text-anchor=\"middle\">next</text>";
+    }
+    var xt = weeks.length ?
+      "<text x=\"" + L0 + "\" y=\"" + (H - 4) + "\" text-anchor=\"start\">" +
+        shortDate(dayOf(weeks[0].date)) + "</text>" : "";
+    var yt = [0, top / 2, top].map(function (v) {
+      return "<text x=\"" + (L0 - 4) + "\" y=\"" + (Y(v) + 4) +
+        "\" text-anchor=\"end\">" + fmt0(v) + "</text>";
+    }).join("");
+    return svgEl(W, H, "Confirmed cases per week" +
+        (hasFc ? " and next week's forecast" : ""),
+      "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
+        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fc + yt + xt);
+  }
+  function renderDetail() {
+    var d = document.getElementById("detail"), r, name, sub, ts, lvl;
+    if (selected && byKey[selected.key]) {
+      r = byKey[selected.key]; lvl = level;
+      if (lvl === "zone") {
+        name = r.label || r.zone;
+        sub = provName(r.province) + ". " +
+          (levelOnly(r) ? LEVEL_ONLY_TEXT : WALKING_TEXT) + ".";
+        ts = series.zone[r.zone];
+      } else {
+        name = provName(r.province);
+        sub = r.pooled === 1 ? pooledText(r) + "." : "";
+        ts = series.province[r.patch];
+      }
+    } else if (national) {
+      r = national; lvl = "national"; name = "National";
+      sub = "Click a zone or province for its own detail.";
+      ts = series.province.National;
+    } else {
+      d.innerHTML = "<p class=\"hint\">Click a zone or province for its detail.</p>";
+      return;
+    }
+    ts = ts || {};
+    var clear = selected ? " <button class=\"plain\" id=\"clear\">Show national</button>" : "";
+    var casesWord = lvl === "zone" ? "Confirmed cases allocated to the zone" :
+      "Confirmed cases";
+    d.innerHTML = "<h2>" + esc(name) + clear + "</h2><p class=\"sub\">" + esc(sub) +
+      "</p>" + keyNumbers(r, lvl) +
+      "<h3>Reproduction number</h3><p class=\"cap\">Median with 50% and 90% " +
+      "intervals; the dashed line is one.</p>" + rtChart(ts.rt) +
+      "<h3>Confirmed cases per week</h3><p class=\"cap\">" + casesWord +
+      " in each week to the cut-off, and the forecast for the next 7 days " +
+      "with its 90% interval.</p>" + casesChart(ts.cases, r);
+    var b = document.getElementById("clear");
+    if (b) { b.addEventListener("click", function () { select(null); }); }
+  }
+  function select(key) {
+    selected = key === null ? null : { key: key };
+    if (layer) { layer.setStyle(styleFor); }
+    renderDetail();
+  }
+  // Long time-series rows grouped by area, then by series, in date order.
+  function groupSeries(rows) {
+    var out = {};
+    rows.forEach(function (r) {
+      var a = out[r.area] = out[r.area] || { rt: [], cases: [] };
+      if (r.series === "rt" || r.series === "cases") { a[r.series].push(r); }
+    });
+    Object.keys(out).forEach(function (k) {
+      ["rt", "cases"].forEach(function (s) {
+        out[k][s].sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      });
+    });
+    return out;
   }
   function computeBins() {
     var m = METRICS[metric];
@@ -666,13 +925,18 @@ Nothing else is fetched.
     if (outline) { outline.setStyle({ color: cssVar("--ink") }); }
     var d = legend.getContainer();
     var legendText = typeof m.legend === "function" ? m.legend() : m.legend;
-    var extra = filterMode === "all" && rSource === "all" ?
-      [NODATA] : [NODATA, HIDDEN];
+    var extra = level === "province" || filterMode === "all" &&
+      rSource === "all" ? [NODATA] : [NODATA, HIDDEN];
     var notes = [];
     if (metric === "R_T") {
       notes.push("Paler: the 90% interval spans one.");
     }
-    notes.push("Hatched: " + LEVEL_ONLY_TEXT + ".");
+    var pool = rows.filter(function (r) { return r.pooled === 1; })[0];
+    if (level === "zone") {
+      notes.push("Hatched: " + LEVEL_ONLY_TEXT + ".");
+    } else if (pool && metric !== "cases") {
+      notes.push("Hatched: " + pooledText(pool) + ".");
+    }
     d.innerHTML = "<div class=\"t\">" + esc(legendText) + "</div>" +
       bins.concat(extra).map(function (b) {
         return "<div class=\"row\"><span class=\"sw\" style=\"background:" +
@@ -698,7 +962,7 @@ Nothing else is fetched.
     if (metric === "cases") {
       return [{ title: "Deaths", value: function (r) { return fmt0(r.deaths); } }];
     }
-    if (metric === "share") {
+    if (metric === "share" || level === "province") {
       return [{ title: "Patch", value: function (r) { return esc(r.patch); } }];
     }
     if (metric === "p_ge" || metric === "p_rt") {
@@ -721,21 +985,24 @@ Nothing else is fetched.
         " (" + (summary === "lower" ? "lower 90%" : "upper 90%") + ")" : "");
     // Every column shows `html` and sorts on `key`; the extra columns sort
     // on their displayed text.
-    var cols = [
+    var cols = (level === "zone" ? [
       { title: "Zone", num: false, html: function (r) { return esc(r.label || r.zone); },
-        key: function (r) { return String(r.label || r.zone); } },
+        key: function (r) { return String(r.label || r.zone); } }
+    ] : []).concat([
       { title: "Province", num: false,
         html: function (r) { return esc(provName(r.province)); },
         key: function (r) { return provName(r.province); } },
       { title: colTitle, num: true, html: function (r) { return m.fmt(m.value(r)); },
-        key: m.value },
+        key: m.value }
+    ]).concat(level === "zone" ? [
       { title: "R modelled separately", num: false,
         html: function (r) { return levelOnly(r) ? "no" : "yes"; },
         key: function (r) { return levelOnly(r) ? "no" : "yes"; } }
-    ].concat(extraCols().map(function (c) {
+    ] : []).concat(extraCols().map(function (c) {
       return { title: c.title, num: true, html: c.value, key: c.value };
     }));
-    var k = sortKey === null || sortKey >= cols.length ? 2 : sortKey;
+    var metricCol = level === "zone" ? 2 : 1;
+    var k = sortKey === null || sortKey >= cols.length ? metricCol : sortKey;
     var key = cols[k].key, dir = sortDesc ? -1 : 1;
     var sorted = visibleRows().sort(function (a, b) {
       var x = key(a), y = key(b);
@@ -796,17 +1063,17 @@ Nothing else is fetched.
   document.getElementById("toggle-table").addEventListener("click", toggleTable);
   if (params.get("table") === "1") { toggleTable(); }
 
-  // Each province's outline: its zones dissolved into one shape. The
+  // Each province as one feature: its zones dissolved into one shape. The
   // simplified zone boundaries leave slivers between neighbours, so only
   // the outer rings of the dissolved pieces larger than a hundredth of the
   // province's largest are kept.
-  function provinceOutlines(geo) {
+  function provinceShapes(geo) {
     var byProv = {};
     geo.features.forEach(function (f) {
       var prov = f.properties && f.properties.province;
       if (prov && f.geometry) { (byProv[prov] = byProv[prov] || []).push(f); }
     });
-    var rings = [];
+    var out = [];
     Object.keys(byProv).forEach(function (prov) {
       var u = byProv[prov].length === 1 ? byProv[prov][0] :
         turf.union(turf.featureCollection(byProv[prov]));
@@ -815,16 +1082,12 @@ Nothing else is fetched.
         [u.geometry.coordinates] : u.geometry.coordinates;
       var areas = polys.map(function (q) { return turf.area(turf.polygon([q[0]])); });
       var top = Math.max.apply(null, areas);
-      polys.forEach(function (q, i) {
-        if (areas[i] < top / 100) { return; }
-        rings.push(q[0].map(function (c) { return [c[1], c[0]]; }));
-      });
+      var keep = polys.filter(function (q, i) { return areas[i] >= top / 100; })
+        .map(function (q) { return [q[0]]; });
+      out.push({ type: "Feature", properties: { province: prov },
+                 geometry: { type: "MultiPolygon", coordinates: keep } });
     });
-    return L.polygon(rings, {
-      color: cssVar("--ink"), weight: 1.8, opacity: 0.85, fill: false,
-      interactive: false, className: "prov-outline", pane: "outline",
-      renderer: L.svg({ pane: "outline" })
-    });
+    return { type: "FeatureCollection", features: out };
   }
   var outline = null;
   function labelProvinces(geo) {
@@ -844,52 +1107,114 @@ Nothing else is fetched.
     });
   }
 
-  function draw(geo) {
-    computeBins();
-    layer = L.geoJSON(geo, {
+  // The fill and hatch layers of one level's shapes, not yet on the map.
+  function buildLayers(geo) {
+    var fill = L.geoJSON(geo, {
       style: styleFor,
       onEachFeature: function (f, l) {
         l.bindTooltip(function () { return tipHTML(f); },
           { sticky: true, className: "zone-tip", opacity: 1 });
-        l.bindPopup(function () { return popupHTML(f); });
+        l.on("click", function () { select(featureKey(f)); });
         l.on({
           mouseover: function () {
-            l.setStyle({ weight: 2, color: "#333" });
+            l.setStyle({ weight: 2, color: "#333", stroke: true });
             l.bringToFront();
           },
-          mouseout: function () { layer.resetStyle(l); }
+          mouseout: function () { fill.resetStyle(l); }
         });
       }
-    }).addTo(map);
-    // The hatching sits in its own pane above the zones and passes the
-    // pointer through, so hover and click still reach the zone beneath.
+    });
+    var hatched = L.geoJSON(geo, {
+      style: hatchStyle, interactive: false, pane: "hatch",
+      renderer: L.svg({ pane: "hatch" })
+    });
+    return { fill: fill, hatch: hatched };
+  }
+  function showLevel() {
+    var d = data[level], other = layers[level === "zone" ? "province" : "zone"];
+    rows = d.rows; byKey = d.byKey;
+    // The two layers' tables have different columns.
+    sortKey = null; sortDesc = true;
+    if (other) { map.removeLayer(other.fill); map.removeLayer(other.hatch); }
+    layer = layers[level].fill; hatch = layers[level].hatch;
+    layer.addTo(map); hatch.addTo(map);
+    document.querySelectorAll(".zone-only").forEach(function (el) {
+      el.hidden = level === "province";
+    });
+    if (level === "province" && (metric === "share" || metric === "p_ge")) {
+      metric = "R_T";
+      document.querySelector("input[name=metric][value=R_T]").checked = true;
+      updateSummaryDisabled();
+    }
+    var zone = level === "zone";
+    document.getElementById("title").textContent = zone ?
+      "Health-zone estimates" : "Province estimates";
+    document.getElementById("csv").href = zone ?
+      "zone_estimates.csv" : "province_estimates.csv";
+    document.getElementById("methods").href = "../methods#" +
+      (zone ? "Health-zone-model" : "Joint-model");
+    showAsOf();
+    selected = null;
+    recolour();
+    renderDetail();
+    if (rows.length) { status.hidden = true; return; }
+    say(zone ?
+      "This build carries no health-zone estimates, so the map shows " +
+        "the zone boundaries only." :
+      "This build carries no province estimates, so the map shows " +
+        "the province boundaries only.");
+    setTimeout(function () { status.hidden = true; }, 3000);
+  }
+
+  function draw(geo) {
+    // The hatching sits in its own pane above the fills and passes the
+    // pointer through, so hover and click still reach the shape beneath.
     var pane = map.createPane("hatch");
     pane.style.zIndex = 450;
     pane.style.pointerEvents = "none";
-    hatch = L.geoJSON(geo, {
-      style: hatchStyle, interactive: false, pane: "hatch",
-      renderer: L.svg({ pane: "hatch" })
-    }).addTo(map);
     var opane = map.createPane("outline");
     opane.style.zIndex = 460;
     opane.style.pointerEvents = "none";
-    // The outlines are an overlay only: without Turf the zones still draw.
+    layers.zone = buildLayers(geo);
+    // Without Turf the province layer fills each zone with its province's
+    // value and draws no outlines.
+    var shapes = null;
     try {
-      if (typeof turf !== "undefined") {
-        outline = provinceOutlines(geo).addTo(map);
-      }
-    } catch (e) { outline = null; }
-    map.fitBounds(layer.getBounds(), { padding: [10, 10] });
+      if (typeof turf !== "undefined") { shapes = provinceShapes(geo); }
+    } catch (e) { shapes = null; }
+    provFromZones = !shapes;
+    layers.province = buildLayers(shapes || geo);
+    if (shapes) {
+      outline = L.geoJSON(shapes, {
+        style: { color: cssVar("--ink"), weight: 1.8, opacity: 0.85,
+                 fill: false },
+        interactive: false, className: "prov-outline", pane: "outline",
+        renderer: L.svg({ pane: "outline" })
+      }).addTo(map);
+    }
+    map.fitBounds(layers.zone.fill.getBounds(), { padding: [10, 10] });
     labelProvinces(geo);
-    recolour();
+    showLevel();
+    var area = params.get("area");
+    if (area && byKey[area]) { select(area); }
+  }
+  document.querySelectorAll("input[name=layer]").forEach(function (el) {
+    el.addEventListener("change", function () {
+      level = el.value;
+      if (layers.zone) { showLevel(); }
+    });
+  });
+  if (params.get("layer") === "province") {
+    level = "province";
+    document.querySelector("input[name=layer][value=province]").checked = true;
   }
 
   // The data cut-off, from the first row, in the site's date style.
   function showAsOf() {
-    var d = rows.length && rows[0].as_of;
-    if (!d) { return; }
+    var d = rows.length && rows[0].as_of, el = document.getElementById("asof");
+    if (!d) { el.textContent = ""; return; }
     var t = new Date(d + "T00:00:00Z");
-    document.getElementById("asof").textContent = "Data as of " +
+    el.textContent = "Data as of " +
       (isNaN(t) ? d : t.toLocaleDateString("en-GB", {
         day: "numeric", month: "long", year: "numeric", timeZone: "UTC"
       })) + ".";
@@ -900,19 +1225,25 @@ Nothing else is fetched.
       return r.text();
     });
   }
+  function fetchRows(url) {
+    return fetchText(url).then(parseCSV).catch(function () { return []; });
+  }
   Promise.all([
     fetchText("health_zones.geojson").then(JSON.parse),
-    fetchText("zone_estimates.csv").then(parseCSV).catch(function () { return null; })
+    fetchRows("zone_estimates.csv"),
+    fetchRows("province_estimates.csv"),
+    fetchRows("national_estimates.csv"),
+    fetchRows("zone_timeseries.csv"),
+    fetchRows("province_timeseries.csv")
   ]).then(function (res) {
-    var geo = res[0];
-    rows = res[1] || [];
-    rows.forEach(function (r) { byZone[r.zone] = r; });
-    showAsOf();
-    draw(geo);
-    if (rows.length) { status.hidden = true; return; }
-    say("This build carries no health-zone estimates, so the map shows " +
-        "the zone boundaries only.");
-    setTimeout(function () { status.hidden = true; }, 3000);
+    [["zone", res[1]], ["province", res[2]]].forEach(function (x) {
+      data[x[0]].rows = x[1];
+      x[1].forEach(function (r) { data[x[0]].byKey[r[x[0]]] = r; });
+    });
+    national = res[3][0] || null;
+    series.zone = groupSeries(res[4]);
+    series.province = groupSeries(res[5]);
+    draw(res[0]);
   }).catch(function (e) {
     say("The map could not be drawn: " + e.message);
   });

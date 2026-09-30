@@ -4544,10 +4544,11 @@ function _zone_selection(score, zone_patch, top::Integer)
     return sort(sel; by = key)
 end
 
-## Legend swatches for the patches that appear in `patches`, in patch order.
+## Legend swatches for the patches that appear in `patches`, in patch order,
+## each label followed by `suffix`.
 function _patch_legend!(
         fig, pos, patches, patch_labels, patch_colours;
-        extra = ()
+        extra = (), suffix::AbstractString = ""
     )
     ps = sort(unique(patches))
     elems = Any[
@@ -4558,7 +4559,7 @@ function _patch_legend!(
             )
         ) for p in ps
     ]
-    labels = Any[String(patch_labels[p]) for p in ps]
+    labels = Any[String(patch_labels[p]) * suffix for p in ps]
     for (e, l) in extra
         push!(elems, e)
         push!(labels, l)
@@ -4582,11 +4583,12 @@ patch the zone belongs to.
 
 Every panel draws 30/60/90% credible ribbons on a shared y-axis.
 `patch_rt[p]`, when given, is the patch's own trajectory, drawn behind each
-of its zones in grey with its median as a line. `reference_rt[z]`, when
-given, is another fit's trajectory for the same zone, drawn behind it as a
-dashed grey median with its 90% band. The days are placed by `dates` (one
-per column) or by `as_of_date`, the date the series ends on. That date is
-marked.
+of its zones as grey bands with its median as a dark line, and the legend
+then names the coloured swatches as each patch's zones.
+`reference_rt[z]`, when given, is another fit's trajectory for the same
+zone, drawn behind it as a dashed grey median with its 90% band. The days
+are placed by `dates` (one per column) or by `as_of_date`, the date the
+series ends on. That date is marked.
 """
 function plot_rt_zones(
         rt_draws::AbstractVector{<:AbstractMatrix},
@@ -4677,7 +4679,10 @@ function plot_rt_zones(
     end
     extra = Any[]
     pbands === nothing ||
-        push!(extra, (CairoMakie.LineElement(; color = patch_colour), "Patch"))
+        push!(
+        extra,
+        (CairoMakie.LineElement(; color = patch_colour), "Whole patch")
+    )
     reference_rt === nothing ||
         push!(
         extra,
@@ -4688,15 +4693,16 @@ function plot_rt_zones(
     )
     _patch_legend!(
         fig, (nr + 1, 1:nc), zone_patch[sel], patch_labels,
-        patch_colours; extra
+        patch_colours; extra, suffix = pbands === nothing ? "" : " zones"
     )
-    caption = "Bands are 30/60/90% credible intervals in the colour of " *
-        "the zone's patch."
+    caption = "Coloured bands are the zone's reproduction number, " *
+        "30/60/90% credible intervals in the colour of its patch."
     pbands === nothing ||
         (
-        caption *= " The grey band and solid line are the patch's own " *
-            "reproduction number, the same behind every zone of " *
-            "that patch."
+        caption *= " The dark line and grey band are the whole patch's " *
+            "reproduction number, the same behind every zone of that " *
+            "patch. It averages all the patch's zones, including those " *
+            "not shown, weighted by their recent infections."
     )
     reference_rt === nothing ||
         (

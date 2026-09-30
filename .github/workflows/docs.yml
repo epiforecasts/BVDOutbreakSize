@@ -61,10 +61,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The merge commit's first parent is the base, which the action
-          # diffs against, so the full history is needed rather than a
-          # single-commit checkout.
-          fetch-depth: 0
+          # The action diffs the merge commit against its first parent, the
+          # base, so it needs those two commits and none of the other
+          # branches and tags a full-history fetch brings.
+          fetch-depth: 2
       - id: filter
         uses: ./.github/actions/changed-paths
         with:
@@ -1098,6 +1098,19 @@ jobs:
           pattern: render-*
           merge-multiple: true
           path: .
+      # The preprint is served at /paper/: files under docs/src/public/ are
+      # copied as they are, so it is in neither the nav, the sidebar nor the
+      # local search. The README and the About page link to it.
+      # This is `task paper-site`, which this job has no Task to run.
+      - uses: quarto-dev/quarto-actions/setup@v2
+      - name: Render the paper
+        run: |
+          cd paper
+          quarto render main.qmd --to html -M embed-resources:true
+          quarto render si.qmd --to html -M embed-resources:true
+          mkdir -p ../docs/src/public/paper
+          mv main.html ../docs/src/public/paper/index.html
+          mv si.html ../docs/src/public/paper/si.html
       - name: Assemble and deploy the Vitepress site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

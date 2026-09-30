@@ -2433,6 +2433,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
+# Over the forecast week the mean import log odds $\bar o_{p,t}$ are the joint model's forecast arrivals against its forecast infections, and the arrival shares $s_{pq,t}$ follow its mean forecast infections, so each draw's import fraction $f_{p,t}$ runs on with its forecast trajectories.
 # The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the share renewal of Equation (58) runs on to the end of the week.
 # Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
 #
