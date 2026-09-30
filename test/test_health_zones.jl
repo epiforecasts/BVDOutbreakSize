@@ -95,7 +95,7 @@ end
 @testitem "health-zone map carries every zone and stays small" begin
     using BVDOutbreakSize: load_health_zones
 
-    path = joinpath(@__DIR__, "..", "data", "health_zones.geojson")
+    path = joinpath(@__DIR__, "..", "src", "assets", "health_zones.geojson")
     @test filesize(path) < 1_500_000
     text = read(path, String)
     rows = load_health_zones()

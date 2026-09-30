@@ -16,7 +16,7 @@ Manifest-v*.toml
 /docs/src/estimates/zone.md
 /docs/src/forecasts/
 /docs/src/evaluation/
-/docs/src/sensitivity.md
+/docs/src/comparisons.md
 /docs/src/analysis.md
 /docs/src/province.md
 /docs/src/forecast.md
@@ -76,6 +76,7 @@ logs/
 /docs/src/public/zone_map/zone_estimates.csv
 /docs/src/public/zone_map/health_zones.geojson
 !/docs/src/public/zone_map/index.html
+/docs/src/public/paper/
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log
@@ -83,3 +84,12 @@ logs/
 
 # Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
 /worktrees/
+
+# Rendered preprint outputs; the sources under paper/ are what is tracked.
+/paper/*.pdf
+/paper/*.tex
+/paper/main_files/
+/paper/si_files/
+
+# Task checksum cache
+/.task/

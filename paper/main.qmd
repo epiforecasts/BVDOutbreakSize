@@ -1,0 +1,48 @@
+---
+title: "Real-time joint estimation of the size of the 2026 Bundibugyo virus outbreak in the Democratic Republic of the Congo"
+metadata-files:
+  - _authors.yml
+  - generated/numbers.yml
+date: today
+format:
+  html:
+    toc: false
+    number-sections: false
+    include-in-header:
+      text: <meta name="robots" content="noindex">
+  pdf:
+    number-sections: false
+bibliography: reference.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/plos.csl
+filters:
+  - authors-block
+abstract: |
+  An outbreak of Ebola disease caused by Bundibugyo virus is ongoing in the Democratic Republic of the Congo, with exported cases in Uganda.
+  Most infections are unreported, so the current size of the outbreak has to be inferred from the surveillance counts that are published.
+  Published estimates use a subset of those counts under fixed delay, doubling-time and case-fatality assumptions.
+  We instead fit every count the national situation reports publish in one posterior, refitted and released with each data update.
+  One latent infection process by province, staged through explicit delays and stream-specific ascertainment, generates every stream.
+  We evaluate each release by one-week-ahead forecasts scored against the data that arrive next and against a persistence baseline, by fits to single streams, and against the published estimates.
+  Language-model agents drafted the model, its priors and the analysis under our direction, with each modelling decision taken by us.
+  We read the development record to ask which events changed the estimates and forecasts and how each was found.
+  At the release analysed the joint model estimates an outbreak larger than the confirmed count with the reproduction number near one, and its estimate sits below every estimate that the single streams imply on their own.
+  Its forecasts beat persistence at most releases only for the onset curve, and its interval on size is no narrower than the priors on ascertainment and delays that the data do not move.
+  In the record most model changes came from a person, most implementation defects were found and fixed by the agents, and the prospective evaluation caught defects that neither did.
+  A joint estimate from published reports alone is feasible in real time and makes the agreement and conflict between surveillance streams explicit.
+---
+
+<!-- Sections are drafted in paper/sections/ and included here. The plan this draft follows is paper/main.qmd on the preprint branch (PR "paper: preprint scaffold and paragraph-level plan"). -->
+
+{{< include sections/introduction.qmd >}}
+
+{{< include sections/methods.qmd >}}
+
+{{< include sections/tables.qmd >}}
+
+{{< include sections/results.qmd >}}
+
+{{< include sections/discussion.qmd >}}
+
+{{< include sections/appendices.qmd >}}
+
+# References {.unnumbered}
