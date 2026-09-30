@@ -160,3 +160,71 @@ end
     )
     @test isequal(from_chn, est)
 end
+
+@testitem "province_map_estimates adds ascertainment when given" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    d = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    kw = (;
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"]),
+    )
+    est = province_map_estimates(d, d; ascertainment = d, kw...)
+    @test est.ascertainment_median ≈ [1.0, 2.0, 2.0]
+    @test est.ascertainment_lower ≈ [0.55, 2.0, 2.0]
+    @test est.ascertainment_upper ≈ [1.45, 2.0, 2.0]
+    @test !(
+        :ascertainment_median in propertynames(
+            province_map_estimates(d, d; kw...)
+        )
+    )
+end
+
+@testitem "rt_quantile_table gives daily quantiles in long format" begin
+    using BVDOutbreakSize: rt_quantile_table
+    using Dates: Date
+    ## Two areas over four days, 101 draws each. The second is unreported
+    ## (NaN) before day 3, and neither is written before `from`.
+    a = repeat(collect(0.0:0.01:1.0), 1, 4) .+ [0 1 2 3]
+    b = copy(a)
+    b[:, 1:2] .= NaN
+    t = rt_quantile_table(
+        [a, b], ["A", "B"]; cutoff = Date(2026, 9, 4), n = 4, from = 2
+    )
+    @test t.area == ["A", "A", "A", "B", "B"]
+    @test t.date == Date.(
+        [
+            "2026-09-02", "2026-09-03", "2026-09-04",
+            "2026-09-03", "2026-09-04",
+        ]
+    )
+    @test t.median ≈ [1.5, 2.5, 3.5, 2.5, 3.5]
+    @test t.lower_90 ≈ [1.05, 2.05, 3.05, 2.05, 3.05]
+    @test t.upper_90 ≈ [1.95, 2.95, 3.95, 2.95, 3.95]
+    @test t.lower_50 ≈ [1.25, 2.25, 3.25, 2.25, 3.25]
+    @test t.upper_50 ≈ [1.75, 2.75, 3.75, 2.75, 3.75]
+end
+
+@testitem "weekly_count_table sums increments into weeks ending at the cut-off" begin
+    using BVDOutbreakSize: weekly_count_table
+    using Dates: Date
+    ## Vintages on days 2, 9, 10, 16 and 20 of a 20-day grid. Weeks end on
+    ## days 20, 13 and 6; the week (−1, 6] starts before the first vintage,
+    ## whose increment lumps in everything before it, so it is left out.
+    days = [2, 9, 10, 16, 20]
+    inc = [5 1 2 3 4; 0 0 1 0 0]
+    t = weekly_count_table(
+        days, inc, ["A", "B"]; cutoff = Date(2026, 9, 20), n = 20,
+        weeks = 3
+    )
+    @test t.area == ["A", "A", "B", "B"]
+    @test t.date == Date.(
+        [
+            "2026-09-13", "2026-09-20",
+            "2026-09-13", "2026-09-20",
+        ]
+    )
+    @test t.count == [3, 7, 1, 0]
+end
