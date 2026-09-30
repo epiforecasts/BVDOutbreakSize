@@ -540,6 +540,61 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Markdown table of the `top` health zones with the most confirmed cases over
+the past two weeks, for the summary dashboard, followed by a sentence giving
+how many were chosen from how many.
+
+`estimates` is the frame the health-zone page writes to
+`zone_estimates.csv`. Zones with no case over the two weeks are left out and
+ties are broken by the cases to date. Ranges are equal-tailed 90% intervals.
+
+# Examples
+
+```julia
+est = CSV.read("docs/src/summary_assets/zone_estimates.csv", DataFrame)
+print(zone_headline(est; top = 5))
+```
+"""
+function zone_headline(estimates::DataFrame; top::Integer)
+    nz = nrow(estimates)
+    active = findall(>(0), estimates.cases_last_14)
+    isempty(active) && return "No zone has had a confirmed case over the " *
+        "past two weeks.\n"
+    order = sort(
+        active;
+        by = z -> (estimates.cases_last_14[z], estimates.cases[z]), rev = true
+    )
+    rows = estimates[first(order, top), :]
+    df = DataFrame(
+        "Zone" => rows.label,
+        "Province" => rows.patch,
+        "Cases, past two weeks" => rows.cases_last_14,
+        "Cases to date" => rows.cases,
+        "Share of province infections (%)" => _bounds_text.(
+            100 .* rows.share_lower, 100 .* rows.share_upper; digits = 0
+        ),
+        "R at the cut-off" => [
+            ismissing(lo) ? "-" : _bounds_text(lo, hi)
+                for (lo, hi) in zip(rows.R_T_lower, rows.R_T_upper)
+        ],
+        "P(R > 1)" => [
+            ismissing(p) ? "-" : _probability_text(p)
+                for p in rows.p_rt_above_one
+        ],
+        "Confirmed cases, next week" => _bounds_text.(
+            rows.forecast_lower, rows.forecast_upper; digits = 0
+        ),
+        "R modelled separately" => [w == 1 ? "yes" : "no" for w in rows.walking]
+    )
+    shown = nrow(df) == 1 ? "The zone" : "The $(nrow(df)) zones"
+    return markdown_table(df) * "\n" *
+        "$(shown) with the most confirmed cases over the past two weeks, " *
+        "of the $(length(active)) of $(nz) with a case in that time.\n"
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Per-zone new confirmed cases over the forecast horizon from the zone
 forecast draws `fc` ([`zone_forecast`](@ref)), as the median and the
 90/60/30% intervals the other forecast tables report, then the probability

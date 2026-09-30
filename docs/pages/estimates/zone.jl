@@ -612,7 +612,7 @@ zone_week_rt_fig #hide
 
 # ## Saving zone assets
 #
-# The [dashboard](@ref "Dashboard") map reads the per-zone estimates written here.
+# The [dashboard](@ref "Dashboard") map reads the per-zone estimates written here, and the summary dashboard's health-zone table is built from them.
 # The zone forecast figure is written by the [health-zone forecasts](@ref "Health-zone forecasts") page and the frozen zone forecast and its scores by the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
 
 #md # ```@raw html
@@ -669,6 +669,9 @@ zone_estimates = DataFrame(
     as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
+open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
+    print(io, zone_headline(zone_estimates; top = 10))
+end
 ## The same frame into the release outputs.
 output_dir = get(
     ENV, "BVD_OUTPUT_DIR",
