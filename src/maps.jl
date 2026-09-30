@@ -487,7 +487,8 @@ end
 ## Province maps: each patch's value drawn on every health zone of the
 ## provinces it pools, with the province names in place of zone labels.
 
-export province_map_summary, province_zone_values, plot_province_map
+export province_map_summary, province_zone_values, plot_province_map,
+    province_map_estimates
 
 """
 $(TYPEDSIGNATURES)
@@ -558,6 +559,48 @@ function province_zone_values(
     lower === nothing || (out = merge(out, (; lower = lower[patch])))
     upper === nothing || (out = merge(out, (; upper = upper[patch])))
     return out
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The province estimates the interactive map reads, one row per source
+province in `members` (patches in `patch_names` order), keyed as the
+geojson's `province` property. `rt` and `forecast` hold one draw vector per
+patch of the reproduction number at the cut-off and of the confirmed cases
+over the coming week. Each province carries its patch's median, `level`
+interval and, for the reproduction number, the chance it exceeds one;
+`pooled` is 1 when its patch pools several provinces. `cases` and `deaths`
+are the province's own last cumulative counts in `confirmed_history` and
+`death_history`, `missing` when it has none, and `as_of` is `cutoff`.
+"""
+function province_map_estimates(
+        rt::AbstractVector{<:AbstractVector},
+        forecast::AbstractVector{<:AbstractVector};
+        confirmed_history::AbstractDict, death_history::AbstractDict,
+        cutoff::Date, patch_names::AbstractVector = PROVINCE_NAMES,
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        members::AbstractDict = PROVINCE_MEMBERS, level::Real = 0.9
+    )
+    r = province_map_summary(rt; level)
+    f = province_map_summary(forecast; level)
+    last_count(h, prov) = haskey(h, prov) && !isempty(h[prov].counts) ?
+        h[prov].counts[end] : missing
+    rows = [
+        (;
+            province = prov, patch = patch_labels[p],
+            pooled = Int(length(members[name]) > 1),
+            cases = last_count(confirmed_history, prov),
+            deaths = last_count(death_history, prov),
+            R_T_median = r.values[p], R_T_lower = r.lower[p],
+            R_T_upper = r.upper[p],
+            p_rt_above_one = mean(rt[p] .> 1),
+            forecast_median = f.values[p], forecast_lower = f.lower[p],
+            forecast_upper = f.upper[p], as_of = string(cutoff),
+        )
+            for (p, name) in enumerate(patch_names) for prov in members[name]
+    ]
+    return DataFrame(rows)
 end
 
 ## Label position of each province in `geo`: the area-weighted mean of its
