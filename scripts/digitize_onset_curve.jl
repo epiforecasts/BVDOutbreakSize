@@ -46,7 +46,11 @@
 #     interior column when none do (a 3-4 px bar has one saturated column
 #     and one or two washed ones that read low). Half a pixel of
 #     outline is subtracted before dividing by pixels-per-count. The dead
-#     segment is the count of crimson pixels in the chosen column.
+#     segment is the count of crimson pixels in the chosen column. A column
+#     under the red dashed first-positive-result line (evenly spaced
+#     crimson dashes above its run) is read to its highest dark pixel
+#     instead, never above its run, with the dead segment the crimson run
+#     below that.
 #
 # The Python port (scripts/digitize_onset_curve.py) must match every step
 # above pixel for pixel: the same pixel classes (page, neutral, light,
@@ -543,6 +547,69 @@ function tick_chain(xt)
     return ks, xs
 end
 
+# Columns under the red dashed first-positive-result line: at least twelve
+# crimson dashes above the column's run, evenly spaced, with white page in
+# at least half of the gaps between them (the pink band's text and edge
+# have none).
+function dash_columns(crimson, white, hp, y0)
+    W = size(crimson, 2)
+    out = falses(W)
+    for x in 1:W
+        starts = Int[]
+        gapwhite = Bool[]
+        run = 0
+        seen = false
+        for r in 1:(y0 - hp[x] - 2)
+            if crimson[r, x]
+                run += 1
+            else
+                if run >= 2
+                    push!(starts, r - run)
+                    push!(gapwhite, seen)
+                    seen = false
+                end
+                run = 0
+                white[r, x] && (seen = true)
+            end
+        end
+        length(starts) >= 12 || continue
+        d = diff(starts)
+        md = median(d)
+        out[x] = count(v -> abs(v - md) <= 2, d) >= 0.8 * length(d) &&
+            2 * count(gapwhite[2:end]) >= length(d)
+    end
+    return out
+end
+
+# A bar read through a dash column: the run walked as `column_runs` walks
+# it, with the height taken to its highest dark pixel (the bar's outline,
+# which the dash's red never is) and the dead segment to the crimson run
+# down from there. Returns `(0, 0)` when the run has no dark pixel.
+function dash_bar(page, neutral, darkpx, crimson, y0, x, gridrows; gap = 3)
+    isgrid(r) = any(g -> abs(r - g) <= 1, gridrows)
+    top = 0
+    miss = 0
+    r = y0 - 1
+    while r >= 1
+        if !page[r, x] && !(isgrid(r) && neutral[r, x])
+            miss = 0
+            darkpx[r, x] && (top = r)
+        else
+            miss += 1
+            miss > gap && break
+        end
+        r -= 1
+    end
+    top == 0 && return 0, 0
+    n = 0
+    r = top
+    while r < y0 && crimson[r, x]
+        n += 1
+        r += 1
+    end
+    return y0 - top, n
+end
+
 # The value of `h` over `cols` that most columns agree with to within a
 # pixel, and how many do; ties go to the value nearest `cx` by column.
 function modal_height(h, cols, cx)
@@ -644,6 +711,19 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h) .| (nb .>= 3))
     soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
     nz = findall((h .> 2) .& .!isborder)
+    # a column under the dashed line reads its bar from the outline; the
+    # dash can only have added height. An outline read under two counts is
+    # taken as the dash's own edge and the run is kept, so a real bar of one
+    # count under the line keeps its dash-inflated height
+    white = (min.(R, G, B) .>= 228) .& (max.(R, G, B) .- min.(R, G, B) .<= 25)
+    hread = copy(h)
+    nread = copy(nr)
+    for x in findall(dash_columns(crimson, white, hp, y0))
+        hd, nd_x = dash_bar(page, neutral, darkpx, crimson, y0, x, yt)
+        hd > 2 * ppc || continue
+        hread[x] = min(hd, h[x])
+        nread[x] = min(nd_x, hread[x])
+    end
     barmin, barmax = minimum(nz), maximum(nz)
     rows = Tuple{Date, Int, Int}[]
     for off in (7 * ks[1] - 7):3
@@ -683,7 +763,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         # washed fill on a tick column can read as gridline and break each run
         # at a different row; a day that reads as neither empty nor a bar is
         # read again without the skip
-        bar = bar_height(h, hp, nr, cols, cx, ppc)
+        bar = bar_height(hread, hp, nread, cols, cx, ppc)
         bar === nothing && (bar = bar_height(h1, hp1, nr1, cols, cx, ppc))
         bar isa Tuple || continue
         hb, hr = bar
