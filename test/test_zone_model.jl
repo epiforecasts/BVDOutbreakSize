@@ -1330,24 +1330,24 @@ end
         return (; within, between)
     end
     ## Unit decay and no destination weight recover the fixed blocks.
-    b1 = zone_mixing_blocks(mix, 1.0, zeros(nz))
+    b1 = zone_mixing_blocks(mix, 1.0, ones(nz))
     @test b1.within ≈ mix.within rtol = 1.0e-12
     @test b1.between ≈ mix.between rtol = 1.0e-12
     @test b1.within ≈ reference(1.0).within rtol = 1.0e-12
     @test b1.between ≈ reference(1.0).between rtol = 1.0e-12
     ## Another decay is the gravity pull at that decay.
-    @test zone_mixing_blocks(mix, 2.5, zeros(nz)).within ≈
+    @test zone_mixing_blocks(mix, 2.5, ones(nz)).within ≈
         reference(2.5).within rtol = 1.0e-12
     ## A weight shared within a patch cancels.
     ω_flat = [fill(0.7, 5); fill(-0.7, 3)]
-    @test zone_mixing_blocks(mix, 1.0, ω_flat).within ≈ mix.within
-    @test zone_mixing_blocks(mix, 1.0, ω_flat).between ≈ mix.between
+    @test zone_mixing_blocks(mix, 1.0, exp.(ω_flat)).within ≈ mix.within
+    @test zone_mixing_blocks(mix, 1.0, exp.(ω_flat)).between ≈ mix.between
     ## At any decay and weight the within block stays column-stochastic in
     ## the origin's patch and the between block's column over a destination
     ## patch is still the parent's flow; only the split moves.
     ω = [1.2, -0.4, 0.3, -0.9, -0.2, 0.8, -1.1, 0.3]
     for γ in (0.05, 0.6, 4.0)
-        b = zone_mixing_blocks(mix, γ, ω)
+        b = zone_mixing_blocks(mix, γ, exp.(ω))
         for q in 1:nz, p in 1:2
 
             zs = findall(==(p), poz)
@@ -1387,7 +1387,7 @@ end
     end
     states = _zone_states(chn, inputs)
     for (i, st) in enumerate(states)
-        b = zone_mixing_blocks(mix, γs[i], ωs[i])
+        b = zone_mixing_blocks(mix, γs[i], exp.(ωs[i]))
         @test st.def.mixing.within ≈ b.within
         @test st.def.mixing.between ≈ b.between
     end

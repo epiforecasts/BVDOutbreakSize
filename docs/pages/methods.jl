@@ -2161,7 +2161,17 @@ cfr_prior_fig #hide
 #
 # Infections cross zone boundaries as they cross provincial ones in Equation (18), through a gravity kernel at a per-origin intensity.
 # The kernel is decomposed so that the movement the joint model already estimated is not estimated again.
-# Both blocks are normalisations of one gravity pull $\mathrm{pull}_{zq} = N_z\, d_{zq}^{-1}$ over all zones, the same form as Equation (14) and the coupling of [xia2004](@citet):
+# Both blocks are normalisations of one gravity pull over all zones, the form of Equation (14) and the coupling of [xia2004](@citet) with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
+#
+# ```math
+# \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 0.5), \qquad
+# \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
+# \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
+# ```
+#
+# with $Q_p$ the sum-to-zero basis over patch $p$'s zones and $\mathbf{z}^\omega_p \sim \mathrm{Normal}(0, I)$.
+# The blocks are
 #
 # ```math
 # K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
@@ -2172,6 +2182,7 @@ cfr_prior_fig #hide
 #
 # the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
 # Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
+# So $\gamma$ and $\omega$ move where an origin's flow into a patch lands among its zones, not how much reaches the patch.
 #
 # Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:
@@ -2297,7 +2308,7 @@ cfr_prior_fig #hide
 # The weekly patch infections and the per-origin intensities are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
 # The import fraction follows from them through the arrivals formula, which leaves out the joint model's change in intensity at detection.
 # Straight-line distance stands for the roads, the lake and the international border that carry movement.
-# We assume the gravity form carries movement between zones as it does between provinces, with no mobility data to check it against.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, carries movement between zones, with no mobility data to check it against.
 # The increments are consecutive-vintage differences clamped at zero.
 # The walking set depends on the data and can differ between fits at different cut-offs.
 # A revision can move counts out of named zones.
