@@ -123,16 +123,18 @@ zone_map_fig = plot_zone_map_panels(
 
 zone_map_fig #hide
 
-# The panels below trace the reproduction number of the twelve zones with most confirmed cases, each against its patch's own implied reproduction number in grey.
-# Where a zone's line departs from the grey patch line, the gap is the zone's fitted deviation from its patch.
+# The panels below trace the reproduction number of the twelve zones with most confirmed cases as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
+# Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
+# The patch line averages all the patch's zones weighted by their recent infections, so it can sit above or below every zone shown when a zone outside the twelve drives the patch.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
 #md # ```
 
 ## Each patch's implied reproduction number from the joint draws with the
-## same generation interval the zone stage fixes, so the grey reference is
-## the quantity the zone values average to.
+## same generation interval the zone stage fixes, so the patch line is close
+## to the quantity the zone values average to (the zone stage's own patch
+## trajectories, compared with these further down the page).
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [
