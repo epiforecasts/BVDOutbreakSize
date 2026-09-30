@@ -176,7 +176,7 @@ jobs:
           BANNER=""
           case "$VERDICT" in
             failure)
-              BANNER="> **The fits behind this release did not converge.** The convergence check on the last \`main\` build failed, so the estimates published here should be read with that in mind. The per-parameter diagnostics are on the sensitivity page."
+              BANNER="> **The fits behind this release did not converge.** The convergence check on the last \`main\` build failed, so the estimates published here should be read with that in mind. The per-parameter diagnostics are on the in-sample checks page."
               ;;
             cancelled|timed_out)
               BANNER="> **The fits behind this release were never checked.** The last \`main\` build ended as \`$VERDICT\` before the convergence check ran, so nothing has judged these fits either way."

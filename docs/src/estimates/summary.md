@@ -10,7 +10,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 
 This page summarises the headline results.
 See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province and a health-zone page alongside.
-See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
+See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Comparisons](../comparisons.md) for the comparisons with published estimates.
 
 ## Headline estimates
 
@@ -68,7 +68,7 @@ Markdown.parse(read(joinpath(dir, "diagnostics_summary.md"), String))
 R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
 The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
 A divergent transition is a step the sampler could not take accurately.
-The [Sensitivity](../sensitivity.md) page breaks these numbers down by parameter.
+The [in-sample checks](../evaluation/insample/national.md) break these numbers down by parameter.
 
 ```@eval
 using Markdown, BVDOutbreakSize
