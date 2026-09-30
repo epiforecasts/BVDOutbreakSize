@@ -77,7 +77,7 @@ tasks:
 
   health-zones:
     desc: >
-      Rebuild data/health_zones.csv and data/health_zones.geojson from the
+      Rebuild data/health_zones.csv and src/assets/health_zones.geojson from the
       INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
       only.
     cmds:
