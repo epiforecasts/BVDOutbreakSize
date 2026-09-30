@@ -102,6 +102,20 @@ end
     @test all(i -> all(>(0), returned(m, rand(Xoshiro(i), m)).C), 1:100)
 end
 
+@testitem "bed_capacity_walk: the growth SD prior covers the fitted scale" begin
+    using Turing: returned, @varname
+    using Random: Xoshiro
+    using Statistics: quantile
+    using BVDOutbreakSize: bed_capacity_walk_model
+
+    ## The capacity-only fit on the cleaned national series puts σ_growth
+    ## at about 0.07 (90% 0.05-0.10); the prior's 95th percentile sits
+    ## above that rather than below it.
+    m = bed_capacity_walk_model(60)
+    σ = [rand(Xoshiro(i), m)[@varname(σ_growth)] for i in 1:4000]
+    @test 0.08 < quantile(σ, 0.95) < 0.12
+end
+
 @testitem "bed_capacity_walk: a growth trend that can fall" begin
     using Turing: fix, returned, @varname
     using Random: Xoshiro
