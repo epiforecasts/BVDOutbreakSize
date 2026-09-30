@@ -1201,7 +1201,9 @@ cfr_prior_fig #hide
 #
 # Capacity enters only as a censored observation.
 # The latent demand is never capped, because the demand is the quantity of interest.
-# The bed capacity is a non-decreasing random walk on weekly knots, since beds are added over the response and not taken away.
+# The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
+# Capacity can slow or fall where the data show a sustained decline.
+# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.02)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The censoring bound is fixed recorded data, so it does not drift with the modelled capacity.
@@ -2391,7 +2393,11 @@ cfr_prior_fig #hide
 #
 # Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
 # The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
-# The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
+# The increment is drawn with the Student-t the scored cells take.
+# Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
+# The scan error dominates the interval on the increment.
+# $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
+# Its prior is centred on the estimate of an earlier fit that sampled a per-figure level, 0.41% (0.09% to 0.75%).
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with genuine late reporting.

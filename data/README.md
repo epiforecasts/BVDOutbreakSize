@@ -56,6 +56,13 @@ A province holding more patients than its printed beds has at least that many be
 Nord-Kivu prints rates of 119 to 143% from 15 July to 9 September, and from 16 September patients above a stale bed count (about 390 to 420 implied beds, 511 on 21 September).
 The CSVs keep the printed counts, and the two reads' occupancy rates are reconciled like the other cells.
 The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
+From SitRep 081 the national `bed_capacity_history` is the sum of the provinces that print a bed count that day.
+A day on which a province holding at least 5% of the beds prints none is dropped from the national capacity likelihood, so a silent province is not read as closed beds.
+The share is taken against the sum of each province's last printed beds.
+A day is kept when the national figure still carries the silent province's beds.
+A province silent for more than 14 days is treated as no longer reporting.
+The longest gap after which a province printed beds again is 10 days, for Nord-Kivu in August.
+Nord-Kivu and Haut-Uélé each hold more than 5% of the beds, and Sud-Kivu, Tshopo and Bas-Uélé each hold at most 2%.
 
 ## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)
 

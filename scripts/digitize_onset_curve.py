@@ -51,7 +51,11 @@
 #     outline pixel in any column the fill's own extent is read where two
 #     columns agree on it. Half a pixel of outline is subtracted before
 #     dividing by pixels-per-count. The dead segment is the count of
-#     crimson pixels in the chosen column.
+#     crimson pixels in the chosen column. A column
+#     under the red dashed first-positive-result line (evenly spaced
+#     crimson dashes above its run) is read to its highest dark pixel
+#     instead, never above its run, with the dead segment the crimson run
+#     below that.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -80,6 +84,7 @@
 import csv
 import datetime as dt
 import math
+import statistics
 import os
 import subprocess
 import sys
@@ -582,6 +587,68 @@ def day_column(cal, off):
     return xs[j] + (off - 7 * ks[j]) * cal["ppd"]
 
 
+def _dash_columns(crimson, white, hp, y0):
+    """Columns under the red dashed first-positive-result line, as a 1-based
+    boolean array: at least twelve crimson dashes above the column's run,
+    evenly spaced, with white page in at least half of the gaps between
+    them (the pink band's text and edge have none). `hp` is 1-based."""
+    W = crimson.shape[1]
+    out = np.zeros(W + 1, dtype=bool)
+    for x in range(1, W + 1):
+        starts = []
+        gapwhite = []
+        run = 0
+        seen = False
+        for r in range(y0 - int(hp[x]) - 1):
+            if crimson[r, x - 1]:
+                run += 1
+            else:
+                if run >= 2:
+                    starts.append(r - run)
+                    gapwhite.append(seen)
+                    seen = False
+                run = 0
+                if white[r, x - 1]:
+                    seen = True
+        if len(starts) < 12:
+            continue
+        d = [b - a for a, b in zip(starts, starts[1:])]
+        md = statistics.median(d)
+        out[x] = (sum(1 for v in d if abs(v - md) <= 2) >= 0.8 * len(d)
+                  and 2 * sum(gapwhite[1:]) >= len(d))
+    return out
+
+
+def _dash_bar(page, neutral, darkpx, crimson, y0, x, gridrows, gap=3):
+    """A bar read through dash column `x` (1-based): the run walked as
+    `_column_runs` walks it, with the height taken to its highest dark
+    pixel and the dead segment to the crimson run down from there.
+    Returns (0, 0) when the run has no dark pixel."""
+    c = x - 1
+    top = -1
+    miss = 0
+    r = y0 - 1
+    while r >= 0:
+        isgrid = any(abs(r - g) <= 1 for g in gridrows)
+        if not page[r, c] and not (isgrid and neutral[r, c]):
+            miss = 0
+            if darkpx[r, c]:
+                top = r
+        else:
+            miss += 1
+            if miss > gap:
+                break
+        r -= 1
+    if top < 0:
+        return 0, 0
+    n = 0
+    r = top
+    while r < y0 and crimson[r, c]:
+        n += 1
+        r += 1
+    return y0 - top, n
+
+
 def _bar_height(h, hp, nr, cols, cx, ppc):
     """One day's bar over its interior `cols`, as the run height, the
     crimson count of the column read and the columns read from, "empty"
@@ -658,6 +725,21 @@ def digitize_windows(im, last_tick_date, y_step=20):
                           | (nb >= 3))
     soft = (h > 4) & (nd >= np.maximum(0.1 * h, 5))
     nz = np.flatnonzero((h > 2) & ~isborder)
+    # a column under the dashed line reads its bar from the outline; the
+    # dash can only have added height. An outline read under two counts is
+    # taken as the dash's own edge and the run is kept, so a real bar of one
+    # count under the line keeps its dash-inflated height
+    lo_px = im.min(axis=2).astype(int)
+    hi_px = im.max(axis=2).astype(int)
+    white = (lo_px >= 228) & (hi_px - lo_px <= 25)
+    hread = h.copy()
+    nread = nr.copy()
+    for x in np.flatnonzero(_dash_columns(crimson, white, hp, y0)):
+        hd, nd_x = _dash_bar(page, neutral, darkpx, crimson, y0, x, yt)
+        if not hd > 2 * ppc:
+            continue
+        hread[x] = min(hd, h[x])
+        nread[x] = min(nd_x, hread[x])
     barmin, barmax = int(nz.min()), int(nz.max())
     rows = []
     windows = {}
@@ -704,7 +786,7 @@ def digitize_windows(im, last_tick_date, y_step=20):
         # washed fill on a tick column can read as gridline and break each run
         # at a different row; a day that reads as neither empty nor a bar is
         # read again without the skip
-        bar = _bar_height(h, hp, nr, cols, cx, ppc)
+        bar = _bar_height(hread, hp, nread, cols, cx, ppc)
         if bar is None:
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
         if not isinstance(bar, tuple):

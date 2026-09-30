@@ -408,7 +408,15 @@ function load_observations(
     ## Implied bed capacity (occupancy / reported occupancy rate) on the days
     ## a rate is published, fitted as noisy observations of the national
     ## capacity the latent bed demand saturates against.
-    bed_capacity_history = history("bed_capacity_history")
+    province_bed_capacity_history =
+        province_sparse_history("province_bed_capacity_history")
+    ## Drop days a large province is silent: the national figure then sums
+    ## only the provinces that print.
+    bed_capacity_history = let h = history("bed_capacity_history")
+        drop = incomplete_capacity_days(h, province_bed_capacity_history)
+        keep = [d ∉ drop for d in h.days]
+        (; days = h.days[keep], counts = h.counts[keep])
+    end
     ## Cumulative recovered among confirmed, "cumul guéris", fitted as
     ## survivors among the modelled confirmed cases. Begins 6 June, where the
     ## reports first print the running total.
@@ -514,8 +522,7 @@ function load_observations(
         province_lab_daily_history = province_history("province_lab_daily_history"),
         province_isolation_history =
             province_sparse_history("province_isolation_history"),
-        province_bed_capacity_history =
-            province_sparse_history("province_bed_capacity_history"),
+        province_bed_capacity_history = province_bed_capacity_history,
         province_admissions_history =
             province_sparse_history("province_admissions_history"),
         zone_confirmed_history = zone_history("zone_confirmed_history"),
@@ -827,6 +834,41 @@ function load_health_zones(
         )
     end
     return rows
+end
+
+"""
+Grid day-indices of the national implied bed capacity `national`, a
+`(; days, counts)` history, that miss a large province. `provinces` maps a
+province to its sparse bed history, as [`load_observations`](@ref) reads
+the `province_bed_capacity_history` block. Each day is compared with the
+sum of every province's last printed count on or before it. The day is
+incomplete when a province silent that day holds at least `tolerance` of
+that sum and the national figure falls at least `tolerance` short of it.
+A province silent for more than `max_silence` days is treated as no longer
+reporting and leaves the sum. `tolerance` must lie in [0, 1].
+"""
+function incomplete_capacity_days(
+        national, provinces::AbstractDict; tolerance::Real = 0.05,
+        max_silence::Integer = 14
+    )
+    0 <= tolerance <= 1 || throw(
+        ArgumentError("tolerance must lie in [0, 1], got $(tolerance).")
+    )
+    incomplete = Int[]
+    for (d, c) in zip(national.days, national.counts)
+        carried = 0
+        silent = 0
+        for h in values(provinces)
+            i = searchsortedlast(h.days, d)
+            (i == 0 || d - h.days[i] > max_silence) && continue
+            carried += h.counts[i]
+            h.days[i] == d || (silent = max(silent, h.counts[i]))
+        end
+        limit = tolerance * carried
+        carried > 0 && silent >= limit && carried - c >= limit &&
+            push!(incomplete, Int(d))
+    end
+    return incomplete
 end
 
 """

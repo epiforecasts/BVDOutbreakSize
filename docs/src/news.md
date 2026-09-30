@@ -18,6 +18,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
+- The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
 - Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
@@ -36,8 +38,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The model cut-off advances to SitRep 136, 27 September.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018).
+- The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 136 (27 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
 
@@ -69,9 +73,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 - The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
+- `importation_from_kernel` is removed, since no model calls it (#1038).
+- The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
 
 ### Fixed
 
+- The onset forecast's figure-total interval adds each figure's calibration error, with a scale drawn from a prior rather than fitted (#1045).
 - The health-zone forecast refuses parent arrivals that stop short of the horizon (#1037).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).

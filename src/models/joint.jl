@@ -227,22 +227,36 @@ Future vintages of the symptom-onset reporting triangle. Each future
 vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 [`onset_report_expected_total`](@ref) as of `v`, over the onsets the model
 runs past the cut-off `n`. Its increment over the total at the cut-off is
-drawn with the Student-t the scored cells take, at the scale
+drawn with the Student-t the scored cells take. Its variance is the one
 [`onset_report_scale`](@ref) gives a correction read off two bars with the
-fitted read SD `τ`. The increment is drawn on the whole figure, not per
-onset date, since the figure's total is the quantity the forecast is
-scored on. The split of each
+fitted read SD `τ`, plus each figure's calibration error on its total,
+`σ_scan² (then² + now²)`, with `then` and `now` the two figures' totals.
+`σ_scan` (`forecast_scan_sd ~ scan_sd_prior`) is not fitted, since the
+scored cells carry no per-figure level, so `predict` draws it from its
+prior. The prior is centred on the estimate of a fit that sampled a
+per-figure level (884a047), 0.41% (0.09–0.75%). The increment is drawn on the whole figure,
+not per onset date, since the figure's total is the quantity the forecast
+is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
 """
-@model function onset_forecast_model(onsets, state, n, vintages)
+@model function onset_forecast_model(
+        onsets, state, n, vintages;
+        scan_sd_prior = truncated(Normal(0.0041, 0.0017); lower = 0.0)
+    )
     past = onsets[1:n]
     now = _onset_total(onsets, state, n)
     then = [_onset_total(onsets, state, v) for v in vintages]
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
-    sds = [onset_report_scale(means[j], state.τ, 2) for j in eachindex(vintages)]
+    forecast_scan_sd ~ scan_sd_prior
+    sds = [
+        hypot(
+            onset_report_scale(means[j], state.τ, 2),
+            forecast_scan_sd * hypot(then[j], now)
+        ) for j in eachindex(vintages)
+    ]
     forecast_onset_reports ~ to_submodel(
         onset_increments_model(means, sds, missing, state.ν)
     )
@@ -634,13 +648,15 @@ Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the reported-
 cases stream (in predictive mode, to supply the non-BVD background the death
 background is scaled from) and the suspected-deaths stream, then conditions
-on the confirmed-death likelihood alone. See
-[`confirmed_deaths_model`](@ref).
+on the confirmed-death likelihood alone. The suspected deaths reach the
+laboratory through a report-to-receipt delay drawn from the prior the joint
+uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
 """
 @model function confirmed_deaths_only_model(
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
@@ -651,6 +667,7 @@ on the confirmed-death likelihood alone. See
         deaths = deaths_model,
         cases = reported_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        receipt = lab_delay_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
@@ -672,15 +689,18 @@ on the confirmed-death likelihood alone. See
     deaths_state ~ to_submodel(
         deaths(
             deaths_history, total_deaths, latent.onsets, k;
+            suspected_daily_deaths_history,
             case_bg_daily = cases_state.bg_daily, ckw...
         )
     )
+    receipt_state ~ to_submodel(receipt)
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(
             confirmed_deaths, total_deaths,
             deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
             deaths_state.bg_death_daily, k;
-            confirmed_deaths_history, confirmed_break_days,
+            confirmed_deaths_history, receipt_pmf = receipt_state.pmf,
+            confirmed_break_days,
             confirmed_break_gross = confirmed_break_gross_deaths,
             confirmed_break_sd, ckw...
         )
