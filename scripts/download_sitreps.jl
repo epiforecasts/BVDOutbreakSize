@@ -9,8 +9,7 @@
 # The INSP site leads the INRB-UMIE GitHub mirror
 # (https://github.com/INRB-UMIE/BDBV2026-Data), which lags by days and has
 # dropped individual vintages, so it is not the source. Some of its PDF
-# copies also differ from INSP's (001, 012, 020, 028, 094, 096, 097, 099,
-# 101 and 102 on 30 September), so it is a last resort only. Its processed
+# copies also differ from INSP's, so it is a last resort only. Its processed
 # national CSVs remain a cross-check (scripts/confirm_insp_data.jl).
 #
 # The media listing has dropped reports and on some days names no MVE PDF
@@ -428,6 +427,7 @@ end
 # taken through its insp.cd post, pausing between requests, and from the
 # mirror only when the post does not serve it.
 function fetch_gaps(limit)
+    limit > 0 || return nothing
     posts = mve_posts(published_posts())
     todo = missing_numbers(keys(posts), limit)
     isempty(todo) && return nothing
@@ -455,8 +455,8 @@ function fetch_gaps(limit)
     )
 end
 
-const count_new = Ref(0)
-
+# Download what the media listing names and is missing on disk, returning
+# how many landed.
 function fetch_listed(listing, limit)
     ## Measles and SGI-GPM SitReps share this media library and their
     ## numbering collides with the MVE series, so these rejections are
@@ -478,11 +478,11 @@ function fetch_listed(listing, limit)
     for num in missing_numbers(keys(urls), limit)
         fetch_to(urls[num], dest_for(num), "SitRep $num") && (downloaded += 1)
     end
-    count_new[] = downloaded
-    return println(
+    println(
         "\n$downloaded new sitrep(s) into $outdir ($(length(urls)) " *
             "upstream)."
     )
+    return downloaded
 end
 
 if only_numbers !== nothing
@@ -492,6 +492,5 @@ else
     isempty(listing.urls) && println(
         "no MVE SitRep PDFs in the media listing at $MEDIA_API"
     )
-    fetch_listed(listing, limit)
-    fetch_gaps(max(0, limit - count_new[]))
+    fetch_gaps(limit - fetch_listed(listing, limit))
 end
