@@ -64,7 +64,7 @@ Every release is signed off by a person, who cuts it with an `@release` comment 
 
 <!-- SHARED:END -->
 
-## Draft paper
+## Draft paper (work in progress)
 
 The [draft paper](https://epiforecasts.io/BVDOutbreakSize/dev/paper/) describes how this work developed, the current model, its evaluation and the lessons learnt.
 It is a work in progress, has not been peer reviewed and will change.
