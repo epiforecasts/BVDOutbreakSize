@@ -212,7 +212,7 @@ end
     cum = [50, 500, 5, 200, 80, 20]
     fig = plot_rt_zones(
         rt, labels, patch; as_of_date = "2026-09-10",
-        cumulative = cum, top = 4, patch_rt = [
+        ranking = cum, top = 4, patch_rt = [
             traj(1.0), traj(1.2),
             traj(1.0), traj(0.9),
         ], ncols = 2
@@ -300,11 +300,11 @@ end
         e.label[] for
             e in first(x for x in f.content if x isa Mk.Legend).entrygroups[][1][2]
     ]
-    ## The panels follow `ranking` over `cumulative`, and the caption says
-    ## how they were chosen.
+    ## The panels follow `ranking`, and the caption says how they were
+    ## chosen when it is named.
     fig = plot_rt_zones(
         rt, labels, patch; as_of_date = "2026-09-10",
-        cumulative = [100, 1, 50, 1], ranking = [1, 100, 1, 50],
+        ranking = [1, 100, 1, 50],
         ranking_label = "infections over the past week", top = 2,
         patch_rt = [traj(1.0), traj(1.0)],
         modelled = [true, false, true, true]
@@ -315,32 +315,48 @@ end
         "2 zones with the most infections over the past week",
         caption(fig)
     )
-    ## A zone whose reproduction number is from its province is drawn
-    ## hollow in grey: the patch reference's bands and median, then the
-    ## zone's 90% edges and median as lines with no fill.
-    @test count(p -> p isa Mk.Band, axes[1].scene.plots) == 3
-    @test count(p -> p isa Mk.Lines, axes[1].scene.plots) == 4
-    @test count(p -> p isa Mk.Band, axes[2].scene.plots) == 6
-    @test Mk.to_color(axes[1].titlecolor[]) == Mk.to_color(:grey55)
+    ## A zone whose reproduction number is from its province is drawn in
+    ## the province colour with no ribbon of its own; a modelled zone has
+    ## ribbons in its patch's colour.
+    using BVDOutbreakSize: _PROVINCE_RT_COLOUR, _ZONE_PATCH_COLOURS
+    rgb(c) = Mk.RGB(Mk.to_color(c))
+    colours(ax, T) = [rgb(p.color[]) for p in ax.scene.plots if p isa T]
+    grey = rgb(_PROVINCE_RT_COLOUR)
+    patch2 = rgb(_ZONE_PATCH_COLOURS[2])
+    @test grey in colours(axes[1], Mk.Lines)
+    @test !(rgb(_ZONE_PATCH_COLOURS[1]) in colours(axes[1], Mk.Band))
+    @test patch2 in colours(axes[2], Mk.Band)
+    @test !(grey in colours(axes[2], Mk.Lines))
+    @test rgb(axes[1].titlecolor[]) == grey
     @test "R from its province" in entries(fig)
     @test occursin("from their province", caption(fig))
-    ## With every panel modelled separately there is no such entry.
+    ## With every panel modelled separately there is no such entry, and
+    ## without a label the caption does not name the ranking.
     all_modelled = plot_rt_zones(
         rt, labels, patch; as_of_date = "2026-09-10",
-        cumulative = [100, 1, 50, 1], top = 2,
+        ranking = [100, 1, 50, 1], top = 2,
         modelled = [true, false, true, true]
     )
     @test !("R from its province" in entries(all_modelled))
     @test !occursin("from their province", caption(all_modelled))
-    ## A figure of patches says so in its caption.
+    @test !occursin("Panels are", caption(all_modelled))
+    @test_throws ErrorException plot_rt_zones(
+        rt, labels, patch; as_of_date = "2026-09-10",
+        modelled = [true, false]
+    )
+    ## A figure of patches names them throughout.
     ref = plot_rt_zones(
-        rt, labels, patch; as_of_date = "2026-09-10", top = 2,
-        unit = "patch",
+        rt, labels, patch; as_of_date = "2026-09-10",
+        ranking = [100, 1, 50, 1], ranking_label = "infections", top = 2,
+        unit = "patch", patch_rt = [traj(1.0), traj(1.0)],
+        modelled = [true, false, true, false],
         reference_rt = [traj(1.0) for _ in 1:4]
     )
     @test occursin("the patch's reproduction number", caption(ref))
+    @test occursin("2 patches with the most infections", caption(ref))
     @test occursin("for the same patch", caption(ref))
     @test !occursin("zone", caption(ref))
+    @test !any(l -> occursin("zone", l), entries(ref))
 end
 
 @testitem "plot_zone_shares draws the observed over the modelled" setup = [
