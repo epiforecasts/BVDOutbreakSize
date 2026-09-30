@@ -1636,16 +1636,12 @@ an optional between-patch importation kernel.
 
 ### Structure
 
-Each patch generates infections from its own renewal force, and
-importation relocates a share of each day's generated infections between
-patches on the same day, as set out in [`patch_infections`](@ref).
-The generation-interval PMF is shared (sampled once, the biology of
-transmission does not depend on province), `R_{p,t}` comes from
-[`patch_rt_model`](@ref), `K` is the importation kernel, and `ε_{q,t}` is
-the importation intensity of origin `q` on day `t`. Each patch depletes
-its own pool of `populations[p]` residents, as in [`patch_infections`](@ref).
-The default is each patch's 2019 INS resident population ([`PROVINCE_POPULATIONS`](@ref)),
-or their sum for a single patch.
+Each patch's reproduction number comes from [`patch_rt_model`](@ref).
+Importation moves a share of each day's infections between patches on the
+same day, as set out in [`patch_infections`](@ref).
+Each patch depletes its own pool of `populations[p]` residents.
+The default is each patch's 2019 INS resident population
+([`PROVINCE_POPULATIONS`](@ref)), or their sum for a single patch.
 
 ### Importation
 
