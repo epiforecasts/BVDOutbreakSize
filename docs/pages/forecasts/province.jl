@@ -230,6 +230,35 @@ province_overlay_fig = plot_forecast_overlay(
 
 province_overlay_fig #hide
 
+# ## Saving province map assets
+#
+# The [dashboard](@ref "Dashboard") map's province layer reads the per-province estimates written here.
+
+#md # ```@raw html
+#md # <details><summary>Write the province map estimates</summary>
+#md # ```
+
+## One row per province keyed as the health-zone geojson keys it: the
+## patch's reproduction number at the cut-off and its confirmed cases over
+## the coming week, with the province's own confirmed cases and deaths.
+province_map_dir = joinpath(
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
+)
+mkpath(province_map_dir)
+CSV.write(
+    joinpath(province_map_dir, "province_estimates.csv"),
+    province_map_estimates(
+        chn_joint, province_forecast_draws(:confirmed_new);
+        n_patches = N_PATCHES,
+        confirmed_history = obs.province_confirmed_history,
+        death_history = obs.province_death_history, cutoff = obs.cutoff
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ---
 #
 # The full analysis code, data and model definitions are in the
