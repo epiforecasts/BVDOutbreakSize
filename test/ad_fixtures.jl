@@ -404,7 +404,8 @@ function scenarios(; n::Integer = N, joint::Bool = false)
             "onsets_only_model", "Composer",
             onsets_only_model(
                 n;
-                onset_curve_history = ONSET_CURVE_HISTORY
+                onset_curve_history = ONSET_CURVE_HISTORY,
+                export_case_days = [12]
             ), SEED
         )
     )
