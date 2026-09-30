@@ -366,3 +366,79 @@ end
     patch = convolve_delay(A_bg, _background_stay_survival(f, κ))
     @test patch ≈ national rtol = 1.0e-10
 end
+
+@testitem "incomplete_capacity_days: a silent province's beds count" begin
+    using BVDOutbreakSize: incomplete_capacity_days
+
+    ## Province A prints every day. B prints on days 1, 2 and 5, and C
+    ## prints 5 beds on day 1 only.
+    provinces = Dict(
+        "a" => (; days = [1, 2, 3, 4, 5], counts = [100, 100, 100, 100, 100]),
+        "b" => (; days = [1, 2, 5], counts = [50, 60, 60]),
+        "c" => (; days = [1], counts = [5]),
+    )
+    ## Day 0 predates every province print, so nothing is missing.
+    national = (;
+        days = [0, 1, 2, 3, 4, 5], counts = [90, 155, 165, 105, 160, 160],
+    )
+    ## Day 3 lacks B's 60 beds (36%). Day 4 carries B's beds although the
+    ## province block does not, so only C's 5 beds (3%) are missing, under
+    ## the tolerance.
+    @test incomplete_capacity_days(national, provinces) == [3]
+    @test incomplete_capacity_days(national, provinces; tolerance = 0.01) ==
+        [3, 4, 5]
+    @test isempty(incomplete_capacity_days(national, Dict()))
+
+    ## Two small provinces silent together miss 8% of the beds, but neither
+    ## holds 5% on its own, so the day is kept.
+    small = Dict(
+        "a" => (; days = [1, 2], counts = [92, 92]),
+        "d" => (; days = [1], counts = [4]),
+        "e" => (; days = [1], counts = [4]),
+    )
+    @test isempty(
+        incomplete_capacity_days((; days = [1, 2], counts = [100, 92]), small)
+    )
+
+    ## A large province that stops printing counts as silent for 14 days
+    ## after its last print, then as no longer reporting.
+    stopped = Dict(
+        "a" => (; days = collect(1:30), counts = fill(80, 30)),
+        "b" => (; days = [1], counts = [20]),
+    )
+    gone = (; days = collect(2:30), counts = fill(80, 29))
+    @test incomplete_capacity_days(gone, stopped) == collect(2:15)
+    @test incomplete_capacity_days(gone, stopped; max_silence = 5) ==
+        collect(2:6)
+    ## A tolerance outside [0, 1] would silently disable the check.
+    @test_throws ArgumentError incomplete_capacity_days(
+        gone, stopped; tolerance = 1.5
+    )
+    @test_throws ArgumentError incomplete_capacity_days(
+        gone, stopped; tolerance = -0.1
+    )
+end
+
+@testitem "load_observations drops national capacity days a province misses" begin
+    using BVDOutbreakSize: load_observations, grid_date
+    using Dates: Date
+
+    obs = load_observations()
+    kept = Set(grid_date.(Ref(obs), obs.bed_capacity_history.days))
+    ## Days on which Nord-Kivu is silent and the national figure is its
+    ## provinces' partial sum are among those dropped.
+    dips = vcat(
+        Date(2026, 8, 4):Date(2026, 8, 12),
+        Date(2026, 9, 10):Date(2026, 9, 15),
+        [Date(2026, 9, 23), Date(2026, 9, 25)],
+    )
+    @test isempty(intersect(kept, dips))
+    ## Days on which every large province prints are kept, as is 26 August,
+    ## whose national figure carries Haut-Uélé's beds although the province
+    ## block does not.
+    complete = (
+        Date(2026, 8, 26), Date(2026, 9, 9), Date(2026, 9, 16),
+        Date(2026, 9, 26),
+    )
+    @test all(in(kept), complete)
+end
