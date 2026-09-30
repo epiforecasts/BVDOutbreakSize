@@ -22,8 +22,8 @@
 
 using BVDOutbreakSize
 using BVDOutbreakSize: bvd_zone, zone_forward, zone_initial_shares,
-    deviation_knots, _zone_draws, _zone_stat, _draws, _draw_vectors,
-    _has_key
+    deviation_knots, deviation_knot_dims, _zone_draws, _zone_stat, _draws,
+    _draw_vectors, _has_key
 using Serialization: serialize, deserialize
 using Statistics: mean, median, quantile
 using Random: Xoshiro
@@ -298,14 +298,14 @@ function stage_b()
     σ_δ = fill(0.06, length(ZD.patch_ranges))
     h = 42.0
     ρ = 0.03
-    z_level = randn(rng, NZ)
-    z_drift = randn(rng, max(ZD.n_walking * (K - 1), 1))
+    dims = deviation_knot_dims(ZD.patch_ranges, ZD.walking)
+    z_level = randn(rng, dims.level)
+    z_drift = randn(rng, dims.drift * (K - 1))
     φ = exp2(-7 / h)
     w0 = zone_initial_shares(z_w, ZD.patch_ranges, 2.0)
     δ_knots = deviation_knots(
-        z_level, z_drift, σ_level, σ_δ[ZD.patch_of_zone], φ,
-        ZD.patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
-        ZD.walking, ZD.walk_index, ZD.n_walking, K
+        z_level, z_drift, σ_level, σ_δ, φ, ZD.patch_ranges,
+        Matrix{Float64}[], Matrix{Float64}[], ZD.walking, K
     )
     fw = zone_forward(ZD, δ_knots, w0, nothing)
     κ = (1 - ρ) / ρ

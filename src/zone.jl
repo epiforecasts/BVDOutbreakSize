@@ -830,11 +830,8 @@ end
 function _zone_allocated_increments(zd, st, stream::Symbol)
     fw = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
     stream === :cases && return fw.increments
-    daily = zd.death_matrix * fw.infections .+
-        st.def.death_pre_rows .* transpose(st.w0)
-    return zone_report_increments(
-        daily, st.w0, zd.patch_ranges, zd.death_days, zd.t0,
-        st.def.death_pre_cum
+    return zone_binned_increments(
+        zd.death_bin, fw.infections, st.def.zone_pre .* st.w0
     )
 end
 

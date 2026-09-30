@@ -14,7 +14,6 @@ The nightly data-update routine follows `DAILY_UPDATE.md` in this directory, whi
 | `province_care_scanned.csv` | Per-province isolation occupancy, beds and 24h patient flows read from the occupation tables and the care-continuity prose, one row per (SitRep, province) with the source text quoted. Feeds the `province_isolation_history` and `province_bed_capacity_history` blocks. |
 | `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `health_zones.csv` | One row per health zone that has reported a confirmed case: manifest key, label, province, WorldPop population, polygon centroid and DHIS2 code. Read by `load_health_zones()`. See the health-zone section below. |
-| `health_zones.geojson` | Simplified boundaries of every health zone in the seven affected provinces, for maps. Not read by the model. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's inline SVG charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
@@ -238,7 +237,7 @@ The mirror's `Dates the mirror carries and the manifest does not` line is the se
 That is how the 124 caption change was found: the reports had been read as carrying no zone table for five vintages while the mirror carried four of them.
 A zone new to the table needs `task health-zones` re-run against a fresh `build/drc_health_zones.geojson`, or its key matches no row in `health_zones.csv`.
 
-`health_zones.csv` and `health_zones.geojson` are written by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson`, build of 21 September 2026, commit `f489a92`).
+`health_zones.csv` and `src/assets/health_zones.geojson` are written by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson`, build of 21 September 2026, commit `f489a92`).
 That build joins the Ministry of Health `DRC_Health_zones` shapefile from the Humanitarian Data Exchange (<https://data.humdata.org/dataset/drc-health-data>) with WorldPop population counts aggregated per zone (WorldPop 2025, University of Southampton, <https://www.worldpop.org>, CC BY 4.0).
 The 63 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
 Population is the WorldPop count rounded to a whole person and the centroid is the area-weighted centroid of the zone's largest ring.
