@@ -84,12 +84,12 @@ end
 @testitem "bed_capacity_walk: positive capacity path over the grid" tags = [
     :slow,
 ] begin
-    using Turing: sample, Prior
+    using Turing: sample, Prior, returned
+    using Random: Xoshiro
     import FlexiChains
     using BVDOutbreakSize: bed_capacity_walk_model
 
-    ## The walk returns a positive bed-capacity path; with a tight innovation
-    ## SD it stays a gentle drift around the baseline rather than blowing up.
+    ## The walk returns a positive bed-capacity path.
     chn = sample(
         bed_capacity_walk_model(30), Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
@@ -98,14 +98,36 @@ end
     @test any(k -> occursin("C0", k), ks)
     C0 = vec(Array(chn[:C0]))
     @test all(C0 .> 0)
+    m = bed_capacity_walk_model(30)
+    @test all(i -> all(>(0), returned(m, rand(Xoshiro(i), m)).C), 1:100)
+end
 
-    ## The innovations are drawn centred, as a half-normal at the sampled
-    ## step size rather than a standard half-normal scaled by it. Both forms
-    ## are the same distribution, and the property that matters downstream is
-    ## that every step is non-negative, so the capacity path cannot fall back
-    ## below a level it has already reached.
-    steps = [collect(s) for s in vec(Array(chn[:steps]))]
-    @test all(s -> all(>=(0), s), steps)
+@testitem "bed_capacity_walk: a growth trend that can fall" begin
+    using Turing: fix, returned, @varname
+    using Random: Xoshiro
+    using BVDOutbreakSize: bed_capacity_walk_model
+
+    ## Prior draws both rise and fall from week to week.
+    m = bed_capacity_walk_model(60)
+    weekly = [diff(log.(returned(m, rand(Xoshiro(i), m)).C[1:7:end])) for i in 1:200]
+    @test any(w -> any(<(0), w), weekly)
+    @test any(w -> any(>(0), w), weekly)
+    ## Unit innovations raise the weekly log growth by `σ_growth` each week
+    ## from `growth0`, and the forecast carries on at the last fitted growth.
+    mh = bed_capacity_walk_model(54; cutoff = 40)
+    θ = rand(Xoshiro(1), mh)
+    nz = length(θ[@varname(z)])
+    fixed = fix(
+        mh, Dict(
+            @varname(growth0) => 0.1, @varname(σ_growth) => 0.01,
+            @varname(z) => ones(nz),
+            @varname(z_future) => zeros(length(θ[@varname(z_future)])),
+        )
+    )
+    C = returned(fixed, rand(Xoshiro(2), fixed)).C
+    @test log(C[15] / C[8]) ≈ 0.12
+    @test log(C[29] / C[22]) ≈ 0.14
+    @test log(C[54] / C[47]) ≈ 0.1 + 0.01 * nz
 end
 
 @testitem "isolation occupancy: conditioned fit stays positive" tags = [
