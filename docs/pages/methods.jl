@@ -2378,7 +2378,11 @@ cfr_prior_fig #hide
 #
 # Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
 # The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
-# The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
+# The increment is drawn with the Student-t the scored cells take.
+# Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
+# The scan error dominates the interval on the increment.
+# $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
+# Its prior is centred on the estimate of an earlier fit that sampled a per-figure level, 0.41% (0.09% to 0.75%).
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with genuine late reporting.
