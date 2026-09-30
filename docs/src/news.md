@@ -40,6 +40,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
 - The summary page has a table of the health zones with the most confirmed cases over the past two weeks (#1021).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
@@ -52,6 +53,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
+- The README, home page and About page link the draft paper as a work in progress (#1029).
 
 ### Infrastructure
 
@@ -64,6 +66,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
+- The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
 
 ### Fixed
 

@@ -1,0 +1,132 @@
+## Methods
+
+<!--
+Meta keys used in this section, to be written to paper/generated/numbers.yml from the release analysed:
+sampler_chains                    NUTS chains per joint fit
+sampler_draws                     post-warmup draws per chain for the joint fit
+sampler_adaptation                    adaptation steps per chain for the joint fit
+sampler_max_depth                 NUTS maximum tree depth
+sampler_target_accept             NUTS target acceptance probability for the joint fit
+convergence_fail_rhat             R-hat above which the build fails
+convergence_fail_ess_bulk         bulk effective sample size below which the build fails
+convergence_fail_divergent_fraction  divergent fraction above which the build fails
+-->
+
+### Data
+
+The release analysed is {{< meta release_tag >}}, with data to {{< meta data_cutoff >}}, and every current-model result below comes from its fits.
+DRC counts come from the daily situation reports of the Institut National de Santé Publique, except the 18 to 22 May suspected totals, which come from the WHO AFRO joint report [@insp_sitrep_2026; @who_afro_sitrep01_2026].
+Each value is read from the report PDFs by a language-model agent and re-read independently by a second agent, with disagreements settled against the source.
+The INRB-UMIE transcription is used only when the primary source is not publishing [@inrb_umie_2026].
+Exported cases enter as three dated detections and one dated death, frozen at the cut-off of the first situation-report model, and a fourth export reported afterwards is deliberately not fitted [@who_don_2026_602].
+The curve of confirmed cases by symptom-onset date is digitised bar by bar from the figure the later reports carry.
+Genetic estimates of the time to the most recent common ancestor and of the early doubling time enter as priors, referred to below as the genetic bound [@virological2026; @mbalaplacide2026].
+Each stream is listed with its observation model, its first and last fitted report and the dates at which its reporting changed or was absent in @tbl-streams.
+
+The cumulative streams are fitted as the increments between successive reports, with a fitted level offset at each documented reclassification or harmonisation date.
+A stream that stops being published is frozen at its last report and stays in the likelihood.
+
+### Model development
+
+The work began as a reproduction of the approach of McCabe et al. as one posterior rather than a set of scenarios, with exact delay convolutions in place of their closed-form approximations and a prior on every fixed quantity [@mccabe2026].
+The national situation reports then became the data source, so the observation model moved to the per-report increments of running totals and added the confirmed series through a laboratory model that the throughput counts did not identify.
+A discrete daily renewal equation with a time-varying reproduction number replaced the latent process, chosen from five prototyped processes that included an explicit convolution, a stochastic renewal, a particle-filtered state space and a compartmental model [@fraser2007; @cori2013].
+Every remaining published stream was then added with its own observation model, so that each published count entered the likelihood on its own terms.
+One renewal process per province replaced the single national process when the reports began to carry counts by province that a national process could not use.
+The versions, the streams each of them fitted and the reason each gave way to the next are given in @tbl-models, and the estimate each released in @fig-journey.
+
+### Current model
+
+The full model definition and every prior are given in the Supporting Information (*Methods*).
+The model runs one renewal process for each of four provinces, Ituri, Nord-Kivu, Haut-Uele and one pooling the remaining affected provinces, coupled by a gravity kernel with same-day transfer, and every national stream is fitted against the sum over provinces.
+Each province $p$ generates infections from its reproduction number $R_{p,t}$ and the generation interval $g$, with the log reproduction number the national trend plus a province deviation that sums to zero across provinces
+
+$$
+G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+\log R_{p,t} = \log R^{\text{trend}}_t + \delta_{p,t}, \qquad
+\sum_p \delta_{p,t} = 0.
+$$ {#eq-renewal}
+
+The national trend follows a weekly random walk, and the deviations revert toward zero at each knot on an orthonormal sum-to-zero basis and are scored through the per-province compositions of confirmed cases and deaths [@egozcue2003; @stan_refman_2026].
+A single import grows through a cryptic phase to the renewal start, with the genetic bound flooring the outbreak age and the number of cryptic generations given a prior.
+Importation relocates a share of what each province generates, with $K$ the gravity kernel and $\varepsilon_{q,t}$ the share leaving origin $q$, and national infections $I_t$ are the sum over provinces
+
+$$
+I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+        + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \qquad
+I_t = \sum_p I_{p,t}.
+$$ {#eq-province}
+
+The generation interval $g$ is a gamma distribution whose mean and standard deviation carry priors centred on the serial interval of Ebola virus disease in West Africa, with widths from a Bundibugyo cohort [@who_ebola_response_2014; @akilimali2026]. <!-- PRs 909, 910, 926: Normal+ priors on the mean and SD at the release analysed -->
+
+National infections convolved with the incubation period give daily onsets $o_t$, and each stream convolves those onsets with its own sampled and double-censored delay, scales them by its ascertainment and adds any stream-specific term [@charniga2024].
+For the suspected cases the delay is the onset-to-report distribution $f_{\text{rep}}$, the ascertainment is $p_{\text{DRC}}$ and the added term is a non-BVD background rate $\lambda_{\text{bg},t}$ on a weekly random walk.
+The increment between the reports on days $d_{i-1}$ and $d_i$ is scored with a negative binomial whose dispersion $k_s$ is partially pooled across the four passive-surveillance streams
+
+$$
+c_t = p_{\text{DRC}} \sum_{s \ge 0} o_{t-s}\, f_{\text{rep},s} + \lambda_{\text{bg},t}, \qquad
+Y_i - Y_{i-1} \sim \mathrm{NegBinomial}\Bigl(\sum_{t = d_{i-1}+1}^{d_i} c_t,\ k_s\Bigr).
+$$ {#eq-stream}
+
+The model estimates infections and deaths to date, the reproduction number by province, the national growth rate, the case-fatality ratio, and the ascertainment of each surveillance system.
+
+### Forecast evaluation
+
+Every release forecasts each still-reported stream one to four weeks ahead, and we score the one-week horizon once the next reports arrive.
+Forecasts are drawn from the fitted model by running it past the cut-off with the fitted parameters fixed, so each future count comes from its stream's own likelihood, and the national forecast is split across provinces by the fitted compositions.
+The scored releases predate this method and projected each stream from its rate at the cut-off under the continued reproduction-number walk.
+We score with the continuous ranked probability score, where lower is better, on the count scale and on a log scale that stops the largest counts dominating [@gneiting2007; @bosse2023transformed].
+We also report coverage of the 50% and 90% predictive intervals [@bosse2022scoringutils].
+
+The persistence baseline carries the increment over the preceding window forward, with a spread drawn from the stream's own past differences.
+It was checked to read only the reports available on the day the forecast was made, since the choice of baseline sets how much skill a forecast appears to have [@mindthebaseline2025].
+Streams no longer reported are excluded because their truth is zero by construction, which favours neither the model nor the baseline.
+Fits fixed at each release date are scored on one scale across reporting breaks, with the harmonisation step subtracted from the observed counts and the windows holding a reclassification dropped.
+
+### Comparison with single-stream fits and published estimates
+
+The joint estimate is set against the same model fitted to one stream at a time with a single likelihood term, against the estimate of every earlier release, and against the published estimates.
+The estimate of each earlier release is read from that release's published outputs.
+McCabe et al. are matched at their cut-offs by fits fixed at those dates, and Chamla et al. by a projection from a fit fixed at their calibration date [@mccabe2026; @mccabe2026lancet; @chamla2026].
+
+### Convergence
+
+Each fit reports R-hat, bulk effective sample size and the number of divergent transitions for every parameter [@gelman1992; @vehtari2021].
+We sample with the No-U-Turn sampler (NUTS), with {{< meta sampler_chains >}} chains of {{< meta sampler_draws >}} draws after {{< meta sampler_adaptation >}} adaptation steps, a maximum tree depth of {{< meta sampler_max_depth >}} and a target acceptance probability of {{< meta sampler_target_accept >}} [@hoffman2014nuts].
+Each chain starts from the first of a batch of prior draws whose log density is at or above the batch median, since a start in the prior tail can trap a chain.
+The build fails if the joint fit exceeds an R-hat of {{< meta convergence_fail_rhat >}} or a divergent fraction of {{< meta convergence_fail_divergent_fraction >}}, or falls below a bulk or tail effective sample size of {{< meta convergence_fail_ess_bulk >}}, and it warns at a tighter tier.
+Builds after the release analysed also fit the joint model to a dataset simulated from one of its prior draws, with the same sampler settings, and check that the posterior recovers the generating values and the simulated future. <!-- PR 882 -->
+
+### Development process
+
+Language-model agents drafted the code, the priors and the analysis, and we directed the work from issues and pull-request reviews and took each modelling decision.
+We worked this way because one modeller's time was set against a live outbreak, because we aimed to fit every published count, and to learn what the workflow could and could not do. <!-- author steer, 28 Sep -->
+An agent opened a pull request for each change, and the lead author reviewed it locally before anything was recorded on the request. <!-- steering-and-data.md section 0: the "do not review until I have pinged" convention from PR 32 -->
+Later an automated reviewer commented on each pull request, and the author accepted or rejected each of its findings on the request. <!-- steering-and-data.md section 2: the review app from 17 August; "Close see bot review and my inline points" on PR 677 -->
+A change that did not converge or did not fit its stream was not merged, judged by review of the diagnostics and later by a check in continuous integration. <!-- steering-and-data.md section 3: PRs 344, 350, 400 and 402 closed on 8 July; the CI gate in PR 764 -->
+The first releases were signed off by every author on a release issue opened for the purpose. <!-- steering-and-data.md section 3: issues 93, 134 and 144 -->
+Between changes the agents ran wide searches over parameterisations, samplers and gradient backends, and most of these measured as null and were not merged. <!-- author steer: "very wider performance searches" -->
+
+Beyond the review of single changes, one check applied to the transcribed data and another to the released model as a whole.
+The second read of each transcribed value, described under Data, checked the transcriptions, and by the lead author's rule every fitted stream advanced on every data update so that no stream was left behind. <!-- steering-and-data.md section 3: PRs 393, 405, 409, 440 and 461 -->
+The prospective evaluation, which scored each release against the data that arrived next, checked the released model on data that no review or test had seen.
+
+### Analysis of the development record
+
+We read the development record for the events that changed the released estimate, the reproduction-number trajectory or the forecasts, and for the defects in released outputs, to establish how each was found and who decided the response.
+The sources were the issues, the pull-request bodies and review comments, the automated reviewer's comments and the release notes, with the account behind each item recorded.
+An item opened under a human login counted as agent-written where its body carried the marker the agents leave, since the human accounts also ran agent sessions. <!-- steering-and-data.md section 0, caveat 1 -->
+We classified each event by kind, as a model change, a data change, a data-quality decision or a defect, and by the route through which it was first recorded.
+We also recorded who decided the response, a person, an agent or the two jointly, and kept the evidence link for every row (@tbl-events).
+An agent counted as the finder when the first record was an issue, pull-request body or comment from an agent account, and as the decider when the record held only agent text and at most an approval without a body.
+Where releases fell on both sides of an event we recorded the two released medians, marked whether other changes shared that window, and estimated no effect ourselves.
+
+From the same record we counted commits and merged pull requests per week by account, human-authored issues, review submissions and inline comments, and the automated reviewer's submissions and inline comments (@fig-journey B).
+The record cannot show decisions taken off GitHub, and the lead author's local first-pass reviews appear on it only as an approval.
+
+### Implementation
+
+The model is written in Julia with `Turing` and differentiated with `Mooncake` [@ge2018turing; @mooncake_jl].
+The daily convolution, renewal and observation kernels carry hand-written reverse-mode rules, each checked against central finite differences and against the backend's own derivation of an unregistered copy.
+The agents wrote those rules and a precompile workload that compiles the fit the report runs, and the benchmarks recorded for both are in the Supporting Information (*Gradient and build benchmarks*).
+Each data update refits every affected model in continuous integration, renders the report and publishes a versioned release with the model definition, thinned draws and forecasts.

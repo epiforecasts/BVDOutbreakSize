@@ -29,6 +29,8 @@ jobs:
           cd paper
           quarto render main.qmd --to html
           quarto render main.qmd --to pdf
+          quarto render si.qmd --to html
+          quarto render si.qmd --to pdf
       - uses: actions/upload-artifact@v4
         with:
           name: paper
@@ -36,4 +38,7 @@ jobs:
             paper/main.pdf
             paper/main.html
             paper/main_files
+            paper/si.pdf
+            paper/si.html
+            paper/si_files
           retention-days: 30
