@@ -52,6 +52,9 @@ The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_h
 A province that prints nothing on a day has no entry; a printed zero is a zero.
 Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total and the beds are the normed count the printed rate refers to.
 The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
+From SitRep 081 the national `bed_capacity_history` is the sum of the provinces that print a bed count that day.
+`load_observations` drops a national capacity day when it falls more than 5% short of the sum of each province's last printed beds (`incomplete_capacity_days`), so a silent province is not read as closed beds.
+This drops the days Nord-Kivu or Haut-Uélé is silent (for example 4 to 12 August, 10 to 15 September, 23 and 25 September) and keeps those on which only Sud-Kivu, Tshopo or Bas-Uélé is.
 
 ## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)
 
