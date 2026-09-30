@@ -2263,3 +2263,25 @@ end
     @test quantile(dest, 0.5) ≈ 0.674 atol = 0.03
     @test quantile(flow, 0.5) ≈ 0.337 atol = 0.02
 end
+
+@testitem "destination_weighted_kernel: finite at extreme weights" begin
+    using BVDOutbreakSize: destination_weighted_kernel,
+        province_importation_kernel
+
+    K = province_importation_kernel()
+    np = size(K, 1)
+    for scale in (50.0, 800.0)
+        W = scale .* [0.0 -1.0 0.5 1.0; 1.0 0.0 -0.5 0.2; -0.3 0.8 0.0 -1.0; 0.4 -0.2 1.0 0.0]
+        Kw = destination_weighted_kernel(K, W)
+        @test all(isfinite, Kw)
+        @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
+        η = scale .* [1.0, -1.0, 0.5, -0.5]
+        Kη = destination_weighted_kernel(K, η)
+        @test all(isfinite, Kη)
+        @test vec(sum(Kη; dims = 1)) ≈ vec(sum(K; dims = 1))
+    end
+    ## A large weight on a destination an origin never reaches is ignored.
+    η = [900.0, 0.0, 0.1, -0.1]
+    @test destination_weighted_kernel(K, η)[:, 1] ≈
+        destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
+end
