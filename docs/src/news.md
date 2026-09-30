@@ -18,7 +18,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The national bed capacity is a local linear trend on log capacity, with a weekly growth walk, so it can fall where the data show a sustained decline and its forecast continues the trend (#1016).
+- The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
 - Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.

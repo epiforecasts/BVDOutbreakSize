@@ -700,14 +700,10 @@ g_k = g_0 + σ_{growth} \\sum_{j \\le k} z_j, \\qquad
 \\log C_k = \\log C_0 + \\sum_{j \\le k} g_j, \\qquad z_j \\sim \\mathrm{N}(0, 1).
 ```
 
-Growth can slow and turn negative, so capacity falls only where the data
-show a sustained decline. The growth SD prior `N⁺(0, 0.02)` keeps the
-growth walk smooth, so a dip lasting a few days changes it little; a wider
-prior lets the trend follow the days on which only some provinces print
-beds. The walk is non-centred. The
-baseline `C0` carries a `LogNormal(log 450, 0.42)` prior (median 450 beds,
-≈0.44 CV), and the implied-capacity series the isolation submodel fits
-pins `C(t)` on the days a rate is published.
+The walk is non-centred. The priors are `g_0 ~ N(0, 0.05)`,
+`σ_growth ~ N⁺(0, 0.02)` and `C_0 ~ LogNormal(log 450, 0.42)`. The
+implied-capacity series the isolation submodel fits pins `C(t)` on the
+days a rate is published.
 
 Knots run only from `start`, the first day with occupancy or capacity data,
 and capacity is flat at `C0` before it. Off-window capacity carries no
@@ -740,12 +736,12 @@ from the last fitted value.
     s = clamp(Int(start), 1, nc)
     days = knot_days(nc; week = week, start = s)
     nb = length(days)
-    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
+    z ~ filldist(Normal(0, 1), max(nb - 1, 1))
     growth = growth0 .+ σ_growth .* cumsum(z[1:max(nb - 1, 0)])
     log_knots = vcat(zero(growth0), cumsum(growth))
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)
-        z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
+        z_future ~ filldist(Normal(0, 1), length(fdays))
         g_last = isempty(growth) ? growth0 : growth[end]
         future_growth = g_last .+ σ_growth .* cumsum(z_future)
         log_knots = vcat(log_knots, log_knots[end] .+ cumsum(future_growth))

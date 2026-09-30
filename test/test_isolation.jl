@@ -84,12 +84,12 @@ end
 @testitem "bed_capacity_walk: positive capacity path over the grid" tags = [
     :slow,
 ] begin
-    using Turing: sample, Prior
+    using Turing: sample, Prior, returned
+    using Random: Xoshiro
     import FlexiChains
     using BVDOutbreakSize: bed_capacity_walk_model
 
-    ## The walk returns a positive bed-capacity path; with a tight innovation
-    ## SD it stays a gentle drift around the baseline rather than blowing up.
+    ## The walk returns a positive bed-capacity path.
     chn = sample(
         bed_capacity_walk_model(30), Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
@@ -98,6 +98,8 @@ end
     @test any(k -> occursin("C0", k), ks)
     C0 = vec(Array(chn[:C0]))
     @test all(C0 .> 0)
+    m = bed_capacity_walk_model(30)
+    @test all(i -> all(>(0), returned(m, rand(Xoshiro(i), m)).C), 1:100)
 end
 
 @testitem "bed_capacity_walk: a growth trend that can fall" begin
@@ -110,21 +112,22 @@ end
     weekly = [diff(log.(returned(m, rand(Xoshiro(i), m)).C[1:7:end])) for i in 1:200]
     @test any(w -> any(<(0), w), weekly)
     @test any(w -> any(>(0), w), weekly)
-    ## With no innovations the weekly log growth stays at its starting rate,
-    ## past the cut-off too.
+    ## Unit innovations raise the weekly log growth by `σ_growth` each week
+    ## from `growth0`, and the forecast carries on at the last fitted growth.
     mh = bed_capacity_walk_model(54; cutoff = 40)
     θ = rand(Xoshiro(1), mh)
+    nz = length(θ[@varname(z)])
     fixed = fix(
         mh, Dict(
-            @varname(growth0) => 0.1, @varname(σ_growth) => 0.0,
-            @varname(z) => zeros(length(θ[@varname(z)])),
+            @varname(growth0) => 0.1, @varname(σ_growth) => 0.01,
+            @varname(z) => ones(nz),
             @varname(z_future) => zeros(length(θ[@varname(z_future)])),
         )
     )
     C = returned(fixed, rand(Xoshiro(2), fixed)).C
-    @test log(C[33] / C[26]) ≈ 0.1
-    @test log(C[54] / C[47]) ≈ 0.1
-    @test C[54] > C[40]
+    @test log(C[15] / C[8]) ≈ 0.12
+    @test log(C[29] / C[22]) ≈ 0.14
+    @test log(C[54] / C[47]) ≈ 0.1 + 0.01 * nz
 end
 
 @testitem "isolation occupancy: conditioned fit stays positive" tags = [
