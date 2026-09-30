@@ -388,6 +388,17 @@ end
     @test incomplete_capacity_days(national, provinces; tolerance = 0.01) ==
         [3, 4, 5]
     @test isempty(incomplete_capacity_days(national, Dict()))
+
+    ## Two small provinces silent together miss 8% of the beds, but neither
+    ## holds 5% on its own, so the day is kept.
+    small = Dict(
+        "a" => (; days = [1, 2], counts = [92, 92]),
+        "d" => (; days = [1], counts = [4]),
+        "e" => (; days = [1], counts = [4]),
+    )
+    @test isempty(
+        incomplete_capacity_days((; days = [1, 2], counts = [100, 92]), small)
+    )
 end
 
 @testitem "load_observations drops national capacity days a province misses" begin
@@ -403,8 +414,13 @@ end
         [Date(2026, 9, 23), Date(2026, 9, 25)],
     )
     @test isempty(intersect(kept, dropped))
-    ## Days the provinces printing beds account for the national figure.
-    for d in (Date(2026, 9, 9), Date(2026, 9, 16), Date(2026, 9, 26))
+    ## Days the provinces printing beds account for the national figure,
+    ## and 26 August, whose national figure carries Haut-Uélé's beds
+    ## although the province block does not.
+    for d in (
+            Date(2026, 8, 26), Date(2026, 9, 9), Date(2026, 9, 16),
+            Date(2026, 9, 26),
+        )
         @test d in kept
     end
 end
