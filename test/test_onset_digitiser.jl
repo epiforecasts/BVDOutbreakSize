@@ -326,6 +326,57 @@ end
     @test (last_tick - Day(5), 12, 5) in rows
 end
 
+@testitem "digitize keeps the run for crimson columns that are not the dashed line" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## The same bar as the dashed-line test, with its dark outline under an
+    ## overlapping crimson mark, but above it something that is not the
+    ## dashed line: too few dashes, dashes with pink rather than white gaps
+    ## (the incomplete-data band), or a solid crimson column. The outline
+    ## read must not fire, so the bar reads through the run as before and
+    ## not as the outline's 12 alive and 5 dead.
+    function chart(above!)
+        R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+        function paint!(rows, cols, c)
+            R[rows, cols] .= c[1]
+            G[rows, cols] .= c[2]
+            B[rows, cols] .= c[3]
+            return nothing
+        end
+        above!(paint!)
+        paint!(226:232, 670:673, (200, 40, 50))
+        paint!(232:232, 669:675, (90, 40, 30))
+        return R, G, B
+    end
+    few!(paint!) = foreach(
+        y -> paint!(y:(y + 6), 670:673, (200, 40, 50)), 128:14:212
+    )
+    function pink!(paint!)
+        paint!(16:225, 670:673, (245, 225, 225))
+        return foreach(
+            y -> paint!(y:(y + 6), 670:673, (200, 40, 50)), 16:14:212
+        )
+    end
+    solid!(paint!) = paint!(16:225, 670:673, (200, 40, 50))
+    last_tick = Date(2026, 8, 24)
+    day = last_tick - Day(5)
+    for above! in (few!, pink!, solid!)
+        R, G, B = chart(above!)
+        rows = digitize(R, G, B, last_tick, 20)
+        bar = [r for r in rows if r[1] == day]
+        @test length(bar) == 1
+        @test bar[1] != (day, 12, 5)
+    end
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
