@@ -76,6 +76,7 @@ logs/
 /docs/src/public/zone_map/zone_estimates.csv
 /docs/src/public/zone_map/health_zones.geojson
 !/docs/src/public/zone_map/index.html
+/docs/src/public/paper/
 
 # Transient docs build logs captured at the repo root
 /docs_build*.log

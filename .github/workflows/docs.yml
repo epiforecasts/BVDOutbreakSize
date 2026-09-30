@@ -1098,6 +1098,19 @@ jobs:
           pattern: render-*
           merge-multiple: true
           path: .
+      # The preprint is served at /paper/ as an unlisted page: files under
+      # docs/src/public/ are copied as they are, so it is in neither the nav,
+      # the sidebar nor the local search, and it carries a noindex meta tag.
+      # This is `task paper-site`, which this job has no Task to run.
+      - uses: quarto-dev/quarto-actions/setup@v2
+      - name: Render the unlisted paper
+        run: |
+          cd paper
+          quarto render main.qmd --to html -M embed-resources:true
+          quarto render si.qmd --to html -M embed-resources:true
+          mkdir -p ../docs/src/public/paper
+          mv main.html ../docs/src/public/paper/index.html
+          mv si.html ../docs/src/public/paper/si.html
       - name: Assemble and deploy the Vitepress site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
