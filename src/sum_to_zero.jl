@@ -228,19 +228,9 @@ end
     flow_pair_deviation(B, σ, ρ, z)
 
 Double-centred flow deviation `U` (`n × n`) from the bases `B` of
-[`flow_pair_basis`](@ref), a scale `σ`, a reciprocity `ρ` and
-standard-normal draws `z` (the symmetric directions first).
-
-The symmetric and antisymmetric parts are scaled so that each directed
-flow has standard deviation `σ` and correlation `ρ` with its reverse,
-
-```math
-U = \\sigma \\sqrt{\\frac{(1 + \\rho) M}{d_s}} B_s z_s
-    + \\sigma \\sqrt{\\frac{(1 - \\rho) M}{d_a}} B_a z_a,
-```
-
-with `M = n (n - 1) / 2` the number of pairs and `d_s`, `d_a` the number of
-directions in each part.
+[`flow_pair_basis`](@ref) and standard-normal draws `z` (the symmetric
+directions first), scaled so each directed flow has standard deviation `σ`
+and correlation `ρ` with its reverse.
 """
 function flow_pair_deviation(B::NamedTuple, σ, ρ, z::AbstractVector)
     S, A = B.symmetric, B.antisymmetric
@@ -253,20 +243,11 @@ function flow_pair_deviation(B::NamedTuple, σ, ρ, z::AbstractVector)
     n = isqrt(size(S, 1))
     pairs = n * (n - 1) ÷ 2
     T = promote_type(typeof(σ), typeof(ρ), eltype(z), eltype(S))
+    ## `M / d` of each part, so the two scales give each flow variance `σ²`.
     s_sym = ds > 0 ? σ * sqrt((1 + ρ) * pairs / ds) : zero(T)
     s_anti = da > 0 ? σ * sqrt((1 - ρ) * pairs / da) : zero(T)
-    U = zeros(T, n, n)
-    @inbounds for i in 1:(n * n)
-        acc = zero(T)
-        for j in 1:ds
-            acc += s_sym * S[i, j] * z[j]
-        end
-        for j in 1:da
-            acc += s_anti * A[i, j] * z[ds + j]
-        end
-        U[i] = acc
-    end
-    return U
+    u = s_sym .* (S * z[1:ds]) .+ s_anti .* (A * z[(ds + 1):end])
+    return reshape(u, n, n)
 end
 
 """

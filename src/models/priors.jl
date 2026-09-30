@@ -1607,6 +1607,10 @@ function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
     return δ
 end
 
+## A correlation from a draw on `(0, 1)`, so a Beta prior on `(ρ + 1) / 2`
+## is a prior on `ρ ∈ (−1, 1)`.
+_unit_to_correlation(x) = 2 * x - 1
+
 """
 Multi-patch latent infection process. Runs a renewal equation per spatial
 patch with a shared generation interval, a shared incubation period, and
@@ -1632,14 +1636,10 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
-The gravity kernel is the centre of the flows, and a log deviation per
-directed flow moves where each origin's exports land
-([`destination_weighted_kernel`](@ref)), with each origin's total held.
-The deviation is a destination effect per province, sum-to-zero and
-correlated `ρ_od` with that province's origin deviation in `ε`, plus a
-double-centred term per flow ([`flow_pair_deviation`](@ref)) with
-reciprocity `ρ_flow` between `q → p` and `p → q`. Together they have one
-direction per share of each origin's exports.
+A log deviation per directed flow, a correlated destination effect plus a
+double-centred flow term ([`flow_pair_deviation`](@ref)), moves where each
+origin's exports land with its total held
+([`destination_weighted_kernel`](@ref)).
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1837,7 +1837,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         σ_dest ~ importation_destination_sd_prior
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         ρ_od_unit ~ importation_correlation_prior
-        ρ_od = 2 * ρ_od_unit - 1
+        ρ_od = _unit_to_correlation(ρ_od_unit)
         z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
         ## Per-flow deviations with the origin and destination effects taken
@@ -1849,7 +1849,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             z_flow ~ product_distribution(fill(Normal(0, 1), n_flow))
             if n_sym > 0
                 ρ_flow_unit ~ importation_correlation_prior
-                ρ_flow = 2 * ρ_flow_unit - 1
+                ρ_flow = _unit_to_correlation(ρ_flow_unit)
             else
                 ρ_flow = -one(Tp)
             end

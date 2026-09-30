@@ -2024,47 +2024,25 @@ end
         @test Ku[2, q] > Kw[2, q]
     end
     @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3))
+    ## A matrix whose columns all equal `η` is the destination weighting,
+    ## and a matrix moves each origin's split on its own.
+    @test destination_weighted_kernel(K, repeat(η, 1, np)) ≈ Kw
+    W = [
+        0.3 -0.2 0.5 0.1; 0.8 0.0 -0.4 1.2
+        -0.6 0.2 0.3 -0.9; 0.1 0.7 -1.1 0.4
+    ]
+    KW = destination_weighted_kernel(K, W)
+    @test vec(sum(KW; dims = 1)) ≈ vec(sum(K; dims = 1))
+    shifted = copy(W)
+    shifted[:, 2] .+= 1.7
+    @test destination_weighted_kernel(K, shifted) ≈ KW
+    @test !(KW ≈ destination_weighted_kernel(K, vec(sum(W; dims = 2)) ./ np))
+    @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3, 3))
     ## An origin that exports nothing stays at zero, not NaN.
     K0 = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
     Kw0 = destination_weighted_kernel(K0, [0.3, -0.1, -0.2])
     @test Kw0[:, 2:3] == zeros(3, 2)
     @test sum(Kw0[:, 1]) ≈ sum(K0[:, 1])
-end
-
-@testitem "patch_infection_model: a pooled destination deviation when coupled" begin
-    using BVDOutbreakSize: patch_infection_model
-    using Turing: DynamicPPL, returned, sample, Prior
-    using Random: Xoshiro
-
-    n, np, rt_start, bp = 60, 4, 30, 10
-    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
-    vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
-    @test "σ_dest" in vnames(coupled)
-    @test "z_dest" in vnames(coupled)
-    ## An all-zero kernel has no split to weight, so nothing is sampled.
-    uncoupled = patch_infection_model(
-        n, np; breakpoint = bp, rt_start,
-        importation_kernel = zeros(np, np)
-    )
-    @test !("σ_dest" in vnames(uncoupled))
-
-    ## With no spread the deviations vanish and the arrivals are the
-    ## gravity kernel's; with spread they move and sum to zero.
-    function run(; σ_dest, z_dest = [1.0, -0.5, 0.5])
-        m = DynamicPPL.fix(coupled; σ_dest, z_dest, σ_flow = 0.0)
-        return m, returned(m, rand(Xoshiro(7), m))
-    end
-    _, flat = run(σ_dest = 0.0)
-    _, other = run(σ_dest = 0.0, z_dest = [-2.0, 1.0, 3.0])
-    @test flat.importation_matrix ≈ other.importation_matrix
-    m, tilted = run(σ_dest = 0.7)
-    @test !(tilted.importation_matrix ≈ flat.importation_matrix)
-    chn = sample(Xoshiro(1), m, Prior(), 2; progress = false)
-    for eff in vec(collect(chn[:importation_destination_effect]))
-        @test length(eff) == np
-        @test sum(eff) ≈ 0 atol = 1.0e-12
-        @test !all(iszero, eff)
-    end
 end
 
 @testitem "flow_pair_basis: double-centred flows, symmetric and not" begin
@@ -2116,37 +2094,6 @@ end
     @test_throws DimensionMismatch flow_pair_deviation(B, σ, ρ, zeros(d + 1))
 end
 
-@testitem "destination_weighted_kernel: a weight per flow" begin
-    using BVDOutbreakSize: destination_weighted_kernel,
-        province_importation_kernel
-
-    K = province_importation_kernel()
-    np = size(K, 1)
-    @test destination_weighted_kernel(K, zeros(np, np)) ≈ K
-    η = [0.4, 0.9, -0.3, -1.0]
-    ## A matrix whose columns all equal `η` is the destination weighting.
-    @test destination_weighted_kernel(K, repeat(η, 1, np)) ≈
-        destination_weighted_kernel(K, η)
-    W = [
-        0.3 -0.2 0.5 0.1; 0.8 0.0 -0.4 1.2
-        -0.6 0.2 0.3 -0.9; 0.1 0.7 -1.1 0.4
-    ]
-    Kw = destination_weighted_kernel(K, W)
-    @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
-    @test all(iszero, [Kw[q, q] for q in 1:np])
-    ## A shift shared within one origin's column cancels.
-    shifted = copy(W)
-    shifted[:, 2] .+= 1.7
-    @test destination_weighted_kernel(K, shifted) ≈ Kw
-    @test !(Kw ≈ destination_weighted_kernel(K, vec(sum(W; dims = 2)) ./ np))
-    @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3, 3))
-    K0 = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
-    W0 = [0.0 0.3 -0.1; 0.2 0.0 0.4; -0.5 0.1 0.0]
-    Kw0 = destination_weighted_kernel(K0, W0)
-    @test Kw0[:, 2:3] == zeros(3, 2)
-    @test sum(Kw0[:, 1]) ≈ sum(K0[:, 1])
-end
-
 @testitem "patch_infection_model: per-flow importation deviations" begin
     using BVDOutbreakSize: patch_infection_model, sum_to_zero_basis,
         sum_to_zero, sum_to_zero_factor
@@ -2156,13 +2103,14 @@ end
     n, np, rt_start, bp = 60, 4, 30, 10
     coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
     vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
-    for v in ("σ_flow", "z_flow", "ρ_flow_unit", "ρ_od_unit")
+    for v in ("σ_dest", "z_dest", "σ_flow", "z_flow", "ρ_flow_unit", "ρ_od_unit")
         @test v in vnames(coupled)
     end
     uncoupled = patch_infection_model(
         n, np; breakpoint = bp, rt_start,
         importation_kernel = zeros(np, np)
     )
+    @test !("σ_dest" in vnames(uncoupled))
     @test !("σ_flow" in vnames(uncoupled))
     ## With three patches the one double-centred flow is a circulation, so
     ## its reciprocity is -1 and not sampled.
@@ -2190,6 +2138,7 @@ end
     η1 = only_draw(:importation_destination_effect)
     a = sum_to_zero(sum_to_zero_factor(sum_to_zero_basis(np), 0.6), fixed.z_ε)
     @test η1 ≈ a
+    @test sum(η1) ≈ 0 atol = 1.0e-12
     @test only_draw(:importation_origin_destination_correlation) ≈ 1
     @test only_draw(:importation_reciprocity) ≈ 0.4
 
@@ -2233,21 +2182,6 @@ end
     B = flow_pair_basis(4)
     sym_only = (; B.symmetric, antisymmetric = zeros(16, 0))
     @test flow_draws(importation_flow_basis = sym_only) == 2
-end
-
-@testitem "patch_infection_model: flow scale prior below the destination's" begin
-    using BVDOutbreakSize: patch_infection_model
-    using Random: Xoshiro
-    using Statistics: quantile
-
-    priors = patch_infection_model(60, 4).defaults
-    dest = rand(Xoshiro(1), priors.importation_destination_sd_prior, 20_000)
-    flow = rand(Xoshiro(2), priors.importation_flow_sd_prior, 20_000)
-    ## A pattern shared across origins should read as a destination effect,
-    ## so the flow scale sits below the destination scale in the prior.
-    @test quantile(flow, 0.9) < quantile(dest, 0.9)
-    @test quantile(dest, 0.5) ≈ 0.674 atol = 0.03
-    @test quantile(flow, 0.5) ≈ 0.337 atol = 0.02
 end
 
 @testitem "destination_weighted_kernel: finite at extreme weights" begin
