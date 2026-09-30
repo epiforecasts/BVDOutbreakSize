@@ -34,6 +34,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
 - The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
