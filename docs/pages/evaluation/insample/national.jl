@@ -1,6 +1,7 @@
 # # In-sample checks
 #
 # Whether the fitted joint model reproduces the national data it was fitted to.
+# It also sets the single-stream fits against the joint, breaks the sampler diagnostics down by parameter and re-fits the joint under alternative assumptions.
 # The same checks by province are on the [province in-sample checks](@ref "Province in-sample checks") page and by health zone on the [health-zone in-sample checks](@ref "Health-zone in-sample checks") page.
 # How the model predicts data it has not seen is on the [forecast evaluation](@ref "Forecast evaluation") page.
 
@@ -15,7 +16,29 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
 ## The fits and prior draws this page reads, loaded from the cache here.
 chn_joint = load_fit("joint")
-prior_chn = joint_prior_draws();
+prior_chn = joint_prior_draws()
+## `sens_no_patches` is the headline with `n_patches = 1`, the check on the
+## spatial structure.
+chn_no_patches = load_fit("sens_no_patches")
+chn_exports = load_fit("exports")
+chn_deaths = load_fit("deaths")
+chn_cases = load_fit("cases")
+chn_confirmed = load_fit("confirmed")
+chn_confirmed_deaths = load_fit("confirmed_deaths")
+chn_treatment = load_fit("treatment")
+chn_onsets = load_fit("onsets")
+frozen_lastweek = load_fit("frozen_validation")
+if RUN_SENSITIVITY
+    chn_joint_community_delay = load_fit("sens_community_delay")
+    chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
+end
+posterior_C_joint = vec(Array(chn_joint[:C_T]))
+posterior_C_exports = vec(Array(chn_exports[:C_T]))
+posterior_C_deaths = vec(Array(chn_deaths[:C_T]))
+posterior_C_cases = vec(Array(chn_cases[:C_T]))
+posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
+posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
+posterior_C_onsets = vec(Array(chn_onsets[:C_T]));
 
 #md # ```@raw html
 #md # </details>
@@ -665,6 +688,606 @@ stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
 #md # ```
 
 stream_pairs_fig #hide
+
+# ## Outbreak size estimated by each data stream
+#
+# The table below puts the posteriors over the infection count side by side, the single-stream fits and the joint, to show what each stream implies alone and what the joint adds.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream infection-count table</summary>
+#md # ```
+
+streams_C_table = streams_table(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
+    "joint" => posterior_C_joint
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(streams_C_table) #hide
+
+# The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
+# The count axis is cropped to twice the joint fit's 90% upper bound, as the density figure below is, and a stream whose band runs past the crop is marked with an open triangle where it leaves the axis.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream projected-trajectory plot</summary>
+#md # ```
+
+## Per-draw cumulative-infection trajectory carried by each single-stream
+## fit out to the cut-off on day `n`, so streams whose data ends earlier are
+## still projected to today.
+function _cuminf(chn)
+    mat = chn[:cumulative_infections]
+    return [collect(v) for v in vec(collect(mat))]
+end
+## Grid day a stream's data last reports, used for the dotted rule. The
+## suspected case and death histories freeze at 26 May; exports and confirmed
+## run to the cut-off.
+_last_day(days) = isempty(days) ? nothing : maximum(days)
+
+stream_traj_fig = plot_stream_trajectories(
+    [
+        (;
+            label = "exports", trajs = _cuminf(chn_exports),
+            last_day = _last_day(
+                vcat(
+                    obs.export_case_days,
+                    obs.export_death_days
+                )
+            ), colour = :seagreen,
+        ),
+        (;
+            label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
+            last_day = _last_day(obs.deaths_history.days),
+            colour = :firebrick,
+        ),
+        (;
+            label = "cases (DRC)", trajs = _cuminf(chn_cases),
+            last_day = _last_day(obs.reported_history.days),
+            colour = :steelblue,
+        ),
+        (;
+            label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
+            last_day = _last_day(obs.confirmed_history.days),
+            colour = :goldenrod,
+        ),
+        (;
+            label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
+            last_day = _last_day(obs.isolation_history.days),
+            colour = :darkorange,
+        ),
+        (;
+            label = "onsets (DRC)", trajs = _cuminf(chn_onsets),
+            last_day = _last_day(obs.onset_curve_history.report_days),
+            colour = :mediumpurple,
+        ),
+    ];
+    n = obs.n, seeding = obs.seeding,
+    ## Twice the joint fit's 90% upper, the crop the cut-off density figure
+    ## below already uses. The exports-only fit bounds the infection count
+    ## so weakly that its 90% upper reaches the source population, which on
+    ## a free axis puts every other stream on the baseline.
+    ymax = 2.0 * quantile(posterior_C_joint, 0.95)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_traj_fig #hide
+
+# The second figure is the posterior density of each fit's cumulative infection count at the cut-off.
+# The x-axis is scaled to a multiple of the joint-fit 90% upper bound so the bulk of the streams stays visible rather than being flattened by the wide, ill-defined confirmed-only tail.
+
+#md # ```@raw html
+#md # <details><summary>Cut-off infection-count density plot</summary>
+#md # ```
+
+## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
+## the streams that track it read clearly while the confirmed-only tail runs
+## off the axis rather than dominating it.
+density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
+
+cumulative_density_fig = plot_cumulative_cases(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
+    "joint" => posterior_C_joint;
+    scenarios = [], xmax = density_xmax
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+cumulative_density_fig #hide
+
+# ## Reproduction number estimated by each data stream
+#
+# The reproduction number each stream implies on its own, one panel per stream with the joint fit overlaid in grey as the reference.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream implied-Rt plot</summary>
+#md # ```
+
+## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
+## joint walks from `RT_WALK_LEAD` days before the first situation report; the
+## shared `display_start` is the joint renewal start so every stream reads over
+## the same established window. `ramp` matches the joint Rt figure.
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
+stream_rt_fig = plot_rt_streams(
+    [
+        (;
+            label = "exports", chn = chn_exports, rt_start = 1,
+            rt_walk_start = 1, colour = :seagreen,
+        ),
+        (;
+            label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick,
+        ),
+        (;
+            label = "cases (DRC)", chn = chn_cases, rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue,
+        ),
+        (;
+            label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
+            rt_walk_start = 1, colour = :goldenrod,
+        ),
+        (;
+            label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
+            rt_walk_start = 1, colour = :darkorange,
+        ),
+        (;
+            label = "onsets (DRC)", chn = chn_onsets, rt_start = 1,
+            rt_walk_start = 1, colour = :mediumpurple,
+        ),
+    ];
+    joint = (;
+        label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint,
+    ),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_rt_fig #hide
+
+# ## Sensitivity to assumptions
+#
+# The joint model re-fitted with one assumption changed at a time.
+
+# ### Delay sensitivity
+#
+# The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
+# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 12 d).
+# We re-fit the joint model under the community-pathway delay from the same reanalysis: the delay for deaths that occur in the community without a recorded admission.
+# This delay is shorter (implied mean about 8 d).
+# Both pathways come from the line list, so this varies the actual delay assumption rather than an arbitrary scenario.
+# The re-fit is the headline model, with its provinces and in-care split, and changes only the delay.
+# It uses the headline's sampler settings.
+#
+# The infection count to date shifts with the assumed delay, and the table and overlaid densities below show how far.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
+#md # ```
+
+## The sensitivity re-fits (community-delay variant) are
+## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
+## (when enabled) in the setup block above.
+posterior_C_community_delay = RUN_SENSITIVITY ?
+    vec(Array(chn_joint_community_delay[:C_T])) : nothing;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count table</summary>
+#md # ```
+
+delay_sensitivity_table = RUN_SENSITIVITY ?
+    streams_table(
+        "baseline (hospital pathway)" => posterior_C_joint,
+        "community pathway" => posterior_C_community_delay
+    ) :
+    Markdown.md"_Delay sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(delay_sensitivity_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count density plot</summary>
+#md # ```
+
+delay_sensitivity_fig = RUN_SENSITIVITY ?
+    plot_cumulative_cases(
+        "baseline (hospital pathway)" => posterior_C_joint,
+        "community pathway" => posterior_C_community_delay; scenarios = []
+    ) :
+    Markdown.md"_Delay sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+delay_sensitivity_fig #hide
+
+# ### Tree-prior sensitivity
+#
+# The outbreak-age estimate depends on the coalescent tree prior assumed in the BEAST X analysis.
+# The baseline uses the more flexible Skygrid non-parametric model, which dates the common ancestor to 15 March 2026 ($95\%$ HPD 09 Feb -- 12 Apr).
+# The report also fits an Exponential growth tree prior, which dates the common ancestor about a week earlier to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr) [mbalaplacide2026](@cite).
+# Both priors give similar evolutionary rates ($\sim 1.1\times10^{-3}$ subs/site/year).
+# We re-fit the joint model under the Exponential growth TMRCA and compare the infection count to date and the outbreak age.
+# As for the delay, the re-fit is the headline model with only the common-ancestor date changed.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
+#md # ```
+
+## The Exponential-growth re-fit (and its `tmrca_days` offset) is defined in the fit
+## registry (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
+posterior_C_exp_growth = RUN_SENSITIVITY ?
+    vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
+T_skygrid = vec(Array(chn_joint[:T]))
+T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The infection count to date under the two tree priors, side by side.
+# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak, though the difference is small because the evolutionary rates are nearly identical.
+
+#md # ```@raw html
+#md # <details><summary>Tree-prior infection-count table</summary>
+#md # ```
+
+clock_sensitivity_C_table = RUN_SENSITIVITY ?
+    streams_table(
+        "Skygrid (baseline)" => posterior_C_joint,
+        "Exponential growth" => posterior_C_exp_growth
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(clock_sensitivity_C_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Tree-prior infection-count density plot</summary>
+#md # ```
+
+clock_sensitivity_C_fig = RUN_SENSITIVITY ?
+    plot_cumulative_cases(
+        "Skygrid (baseline)" => posterior_C_joint,
+        "Exponential growth" => posterior_C_exp_growth; scenarios = []
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_C_fig #hide
+
+# The outbreak age, the number of days from seeding to the cut-off, under the two tree priors.
+
+#md # ```@raw html
+#md # <details><summary>Tree-prior outbreak-age table</summary>
+#md # ```
+
+clock_sensitivity_T_table = RUN_SENSITIVITY ?
+    streams_table(
+        "Skygrid (baseline)" => T_skygrid,
+        "Exponential growth" => T_exp_growth; digits = 0
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(clock_sensitivity_T_table) #hide
+
+#md # ```@raw html
+#md # <details><summary>Tree-prior outbreak-age density plot</summary>
+#md # ```
+
+clock_sensitivity_T_fig = RUN_SENSITIVITY ?
+    plot_density_overlay(
+        "Skygrid (baseline)" => T_skygrid,
+        "Exponential growth" => T_exp_growth;
+        xlabel = "Outbreak age (days before cut-off)",
+        title = "Posterior outbreak age by tree prior", lower = 0
+    ) :
+    Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_T_fig #hide
+
+# ## Fit diagnostics by parameter
+#
+# ### One parameter or the whole model
+#
+
+#md # ```@raw html
+#md # <details><summary>Per-parameter diagnostics for every fit</summary>
+#md # ```
+
+## R-hat and both effective sample sizes over several thousand parameters
+## are not free to compute, so each fit's per-parameter frame is built once
+## here and handed to every table and figure in this section.
+diagnostic_fits = [
+    "joint" => chn_joint,
+    "joint, no patches" => chn_no_patches,
+    "exports" => chn_exports,
+    "deaths (DRC)" => chn_deaths,
+    "cases (DRC)" => chn_cases,
+    "confirmed (DRC)" => chn_confirmed,
+    "confirmed deaths (DRC)" => chn_confirmed_deaths,
+    "isolation (DRC)" => chn_treatment,
+    "onsets (DRC)" => chn_onsets,
+    "frozen (1wk back)" => frozen_lastweek.chn,
+    (
+        RUN_SENSITIVITY ?
+            [
+                "delay sensitivity" => chn_joint_community_delay,
+                "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+            ] :
+            []
+    )...,
+]
+diagnostic_frames = [
+    label => parameter_diagnostics(chn)
+        for (label, chn) in diagnostic_fits
+]
+diagnostic_frame = Dict(diagnostic_frames)
+joint_diagnostics = diagnostic_frame["joint"]
+diagnostic_spread = MarkdownTable(
+    diagnostic_spread_table(diagnostic_frames...; labels = display_names)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+diagnostic_spread #hide
+
+#md # ```@raw html
+#md # <details><summary>R-hat spread figure</summary>
+#md # ```
+
+rhat_spread_fig = plot_rhat_spread(
+    "joint" => joint_diagnostics,
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "exports" => diagnostic_frame["exports"],
+    "frozen (1wk back)" => diagnostic_frame["frozen (1wk back)"]
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rhat_spread_fig #hide
+
+# ### Which parameters mix worst
+#
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters of the joint fit</summary>
+#md # ```
+
+joint_worst_parameters = MarkdownTable(
+    worst_parameters_table(
+        joint_diagnostics; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_parameters #hide
+
+# The same diagnostics grouped by parameter rather than by element.
+
+#md # ```@raw html
+#md # <details><summary>Worst-mixing parameters, grouped</summary>
+#md # ```
+
+joint_worst_groups = MarkdownTable(
+    family_diagnostics_table(
+        joint_diagnostics; n = 12,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_worst_groups #hide
+
+#md # ```@raw html
+#md # <details><summary>Mixing over time varying paramters</summary>
+#md # ```
+
+joint_index_fig = plot_parameter_index_diagnostics(
+    joint_diagnostics;
+    n_groups = 3, labels = display_names
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_index_fig #hide
+
+# ### Where the divergent transitions sit
+#
+#md # ```@raw html
+#md # <details><summary>Sampler behaviour by chain</summary>
+#md # ```
+
+joint_chain_table = MarkdownTable(sampler_by_chain_table(chn_joint));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_chain_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Divergence location table</summary>
+#md # ```
+
+joint_divergence_table = MarkdownTable(
+    divergence_location_table(chn_joint; n = 12, labels = display_names)
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Divergent draws against the posterior</summary>
+#md # ```
+
+joint_divergence_fig = plot_divergence_locations(
+    chn_joint,
+    [:C_T, :R_T, :r, :T, :CFR, :k];
+    labels = Dict(
+        :C_T => "cumulative infections",
+        :R_T => "reproduction number at the cut-off",
+        :r => "latest growth rate", :T => "outbreak age",
+        :CFR => "case-fatality ratio",
+        :k => "surveillance dispersion"
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_divergence_fig #hide
+
+# ### The joint fit against the single-stream fits
+#
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream contrast</summary>
+#md # ```
+
+stream_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "exports" => diagnostic_frame["exports"],
+    "deaths (DRC)" => diagnostic_frame["deaths (DRC)"],
+    "cases (DRC)" => diagnostic_frame["cases (DRC)"],
+    "confirmed (DRC)" => diagnostic_frame["confirmed (DRC)"],
+    "isolation (DRC)" => diagnostic_frame["isolation (DRC)"],
+    "onsets (DRC)" => diagnostic_frame["onsets (DRC)"]
+)
+stream_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(
+        stream_contrast; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Joint against single-stream figure</summary>
+#md # ```
+
+stream_contrast_fig = plot_diagnostic_contrast(
+    stream_contrast;
+    xlabel = "Bulk effective sample size, single-stream fit",
+    ylabel = "Bulk effective sample size, joint fit",
+    title = "Mixing in the joint against each stream fitted alone"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_contrast_fig #hide
+
+# ### The joint fit against the same fit a week earlier
+#
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen contrast</summary>
+#md # ```
+
+frozen_contrast = diagnostic_contrast(
+    "joint" => joint_diagnostics,
+    "one week earlier" => diagnostic_frame["frozen (1wk back)"]
+)
+frozen_contrast_table = MarkdownTable(
+    diagnostic_contrast_table(
+        frozen_contrast; n = 15,
+        labels = display_names
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Live against frozen figure</summary>
+#md # ```
+
+frozen_contrast_fig = plot_diagnostic_contrast(
+    frozen_contrast;
+    xlabel = "Bulk effective sample size, fit a week earlier",
+    ylabel = "Bulk effective sample size, live fit",
+    title = "Mixing in the live fit against the same fit a week earlier"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_contrast_fig #hide
+
 # ## Parameter recovery
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
@@ -782,6 +1405,26 @@ recovery_forecasts_display #hide
 #md # ```
 
 # ## Saving in-sample outputs
+#
+# The per-stream infection-count table is written to the shared output directory.
+
+#md # ```@raw html
+#md # <details><summary>Write in-sample outputs</summary>
+#md # ```
+
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+CSV.write(
+    joinpath(output_dir, "cumulative_cases_by_stream.csv"),
+    streams_C_table
+)
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Write the summary bullets</summary>

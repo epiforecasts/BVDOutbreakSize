@@ -9,7 +9,7 @@ Simplified boundaries of every health zone in the seven affected provinces (Itur
 Read by `load_health_zones_geojson()` and drawn by `plot_zone_map`, `plot_zone_map_panels` and `plot_province_map`.
 Its properties are `zone` (the manifest zone key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
 
-It is built by `scripts/build_health_zones.py`, which is on the `zone-mainstream` branch (#779), from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson` in <https://github.com/INRB-UMIE/BDBV2026-Data>, build of 21 September 2026, commit `f489a92`).
+It is built by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson` in <https://github.com/INRB-UMIE/BDBV2026-Data>, build of 21 September 2026, commit `f489a92`).
 That build uses the Ministry of Health `DRC_Health_zones` shapefile (Zones de santé, DSNIS) from the Humanitarian Data Exchange, <https://data.humdata.org/dataset/drc-health-data>.
 Coordinates are rounded to four decimals and each ring is simplified on its own by Douglas-Peucker at 0.005 degrees, so a shared boundary can show a hairline gap.
 The file is for display, not for topology.

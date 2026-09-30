@@ -720,11 +720,18 @@ function patch_overview_table(
     return df
 end
 
+## An interval's bounds as `lo–hi`. `digits = 0` writes whole numbers.
+function _bounds_text(
+        lo::Real, hi::Real; digits::Integer = 2, unit::AbstractString = ""
+    )
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return string(fmt(lo), "–", fmt(hi), unit)
+end
+
 ## Equal-tailed 90% interval as `lo–hi`. `digits = 0` writes whole numbers.
 function _interval90_text(draws; digits::Integer = 2, unit::AbstractString = "")
     s = posterior_summary(draws)
-    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
-    return string(fmt(s.lo90), "–", fmt(s.hi90), unit)
+    return _bounds_text(s.lo90, s.hi90; digits, unit)
 end
 
 ## Equal-tailed 30%, 60% and 90% intervals as one phrase, `30% a–b, 60% c–d,

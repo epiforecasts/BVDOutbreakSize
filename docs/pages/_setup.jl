@@ -538,7 +538,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
-    ## with the model, shared by the main and sensitivity R(t) plots.
+    ## with the model, shared by the main and per-stream R(t) plots.
     _rt_start_plot = clamp(
         obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n
     )

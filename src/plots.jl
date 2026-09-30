@@ -2664,7 +2664,7 @@ the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
 marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
-They default to the per-stream reading, and the sensitivity page passes its
+They default to the per-stream reading, and the province in-sample page passes its
 own to set two model structures against each other instead.
 """
 function plot_rt_streams(

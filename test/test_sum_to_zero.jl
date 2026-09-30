@@ -417,6 +417,80 @@ end
     end
 end
 
+@testitem "patch_rt_model: forecast knots continue the fitted AR(1)" setup = [
+    SumToZeroReference,
+] begin
+    using BVDOutbreakSize: patch_rt_model, ForecastHorizon, knot_days,
+        future_knot_days, interpolate_knots
+    using Turing.DynamicPPL: OnlyAccsVarInfo, RawValueAccumulator,
+        InitFromPrior, UnlinkAll, init!!, get_raw_values, @varname
+
+    n, H = 60, 20
+    for np in (2, 4), seed in 1:3
+        nd = np - 1
+        Q = sum_to_zero_basis(np)
+        model = patch_rt_model(
+            n, np, log(1.5); rt_start = 10, forecast = ForecastHorizon(H)
+        )
+        accs = OnlyAccsVarInfo(RawValueAccumulator(false))
+        r, vi = init!!(
+            Xoshiro(seed), model, accs, InitFromPrior(), UnlinkAll()
+        )
+        vi = get_raw_values(vi)
+        d = vi[@varname(bartlett_diag)]
+        o = np > 2 ? vi[@varname(bartlett_lower)] : Float64[]
+        B = bartlett_factor(d, o)
+        shape = sqrt(nd / sum(abs2, B))
+        QB = matmul(Q, B)
+        apply(v) = vec(matmul(QB, reshape(v, :, 1)))
+        φ = exp2(-7 / vi[@varname(δ_halflife)])
+        days = vcat(knot_days(n; start = 10), future_knot_days(n, H))
+        nb = length(knot_days(n; start = 10))
+        z = vcat(vi[@varname(z_drift)], vi[@varname(z_drift_future)])
+        knots = zeros(np, length(days))
+        s_level = vi[@varname(σ_level)] * shape
+        knots[:, 1] = s_level .* apply(vi[@varname(z_level)])
+        for k in 2:length(days)
+            η = apply(z[((k - 2) * nd + 1):((k - 1) * nd)])
+            knots[:, k] = φ .* knots[:, k - 1] .+
+                vi[@varname(σ_drift)] * shape .* η
+        end
+        @test r.δ_knots ≈ knots[:, 1:nb] rtol = 1.0e-12 atol = 1.0e-14
+        for p in 1:np
+            δ = interpolate_knots(knots[p, :], days, n + H)
+            δr = log.(r.Rt_matrix[p, :] ./ r.Rt_national)
+            @test δr ≈ δ rtol = 1.0e-10 atol = 1.0e-12
+        end
+    end
+end
+
+@testitem "sum_to_zero_knots: the AR(1) recursion by hand" begin
+    using BVDOutbreakSize: sum_to_zero_knots, sum_to_zero_ar1!
+
+    F_level = [1.0 0.0; -0.5 0.5; -0.5 -0.5]
+    F_drift = [0.2 0.1; 0.0 -0.3; -0.2 0.2]
+    z_level = [0.4, -1.2]
+    Z = [0.5 -0.1; 1.5 0.7]
+    φ = 0.8
+    δ1 = F_level * z_level
+    δ2 = φ .* δ1 .+ F_drift * Z[:, 1]
+    δ3 = φ .* δ2 .+ F_drift * Z[:, 2]
+    @test sum_to_zero_knots(F_level, F_drift, z_level, Z[:, 1:1], φ) ≈
+        hcat(δ1, δ2)
+    @test sum_to_zero_knots(F_level, F_drift, z_level, Z, φ) ≈
+        hcat(δ1, δ2, δ3)
+    ## No innovation columns: the level alone.
+    @test sum_to_zero_knots(F_level, F_drift, z_level, zeros(2, 0), φ) ≈
+        reshape(δ1, 3, 1)
+    ## No drift directions: the level decays.
+    @test sum_to_zero_knots(F_level, zeros(3, 0), z_level, zeros(0, 2), φ) ≈
+        hcat(δ1, φ .* δ1, φ^2 .* δ1)
+    ## Continuing from knot `k0 > 1` leaves the earlier knots alone.
+    knots = hcat(δ1, δ2, zeros(3))
+    sum_to_zero_ar1!(knots, F_drift, Z[:, 2:2], φ, 2)
+    @test knots ≈ hcat(δ1, δ2, δ3)
+end
+
 @testitem "relative_multiplier: identified contrasts within each group" begin
     using BVDOutbreakSize: relative_multiplier, relative_multiplier_dims,
         sum_to_zero_basis

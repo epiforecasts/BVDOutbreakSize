@@ -1,0 +1,39 @@
+name: Paper
+
+# Renders the preprint under paper/ and uploads the PDF and HTML as an
+# artifact. Nothing here fits a model: the paper reads only committed
+# figures and generated numbers.
+
+on:
+  push:
+    branches: [main]
+    paths: ["paper/**", "docs/src/refs.bib", ".github/workflows/paper.yml"]
+  pull_request:
+    paths: ["paper/**", "docs/src/refs.bib", ".github/workflows/paper.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: paper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          tinytex: true
+      - name: Render
+        run: |
+          cd paper
+          quarto render main.qmd --to html
+          quarto render main.qmd --to pdf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: |
+            paper/main.pdf
+            paper/main.html
+            paper/main_files
+          retention-days: 30

@@ -1244,6 +1244,7 @@ function _zone_share_renewal_adjoint!(
     ## adjoint grows as the walk goes back. `ȳ.infections` is Mooncake's
     ## buffer, so it accumulates into a copy.
     acc = copy(ȳ.infections)
+    E = exp.(δ_daily)
     ū = zeros(Tp, nz)
     v̄ = zeros(Tp, nz)
     h̄ = zeros(Tp, nz)
@@ -1366,7 +1367,7 @@ function _zone_share_renewal_adjoint!(
             fp = force_pre[p, t]
             pre = zero(Tp)
             for z in zs
-                Λ̄ = ȳ.forces[j, z] + ū[z] * exp(δ_daily[j, z])
+                Λ̄ = ȳ.forces[j, z] + ū[z] * E[j, z]
                 δ̄[j, z] += ū[z] * st.u[j, z]
                 w̄0[z] += Λ̄ * fp
                 pre += Λ̄ * w0[z]
