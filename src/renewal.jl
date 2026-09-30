@@ -402,7 +402,8 @@ and `S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`.
   recursion begins on day `L+1`.
 - `importation_kernel`: `n_patches x n_patches` matrix `K` where
   `K[p, q]` is the share of patch `q`'s transmission that lands in patch
-  `p` rather than at home. The diagonal should be zero, and each column's
+  `p` rather than at home, or an `n_patches x n_patches x n_days` array
+  with one such matrix per day. The diagonal should be zero, and each column's
   off-diagonal sum times `epsilon` must be at most one, so a patch cannot
   export more transmission than it generates. Both hold for
   [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
@@ -432,7 +433,7 @@ AD-transparent under Mooncake.
 """
 function patch_infections(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
-        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractArray,
         epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
     )
     st = patch_infections_with_state(
@@ -449,10 +450,17 @@ depletion rate `y_{p,t} / N_p`. The derivative rule reads both.
 """
 function patch_infections_with_state(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
-        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractArray,
         epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
     )
     np, n = size(Rt_matrix)
+    ndims(importation_kernel) == 2 || size(importation_kernel, 3) == n ||
+        throw(
+        DimensionMismatch(
+            "patch_infections: a daily kernel over " *
+                "$(size(importation_kernel, 3)) days for $n days."
+        )
+    )
     L = size(seeds_matrix, 2)
     Tp = promote_type(
         eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
@@ -491,11 +499,11 @@ function patch_infections_with_state(
             for q in 1:np
                 q == p && continue
                 arrivals += _eps(epsilon, q, t) *
-                    importation_kernel[p, q] * gen[q]
+                    _day(importation_kernel, p, q, t) * gen[q]
             end
             imports[p, t] = arrivals
-            y = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
-                arrivals
+            y = (one(Tp) - _eps(epsilon, p, t) * _day(outflow, p, t)) *
+                gen[p] + arrivals
             x = y / N[p]
             rate[p, t] = x
             I[p, t] = -pool[p] * expm1(-x)
@@ -518,6 +526,24 @@ function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
     end
     return outflow
 end
+
+## The same per day for a daily kernel, `np x n_days`.
+function _patch_outflow(
+        ::Type{T}, K::AbstractArray{<:Any, 3}, np::Integer
+    ) where {T}
+    outflow = zeros(T, np, size(K, 3))
+    @inbounds for t in axes(K, 3), q in 1:np, r in 1:np
+        r == q && continue
+        outflow[q, t] += K[r, q, t]
+    end
+    return outflow
+end
+
+## Day `t`'s entry of a quantity that is constant in time or daily.
+@inline _day(x::AbstractVector, q, t) = @inbounds x[q]
+@inline _day(x::AbstractMatrix, q, t) = @inbounds x[q, t]
+@inline _day(K::AbstractMatrix, p, q, t) = @inbounds K[p, q]
+@inline _day(K::AbstractArray{<:Any, 3}, p, q, t) = @inbounds K[p, q, t]
 
 """
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF

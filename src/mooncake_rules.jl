@@ -62,6 +62,15 @@ Mooncake.@is_primitive(
         Vector{<:Mooncake.IEEEFloat},
     },
 )
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat, 3}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat},
+    },
+)
 
 ## Data-only helpers: lookups over the observation grid and the recorded
 ## histories, with no sampled quantity among their arguments. They pass no
@@ -891,12 +900,18 @@ function Mooncake.rrule!!(
     return out, onset_report_moments_pullback!!
 end
 
+## Accumulate into day `t` of a kernel tangent that is constant in time or
+## daily.
+@inline _add_day!(K̄::AbstractMatrix, v, p, q, t) = (@inbounds K̄[p, q] += v)
+@inline _add_day!(K̄::AbstractArray{<:Any, 3}, v, p, q, t) =
+    (@inbounds K̄[p, q, t] += v)
+
 function Mooncake.rrule!!(
         ::CoDual{typeof(patch_infections)},
         Rt::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
         g::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
         seeds::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        K::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        K::CoDual{<:Union{Matrix{T}, Array{T, 3}}} where {T <: Mooncake.IEEEFloat},
         ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
         N::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
     )
@@ -931,7 +946,7 @@ function Mooncake.rrule!!(
         force = zeros(Tf, np)
         gen = zeros(Tf, np)
         ḡen = zeros(Tf, np)
-        ōut = zeros(Tf, np)
+        ōut = zeros(Tf, np, n)
         ȳ = zeros(Tf, np)
         S̄ = zeros(Tf, np)
         @inbounds for t in n:-1:(L + 1)
@@ -957,14 +972,16 @@ function Mooncake.rrule!!(
             for p in 1:np
                 a = ȳ[p]
                 ā = a + Ā[p, t]
-                ḡen[p] += a * (one(Tf) - εp[p, t] * outflow[p])
-                ε̄[p, t] -= a * outflow[p] * gen[p]
-                ōut[p] -= a * εp[p, t] * gen[p]
+                o = _day(outflow, p, t)
+                ḡen[p] += a * (one(Tf) - εp[p, t] * o)
+                ε̄[p, t] -= a * o * gen[p]
+                ōut[p, t] -= a * εp[p, t] * gen[p]
                 for q in 1:np
                     q == p && continue
-                    ε̄[q, t] += ā * Kp[p, q] * gen[q]
-                    K̄[p, q] += ā * εp[q, t] * gen[q]
-                    ḡen[q] += ā * εp[q, t] * Kp[p, q]
+                    k = _day(Kp, p, q, t)
+                    ε̄[q, t] += ā * k * gen[q]
+                    _add_day!(K̄, ā * εp[q, t] * gen[q], p, q, t)
+                    ḡen[q] += ā * εp[q, t] * k
                 end
             end
             for p in 1:np
@@ -976,9 +993,9 @@ function Mooncake.rrule!!(
                 end
             end
         end
-        @inbounds for q in 1:np, r in 1:np
+        @inbounds for t in (L + 1):n, q in 1:np, r in 1:np
             r == q && continue
-            K̄[r, q] += ōut[q]
+            _add_day!(K̄, ōut[q, t], r, q, t)
         end
         ## Each pool after the seed is `N[p] − Σ seeds[p, :]`.
         m = min(L, n)

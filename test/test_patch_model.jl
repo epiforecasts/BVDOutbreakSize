@@ -2294,8 +2294,8 @@ end
     K3 = repeat(K, 1, 1, n)
     K3[:, :, 25:end] .*= 2
     moved = patch_infections(Rt, g, seeds, K3, ε, N)
-    @test moved.importation[:, 1:25] ≈ static.importation[:, 1:25]
-    @test !(moved.importation[:, 26:end] ≈ static.importation[:, 26:end])
+    @test moved.importation[:, 1:24] ≈ static.importation[:, 1:24]
+    @test !(moved.importation[:, 25:end] ≈ static.importation[:, 25:end])
     @test_throws DimensionMismatch patch_infections(
         Rt, g, seeds, repeat(K, 1, 1, n - 1), ε, N
     )
