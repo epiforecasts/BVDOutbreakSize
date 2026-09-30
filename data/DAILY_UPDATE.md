@@ -108,6 +108,14 @@ INSP publishes SitReps for floods, measles, Mpox and other events through the sa
 Expect around 58 rejects; that is normal.
 If an MVE report is ever published without MVE in the filename it will appear in that list, which is the signal to fetch it by hand.
 
+The back catalogue has to be complete before any onset reader change (section 8).
+If the media listing comes back empty or short, do not give up on it:
+
+1. List the report numbers in the digitiser `CONFIG` with no PDF in `data/sitrep_pdfs/`.
+2. Fetch them in one call through the per-post path: `julia --project=scripts scripts/download_sitreps.jl --only 132,133,134` (two sequential requests per report).
+3. Take any the posts API cannot find from the INRB-UMIE mirror, named `SitRep_MVE_NNN_2026.pdf`, and say so in the PR.
+4. Stop only if a report is on neither source, and name it in the PR.
+
 Read PDFs with the Read tool's `pages=` argument.
 Poppler (`pdftotext -layout`, `pdfimages`, `pdfinfo`) is useful for cross-reading tables and is required by the digitiser.
 
@@ -266,9 +274,20 @@ The analytique reports print a symptom-onset epidemic curve as a raster figure w
 The procedure of record is the "Onset-curve digitiser" section of `scripts/README.md`.
 Follow its "Adding a vintage" steps for each new report that carries the figure, and its acceptance rules.
 `task onset-audit` exits non-zero when a vintage is outside the acceptance bands, and that exit status decides whether a block is accepted.
-When a block fails after the tick date, the y-axis step and the printed `n` have been re-read, the reader is at fault: fix it in the same data PR by the "Fixing the reader" steps in `scripts/README.md`.
+When a block fails after the tick date, the y-axis step and the printed `n` have been re-read, the reader is at fault.
+Adapt the reader in this run so the onsets go in:
+
+1. Check that every `CONFIG` vintage's PDF is on disk, fetching any missing ones as section 3 says.
+2. Match the audit rows to a row of "Failure modes to recognise in the audit" in `scripts/README.md`, then find the step that misreads with `baseline_row`, `y_tick_rows`, `tick_chain` and `column_runs` on the new image.
+3. Follow "Fixing the reader" in `scripts/README.md`: a failing synthetic test, then the reference change, then the port.
+4. Rebuild with `task onset-digitise -- --rebuild` before adding the new `CONFIG` row.
+   It must report every `CONFIG` vintage read and none reused, and `cmp` against the committed CSV must pass.
+5. Add the new `CONFIG` row, digitise, and run `task onset-port-check`, `task onset-audit` and the vision check.
+6. Commit the test, the reader change and the new vintage separately in the data PR, with the rebuild proof and the audit rows in its body.
+
 Never special-case one vintage to make it pass.
-Leave a vintage out of `CONFIG` and open an issue with the audit rows only when no general change to the reader passes.
+Leaving a vintage out is the last resort.
+Do it only when no general change to the reader passes step 4 or the audit, state the reason in the PR, and open an issue with the audit rows and what was tried.
 
 The INRB-UMIE epidemic dashboard publishes the same onset curve as SVG, at national, province and health-zone level.
 Refresh `data/onset_dashboard_history.csv` and the zones file beside it once per run with `scripts/extract_dashboard_onsets.py`, as "Dashboard symptom-onset curves" in `data/README.md` describes: one blob-filtered fetch of the dashboard repo, no more.
