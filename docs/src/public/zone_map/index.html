@@ -926,6 +926,8 @@ Nothing else is fetched.
   function showLevel() {
     var d = data[level], other = layers[level === "zone" ? "province" : "zone"];
     rows = d.rows; byKey = d.byKey;
+    // The two layers' tables have different columns.
+    sortKey = null; sortDesc = true;
     if (other) { map.removeLayer(other.fill); map.removeLayer(other.hatch); }
     layer = layers[level].fill; hatch = layers[level].hatch;
     layer.addTo(map); hatch.addTo(map);
