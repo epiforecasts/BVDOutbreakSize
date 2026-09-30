@@ -18,6 +18,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
 - Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
