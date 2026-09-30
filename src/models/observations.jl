@@ -1601,7 +1601,8 @@ Three pieces:
     death-to-case ratio carries the suspect-pool severity and the
     suspected-death level. The death-only composer has no case stream and
     falls back to a death testing fraction
-    ([`death_testing_fraction_model`](@ref)).
+    ([`death_testing_fraction_model`](@ref)) of the suspected deaths, gated
+    to zero before the first confirmed-death vintage.
   - Death-pool composition. The BVD share of the suspected deaths at
     receipt, `q_death = bvd_death / (bvd_death + bg_death)` per day, from
     the death series' own BVD and background components. The death
@@ -1642,7 +1643,6 @@ positivity and the expected confirmed-death count.
         ## pinning the step and sampling no parameter.
         confirmed_break_sd::Real = 25.0,
         receipt_pmf::AbstractVector = [1.0],
-        capacity_start::Integer = 0,
         case_analysed_daily = nothing,
         case_suspected_daily = nothing,
         scaling = death_testing_scaling_model(),
@@ -1711,7 +1711,11 @@ positivity and the expected confirmed-death count.
         test_state ~ to_submodel(testing)
         τ_death = test_state.τ_death
         sc = one(τ_death)
-        death_volume = τ_death .* gate_before(susp_death, capacity_start)
+        ## Gated before the first confirmed-death vintage, as the case volume
+        ## is gated before the first confirmed-case vintage.
+        cap_start = isempty(confirmed_deaths_history.days) ? 1 :
+            clamp(Int(confirmed_deaths_history.days[1]), 1, n)
+        death_volume = τ_death .* gate_before(susp_death, cap_start)
     end
 
     confirmed_death_daily = p_pos_daily .* death_volume
