@@ -603,6 +603,22 @@ function province_map_estimates(
     return DataFrame(rows)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+[`province_map_estimates`](@ref) with the reproduction number at the
+cut-off read from the per-patch `R_T_patch` of `chn`, for its first
+`n_patches` patches.
+"""
+function province_map_estimates(
+        chn, forecast::AbstractVector{<:AbstractVector};
+        n_patches::Integer, kwargs...
+    )
+    return province_map_estimates(
+        _per_patch(chn, :R_T_patch, n_patches), forecast; kwargs...
+    )
+end
+
 ## Label position of each province in `geo`: the area-weighted mean of its
 ## zones' part centroids. Named by the entry of `provinces` it folds to.
 function _province_label_points(geo, provinces)
