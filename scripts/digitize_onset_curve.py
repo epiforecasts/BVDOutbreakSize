@@ -701,10 +701,9 @@ def digitize_windows(im, last_tick_date, y_step=20):
             cols = [x for x in range(lo, hi + 1) if not isborder[x]]
         if not cols:
             continue
-        # a bar whose columns all lie on a tick column can have washed
-        # fill that the gridline skip reads as page, breaking each run at
-        # a different row (SitRep 136's 20 July bar); a day that reads as
-        # neither empty nor a bar is read again without the skip
+        # washed fill on a tick column can read as gridline and break each run
+        # at a different row; a day that reads as neither empty nor a bar is
+        # read again without the skip
         bar = _bar_height(h, hp, nr, cols, cx, ppc)
         if bar is None:
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)

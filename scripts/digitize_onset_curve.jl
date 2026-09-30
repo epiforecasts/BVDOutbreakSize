@@ -680,10 +680,9 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
         isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
         isempty(cols) && continue
-        # a bar whose columns all lie on a tick column can have washed
-        # fill that the gridline skip reads as page, breaking each run at
-        # a different row (SitRep 136's 20 July bar); a day that reads as
-        # neither empty nor a bar is read again without the skip
+        # washed fill on a tick column can read as gridline and break each run
+        # at a different row; a day that reads as neither empty nor a bar is
+        # read again without the skip
         bar = bar_height(h, hp, nr, cols, cx, ppc)
         bar === nothing && (bar = bar_height(h1, hp1, nr1, cols, cx, ppc))
         bar isa Tuple || continue
