@@ -122,3 +122,137 @@ end
     @test sort(z.zones) == sort([z.zone for z in zones])
     @test sort(unique(z.values)) == Float64.(eachindex(PROVINCE_NAMES))
 end
+
+@testitem "province_map_estimates gives one row per source province" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    rt = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    fc = [collect(0.0:100.0), collect(100.0:200.0)]
+    hist(c) = (; days = [1, 5], counts = c)
+    confirmed = Dict("a" => hist([3, 7]), "c" => hist([1, 2]))
+    deaths = Dict("a" => hist([0, 1]))
+    est = province_map_estimates(
+        rt, fc; confirmed_history = confirmed, death_history = deaths,
+        cutoff = Date(2026, 9, 1), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"])
+    )
+    @test est.province == ["a", "b", "c"]
+    @test est.patch == ["X", "Pool", "Pool"]
+    @test est.pooled == [0, 1, 1]
+    @test isequal(est.cases, [7, missing, 2])
+    @test isequal(est.deaths, [1, missing, missing])
+    @test est.R_T_median ≈ [1.0, 2.0, 2.0]
+    @test est.R_T_lower ≈ [0.55, 2.0, 2.0]
+    @test est.R_T_upper ≈ [1.45, 2.0, 2.0]
+    @test est.p_rt_above_one ≈ [50 / 101, 1.0, 1.0]
+    @test est.forecast_median ≈ [50.0, 150.0, 150.0]
+    @test est.forecast_lower ≈ [5.0, 105.0, 105.0]
+    @test est.forecast_upper ≈ [95.0, 195.0, 195.0]
+    @test all(==("2026-09-01"), est.as_of)
+    ## From a chain's per-patch reproduction number, one vector per draw.
+    chn = (; R_T_patch = [[rt[1][i], rt[2][i], 9.0] for i in 1:101])
+    from_chn = province_map_estimates(
+        chn, fc; n_patches = 2, confirmed_history = confirmed,
+        death_history = deaths, cutoff = Date(2026, 9, 1),
+        patch_names = ["x", "y"], patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"])
+    )
+    @test isequal(from_chn, est)
+end
+
+@testitem "province_map_estimates adds ascertainment when given" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    d = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    kw = (;
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"]),
+    )
+    est = province_map_estimates(d, d; ascertainment = d, kw...)
+    @test est.ascertainment_median ≈ [1.0, 2.0, 2.0]
+    @test est.ascertainment_lower ≈ [0.55, 2.0, 2.0]
+    @test est.ascertainment_upper ≈ [1.45, 2.0, 2.0]
+    @test !(
+        :ascertainment_median in propertynames(
+            province_map_estimates(d, d; kw...)
+        )
+    )
+end
+
+@testitem "rt_quantile_table gives daily quantiles in long format" begin
+    using BVDOutbreakSize: rt_quantile_table
+    using Dates: Date
+    ## Two areas over four days, 101 draws each. The second is unreported
+    ## (NaN) before day 3, and neither is written before `from`.
+    a = repeat(collect(0.0:0.01:1.0), 1, 4) .+ [0 1 2 3]
+    b = copy(a)
+    b[:, 1:2] .= NaN
+    t = rt_quantile_table(
+        [a, b], ["A", "B"]; cutoff = Date(2026, 9, 4), n = 4, from = 2
+    )
+    @test t.area == ["A", "A", "A", "B", "B"]
+    @test t.date == Date.(
+        [
+            "2026-09-02", "2026-09-03", "2026-09-04",
+            "2026-09-03", "2026-09-04",
+        ]
+    )
+    @test t.median ≈ [1.5, 2.5, 3.5, 2.5, 3.5]
+    @test t.lower_90 ≈ [1.05, 2.05, 3.05, 2.05, 3.05]
+    @test t.upper_90 ≈ [1.95, 2.95, 3.95, 2.95, 3.95]
+    @test t.lower_50 ≈ [1.25, 2.25, 3.25, 2.25, 3.25]
+    @test t.upper_50 ≈ [1.75, 2.75, 3.75, 2.75, 3.75]
+end
+
+@testitem "weekly_count_table sums increments into weeks ending at the cut-off" begin
+    using BVDOutbreakSize: weekly_count_table
+    using Dates: Date
+    ## Vintages on days 2, 9, 10, 16 and 20 of a 20-day grid. Weeks end on
+    ## days 20, 13 and 6; the week (−1, 6] starts before the first vintage,
+    ## whose increment lumps in everything before it, so it is left out.
+    days = [2, 9, 10, 16, 20]
+    inc = [5 1 2 3 4; 0 0 1 0 0]
+    t = weekly_count_table(
+        days, inc, ["A", "B"]; cutoff = Date(2026, 9, 20), n = 20,
+        weeks = 3
+    )
+    @test t.area == ["A", "A", "B", "B"]
+    @test t.date == Date.(
+        [
+            "2026-09-13", "2026-09-20",
+            "2026-09-13", "2026-09-20",
+        ]
+    )
+    @test t.count == [3, 7, 1, 0]
+end
+
+@testitem "province_map_estimates counts only draws above one and defaults to the patches" begin
+    using BVDOutbreakSize: province_map_estimates, PROVINCE_MEMBERS,
+        PROVINCE_NAMES, PROVINCE_SOURCE_NAMES
+    using Dates: Date
+    ## A draw at exactly one does not count as above it.
+    one = province_map_estimates(
+        [[0.9, 1.0, 1.0, 1.1]], [[1.0, 2.0, 3.0, 4.0]];
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1), patch_names = ["x"], patch_labels = ["X"],
+        members = Dict("x" => ["a"])
+    )
+    @test one.p_rt_above_one == [0.25]
+    ## The default patches cover every source province once, keyed as the
+    ## geojson keys them.
+    np = length(PROVINCE_NAMES)
+    est = province_map_estimates(
+        fill([1.0, 2.0], np), fill([1.0, 2.0], np);
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1)
+    )
+    @test size(est, 1) == sum(length, values(PROVINCE_MEMBERS))
+    @test sort(est.province) == sort(PROVINCE_SOURCE_NAMES)
+    @test est.pooled == [
+        length(PROVINCE_MEMBERS[n]) > 1 ? 1 : 0
+            for n in PROVINCE_NAMES for _ in PROVINCE_MEMBERS[n]
+    ]
+end
