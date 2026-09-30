@@ -573,13 +573,15 @@ Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the reported-
 cases stream (in predictive mode, to supply the non-BVD background the death
 background is scaled from) and the suspected-deaths stream, then conditions
-on the confirmed-death likelihood alone. See
-[`confirmed_deaths_model`](@ref).
+on the confirmed-death likelihood alone. The suspected deaths reach the
+laboratory through a report-to-receipt delay drawn from the prior the joint
+uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
 """
 @model function confirmed_deaths_only_model(
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
@@ -590,6 +592,7 @@ on the confirmed-death likelihood alone. See
         deaths = deaths_model,
         cases = reported_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        receipt = lab_delay_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
@@ -611,15 +614,18 @@ on the confirmed-death likelihood alone. See
     deaths_state ~ to_submodel(
         deaths(
             deaths_history, total_deaths, latent.onsets, k;
+            suspected_daily_deaths_history,
             case_bg_daily = cases_state.bg_daily, ckw...
         )
     )
+    receipt_state ~ to_submodel(receipt)
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(
             confirmed_deaths, total_deaths,
             deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
             deaths_state.bg_death_daily, k;
-            confirmed_deaths_history, confirmed_break_days,
+            confirmed_deaths_history, receipt_pmf = receipt_state.pmf,
+            confirmed_break_days,
             confirmed_break_gross = confirmed_break_gross_deaths,
             confirmed_break_sd, ckw...
         )
