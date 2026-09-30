@@ -488,7 +488,7 @@ end
 ## provinces it pools, with the province names in place of zone labels.
 
 export province_map_summary, province_zone_values, plot_province_map,
-    province_map_estimates
+    province_map_estimates, rt_quantile_table, weekly_count_table
 
 """
 $(TYPEDSIGNATURES)
@@ -573,6 +573,8 @@ interval and, for the reproduction number, the chance it exceeds one;
 `pooled` is 1 when its patch pools several provinces. `cases` and `deaths`
 are the province's own last cumulative counts in `confirmed_history` and
 `death_history`, `missing` when it has none, and `as_of` is `cutoff`.
+With per-patch `ascertainment` draws, each province also carries its
+patch's ascertainment median and interval.
 """
 function province_map_estimates(
         rt::AbstractVector{<:AbstractVector},
@@ -580,9 +582,12 @@ function province_map_estimates(
         confirmed_history::AbstractDict, death_history::AbstractDict,
         cutoff::Date, patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        members::AbstractDict = PROVINCE_MEMBERS, level::Real = 0.9
+        members::AbstractDict = PROVINCE_MEMBERS, level::Real = 0.9,
+        ascertainment::Union{Nothing, AbstractVector} = nothing
     )
     r = province_map_summary(rt; level)
+    a = ascertainment === nothing ? nothing :
+        province_map_summary(ascertainment; level)
     f = province_map_summary(forecast; level)
     last_count(h, prov) = haskey(h, prov) && !isempty(h[prov].counts) ?
         h[prov].counts[end] : missing
@@ -600,7 +605,14 @@ function province_map_estimates(
         )
             for (p, name) in enumerate(patch_names) for prov in members[name]
     ]
-    return DataFrame(rows)
+    df = DataFrame(rows)
+    if a !== nothing
+        patch_of = [p for (p, name) in enumerate(patch_names) for _ in members[name]]
+        df.ascertainment_median = a.values[patch_of]
+        df.ascertainment_lower = a.lower[patch_of]
+        df.ascertainment_upper = a.upper[patch_of]
+    end
+    return df
 end
 
 """
@@ -608,15 +620,73 @@ $(TYPEDSIGNATURES)
 
 [`province_map_estimates`](@ref) with the reproduction number at the
 cut-off read from the per-patch `R_T_patch` of `chn`, for its first
-`n_patches` patches.
+`n_patches` patches, and the ascertainment from its
+`province_ascertainment` when it carries one.
 """
 function province_map_estimates(
         chn, forecast::AbstractVector{<:AbstractVector};
         n_patches::Integer, kwargs...
     )
+    ascertainment = _has_key(chn, :province_ascertainment) ?
+        _per_patch(chn, :province_ascertainment, n_patches) : nothing
     return province_map_estimates(
-        _per_patch(chn, :R_T_patch, n_patches), forecast; kwargs...
+        _per_patch(chn, :R_T_patch, n_patches), forecast; ascertainment,
+        kwargs...
     )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Daily reproduction-number quantiles per area in long format, one row per
+area and day from `from` to `n` with at least one finite draw: `area`,
+`date`, `median` and the 90% and 50% interval bounds. `trajs` holds one
+`(ndraws × n)` matrix per area, named by `areas`, with `NaN` or `missing`
+on unreported days. Grid day `d` is dated `cutoff - (n - d)` days.
+"""
+function rt_quantile_table(
+        trajs::AbstractVector{<:AbstractMatrix}, areas::AbstractVector;
+        cutoff::Date, n::Integer, from::Integer = 1, digits::Integer = 3
+    )
+    rows = NamedTuple[]
+    for (m, area) in zip(trajs, areas), d in max(from, 1):n
+        v = [x for x in skipmissing(@view m[:, d]) if isfinite(x)]
+        isempty(v) && continue
+        q(pr) = round(quantile(v, pr); digits)
+        push!(
+            rows, (;
+                area = String(area), date = cutoff - Day(n - d),
+                median = q(0.5), lower_90 = q(0.05), upper_90 = q(0.95),
+                lower_50 = q(0.25), upper_50 = q(0.75),
+            )
+        )
+    end
+    return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Observed counts per area over the `weeks` seven-day windows ending at the
+cut-off, in long format: `area`, `date` (the window's last day) and
+`count`. `increments` is `(areas × vintages)`, the new counts at each
+vintage in `days`. A window that starts before the first vintage is left
+out, since that vintage's increment holds everything before it.
+"""
+function weekly_count_table(
+        days::AbstractVector{<:Integer}, increments::AbstractMatrix,
+        areas::AbstractVector; cutoff::Date, n::Integer, weeks::Integer = 8
+    )
+    rows = NamedTuple[]
+    isempty(days) && return DataFrame(area = String[], date = Date[], count = Int[])
+    for (i, area) in enumerate(areas), k in (weeks - 1):-1:0
+        hi = n - 7k
+        lo = hi - 7
+        lo < days[1] && continue
+        c = sum(increments[i, v] for v in eachindex(days) if lo < days[v] <= hi; init = 0)
+        push!(rows, (; area = String(area), date = cutoff - Day(n - hi), count = c))
+    end
+    return DataFrame(rows)
 end
 
 ## Label position of each province in `geo`: the area-weighted mean of its
