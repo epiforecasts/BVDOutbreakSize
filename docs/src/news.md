@@ -72,6 +72,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 - The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
+- `importation_from_kernel` is removed, since no model calls it (#1038).
+- The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
 
 ### Fixed
 
