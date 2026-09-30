@@ -493,6 +493,45 @@ end
     @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
 end
 
+@testitem "onset_detection_step runs from ρ before detection to one after" begin
+    using BVDOutbreakSize: onset_detection_step
+    using ForwardDiff: gradient
+
+    ρ = 0.25
+    s = onset_detection_step(ρ, 1, 100, 50.0; width = 2.5)
+    @test length(s) == 100
+    @test s[1] ≈ ρ atol = 1.0e-6
+    @test s[end] ≈ 1.0 atol = 1.0e-6
+    @test s[50] ≈ (1 + ρ) / 2
+    @test issorted(s)
+    ## The step is indexed from the grid start, so a later start moves it.
+    @test onset_detection_step(ρ, 41, 20, 50.0; width = 2.5) ≈ s[41:60]
+    ## No detection day inside the grid leaves ascertainment untouched.
+    @test all(isone, onset_detection_step(ρ, 1, 10, -Inf; width = 2.5))
+
+    f(x) = sum(onset_detection_step(x[1], 1, 100, 50.0; width = 2.5))
+    for r in (1.0e-6, 0.3, 1 - 1.0e-6)
+        @test all(isfinite, gradient(f, [r]))
+    end
+end
+
+@testitem "onset_ascertainment_model scales ascertainment by the detection step" begin
+    using BVDOutbreakSize: onset_ascertainment_model,
+        onset_report_ascertainment, onset_detection_step
+    using Random: seed!
+
+    seed!(20260930)
+    anchor = fill(0.3, 60)
+    for _ in 1:20
+        out = onset_ascertainment_model(anchor, 1, 60; detection_day = 30)()
+        step = onset_detection_step(out.ρ, 1, 60, 30)
+        @test out.alpha ≈ onset_report_ascertainment(anchor, out.β, out.ω) .*
+            step
+        @test all(a -> 0 < a < 1, out.alpha)
+        @test 0 < out.ρ < 1
+    end
+end
+
 @testitem "onset_report_anchor weighted-averages a, exact for constant a" begin
     using BVDOutbreakSize: onset_report_anchor
     using Random: seed!
