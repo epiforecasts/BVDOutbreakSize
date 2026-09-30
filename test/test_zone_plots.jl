@@ -233,6 +233,23 @@ end
     @test all(==(ylims[1]), ylims)
     @test ylims[1][1] == 0
     @test count(x -> x isa Mk.Legend, fig.content) == 1
+    ## With a patch reference the legend names the colour as the zones of
+    ## each patch and the dark line as the patch, and the caption says the
+    ## patch line averages every zone of the patch, shown or not.
+    using BVDOutbreakSize: PROVINCE_LABELS
+    entry_labels(f) = [
+        e.label[] for
+            e in first(x for x in f.content if x isa Mk.Legend).entrygroups[][1][2]
+    ]
+    caption(f) = only(
+        x.text[] for x in f.content
+            if x isa Mk.Label && startswith(x.text[], "Coloured")
+    )
+    @test entry_labels(fig) == vcat(
+        ["$(l) zones" for l in PROVINCE_LABELS[[1, 2, 4]]], "Whole patch"
+    )
+    @test occursin("dark line", caption(fig))
+    @test occursin("including those not shown", caption(fig))
     ## Without a patch reference or a cut-off, and with explicit dates,
     ## the first `top` zones grouped by patch.
     using Dates: Date, Day
@@ -242,6 +259,8 @@ end
     @test length(paxes) == nz
     @test count(p -> p isa Mk.Band, paxes[1].scene.plots) == 3
     @test count(p -> p isa Mk.VLines, paxes[1].scene.plots) == 0
+    @test entry_labels(plain) == PROVINCE_LABELS[[1, 2, 4]]
+    @test !occursin("dark line", caption(plain))
     ## A reference fit per zone adds its 90% band and dashed median.
     ref = plot_rt_zones(
         rt, labels, patch; dates, top = 2,
