@@ -1201,7 +1201,9 @@ cfr_prior_fig #hide
 #
 # Capacity enters only as a censored observation.
 # The latent demand is never capped, because the demand is the quantity of interest.
-# The bed capacity is a non-decreasing random walk on weekly knots, since beds are added over the response and not taken away.
+# The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
+# Capacity can slow or fall where the data show a sustained decline.
+# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.02)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.

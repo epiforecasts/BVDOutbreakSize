@@ -18,6 +18,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
 - The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
 - Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
