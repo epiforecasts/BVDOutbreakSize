@@ -525,7 +525,7 @@ jobs:
         uses: ./.github/actions/bvd-pkgimage
         with:
           mode: restore
-      # Refresh the released-estimate overlay so the sensitivity page's
+      # Refresh the released-estimate overlay so the forecast evaluation's
       # "Estimate evolution across releases" figure picks up the newest
       # results-v* release. Best-effort: on any failure it uses the committed
       # data/released_estimates.csv.
@@ -878,14 +878,34 @@ jobs:
             fits: fit-joint
             overlays: false
             recovery: false
-          - id: evaluation/insample/national
-            slug: evaluation-insample-national
-            fits: fit-joint
-            overlays: false
-            recovery: true
           - id: evaluation/insample/province
             slug: evaluation-insample-province
-            fits: fit-joint
+            fits: fit-{joint,sens_no_patches}
+            overlays: false
+            recovery: true
+    steps: *render-steps
+
+  # The national in-sample page sets the joint against the single-stream,
+  # one-week-back and sensitivity fits. The sensitivity group is skipped on
+  # pull requests, so the condition is spelled out as for `render_all`.
+  render_insample:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_streams, fit_frozen, fit_sensitivity, recovery]
+    if: >-
+      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
+      needs.fit_streams.result == 'success' &&
+      needs.fit_frozen.result == 'success' &&
+      (needs.fit_sensitivity.result == 'success' ||
+      needs.fit_sensitivity.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: evaluation/insample/national
+            slug: evaluation-insample-national
+            fits: fit-*
             overlays: false
             recovery: true
     steps: *render-steps
@@ -915,14 +935,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - id: evaluation/forecast/national
-            slug: evaluation-forecast-national
-            fits: fit-{joint,frozen_validation*}
-            overlays: true
-            recovery: false
           - id: evaluation/forecast/province
             slug: evaluation-forecast-province
             fits: fit-{joint,frozen_validation}
+            overlays: true
+            recovery: false
+          - id: comparisons
+            slug: comparisons
+            fits: fit-{joint,frozen_2026-*}
+            overlays: false
+            recovery: false
+    steps: *render-steps
+
+  # The national forecast evaluation also draws each single-stream fit's
+  # band behind the per-release estimates.
+  render_evaluation:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, fit_streams, fit_frozen, overlays]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: evaluation/forecast/national
+            slug: evaluation-forecast-national
+            fits: fit-*
             overlays: true
             recovery: false
     steps: *render-steps
@@ -959,7 +997,7 @@ jobs:
             overlays: true
     steps: *render-steps
 
-  # These two pages read every group. The sensitivity group is skipped on
+  # This page reads every group. The sensitivity group is skipped on
   # pull requests, which would skip this job too under the default
   # `success()`, so the condition is spelled out.
   render_all:
@@ -983,11 +1021,6 @@ jobs:
             fits: fit-*
             overlays: false
             recovery: false
-          - id: sensitivity
-            slug: sensitivity
-            fits: fit-*
-            overlays: true
-            recovery: false
     steps: *render-steps
 
   # Assemble the Vitepress site from both pre-rendered pages (a single
@@ -999,7 +1032,9 @@ jobs:
       - render_methods
       - render_joint
       - render_joint_overlays
+      - render_insample
       - render_validation
+      - render_evaluation
       - render_zone
       - render_all
     runs-on: ubuntu-latest
@@ -1022,13 +1057,15 @@ jobs:
     # entirely; dependabot PRs only need the test results, not a docs preview.
     # A condition with no status function gets an implicit `success()`, which
     # is false whenever any ancestor was skipped. `fit_sensitivity` is skipped
-    # on pull requests, so check the five renders directly instead.
+    # on pull requests, so check the renders directly instead.
     if: >-
       ${{ !cancelled() && github.actor != 'dependabot[bot]' &&
       needs.render_methods.result == 'success' &&
       needs.render_joint.result == 'success' &&
       needs.render_joint_overlays.result == 'success' &&
+      needs.render_insample.result == 'success' &&
       needs.render_validation.result == 'success' &&
+      needs.render_evaluation.result == 'success' &&
       needs.render_all.result == 'success' }}
     steps:
       - uses: actions/checkout@v7

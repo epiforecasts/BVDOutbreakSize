@@ -16,7 +16,7 @@ Manifest-v*.toml
 /docs/src/estimates/zone.md
 /docs/src/forecasts/
 /docs/src/evaluation/
-/docs/src/sensitivity.md
+/docs/src/comparisons.md
 /docs/src/analysis.md
 /docs/src/province.md
 /docs/src/forecast.md

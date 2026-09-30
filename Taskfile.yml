@@ -77,7 +77,7 @@ tasks:
 
   health-zones:
     desc: >
-      Rebuild data/health_zones.csv and data/health_zones.geojson from the
+      Rebuild data/health_zones.csv and src/assets/health_zones.geojson from the
       INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
       only.
     cmds:
@@ -235,12 +235,12 @@ tasks:
       - BVD_DOC_PAGE=estimates/national julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
-  docs-sensitivity:
+  docs-comparisons:
     desc: >
-      Render just the sensitivity page (docs/src/sensitivity.md) from the
+      Render just the comparisons page (docs/src/comparisons.md) from the
       cached fits, without assembling the site.
     cmds:
-      - BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
+      - BVD_DOC_PAGE=comparisons julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
   docs-zone:

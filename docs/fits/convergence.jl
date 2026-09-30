@@ -220,8 +220,8 @@ function _headline_table(io, checks)
     return println(io)
 end
 
-## Which parameters are responsible, the same three views the sensitivity
-## report's "Fit diagnostics by parameter" section shows, cut to what fits in
+## Which parameters are responsible, the same three views the in-sample
+## page's "Fit diagnostics by parameter" section shows, cut to what fits in
 ## a comment. Ranked by bulk effective sample size from the lowest up, then
 ## grouped so a whole badly mixing vector reads as one line, then where the
 ## divergent transitions concentrate.
@@ -322,10 +322,10 @@ function convergence_markdown(
     println(io)
     println(
         io,
-        "The full per-parameter breakdown is on the sensitivity page, under ",
-        "[Fit diagnostics by parameter]",
-        "(https://epiforecasts.io/BVDOutbreakSize/dev/sensitivity",
-        "#Fit-diagnostics-by-parameter)."
+        "The full per-parameter breakdown is on the in-sample checks page, ",
+        "under [Fit diagnostics by parameter]",
+        "(https://epiforecasts.io/BVDOutbreakSize/dev/",
+        "evaluation/insample/national#Fit-diagnostics-by-parameter)."
     )
     return String(take!(io))
 end

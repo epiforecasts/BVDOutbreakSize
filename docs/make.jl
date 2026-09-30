@@ -18,7 +18,7 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## one-week-ahead projections, `forecasts/province` their split by province,
 ## `evaluation/insample/*` the in-sample checks and `evaluation/forecast/*`
 ## the scoring against what arrived, each national and by province,
-## and `sensitivity` the comparison and sensitivity analyses. All load the
+## and `comparisons` the comparisons with published estimates. All load the
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
@@ -28,7 +28,7 @@ const PAGES = [
     "evaluation/insample/zone",
     "evaluation/forecast/national", "evaluation/forecast/province",
     "evaluation/forecast/zone",
-    "sensitivity",
+    "comparisons",
 ]
 
 ## Build stage, so fitting and rendering can be split across jobs:
@@ -45,7 +45,7 @@ const PAGES = [
 ##   render-evaluation   → evaluation/forecast/national.jl
 ##   render-evaluation-province → evaluation/forecast/province.jl
 ##   render-evaluation-zone → evaluation/forecast/zone.jl
-##   render-sensitivity  → sensitivity.jl
+##   render-comparisons  → comparisons.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
 ##   all (default)       → render both pages then combine, for local builds
@@ -119,14 +119,15 @@ end
 ## `src/public/` through unchanged (everything else is either a page or a
 ## hashed asset), so the map page at `src/public/zone_map/index.html` fetches
 ## its CSV and geojson from that directory by relative URL. The render step
-## writes the CSV into `summary_assets/`; the geojson is versioned under
-## `data/`. A missing input is a warning, not an error, so a build without
-## the zone model still deploys and the page shows its no-data message.
+## writes the CSV into `summary_assets/`; the geojson is
+## `src/assets/health_zones.geojson`. A missing input is a warning, not an
+## error, so a build without the zone model still deploys and the page
+## shows its no-data message.
 function stage_zone_map()
     dest = joinpath(LITERATE_OUT, "public", "zone_map")
     mkpath(dest)
     inputs = (
-        joinpath(REPO_ROOT, "data", "health_zones.geojson"),
+        joinpath(REPO_ROOT, "src", "assets", "health_zones.geojson"),
         joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"),
     )
     for src in inputs
@@ -187,7 +188,7 @@ function combine()
                 "Aim and origins" => "aim.md",
                 "Methods" => "methods.md",
                 "Limitations" => "limitations.md",
-                "Sensitivity" => "sensitivity.md",
+                "Comparisons" => "comparisons.md",
             ],
             "API" => [
                 "Overview" => "lib/api.md",
@@ -262,8 +263,8 @@ elseif STAGE == "render-evaluation-province"
     render_page("evaluation/forecast/province")
 elseif STAGE == "render-evaluation-zone"
     render_page("evaluation/forecast/zone")
-elseif STAGE == "render-sensitivity"
-    render_page("sensitivity")
+elseif STAGE == "render-comparisons"
+    render_page("comparisons")
 elseif STAGE == "combine"
     combine()
 elseif STAGE == "all"
@@ -281,6 +282,6 @@ else
             "render-insample-zone, " *
             "render-evaluation, render-evaluation-province, " *
             "render-evaluation-zone, " *
-            "render-sensitivity, combine, all"
+            "render-comparisons, combine, all"
     )
 end
