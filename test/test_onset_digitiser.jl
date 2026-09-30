@@ -231,6 +231,42 @@ end
     @test all(r -> (r[2], r[3]) == (8, 4), rows)
 end
 
+@testitem "digitize keeps a bar whose fill on a tick column reads as gridline" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## The last bar sits on the rightmost weekly tick. As on SitRep 136's
+    ## 20 July bar, its interior columns all lie on the tick column, its
+    ## fill is washed pale, and JPEG chroma leaves a grey band in it that
+    ## the gridline skip reads as page, at a different row in each column.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    paint!(200:299, 691:695, (255, 255, 255))
+    paint!(252:299, 692:694, (195, 225, 235))
+    paint!(232:251, 692:694, (200, 60, 60))
+    for (x, y) in zip(692:694, (260, 266, 272))
+        paint!(y:(y + 4), x:x, (220, 220, 220))
+    end
+    rows = [
+        r for r in digitize(R, G, B, Date(2026, 8, 24), 20)
+            if r[2] + r[3] > 0
+    ]
+    @test length(rows) == 10
+    @test rows[end] == (Date(2026, 8, 24), 12, 5)
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
