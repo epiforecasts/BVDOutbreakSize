@@ -2300,3 +2300,31 @@ end
         Rt, g, seeds, repeat(K, 1, 1, n - 1), ε, N
     )
 end
+
+@testitem "patch_infection_model: a destination walk over four-week knots" begin
+    using BVDOutbreakSize: patch_infection_model, knot_days
+    using Turing: DynamicPPL, returned, sample, Prior
+    using Random: Xoshiro
+
+    n, np, rt_start, bp = 120, 4, 30, 60
+    m = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    names = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
+    @test "σ_dest_walk" in names
+    @test "z_dest_walk" in names
+    nk = length(knot_days(n; week = 28, start = rt_start))
+    chn = sample(Xoshiro(1), m, Prior(), 2; progress = false)
+    for e in vec(collect(chn[:importation_destination_knots]))
+        E = reshape(collect(e), np, nk)
+        ## Sum-to-zero across destinations at every knot.
+        @test maximum(abs, sum(E; dims = 1)) < 1.0e-10
+        @test !(E[:, end] ≈ E[:, 1])
+    end
+    ## With no walk the arrivals are the static model's whatever the draws.
+    function arrivals(; kw...)
+        mm = DynamicPPL.fix(m; σ_dest_walk = 0.0, kw...)
+        return returned(mm, rand(Xoshiro(7), mm)).importation_matrix
+    end
+    flat = arrivals()
+    @test flat ≈ arrivals(z_dest_walk = fill(1.3, (np - 1) * (nk - 1)))
+    @test !(flat ≈ arrivals(σ_dest_walk = 0.5))
+end
