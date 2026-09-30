@@ -277,6 +277,14 @@
             "3 patches, n = 220", patch_infections,
             patch_args(3, 220, 14, 35)...; perf = true
         )
+        ## A kernel per day.
+        let a = patch_args(3, 40, 7, 12)
+            K3 = cat((a[4] .* (0.5 + rand(rng)) for _ in 1:40)...; dims = 3)
+            add!(
+                "3 patches, daily kernel", patch_infections,
+                a[1], a[2], a[3], K3, a[5], a[6]; rtol = 1.0e-5
+            )
+        end
 
         ## Floored inputs sit inside the flat region, away from the kink, so
         ## the finite-difference steps stay on one side: means below the

@@ -2271,3 +2271,32 @@ end
     @test destination_weighted_kernel(K, η)[:, 1] ≈
         destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
 end
+
+@testitem "patch_infections: a daily kernel" begin
+    using BVDOutbreakSize: patch_infections
+    using Random: Xoshiro
+
+    rng = Xoshiro(4)
+    np, n, L = 3, 40, 6
+    g = [0.2, 0.3, 0.3, 0.2]
+    Rt = 1.0 .+ 0.3 .* rand(rng, np, n)
+    seeds = 1.0 .+ rand(rng, np, L)
+    K = 0.2 .* rand(rng, np, np)
+    foreach(p -> K[p, p] = 0, 1:np)
+    ε = 0.3 .* rand(rng, np, n)
+    N = [1.0e6, 2.0e6, 5.0e5]
+    ## A kernel that does not change over the days is the matrix kernel.
+    static = patch_infections(Rt, g, seeds, K, ε, N)
+    daily = patch_infections(Rt, g, seeds, repeat(K, 1, 1, n), ε, N)
+    @test daily.infections ≈ static.infections
+    @test daily.importation ≈ static.importation
+    ## Each day reads its own kernel.
+    K3 = repeat(K, 1, 1, n)
+    K3[:, :, 25:end] .*= 2
+    moved = patch_infections(Rt, g, seeds, K3, ε, N)
+    @test moved.importation[:, 1:25] ≈ static.importation[:, 1:25]
+    @test !(moved.importation[:, 26:end] ≈ static.importation[:, 26:end])
+    @test_throws DimensionMismatch patch_infections(
+        Rt, g, seeds, repeat(K, 1, 1, n - 1), ε, N
+    )
+end
