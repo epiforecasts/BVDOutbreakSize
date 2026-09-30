@@ -712,8 +712,9 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
     nz = findall((h .> 2) .& .!isborder)
     # a column under the dashed line reads its bar from the outline; the
-    # dash can only have added height, and a read under two counts is the
-    # dash's edge rather than a bar, which keeps the run
+    # dash can only have added height. An outline read under two counts is
+    # taken as the dash's own edge and the run is kept, so a real bar of one
+    # count under the line keeps its dash-inflated height
     white = (min.(R, G, B) .>= 228) .& (max.(R, G, B) .- min.(R, G, B) .<= 25)
     hread = copy(h)
     nread = copy(nr)
