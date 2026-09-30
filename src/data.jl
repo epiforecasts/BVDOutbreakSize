@@ -407,11 +407,11 @@ function load_observations(
     isolation_history = history("isolation_history")
     ## Implied bed capacity (occupancy / reported occupancy rate) on the days
     ## a rate is published, fitted as noisy observations of the national
-    ## capacity the latent bed demand saturates against. Days a province
-    ## that printed beds earlier is silent are dropped, since the national
-    ## figure then sums only the provinces that print.
+    ## capacity the latent bed demand saturates against.
     province_bed_capacity_history =
         province_sparse_history("province_bed_capacity_history")
+    ## Drop days a large province is silent: the national figure then sums
+    ## only the provinces that print.
     bed_capacity_history = let h = history("bed_capacity_history")
         drop = incomplete_capacity_days(h, province_bed_capacity_history)
         keep = [d ∉ drop for d in h.days]
@@ -835,33 +835,22 @@ function load_health_zones(
 end
 
 """
-    incomplete_capacity_days(national, provinces; tolerance = 0.05,
-                             max_silence = 14)
-
-Days of the national implied bed capacity `national`, a `(; days, counts)`
-history, on which a large province that printed beds earlier prints none.
-The national figure is the sum of the provinces that print that day, so a
-silent province reads as closed beds. Against the sum of each province's
-last printed count on or before the day, a day is incomplete when a silent
-province's last count and the national figure's shortfall are both at
-least `tolerance` of it. `provinces` maps a province to its sparse history,
-as [`load_observations`](@ref) reads the `province_bed_capacity_history`
-block.
-
-Keying on each silent province keeps days on which only small provinces
-are silent: Sud-Kivu (25 beds), Tshopo (12 to 31) and Bas-Uélé (3) each
-hold at most 2% of the beds, and Haut-Uélé (68 to 138) at least 6.5%. The
-shortfall keeps a day whose national figure carries a province the block
-does not (Haut-Uélé on 26 August 2026).
-
+Grid day-indices of the national implied bed capacity `national`, a
+`(; days, counts)` history, that miss a large province. `provinces` maps a
+province to its sparse bed history, as [`load_observations`](@ref) reads
+the `province_bed_capacity_history` block. Each day is compared with the
+sum of every province's last printed count on or before it. The day is
+incomplete when a province silent that day holds at least `tolerance` of
+that sum and the national figure falls at least `tolerance` short of it.
 A province silent for more than `max_silence` days is treated as no longer
-reporting and leaves the sum, so one that stops printing for good does not
-drop every later day. The longest gap after which a province printed again
-is 10 days (Nord-Kivu, 3 to 13 August 2026).
+reporting and leaves the sum. `tolerance` must lie in [0, 1].
 """
 function incomplete_capacity_days(
         national, provinces::AbstractDict; tolerance::Real = 0.05,
         max_silence::Integer = 14
+    )
+    0 <= tolerance <= 1 || throw(
+        ArgumentError("tolerance must lie in [0, 1], got $(tolerance).")
     )
     incomplete = Int[]
     for (d, c) in zip(national.days, national.counts)
