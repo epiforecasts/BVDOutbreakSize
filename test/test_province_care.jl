@@ -399,6 +399,17 @@ end
     @test isempty(
         incomplete_capacity_days((; days = [1, 2], counts = [100, 92]), small)
     )
+
+    ## A large province that stops printing counts as silent for 14 days
+    ## after its last print, then as no longer reporting.
+    stopped = Dict(
+        "a" => (; days = collect(1:30), counts = fill(80, 30)),
+        "b" => (; days = [1], counts = [20]),
+    )
+    gone = (; days = collect(2:30), counts = fill(80, 29))
+    @test incomplete_capacity_days(gone, stopped) == collect(2:15)
+    @test incomplete_capacity_days(gone, stopped; max_silence = 5) ==
+        collect(2:6)
 end
 
 @testitem "load_observations drops national capacity days a province misses" begin
