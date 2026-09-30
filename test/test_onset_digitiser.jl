@@ -294,6 +294,38 @@ end
     @test length([r for r in rows if r[2] + r[3] > 0]) == 9
 end
 
+@testitem "digitize reads a bar under the dashed first-positive-result line" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A red dashed vertical line, 7 px dashes every 14 px, covers every
+    ## interior column of one bar. One dash overlaps the bar's top, so the
+    ## run climbs it, and the dashes inside the alive segment read as dead.
+    ## The bar's own dark outline still crosses the dash at its top.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    for y in 16:14:296
+        paint!(y:min(y + 6, 299), 670:673, (200, 40, 50))
+    end
+    paint!(232:232, 669:675, (90, 40, 30))
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test length(rows) == 10
+    @test (last_tick - Day(5), 12, 5) in rows
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
