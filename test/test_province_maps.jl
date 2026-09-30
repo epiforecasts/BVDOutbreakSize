@@ -122,3 +122,32 @@ end
     @test sort(z.zones) == sort([z.zone for z in zones])
     @test sort(unique(z.values)) == Float64.(eachindex(PROVINCE_NAMES))
 end
+
+@testitem "province_map_estimates gives one row per source province" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    rt = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    fc = [collect(0.0:100.0), collect(100.0:200.0)]
+    hist(c) = (; days = [1, 5], counts = c)
+    confirmed = Dict("a" => hist([3, 7]), "c" => hist([1, 2]))
+    deaths = Dict("a" => hist([0, 1]))
+    est = province_map_estimates(
+        rt, fc; confirmed_history = confirmed, death_history = deaths,
+        cutoff = Date(2026, 9, 1), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"])
+    )
+    @test est.province == ["a", "b", "c"]
+    @test est.patch == ["X", "Pool", "Pool"]
+    @test est.pooled == [0, 1, 1]
+    @test isequal(est.cases, [7, missing, 2])
+    @test isequal(est.deaths, [1, missing, missing])
+    @test est.R_T_median ≈ [1.0, 2.0, 2.0]
+    @test est.R_T_lower ≈ [0.55, 2.0, 2.0]
+    @test est.R_T_upper ≈ [1.45, 2.0, 2.0]
+    @test est.p_rt_above_one ≈ [50 / 101, 1.0, 1.0]
+    @test est.forecast_median ≈ [50.0, 150.0, 150.0]
+    @test est.forecast_lower ≈ [5.0, 105.0, 105.0]
+    @test est.forecast_upper ≈ [95.0, 195.0, 195.0]
+    @test all(==("2026-09-01"), est.as_of)
+end
