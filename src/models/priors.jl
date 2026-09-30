@@ -1887,8 +1887,10 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             vcat,
             [permutedims(interpolate_knots(dest_knots[p, :], dest_days, ng)) for p in 1:n_patches]
         )
-        log_weight = reshape(dest_daily, n_patches, 1, ng) .+ flow_dev
-        weighted = destination_weighted_kernel(importation_kernel, log_weight)
+        knot_kernels = destination_weighted_kernel(
+            importation_kernel, reshape(dest_knots, n_patches, 1, nk) .+ flow_dev
+        )
+        weighted = interpolate_kernel_knots(knot_kernels, dest_days, ng)
         dest_mean = vec(sum(view(dest_daily, :, renewal_start:n); dims = 2)) ./
             (n - renewal_start + 1)
         importation_destination_sd := σ_dest

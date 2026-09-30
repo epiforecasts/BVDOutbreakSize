@@ -500,6 +500,34 @@ function destination_weighted_kernel(K::AbstractMatrix, W::AbstractArray)
 end
 
 """
+    interpolate_kernel_knots(Kk, days, n)
+
+Daily kernels `K[p, q, t]` for `t ∈ 1:n`, linear between the knot kernels
+`Kk[:, :, k]` placed on `days` and held flat outside them. A linear mix of
+kernels with equal column totals keeps those totals.
+"""
+function interpolate_kernel_knots(
+        Kk::AbstractArray{<:Any, 3}, days::AbstractVector{<:Integer}, n::Integer
+    )
+    np = size(Kk, 1)
+    T = eltype(Kk)
+    out = zeros(T, np, np, n)
+    nb = length(days)
+    @inbounds for t in 1:n
+        if nb == 1
+            b, frac = 1, zero(T)
+        else
+            b, frac = _knot_bracket(days, t, T)
+        end
+        b2 = min(b + 1, nb)
+        for q in 1:np, p in 1:np
+            out[p, q, t] = (one(T) - frac) * Kk[p, q, b] + frac * Kk[p, q, b2]
+        end
+    end
+    return out
+end
+
+"""
     gravity_pull(pops; distances, decay)
 
 Unnormalised gravity pull, `pull[p, q]` the relative attraction of
