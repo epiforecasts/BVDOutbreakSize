@@ -656,6 +656,7 @@ function build_fit_specs(
             () -> onsets_only_model(
                 obs.n;
                 onset_curve_history = obs.onset_curve_history,
+                export_case_days = obs.export_case_days,
                 breakpoint = breakpoint
             ),
             m -> nuts_sample(
