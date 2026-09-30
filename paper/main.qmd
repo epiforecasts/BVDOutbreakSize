@@ -8,8 +8,6 @@ format:
   html:
     toc: false
     number-sections: false
-    include-in-header:
-      text: <meta name="robots" content="noindex">
   pdf:
     number-sections: false
 bibliography: reference.bib

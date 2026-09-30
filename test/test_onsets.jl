@@ -493,6 +493,89 @@ end
     @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
 end
 
+@testitem "onset_detection_step runs from ρ before detection to one after" begin
+    using BVDOutbreakSize: onset_detection_step
+    using ForwardDiff: gradient
+
+    ρ = 0.25
+    w = 3.0
+    s = onset_detection_step(ρ, 1, 100, 50.0, w)
+    @test length(s) == 100
+    @test s[1] ≈ ρ atol = 1.0e-6
+    @test s[end] ≈ 1.0 atol = 1.0e-6
+    @test s[50] ≈ (1 + ρ) / 2
+    @test issorted(s)
+    ## The step is indexed from the grid start, so a later start moves it.
+    @test onset_detection_step(ρ, 41, 20, 50.0, w) ≈ s[41:60]
+    ## No detection day inside the grid leaves ascertainment untouched.
+    @test all(isone, onset_detection_step(ρ, 1, 10, -Inf, w))
+
+    f(x) = sum(onset_detection_step(x[1], 1, 100, 50.0, w))
+    for r in (1.0e-6, 0.3, 1 - 1.0e-6)
+        @test all(isfinite, gradient(f, [r]))
+    end
+end
+
+@testitem "onset_detection_day is the earliest export, or -Inf without one" begin
+    using BVDOutbreakSize: onset_detection_day
+
+    @test onset_detection_day([5, 9, 7]) === 5.0
+    @test onset_detection_day(Int[]) === -Inf
+end
+
+@testitem "onset_ascertainment_model is lower by ρ before the detection day" begin
+    using BVDOutbreakSize: onset_ascertainment_model,
+        onset_report_ascertainment
+    using Random: seed!
+
+    seed!(20260930)
+    anchor = fill(0.3, 60)
+    model = onset_ascertainment_model(anchor, 1, 60; detection_day = 30)
+    ## With the walk flat, dates far either side of the step differ by ρ.
+    for ρ in (0.1, 0.5, 0.9)
+        out = (model | (σ_a = 1.0e-8, ρ = ρ))()
+        @test out.alpha[1] / out.alpha[60] ≈ ρ rtol = 1.0e-3
+    end
+    for _ in 1:20
+        out = model()
+        @test all(a -> 0 < a < 1, out.alpha)
+        @test 0 < out.ρ < 1
+    end
+    ## Without a detection day the step is one everywhere.
+    out = onset_ascertainment_model(anchor, 1, 60)()
+    @test out.alpha ≈ onset_report_ascertainment(anchor, out.β, out.ω)
+end
+
+@testitem "onsets_only_model samples ρ and lowers ascertainment before the first export" begin
+    using BVDOutbreakSize: onsets_only_model
+    using Turing: Prior, sample, @varname
+    using Turing.DynamicPPL: condition
+
+    oc = (;
+        onset_days = [2, 5, 10, 11, 12, 13, 10, 11, 12, 13, 14, 30],
+        report_days = [15, 15, 15, 15, 15, 15, 20, 20, 20, 20, 20, 32],
+        prev_report_days = [0, 0, 0, 0, 0, 0, 15, 15, 15, 15, 0, 0],
+        increments = [1, 1, 2, 3, 1, 0, 1, 2, 3, 4, 5, 2],
+    )
+    model = onsets_only_model(
+        40; onset_curve_history = oc, export_case_days = [20]
+    )
+    chn = sample(model, Prior(), 5; progress = false)
+    @test all(ρ -> 0 < ρ < 1, vec(Array(chn[Symbol("onset_report_state.ρ")])))
+
+    fixed = condition(
+        model,
+        Dict(
+            @varname(onset_report_state.ρ) => 0.2,
+            @varname(onset_report_state.σ_a) => 1.0e-8
+        )
+    )
+    alpha = fixed().onset_report_state.alpha
+    ## The grid runs from onset day 2 to report day 32, the step sits on day 20.
+    @test alpha[1] / alpha[end] ≈ 0.2 rtol = 0.02
+    @test alpha[1] < alpha[19] < alpha[end]
+end
+
 @testitem "onset_report_anchor weighted-averages a, exact for constant a" begin
     using BVDOutbreakSize: onset_report_anchor
     using Random: seed!

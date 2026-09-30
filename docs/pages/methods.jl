@@ -1789,13 +1789,16 @@ cfr_prior_fig #hide
 # \qquad
 # F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
-#     + \beta + \omega_u\bigr). \tag{52}
+#     + \beta + \omega_u\bigr)\, s(u), \qquad
+# s(u) = \rho + (1 - \rho)\,\mathrm{logistic}\bigl((u - u_d) / w\bigr).
+#     \tag{52}
 # ```
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
 # $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset and $\omega$ a weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$).
 # $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto the onset axis, so this triangle's ascertainment is tied to the confirmed pipeline's rather than left free.
 # The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
+# Onset dates before the detection day $u_d$, the earliest dated export detection, are ascertained at a fraction $\rho \sim \mathrm{Beta}(2,\ 2)$ of the later rate, with the change spread over $w = 2.5$ days.
 #
 # The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
 # The likelihood scores each onset date once.
@@ -2419,7 +2422,11 @@ cfr_prior_fig #hide
 #
 # Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
 # The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
-# The increment is drawn with the Student-t the scored cells take, at the scale of a correction read off two scans.
+# The increment is drawn with the Student-t the scored cells take.
+# Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
+# The scan error dominates the interval on the increment.
+# $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
+# Its prior is centred on the estimate of an earlier fit that sampled a per-figure level, 0.41% (0.09% to 0.75%).
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with genuine late reporting.
@@ -2463,6 +2470,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
+# Over the forecast week the mean import log odds $\bar o_{p,t}$ are the joint model's forecast arrivals against its forecast infections, and the arrival shares $s_{pq,t}$ follow its mean forecast infections, so each draw's import fraction $f_{p,t}$ runs on with its forecast trajectories.
 # The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the share renewal of Equation (58) runs on to the end of the week.
 # Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
 #

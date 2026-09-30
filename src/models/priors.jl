@@ -1631,26 +1631,17 @@ end
 
 """
 Multi-patch latent infection process. Runs a renewal equation per spatial
-patch (Ituri, Nord-Kivu, Sud-Kivu) with a shared generation interval, a
-shared incubation period, and an optional between-patch importation
-kernel.
+patch with a shared generation interval, a shared incubation period, and
+an optional between-patch importation kernel.
 
 ### Structure
 
-For patch `p` on day `t`:
-
-```math
-I_{p,t} = R_{p,t} \\cdot \\sum_{s \\ge 1} I_{p,t-s}\\, g_s
-          + \\varepsilon \\sum_{q \\neq p} K_{p,q}\\, I_{q,t-1}
-```
-
-with `g_s` the shared generation-interval PMF (sampled once, the biology
-of transmission does not depend on province), `R_{p,t}` from
-[`patch_rt_model`](@ref), `K` the importation kernel, and `ε` the
-importation intensity. Each patch depletes its own pool of
-`populations[p]` residents, as in [`patch_infections`](@ref). The default
-is each patch's 2019 INS resident population ([`PROVINCE_POPULATIONS`](@ref)),
-or their sum for a single patch.
+Each patch's reproduction number comes from [`patch_rt_model`](@ref).
+Importation moves a share of each day's infections between patches on the
+same day, as set out in [`patch_infections`](@ref).
+Each patch depletes its own pool of `populations[p]` residents.
+The default is each patch's 2019 INS resident population
+([`PROVINCE_POPULATIONS`](@ref)), or their sum for a single patch.
 
 ### Importation
 

@@ -207,20 +207,6 @@ end
     end
 end
 
-@testitem "importation_from_kernel: matches the explicit sum" begin
-    using BVDOutbreakSize: importation_from_kernel
-
-    K = [0.0 0.2 0.3; 0.1 0.0 0.4; 0.5 0.6 0.0]
-    I_prev = [10.0, 20.0, 30.0]
-    ε = 0.25
-    imp = importation_from_kernel(K, I_prev, ε)
-    for p in 1:3
-        @test imp[p] ≈ ε * sum(K[p, q] * I_prev[q] for q in 1:3)
-    end
-    ## A zero kernel imports nothing.
-    @test all(iszero, importation_from_kernel(zeros(3, 3), I_prev, ε))
-end
-
 @testitem "implied_national_Rt: recovers the incidence-weighted patch Rt" begin
     using BVDOutbreakSize: patch_infections, implied_national_Rt
 
