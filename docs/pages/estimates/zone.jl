@@ -125,8 +125,7 @@ zone_map_fig #hide
 
 # The panels below trace the reproduction number of the twelve zones with the most infections over the past week as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
 # Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
-# The patch line averages all the patch's zones weighted by their recent infections, so the zones shown are the ones that move it most.
-# A zone whose reproduction number is from its province, not modelled separately, is drawn as grey outlines.
+# The patch line averages all the patch's zones weighted by their recent infections, so the zones shown tend to move it most.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
@@ -599,7 +598,8 @@ zone_week_rt_fig = let grid = zone_inputs.t0:obs.n, n_f = frozen_zone_inputs.n
         zone_inputs.zone_labels[zs], zone_inputs.patch_of_zone[zs];
         patch_labels = zone_inputs.patch_labels,
         dates = grid_date.(grid), as_of_date = obs.cutoff,
-        cumulative = zone_inputs.cumulative[zs], top = 12,
+        ranking = zone_inputs.cumulative[zs],
+        ranking_label = "confirmed cases to date", top = 12,
         reference_rt = frozen, reference_label = "Frozen fit",
         title = "Zone reproduction number from the live fit, " *
             "with the frozen fit behind"

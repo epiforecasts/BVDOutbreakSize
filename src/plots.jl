@@ -4538,9 +4538,12 @@ function _zone_selection(score, zone_patch, top::Integer)
     return sort(sel; by = key)
 end
 
-## The colour of a zone whose reproduction number is from its province, as
-## in the zone ranking.
+## The colour of a zone whose reproduction number is from its province, in
+## `plot_rt_zones` and `plot_zone_ranking`.
 const _PROVINCE_RT_COLOUR = :grey55
+
+## The plural of a panel unit for a caption.
+_plural(unit) = endswith(unit, r"(s|x|z|ch|sh)") ? unit * "es" : unit * "s"
 
 ## A zone's 90% interval edges and median as lines with no fill, for a zone
 ## whose reproduction number is from its province.
@@ -4589,12 +4592,12 @@ end
 $(TYPEDSIGNATURES)
 
 Faceted reproduction number by health zone for the `top` zones by
-`ranking`, which defaults to `cumulative` and is named in the caption by
-`ranking_label` (the first `top` zones when it is `nothing`), grouped and
-coloured by patch. `modelled[z]`, when given, is false for a zone whose
-reproduction number is from its province; that zone is drawn in grey as
-the edges and median of its 90% interval with no fill. `unit` names what a
-panel shows in the caption, for a figure whose panels are patches.
+`ranking` (the first `top` zones when it is `nothing`), grouped and coloured
+by patch. `ranking_label`, when given, names the ranking in the caption.
+`modelled[z]`, when given, is false for a zone whose reproduction number is
+from its province; that zone is drawn in grey as the edges and median of its
+90% interval with no fill. `unit` names what a panel shows in the caption
+and legend, for a figure whose panels are patches.
 `rt_draws[z]` is the `ndraws × n` daily trajectory of zone `z` (`missing`
 where a day is not established), `zone_labels` names the zones and
 `zone_patch[z]` indexes the patch the zone belongs to.
@@ -4615,9 +4618,8 @@ function plot_rt_zones(
         zone_labels::AbstractVector, zone_patch::AbstractVector{<:Integer};
         patch_labels::AbstractVector = PROVINCE_LABELS,
         dates = nothing, as_of_date = nothing,
-        cumulative = nothing, top::Integer = 12,
-        ranking = cumulative,
-        ranking_label::AbstractString = "confirmed cases to date",
+        ranking = nothing, top::Integer = 12,
+        ranking_label = nothing,
         modelled = nothing, unit::AbstractString = "zone",
         patch_rt = nothing, reference_rt = nothing,
         reference_label::AbstractString = "Reference fit",
@@ -4630,6 +4632,11 @@ function plot_rt_zones(
         "plot_rt_zones: $nz trajectories but $(length(zone_labels)) labels " *
             "and $(length(zone_patch)) patch indices."
     )
+    modelled === nothing || length(modelled) == nz || error(
+        "plot_rt_zones: $nz trajectories but $(length(modelled)) " *
+            "`modelled` flags."
+    )
+    units = _plural(unit)
     n = size(first(rt_draws), 2)
     x = _zone_days(dates, as_of_date, n)
     sel = _zone_selection(ranking, zone_patch, top)
@@ -4730,24 +4737,24 @@ function plot_rt_zones(
     )
     _patch_legend!(
         fig, (nr + 1, 1:nc), zone_patch[sel], patch_labels,
-        patch_colours; extra, suffix = pbands === nothing ? "" : " zones"
+        patch_colours; extra, suffix = pbands === nothing ? "" : " $(units)"
     )
     caption = "Coloured bands are the $(unit)'s reproduction number, " *
         "30/60/90% credible intervals in the colour of its patch."
-    ranking === nothing || (
-        caption *= " Panels are the $(length(sel)) $(unit)s with the most " *
+    ranking_label === nothing || (
+        caption *= " Panels are the $(length(sel)) $(units) with the most " *
             "$(ranking_label)."
     )
     borrowed && (
         caption *= " Grey outlines, the 90% interval and median, are " *
-            "zones whose reproduction number is from their province, " *
+            "$(units) whose reproduction number is from their province, " *
             "not modelled separately."
     )
     pbands === nothing ||
         (
         caption *= " The dark line and grey band are the whole patch's " *
-            "reproduction number, the same behind every zone of that " *
-            "patch. It averages all the patch's zones, including those " *
+            "reproduction number, the same behind every $(unit) of that " *
+            "patch. It averages all the patch's $(units), including those " *
             "not shown, weighted by their recent infections."
     )
     reference_rt === nothing ||
@@ -5226,7 +5233,8 @@ function plot_zone_ranking(
     ns = length(order)
     ys = Float64.(ns:-1:1)
     colour(i) = walking[i] ?
-        patch_colours[mod1(patch[i], length(patch_colours))] : :grey55
+        patch_colours[mod1(patch[i], length(patch_colours))] :
+        _PROVINCE_RT_COLOUR
     fig = Figure(; size = (760, 26 * ns + 170))
     ax1 = Axis(fig[1, 1]; xlabel = "P(R > 1)", yticks = (ys, label[order]))
     ax2 = Axis(fig[1, 2]; xlabel = "Reproduction number at the cut-off")
@@ -5259,7 +5267,8 @@ function plot_zone_ranking(
             (
                 CairoMakie.MarkerElement(;
                     marker = :circle, color = :white,
-                    strokecolor = :grey55, strokewidth = 1.5, markersize = 10
+                    strokecolor = _PROVINCE_RT_COLOUR, strokewidth = 1.5,
+                    markersize = 10
                 ),
                 "R from its province,\nnot modelled separately",
             ),
