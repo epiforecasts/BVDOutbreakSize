@@ -117,7 +117,8 @@ end
 
 Load the digitised symptom-onset reporting triangle at `path` and build the
 cells [`onset_reporting_model`](@ref) fits: each onset date's level at its
-first print, then its corrections while the reporting delay still moves it.
+first print inside the delay support, then its corrections while the
+reporting delay still moves it.
 
 Distinct SitRep vintages are recovered by exact-value dedup
 ([`_dedup_onset_blocks`](@ref)), so reprinted figures collapse to their

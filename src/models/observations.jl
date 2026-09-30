@@ -3879,7 +3879,7 @@ a flat departure the default the data has to argue away from (see
 
 Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
 by levels, not by corrections, since corrections constrain only differences
-of `F`. What breaks the tie is each onset date's level cell, its first
+of `F`. What breaks the tie is each scored onset date's level cell, its first
 print differenced against an empty predecessor (see
 [`load_onset_curve`](@ref)), together with
 the onset series being pinned by the other streams. A single-stream
@@ -3950,8 +3950,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     grid_start = m > 0 ? minimum(onset_days) : 1
     grid_end = m > 0 ? max(maximum(report_days), grid_start) : 1
     ## The report-date walk moves only from the first snapshot, the first
-    ## report day a delay can be seen on. Earlier onset dates are still on
-    ## the grid, since every onset date's first print is scored.
+    ## report day a delay can be seen on. Onset dates in the first figure's
+    ## delay support are on the grid before it.
     walk_start = m > 0 ? max(minimum(report_days), grid_start) : grid_start
     ## Unprefixed (`false`): the hazard model has no `:=` deterministics to
     ## collide with, and hoisting its sampled variables into this frame
