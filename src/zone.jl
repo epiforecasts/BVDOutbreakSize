@@ -10,8 +10,9 @@
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
 ## quantity and the patch trajectory and between-patch movement it implies,
-## and, with mixing, the per-zone mixing fractions. A chain with no kept meld cell carries an
-## empty `η` and every draw reads the province model's mean curve.
+## and, with mixing, the per-zone mixing fractions. A chain with no kept
+## meld cell carries an empty `η` and every draw reads the province model's
+## mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
     zd = inputs.model_data
     nz = length(inputs.zone_keys)
@@ -117,9 +118,8 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. The origin intensity cells have no row. `mean_norm_sq`
-is the mean of `‖η‖²` over every component, which is `dimension` when the
-fit reproduces the prior.
+weekly infections there. `mean_norm_sq` is the mean of `‖η‖²` over every
+component, which is `dimension` when the fit reproduces the prior.
 """
 function zone_meld_check(chn, inputs)
     meld = inputs.meld
@@ -540,6 +540,61 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Markdown table of the `top` health zones with the most confirmed cases over
+the past two weeks, for the summary dashboard, followed by a sentence giving
+how many were chosen from how many.
+
+`estimates` is the frame the health-zone page writes to
+`zone_estimates.csv`. Zones with no case over the two weeks are left out and
+ties are broken by the cases to date. Ranges are equal-tailed 90% intervals.
+
+# Examples
+
+```julia
+est = CSV.read("docs/src/summary_assets/zone_estimates.csv", DataFrame)
+print(zone_headline(est; top = 5))
+```
+"""
+function zone_headline(estimates::DataFrame; top::Integer)
+    nz = nrow(estimates)
+    active = findall(>(0), estimates.cases_last_14)
+    isempty(active) && return "No zone has had a confirmed case over the " *
+        "past two weeks.\n"
+    order = sort(
+        active;
+        by = z -> (estimates.cases_last_14[z], estimates.cases[z]), rev = true
+    )
+    rows = estimates[first(order, top), :]
+    df = DataFrame(
+        "Zone" => rows.label,
+        "Province" => rows.patch,
+        "Cases, past two weeks" => rows.cases_last_14,
+        "Cases to date" => rows.cases,
+        "Share of province infections (%)" => _bounds_text.(
+            100 .* rows.share_lower, 100 .* rows.share_upper; digits = 0
+        ),
+        "R at the cut-off" => [
+            ismissing(lo) ? "-" : _bounds_text(lo, hi)
+                for (lo, hi) in zip(rows.R_T_lower, rows.R_T_upper)
+        ],
+        "P(R > 1)" => [
+            ismissing(p) ? "-" : _probability_text(p)
+                for p in rows.p_rt_above_one
+        ],
+        "Confirmed cases, next week" => _bounds_text.(
+            rows.forecast_lower, rows.forecast_upper; digits = 0
+        ),
+        "R modelled separately" => [w == 1 ? "yes" : "no" for w in rows.walking]
+    )
+    shown = nrow(df) == 1 ? "The zone" : "The $(nrow(df)) zones"
+    return markdown_table(df) * "\n" *
+        "$(shown) with the most confirmed cases over the past two weeks, " *
+        "of the $(length(active)) of $(nz) with a case in that time.\n"
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Per-zone new confirmed cases over the forecast horizon from the zone
 forecast draws `fc` ([`zone_forecast`](@ref)), as the median and the
 90/60/30% intervals the other forecast tables report, then the probability
@@ -830,11 +885,8 @@ end
 function _zone_allocated_increments(zd, st, stream::Symbol)
     fw = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
     stream === :cases && return fw.increments
-    daily = zd.death_matrix * fw.infections .+
-        st.def.death_pre_rows .* transpose(st.w0)
-    return zone_report_increments(
-        daily, st.w0, zd.patch_ranges, zd.death_days, zd.t0,
-        st.def.death_pre_cum
+    return zone_binned_increments(
+        zd.death_bin, fw.infections, st.def.zone_pre .* st.w0
     )
 end
 

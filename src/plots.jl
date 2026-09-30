@@ -2664,7 +2664,7 @@ the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
 marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
-They default to the per-stream reading, and the sensitivity page passes its
+They default to the per-stream reading, and the province in-sample page passes its
 own to set two model structures against each other instead.
 """
 function plot_rt_streams(
@@ -4594,15 +4594,17 @@ Faceted reproduction number by health zone for the `top` zones by
 coloured by patch. `modelled[z]`, when given, is false for a zone whose
 reproduction number is from its province; that zone is drawn in grey as
 the edges and median of its 90% interval with no fill. `unit` names what a
-panel shows in the caption, for a figure whose panels are patches. `rt_draws[z]` is the
-`ndraws × n` daily trajectory of zone `z` (`missing` where a day is not
-established), `zone_labels` names the zones and `zone_patch[z]` indexes the
-patch the zone belongs to.
+panel shows in the caption, for a figure whose panels are patches.
+`rt_draws[z]` is the `ndraws × n` daily trajectory of zone `z` (`missing`
+where a day is not established), `zone_labels` names the zones and
+`zone_patch[z]` indexes the patch the zone belongs to.
 
 Every panel draws 30/60/90% credible ribbons on a shared y-axis.
-`patch_rt[p]`, when given, is the patch's own trajectory, drawn behind each
-of its zones as grey bands with its median as a dark line, and the legend
-then names the coloured swatches as each patch's zones.
+`patch_rt[p]`, when given, is the patch's reproduction number implied by its
+infections, which the caption describes as the infection-weighted average
+of its zones. It is drawn behind each of its zones as grey bands with its
+median as a dark line, and the legend then names the coloured swatches as
+each patch's zones.
 `reference_rt[z]`, when given, is another fit's trajectory for the same
 zone, drawn behind it as a dashed grey median with its 90% band. The days
 are placed by `dates` (one per column) or by `as_of_date`, the date the

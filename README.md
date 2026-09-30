@@ -32,9 +32,9 @@ The rendered report fills in the build date and the exact data cut-off automatic
 [model against observed](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample/national#Posterior-predictive-checks) ·
 [forecast skill against a baseline](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national#Forecast-scoring-across-releases) ·
 [frozen-fit evaluation](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national#Frozen-fit-forecast-evaluation) ·
-[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
-[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
-[estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
+[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/insample/national#Outbreak-size-estimated-by-each-data-stream) ·
+[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/evaluation/forecast/national#Estimate-evolution-across-releases) ·
+[estimates against McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/comparisons#Comparison-with-McCabe-et-al.) ·
 [aim and origins](https://epiforecasts.io/BVDOutbreakSize/stable/aim).
 
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
@@ -63,6 +63,11 @@ The named authors are responsible for that oversight.
 Every release is signed off by a person, who cuts it with an `@release` comment that needs write access to the repository.
 
 <!-- SHARED:END -->
+
+## Draft paper (work in progress)
+
+The [draft paper](https://epiforecasts.io/BVDOutbreakSize/dev/paper/) describes how this work developed, the current model, its evaluation and the lessons learnt.
+It is a work in progress, has not been peer reviewed and will change.
 
 ## Installing the package
 

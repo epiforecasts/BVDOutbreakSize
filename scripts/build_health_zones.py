@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build data/health_zones.csv and data/health_zones.geojson.
+"""Build data/health_zones.csv and src/assets/health_zones.geojson.
 
 Reads the INRB-UMIE build of the DRC health-zone map
 (``build/drc_health_zones.geojson`` in
@@ -11,7 +11,7 @@ counts attached per zone) and the zone keys in the
 - ``data/health_zones.csv``: one row per zone key that appears in the
   block (the unallocated rows excluded) with its display label, province
   key, WorldPop population, polygon centroid and the shapefile's zscode.
-- ``data/health_zones.geojson``: the map features of the seven affected
+- ``src/assets/health_zones.geojson``: the map features of the seven affected
   provinces, geometry rounded to four decimals and simplified with
   Douglas-Peucker at 0.005 degrees (less for a small ring, so a city zone
   keeps its shape), properties reduced to ``zone`` (our key, empty for a
@@ -41,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "data" / "observations.toml"
 OUT_CSV = ROOT / "data" / "health_zones.csv"
-OUT_GEOJSON = ROOT / "data" / "health_zones.geojson"
+OUT_GEOJSON = ROOT / "src" / "assets" / "health_zones.geojson"
 
 ## Shapefile PROVINCE attribute -> manifest province key, in patch order.
 PROVINCES = {

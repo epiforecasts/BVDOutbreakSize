@@ -77,7 +77,7 @@ tasks:
 
   health-zones:
     desc: >
-      Rebuild data/health_zones.csv and data/health_zones.geojson from the
+      Rebuild data/health_zones.csv and src/assets/health_zones.geojson from the
       INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
       only.
     cmds:
@@ -235,12 +235,12 @@ tasks:
       - BVD_DOC_PAGE=estimates/national julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
-  docs-sensitivity:
+  docs-comparisons:
     desc: >
-      Render just the sensitivity page (docs/src/sensitivity.md) from the
+      Render just the comparisons page (docs/src/comparisons.md) from the
       cached fits, without assembling the site.
     cmds:
-      - BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
+      - BVD_DOC_PAGE=comparisons julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
   docs-zone:
@@ -350,3 +350,59 @@ tasks:
     cmds:
       - uvx --python 3.12 --with 'setuptools<81' --from tensorboard
         tensorboard --logdir logs/tensorboard {{.CLI_ARGS}}
+
+  # ---- Paper ----------------------------------------------------------------
+  # Paper rendering is decoupled from the fits and the docs build: it depends
+  # only on the committed sources under paper/ and the figures and quoted
+  # numbers written into paper/ from a pinned release. Editing prose or
+  # references re-renders without refitting anything.
+  paper:
+    desc: Render the preprint to PDF and HTML
+    cmds:
+      - task: paper-html
+      - task: paper-pdf
+
+  paper-pdf:
+    desc: Render the preprint to PDF only
+    dir: paper
+    sources:
+      - "**/*.qmd"
+      - "**/*.bib"
+      - "**/*.yml"
+      - "figures/**"
+      - "generated/**"
+    cmds:
+      - quarto render main.qmd --to pdf
+      - quarto render si.qmd --to pdf
+
+  paper-html:
+    desc: Render the preprint to HTML only
+    dir: paper
+    sources:
+      - "**/*.qmd"
+      - "**/*.bib"
+      - "**/*.yml"
+      - "figures/**"
+      - "generated/**"
+    cmds:
+      - quarto render main.qmd --to html
+      - quarto render si.qmd --to html
+
+  paper-site:
+    desc: >
+      Render the preprint and its Supporting Information to self-contained
+      HTML under docs/src/public/paper/, where the report site serves them
+      at /paper/
+    dir: paper
+    cmds:
+      - quarto render main.qmd --to html -M embed-resources:true
+      - quarto render si.qmd --to html -M embed-resources:true
+      - mkdir -p ../docs/src/public/paper
+      - mv main.html ../docs/src/public/paper/index.html
+      - mv si.html ../docs/src/public/paper/si.html
+
+  paper-preview:
+    desc: Live-preview the preprint in the browser while editing
+    dir: paper
+    cmds:
+      - quarto preview main.qmd
