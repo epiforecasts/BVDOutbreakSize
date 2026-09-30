@@ -18,6 +18,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
   The delay deviations of the reporting hazard sum to zero, so $\eta_0$ is the mean logit hazard rather than trading against their mean (#1013).
@@ -34,13 +35,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The model cut-off advances to SitRep 136, 27 September.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
-  SitRep 136's figure is by onset date again but the reader misreads its new render, so it is not added either (#1018).
+  SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 136 (27 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 
 ### Report
 
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
+- The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
 - The summary page has a table of the health zones with the most confirmed cases over the past two weeks (#1021).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
@@ -70,6 +72,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Fixed
 
+- The health-zone forecast refuses parent arrivals that stop short of the horizon (#1037).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 - The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).

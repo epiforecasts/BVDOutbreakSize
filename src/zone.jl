@@ -118,8 +118,9 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. `mean_norm_sq` is the mean of `‖η‖²` over every
-component, which is `dimension` when the fit reproduces the prior.
+weekly infections there. The origin intensity cells have no row.
+`mean_norm_sq` is the mean of `‖η‖²` over every component, which is
+`dimension` when the fit reproduces the prior.
 """
 function zone_meld_check(chn, inputs)
     meld = inputs.meld

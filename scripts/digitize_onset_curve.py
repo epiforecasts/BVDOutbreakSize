@@ -43,8 +43,10 @@
 #     pixels when bar colour resumes and skipping neutral pixels on the
 #     tick rows and tick columns (gridlines). The run's top is its highest
 #     pixel darker than an anti-alias, which is the bar's outline. A day
-#     whose columns are mostly page from the baseline up is empty. The bar
-#     height is the height at least two of its interior columns agree on to
+#     whose columns are mostly page from the baseline up is empty; one whose
+#     columns neither show a bar nor leave it empty is read again without
+#     the tick-column skip, which washed fill on a tick column can break.
+#     The bar height is the height at least two of its interior columns agree on to
 #     within a pixel, or the tallest interior column when none do; with no
 #     outline pixel in any column the fill's own extent is read where two
 #     columns agree on it. Half a pixel of outline is subtracted before
@@ -179,6 +181,7 @@ CONFIG = {
     "132": ("2026-09-23", "2026-09-21"),
     "133": ("2026-09-24", "2026-09-21"),
     "134": ("2026-09-25", "2026-09-21"),
+    "136": ("2026-09-27", "2026-09-28"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -234,6 +237,7 @@ Y_AXIS_STEP = {
     "132": 25,
     "133": 25,
     "134": 25,
+    "136": 25,
 }
 
 
@@ -578,6 +582,36 @@ def day_column(cal, off):
     return xs[j] + (off - 7 * ks[j]) * cal["ppd"]
 
 
+def _bar_height(h, hp, nr, cols, cx, ppc):
+    """One day's bar over its interior `cols`, as the run height, the
+    crimson count of the column read and the columns read from, "empty"
+    when there is no bar, or None when the columns neither show a bar nor
+    leave the day empty."""
+    # a day is empty when half or more of its columns are page from
+    # the baseline up (the baseline's own anti-alias apart); a column
+    # that is fill all the way but never shows an outline pixel
+    # (chroma-washed) abstains rather than reading 0
+    gaps = sum(1 for x in cols if h[x] == 0 and hp[x] <= 2 * ppc)
+    if 2 * gaps >= len(cols):
+        return "empty"
+    resolved = [x for x in cols if h[x] > 0]
+    if not resolved:
+        # no outline pixel in any column: read the fill's extent where
+        # two columns agree on it, else it is a halo, not a bar
+        hb, support = _modal_height(hp, cols, cx)
+        if support < 2:
+            return None
+        jb = next(x for x in cols if hp[x] == hb)
+    else:
+        hb, support = _modal_height(h, resolved, cx)
+        if support < 2:
+            hb = max(int(h[x]) for x in resolved)
+        jb = next(x for x in resolved if h[x] == hb)
+    if hb < 1:
+        return "empty"
+    return hb, nr[jb], resolved or cols
+
+
 def digitize(im, last_tick_date, y_step=20):
     return digitize_windows(im, last_tick_date, y_step)[0]
 
@@ -605,6 +639,12 @@ def digitize_windows(im, last_tick_date, y_step=20):
     nd = np.concatenate([pad, nd0])
     ns = np.concatenate([pad, ns0])
     nb = np.concatenate([pad, nb0])
+    h10, hp10, nr10 = _column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt, []
+    )[:3]
+    h1 = np.concatenate([pad, h10])
+    hp1 = np.concatenate([pad, hp10])
+    nr1 = np.concatenate([pad, nr10])
     # outline columns are mostly dark over their run (a short bar's top
     # and junction lines are a few dark pixels in every column, so the
     # floor keeps its interior as interior), and a column with no
@@ -661,33 +701,19 @@ def digitize_windows(im, last_tick_date, y_step=20):
             cols = [x for x in range(lo, hi + 1) if not isborder[x]]
         if not cols:
             continue
-        # a day is empty when half or more of its columns are page from
-        # the baseline up (the baseline's own anti-alias apart); a column
-        # that is fill all the way but never shows an outline pixel
-        # (chroma-washed) abstains rather than reading 0
-        gaps = sum(1 for x in cols if h[x] == 0 and hp[x] <= 2 * ppc)
-        if 2 * gaps >= len(cols):
+        # washed fill on a tick column can read as gridline and break each run
+        # at a different row; a day that reads as neither empty nor a bar is
+        # read again without the skip
+        bar = _bar_height(h, hp, nr, cols, cx, ppc)
+        if bar is None:
+            bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
+        if not isinstance(bar, tuple):
             continue
-        resolved = [x for x in cols if h[x] > 0]
-        if not resolved:
-            # no outline pixel in any column: read the fill's extent where
-            # two columns agree on it, else it is a halo, not a bar
-            hb, support = _modal_height(hp, cols, cx)
-            if support < 2:
-                continue
-            jb = next(x for x in cols if hp[x] == hb)
-        else:
-            hb, support = _modal_height(h, resolved, cx)
-            if support < 2:
-                hb = max(int(h[x]) for x in resolved)
-            jb = next(x for x in resolved if h[x] == hb)
-        if hb < 1:
-            continue
+        hb, hr, read_from = bar
         total = round(max(0.0, hb - 0.5) / ppc)
-        dead = min(total, round(max(0.0, float(nr[jb]) - 0.5) / ppc))
+        dead = min(total, round(max(0.0, float(hr) - 0.5) / ppc))
         date = lastdate + dt.timedelta(days=off)
         rows.append((date, total - dead, dead))
-        read_from = resolved or cols
         windows[date] = (min(read_from), max(read_from))
     # drop leading and trailing zero rows (a stray anti-alias column near
     # the y-axis or the band edge reads as a bar of height 0) and isolated
