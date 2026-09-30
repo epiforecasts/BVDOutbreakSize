@@ -1758,7 +1758,7 @@ cfr_prior_fig #hide
 # Its first print is a level, differenced against an empty predecessor.
 # Each later figure $R_s$ that prints it while its delay is inside the support scores a correction against the last figure $R_{s-1}$ that printed it.
 # A level and its corrections sum to the latest print inside the support, so no case is counted twice.
-# Onset dates first printed past the support score their level alone, so the fit sees the complete curve back to the start of the digitised window.
+# An onset date first printed past the support is not scored, since that print carries no delay information and would pin the early curve through the ascertainment alone.
 # A count likelihood cannot be used, since a re-dated case can move a bar down in a later scan even though the true running total cannot fall.
 # The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #

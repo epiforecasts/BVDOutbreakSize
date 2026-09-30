@@ -126,15 +126,15 @@ same convention `load_observations` uses for every other stream, so
 advancing the manifest `as_of_date` past a newly-digitised vintage's
 report date picks that vintage up with no code change.
 
-Every onset date is scored once as a level and then only through
-increments, so no printed count enters the likelihood twice:
+Every onset date first printed inside the delay support is scored once as
+a level and then only through increments, so no printed count enters the
+likelihood twice:
 
-  - Level. The first vintage that prints onset date `u` gives one cell,
+  - Level. The first vintage that prints onset date `u`, while
+    `report_day - u < ONSET_REPORT_MAX_DELAY`, gives one cell,
     differenced against an implicit empty predecessor (the sentinel
     `prev_report_days[i] = 0`), right-truncated at that vintage's report
-    day. This is the only cell for dates first printed past the delay
-    support, which is the complete curve back to the start of the
-    digitised window.
+    day.
   - Corrections. Each later vintage `s` that prints `u` while
     `report_day(s) - u < ONSET_REPORT_MAX_DELAY` gives one cell against
     the last earlier vintage that printed `u`:
@@ -147,6 +147,12 @@ A level plus its corrections telescopes to the latest print inside the
 delay support. Past the support the modelled increment is zero, so later
 reprints of a settled date are not scored and late reclassification is not
 modelled.
+
+A date first printed past the support, the settled part of the first
+figure, is not scored at all. Its first print carries no delay
+information, and scoring it as a level would pin the early curve through
+the ascertainment alone, which the onset triangle cannot separate from
+the size of the cryptic seed.
 
 Each block has its own printed extent, its earliest to latest digitised
 onset date, and the published figures stop their x axis short of the
@@ -225,12 +231,16 @@ function load_onset_curve(
             d = _date(u)
             cur = get(snaps[s].onsets, d, 0)
             p = get(last_print, u, 0)
-            if p == 0
+            if R - u >= ONSET_REPORT_MAX_DELAY
+                ## Past the support nothing is scored. A first print here
+                ## carries no delay information, and its level would pin
+                ## the early curve through ascertainment alone.
+            elseif p == 0
                 push!(onset_days, u)
                 push!(report_days, R)
                 push!(prev_report_days, 0)
                 push!(increments, cur)
-            elseif R - u < ONSET_REPORT_MAX_DELAY
+            else
                 push!(onset_days, u)
                 push!(report_days, R)
                 push!(prev_report_days, _idx(snaps[p].report_date))
