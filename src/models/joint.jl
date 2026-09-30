@@ -492,6 +492,21 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
 end
 
 """
+    onset_detection_day(export_case_days)
+
+Grid day the outbreak was first detected, for the onset ascertainment step
+([`onset_detection_step`](@ref)): the first Uganda export's detection,
+11 May 2026, the earliest dated detection the data carry. On the onset-date
+axis the change sits a few days before the national declaration, since
+cases with onset shortly before it were still ill and could be tested. With
+no exports it is `-Inf`, which leaves ascertainment unchanged.
+"""
+function onset_detection_day(export_case_days::AbstractVector{<:Integer})
+    return isempty(export_case_days) ? -Inf :
+        float(minimum(export_case_days))
+end
+
+"""
 Onsets-only composer (the direct-observation analogue). Runs the infection
 process and onset staging, then conditions on the symptom-onset reporting-
 triangle likelihood alone. See [`onset_reporting_model`](@ref) for the
@@ -501,7 +516,9 @@ maths.
 This stream needs no dispersion submodel of its own. `onset_report`
 samples its own ascertainment level and is the only injected submodel. No
 confirmed pipeline is available to anchor ascertainment on, so it falls
-back to its constant `0.15` anchor.
+back to its constant `0.15` anchor. `export_case_days` only dates the
+outbreak's detection for the onset ascertainment step
+([`onset_detection_day`](@ref)); the exports are not fitted here.
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the un-prefixed name [`bvd_joint`](@ref) uses,
@@ -522,13 +539,17 @@ the digitised level.
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         onset_report = onset_reporting_model,
+        export_case_days::AbstractVector{<:Integer} = Int[],
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence; forecast), false
     )
     onset_report_state ~ to_submodel(
-        onset_report(onset_curve_history, latent.onsets)
+        onset_report(
+            onset_curve_history, latent.onsets;
+            detection_day = onset_detection_day(export_case_days)
+        )
     )
     ## Reported only, so built only when `:=` values are recorded.
     if _reporting(__varinfo__)
@@ -1318,7 +1339,8 @@ density there, is the fitted model's.
     onset_report_state ~ to_submodel(
         onset_report(
             onset_curve_history, onsets;
-            anchor = onset_anchor_daily
+            anchor = onset_anchor_daily,
+            detection_day = onset_detection_day(export_case_days)
         )
     )
 

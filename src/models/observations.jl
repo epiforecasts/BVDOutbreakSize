@@ -3693,6 +3693,30 @@ function onset_report_ascertainment(
 end
 
 """
+    onset_detection_step(ρ, grid_start, nt, detection_day; width = 2.5)
+
+Relative ascertainment of cases by onset date around the outbreak's
+detection, for the `nt` onset dates from `grid_start`:
+
+```math
+s(u) = \\rho + (1 - \\rho)\\,\\text{logistic}((u - u_d) / w).
+```
+
+Cases whose illness ended before surveillance began were mostly never
+tested, so onset dates well before the detection day `u_d` are confirmed
+at the fraction `ρ` of the later rate, and dates well after it at the full
+rate. `w` is the width of the change in days. A `detection_day` of `-Inf`
+gives one everywhere.
+"""
+function onset_detection_step(
+        ρ::Real, grid_start::Integer, nt::Integer, detection_day::Real;
+        width::Real = 2.5
+    )
+    u = Int(grid_start):(Int(grid_start) + Int(nt) - 1)
+    return ρ .+ (1 - ρ) .* logistic.((u .- detection_day) ./ width)
+end
+
+"""
 Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
@@ -3816,7 +3840,17 @@ linearly interpolated ([`knot_days`](@ref)/[`interpolate_knots`](@ref)),
 first knot pinned at zero, mirroring [`onset_report_hazard_model`](@ref)'s
 calendar walk exactly.
 
-Returns `(; alpha, β, σ_a, z_a, ω)`, `alpha` and `ω` length `nt =
+The level is scaled by a one-sided step at the outbreak's detection
+([`onset_detection_step`](@ref)), `alpha = α(u) · s(u)`. Onset dates before
+`detection_day` are confirmed at the fraction `ρ ~ detection_prior` of the
+later rate, since most of those cases died or recovered before anyone
+tested them. `detection_prior = Beta(2, 2)` centres that fraction on a
+half. The walk `ω` cannot make this change, since its tight prior lets it
+move by about a factor of two over five weeks and the change happens over a
+few days. Without the step, the reproduction number rises to reproduce the
+jump in the early onset bars instead. `detection_width = 2.5` days.
+
+Returns `(; alpha, β, σ_a, z_a, ω, ρ)`, `alpha` and `ω` length `nt =
 max(grid_end - grid_start + 1, 1)`.
 """
 @model function onset_ascertainment_model(
@@ -3824,6 +3858,9 @@ max(grid_end - grid_start + 1, 1)`.
         grid_start::Integer, grid_end::Integer;
         beta_prior = Normal(0.0, 0.75),
         pooling_prior = truncated(Normal(0.0, 0.1); lower = 0),
+        detection_day::Real = -Inf,
+        detection_prior = Beta(2, 2),
+        detection_width::Real = 2.5,
         week::Integer = 7
     )
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
@@ -3835,8 +3872,12 @@ max(grid_end - grid_start + 1, 1)`.
     steps = σ_a .* z_a[1:max(nb - 1, 0)]
     ω_knots = vcat(zero(σ_a), cumsum(steps))
     ω = interpolate_knots(ω_knots, days, nt)
-    alpha = onset_report_ascertainment(anchor_series, β, ω)
-    return (; alpha, β, σ_a, z_a, ω)
+    ρ ~ detection_prior
+    step = onset_detection_step(
+        ρ, grid_start, nt, detection_day; width = detection_width
+    )
+    alpha = onset_report_ascertainment(anchor_series, β, ω) .* step
+    return (; alpha, β, σ_a, z_a, ω, ρ)
 end
 
 """
@@ -3875,7 +3916,10 @@ passes that series in as `anchor`, `onsets_only_model` falls back to a
 constant `0.15` anchor (no confirmed pipeline to borrow from). `β` and `ω`
 let the fitted level depart from that anchor, with `ω`'s tight prior making
 a flat departure the default the data has to argue away from (see
-[`onset_ascertainment_model`](@ref)).
+[`onset_ascertainment_model`](@ref)). Onset dates before `detection_day`,
+the grid day the outbreak was first detected, are ascertained at a sampled
+fraction `ρ` of the later rate ([`onset_detection_step`](@ref)). The
+default `-Inf` leaves every date at the full rate.
 
 Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
 by levels, not by corrections, since corrections constrain only differences
@@ -3923,7 +3967,7 @@ negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
 Returns `(; increments, modelled, scales, logit_h0, γ, grid_start,
-grid_end, alpha, τ, η0, σ_h0, σ_γ, β, σ_a, ν)` with `modelled` the per-cell
+grid_end, alpha, τ, η0, σ_h0, σ_γ, β, σ_a, ρ, ν)` with `modelled` the per-cell
 increment means the likelihood scores, `scales` the per-cell observation
 scales it scores them with, `grid_end` the report-date grid day the
 calendar walk was built up to
@@ -3935,6 +3979,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         hazard = onset_report_hazard_model,
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
+        detection_day::Real = -Inf,
         D::Integer = ONSET_REPORT_MAX_DELAY,
         read_sd_prior = LogNormal(log(1.0), 0.5),
         ν::Real = 4.0
@@ -3979,7 +4024,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         anchor
     )
     asc_state ~ to_submodel(
-        ascertainment(anchor_series, grid_start, grid_end), false
+        ascertainment(anchor_series, grid_start, grid_end; detection_day),
+        false
     )
     alpha = asc_state.alpha
 
@@ -4016,7 +4062,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         grid_start = hazard_state.grid_start, grid_end, alpha, τ,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a,
-        ν,
+        ρ = asc_state.ρ, ν,
     )
 end
 
