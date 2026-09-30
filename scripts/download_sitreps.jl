@@ -7,17 +7,19 @@
 # to SitRep_MVE_NNN_2026.pdf and downloads any not already present.
 #
 # The INSP site leads the INRB-UMIE GitHub mirror
-# (https://github.com/INRB-UMIE/BDBV2026-Data), which lags by days and has
-# dropped individual vintages, so it is not the source. Some of its PDF
-# copies also differ from INSP's, so it is a last resort only. Its processed
-# national CSVs remain a cross-check (scripts/confirm_insp_data.jl).
+# (https://github.com/INRB-UMIE/BDBV2026-Data), which lags by days, has
+# dropped individual vintages, and holds some PDF copies that differ from
+# INSP's, so it is a last resort only. Its processed national CSVs are a
+# cross-check (scripts/confirm_insp_data.jl).
 #
-# The media listing has dropped reports and on some days names no MVE PDF
-# at all. So the order is: the media listing, then every published MVE
-# report still missing on disk through its insp.cd post (the per-post path
-# below), pausing between requests, and only a report neither insp.cd path
-# serves from the mirror, logged as unverified. An empty listing therefore
-# no longer stops the run, and a fresh checkout can rebuild the cache.
+# The media listing drops reports and on some days names no MVE PDF at
+# all. So the order is: the media listing, then every published MVE report
+# still missing on disk through its insp.cd post (the per-post path below),
+# pausing between requests, and only a report neither insp.cd path serves
+# from the mirror, logged as unverified. An empty listing is not an error;
+# the gaps are filled through the posts. The posts are listed only when
+# the cache has a gap below its newest report, and a failure there is
+# reported without undoing the media downloads.
 #
 # Usage:
 #
@@ -71,6 +73,8 @@ const BACKOFF_SECONDS = 5
 # or cache that keeps answering page 1 would otherwise spin forever, and a
 # nightly hang is worse than an error.
 const MAX_PAGES = 50
+# Report numbers INSP never published, which are not gaps in the cache.
+const NEVER_PUBLISHED = Set(["029", "043", "045"])
 # Pause between consecutive insp.cd requests on the fallback path, which can
 # make a few dozen of them on a fresh checkout.
 const PAUSE_SECONDS = 5
@@ -103,12 +107,6 @@ function parse_args(args)
     )
 end
 
-parsed = parse_args(ARGS)
-only_numbers = parsed.only_numbers
-limit = parsed.limit
-outdir = length(parsed.rest) >= 1 ? parsed.rest[1] :
-    joinpath(@__DIR__, "..", "data", "sitrep_pdfs")
-mkpath(outdir)
 
 # Decode the JSON string escapes WordPress returns in source_url (`\/` and
 # `\uXXXX`, e.g. `°` for the degree sign in `N°60`). The replacement
@@ -346,10 +344,12 @@ function get_once(url, dest)
     return res isa Downloads.Response ? res.status : 0
 end
 
-# Report `num` from the mirror, under the file names it has used, following
-# the Git LFS pointer the raw URL serves for most of them. Kept only when it
-# is a PDF.
-function fetch_mirror(num, dest)
+# Report `num` from the mirror, following the Git LFS pointer the raw URL
+# serves for most files. Kept only when it is a PDF. The mirror names most
+# reports `SitRep_MVE_NNN_2026.pdf`, 001-021, 037 and 038
+# `SitRep_MVE_NNN-2026.pdf`, and 028, 030 and 031 without the leading zero,
+# so the names are tried in that order.
+function fetch_mirror(num, dest; get = get_once)
     names = unique(
         [
             "SitRep_MVE_$(num)_2026.pdf", "SitRep_MVE_$(num)-2026.pdf",
@@ -358,9 +358,9 @@ function fetch_mirror(num, dest)
     )
     for name in names
         path = "data/insp_sitrep/raw/$name"
-        get_once(MIRROR_RAW * path, dest) == 200 || continue
+        get(MIRROR_RAW * path, dest) == 200 || continue
         if startswith(read(dest, String), "version https://git-lfs")
-            get_once(MIRROR_LFS * path, dest) == 200 || continue
+            get(MIRROR_LFS * path, dest) == 200 || continue
         end
         if startswith(read(dest, String), "%PDF")
             println(
@@ -389,21 +389,43 @@ function fetch_from_post(post, dest)
     return fetch_to(pdf_url, dest, "SitRep $num")
 end
 
-dest_for(num) = joinpath(outdir, "SitRep_MVE_$(num)_2026.pdf")
+dest_for(outdir, num) = joinpath(outdir, "SitRep_MVE_$(num)_2026.pdf")
 
-# The newest `limit` of `numbers` not already on disk, in ascending order.
-function missing_numbers(numbers, limit)
-    todo = sort([n for n in numbers if !isfile(dest_for(n))]; rev = true)
+# The newest `limit` of `numbers` not already in `outdir`, in ascending
+# order.
+function missing_numbers(outdir, numbers, limit)
+    todo = sort(
+        [n for n in numbers if !isfile(dest_for(outdir, n))]; rev = true
+    )
     return sort(first(todo, min(limit, length(todo))))
+end
+
+# Whether the posts need listing after the media walk: always when the
+# listing named nothing, otherwise when a report below the newest one
+# listed or on disk is missing, other than those never published.
+function gaps_suspected(outdir, listed)
+    isempty(listed) && return true
+    on_disk = [
+        m.captures[1] for m in (
+                match(r"^SitRep_MVE_(\d{3})_2026\.pdf$", f)
+                for f in readdir(outdir)
+            ) if m !== nothing
+    ]
+    newest = maximum(parse.(Int, vcat(collect(listed), on_disk)))
+    return any(
+        n -> !(n in NEVER_PUBLISHED) && !isfile(dest_for(outdir, n)),
+        (lpad(i, 3, '0') for i in 1:newest)
+    )
 end
 
 # Selective mode: look each number up directly via the posts API and
 # download just its PDF, never touching the paginated media listing.
-function fetch_selected(numbers, limit)
+function fetch_selected(outdir, numbers, limit)
     for n in numbers
-        isfile(dest_for(n)) && println("skip   SitRep $n (already present)")
+        isfile(dest_for(outdir, n)) &&
+            println("skip   SitRep $n (already present)")
     end
-    todo = missing_numbers(numbers, limit)
+    todo = missing_numbers(outdir, numbers, limit)
     posts = isempty(todo) ? Dict() :
         mve_posts(published_posts(; want = Set(todo)))
     downloaded = 0
@@ -415,7 +437,8 @@ function fetch_selected(numbers, limit)
             )
             continue
         end
-        fetch_from_post(posts[num], dest_for(num)) && (downloaded += 1)
+        fetch_from_post(posts[num], dest_for(outdir, num)) &&
+            (downloaded += 1)
     end
     return println(
         "\n$downloaded new sitrep(s) into $outdir (selective mode)."
@@ -426,10 +449,10 @@ end
 # names no MVE PDF at all, and the ones it has dropped otherwise. Each is
 # taken through its insp.cd post, pausing between requests, and from the
 # mirror only when the post does not serve it.
-function fetch_gaps(limit)
+function fetch_gaps(outdir, limit)
     limit > 0 || return nothing
     posts = mve_posts(published_posts())
-    todo = missing_numbers(keys(posts), limit)
+    todo = missing_numbers(outdir, keys(posts), limit)
     isempty(todo) && return nothing
     println(
         "\n$(length(todo)) published report(s) missing after the media " *
@@ -439,11 +462,11 @@ function fetch_gaps(limit)
     unverified = String[]
     for (i, num) in enumerate(todo)
         i > 1 && sleep(PAUSE_SECONDS)
-        if fetch_from_post(posts[num], dest_for(num))
+        if fetch_from_post(posts[num], dest_for(outdir, num))
             downloaded += 1
             continue
         end
-        if fetch_mirror(num, dest_for(num))
+        if fetch_mirror(num, dest_for(outdir, num))
             downloaded += 1
             push!(unverified, num)
         end
@@ -457,7 +480,7 @@ end
 
 # Download what the media listing names and is missing on disk, returning
 # how many landed.
-function fetch_listed(listing, limit)
+function fetch_listed(outdir, listing, limit)
     ## Measles and SGI-GPM SitReps share this media library and their
     ## numbering collides with the MVE series, so these rejections are
     ## expected. They are printed anyway: if an MVE report is ever
@@ -475,8 +498,9 @@ function fetch_listed(listing, limit)
     end
     urls = listing.urls
     downloaded = 0
-    for num in missing_numbers(keys(urls), limit)
-        fetch_to(urls[num], dest_for(num), "SitRep $num") && (downloaded += 1)
+    for num in missing_numbers(outdir, keys(urls), limit)
+        fetch_to(urls[num], dest_for(outdir, num), "SitRep $num") &&
+            (downloaded += 1)
     end
     println(
         "\n$downloaded new sitrep(s) into $outdir ($(length(urls)) " *
@@ -485,12 +509,28 @@ function fetch_listed(listing, limit)
     return downloaded
 end
 
-if only_numbers !== nothing
-    fetch_selected(only_numbers, limit)
-else
+function main(args = ARGS)
+    parsed = parse_args(args)
+    outdir = length(parsed.rest) >= 1 ? parsed.rest[1] :
+        joinpath(@__DIR__, "..", "data", "sitrep_pdfs")
+    mkpath(outdir)
+    parsed.only_numbers === nothing ||
+        return fetch_selected(outdir, parsed.only_numbers, parsed.limit)
     listing = collect_sitrep_urls()
     isempty(listing.urls) && println(
         "no MVE SitRep PDFs in the media listing at $MEDIA_API"
     )
-    fetch_gaps(limit - fetch_listed(listing, limit))
+    got = fetch_listed(outdir, listing, parsed.limit)
+    gaps_suspected(outdir, keys(listing.urls)) || return nothing
+    try
+        fetch_gaps(outdir, parsed.limit - got)
+    catch e
+        e isa InterruptException && rethrow()
+        @warn "gap fill through the posts skipped" exception = e
+    end
+    return nothing
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
 end
