@@ -5,12 +5,12 @@
 # `evaluation/insample/national`, `evaluation/insample/province`,
 # `evaluation/insample/zone`, `evaluation/forecast/national`,
 # `evaluation/forecast/province`, `evaluation/forecast/zone`,
-# `sensitivity`). Every model
+# `comparisons`). Every model
 # fit is loaded from the content-addressed cache (`BVD_FIT_CACHE`) rather
 # than refitted, so this is fast once the per-fit matrix (or an earlier run)
 # has populated the cache.
 #
-#   BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
+#   BVD_DOC_PAGE=comparisons julia --project=docs docs/execute.jl
 #
 # This is the execute step only: it runs the literate page (fits loaded from
 # cache) and writes the markdown plus its figures and its half of the shared
@@ -33,7 +33,7 @@ PAGE in (
     "evaluation/insample/zone",
     "evaluation/forecast/national", "evaluation/forecast/province",
     "evaluation/forecast/zone",
-    "sensitivity",
+    "comparisons",
 ) ||
     error(
     "BVD_DOC_PAGE must be one of methods, estimates/national, " *
@@ -42,7 +42,7 @@ PAGE in (
         "evaluation/insample/national, evaluation/insample/province, " *
         "evaluation/insample/zone, evaluation/forecast/national, " *
         "evaluation/forecast/province, evaluation/forecast/zone, " *
-        "sensitivity; got \"$PAGE\""
+        "comparisons; got \"$PAGE\""
 )
 
 const LITERATE_SRC = joinpath(@__DIR__, "pages", "$PAGE.jl")
