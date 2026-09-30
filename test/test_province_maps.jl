@@ -150,4 +150,13 @@ end
     @test est.forecast_lower ≈ [5.0, 105.0, 105.0]
     @test est.forecast_upper ≈ [95.0, 195.0, 195.0]
     @test all(==("2026-09-01"), est.as_of)
+    ## From a chain's per-patch reproduction number, one vector per draw.
+    chn = (; R_T_patch = [[rt[1][i], rt[2][i], 9.0] for i in 1:101])
+    from_chn = province_map_estimates(
+        chn, fc; n_patches = 2, confirmed_history = confirmed,
+        death_history = deaths, cutoff = Date(2026, 9, 1),
+        patch_names = ["x", "y"], patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"])
+    )
+    @test isequal(from_chn, est)
 end
