@@ -10,7 +10,7 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 
 This page summarises the headline results.
 See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province and a health-zone page alongside.
-See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Sensitivity](../sensitivity.md) for the sensitivity analyses.
+See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Comparisons](../comparisons.md) for the comparisons with published estimates.
 
 ## Headline estimates
 
@@ -53,6 +53,19 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 ```
 
+### By health zone
+
+The table gives the health zones with the most confirmed cases over the past two weeks.
+Each range is an equal-tailed 90% credible interval, and the share is of the zone's province.
+A zone whose reproduction number is not modelled separately takes it from its province.
+The detail is on the [Health zones](zone.md) and [health-zone forecasts](../forecasts/zone.md) pages.
+
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "zone_headline.md"), String))
+```
+
 ### Fit diagnostics
 
 ```@eval
@@ -68,7 +81,7 @@ Markdown.parse(read(joinpath(dir, "diagnostics_summary.md"), String))
 R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
 The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
 A divergent transition is a step the sampler could not take accurately.
-The [Sensitivity](../sensitivity.md) page breaks these numbers down by parameter.
+The [in-sample checks](../evaluation/insample/national.md) break these numbers down by parameter.
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -103,7 +116,7 @@ The detail is on the [National estimates](national.md) page.
 
 ## Health zones
 
-The split of each patch's infections across its health zones, with the zone maps and the interactive map, is on the [Health zones](zone.md) page.
+The split of each patch's infections across its health zones, with the zone maps, is on the [Health zones](zone.md) page, and the interactive map is on the [Dashboard](../dashboard.md).
 The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
 
 The week-ahead forecast by health zone:

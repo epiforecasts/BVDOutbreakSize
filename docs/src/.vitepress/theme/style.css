@@ -186,3 +186,17 @@ mjx-container > svg {
 .vp-doc mjx-container[display="true"] {
   scrollbar-width: none;
 }
+
+/* Dashboard page: the map takes the full content width */
+.bvd-dashboard .VPDoc .container,
+.bvd-dashboard .VPDoc .content,
+.bvd-dashboard .VPDoc .content-container {
+  max-width: none !important;
+}
+.bvd-dashboard-map {
+  width: 100%;
+  height: max(560px, calc(100vh - 220px));
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg);
+}
