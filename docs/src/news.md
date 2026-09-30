@@ -56,7 +56,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
-- The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
+- The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer, and the unused `importation_from_kernel` is removed (#1038).
 
 ### Infrastructure
 
