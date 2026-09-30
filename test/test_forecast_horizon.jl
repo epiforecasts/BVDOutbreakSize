@@ -310,6 +310,26 @@ end
     end
 end
 
+@testitem "the patch forecast records each patch's arrivals" setup = [
+    HorizonFixtures,
+] begin
+    m0 = patch_joint()
+    chn = sample(
+        Xoshiro(12), m0, Prior(), 4;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    pp = predict(Xoshiro(13), with_horizon(m0, H), chn)
+    draws(key) = [collect(v) for v in vec(collect(pp[Symbol(key)]))]
+    imp = draws("forecast_importation_patch")
+    inf = draws("forecast_infections_patch")
+    ## One entry per patch and future day, as the infections, and the
+    ## arrivals are part of what each patch takes in.
+    @test all(v -> length(v) == NP * H, imp)
+    @test all(v -> all(>=(0), v), imp)
+    @test any(v -> any(>(0), v), imp)
+    @test all(i -> length(imp[i]) == length(inf[i]), eachindex(imp))
+end
+
 @testitem "the onset forecast is the fitted reporting hazard run forward" setup = [
     HorizonFixtures,
 ] begin

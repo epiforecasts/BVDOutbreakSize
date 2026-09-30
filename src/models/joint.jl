@@ -1747,6 +1747,7 @@ density there, is the fitted model's.
         ## and overdispersion the province tables are fitted with, so the
         ## provinces add up to the national counts drawn above.
         forecast_infections_patch := vec(patch_state.infections_matrix[:, fd])
+        forecast_importation_patch := vec(patch_state.importation_matrix[:, fd])
         if _reporting(__varinfo__)
             frf = _patch_fractions(patch_state)
             forecast_rt_patch := vec(
