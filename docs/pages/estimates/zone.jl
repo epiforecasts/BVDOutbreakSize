@@ -612,7 +612,7 @@ zone_week_rt_fig #hide
 
 # ## Saving zone assets
 #
-# The [dashboard](@ref "Dashboard") map reads the per-zone estimates written here, and the summary dashboard's health-zone table is built from them.
+# The [dashboard](@ref "Dashboard") map reads the per-zone estimates and time series written here, and the summary dashboard's health-zone table is built from them.
 # The zone forecast figure is written by the [health-zone forecasts](@ref "Health-zone forecasts") page and the frozen zone forecast and its scores by the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
 
 #md # ```@raw html
@@ -669,6 +669,27 @@ zone_estimates = DataFrame(
     as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
+## Each zone's daily reproduction number and weekly allocated confirmed
+## cases, for the dashboard map's detail column.
+_with_series(t, s) = (t[!, :series] .= s; t)
+CSV.write(
+    joinpath(dashboard_dir, "zone_timeseries.csv"),
+    vcat(
+        _with_series(
+            rt_quantile_table(
+                zone_rt_traj, zone_map_keys; cutoff = obs.cutoff,
+                n = obs.n, from = zone_inputs.t0
+            ), "rt"
+        ),
+        _with_series(
+            weekly_count_table(
+                zone_inputs.days, zone_inputs.counts, zone_map_keys;
+                cutoff = obs.cutoff, n = zone_inputs.n
+            ), "cases"
+        );
+        cols = :union
+    )
+)
 open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
     print(io, zone_headline(zone_estimates; top = 10))
 end

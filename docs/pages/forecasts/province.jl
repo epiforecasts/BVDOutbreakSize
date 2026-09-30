@@ -232,15 +232,17 @@ province_overlay_fig #hide
 
 # ## Saving province map assets
 #
-# The [dashboard](@ref "Dashboard") map's province layer reads the per-province estimates written here.
+# The [dashboard](@ref "Dashboard") map's province layer and its detail column read the per-province and national estimates and time series written here.
 
 #md # ```@raw html
-#md # <details><summary>Write the province map estimates</summary>
+#md # <details><summary>Write the province map estimates and time series</summary>
 #md # ```
 
 ## One row per province keyed as the health-zone geojson keys it: the
-## patch's reproduction number at the cut-off and its confirmed cases over
-## the coming week, with the province's own confirmed cases and deaths.
+## patch's reproduction number at the cut-off, its confirmed cases over
+## the coming week and its ascertainment, with the province's own confirmed
+## cases and deaths. The national row reads the joint's national
+## reproduction number and the provinces' summed forecast.
 province_map_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
@@ -252,6 +254,67 @@ CSV.write(
         n_patches = N_PATCHES,
         confirmed_history = obs.province_confirmed_history,
         death_history = obs.province_death_history, cutoff = obs.cutoff
+    )
+);
+national_forecast_draws = let d = province_projection
+    [float(sum(d.confirmed_new[d.draw .== i])) for i in sort(unique(d.draw))]
+end
+CSV.write(
+    joinpath(province_map_dir, "national_estimates.csv"),
+    province_map_estimates(
+        [vec(Array(chn_joint[:R_T]))], [national_forecast_draws];
+        confirmed_history = Dict("national" => obs.confirmed_history),
+        death_history = Dict("national" => obs.confirmed_deaths_history),
+        cutoff = obs.cutoff, patch_names = ["national"],
+        patch_labels = ["National"],
+        members = Dict("national" => ["national"])
+    )
+);
+## The daily reproduction number and the weekly confirmed cases of each
+## patch and of the country, keyed by the patch label.
+province_ts_rt_args = (;
+    n = obs.n, breakpoint = _BREAKPOINT, rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    ramp = RT_INTERVENTION_RAMP,
+)
+province_ts_inc = province_increment_matrix(
+    obs.province_confirmed_history, PROVINCE_NAMES, N_PATCHES
+)
+national_ts_inc = let c = obs.confirmed_history.counts
+    isempty(c) ? zeros(Int, 1, 0) : reshape([c[1]; max.(diff(c), 0)], 1, :)
+end
+## Tag a long table with the series it holds.
+_with_series(t, s) = (t[!, :series] .= s; t)
+CSV.write(
+    joinpath(province_map_dir, "province_timeseries.csv"),
+    vcat(
+        _with_series(
+            rt_quantile_table(
+                [
+                    reconstruct_patch_rt(
+                        chn_joint; n_patches = N_PATCHES,
+                        province_ts_rt_args...
+                    );
+                    [reconstruct_rt(chn_joint; province_ts_rt_args...)]
+                ],
+                [PROVINCE_LABELS[1:N_PATCHES]; "National"];
+                cutoff = obs.cutoff, n = obs.n, from = _rt_start_plot
+            ), "rt"
+        ),
+        _with_series(
+            vcat(
+                weekly_count_table(
+                    province_ts_inc.days, province_ts_inc.increments,
+                    PROVINCE_LABELS[1:N_PATCHES];
+                    cutoff = obs.cutoff, n = obs.n
+                ),
+                weekly_count_table(
+                    obs.confirmed_history.days, national_ts_inc,
+                    ["National"]; cutoff = obs.cutoff, n = obs.n
+                )
+            ), "cases"
+        );
+        cols = :union
     )
 );
 

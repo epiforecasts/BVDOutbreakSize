@@ -119,10 +119,10 @@ end
 ## `src/public/` through unchanged (everything else is either a page or a
 ## hashed asset), so the map page at `src/public/zone_map/index.html` fetches
 ## its CSVs and geojson from that directory by relative URL. The render steps
-## write the zone and province CSVs into `summary_assets/`; the geojson is
-## `src/assets/health_zones.geojson`. A missing input is a warning, not an
-## error, so a build without the zone or province results still deploys and
-## the page shows its no-data message.
+## write the estimate and time-series CSVs into `summary_assets/`; the
+## geojson is `src/assets/health_zones.geojson`. A missing input is a
+## warning, not an error, so a build without the zone or province results
+## still deploys and the page shows its no-data message.
 function stage_zone_map()
     dest = joinpath(LITERATE_OUT, "public", "zone_map")
     mkpath(dest)
@@ -130,6 +130,9 @@ function stage_zone_map()
         joinpath(REPO_ROOT, "src", "assets", "health_zones.geojson"),
         joinpath(LITERATE_OUT, "summary_assets", "zone_estimates.csv"),
         joinpath(LITERATE_OUT, "summary_assets", "province_estimates.csv"),
+        joinpath(LITERATE_OUT, "summary_assets", "national_estimates.csv"),
+        joinpath(LITERATE_OUT, "summary_assets", "zone_timeseries.csv"),
+        joinpath(LITERATE_OUT, "summary_assets", "province_timeseries.csv"),
     )
     for src in inputs
         if isfile(src)
