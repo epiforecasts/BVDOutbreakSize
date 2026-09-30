@@ -373,6 +373,7 @@ tasks:
       - "generated/**"
     cmds:
       - quarto render main.qmd --to pdf
+      - quarto render si.qmd --to pdf
 
   paper-html:
     desc: Render the preprint to HTML only
@@ -385,6 +386,20 @@ tasks:
       - "generated/**"
     cmds:
       - quarto render main.qmd --to html
+      - quarto render si.qmd --to html
+
+  paper-site:
+    desc: >
+      Render the preprint and its Supporting Information to self-contained
+      HTML under docs/src/public/paper/, where the report site serves them
+      at /paper/ without listing them
+    dir: paper
+    cmds:
+      - quarto render main.qmd --to html -M embed-resources:true
+      - quarto render si.qmd --to html -M embed-resources:true
+      - mkdir -p ../docs/src/public/paper
+      - mv main.html ../docs/src/public/paper/index.html
+      - mv si.html ../docs/src/public/paper/si.html
 
   paper-preview:
     desc: Live-preview the preprint in the browser while editing
