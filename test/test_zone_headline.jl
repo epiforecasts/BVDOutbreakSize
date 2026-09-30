@@ -47,7 +47,8 @@
     @test content[2] isa Markdown.Paragraph
 
     ## `top` caps the rows.
-    @test length(filter(startswith("| "), split(zone_headline(est; top = 1), "\n"))) == 3
+    one = zone_headline(est; top = 1)
+    @test length(filter(startswith("| "), split(one, "\n"))) == 3
 
     ## With no recent case anywhere there is a sentence and no table.
     quiet = zone_headline(

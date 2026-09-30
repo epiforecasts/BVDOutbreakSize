@@ -540,6 +540,61 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Markdown table of the `top` health zones with the most confirmed cases over
+the past two weeks, for the summary dashboard, followed by a sentence giving
+how many zones had a case over that time. Ties are broken by the cases to
+date, and a zone with no case over the two weeks is left out.
+
+`estimates` is the per-zone frame the health-zone page writes to
+`zone_estimates.csv`. Each row gives the zone's province, its cases over the
+past two weeks and to date, its share of its province's infections at the
+cut-off, its reproduction number at the cut-off with the probability that it
+exceeds one, its confirmed cases over the coming week and whether its
+reproduction number is modelled separately. The share, the reproduction
+number and the forecast are equal-tailed 90% intervals. A zone below the
+reporting floor has a dash for its reproduction number.
+"""
+function zone_headline(estimates::DataFrame; top::Integer = 10)
+    nz = nrow(estimates)
+    active = findall(>(0), estimates.cases_last_14)
+    isempty(active) && return "No zone has had a confirmed case over the " *
+        "past two weeks.\n"
+    order = sort(
+        active;
+        by = z -> (estimates.cases_last_14[z], estimates.cases[z]), rev = true
+    )
+    rows = estimates[first(order, top), :]
+    interval(lo, hi; digits = 2) = ismissing(lo) || ismissing(hi) ? "-" :
+        digits <= 0 ?
+        string(round(Int, lo), "–", round(Int, hi)) :
+        string(round(lo; digits), "–", round(hi; digits))
+    df = DataFrame(
+        "Zone" => rows.label,
+        "Province" => rows.patch,
+        "Cases, past two weeks" => rows.cases_last_14,
+        "Cases to date" => rows.cases,
+        "Share of province infections (%)" => interval.(
+            100 .* rows.share_lower, 100 .* rows.share_upper; digits = 0
+        ),
+        "R at the cut-off" => interval.(rows.R_T_lower, rows.R_T_upper),
+        "P(R > 1)" => [
+            ismissing(p) ? "-" : _probability_text(p)
+                for p in rows.p_rt_above_one
+        ],
+        "Confirmed cases, next week" => interval.(
+            rows.forecast_lower, rows.forecast_upper; digits = 0
+        ),
+        "R modelled separately" => [w == 1 ? "yes" : "no" for w in rows.walking]
+    )
+    return markdown_table(df) * "\n" *
+        "$(length(active)) of $(nz) zones " *
+        (length(active) == 1 ? "has" : "have") *
+        " had a confirmed case over the past two weeks.\n"
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Per-zone new confirmed cases over the forecast horizon from the zone
 forecast draws `fc` ([`zone_forecast`](@ref)), as the median and the
 90/60/30% intervals the other forecast tables report, then the probability
