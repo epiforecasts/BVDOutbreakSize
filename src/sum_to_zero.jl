@@ -161,6 +161,96 @@ function sum_to_zero_moments(F::AbstractMatrix)
 end
 
 """
+    flow_pair_basis(n)
+
+Orthonormal bases, to rounding, of the double-centred flows between `n`
+patches, as `(; symmetric, antisymmetric)` matrices of size `n² × d` whose
+columns reshape to `n × n` flow matrices.
+
+A double-centred flow matrix has a zero diagonal and zero row and column
+sums. The symmetric part moves `q → p` and `p → q` together and has
+`n (n - 3) / 2` directions. The antisymmetric part moves them in opposite
+directions (circulations) and has `(n - 1)(n - 2) / 2`.
+"""
+function flow_pair_basis(n::Integer)
+    n >= 1 || throw(ArgumentError("flow_pair_basis: n = $n < 1"))
+    idx(p, q) = (q - 1) * n + p
+    unit(ks...) = (v = zeros(n^2); foreach(k -> v[k] += 1, ks); v)
+    centred = Vector{Float64}[]
+    for p in 1:n
+        push!(centred, unit(idx(p, p)))
+        push!(centred, unit((idx(p, q) for q in 1:n)...))
+        push!(centred, unit((idx(q, p) for q in 1:n)...))
+    end
+    ## `x_pq = x_qp` for the symmetric part, `x_pq = -x_qp` for the other.
+    swapped(sgn) = [
+        unit(idx(p, q)) .+ sgn .* unit(idx(q, p)) for q in 1:n for p in 1:(q - 1)
+    ]
+    symmetric = _orthonormal_complement(vcat(centred, swapped(-1)), n^2)
+    antisymmetric = _orthonormal_complement(vcat(centred, swapped(1)), n^2)
+    ## The diagonal is zero up to rounding; set it exactly.
+    for p in 1:n
+        symmetric[idx(p, p), :] .= 0
+        antisymmetric[idx(p, p), :] .= 0
+    end
+    return (; symmetric, antisymmetric)
+end
+
+## Orthonormal basis (`m × d`) of the complement of `constraints` in `R^m`,
+## by Gram-Schmidt in plain loops, since Mooncake has no rule for an SVD.
+function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
+    span = Vector{Float64}[]
+    function project_out!(v)
+        for b in span
+            v .-= dot(b, v) .* b
+        end
+        nv = sqrt(dot(v, v))
+        nv > tol || return false
+        push!(span, v ./ nv)
+        return true
+    end
+    foreach(c -> project_out!(copy(c)), constraints)
+    n_constraints = length(span)
+    for k in 1:m
+        v = zeros(m)
+        v[k] = 1
+        project_out!(v)
+    end
+    d = length(span) - n_constraints
+    basis = zeros(m, d)
+    for j in 1:d
+        basis[:, j] = span[n_constraints + j]
+    end
+    return basis
+end
+
+"""
+    flow_pair_deviation(B, σ, ρ, z)
+
+Double-centred flow deviation `U` (`n × n`) from the bases `B` of
+[`flow_pair_basis`](@ref) and standard-normal draws `z` (the symmetric
+directions first), scaled so each directed flow has standard deviation `σ`
+and correlation `ρ` with its reverse.
+"""
+function flow_pair_deviation(B::NamedTuple, σ, ρ, z::AbstractVector)
+    S, A = B.symmetric, B.antisymmetric
+    ds, da = size(S, 2), size(A, 2)
+    length(z) == ds + da || throw(
+        DimensionMismatch(
+            "flow_pair_deviation: $(length(z)) draws for $(ds + da) directions"
+        )
+    )
+    n = isqrt(size(S, 1))
+    pairs = n * (n - 1) ÷ 2
+    T = promote_type(typeof(σ), typeof(ρ), eltype(z), eltype(S))
+    ## `M / d` of each part, so the two scales give each flow variance `σ²`.
+    s_sym = ds > 0 ? σ * sqrt((1 + ρ) * pairs / ds) : zero(T)
+    s_anti = da > 0 ? σ * sqrt((1 - ρ) * pairs / da) : zero(T)
+    u = s_sym .* (S * z[1:ds]) .+ s_anti .* (A * z[(ds + 1):end])
+    return reshape(u, n, n)
+end
+
+"""
 Mean-reverting AR(1) knots of a sum-to-zero vector, one column per knot,
 `size(Z, 2) + 1` in all,
 

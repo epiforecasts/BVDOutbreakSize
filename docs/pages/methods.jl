@@ -530,6 +530,50 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
+# The gravity kernel is the centre of the flows.
+# A log deviation per directed flow moves where each origin's exports land, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
+#
+# ```math
+# K'_{p,q} = K_{p,q}\, e^{W_{p,q}} \frac{\sum_r K_{r,q}}{\sum_r K_{r,q}\, e^{W_{r,q}}},
+# \qquad
+# W_{p,q} = \eta_p + u_{p,q}.
+# ```
+#
+# The destination effect $\boldsymbol\eta$ sums to zero, and each province's destination effect has correlation $\rho_{\text{od}}$ with its origin deviation in Equation (15):
+#
+# ```math
+# \boldsymbol\eta = \sigma_{\text{dest}}\, Q \Bigl(\rho_{\text{od}}\, \mathbf{z}^{\varepsilon} + \sqrt{1 - \rho_{\text{od}}^2}\, \mathbf{z}^{\text{dest}}\Bigr),
+# \qquad
+# \mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \qquad
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 1).
+# ```
+#
+# The flow term $u$ has a zero diagonal and zero row and column sums.
+# A shift shared within an origin's column cancels in $K'$, so $\boldsymbol\eta$ and $u$ together have one direction per share of each origin's exports.
+# $u$ has a symmetric part, which moves $q \to p$ and $p \to q$ together, and an antisymmetric part, which moves them apart:
+#
+# ```math
+# \operatorname{vec}(u) = \sigma_{\text{flow}} \sqrt{\frac{(1 + \rho_{\text{flow}}) M}{d_s}}\, B_s \mathbf{z}^{\text{sym}}
+#     + \sigma_{\text{flow}} \sqrt{\frac{(1 - \rho_{\text{flow}}) M}{d_a}}\, B_a \mathbf{z}^{\text{anti}},
+# \qquad
+# \mathbf{z}^{\text{sym}} \sim \mathrm{Normal}(0, I_{d_s}),
+# \qquad
+# \mathbf{z}^{\text{anti}} \sim \mathrm{Normal}(0, I_{d_a}),
+# ```
+#
+# with $B_s$ and $B_a$ orthonormal bases of the $d_s = P(P-3)/2$ symmetric and $d_a = (P-1)(P-2)/2$ antisymmetric matrices of this form, and $M = P(P-1)/2$ the number of province pairs.
+# Each flow then has standard deviation $\sigma_{\text{flow}}$ and correlation $\rho_{\text{flow}}$ with its reverse.
+#
+# ```math
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
+# \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
+# ```
+#
+# The flow scale's prior is tighter than the destination scale's, so a pattern shared across origins is read as a destination effect.
+# The renewal uses $K'$ in place of $K$.
+#
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_importation_kernel</summary>
@@ -2122,7 +2166,17 @@ cfr_prior_fig #hide
 #
 # Infections cross zone boundaries as they cross provincial ones in Equation (18), through a gravity kernel at a per-origin intensity.
 # The kernel is decomposed so that the movement the joint model already estimated is not estimated again.
-# Both blocks are normalisations of one gravity pull $\mathrm{pull}_{zq} = N_z\, d_{zq}^{-1}$ over all zones, the same form as Equation (14) and the coupling of [xia2004](@citet):
+# Both blocks are normalisations of one gravity pull over all zones, the form of Equation (14) and the coupling of [xia2004](@citet) with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
+#
+# ```math
+# \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 0.5), \qquad
+# \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
+# \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
+# ```
+#
+# with $Q_p$ the sum-to-zero basis over patch $p$'s zones and $\mathbf{z}^\omega_p \sim \mathrm{Normal}(0, I)$.
+# The blocks are
 #
 # ```math
 # K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
@@ -2132,7 +2186,7 @@ cfr_prior_fig #hide
 # ```
 #
 # the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
-# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
+# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$ and $\omega$, so they move only where a flow lands among the patch's zones.
 #
 # Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:
@@ -2258,7 +2312,7 @@ cfr_prior_fig #hide
 # The weekly patch infections and the per-origin intensities are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
 # The import fraction follows from them through the arrivals formula, which leaves out the joint model's change in intensity at detection.
 # Straight-line distance stands for the roads, the lake and the international border that carry movement.
-# We assume the gravity form carries movement between zones as it does between provinces, with no mobility data to check it against.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, carries movement between zones, with no mobility data to check it against.
 # The increments are consecutive-vintage differences clamped at zero.
 # The walking set depends on the data and can differ between fits at different cut-offs.
 # A revision can move counts out of named zones.

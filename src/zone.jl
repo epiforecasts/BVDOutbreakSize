@@ -25,6 +25,14 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         _draw_vectors(chn, :mixing_epsilon_zone) : nothing
     eta = _has_key(chn, :parent_eta_zone) ?
         _draw_vectors(chn, :parent_eta_zone) : nothing
+    decay = _has_key(chn, :mixing_decay_zone) ?
+        _draws(chn, :mixing_decay_zone) : nothing
+    dest = _has_key(chn, :mixing_destination_zone) ?
+        _draw_vectors(chn, :mixing_destination_zone) : nothing
+    (decay === nothing) == (dest === nothing) || error(
+        "_zone_states: the chain carries only one of `mixing_decay_zone` " *
+            "and `mixing_destination_zone`."
+    )
     ndraws = length(knots)
     isempty(knots) || length(knots[1]) == nz * K ||
         error(
@@ -47,6 +55,10 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
     epsilon(i) = shared(i) && size(zd.meld_epsilon_rows, 1) > 0 ?
         zone_parent_epsilon(zd.meld_epsilon_rows, Float64.(eta[i])) :
         nothing
+    blocks(i) = decay === nothing || zd.mixing === nothing ? nothing :
+        zone_gravity_blocks(
+            zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i])
+        )
     return [
         (;
             δ_knots = reshape(Float64.(knots[i]), nz, K),
@@ -54,7 +66,7 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
             φ = exp2(-week / halflife[i]),
             ε = eps_ === nothing ? nothing : Float64.(eps_[i]),
             η = eta === nothing ? Float64[] : Float64.(eta[i]),
-            def = zone_deformation(zd, scale(i), epsilon(i)),
+            def = zone_deformation(zd, scale(i), epsilon(i), blocks(i)),
         )
             for i in 1:ndraws
     ]
