@@ -1293,9 +1293,8 @@ end
 @testitem "zone mixing: the sampled decay and destination weights" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, zone_mixing_blocks,
-        zone_destination_weighted, gravity_pull, province_distance_matrix,
-        _zone_states
+    using BVDOutbreakSize: bvd_zone, zone_gravity_blocks, gravity_pull,
+        province_distance_matrix, _zone_states
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1309,11 +1308,12 @@ end
     pops = Float64[r.population for r in meta]
     coords = [(r.lat, r.lon) for r in meta]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:2])
-    ## The gravity blocks written out from the pull at decay `γ`.
-    function reference(γ)
+    ## The gravity blocks written out from the pull at decay `γ`, each
+    ## destination weighted by `exp(ω_z)`.
+    function reference(γ, ω = zeros(nz))
         pull = gravity_pull(
             pops; distances = province_distance_matrix(coords), decay = γ
-        )
+        ) .* exp.(ω)
         within = zeros(nz, nz)
         between = zeros(nz, nz)
         for q in 1:nz, z in 1:nz
@@ -1330,24 +1330,26 @@ end
         return (; within, between)
     end
     ## Unit decay and no destination weight recover the fixed blocks.
-    b1 = zone_mixing_blocks(mix, 1.0, ones(nz))
+    blocks(γ, ω) = zone_gravity_blocks(mix.gravity, γ, ω)
+    b1 = blocks(1.0, zeros(nz))
     @test b1.within ≈ mix.within rtol = 1.0e-12
     @test b1.between ≈ mix.between rtol = 1.0e-12
     @test b1.within ≈ reference(1.0).within rtol = 1.0e-12
     @test b1.between ≈ reference(1.0).between rtol = 1.0e-12
     ## Another decay is the gravity pull at that decay.
-    @test zone_mixing_blocks(mix, 2.5, ones(nz)).within ≈
-        reference(2.5).within rtol = 1.0e-12
+    @test blocks(2.5, zeros(nz)).within ≈ reference(2.5).within rtol = 1.0e-12
     ## A weight shared within a patch cancels.
     ω_flat = [fill(0.7, 5); fill(-0.7, 3)]
-    @test zone_mixing_blocks(mix, 1.0, exp.(ω_flat)).within ≈ mix.within
-    @test zone_mixing_blocks(mix, 1.0, exp.(ω_flat)).between ≈ mix.between
+    @test blocks(1.0, ω_flat).within ≈ mix.within
+    @test blocks(1.0, ω_flat).between ≈ mix.between
     ## At any decay and weight the within block stays column-stochastic in
     ## the origin's patch and the between block's column over a destination
     ## patch is still the parent's flow; only the split moves.
     ω = [1.2, -0.4, 0.3, -0.9, -0.2, 0.8, -1.1, 0.3]
     for γ in (0.05, 0.6, 4.0)
-        b = zone_mixing_blocks(mix, γ, exp.(ω))
+        b = blocks(γ, ω)
+        @test b.within ≈ reference(γ, ω).within rtol = 1.0e-10
+        @test b.between ≈ reference(γ, ω).between rtol = 1.0e-10
         for q in 1:nz, p in 1:2
 
             zs = findall(==(p), poz)
@@ -1362,15 +1364,6 @@ end
         end
         @test !(b.within ≈ mix.within)
     end
-    ## The weighting multiplies each destination by its weight and rescales
-    ## so each origin's total into every patch is unchanged; an origin that
-    ## sends nothing into a patch stays at zero.
-    B = [0.0 0.2 0.0; 0.5 0.0 0.0; 0.5 0.8 0.0]
-    @test zone_destination_weighted(B, [2.0, 1.0, 1.0], [1, 2, 2]) ≈ B
-    Bw = zone_destination_weighted(B, [1.0, 3.0, 1.0], [1, 2, 2])
-    @test Bw[:, 1] ≈ [0.0, 0.75, 0.25]
-    @test Bw[:, 2] ≈ [0.2, 0.0, 0.8]
-    @test all(iszero, Bw[:, 3])
     ## The model records the decay, the weight scale and the log weights,
     ## which sum to zero within every patch, and the states rebuild each
     ## draw's blocks from them.
@@ -1387,7 +1380,7 @@ end
     end
     states = _zone_states(chn, inputs)
     for (i, st) in enumerate(states)
-        b = zone_mixing_blocks(mix, γs[i], exp.(ωs[i]))
+        b = blocks(γs[i], ωs[i])
         @test st.def.mixing.within ≈ b.within
         @test st.def.mixing.between ≈ b.between
     end

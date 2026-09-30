@@ -51,8 +51,8 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         zone_parent_epsilon(zd.meld_epsilon_rows, Float64.(eta[i])) :
         nothing
     blocks(i) = decay === nothing || zd.mixing === nothing ? nothing :
-        zone_mixing_blocks(
-            zd.mixing, Float64(decay[i]), exp.(Float64.(dest[i]))
+        zone_gravity_blocks(
+            zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i])
         )
     return [
         (;
