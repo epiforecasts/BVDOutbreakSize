@@ -36,7 +36,6 @@ const _ZONE_PARENT_KEYS = (
     death_confirmation = :onset_to_death_confirmation_pmf,
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
-    importation_destination = :importation_destination_effect,
     importation_flow = :importation_flow_effect,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
@@ -835,6 +834,25 @@ function _mean_parent_vector(chn, key::Symbol)
         m .+= Float64.(v)
     end
     return m ./ length(vs)
+end
+
+## Posterior mean over draws of the province model's weighted kernel
+## ([`destination_weighted_kernel`](@ref)) from its per-draw log weights,
+## `vec` of an `n × n` matrix; empty for a chain without them.
+function _mean_parent_kernel(chn, key::Symbol)
+    _has_key(chn, key) || return zeros(0, 0)
+    ws = _draw_vectors(chn, key)
+    isempty(ws) && return zeros(0, 0)
+    np = isqrt(length(first(ws)))
+    np^2 == length(first(ws)) || throw(
+        DimensionMismatch("$key: $(length(first(ws))) entries is not square.")
+    )
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    acc = zeros(np, np)
+    for w in ws
+        acc .+= destination_weighted_kernel(K, reshape(Float64.(w), np, np))
+    end
+    return acc ./ length(ws)
 end
 
 ## Beta matched by moments to the parent's draws of a probability. A
@@ -1878,12 +1896,9 @@ function zone_parent_inputs(chn)
     ## the between-patch flows the zone stage applies are the province
     ## model's rather than a second estimate of them.
     origin_epsilon = _geomean_parent_vector(chn, keys_.importation_epsilon)
-    ## The province model's per-flow and destination weightings of its
-    ## kernel, each empty for a chain fitted without it.
-    flow_effect = _mean_parent_vector(chn, keys_.importation_flow)
-    destination_effect = _mean_parent_vector(
-        chn, keys_.importation_destination
-    )
+    ## The province model's weighted kernel at its posterior mean over draws,
+    ## empty for a chain fitted without log weights on the kernel.
+    flow_kernel = _mean_parent_kernel(chn, keys_.importation_flow)
     ## The province model's own relative ascertainment and fatality, at its
     ## posterior mean. A factor common to a patch cancels in a within-patch
     ## composition, so these never reach the likelihood; they carry the
@@ -1911,7 +1926,7 @@ function zone_parent_inputs(chn)
     )
     return (;
         log_infections = logI, g, f, death_pmf,
-        origin_epsilon, flow_effect, destination_effect, import_log_odds,
+        origin_epsilon, flow_kernel, import_log_odds,
         priors,
         province_ascertainment, province_severity,
     )
@@ -1964,9 +1979,8 @@ of `parent_kernel`, the province model's own
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
 the same origin intensity, which is what keeps one movement from being
-counted at both levels. The zone stage weights the parent kernel by the
-posterior mean of the log deviation, not the posterior mean of the weighted
-kernel.
+counted at both levels. The parent kernel is the posterior mean of the
+province model's weighted kernel over its draws.
 """
 function zone_importation_blocks(
         pops::AbstractVector, coords::AbstractVector,
@@ -2557,10 +2571,14 @@ function _zone_mixing_or_nothing(
     kernel = province_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
-    weight = isempty(parent.flow_effect) ? parent.destination_effect :
-        reshape(parent.flow_effect, np, :)
-    if !isempty(weight)
-        kernel = destination_weighted_kernel(kernel, weight)
+    if !isempty(parent.flow_kernel)
+        size(parent.flow_kernel) == size(kernel) || throw(
+            DimensionMismatch(
+                "zone stage: a $(size(parent.flow_kernel)) parent kernel " *
+                    "for $np patches."
+            )
+        )
+        kernel = parent.flow_kernel
     end
     gravity = zone_gravity_inputs(pops, coords, patch_of_zone, kernel)
     blocks = zone_gravity_blocks(gravity, PROVINCE_DISTANCE_DECAY, zeros(nz))

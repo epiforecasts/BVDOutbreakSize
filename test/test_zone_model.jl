@@ -1187,41 +1187,35 @@ end
     end
     ## Arrivals stay a proper fraction of a patch's own infections.
     @test all(0 .<= zone_draw_mixing(mix, nothing, nothing).import_fraction .< 1)
-    ## A parent destination weighting reaches the blocks through
-    ## `destination_weighted_kernel`: a wrong-length effect throws there
-    ## rather than being skipped.
-    function tilted(effect)
+    ## A parent's log weights reach the blocks through
+    ## `destination_weighted_kernel`: a malformed one throws there rather
+    ## than being skipped.
+    function tilted(flow)
         chain = copy(syn.chain)
-        chain[:importation_destination_effect] = reshape(
-            [effect for _ in 1:4], 4, 1
-        )
+        chain[:importation_flow_effect] = reshape([flow for _ in 1:4], 4, 1)
         return zone_inputs(
             merge(syn, (; chain)); zones = zone_metadata(syn)
         ).model_data.mixing
     end
-    @test_throws DimensionMismatch tilted([0.5, 0.0, -0.5])
-    ## A parent per-flow weighting takes precedence over the destination
-    ## one: a well-formed flow effect is used even beside a malformed
-    ## destination effect, and a malformed one throws.
-    function flow_tilted(flow; dest = nothing)
-        chain = copy(syn.chain)
-        chain[:importation_flow_effect] = reshape(
-            [flow for _ in 1:4], 4, 1
-        )
-        if dest !== nothing
-            chain[:importation_destination_effect] = reshape(
-                [dest for _ in 1:4], 4, 1
-            )
-        end
-        return zone_inputs(
-            merge(syn, (; chain)); zones = zone_metadata(syn)
-        ).model_data.mixing
-    end
-    @test_throws DimensionMismatch flow_tilted(zeros(3))
+    @test_throws DimensionMismatch tilted(zeros(3))
     ## With two patches each origin has one destination, so any weighting
     ## cancels and the blocks are the unweighted ones.
-    @test flow_tilted([0.0, 0.4, -0.7, 0.0]; dest = zeros(3)).between ≈
-        mix.between
+    @test tilted([0.0, 0.4, -0.7, 0.0]).between ≈ mix.between
+    ## The parent kernel is the posterior mean of the weighted kernels over
+    ## draws, not the kernel at the mean log weight.
+    Ws = [
+        [0.0 1.5 -0.4; 2.0 0.0 0.3; -1.0 0.2 0.0],
+        [0.0 -1.2 0.8; -0.5 0.0 1.1; 0.9 -0.7 0.0],
+        [0.0 0.3 0.1; 0.4 0.0 -2.0; 1.6 0.5 0.0],
+        [0.0 -0.2 -1.5; 1.0 0.0 0.0; -0.3 1.8 0.0],
+    ]
+    chain3 = copy(syn.chain)
+    chain3[:importation_flow_effect] = reshape(vec.(Ws), 4, 1)
+    K3p = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    mean_kernel = sum(destination_weighted_kernel(K3p, W) for W in Ws) ./ 4
+    got = BVDOutbreakSize._mean_parent_kernel(chain3, :importation_flow_effect)
+    @test got ≈ mean_kernel
+    @test !(got ≈ destination_weighted_kernel(K3p, sum(Ws) ./ 4))
     ## With three patches a non-zero weighting changes the between block,
     ## and its column over a destination patch's zones is the weighted
     ## kernel's entry.
