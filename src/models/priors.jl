@@ -1700,6 +1700,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_effect_prior = Normal(0, 0.5),
         importation_destination_sd_prior = truncated(Normal(0, 1); lower = 0),
         importation_flow_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_destination_walk_sd_prior = truncated(Normal(0, 0.25); lower = 0),
+        importation_walk_week::Integer = 28,
         importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
@@ -1859,12 +1861,41 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         else
             flow_dev = zeros(Tp, n_patches, n_patches)
         end
-        log_weight = dest_dev .+ flow_dev
+        ## The destination effect walks from its first-knot value over
+        ## four-week knots, sum-to-zero at every knot, and is held after the
+        ## last knot.
+        dest_days = knot_days(n; week = importation_walk_week, start = renewal_start)
+        nk = length(dest_days)
+        dest_knots = zeros(Tp, n_patches, nk)
+        dest_knots[:, 1] .= dest_dev
+        if nk > 1
+            σ_dest_walk ~ importation_destination_walk_sd_prior
+            z_dest_walk ~ product_distribution(
+                fill(Normal(0, 1), (n_patches - 1) * (nk - 1))
+            )
+            F_walk = sum_to_zero_factor(basis, σ_dest_walk)
+            for k in 2:nk
+                step = sum_to_zero(
+                    F_walk,
+                    view(z_dest_walk, ((k - 2) * (n_patches - 1) + 1):((k - 1) * (n_patches - 1)))
+                )
+                dest_knots[:, k] .= view(dest_knots, :, k - 1) .+ step
+            end
+            importation_destination_walk_sd := σ_dest_walk
+        end
+        dest_daily = reduce(
+            vcat,
+            [permutedims(interpolate_knots(dest_knots[p, :], dest_days, ng)) for p in 1:n_patches]
+        )
+        log_weight = reshape(dest_daily, n_patches, 1, ng) .+ flow_dev
         weighted = destination_weighted_kernel(importation_kernel, log_weight)
+        dest_mean = vec(sum(view(dest_daily, :, renewal_start:n); dims = 2)) ./
+            (n - renewal_start + 1)
         importation_destination_sd := σ_dest
-        importation_destination_effect := dest_dev
+        importation_destination_effect := dest_mean
+        importation_destination_knots := vec(dest_knots)
         importation_origin_destination_correlation := ρ_od
-        importation_flow_effect := vec(log_weight)
+        importation_flow_effect := vec(dest_mean .+ flow_dev)
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There

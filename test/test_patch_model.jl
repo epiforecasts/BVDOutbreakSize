@@ -2180,6 +2180,7 @@ end
     fixed = (;
         σ_ε = 0.6, z_ε = [0.8, -1.1, 0.4], σ_dest = 0.6,
         z_dest = [-0.3, 1.5, 0.2], σ_flow = 0.4, ρ_flow_unit = 0.7,
+        σ_dest_walk = 0.0,
         z_flow = [0.5, -0.9, 1.3, 0.2, -0.6],
     )
     ## At a perfect origin-destination correlation and equal scales, each

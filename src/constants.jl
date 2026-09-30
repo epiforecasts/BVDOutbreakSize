@@ -471,15 +471,16 @@ K'_{p,q} = K_{p,q} e^{W_{p,q}}
     \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{W_{r,q}}}.
 ```
 
-`W` is an `n × n` matrix of per-flow log weights, or a vector `η` of
-destination weights shared by every origin (`W_{p,q} = η_p`). Each origin
+`W` is an `n × n` matrix of per-flow log weights, an `n × n × n_days`
+array of them giving one kernel per day, or a vector `η` of destination
+weights shared by every origin (`W_{p,q} = η_p`). Each origin
 column keeps its total, so `W` moves where exports land, not how much
 leaves, and a shift shared within a column cancels.
 """
-function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
+function destination_weighted_kernel(K::AbstractMatrix, W::AbstractArray)
     np = size(K, 1)
     np == size(K, 2) == size(W, 1) &&
-        (W isa AbstractVector || size(W, 2) == np) || throw(
+        (ndims(W) == 1 || size(W, 2) == np) && ndims(W) <= 3 || throw(
         DimensionMismatch(
             "destination_weighted_kernel: a $(size(K)) kernel and " *
                 "$(size(W)) weights."
