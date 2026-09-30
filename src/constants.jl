@@ -485,7 +485,11 @@ function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
                 "$(size(W)) weights."
         )
     )
-    KW = K .* exp.(W)
+    ## Each column is shifted by its largest reachable log weight, which
+    ## cancels in the rescale and keeps `exp` from overflowing.
+    Wr = ifelse.(K .> 0, W, oftype(float(first(W)), -Inf))
+    top = maximum(Wr; dims = 1)
+    KW = K .* exp.(Wr .- ifelse.(isfinite.(top), top, zero.(top)))
     weighted = sum(KW; dims = 1)
     ## An origin that exports nothing keeps an all-zero column rather than
     ## 0/0, which would turn the renewal and its gradient into NaN.
