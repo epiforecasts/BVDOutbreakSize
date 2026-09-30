@@ -16,7 +16,7 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `confirm_insp_data.jl` | Cross-checks the scanned confirmed-case and confirmed-death totals against the INRB-UMIE mirror, and reports the dates each source carries alone. Also `task confirm-data`. |
 | `scan_zone_tableau2.jl` | Scans Tableau 2 of the PDFs (per-health-zone confirmed cases and deaths within each province) into the `[zone_confirmed_history]` and `[zone_death_history]` blocks, admitting a vintage only when its zone rows partition the committed province cumulatives. Also `task zone-tableau2`. |
 | `confirm_zone_data.jl` | Cross-checks the two zone blocks against the INRB-UMIE mirror's per-zone CSVs and lists every disagreement. Also `task confirm-zone-data`. |
-| `build_health_zones.py` | Writes `data/health_zones.csv` and `data/health_zones.geojson` from the INRB-UMIE health-zone GeoJSON (Python standard library only; pass the GeoJSON path). Also `task health-zones`. |
+| `build_health_zones.py` | Writes `data/health_zones.csv` and `src/assets/health_zones.geojson` from the INRB-UMIE health-zone GeoJSON (Python standard library only; pass the GeoJSON path). Also `task health-zones`. |
 | `refresh_releases.jl` | Pulls each tagged results release's headline estimate into `data/released_estimates.csv`. Also `task refresh-releases`. |
 | `scan_province_tableau1.jl` | Scans Tableau 1 of the SitRep PDFs for the per-province confirmed cases and deaths and prints the `province_confirmed_history` and `province_death_history` blocks. Fails unless the provinces sum to the national series on every date. Also `task province-tableau1`. |
 | `scan_province_lab.jl` | Scans the laboratory section for the per-province samples analysed and positives and prints the `province_lab_daily_history` block. Fails unless the analysed counts sum to `tests_analysed_daily_history` on every date. Also `task province-lab-data`. |
@@ -156,7 +156,7 @@ CI uses `--project=docs` because that environment is already instantiated at tha
 
 | Script | Project | What it does |
 | --- | --- | --- |
-| `run.jl` | `.` | Regenerates the published results by running the analysis and sensitivity pages. |
+| `run.jl` | `.` | Regenerates the published results by running the report pages. |
 | `reproduce.jl` | none | Bootstraps a full reproduction from a fresh clone; run with `curl -fsSL https://raw.githubusercontent.com/epiforecasts/BVDOutbreakSize/main/scripts/reproduce.jl \| julia`. |
 | `backfill_forecasts.jl` | none | Reconstructs the one-week-ahead forecast each past release made but never saved, for `score_releases.jl` to score. Needs only `Dates` itself: it checks out each release tag into its own worktree and runs there under that tag's own project. |
 | `backfill_drivers/driver_v1.0.0.jl`, `driver_v1.1.0.jl` | that tag's own `docs` | Standalone drivers for the two release tags whose model predates the fit registry. Run by `backfill_forecasts.jl`, not directly. |

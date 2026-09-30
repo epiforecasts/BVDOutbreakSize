@@ -18,7 +18,7 @@ for page in (
         "forecasts/province",
         "evaluation/insample/national", "evaluation/insample/province",
         "evaluation/forecast/national", "evaluation/forecast/province",
-        "sensitivity",
+        "comparisons",
     )
     include(joinpath(REPO_ROOT, "docs", "pages", "$page.jl"))
 end

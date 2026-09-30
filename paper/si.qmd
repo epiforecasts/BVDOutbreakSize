@@ -1,0 +1,42 @@
+---
+title: "Supporting Information: Real-time joint estimation of the size of the 2026 Bundibugyo virus outbreak in the Democratic Republic of the Congo"
+metadata-files:
+  - _authors.yml
+  - generated/numbers.yml
+date: today
+format:
+  html:
+    toc: true
+    number-sections: false
+    include-in-header:
+      text: <meta name="robots" content="noindex">
+  pdf:
+    toc: true
+    number-sections: false
+    fig-pos: 'H'
+    include-in-header:
+      text: |
+        \usepackage{float}
+bibliography: reference.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/plos.csl
+filters:
+  - authors-block
+---
+
+# Model definition and priors
+
+The full definition of the model at the release analysed, every prior with its source, the prior predictive check and the in-sample checks are in the report site archived with that release, {{< meta release_tag >}} [@bvdoutbreaksize-zenodo].
+Its Methods page is the model as fitted, and its Estimates, Forecasts and Evaluation pages carry every result the main text summarises.
+
+# Gradient and build benchmarks
+
+![**Joint-model gradient time from the benchmark records.**
+Open markers are the time before and filled markers the time after the same pull request, for the production joint model and the continuous-integration benchmark model on a log axis.
+One pull request recorded only the time before its change.
+The single recorded wall-clock of a headline fit is drawn as a diamond whose height carries no value.
+Thin vertical lines are release tags and the background bands the three model versions.](figures/fig-gradient-si.pdf){#fig-gradient-si width=90%}
+
+The hand-written reverse-mode rules for the daily convolution, renewal and observation kernels cut the joint gradient time by about {{< meta gradient_speedup_joint_percent >}}% in the recorded benchmarks, and the treatment-flow, occupancy and onset-reporting kernels ran {{< meta gradient_speedup_kernels_min >}} to {{< meta gradient_speedup_kernels_max >}} times faster when timed on their own (@fig-gradient-si). <!-- PRs 810, 837, 856 -->
+A precompile workload that compiles the fit the report runs cut the cold build of the joint fit by a factor of {{< meta precompile_cold_build_factor >}} in the same records. <!-- PR 791 -->
+
+# References {.unnumbered}

@@ -12,10 +12,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Performance
 
 - A hand-written Mooncake rule differentiates the health-zone renewal (#779).
+- The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
+- The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
+- The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
 
 ### Model
 
-- Ituri's and Nord-Kivu's importation kernel columns follow Flowminder's outbreak-cluster subscriber cohorts, with tighter destination and flow deviation priors (#1027).
+- The importation kernel keeps gravity as its centre and gains a log deviation per directed flow: a destination effect correlated with each province's origin deviation, plus a double-centred flow term with a reciprocity correlation, holding each origin's export total (#1030).
+- Ituri's and Nord-Kivu's importation kernel columns follow Flowminder's outbreak-cluster subscriber cohorts in place of gravity, with tighter destination and flow deviation priors (#1027).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
   The delay deviations of the reporting hazard sum to zero, so $\eta_0$ is the mean logit hazard rather than trading against their mean (#1013).
@@ -24,17 +28,22 @@ A major version: the report gains a health-zone level below the provinces, with 
 - A health-zone model splits each patch of the headline joint fit across the 63 health zones that have reported a confirmed case, melded in two stages on the joint's log weekly patch infections and fitted to the per-zone confirmed case and death compositions with gravity mixing and a distance-correlated deviation walk (#779).
 - The health-zone fatality scale takes a tight prior of its own, an identifying assumption since two compositions leave three unknowns per zone (#779).
 - The health-zone forecast is drawn from the zone model with `predict`, the shared quantity extended over the joint's forecast week and each draw splitting a random joint forecast draw's province totals over the zones (#779).
+- The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 
 ### Data
 
-- The model cut-off advances to SitRep 135, 26 September.
+- The model cut-off advances to SitRep 136, 27 September.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
+  SitRep 136's figure is by onset date again but the reader misreads its new render, so it is not added either (#1018).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 135 (26 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `data/health_zones.geojson` hold the zone boundaries (#779, #979).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 136 (27 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 
 ### Report
 
+- The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
+- The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
+- The summary page has a table of the health zones with the most confirmed cases over the past two weeks (#1021).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
 - The zone map hatches zones whose R is from their province, not modelled separately, outlines the provinces, dates itself, offers the estimates as a CSV and puts every number in the popup, and the zone tables and ranking use the same phrase (#981).
@@ -43,6 +52,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
 - The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
+- The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 
 ### Infrastructure
@@ -56,6 +66,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
+- The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
 
 ### Fixed
 

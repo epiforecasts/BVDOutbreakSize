@@ -1,0 +1,353 @@
+# Quoted numbers for paper/main.qmd, read with Quarto meta shortcodes.
+# Written by paper/scripts/paper_numbers.jl from release results-2536 (commit 609d6ae, published 2026-09-28);
+# never edited by hand. Each key's comment names its source.
+# gh release view: tagName
+release_tag: "results-2536"
+# gh release view: source commit, first seven characters
+release_commit_short: "609d6ae"
+# gh release view: publishedAt
+release_date: "28 September 2026"
+# observations.toml: as_of_date
+data_cutoff: "25 September 2026"
+# observations.toml: as_of_date
+data_cutoff_iso: "2026-09-25"
+# stream_estimates.csv: fit joint, quantity C_T, median
+cumulative_infections_median: "16,000"
+# posterior_summary.csv: C_T, Lower 90%
+cumulative_infections_lower90: "11,000"
+# posterior_summary.csv: C_T, Upper 90%
+cumulative_infections_upper90: "23,000"
+# posterior_summary.csv: C_T, Lower 90% to Upper 90%
+cumulative_infections_interval90: "11,000 to 23,000"
+# observations.toml: confirmed_case_history, last value (dated as_of_date)
+confirmed_cases_at_cutoff: "7,989"
+# observations.toml: confirmed_death_history, last value (dated as_of_date)
+confirmed_deaths_at_cutoff: "3,852"
+# cumulative_infections_median (unrounded) divided by confirmed_cases_at_cutoff
+ratio_infections_to_confirmed: "2.0"
+# posterior_summary.csv C_T 90% bounds divided by confirmed_cases_at_cutoff
+ratio_infections_to_confirmed_interval90: "1.4 to 2.9"
+# stream_estimates.csv: fit joint, quantity R_T, median
+rt_cutoff_median: "0.92"
+# posterior_summary.csv: R_T, Lower 90%
+rt_cutoff_lower90: "0.67"
+# posterior_summary.csv: R_T, Upper 90%
+rt_cutoff_upper90: "1.2"
+# posterior_summary.csv: R_T, Lower 90% to Upper 90%
+rt_cutoff_interval90: "0.67 to 1.2"
+# posterior_draws.csv: share of the thinned R_T draws above one
+rt_cutoff_prob_above_one: "27%"
+# stream_estimates.csv: fit joint, quantity R0 (renewal walk start), median
+r0_median: "1.9"
+# stream_estimates.csv: fit joint, quantity R0, lo90 to hi90
+r0_interval90: "1.5 to 2.6"
+# posterior_summary.csv: r (latest daily growth rate), Lower 90% to Upper 90%
+growth_rate_interval90: "-0.03 to 0.02"
+# posterior_draws.csv: median of the thinned CFR draws
+cfr_median: "50%"
+# posterior_summary.csv: CFR, Lower 90%
+cfr_lower90: "37%"
+# posterior_summary.csv: CFR, Upper 90%
+cfr_upper90: "61%"
+# posterior_summary.csv: CFR, Lower 90% to Upper 90%
+cfr_interval90: "37% to 61%"
+# posterior_summary.csv: T (days from the first infection to the cut-off), Lower 90% to Upper 90%
+outbreak_age_days_interval90: "182 to 209"
+# as_of_date minus the posterior_summary.csv T bounds
+outbreak_start_interval90: "28 February to 27 March"
+# site.zip estimates/province.html: Ituri table, Cumulative infections, Lower 90% to Upper 90%
+ituri_infections_interval90: "8,100 to 17,000"
+# site.zip estimates/province.html: Ituri table, Reproduction number, Lower 90%
+ituri_rt_lower90: "0.63"
+# site.zip estimates/province.html: Ituri table, Reproduction number, Upper 90%
+ituri_rt_upper90: "1.2"
+# site.zip estimates/province.html: Ituri table, Reproduction number, Lower 90% to Upper 90%
+ituri_rt_interval90: "0.63 to 1.2"
+# site.zip summary_assets/provinces.html: table, Ituri, Share of infections (%)
+ituri_share_interval90: "66 to 76%"
+# site.zip summary_assets/provinces.html: table, Ituri, P(R > 1)
+ituri_rt_prob_above_one: "24%"
+# site.zip estimates/province.html: Nord-Kivu table, Cumulative infections, Lower 90% to Upper 90%
+nord_kivu_infections_interval90: "2,400 to 5,800"
+# site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Lower 90%
+nord_kivu_rt_lower90: "0.53"
+# site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Upper 90%
+nord_kivu_rt_upper90: "1.4"
+# site.zip estimates/province.html: Nord-Kivu table, Reproduction number, Lower 90% to Upper 90%
+nord_kivu_rt_interval90: "0.53 to 1.4"
+# site.zip summary_assets/provinces.html: table, Nord-Kivu, Share of infections (%)
+nord_kivu_share_interval90: "19 to 28%"
+# site.zip summary_assets/provinces.html: table, Nord-Kivu, P(R > 1)
+nord_kivu_rt_prob_above_one: "32%"
+# site.zip estimates/province.html: Haut-Uele table, Cumulative infections, Lower 90% to Upper 90%
+haut_uele_infections_interval90: "450 to 1,100"
+# site.zip estimates/province.html: Haut-Uele table, Reproduction number, Lower 90%
+haut_uele_rt_lower90: "0.56"
+# site.zip estimates/province.html: Haut-Uele table, Reproduction number, Upper 90%
+haut_uele_rt_upper90: "1.6"
+# site.zip estimates/province.html: Haut-Uele table, Reproduction number, Lower 90% to Upper 90%
+haut_uele_rt_interval90: "0.56 to 1.6"
+# site.zip summary_assets/provinces.html: table, Haut-Uele, Share of infections (%)
+haut_uele_share_interval90: "3 to 6%"
+# site.zip summary_assets/provinces.html: table, Haut-Uele, P(R > 1)
+haut_uele_rt_prob_above_one: "44%"
+# site.zip estimates/province.html: Other provinces table, Cumulative infections, Lower 90% to Upper 90%
+other_infections_interval90: "94 to 280"
+# site.zip estimates/province.html: Other provinces table, Reproduction number, Lower 90%
+other_rt_lower90: "0.73"
+# site.zip estimates/province.html: Other provinces table, Reproduction number, Upper 90%
+other_rt_upper90: "2.0"
+# site.zip estimates/province.html: Other provinces table, Reproduction number, Lower 90% to Upper 90%
+other_rt_interval90: "0.73 to 2.0"
+# site.zip summary_assets/provinces.html: table, Other provinces, Share of infections (%)
+other_share_interval90: "1 to 2%"
+# site.zip summary_assets/provinces.html: table, Other provinces, P(R > 1)
+other_rt_prob_above_one: "74%"
+# province_forecast.csv: number of distinct values of province
+n_provinces: "4"
+# posterior_draws.csv: median of the thinned p_drc draws (suspected-case ascertainment)
+suspected_ascertainment_median: "0.58"
+# posterior_summary.csv: p_drc, Lower 90% to Upper 90%
+suspected_ascertainment_interval90: "0.37 to 0.82"
+# src/models/priors.jl at the release commit: pooled_ascertainment_model mu_prior centre
+suspected_ascertainment_prior_median: "0.75"
+# posterior_draws.csv: median of the thinned p_uganda draws (export detection in Uganda)
+export_ascertainment_median: "0.64"
+# posterior_summary.csv: p_uganda, Lower 90% to Upper 90%
+export_ascertainment_interval90: "0.39 to 0.88"
+# src/models/priors.jl at the release commit: pooled_ascertainment_model mu_prior centre
+export_ascertainment_prior_median: "0.75"
+# posterior_summary.csv: tau_test (fraction of suspects sampled), Lower 90% to Upper 90%
+tested_fraction_interval90: "0.73 to 0.97"
+# src/models/priors.jl at the release commit: fraction_tested_prior Beta median
+tested_fraction_prior_median: "0.74"
+# site.zip estimates/national.html: onset-report table, median modelled ascertainment, Lower 90% to Upper 90%
+onset_ascertainment_interval90: "0.28 to 0.59"
+# docs/fits/registry.jl at the release commit: build_fit_specs chains default
+sampler_chains: "2"
+# docs/fits/registry.jl at the release commit: joint_sampler_args samples (per chain, after warm-up)
+sampler_draws: "1,000"
+# docs/fits/registry.jl at the release commit: joint_sampler_args n_adapts
+sampler_adaptation: "500"
+# docs/fits/registry.jl at the release commit: joint_target_accept default
+sampler_target_accept: "0.80"
+# docs/fits/registry.jl at the release commit: joint_max_depth default
+sampler_max_depth: "10"
+# docs/fits/convergence.jl at the release commit: CONVERGENCE_FAIL.rhat
+convergence_fail_rhat: "1.1"
+# docs/fits/convergence.jl at the release commit: CONVERGENCE_FAIL.ess_bulk
+convergence_fail_ess_bulk: "25"
+# docs/fits/convergence.jl at the release commit: CONVERGENCE_FAIL.divergent_fraction, as a percentage of draws
+convergence_fail_divergent_fraction: "5%"
+# PR #810 body and news v2.2.0: joint gradient under Mooncake about 20% faster from the hand-written rules
+gradient_speedup_joint_percent: "20"
+# PR #837 body: smallest per-kernel gradient speed-up (onset-reporting CDF table, 262 to 97 us)
+gradient_speedup_kernels_min: "2.7"
+# PR #837 body: largest per-kernel gradient speed-up (abscond thinning, 5 to 17x)
+gradient_speedup_kernels_max: "17"
+# PR #791 and news v2.2.0: headline joint fit cold build 1095 s to 292 s
+precompile_cold_build_factor: "3.8"
+# site.zip summary_assets/diagnostics.html: row joint, max_rhat
+max_rhat: "1.032"
+# site.zip summary_assets/diagnostics.html: row joint, min_ess_bulk
+min_ess_bulk: "73"
+# site.zip summary_assets/diagnostics.html: row joint, divergences
+n_divergent: "0"
+# forecast_validation.csv: made_date
+forecast_validation_made: "18 September 2026"
+# forecast_validation.csv: made_date plus seven days
+forecast_validation_target: "25 September 2026"
+# forecast_validation.csv: confirmed cases, horizon 7, median of draws
+forecast_validation_confirmed_cases_median: "662"
+# forecast_validation.csv: confirmed cases, horizon 7, 5th to 95th percentile of draws
+forecast_validation_confirmed_cases_interval90: "485 to 875"
+# observations.toml: confirmed_case_history, value at the validation target minus value at the validation origin
+observed_confirmed_cases_validation_week: "375"
+# forecast.csv: confirmed cases, horizon 7, median of draws
+forecast_confirmed_cases_next_week_median: "488"
+# forecast.csv: confirmed cases, horizon 7, 5th to 95th percentile of draws
+forecast_confirmed_cases_next_week_interval90: "355 to 667"
+# forecast_validation.csv: confirmed deaths, horizon 7, median of draws
+forecast_validation_confirmed_deaths_median: "291"
+# forecast_validation.csv: confirmed deaths, horizon 7, 5th to 95th percentile of draws
+forecast_validation_confirmed_deaths_interval90: "226 to 375"
+# observations.toml: confirmed_death_history, value at the validation target minus value at the validation origin
+observed_confirmed_deaths_validation_week: "176"
+# forecast.csv: confirmed deaths, horizon 7, median of draws
+forecast_confirmed_deaths_next_week_median: "241"
+# forecast.csv: confirmed deaths, horizon 7, 5th to 95th percentile of draws
+forecast_confirmed_deaths_next_week_interval90: "182 to 329"
+# release_estimates.csv: row v1.0.0, median
+first_release_median: "972"
+# release_estimates.csv: row v1.0.0, lower90 to upper90
+first_release_interval90: "478 to 2,437"
+# release_estimates.csv: last row with a median
+last_release_tag: "v2.1.0"
+# release_estimates.csv: row v2.1.0 (the last with a median), median
+last_release_median: "13,314"
+# release_estimates.csv: tag before the largest ratio of consecutive medians
+closed_form_step_from: "v1.2.0"
+# release_estimates.csv: tag after the largest ratio of consecutive medians
+closed_form_step_to: "v1.3.0"
+# release_estimates.csv: median of v1.3.0 divided by median of v1.2.0
+closed_form_step_ratio: "3.2"
+# results-v1.0.0 imperial_comparison.csv: McCabe Method 1 (Ituri, w=15 d), Central estimate
+mccabe_headline_exports: "313"
+# results-v1.0.0 imperial_comparison.csv: McCabe Method 2 (τ=14 d, CFR 30%), Central estimate
+mccabe_headline_deaths: "501"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, all release-stream pairs
+skill_pairs_beat: "11"
+# data/forecast_scores.csv: release-stream pairs with a joint and a baseline score at horizon 7
+skill_pairs_total: "69"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, releases not marked (backfill)
+skill_pairs_beat_live: "9"
+# data/forecast_scores.csv: scored pairs at releases not marked (backfill)
+skill_pairs_total_live: "53"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, stream confirmed cases, over its scored releases
+skill_confirmed_cases: "1 of 20"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, stream confirmed deaths, over its scored releases
+skill_confirmed_deaths: "0 of 20"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, stream isolation beds, over its scored releases
+skill_isolation_beds: "3 of 18"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, stream onset reports, over its scored releases
+skill_onset_reports: "6 of 8"
+# data/forecast_scores.csv: horizon 7, joint CRPS below the baseline's, stream recovered, over its scored releases
+skill_recovered: "1 of 3"
+# data/forecast_scores.csv: horizon 7 joint coverage_90 true
+coverage90_covered: "67"
+# data/forecast_scores.csv: scored pairs, as skill_pairs_total
+coverage90_total: "69"
+# stream_estimates.csv: quantity C_T, median, single-stream fit with the smallest median
+single_stream_min_fit: "isolation beds"
+# stream_estimates.csv: quantity C_T, median, fit treatment (the smallest)
+single_stream_min_median: "17,437"
+# stream_estimates.csv: quantity C_T, median, single-stream fit with the largest median
+single_stream_max_fit: "exports"
+# stream_estimates.csv: quantity C_T, median, fit exports (the largest)
+single_stream_max_median: "229,543"
+# stream_estimates.csv: quantity C_T, median, largest single-stream median over the smallest
+single_stream_ratio: "13.16"
+# stream_estimates.csv: quantity C_T, single-stream fits whose lo90 to hi90 overlaps the joint's
+single_stream_overlap_fits: "isolation beds, onset reports and exports"
+# stream_estimates.csv: quantity C_T, median, single-stream fits with a median above the joint's
+single_stream_n_above_joint: "7 of 7"
+# stream_estimates.csv: fit joint, quantity C_T, median to the nearest infection
+joint_median_unrounded: "15,795"
+# src/constants.jl at the release commit: CHAMLA_CONFIRMED_CENTRAL row matching the CHAMLA_CONFIRMED_W12 central scenario
+chamla_week12_date: "24 June 2026"
+# src/constants.jl at the release commit: CHAMLA_CONFIRMED_W12 central scenario, median
+chamla_central_median: "990"
+# src/constants.jl at the release commit: CHAMLA_CONFIRMED_W12 central scenario, lower_90 to upper_90
+chamla_central_interval90: "709 to 1,293"
+# site.zip sensitivity.html: Chamla comparison table, row 24 June, Our projection median
+chamla_frozen_projection_median: "1,474"
+# site.zip sensitivity.html: Chamla comparison table, row 24 June, Our projection 90% CrI
+chamla_frozen_projection_interval90: "1,022 to 2,494"
+# observations.toml: confirmed_case_history, value at chamla_week12_date
+observed_confirmed_week12: "1,155"
+# change_events.csv: rows
+n_events: "49"
+# change_events.csv: rows with kind model change
+n_events_model: "17"
+# change_events.csv: rows with kind defect
+n_events_defect: "16"
+# change_events.csv: rows with kind data-quality decision
+n_events_data_quality: "11"
+# change_events.csv: rows with kind data change
+n_events_data: "5"
+# change_events.csv: rows with detected_by agent self-report
+n_found_agent: "26"
+# change_events.csv: rows with detected_by human review
+n_found_human_review: "11"
+# change_events.csv: rows with detected_by human data check
+n_found_human_data: "7"
+# change_events.csv: rows with detected_by prospective evaluation
+n_found_prospective: "2"
+# change_events.csv: rows with detected_by automated review bot
+n_found_review_bot: "2"
+# change_events.csv: rows with detected_by unrecorded
+n_found_unrecorded: "1"
+# change_events.csv: rows with detected_by human review or human data check
+n_found_human: "18"
+# change_events.csv: rows with decided_by human
+n_decided_human: "23"
+# change_events.csv: rows with decided_by agent
+n_decided_agent: "17"
+# change_events.csv: rows with decided_by joint
+n_decided_joint: "9"
+# change_events.csv: rows with kind defect and detected_by agent self-report
+n_defects_found_agent: "10"
+# change_events.csv: rows with kind defect and detected_by prospective evaluation
+n_defects_found_prospective: "2"
+# change_events.csv: rows with kind defect and detected_by automated review bot
+n_defects_found_review_bot: "2"
+# change_events.csv: rows with kind defect and detected_by human review
+n_defects_found_human_review: "1"
+# change_events.csv: rows with kind model change and detected_by agent self-report
+n_model_found_agent: "6"
+# change_events.csv: rows with kind data-quality decision and detected_by agent self-report
+n_data_quality_found_agent: "7"
+# change_events.csv: rows with kind data change and detected_by agent self-report
+n_data_found_agent: "3"
+# change_events.csv: rows with kind model change and detected_by human review or human data check
+n_model_found_human: "11"
+# change_events.csv: rows with kind model change and decided_by human
+n_model_decided_human: "9"
+# change_events.csv: rows with kind model change and decided_by agent
+n_model_decided_agent: "3"
+# change_events.csv: rows with kind model change and decided_by joint
+n_model_decided_joint: "5"
+# change_events.csv: rows with kind defect and decided_by agent
+n_defects_decided_agent: "10"
+# change_events.csv: rows with kind defect and decided_by human
+n_defects_decided_human: "3"
+# change_events.csv: rows with kind defect and decided_by joint
+n_defects_decided_joint: "3"
+# change_events.csv: rows with kind data-quality decision and decided_by human
+n_data_quality_decided_human: "7"
+# change_events.csv: rows with kind data change and decided_by human
+n_data_decided_human: "4"
+# release_estimates.csv: the larger of the medians of v1.6.0 and v1.7.0 over the smaller
+occupancy_offset_step_ratio: "2.9"
+# release_estimates.csv: the larger of the medians of v1.5.0 and v1.6.0 over the smaller
+background_prior_step_ratio: "2.0"
+# detection_summary.csv: record row `human-authored issues (not PRs, not bot-marked)`
+n_human_issues: "70"
+# detection_summary.csv: record row `human review submissions`
+n_human_reviews: "556"
+# detection_summary.csv: record row `human inline review comments`
+n_human_inline_comments: "183"
+# detection_summary.csv: record row `agent PRs opened`
+n_agent_prs: "541"
+# detection_summary.csv: record row `agent issues opened (not PRs)`
+n_agent_issues: "253"
+# detection_summary.csv: record row `review-bot inline review comments`
+n_bot_inline_comments: "244"
+# detection_summary.csv: record row `review-bot review submissions`
+n_bot_reviews: "175"
+# detection_summary.csv: record row `review-bot declined PRs over the 3000-line cap`
+n_bot_declined_prs: "3"
+# commits_weekly.csv: sum of n_commits_human over the weeks
+n_commits_human: "59"
+# commits_weekly.csv: sum of n_commits_agent over the weeks
+n_commits_agent: "542"
+# commits_weekly.csv: sum of n_prs_merged_human over the weeks
+n_prs_merged_human: "21"
+# commits_weekly.csv: sum of n_prs_merged_agent over the weeks
+n_prs_merged_agent: "422"
+# commits_weekly.csv: rows (ISO weeks)
+n_weeks: "19"
+# detection_summary.csv: record row `human review submissions` divided by the number of weeks in commits_weekly.csv
+human_reviews_per_week: "29"
+# detection_summary.csv: record row `human inline review comments` divided by the number of weeks in commits_weekly.csv
+human_inline_comments_per_week: "9.6"
+# detection_summary.csv: record row `agent PRs opened` divided by the number of weeks in commits_weekly.csv
+agent_prs_per_week: "28"
+# fit_cost.csv: joint_fit_minutes, the one recorded value (#716, wall-clock of the last headline fit job before the PR)
+joint_fit_minutes_recorded: "320"
+# gh release list -R epiforecasts/BVDOutbreakSize --limit 500 --json tagName,publishedAt: tags starting results- published up to the pinned release's date (2026-09-28)
+n_releases: "153"
+# n_releases divided by the number of weeks in commits_weekly.csv
+releases_per_week: "8.1"
+# change_events.csv: largest n_releases_live among the defect rows whose event or effect mentions a forecast (#606, #623, #637, #637, #742)
+forecast_defect_releases_live: "13"
