@@ -238,11 +238,8 @@ province_overlay_fig #hide
 #md # <details><summary>Write the province map estimates and time series</summary>
 #md # ```
 
-## One row per province keyed as the health-zone geojson keys it: the
-## patch's reproduction number at the cut-off, its confirmed cases over
-## the coming week and its ascertainment, with the province's own confirmed
-## cases and deaths. The national row reads the joint's national
-## reproduction number and the provinces' summed forecast.
+## The national row reads the joint's national reproduction number and the
+## provinces' summed forecast.
 province_map_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )

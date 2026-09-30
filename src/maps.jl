@@ -566,15 +566,11 @@ $(TYPEDSIGNATURES)
 
 The province estimates the interactive map reads, one row per source
 province in `members` (patches in `patch_names` order), keyed as the
-geojson's `province` property. `rt` and `forecast` hold one draw vector per
-patch of the reproduction number at the cut-off and of the confirmed cases
-over the coming week. Each province carries its patch's median, `level`
-interval and, for the reproduction number, the chance it exceeds one;
-`pooled` is 1 when its patch pools several provinces. `cases` and `deaths`
-are the province's own last cumulative counts in `confirmed_history` and
-`death_history`, `missing` when it has none, and `as_of` is `cutoff`.
-With per-patch `ascertainment` draws, each province also carries its
-patch's ascertainment median and interval.
+geojson's `province` property. `rt`, `forecast` and the optional
+`ascertainment` hold one draw vector per patch, and every member province
+takes its patch's summaries; `pooled` is 1 when a patch pools several
+provinces. `cases` and `deaths` are the province's own last cumulative
+counts.
 """
 function province_map_estimates(
         rt::AbstractVector{<:AbstractVector},

@@ -965,7 +965,6 @@ Nothing else is fetched.
     if (metric === "share" || level === "province") {
       return [{ title: "Patch", value: function (r) { return esc(r.patch); } }];
     }
-    if (level === "province") { return []; }
     if (metric === "p_ge" || metric === "p_rt") {
       return [
         { title: "Cases past " + windowDays + " days", value: function (r) {
