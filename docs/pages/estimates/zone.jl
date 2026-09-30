@@ -686,7 +686,7 @@ zone_estimates = DataFrame(
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
-    print(io, zone_headline(zone_estimates))
+    print(io, zone_headline(zone_estimates; top = 10))
 end
 ## The same frame into the release outputs.
 output_dir = get(

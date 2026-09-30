@@ -5,9 +5,8 @@
     using DataFrames: DataFrame
     using Markdown
 
-    ## Four zones in the `zone_estimates` frame's columns: Aru has no case
-    ## over the past two weeks and Mambasa is below the reproduction-number
-    ## floor.
+    ## Aru has no case over the past two weeks and Mambasa is below the
+    ## reproduction-number floor.
     est = DataFrame(
         label = ["Bunia", "Aru", "Beni", "Mambasa"],
         patch = ["Ituri", "Ituri", "Nord-Kivu", "Ituri"],
@@ -24,8 +23,6 @@
     )
     md = zone_headline(est; top = 10)
     rows = filter(startswith("| "), split(md, "\n"))
-    ## A header, a separator and one row per zone with a recent case,
-    ## most recent cases first.
     @test length(rows) == 5
     @test occursin("| Zone | Province | Cases, past two weeks |", rows[1])
     @test occursin("Share of province infections (%)", rows[1])
@@ -35,22 +32,19 @@
     @test occursin("| 1.05–1.87 | over 99% | 10–42 | yes |", rows[3])
     @test startswith(rows[4], "| Bunia | Ituri | 12 | 120 | 30–45 |")
     @test occursin("| 0.61–1.44 | 40% |", rows[4])
-    ## A zone below the floor carries no reproduction number.
     @test startswith(rows[5], "| Mambasa | Ituri | 2 | 3 |")
     @test occursin("| - | - | 0–3 | no |", rows[5])
     @test !occursin("Aru", md)
-    @test occursin("3 of 4 zones", md)
-    ## The summary page parses the markdown, so it must parse as a table
-    ## and a paragraph.
+    @test occursin("The 3 zones with the most", md)
+    @test occursin("of the 3 of 4 with a case", md)
     content = Markdown.parse(md).content
     @test content[1] isa Markdown.Table
     @test content[2] isa Markdown.Paragraph
 
-    ## `top` caps the rows.
     one = zone_headline(est; top = 1)
     @test length(filter(startswith("| "), split(one, "\n"))) == 3
+    @test occursin("The zone with the most", one)
 
-    ## With no recent case anywhere there is a sentence and no table.
     quiet = zone_headline(
         DataFrame(est[est.label .== "Aru", :]); top = 10
     )
