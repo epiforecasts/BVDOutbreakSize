@@ -135,6 +135,7 @@ A flood capped at the top y-axis tick: every bar taller than the top gridline re
 A bar on a weekly tick column dropped outright: the day is missing from the block while its neighbours read, the missing days are tick dates, and the gap is negative by about the missing bars' height (SitRep 136's 20 July and 14 September, where washed fill on the tick column read as gridline).
 A count scale off by a fraction of a pixel per gridline, because the tick rows are whole pixels: about half the settled bars read one count off in the same direction, the falls are single counts at shift 0 and the gap stays inside 2.1% (SitRep 136 reads 81 px per 25 counts where its gridlines give 80.7).
 No scale rule tried so far rebuilds the earlier blocks byte for byte, so this one is left to the per-vintage scan level in the model.
+The 14 May bar under the red dashed first-positive-result line: its total swings between 8 and 27 across vintages while its neighbours hold, and the dead segment carries most of it (issue #1032, not yet fixed).
 Day-grid drift from an integer tick spacing: `best shift` leaves 0 on pairs whose ticks were verified, the preferred shift alternates direction between consecutive pairs, and `drift_days` in `data/onset_curve_figures.csv` is non-zero.
 
 #### Dashboard cross-check
