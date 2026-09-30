@@ -35,8 +35,11 @@
 #     column is read as the run of non-page pixels up from the baseline,
 #     bridging up to three page pixels when bar colour resumes (JPEG ringing
 #     between the stacked segments) and skipping neutral pixels on the tick
-#     rows and tick columns (gridlines). The run's top is its highest pixel
-#     darker than an anti-alias, which is the bar's outline; chroma-washed
+#     rows and tick columns (gridlines); a day whose columns then neither
+#     show a bar nor leave it empty is read again without the tick-column
+#     skip, which washed fill on a tick column can break. The run's top is
+#     its highest pixel darker than an anti-alias, which is the bar's
+#     outline; chroma-washed
 #     fill inside the run is crossed on the way up. The bar height is the
 #     height at least two of its interior columns agree on to within a
 #     pixel, or the tallest
@@ -555,6 +558,32 @@ function modal_height(h, cols, cx)
     return best, bestkey[1]
 end
 
+# One day's bar over its interior `cols`, as the run height and the
+# crimson count of the column read, `:empty` when there is no bar, or
+# `nothing` when the columns neither show a bar nor leave the day empty.
+function bar_height(h, hp, nr, cols, cx, ppc)
+    # a day is empty when half or more of its columns are page from
+    # the baseline up (the baseline's own anti-alias apart); a column
+    # that is fill all the way but never shows an outline pixel
+    # (chroma-washed) abstains rather than reading 0
+    gaps = count(x -> h[x] == 0 && hp[x] <= 2 * ppc, cols)
+    2 * gaps >= length(cols) && return :empty
+    resolved = [x for x in cols if h[x] > 0]
+    if isempty(resolved)
+        # no outline pixel in any column: read the fill's extent where
+        # two columns agree on it, else it is a halo, not a bar
+        hb, support = modal_height(hp, cols, cx)
+        support >= 2 || return nothing
+        jb = cols[findfirst(x -> hp[x] == hb, cols)]
+    else
+        hb, support = modal_height(h, resolved, cx)
+        support >= 2 || (hb = maximum(h[resolved]))
+        jb = resolved[findfirst(x -> h[x] == hb, resolved)]
+    end
+    hb < 1 && return :empty
+    return hb, nr[jb]
+end
+
 function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
@@ -596,6 +625,9 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     page, neutral, light, crimson, darkpx, saturated = pixel_classes(R, G, B)
     h, hp, nr, nd, ns, nb = column_runs(
         page, neutral, light, crimson, darkpx, saturated, y0, yt, xs
+    )
+    h1, hp1, nr1 = column_runs(
+        page, neutral, light, crimson, darkpx, saturated, y0, yt, Int[]
     )
     # outline columns are mostly dark over their run (a short bar's top
     # and junction lines are a few dark pixels in every column, so the
@@ -646,27 +678,16 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
         isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
         isempty(cols) && continue
-        # a day is empty when half or more of its columns are page from
-        # the baseline up (the baseline's own anti-alias apart); a column
-        # that is fill all the way but never shows an outline pixel
-        # (chroma-washed) abstains rather than reading 0
-        gaps = count(x -> h[x] == 0 && hp[x] <= 2 * ppc, cols)
-        2 * gaps >= length(cols) && continue
-        resolved = [x for x in cols if h[x] > 0]
-        if isempty(resolved)
-            # no outline pixel in any column: read the fill's extent where
-            # two columns agree on it, else it is a halo, not a bar
-            hb, support = modal_height(hp, cols, cx)
-            support >= 2 || continue
-            jb = cols[findfirst(x -> hp[x] == hb, cols)]
-        else
-            hb, support = modal_height(h, resolved, cx)
-            support >= 2 || (hb = maximum(h[resolved]))
-            jb = resolved[findfirst(x -> h[x] == hb, resolved)]
-        end
-        hb < 1 && continue
+        # a bar whose columns all lie on a tick column can have washed
+        # fill that the gridline skip reads as page, breaking each run at
+        # a different row (SitRep 136's 20 July bar); a day that reads as
+        # neither empty nor a bar is read again without the skip
+        bar = bar_height(h, hp, nr, cols, cx, ppc)
+        bar === nothing && (bar = bar_height(h1, hp1, nr1, cols, cx, ppc))
+        bar isa Tuple || continue
+        hb, hr = bar
         total = round(Int, max(0.0, hb - 0.5) / ppc)
-        dead = min(total, round(Int, max(0.0, nr[jb] - 0.5) / ppc))
+        dead = min(total, round(Int, max(0.0, hr - 0.5) / ppc))
         push!(rows, (last_tick + Day(off), total - dead, dead))
     end
     # drop leading and trailing zero rows (a stray anti-alias column near
