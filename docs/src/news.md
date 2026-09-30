@@ -49,7 +49,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The province and health-zone blocks are streams of the shared registry, so each page reports the currency of its own data (#779).
 - The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
-- The interactive map moves to its own Dashboard page after the summary and gains a province layer (#1022).
+- The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 
 ### Infrastructure
