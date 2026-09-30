@@ -63,6 +63,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - With no recovery results, every listed seed is reported as unconverged rather than the report failing (#966).
 - The Enzyme sweep leaves the quality job and runs only on request, with `enzyme_only`, since no fit uses the Enzyme backend (#967).
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
+- The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
 
 ### Fixed
 
