@@ -112,7 +112,7 @@ function patch_fit_args(obs)
             obs.province_bed_capacity_history, PROVINCE_NAMES;
             changes_only = true
         ),
-        ## Admissions are a daily flow, so every day is kept.
+        ## A flow, so every day is kept.
         province_admissions = province_care_observations(
             obs.province_admissions_history, PROVINCE_NAMES
         ),

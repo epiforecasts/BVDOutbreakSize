@@ -200,6 +200,7 @@ end
         pp; horizon = 7, obs_cases = 905, obs_deaths = 18, obs_confirmed = 40
     )
     capacity = _draw_vectors(pp, :forecast_bed_capacity)
+    shortfall = _draw_vectors(pp, :forecast_bed_shortfall)
     @test "isolation_level" in names(fc) && "bed_capacity" in names(fc)
     @test "admissions_new" in names(fc)
     national = _draw_vectors(pp, Symbol("forecast_admissions.obs"))
@@ -219,6 +220,9 @@ end
         ## every day.
         @test vec(sum(reshape(province[d], NP, :); dims = 1)) ≈ national[d]
         @test sum(fc.admissions_new[rows]) ≈ sum(national[d][1:7])
+        ## The national shortfall column is the forecast shortfall that day.
+        @test nat.bed_shortfall[d] == round(shortfall[d][7])
+        @test all(>=(0), shortfall[d])
     end
 end
 
@@ -272,4 +276,13 @@ end
         merge(state, (; occupancy_mean = fill(50.0, n))), fd, cap, 10.0
     )
     @test returned(half, rand(Xoshiro(1), half)).bed_shortfall == [0.0, 0.0]
+    ## With no recorded capacity the stock starts from the uncapped 100 and
+    ## admits everything, so patch 1 runs above its 35 beds.
+    nocap = treatment_forecast_model(
+        state, fd, (; days = Int[], counts = Int[]), 10.0
+    )
+    r = returned(nocap, rand(Xoshiro(2), nocap))
+    @test r.path.admissions ≈ admit_patch[:, fd]
+    @test r.path.occupancy[1, 1] > 35.0
+    @test sum(r.path.occupancy[:, 1]) > sum(cut.occupancy)
 end

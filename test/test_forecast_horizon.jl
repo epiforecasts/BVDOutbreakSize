@@ -433,3 +433,18 @@ end
     @test vec(sum(path.occupancy; dims = 1)) ≈ uncapped .+ 4.0
     @test path.admissions ≈ admit
 end
+
+@testitem "the forecast exit scale is at most one" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    beds = fill(1000.0, 1, 2)
+    admit = fill(5.0, 1, 2)
+    flows = fill(1.0, 2, 4)
+    ## A stock above the uncapped occupancy loses no more than the flows.
+    above = capped_stock_forecast([120.0], beds, admit, [100.0, 100.0], flows)
+    @test above.scale ≈ ones(2)
+    @test above.occupancy[1] ≈ 121.0
+    ## A non-positive uncapped occupancy leaves the flows unscaled.
+    neg = capped_stock_forecast([10.0], beds, admit, [-5.0, 0.0], flows)
+    @test neg.scale == ones(2)
+    @test neg.occupancy[1] ≈ 11.0
+end

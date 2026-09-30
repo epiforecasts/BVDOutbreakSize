@@ -101,9 +101,10 @@ a stock capped at its beds. `occupied` is each patch's cut-off occupancy.
 and one column per day. `uncapped` is the national uncapped occupancy mean
 on the day before each day, and `flows` the national modelled exits, one
 row per day and one column per flow. The exits are scaled by the occupied
-beds over `uncapped` and shared by occupancy. Each patch admits up to its
-free beds, its beds less its previous occupancy plus its exits. Returns the
-occupancy, admissions and free beds by patch and the exit scale by day.
+beds over `uncapped`, at most 1 (1 when `uncapped` is not positive), and
+shared by occupancy. Each patch admits up to its free beds, its beds less
+its previous occupancy plus its exits. Returns the occupancy, admissions and
+free beds by patch and the exit scale by day.
 """
 function capped_stock_forecast(occupied, beds, admit, uncapped, flows)
     np, h = size(beds)
@@ -119,7 +120,7 @@ function capped_stock_forecast(occupied, beds, admit, uncapped, flows)
     z = zero(T)
     for t in 1:h
         held = sum(prev)
-        r = uncapped[t] > 0 ? held / uncapped[t] : one(T)
+        r = uncapped[t] > 0 ? min(held / uncapped[t], one(T)) : one(T)
         scale[t] = r
         exits = r * sum(view(flows, t, :))
         for p in 1:np
@@ -150,15 +151,12 @@ sum over the patches, the national count.
 end
 
 """
-Future observations of the isolation and treatment flows, from a fitted
-[`treatment_flow_model`](@ref) state run past the cut-off. Each patch is a
-stock of occupied beds capped at its beds ([`capped_stock_forecast`](@ref)),
-starting from its cut-off occupancy. Its beds are its modelled capacity,
-floored at its cut-off beds and never falling. The occupancy is drawn by
-patch censored at the beds and the admissions censored at the free beds
-([`province_counts_model`](@ref)); the national counts are their sums. The
-in-care deaths and rule-outs are the scaled exits of the capped stock. With
-no recorded capacity the future counts are uncensored.
+Future isolation and treatment counts from a fitted
+[`treatment_flow_model`](@ref) state run past the cut-off, drawn by patch
+from a stock capped at its beds ([`capped_stock_forecast`](@ref)) and summed
+to national. The beds are the modelled capacity floored at the cut-off beds
+and never fall. With no recorded capacity the stock starts from the uncapped
+cut-off occupancy and nothing is censored.
 """
 @model function treatment_forecast_model(state, fd, capacity_history, k)
     nocap = 1.0e6
@@ -196,12 +194,10 @@ no recorded capacity the future counts are uncensored.
     forecast_bed_capacity := vec(sum(beds; dims = 1))
     forecast_bed_shortfall := [
         sum(
-            max.(
-                _held_by_patch(
-                    state.occupancy_mean[t], state.demand_patch[:, t]
-                ) .- beds[:, j],
-                0.0
-            )
+            cutoff_occupancy(
+                state.occupancy_mean[t], state.demand_patch[:, t],
+                beds[:, j], beds[:, j]
+            ).shortfall
         ) for (j, t) in enumerate(fd)
     ]
     if np > 1

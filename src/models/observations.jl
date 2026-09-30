@@ -2179,6 +2179,17 @@ function _province_bed_floors(rows, np::Integer, nc::Integer)
     return floors
 end
 
+## The recorded national capacity on the last occupancy day, as a one-patch
+## floor; zero with no capacity or occupancy recorded. Data only.
+function _national_bed_floor(capacity_history, isolation_history)
+    (isempty(capacity_history.counts) || isempty(isolation_history.counts)) &&
+        return [0.0]
+    return censoring_cap(
+        isolation_history.days[end:end], isolation_history.counts[end:end],
+        capacity_history
+    )
+end
+
 ## The national `occupied`, floored at zero, shared out on the patches'
 ## `demand`, equally when there is no demand.
 function _held_by_patch(occupied, demand)
@@ -2561,16 +2572,7 @@ series for forecasting and replication.
     ## province's last effective beds with province rows, else the national
     ## recorded cap on the last occupancy day.
     bed_floors = by_patch ? _province_bed_floors(province_capacity, np, nc) :
-        [
-            isempty(capacity_history.counts) ||
-            isempty(isolation_history.counts) ? 0.0 :
-            only(
-                censoring_cap(
-                    isolation_history.days[end:end],
-                    isolation_history.counts[end:end], capacity_history
-                )
-            ),
-        ]
+        _national_bed_floor(capacity_history, isolation_history)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2810,8 +2812,7 @@ series for forecasting and replication.
             )
         )
     end
-    ## The 24h admissions are a flow, so each day is a fresh split of the
-    ## national admissions, on each patch's modelled admissions.
+    ## Admissions are a flow, so every day is scored.
     admissions_split_rho = 0.0
     if split_adm
         admissions_split_rho ~ province_split_rho_prior
@@ -2927,7 +2928,6 @@ series for forecasting and replication.
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
-    ## Unmet demand: the reported-scale demand above each patch's beds.
     shortfall_T = safe_rate(sum(cut.shortfall))
     bed_shortfall := shortfall_T
     bed_utilisation := isolation_T / safe_rate(beds_T)

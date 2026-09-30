@@ -865,8 +865,9 @@ forecast.
 
 The columns are the new confirmed cases and confirmed deaths over the week,
 the patients in isolation and the isolation beds at the end of the week, the
-new admissions and new infections over the week, the reproduction number at the end of the week
-and the probability that it is above one, each when `fc` carries it.
+new admissions and new infections over the week, the reproduction number at
+the end of the week and the probability that it is above one, each when `fc`
+carries it.
 """
 function province_forecast_headline(
         fc::DataFrame;

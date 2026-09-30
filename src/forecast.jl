@@ -387,12 +387,16 @@ function forecast_provinces(
     end
     conf = weekly("forecast_province_confirmed")
     conf_deaths = weekly("forecast_province_deaths")
-    ## The occupancy, beds and admissions are drawn daily by patch: the
-    ## levels are read `h` days on and the admissions summed over those days.
-    ## A fit with no province rows draws them nationally, as one patch.
+    ## Levels are read `h` days on and admissions summed over those days. A
+    ## fit with no province rows draws one national row, which is skipped.
     function daily(key, f)
         v = _forecast_vectors(pp, key)
-        (isnothing(v) || length(first(v)) != n_patches * H) && return nothing
+        isnothing(v) && return nothing
+        len = length(first(v))
+        len == H && n_patches > 1 && return nothing
+        len == n_patches * H || throw(
+            ArgumentError("$key has $len entries per draw, not $(n_patches * H)")
+        )
         return [f(reshape(x, n_patches, :)) for x in v]
     end
     iso = daily("forecast_isolation.province.obs", x -> x[:, h])

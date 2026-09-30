@@ -487,3 +487,12 @@ end
         )
     end
 end
+
+@testitem "the one-patch bed floor is the last recorded capacity" begin
+    using BVDOutbreakSize: _national_bed_floor
+    cap = (; days = [5, 10], counts = [300, 320])
+    iso = (; days = [4, 9], counts = [250, 280])
+    @test _national_bed_floor(cap, iso) == [320.0]
+    @test _national_bed_floor((; days = Int[], counts = Int[]), iso) == [0.0]
+    @test _national_bed_floor(cap, (; days = Int[], counts = Int[])) == [0.0]
+end

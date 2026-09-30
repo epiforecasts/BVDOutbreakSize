@@ -25,7 +25,7 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, _province_bed_floors
+        zone_share_renewal_kernel, _province_bed_floors, _national_bed_floor
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -507,6 +507,10 @@
             counts = [40, 15, 45, 9],
         )
         add!("province bed rows", _province_bed_floors, bed_rows, 4, 45)
+        add!(
+            "last occupancy day", _national_bed_floor, cap,
+            (; days = days, counts = counts)
+        )
         add!(
             "generated counts", _province_bed_floors,
             merge(bed_rows, (; counts = missing)), 4, 45

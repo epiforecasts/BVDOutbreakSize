@@ -237,8 +237,7 @@ function Distributions.censored(d::NegBinomialVector; upper::AbstractVector)
 end
 
 Base.length(d::CensoredNegBinomialVector) = length(d.μ)
-## A draw above a ceiling returns the ceiling, which need not be a whole
-## number (the forecast caps at the modelled capacity and the free beds), so
+## A draw above a ceiling returns the ceiling, which need not be whole, so
 ## censored draws are floats.
 Base.eltype(::Type{<:CensoredNegBinomialVector}) = Float64
 
