@@ -15,6 +15,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- Ituri's and Nord-Kivu's importation kernel columns follow Flowminder's outbreak-cluster subscriber cohorts, with tighter destination and flow deviation priors (#1027).
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
   The delay deviations of the reporting hazard sum to zero, so $\eta_0$ is the mean logit hazard rather than trading against their mean (#1013).
