@@ -1596,9 +1596,8 @@ quantity is computed on the fitted days as without a forecast.
         ε_mix = logistic.(
             logit(ε_within) .+ τ_mix .* (z_mix .- sum(z_mix) / nz)
         )
-        ## The gravity centre's distance decay, and a log weight per
-        ## destination zone centred within its patch, set where both blocks
-        ## land within a patch.
+        ## The gravity decay, and log weights centred within each patch, so
+        ## both move only the split over a patch's zones.
         γ_zone ~ mixing_decay_prior
         σ_destination ~ mixing_destination_prior
         z_destination ~ product_distribution(fill(offset_prior, n_contrast))
@@ -1968,7 +1967,7 @@ function zone_gravity_inputs(
     length(patch_of_zone) == nz && all(p -> 1 <= p <= np, patch_of_zone) ||
         throw(
         DimensionMismatch(
-            "zone_importation_blocks: every zone's patch must index the " *
+            "zone_gravity_inputs: every zone's patch must index the " *
                 "$np-patch parent kernel."
         )
     )
@@ -2012,23 +2011,14 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The within and between blocks of [`zone_importation_blocks`](@ref) at the
-distance decay `γ` and log destination weights `ω`, from the fixed inputs
-`g` of [`zone_gravity_inputs`](@ref): the blocks of the log pattern
-`log N_z − γ log d_zq + ω_z` ([`zone_pattern_blocks`](@ref)), so a draw
-costs one exponential per zone pair.
+The blocks ([`zone_pattern_blocks`](@ref)) of the log gravity pull at decay
+`γ` plus the log destination weights `ω`.
 """
 function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)
     return zone_pattern_blocks(g, zone_log_gravity(g, γ) .+ ω)
 end
 
-"""
-$(TYPEDSIGNATURES)
-
-The log gravity pull `log N_z − γ log d_zq` `(n_zones × n_zones)`, the
-centre of the zone kernel's log pattern, from the fixed inputs `g` of
-[`zone_gravity_inputs`](@ref).
-"""
+"The log gravity pull `log N_z − γ log d_zq`, the centre of the zone kernel."
 zone_log_gravity(g, γ::Real) = g.log_pop .- γ .* g.log_distance
 
 """

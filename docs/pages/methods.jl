@@ -2181,8 +2181,7 @@ cfr_prior_fig #hide
 # ```
 #
 # the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
-# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$.
-# So $\gamma$ and $\omega$ move where an origin's flow into a patch lands among its zones, not how much reaches the patch.
+# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$ and $\omega$, so they move only where a flow lands among the patch's zones.
 #
 # Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:

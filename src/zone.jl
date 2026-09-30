@@ -28,6 +28,10 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         _draws(chn, :mixing_decay_zone) : nothing
     dest = _has_key(chn, :mixing_destination_zone) ?
         _draw_vectors(chn, :mixing_destination_zone) : nothing
+    (decay === nothing) == (dest === nothing) || error(
+        "_zone_states: the chain carries only one of `mixing_decay_zone` " *
+            "and `mixing_destination_zone`."
+    )
     ndraws = length(knots)
     isempty(knots) || length(knots[1]) == nz * K ||
         error(
