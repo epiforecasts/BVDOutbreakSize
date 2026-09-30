@@ -10,8 +10,8 @@
 @testsnippet ZoneSynthetic begin
     using BVDOutbreakSize
     using BVDOutbreakSize: zone_initial_shares, deviation_knots,
-        zone_fixed_terms, zone_report_increments,
-        zone_forward, discretise_censored,
+        deviation_knot_dims, zone_fixed_terms, zone_binned_operator,
+        zone_binned_increments, zone_forward, discretise_censored,
         lognormal_meansd, convolve_pmf, knot_days,
         zone_interpolation_weights, zone_delay_operator,
         zone_report_pre_rows, future_knot_days
@@ -57,34 +57,33 @@
         z_w = [1.2, 0.3, -0.2, -0.6, -0.7, 0.8, -0.3, -0.5]
         w0 = zone_initial_shares(z_w, patch_ranges, 2.0)
         walking = fill(true, nz)
-        walk_index = collect(1:nz)
-        n_walking = nz
         σ_level = 0.25
         ## One drift scale per patch, as the model samples it.
         σ_δ = fill(0.08, np)
         φ = exp2(-7 / 42)
-        z_level = [0.6, -0.4, 0.2, -0.3, -0.1, 0.5, -0.2, -0.3]
-        z_drift = zeros(n_walking * (K - 1))
+        ## `n_p - 1` level draws per patch on the sum-to-zero basis.
+        z_level = [0.6, -0.4, 0.2, -0.3, 0.5, -0.2]
+        ## Per knot, the first basis direction of the big patch contrasts
+        ## its first two zones: `+0.8` and `-0.8` in the draw's units.
+        nd = deviation_knot_dims(patch_ranges, walking).drift
+        z_drift = zeros(nd * (K - 1))
         for k in 2:K
-            z_drift[(k - 2) * n_walking + 1] = 0.8
-            z_drift[(k - 2) * n_walking + 2] = -0.8
+            z_drift[(k - 2) * nd + 1] = 0.8 * sqrt(2)
         end
         patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
         δ_knots = deviation_knots(
-            z_level, z_drift, σ_level, σ_δ[patch_of_zone], φ,
-            patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
-            walking, walk_index, n_walking, K
+            z_level, z_drift, σ_level, σ_δ, φ,
+            patch_ranges, Matrix{Float64}[], Matrix{Float64}[], walking, K
         )
         fixed = zone_fixed_terms(I_bar, g, f, t0)
         zd = (;
             I_bar, g, f, patch_ranges, knots, t0, n, days,
-            fixed.force_pre, fixed.report_pre_cum,
-            fixed.infections_pre, mixing = nothing,
+            fixed.force_pre, fixed.infections_pre, mixing = nothing,
             interp = zone_interpolation_weights(knots, t0, n),
-            report_matrix = zone_delay_operator(f, n - t0 + 1),
-            report_pre_rows = zone_report_pre_rows(
-                fixed.report_pre,
-                patch_of_zone, t0, n
+            report_bin = zone_binned_operator(
+                zone_delay_operator(f, n - t0 + 1),
+                zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n),
+                fixed.report_pre_cum, days, t0, patch_of_zone
             ),
         )
         fw = zone_forward(zd, δ_knots, w0, nothing)
@@ -383,8 +382,10 @@ end
         zd.I_bar, zd.g, δd, w0, zd.patch_ranges, t0,
         zd.force_pre
     )
-    r_op = zd.report_matrix * st.infections .+
-        zd.report_pre_rows .* transpose(w0)
+    fixed = zone_fixed_terms(zd.I_bar, zd.g, zd.f, t0)
+    r_op = zone_delay_operator(zd.f, nd) * st.infections .+
+        zone_report_pre_rows(fixed.report_pre, zd.patch_of_zone, t0, n) .*
+        transpose(w0)
     for (p, zs) in enumerate(zd.patch_ranges), z in zs, j in 1:7:nd
         t = t0 + j - 1
         explicit = 0.0
@@ -439,14 +440,13 @@ end
     syn = zone_synthetic()
     K = size(syn.truth.δ_knots, 2)
     φ = syn.truth.φ
-    ## Three walking zones in the big patch, none in the small one.
+    ## Three walking zones in the big patch, none in the small one: two
+    ## draws per knot.
     walking = [true, true, true, false, false, false, false, false]
-    walk_index = [1, 2, 3, 0, 0, 0, 0, 0]
-    z_drift = randn(Xoshiro(3), 3 * (K - 1))
+    z_drift = randn(Xoshiro(3), 2 * (K - 1))
     δ = deviation_knots(
-        syn.truth.z_level, z_drift, 0.25, fill(0.08, syn.nz), φ,
-        syn.patch_ranges, Matrix{Float64}[], Matrix{Float64}[],
-        walking, walk_index, 3, K
+        syn.truth.z_level, z_drift, 0.25, fill(0.08, 2), φ,
+        syn.patch_ranges, Matrix{Float64}[], Matrix{Float64}[], walking, K
     )
     for (p, zs) in enumerate(syn.patch_ranges), k in 1:K
 
@@ -472,6 +472,72 @@ end
         @test sum(w[zs]) ≈ 1 rtol = 1.0e-12
     end
     @test w ≈ w_shift rtol = 1.0e-12
+end
+
+@testitem "zone deviations: the basis keeps the centred covariance" begin
+    using BVDOutbreakSize: deviation_knots, deviation_knot_dims,
+        zone_correlation_factors
+    using LinearAlgebra: I
+    using Random: Xoshiro
+
+    groups = [1:5, 6:6, 7:10]
+    walking = Bool[1, 0, 1, 1, 0, 0, 1, 1, 0, 0]
+    x = [0.0, 0.3, 1.1, 2.0, 2.4, 0.0, 0.5, 0.9, 1.7, 3.0]
+    dist(zs) = [abs(x[a] - x[b]) for a in zs, b in zs]
+    walkers(us) = [u for u in us if walking[u]]
+    ℓ = 0.8
+    A = zone_correlation_factors([dist(us) for us in groups], ℓ)
+    Aw = zone_correlation_factors([dist(walkers(us)) for us in groups], ℓ)
+    dims = deviation_knot_dims(groups, walking)
+    @test dims == (; level = 4 + 0 + 3, drift = 2 + 0 + 1)
+    σ_level, σ_δ, φ, K = 0.3, [0.1, 0.2, 0.05], 0.8, 3
+    knots(zl, zδ) = deviation_knots(
+        zl, zδ, σ_level, σ_δ, φ, groups, A, Aw, walking, K
+    )
+    unit(i, m) = [j == i ? 1.0 : 0.0 for j in 1:m]
+    nδ = dims.drift * (K - 1)
+    ## Both knots are linear in their draws, so the covariance is `J Jᵀ`.
+    level(i) = knots(unit(i, dims.level), zeros(nδ))[:, 1]
+    drift(i) = knots(zeros(dims.level), unit(i, nδ))[:, 2]
+    Jl = reduce(hcat, [level(i) for i in 1:dims.level])
+    Jδ = reduce(hcat, [drift(i) for i in 1:dims.drift])
+    ## The covariance of the centred construction `σ P L z` with `L Lᵀ = C`:
+    ## `σ² P C P` over each group, and over the walking zones for the
+    ## innovations.
+    function centred_cov(σs, sets)
+        Σ = zeros(length(walking), length(walking))
+        for (σ, zs) in zip(σs, sets)
+            m = length(zs)
+            m == 0 && continue
+            C = exp.(.-dist(zs) ./ ℓ) + 1.0e-6 * I
+            P = I - fill(1 / m, m, m)
+            Σ[zs, zs] = σ^2 .* (P * C * P)
+        end
+        return Σ
+    end
+    @test Jl * Jl' ≈ centred_cov(fill(σ_level, 3), groups) atol = 1.0e-12
+    @test Jδ * Jδ' ≈ centred_cov(σ_δ, walkers.(groups)) atol = 1.0e-12
+    ## Every group sums to zero at every knot, and a level-only zone decays
+    ## along the mean path.
+    δ = knots(randn(Xoshiro(1), dims.level), randn(Xoshiro(2), nδ))
+    for us in groups, k in 1:K
+        @test abs(sum(δ[us, k])) < 1.0e-12
+    end
+    for z in findall(!, walking), k in 1:K
+        @test δ[z, k] ≈ φ^(k - 1) * δ[z, 1] atol = 1.0e-14
+    end
+    ## One knot takes no innovation draw and is the level alone.
+    δ1 = deviation_knots(
+        ones(dims.level), Float64[], σ_level, σ_δ, φ, groups, A, Aw,
+        walking, 1
+    )
+    @test δ1 ≈ knots(ones(dims.level), zeros(nδ))[:, 1:1]
+    @test_throws DimensionMismatch deviation_knots(
+        ones(dims.level), ones(dims.drift), σ_level, σ_δ, φ, groups, A, Aw,
+        walking, 1
+    )
+    @test_throws DimensionMismatch knots(zeros(10), zeros(nδ))
+    @test_throws DimensionMismatch knots(zeros(dims.level), zeros(10))
 end
 
 @testitem "zone_fit_inputs: units, cells and the walking set" setup = [
@@ -508,7 +574,6 @@ end
         1:syn.nz
     )
     @test zd.n_walking == count(inputs.walking)
-    @test all(z -> (zd.walk_index[z] > 0) == inputs.walking[z], 1:syn.nz)
     ## Cumulative counts come from the manifest's last vintage.
     @test inputs.cumulative == vec(sum(syn.counts; dims = 2))
 end
@@ -858,7 +923,7 @@ end
     @test all(arch.target_date .== made + Day(7))
 end
 
-@testitem "zone_report_increments: the explicit window sums" setup = [
+@testitem "zone_binned_increments: the explicit window sums" setup = [
     ZoneSynthetic,
 ] begin
     syn = zone_synthetic()
@@ -866,9 +931,12 @@ end
     n = size(syn.I_bar, 2)
     nd = n - t0 + 1
     fixed = zone_fixed_terms(syn.I_bar, syn.g, syn.f, t0)
-    reports = rand(Xoshiro(2), nd, nz)
+    infections = rand(Xoshiro(2), nd, nz)
     w0 = syn.truth.w0
     patch_of_zone = [p for (p, zs) in enumerate(syn.patch_ranges) for _ in zs]
+    F = zone_delay_operator(syn.f, nd)
+    pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n)
+    reports = F * infections .+ pre_rows .* transpose(w0)
     ## Each window `(d_{v−1}, d_v]` sums the pre-`t0` patch term at the
     ## initial share and the zone's own daily reports from `t0`.
     explicit(days, v) = begin
@@ -891,10 +959,10 @@ end
     ## The fit's windows (the first opens before `t0`), windows entirely
     ## before `t0`, and windows that open after it.
     for days in (syn.days, [t0 - 10, t0 - 3, t0 + 5, n], [t0 + 3, t0 + 20, n])
-        C = zone_report_increments(
-            reports, w0, syn.patch_ranges, days, t0,
-            fixed.report_pre_cum
+        op = zone_binned_operator(
+            F, pre_rows, fixed.report_pre_cum, days, t0, patch_of_zone
         )
+        C = zone_binned_increments(op, infections, w0)
         @test size(C) == (nz, length(days))
         for v in eachindex(days)
             @test C[:, v] ≈ explicit(days, v) rtol = 1.0e-12
@@ -1194,7 +1262,7 @@ end
     ## Deaths are scored per vintage, on the same grid as the cases, and
     ## the rows sum to the cumulative the table ends on.
     @test size(zd.death_counts) == size(zd.counts)
-    @test zd.death_days == zd.days
+    @test size(zd.death_bin.weights, 2) == length(zd.days)
     @test vec(sum(zd.death_counts; dims = 2)) == cld.(inputs.cumulative, 10)
     @test length(zd.death_cell_patch) == length(zd.death_cell_vintage)
     @test length(zd.death_cell_patch) > 2
@@ -1221,12 +1289,7 @@ end
         zd.cell_vintage, zd.cell_total, zd.cell_const,
         zd.patch_ranges, _zone_kappa(0.05)
     )
-    daily = zd.death_matrix * fw.infections .+
-        zd.death_pre_rows .* transpose(truth.w0)
-    D = zone_report_increments(
-        daily, truth.w0, zd.patch_ranges,
-        zd.death_days, zd.t0, zd.death_pre_cum
-    )
+    D = zone_binned_increments(zd.death_bin, fw.infections, truth.w0)
     extra = zone_composition_logpdf(
         zd.death_counts, D, zd.death_cell_patch,
         zd.death_cell_vintage, zd.death_cell_total, zd.death_cell_const,
@@ -1247,7 +1310,8 @@ end
 @testitem "bvd_zone: the sampled dimension and the optional blocks" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: bvd_zone, relative_multiplier_dims
+    using BVDOutbreakSize: bvd_zone, relative_multiplier_dims,
+        deviation_knot_dims
     using Turing: DynamicPPL
     import FlexiChains
     using Turing: sample, Prior
@@ -1259,10 +1323,12 @@ end
     np = length(inputs.patch_ranges)
     nc = relative_multiplier_dims(zd.patch_ranges)
     dimension(m) = length(DynamicPPL.link(DynamicPPL.VarInfo(m), m)[:])
-    ## Two unit-scale blocks over the zones, the two multipliers' contrasts
-    ## within each patch, the innovations, the six scalar scales, one drift
-    ## scale per patch and the shared draw.
-    dim = 2 * syn.nz + 2 * nc + zd.n_walking * (K - 1) + 6 + np + zd.meld_d
+    ## The initial-share draws over the zones, the level and the two
+    ## multipliers' contrasts within each patch, the innovations on the
+    ## walking zones' contrasts, the six scalar scales, one drift scale per
+    ## patch and the shared draw.
+    nd = deviation_knot_dims(zd.patch_ranges, zd.walking).drift
+    dim = syn.nz + 3 * nc + nd * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
     ## offset per zone, where the inputs carry the kernel blocks, and one
@@ -1283,7 +1349,7 @@ end
     zd0 = inputs0.model_data
     @test zd0.n_walking == 0
     model0 = bvd_zone(zd0)
-    @test dimension(model0) == 2 * syn.nz + 2 * nc + 6 + np + zd0.meld_d
+    @test dimension(model0) == syn.nz + 3 * nc + 6 + np + zd0.meld_d
     chn0 = sample(
         model0, Prior(), 3; chain_type = FlexiChains.VNChain,
         progress = false
@@ -1882,7 +1948,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_composition_draws,
-        zone_composition_calibration, zone_report_increments, safe_rate,
+        zone_composition_calibration, zone_binned_increments, safe_rate,
         _zone_composition, _zone_observed_counts,
         _zone_allocated_increments, _zone_multiplier_draws,
         _zone_modelled_shares, _zone_states
@@ -1951,10 +2017,8 @@ end
     @test size(death_inc) == size(case_inc)
     @test death_inc != case_inc
     fw = BVDOutbreakSize.zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
-    expected_death = zone_report_increments(
-        zd.death_matrix * fw.infections .+
-            st.def.death_pre_rows .* transpose(st.w0),
-        st.w0, zd.patch_ranges, zd.death_days, zd.t0, st.def.death_pre_cum
+    expected_death = zone_binned_increments(
+        zd.death_bin, fw.infections, st.def.zone_pre .* st.w0
     )
     @test death_inc ≈ expected_death
     @test case_inc ≈ fw.increments
@@ -2008,8 +2072,29 @@ end
     end
     @test size(zf.I_bar, 2) == zd.n + horizon
 
-    ## A term shorter than the grid is refused.
+    ## The forecast week's operator sums the delayed reports over
+    ## `(n, n + H]`, and the extended operators bin the fitted vintages as
+    ## the fitted ones do.
     nd = zd.n + horizon - zd.t0 + 1
+    fx = zone_fixed_terms(zf.I_bar, zd.g, zd.f, zd.t0)
+    I_ext = rand(Xoshiro(3), nd, nz)
+    w = rand(Xoshiro(4), nz)
+    daily = zone_delay_operator(zd.f, nd) * I_ext .+
+        zone_report_pre_rows(
+        fx.report_pre, zd.patch_of_zone, zd.t0, zd.n + horizon
+    ) .* transpose(w)
+    week = (zd.n - zd.t0 + 2):nd
+    @test vec(zone_binned_increments(zf.report_future, I_ext, w)) ≈
+        vec(sum(daily[week, :]; dims = 1)) rtol = 1.0e-12
+    fitted = 1:(zd.n - zd.t0 + 1)
+    for s in (:report_bin, :death_bin)
+        @test zone_binned_increments(getproperty(zf, s), I_ext, w) ≈
+            zone_binned_increments(
+            getproperty(zd, s), I_ext[fitted, :], w
+        ) rtol = 1.0e-12
+    end
+
+    ## A term shorter than the grid is refused.
     def = zone_deformation(merge(zd, zf), nothing)
     short = zone_draw_mixing(zd.mixing, nothing, nothing)
     @test_throws DimensionMismatch zone_share_renewal(
