@@ -228,3 +228,31 @@ end
     )
     @test t.count == [3, 7, 1, 0]
 end
+
+@testitem "province_map_estimates counts only draws above one and defaults to the patches" begin
+    using BVDOutbreakSize: province_map_estimates, PROVINCE_MEMBERS,
+        PROVINCE_NAMES, PROVINCE_SOURCE_NAMES
+    using Dates: Date
+    ## A draw at exactly one does not count as above it.
+    one = province_map_estimates(
+        [[0.9, 1.0, 1.0, 1.1]], [[1.0, 2.0, 3.0, 4.0]];
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1), patch_names = ["x"], patch_labels = ["X"],
+        members = Dict("x" => ["a"])
+    )
+    @test one.p_rt_above_one == [0.25]
+    ## The default patches cover every source province once, keyed as the
+    ## geojson keys them.
+    np = length(PROVINCE_NAMES)
+    est = province_map_estimates(
+        fill([1.0, 2.0], np), fill([1.0, 2.0], np);
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1)
+    )
+    @test size(est, 1) == sum(length, values(PROVINCE_MEMBERS))
+    @test sort(est.province) == sort(PROVINCE_SOURCE_NAMES)
+    @test est.pooled == [
+        length(PROVINCE_MEMBERS[n]) > 1 ? 1 : 0
+            for n in PROVINCE_NAMES for _ in PROVINCE_MEMBERS[n]
+    ]
+end
