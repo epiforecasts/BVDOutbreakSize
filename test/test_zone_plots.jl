@@ -326,14 +326,16 @@ end
     @test occursin("from their province", caption(fig))
     ## With every panel modelled separately there is no such entry.
     all_modelled = plot_rt_zones(
-        rt, labels, patch; cumulative = [100, 1, 50, 1], top = 2,
+        rt, labels, patch; as_of_date = "2026-09-10",
+        cumulative = [100, 1, 50, 1], top = 2,
         modelled = [true, false, true, true]
     )
     @test !("R from its province" in entries(all_modelled))
     @test !occursin("from their province", caption(all_modelled))
     ## A figure of patches says so in its caption.
     ref = plot_rt_zones(
-        rt, labels, patch; top = 2, unit = "patch",
+        rt, labels, patch; as_of_date = "2026-09-10", top = 2,
+        unit = "patch",
         reference_rt = [traj(1.0) for _ in 1:4]
     )
     @test occursin("the patch's reproduction number", caption(ref))
