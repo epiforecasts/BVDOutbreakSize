@@ -15,7 +15,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- An onset date is scored only once its first print falls inside the 28-day delay support, so the settled part of the first digitised figure (onsets from 20 April to 14 June) is no longer fitted (#PR).
+- An onset date is scored only once its first print falls inside the 28-day delay support, so the settled part of the first digitised figure (onsets from 20 April to 14 June) is no longer fitted (#1017).
   Fitted values change.
 - The onset reporting walk $\gamma_t$ is zero up to the first digitised figure and moves only after it (#1013).
   Since #948 scores every onset date's first print, the walk had run from the earliest onset, 20 April, twelve weeks before the first figure, where no delay is observed and the walk traded against the baseline hazard.
