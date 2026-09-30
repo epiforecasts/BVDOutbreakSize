@@ -326,7 +326,7 @@ admissions_panel = (;
     title = "Admissions/day",
     dates = _vintage_dates(obs.treatment_admissions_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(admissions.obs)
+        pp_joint, @varname(admissions.increments)
     ),
     observed = obs.treatment_admissions_history.counts,
     colour = :teal, cumulative = false,

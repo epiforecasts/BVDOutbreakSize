@@ -162,14 +162,15 @@ province_case_ppc_fig #hide
 
 province_death_ppc_fig #hide
 
-# The three province terms for the isolation and laboratory data are checked the same way.
+# The four province terms for the isolation and laboratory data are checked the same way.
 # The laboratory panel is the split of each calendar week's analysed specimens, which identifies the background split.
 # The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
 # The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's modelled share of the national capacity.
+# The admission panel is the split of each day's 24h admissions among the provinces printed that day, over each patch's modelled admissions.
 # A gap in a panel is a day on which that province printed nothing.
 
 #md # ```@raw html
-#md # <details><summary>Province laboratory, occupancy and bed split posterior predictive checks</summary>
+#md # <details><summary>Province laboratory, occupancy, bed and admission split posterior predictive checks</summary>
 #md # ```
 
 province_lab_bin_days = [
@@ -199,6 +200,13 @@ province_beds_ppc_fig = plot_province_split_ppc(
     title = "Isolation bed share by province"
 );
 
+province_admissions_ppc_fig = plot_province_split_ppc(
+    chn_joint;
+    share_key = :province_admissions_share, rows = province_admissions,
+    seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Admission share by province"
+);
+
 #md # ```@raw html
 #md # </details>
 #md # ```
@@ -212,6 +220,10 @@ province_occupancy_ppc_fig #hide
 #-
 
 province_beds_ppc_fig #hide
+
+#-
+
+province_admissions_ppc_fig #hide
 
 # ## Province stream calibration
 #
