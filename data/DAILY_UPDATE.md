@@ -108,6 +108,8 @@ INSP publishes SitReps for floods, measles, Mpox and other events through the sa
 Expect around 58 rejects; that is normal.
 If an MVE report is ever published without MVE in the filename it will appear in that list, which is the signal to fetch it by hand.
 
+An empty or short media listing is not a reason to stop: fetch the missing back catalogue as step 4 of "Fixing the reader" in `scripts/README.md` says.
+
 Read PDFs with the Read tool's `pages=` argument.
 Poppler (`pdftotext -layout`, `pdfimages`, `pdfinfo`) is useful for cross-reading tables and is required by the digitiser.
 
@@ -266,9 +268,11 @@ The analytique reports print a symptom-onset epidemic curve as a raster figure w
 The procedure of record is the "Onset-curve digitiser" section of `scripts/README.md`.
 Follow its "Adding a vintage" steps for each new report that carries the figure, and its acceptance rules.
 `task onset-audit` exits non-zero when a vintage is outside the acceptance bands, and that exit status decides whether a block is accepted.
-When a block fails after the tick date, the y-axis step and the printed `n` have been re-read, the reader is at fault: fix it in the same data PR by the "Fixing the reader" steps in `scripts/README.md`.
+When a block fails after the tick date, the y-axis step and the printed `n` have been re-read, the reader is at fault.
+Adapt the reader in this run by "Fixing the reader" in `scripts/README.md`, and commit the fix with the new vintage in the data PR.
 Never special-case one vintage to make it pass.
-Leave a vintage out of `CONFIG` and open an issue with the audit rows only when no general change to the reader passes.
+Leaving a vintage out is the last resort.
+Do it only when no general change to the reader passes its step 4, state the reason in the PR, and open an issue with the audit rows and what was tried.
 
 The INRB-UMIE epidemic dashboard publishes the same onset curve as SVG, at national, province and health-zone level.
 Refresh `data/onset_dashboard_history.csv` and the zones file beside it once per run with `scripts/extract_dashboard_onsets.py`, as "Dashboard symptom-onset curves" in `data/README.md` describes: one blob-filtered fetch of the dashboard repo, no more.

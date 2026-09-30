@@ -231,6 +231,69 @@ end
     @test all(r -> (r[2], r[3]) == (8, 4), rows)
 end
 
+@testitem "digitize keeps bars whose fill on a tick column reads as gridline" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## Two bars sit on weekly tick columns, with all their columns inside
+    ## the gridline skip. Their fill is washed pale and carries a grey band
+    ## that the skip reads as page, at a different row in each column.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    for x in (663, 693)
+        paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+        paint!(252:299, (x - 1):(x + 1), (195, 225, 235))
+        paint!(232:251, (x - 1):(x + 1), (200, 60, 60))
+        for (c, y) in zip((x - 1):(x + 1), (260, 266, 272))
+            paint!(y:(y + 4), c:c, (220, 220, 220))
+        end
+    end
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test length(rows) == 10
+    @test (last_tick - Day(7), 12, 5) in rows
+    @test (last_tick, 12, 5) in rows
+end
+
+@testitem "digitize leaves an empty tick column empty" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A dotted grey gridline, anti-aliased over two columns, on a weekly
+    ## tick column whose day has no bar. The gridline skip reads the day
+    ## as empty, so it is not read again without the skip, which would
+    ## climb the dots as a bar.
+    bars = [(12, 5) for _ in 1:10]
+    bars[3] = (0, 0)
+    R, G, B = _synthetic_chart(bars)
+    for y in 100:2:298, x in 662:663
+        R[y, x] = G[y, x] = B[y, x] = 180
+    end
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test all(r -> r[1] != last_tick - Day(7), rows)
+    @test length([r for r in rows if r[2] + r[3] > 0]) == 9
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
