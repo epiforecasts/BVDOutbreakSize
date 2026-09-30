@@ -2014,14 +2014,35 @@ $(TYPEDSIGNATURES)
 
 The within and between blocks of [`zone_importation_blocks`](@ref) at the
 distance decay `γ` and log destination weights `ω`, from the fixed inputs
-`g` of [`zone_gravity_inputs`](@ref). The pull is
-`exp(log N_z + ω_z − γ log d_zq)`, so a draw costs one exponential per zone
-pair, and each origin's column is normalised over every destination patch.
-The totals into each patch are the same at any `γ` and `ω`, so both move
-only the split over a patch's zones.
+`g` of [`zone_gravity_inputs`](@ref): the blocks of the log pattern
+`log N_z − γ log d_zq + ω_z` ([`zone_pattern_blocks`](@ref)), so a draw
+costs one exponential per zone pair.
 """
 function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)
-    pull = g.off_diagonal .* exp.((g.log_pop .+ ω) .- γ .* g.log_distance)
+    return zone_pattern_blocks(g, zone_log_gravity(g, γ) .+ ω)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The log gravity pull `log N_z − γ log d_zq` `(n_zones × n_zones)`, the
+centre of the zone kernel's log pattern, from the fixed inputs `g` of
+[`zone_gravity_inputs`](@ref).
+"""
+zone_log_gravity(g, γ::Real) = g.log_pop .- γ .* g.log_distance
+
+"""
+$(TYPEDSIGNATURES)
+
+The within and between blocks of a log pattern `L`, `L[z, q]` the log
+relative pull of destination `z` on origin `q`. Each origin's column of
+`exp(L)` is normalised over every destination patch, within its own patch
+to one and into another to the parent kernel entry, so the totals into
+each patch do not depend on `L` and it moves only the split over a patch's
+zones.
+"""
+function zone_pattern_blocks(g, L::AbstractMatrix)
+    pull = g.off_diagonal .* exp.(L)
     col = g.indicator * pull
     ## An origin with no pull into a patch keeps a zero column, not 0/0.
     share = pull ./ ifelse.(col .> 0, col, one.(col))[g.patch_of_zone, :]
