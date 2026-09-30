@@ -295,8 +295,9 @@ end
 @testitem "load_onset_curve: one level per onset date, corrections inside the support" begin
     ## A synthetic 3-vintage triangle with printed extents wider than the
     ## delay support. Each onset date scores one level where it is first
-    ## printed and then corrections only while the delay is inside the
-    ## support.
+    ## printed, if that print is inside the delay support, and then
+    ## corrections while the delay is inside the support. A date first
+    ## printed past the support is not scored.
     using BVDOutbreakSize: load_onset_curve, ONSET_REPORT_MAX_DELAY
     using Dates: Date, Day
 
@@ -322,11 +323,13 @@ end
     h = load_onset_curve(path; cutoff = Date("2026-03-11"), seeding)
     R1, R2, R3 = 60, 65, 70
     levels = h.prev_report_days .== 0
-    ## One level per printed onset date, at the vintage that printed it
-    ## first.
-    @test sort(h.onset_days[levels]) == collect(1:68)
+    ## One level per onset date first printed inside the support, at the
+    ## vintage that printed it first. Dates 1 to R1 - D were first printed
+    ## past the support and are not scored at all.
+    @test sort(h.onset_days[levels]) == collect((R1 - D + 1):68)
+    @test minimum(h.onset_days) == R1 - D + 1
     first_print = Dict(zip(h.onset_days[levels], h.report_days[levels]))
-    @test all(first_print[u] == R1 for u in 1:58)
+    @test all(first_print[u] == R1 for u in (R1 - D + 1):58)
     @test all(first_print[u] == R2 for u in 59:63)
     @test all(first_print[u] == R3 for u in 64:68)
     ## Corrections only inside the delay support, each against the
@@ -721,7 +724,7 @@ end
     @test allunique(h.onset_days[levels])
     @test Set(h.onset_days) == Set(h.onset_days[levels])
     corr = .!levels
-    @test all(h.report_days[corr] .- h.onset_days[corr] .< ONSET_REPORT_MAX_DELAY)
+    @test all(h.report_days .- h.onset_days .< ONSET_REPORT_MAX_DELAY)
     by_report = Dict(b.report_date => b for b in blocks)
     for u in unique(h.onset_days)
         idx = findall(==(u), h.onset_days)
