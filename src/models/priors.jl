@@ -684,94 +684,76 @@ Pass `logodds_prior` to override. Returns `(; δ_iso)`.
 end
 
 """
-Time-varying isolation/treatment-bed capacity over the daily grid, a
-multiplicative random walk: the supply-limited occupancy stream
-([`treatment_flow_model`](@ref)) uses `C(t)` as the ceiling the latent
-bed demand saturates against on each day. Capacity is not fixed (beds are
-being added: SitRep 030 records mattress and bed deliveries and new
-treatment centres opening), so the walk tracks growth that a single
-scalar capacity cannot.
+Time-varying isolation/treatment-bed capacity over the daily grid: the
+supply-limited occupancy stream ([`treatment_flow_model`](@ref)) uses
+`C(t)` as the ceiling the latent bed demand saturates against on each day.
+Beds are added over the response and occasionally withdrawn, so capacity
+is not fixed.
 
-The walk is a centred cumulative log-deviation from a baseline bed count
-`C0` on weekly knots, linearly interpolated to the daily grid. With knot
-values `\\log C` and knot days `d`,
-`C(t) = C0 · exp(\\text{interp}(\\text{cumsum}(\\text{steps})))`, each step
-drawn at the sampled innovation SD `σ_cap` from a half-normal, keeping
-capacity a gentle drift rather than per-day jumps. Knots need far fewer
-innovations than a daily walk, so the walk stays low-dimensional.
+The log capacity is a local linear trend on weekly knots, linearly
+interpolated to the daily grid. The weekly log growth `g_k` starts at
+`growth0` and follows a random walk with innovation SD `σ_growth`, and the
+log capacity accumulates it:
 
-Centred, unlike the reproduction-number and background walks. The two
-forms are the same distribution: a standard half-normal scaled by `σ_cap`
-is a half-normal at `σ_cap`. They differ only in the geometry NUTS
-explores. Non-centring pays off when the prior dominates the walk, and it
-costs when the data pin it, since the sampled scale and the standard
-offsets then have to move together. Here the data pin it. On the 16
-September 2026 joint fit the innovations had lost about 90% of their prior
-variance, and `σ_cap` sat at 0.11 against a prior mean of 0.04, past the
-prior 95th percentile and with about half its spread. That is the regime
-the centred form suits. The baseline carries
-the same weakly-informative `LogNormal(log 450, 0.42)` prior as the
-scalar model (median 450 beds, ≈0.44 CV), so `C0` is sampled on the log
-scale and the whole capacity `log C(t) = log C0 + walk` is fully
-log-scale. The implied-capacity series the isolation submodel fits pins
-`C(t)` on the days a rate is published.
+```math
+g_k = g_0 + σ_{growth} \\sum_{j \\le k} z_j, \\qquad
+\\log C_k = \\log C_0 + \\sum_{j \\le k} g_j, \\qquad z_j \\sim \\mathrm{N}(0, 1).
+```
+
+Growth can slow and turn negative, so capacity falls only where the data
+show a sustained decline. The growth SD prior `N⁺(0, 0.02)` keeps the
+growth walk smooth, so a dip lasting a few days changes it little; a wider
+prior lets the trend follow the days on which only some provinces print
+beds. The walk is non-centred. The
+baseline `C0` carries a `LogNormal(log 450, 0.42)` prior (median 450 beds,
+≈0.44 CV), and the implied-capacity series the isolation submodel fits
+pins `C(t)` on the days a rate is published.
 
 Knots run only from `start`, the first day with occupancy or capacity data,
 and capacity is flat at `C0` before it. Off-window capacity carries no
 likelihood, so walking it there would add unidentified innovations. Pass
 `start = 1` for knots over the whole grid, or `week` to change the knot
 spacing. A single national capacity cannot represent local saturation, one
-province full while another has slack. Pass
-`baseline_prior` / `innovation_prior` to override. Returns
-`(; C, C0, σ_cap)` with `C` a length-`n` vector.
+province full while another has slack. Pass `baseline_prior`,
+`growth_prior` or `growth_sd_prior` to override. Returns
+`(; C, C0, growth)` with `C` a length-`n` vector and `growth` the weekly
+log growth.
 
 With a `cutoff` before the grid end the fitted knots end at `cutoff` and
-the walk continues past it on knots a week apart, with future steps drawn
-at the same scale.
+the trend continues past it on knots a week apart, its growth walking on
+from the last fitted value.
 """
 @model function bed_capacity_walk_model(
         n::Integer; start::Integer = 1,
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
-        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0),
+        growth_prior = Normal(0.0, 0.05),
+        growth_sd_prior = truncated(Normal(0.0, 0.02); lower = 0),
         cutoff::Union{Nothing, Integer} = nothing
     )
     C0 ~ baseline_prior
-    σ_cap ~ innovation_prior
+    growth0 ~ growth_prior
+    σ_growth ~ growth_sd_prior
     ## The fitted knots end at the cut-off. A grid running past it continues
-    ## the walk on future knots a week apart with steps `steps_future`.
+    ## the trend on future knots a week apart with innovations `z_future`.
     nc = something(cutoff, n)
     s = clamp(Int(start), 1, nc)
     days = knot_days(nc; week = week, start = s)
     nb = length(days)
-    ## Non-negative innovations, so capacity is non-decreasing. Beds are
-    ## added over the response and not taken away, so `C(t)` cannot drop
-    ## below an already-reached level, and the effective ceiling cannot
-    ## jitter down into the observed occupancy.
-    ##
-    ## Centred: each step is drawn at the sampled scale rather than as a
-    ## standard half-normal multiplied by it. `eps` floors the scale so a
-    ## `σ_cap ≈ 0` draw stays a proper distribution. `filldist` holds one
-    ## copy of the truncated distribution rather than one per step.
-    steps ~ filldist(
-        truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
-        max(nb - 1, 1)
-    )
-    log_knots = vcat(zero(σ_cap), cumsum(steps[1:max(nb - 1, 0)]))
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
+    growth = growth0 .+ σ_growth .* cumsum(z[1:max(nb - 1, 0)])
+    log_knots = vcat(zero(growth0), cumsum(growth))
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)
-        steps_future ~ product_distribution(
-            fill(
-                truncated(Normal(0, σ_cap + eps(typeof(σ_cap))); lower = 0),
-                length(fdays)
-            )
-        )
-        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(steps_future))
+        z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
+        g_last = isempty(growth) ? growth0 : growth[end]
+        future_growth = g_last .+ σ_growth .* cumsum(z_future)
+        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(future_growth))
         days = vcat(days, fdays)
     end
     walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
-    return (; C, C0, σ_cap)
+    return (; C, C0, growth)
 end
 
 """
@@ -813,8 +795,8 @@ and population, so the deviations left for the pool are modest.
 The cumulative admissions differ from the stock that splits the bed demand
 in [`treatment_flow_model`](@ref). The stock counts
 the patients still in a bed and falls as they leave. Cumulative admissions
-never fall, as the national walk never does, and they remember where the
-response has been sent since the start.
+never fall, and they remember where the response has been sent since the
+start.
 
 Returns `(; s, pooling_sd)`, with `s` an `(n_patches × n)` matrix whose
 columns sum to one.
