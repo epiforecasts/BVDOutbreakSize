@@ -3718,13 +3718,15 @@ Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
 and drifting over calendar time. Two non-centred random effects:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
-    partially-pooled non-centred random effect over delay:
+    partially-pooled non-centred random effect over delay whose deviations
+    sum to zero, so `η0` is the mean logit hazard:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
-    z_{h0,d} \\sim \\mathcal N(0,1), \\quad
-    \\text{logit\\_h0}(d) = \\eta_0 + \\sigma_{h0} z_{h0,d};
+    \\mathbf z_{h0} \\sim \\mathcal N(0, I_{D-1}), \\quad
+    \\text{logit\\_h0} = \\eta_0 + \\sigma_{h0} Q \\mathbf z_{h0};
     ```
+    with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)).
   - a calendar-time random walk on report date, weekly knots linearly
     interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
     cumulative-sum walk, same construction):
@@ -3744,6 +3746,14 @@ explain the same onset-date-indexed rise and fall. Report date lags onset
 date by the delay itself (mean ≈6 d) plus the ≈6 d incubation period the
 onset series is already convolved from, so the two walks act on different,
 if overlapping, calendar windows.
+
+The walk holds at zero on every day before `walk_start` and only moves
+from there. It changes the reporting delay, and a delay is seen only
+between snapshots, so before the first snapshot a calendar shift cannot be
+told apart from the baseline hazard. [`onset_reporting_model`](@ref) sets
+`walk_start` to the first snapshot's report day. The grid, and so the
+indexing of `γ`, is unchanged, so every consumer reads it as before. The
+default `walk_start = grid_start` starts the walk on the grid's first day.
 
 The default `baseline_prior = Normal(logit(0.13), 0.7)` targets a median
 onset-to-report delay of roughly 5 days under a constant-hazard
@@ -3775,17 +3785,24 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
         baseline_prior = Normal(logit(0.13), 0.7),
         pooling_prior = truncated(Normal(0.0, 1.0); lower = 0),
         walk_sigma_prior = truncated(Normal(0.0, 0.3); lower = 0),
-        week::Integer = 7
+        week::Integer = 7,
+        walk_start::Integer = grid_start,
+        basis = sum_to_zero_basis(D)
     )
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
-    z_h0 ~ product_distribution(fill(Normal(0, 1), D))
-    logit_h0 = η0 .+ σ_h0 .* z_h0
+    ## Sum-to-zero deviations, so `η0` is the mean logit hazard. With `D`
+    ## free deviations their mean duplicated `η0` and only the sum of the
+    ## two was identified.
+    z_h0 ~ product_distribution(fill(Normal(0, 1), D - 1))
+    logit_h0 = η0 .+ sum_to_zero(sum_to_zero_factor(basis, σ_h0), z_h0)
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
-    days = knot_days(nt; week, start = 1)
+    ## The first knot sits on `walk_start` at zero, and `interpolate_knots`
+    ## holds every earlier day flat at that knot.
+    days = knot_days(nt; week, start = Int(walk_start) - Int(grid_start) + 1)
     nb = length(days)
     σ_γ ~ walk_sigma_prior
     z_γ ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
@@ -3953,12 +3970,18 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## which `onset_report_hazard_model` handles via its own `nt` floor.
     grid_start = m > 0 ? minimum(onset_days) : 1
     grid_end = m > 0 ? max(maximum(report_days), grid_start) : 1
+    ## The report-date walk moves only from the first snapshot, the first
+    ## report day a delay can be seen on. Earlier onset dates are still on
+    ## the grid, since every onset date's first print is scored.
+    walk_start = m > 0 ? max(minimum(report_days), grid_start) : grid_start
     ## Unprefixed (`false`): the hazard model has no `:=` deterministics to
     ## collide with, and hoisting its sampled variables into this frame
     ## surfaces them as a flat `onset_report_state.η0` at the composer level
     ## rather than the double-nested form a prefixed attachment would give.
     ## The pairs-plot summary indexes the flat names.
-    hazard_state ~ to_submodel(hazard(grid_start, grid_end; D), false)
+    hazard_state ~ to_submodel(
+        hazard(grid_start, grid_end; D, walk_start), false
+    )
 
     ## Delay-weighted anchor series over the onset-date grid, built from the
     ## fitted hazard and the caller-supplied calendar-indexed daily
