@@ -18,7 +18,7 @@ const LITERATE_OUT = joinpath(@__DIR__, "src")
 ## one-week-ahead projections, `forecasts/province` their split by province,
 ## `evaluation/insample/*` the in-sample checks and `evaluation/forecast/*`
 ## the scoring against what arrived, each national and by province,
-## and `sensitivity` the comparison and sensitivity analyses. All load the
+## and `comparisons` the comparisons with published estimates. All load the
 ## same cached fits through the shared `docs/pages/_setup.jl`.
 const PAGES = [
     "methods",
@@ -28,7 +28,7 @@ const PAGES = [
     "evaluation/insample/zone",
     "evaluation/forecast/national", "evaluation/forecast/province",
     "evaluation/forecast/zone",
-    "sensitivity",
+    "comparisons",
 ]
 
 ## Build stage, so fitting and rendering can be split across jobs:
@@ -45,7 +45,7 @@ const PAGES = [
 ##   render-evaluation   → evaluation/forecast/national.jl
 ##   render-evaluation-province → evaluation/forecast/province.jl
 ##   render-evaluation-zone → evaluation/forecast/zone.jl
-##   render-sensitivity  → sensitivity.jl
+##   render-comparisons  → comparisons.jl
 ##   combine             → assemble the Vitepress site from the pre-rendered
 ##                         markdown (no execution) and deploy
 ##   all (default)       → render both pages then combine, for local builds
@@ -193,7 +193,7 @@ function combine()
                 "Aim and origins" => "aim.md",
                 "Methods" => "methods.md",
                 "Limitations" => "limitations.md",
-                "Sensitivity" => "sensitivity.md",
+                "Comparisons" => "comparisons.md",
             ],
             "API" => [
                 "Overview" => "lib/api.md",
@@ -267,8 +267,8 @@ elseif STAGE == "render-evaluation-province"
     render_page("evaluation/forecast/province")
 elseif STAGE == "render-evaluation-zone"
     render_page("evaluation/forecast/zone")
-elseif STAGE == "render-sensitivity"
-    render_page("sensitivity")
+elseif STAGE == "render-comparisons"
+    render_page("comparisons")
 elseif STAGE == "combine"
     combine()
 elseif STAGE == "all"
@@ -286,6 +286,6 @@ else
             "render-insample-zone, " *
             "render-evaluation, render-evaluation-province, " *
             "render-evaluation-zone, " *
-            "render-sensitivity, combine, all"
+            "render-comparisons, combine, all"
     )
 end
