@@ -254,10 +254,12 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    ## The occupancy is a live stock at or below the beds, which never fall.
-    @test all(fm.isolation .<= vec(sum(fm.beds; dims = 1)) .+ 1.0e-8)
+    ## The occupancy is a live stock, and the beds start from the cut-off
+    ## beds.
+    st = rh.treatment_state
     @test all(fm.isolation .> 0)
-    @test all(diff(fm.beds; dims = 2) .>= 0)
+    @test fm.beds[:, 1] ≈ st.beds_patch_T .* st.capacity_patch[:, N + 1] ./
+        st.capacity_patch[:, N]
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [
@@ -447,4 +449,23 @@ end
     neg = capped_stock_forecast([10.0], beds, admit, [-5.0, 0.0], flows)
     @test neg.scale == ones(2)
     @test neg.occupancy[1] ≈ 11.0
+end
+
+
+@testitem "the forecast stock drains when its beds fall" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## One patch holding 100 whose beds fall to 80 and then to 70.
+    beds = [100.0 80.0 70.0]
+    admit = fill(10.0, 1, 3)
+    flows = fill(2.0, 3, 4)
+    path = capped_stock_forecast([100.0], beds, admit, [100.0, 100.0, 92.0], flows)
+    ## Full on day 1, it admits only the 8 that leave.
+    @test path.admissions[1] ≈ 8.0
+    @test path.occupancy[1] ≈ 100.0
+    ## Above its beds it admits no one and loses only its exits.
+    @test path.free[2] < 0 && path.admissions[2] == 0
+    @test path.occupancy[2:3] ≈ [92.0, 84.0]
+    ## Never above its beds or its previous occupancy, whichever is larger.
+    prev = [100.0; path.occupancy[1:2]]
+    @test all(vec(path.occupancy) .<= max.(vec(beds), prev) .+ 1.0e-10)
 end

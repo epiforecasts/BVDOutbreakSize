@@ -2342,8 +2342,9 @@ cfr_prior_fig #hide
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The occupied beds are forecast as a stock that never exceeds the beds, per province with province care data and nationally otherwise.
-# The beds are the modelled capacity floored at the cut-off beds, and they never fall.
+# The occupied beds are forecast as a stock that admits only into free beds, per province with province care data and nationally otherwise.
+# Each province's beds start from its cut-off beds and move with its modelled capacity, so they fall when it falls.
+# A province left above its beds admits no one until its exits bring it below them.
 # The stock starts from the cut-off occupancy.
 # Each day's in-care deaths, recoveries, rule-outs and absconds are the modelled flows scaled by the occupied beds over the uncapped occupancy the day before, and each province loses them in proportion to its occupancy.
 # Below the beds the stock follows the fitted occupancy and the flows are unscaled.
@@ -2412,7 +2413,7 @@ cfr_prior_fig #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
-# The patients in isolation, the beds and the admissions are forecast by province as the capped stock above, so each adds up to the national forecast.
+# The patients in isolation, the beds and the admissions are forecast by province as the stock above, so each adds up to the national forecast.
 # A province over its beds, such as Nord-Kivu, can then admit only as many as leave.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.

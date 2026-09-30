@@ -96,15 +96,17 @@ _forecast_counts(daily, fd, k) = vintage_increments_model(daily[fd], missing, k)
     capped_stock_forecast(occupied, beds, admit, uncapped, flows)
 
 Mean path of the occupied beds by patch over the forecast days, each patch
-a stock capped at its beds. `occupied` is each patch's cut-off occupancy.
+a stock that admits only into free beds. `occupied` is each patch's cut-off
+occupancy.
 `beds` and `admit` are its beds and modelled admissions, one row per patch
 and one column per day. `uncapped` is the national uncapped occupancy mean
 on the day before each day, and `flows` the national modelled exits, one
 row per day and one column per flow. The exits are scaled by the occupied
 beds over `uncapped`, at most 1 (1 when `uncapped` is not positive), and
 shared by occupancy. Each patch admits up to its free beds, its beds less
-its previous occupancy plus its exits. Returns the occupancy, admissions and
-free beds by patch and the exit scale by day.
+its previous occupancy plus its exits. A patch above its beds after they
+fall admits no one and is drained by its exits. Returns the occupancy,
+admissions and free beds by patch and the exit scale by day.
 """
 function capped_stock_forecast(occupied, beds, admit, uncapped, flows)
     np, h = size(beds)
@@ -154,17 +156,18 @@ end
 Future isolation and treatment counts from a fitted
 [`treatment_flow_model`](@ref) state run past the cut-off, drawn by patch
 from a stock capped at its beds ([`capped_stock_forecast`](@ref)) and summed
-to national. The beds are the modelled capacity floored at the cut-off beds
-and never fall. With no recorded capacity the stock starts from the uncapped
-cut-off occupancy and nothing is censored.
+to national. Each patch's beds start from its cut-off beds and move with
+its modelled capacity, so they fall when it falls. A patch left above its
+beds admits no one until its exits bring it below them. With no recorded
+capacity the stock starts from the uncapped cut-off occupancy and nothing is
+censored.
 """
 @model function treatment_forecast_model(state, fd, capacity_history, k)
     nocap = 1.0e6
     have_cap = !isempty(capacity_history.counts)
     np = size(state.admit_patch, 1)
-    beds = accumulate(
-        max, max.(state.capacity_patch[:, fd], state.beds_patch_T); dims = 2
-    )
+    beds = state.beds_patch_T .* state.capacity_patch[:, fd] ./
+        state.capacity_patch[:, first(fd) - 1]
     ceilings = have_cap ? beds : fill(nocap, size(beds))
     occupied = have_cap ? state.occupancy_patch_T :
         state.occupancy_patch_T .+ state.shortfall_patch_T

@@ -213,7 +213,6 @@ end
         ## holds more than its beds.
         @test round(Int, sum(fc.isolation_level[rows])) ==
             nat.isolation_level[d]
-        @test all(fc.bed_capacity[rows][beds.patches] .>= beds.counts)
         @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7]
         @test all(fc.isolation_level[rows] .<= fc.bed_capacity[rows])
         ## The provinces' admissions add up to the national admissions on
@@ -285,4 +284,14 @@ end
     @test r.path.admissions ≈ admit_patch[:, fd]
     @test r.path.occupancy[1, 1] > 35.0
     @test sum(r.path.occupancy[:, 1]) > sum(cut.occupancy)
+    ## Patch 1's capacity falls by a fifth after the cut-off, so its beds fall
+    ## from 35 to 28 and, above them, it admits no one.
+    falling = copy(capacity_patch)
+    falling[1, fd] .= 24.0
+    fall = treatment_forecast_model(
+        merge(state, (; capacity_patch = falling)), fd, cap, 10.0
+    )
+    r = returned(fall, rand(Xoshiro(3), fall))
+    @test r.beds[1, :] ≈ [28.0, 28.0]
+    @test r.path.admissions[1, 2] == 0
 end
