@@ -838,17 +838,20 @@ end
     incomplete_capacity_days(national, provinces; tolerance = 0.05)
 
 Days of the national implied bed capacity `national`, a `(; days, counts)`
-history, on which a province that printed beds earlier prints none. The
-national figure is the sum of the provinces that print that day, so a
-silent province reads as closed beds. Each province's last printed count on
-or before the day is summed, and the day is incomplete when the national
-figure falls short of that sum by more than `tolerance` of it. `provinces`
-maps a province to its sparse history, as [`load_observations`](@ref) reads
-the `province_bed_capacity_history` block.
+history, on which a large province that printed beds earlier prints none.
+The national figure is the sum of the provinces that print that day, so a
+silent province reads as closed beds. Against the sum of each province's
+last printed count on or before the day, a day is incomplete when a silent
+province's last count and the national figure's shortfall are both at
+least `tolerance` of it. `provinces` maps a province to its sparse history,
+as [`load_observations`](@ref) reads the `province_bed_capacity_history`
+block.
 
-The tolerance keeps days on which only small provinces are silent: Sud-Kivu
-(25 beds), Tshopo (12 to 31) and Bas-Uélé (3) together miss at most 4.5% of
-the national beds, and Haut-Uélé (68 to 138) at least 6.5%.
+Keying on each silent province keeps days on which only small provinces
+are silent: Sud-Kivu (25 beds), Tshopo (12 to 31) and Bas-Uélé (3) each
+hold at most 2% of the beds, and Haut-Uélé (68 to 138) at least 6.5%. The
+shortfall keeps a day whose national figure carries a province the block
+does not (Haut-Uélé on 26 August 2026).
 """
 function incomplete_capacity_days(
         national, provinces::AbstractDict; tolerance::Real = 0.05
@@ -856,11 +859,16 @@ function incomplete_capacity_days(
     incomplete = Int[]
     for (d, c) in zip(national.days, national.counts)
         carried = 0
+        silent = 0
         for h in values(provinces)
             i = searchsortedlast(h.days, d)
-            i > 0 && (carried += h.counts[i])
+            i == 0 && continue
+            carried += h.counts[i]
+            h.days[i] == d || (silent = max(silent, h.counts[i]))
         end
-        carried - c > tolerance * carried && push!(incomplete, Int(d))
+        limit = tolerance * carried
+        carried > 0 && silent >= limit && carried - c >= limit &&
+            push!(incomplete, Int(d))
     end
     return incomplete
 end
