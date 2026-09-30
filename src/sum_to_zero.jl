@@ -168,9 +168,7 @@ patches, as `(; symmetric, antisymmetric)` matrices of size `n² × d` whose
 columns reshape to `n × n` flow matrices.
 
 A double-centred flow matrix has a zero diagonal and zero row and column
-sums. On the log scale of an importation kernel it is what is left of a
-per-flow deviation once one effect per origin and one per destination are
-taken out. The symmetric part moves `q → p` and `p → q` together and has
+sums. The symmetric part moves `q → p` and `p → q` together and has
 `n (n - 3) / 2` directions. The antisymmetric part moves them in opposite
 directions (circulations) and has `(n - 1)(n - 2) / 2`.
 """
@@ -198,11 +196,8 @@ function flow_pair_basis(n::Integer)
     return (; symmetric, antisymmetric)
 end
 
-## Orthonormal basis (`m × d`) of the vectors in `R^m` orthogonal to every
-## vector in `constraints`, by Gram-Schmidt over the constraints and then
-## the unit vectors. Plain loops rather than an SVD, which Mooncake has no
-## rule for, so a model that builds the basis in its body still
-## differentiates.
+## Orthonormal basis (`m × d`) of the complement of `constraints` in `R^m`,
+## by Gram-Schmidt in plain loops, since Mooncake has no rule for an SVD.
 function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
     span = Vector{Float64}[]
     function project_out!(v)

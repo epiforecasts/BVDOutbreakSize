@@ -392,7 +392,7 @@ tasks:
     desc: >
       Render the preprint and its Supporting Information to self-contained
       HTML under docs/src/public/paper/, where the report site serves them
-      at /paper/ without listing them
+      at /paper/
     dir: paper
     cmds:
       - quarto render main.qmd --to html -M embed-resources:true

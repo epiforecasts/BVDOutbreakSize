@@ -106,9 +106,9 @@ end
     using Random: MersenneTwister
 
     ## No deaths are confirmed before testing began: with a flat death series,
-    ## gating the death "analysed" volume at day 21 of 40 zeroes the first 20
-    ## days, so the expected confirmed deaths fall to 20/40 of the ungated
-    ## total. The default `capacity_start = 0` leaves it ungated.
+    ## a first confirmed-death vintage on day 21 of 40 gates the death
+    ## "analysed" volume over the first 20 days, so the expected confirmed
+    ## deaths fall to 20/40 of the total with no history.
     bvd_deaths = fill(5.5, 40)
     bg_death = fill(0.5, 40)
     deaths_daily = bvd_deaths .+ bg_death
@@ -118,7 +118,7 @@ end
     )
     gat = confirmed_deaths_model(
         17, 246, deaths_daily, bvd_deaths, bg_death,
-        5.0; capacity_start = 21
+        5.0; confirmed_deaths_history = (; days = [21, 40], counts = [4, 17])
     )
     su = returned(ung, rand(MersenneTwister(seed), ung))
     sg = returned(gat, rand(MersenneTwister(seed), gat))
@@ -185,6 +185,41 @@ end
     )
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
+end
+
+@testitem "confirmed_deaths_only_model passes what the joint passes" begin
+    using BVDOutbreakSize: confirmed_deaths_only_model
+    using Turing: logjoint, DynamicPPL
+    using .DynamicPPL: ParamsWithStats, InitFromPrior, @varname
+    using Random: MersenneTwister
+
+    hist = (; days = [21, 30, 40], counts = [4, 10, 17])
+    deaths_history = (; days = [20, 40], counts = [120, 246])
+    m = confirmed_deaths_only_model(
+        40, 17, 246; deaths_history, confirmed_deaths_history = hist
+    )
+    pws = ParamsWithStats(InitFromPrior(), m)
+    cum = pws.params[@varname(cumulative_confirmed_deaths)]
+    ## The volume is gated before the first confirmed-death vintage.
+    @test all(iszero, cum[1:20])
+    @test cum[40] > 0
+    ## The suspected deaths reach the laboratory through the sampled
+    ## report-to-receipt delay.
+    @test any(k -> startswith(string(k), "receipt_state"), keys(pws.params))
+
+    ## The daily suspected deaths are scored.
+    sddh(c) = (; days = [30, 35], counts = c)
+    ma = confirmed_deaths_only_model(
+        40, 17, 246; deaths_history, confirmed_deaths_history = hist,
+        suspected_daily_deaths_history = sddh([5, 6])
+    )
+    mb = confirmed_deaths_only_model(
+        40, 17, 246; deaths_history, confirmed_deaths_history = hist,
+        suspected_daily_deaths_history = sddh([50, 60])
+    )
+    θ = rand(MersenneTwister(2), ma)
+    @test isfinite(logjoint(ma, θ))
+    @test logjoint(ma, θ) != logjoint(mb, θ)
 end
 
 @testitem "confirmed deaths break day is sampled at composer level" begin

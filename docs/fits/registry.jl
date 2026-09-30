@@ -429,6 +429,8 @@ function build_fit_specs(
                 o.n, o.confirmed_deaths,
                 o.total_deaths;
                 deaths_history = o.deaths_history,
+                suspected_daily_deaths_history =
+                    o.suspected_daily_deaths_history,
                 confirmed_deaths_history = o.confirmed_deaths_history,
                 confirmed_break_days = o.confirmed_break_days,
                 confirmed_break_gross_deaths =
@@ -615,6 +617,8 @@ function build_fit_specs(
                 obs.n, obs.confirmed_deaths,
                 obs.total_deaths;
                 deaths_history = obs.deaths_history,
+                suspected_daily_deaths_history =
+                    obs.suspected_daily_deaths_history,
                 confirmed_deaths_history = obs.confirmed_deaths_history,
                 confirmed_break_days = obs.confirmed_break_days,
                 confirmed_break_gross_deaths =
@@ -656,6 +660,7 @@ function build_fit_specs(
             () -> onsets_only_model(
                 obs.n;
                 onset_curve_history = obs.onset_curve_history,
+                export_case_days = obs.export_case_days,
                 breakpoint = breakpoint
             ),
             m -> nuts_sample(

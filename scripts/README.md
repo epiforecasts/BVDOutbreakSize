@@ -12,7 +12,7 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | Script | What it does |
 | --- | --- |
 | `check_new_sitreps.jl` | Lists INSP SitReps not yet in `data/insp_sitrep_scanned.csv`. Exits non-zero if any are missing. |
-| `download_sitreps.jl` | Downloads the INSP SitRep PDFs into `data/sitrep_pdfs/` (git-ignored). Also `task download-sitreps`. |
+| `download_sitreps.jl` | Downloads the INSP SitRep PDFs into `data/sitrep_pdfs/` (git-ignored), filling any report the media listing lacks through its INSP post, and only a report no INSP path serves from the INRB-UMIE mirror (some mirror copies differ from INSP's). Also `task download-sitreps`. |
 | `confirm_insp_data.jl` | Cross-checks the scanned confirmed-case and confirmed-death totals against the INRB-UMIE mirror, and reports the dates each source carries alone. Also `task confirm-data`. |
 | `scan_zone_tableau2.jl` | Scans Tableau 2 of the PDFs (per-health-zone confirmed cases and deaths within each province) into the `[zone_confirmed_history]` and `[zone_death_history]` blocks, admitting a vintage only when its zone rows partition the committed province cumulatives. Also `task zone-tableau2`. |
 | `confirm_zone_data.jl` | Cross-checks the two zone blocks against the INRB-UMIE mirror's per-zone CSVs and lists every disagreement. Also `task confirm-zone-data`. |
@@ -83,17 +83,20 @@ A block that still fails after the ticks, the step and the printed `n` have been
 #### Fixing the reader
 
 The INSP figure changes render size and anti-aliasing from time to time, and the reader's thresholds are fitted to the renders seen so far.
-When a new render breaks it, the data run changes the reader in the same PR as the new vintage, as SitRep 133 did (issue #952).
-1. Find the step that misreads: run `baseline_row`, `y_tick_rows` and `tick_chain` on the new figure and compare their rows and columns against the extracted image.
+When a new render breaks it, the data run adapts the reader there and then and commits the fix with the new vintage in the same PR, as SitReps 133 and 136 did (issues #952 and #1018).
+1. Match the audit rows to a failure mode below, then find the step that misreads: run `baseline_row`, `y_tick_rows`, `tick_chain` and `column_runs` on the new figure and compare their rows and columns against the extracted image.
 2. Add a synthetic chart to `test/test_onset_digitiser.jl` that reproduces the failure, and check that it fails on the current reader.
 3. Change the Julia reference, then carry the same change into the port.
    Prefer a rule that picks between readings the reader already makes over a new threshold, and keep the change as narrow as the failure allows.
-4. Rebuild everything (below) and run `task onset-port-check` and `task onset-audit`.
-   The change is accepted when every earlier block is byte-identical in `data/onset_curve_scanned.csv`, or when the before and after audits show the gaps tightening and the falls dropping across vintages.
+4. Rebuild everything (below) before adding the new `CONFIG` row, then add it and run `task onset-port-check` and `task onset-audit`.
+   The rebuild proves nothing unless every `CONFIG` vintage's PDF is on disk, since a missing PDF is skipped with a warning.
+   `task download-sitreps` fills the reports the media listing lacks through their INSP posts, then the INRB-UMIE mirror; fetch any still missing with `julia --project=scripts scripts/download_sitreps.jl --only N1,N2,...`.
+   The change is accepted when the rebuild reports every `CONFIG` vintage read and none reused and every earlier block is byte-identical in `data/onset_curve_scanned.csv`, or when the before and after audits show the gaps tightening and the falls dropping across vintages.
 5. Run the vision check on the new vintage.
-6. Commit the test, the reader change and the data separately, and put the audit rows for the new vintage in the PR.
+6. Commit the test, the reader change and the data separately, and put the rebuild proof and the audit rows for the new vintage in the PR.
 
-Open an issue with the audit rows and leave the vintage out of `CONFIG` only when no change passes step 4.
+Leaving the vintage out of `CONFIG` is the last resort.
+Do it only when no change passes step 4, give the reason in the PR, and open an issue with the audit rows and the changes tried.
 
 #### Vision check
 
@@ -129,6 +132,10 @@ Each of these was found on the September renders and each shows in the audit tab
 A loop bound fixed at 105 days: `cases before` is above 0 and grows with each vintage as the axis extends back, `first onset` sits weeks after `axis start`, and the gap turns negative and widens vintage by vintage.
 Washed JPEG chroma losing the dead segment: `confirmed_dead` is near zero on bars whose crimson segment is visible in the panels, the gap drops to -10% to -23% from the small renders at SitRep 106 on, and the alive count rises while the dead count falls between vintages.
 A flood capped at the top y-axis tick: every bar taller than the top gridline reads the same height, the tallest bars fall between vintages whenever the render's axis range changes, and the gap is negative on vintages whose peak stands above the top tick.
+A bar on a weekly tick column dropped outright: the day is missing from the block while its neighbours read, the missing days are tick dates, and the gap is negative by about the missing bars' height (SitRep 136's 20 July and 14 September, where washed fill on the tick column read as gridline).
+A count scale off by a fraction of a pixel per gridline, because the tick rows are whole pixels: about half the settled bars read one count off in the same direction, the falls are single counts at shift 0 and the gap stays inside 2.1% (SitRep 136 reads 81 px per 25 counts where its gridlines give 80.7).
+The 14 May bar under the red dashed first-positive-result line: the dash covers every interior column, the run climbs it above the bar, and the dashes inside the alive segment read as dead, so the total swings while its neighbours hold and the dead segment carries most of it.
+The reader now reads such a column to the bar's dark outline, which leaves a bracket error where a render hides the outline under a dash: there the read falls back to the run or lands on the alive/dead junction, and 14 May reads 3 to 15 across vintages against the dashboard's 7 to 8, with the alive/dead split unreliable (issue #1032).
 Day-grid drift from an integer tick spacing: `best shift` leaves 0 on pairs whose ticks were verified, the preferred shift alternates direction between consecutive pairs, and `drift_days` in `data/onset_curve_figures.csv` is non-zero.
 
 #### Dashboard cross-check

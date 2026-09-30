@@ -18,7 +18,7 @@ jobs:
   cancel:
     name: Cancel runs on the closed head branch
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     # A pull request from a fork gets a read-only token, so the cancel call
     # would fail. A pull request whose head is the default branch is skipped
     # because its runs are the default branch own runs.
@@ -72,11 +72,57 @@ jobs:
             exit 0
           fi
 
-          echo "$active" | while read -r id name; do
+          status() {
+            gh api "repos/$REPO/actions/runs/$1" --jq .status ||
+              echo unknown
+          }
+
+          # The cancel call can fail on a run that is still going, such as
+          # a 502 on a docs build with a long fit matrix, so a failure is
+          # retried unless the run has finished in the meantime, which
+          # answers 409.
+          cancel() {
+            local attempt
+            for attempt in 1 2 3; do
+              gh api -X POST "repos/$REPO/actions/runs/$1/$2" --silent &&
+                return 0
+              [ "$(status "$1")" = completed ] && return 0
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+
+          ids=()
+          while read -r id name; do
             [ -n "$id" ] || continue
             echo "cancelling run $id ($name)"
-            # A run that finished between the listing and now answers 409.
-            # That is not a failure of this job.
-            gh api -X POST "repos/$REPO/actions/runs/$id/cancel" --silent ||
-              echo "run $id was not cancelled, it had probably finished"
+            cancel "$id" cancel || echo "run $id did not accept the cancel"
+            ids+=("$id")
+          done <<< "$active"
+
+          # A cancelled run is only done once its jobs stop. One still
+          # active after three minutes is force-cancelled, and one still
+          # active after that fails this job, so it shows as a red check
+          # rather than a runner held for hours.
+          left=("${ids[@]}")
+          for _ in $(seq 18); do
+            still=()
+            for id in "${left[@]}"; do
+              [ "$(status "$id")" = completed ] || still+=("$id")
+            done
+            left=("${still[@]}")
+            [ "${#left[@]}" -eq 0 ] && break
+            sleep 10
           done
+
+          failed=0
+          for id in "${left[@]}"; do
+            echo "run $id is still active, force-cancelling it"
+            cancel "$id" force-cancel || true
+            sleep 15
+            if [ "$(status "$id")" != completed ]; then
+              echo "::error::run $id is still active after a force-cancel"
+              failed=1
+            fi
+          done
+          exit "$failed"

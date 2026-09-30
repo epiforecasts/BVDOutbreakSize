@@ -1098,12 +1098,12 @@ jobs:
           pattern: render-*
           merge-multiple: true
           path: .
-      # The preprint is served at /paper/ as an unlisted page: files under
-      # docs/src/public/ are copied as they are, so it is in neither the nav,
-      # the sidebar nor the local search, and it carries a noindex meta tag.
+      # The preprint is served at /paper/: files under docs/src/public/ are
+      # copied as they are, so it is in neither the nav, the sidebar nor the
+      # local search. The README and the About page link to it.
       # This is `task paper-site`, which this job has no Task to run.
       - uses: quarto-dev/quarto-actions/setup@v2
-      - name: Render the unlisted paper
+      - name: Render the paper
         run: |
           cd paper
           quarto render main.qmd --to html -M embed-resources:true

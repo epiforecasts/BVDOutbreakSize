@@ -207,20 +207,6 @@ end
     end
 end
 
-@testitem "importation_from_kernel: matches the explicit sum" begin
-    using BVDOutbreakSize: importation_from_kernel
-
-    K = [0.0 0.2 0.3; 0.1 0.0 0.4; 0.5 0.6 0.0]
-    I_prev = [10.0, 20.0, 30.0]
-    ε = 0.25
-    imp = importation_from_kernel(K, I_prev, ε)
-    for p in 1:3
-        @test imp[p] ≈ ε * sum(K[p, q] * I_prev[q] for q in 1:3)
-    end
-    ## A zero kernel imports nothing.
-    @test all(iszero, importation_from_kernel(zeros(3, 3), I_prev, ε))
-end
-
 @testitem "implied_national_Rt: recovers the incidence-weighted patch Rt" begin
     using BVDOutbreakSize: patch_infections, implied_national_Rt
 
@@ -2262,4 +2248,26 @@ end
     @test quantile(flow, 0.9) < quantile(dest, 0.9)
     @test quantile(dest, 0.5) ≈ 0.674 atol = 0.03
     @test quantile(flow, 0.5) ≈ 0.337 atol = 0.02
+end
+
+@testitem "destination_weighted_kernel: finite at extreme weights" begin
+    using BVDOutbreakSize: destination_weighted_kernel,
+        province_importation_kernel
+
+    K = province_importation_kernel()
+    np = size(K, 1)
+    for scale in (50.0, 800.0)
+        W = scale .* [0.0 -1.0 0.5 1.0; 1.0 0.0 -0.5 0.2; -0.3 0.8 0.0 -1.0; 0.4 -0.2 1.0 0.0]
+        Kw = destination_weighted_kernel(K, W)
+        @test all(isfinite, Kw)
+        @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
+        η = scale .* [1.0, -1.0, 0.5, -0.5]
+        Kη = destination_weighted_kernel(K, η)
+        @test all(isfinite, Kη)
+        @test vec(sum(Kη; dims = 1)) ≈ vec(sum(K; dims = 1))
+    end
+    ## A large weight on a destination an origin never reaches is ignored.
+    η = [900.0, 0.0, 0.1, -0.1]
+    @test destination_weighted_kernel(K, η)[:, 1] ≈
+        destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
 end
