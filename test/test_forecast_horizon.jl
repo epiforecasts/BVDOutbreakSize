@@ -321,13 +321,14 @@ end
     pp = predict(Xoshiro(13), with_horizon(m0, H), chn)
     draws(key) = [collect(v) for v in vec(collect(pp[Symbol(key)]))]
     imp = draws("forecast_importation_patch")
-    inf = draws("forecast_infections_patch")
-    ## One entry per patch and future day, as the infections, and the
-    ## arrivals are part of what each patch takes in.
-    @test all(v -> length(v) == NP * H, imp)
-    @test all(v -> all(>=(0), v), imp)
+    daily = draws("importation_patch")
+    ## The future columns of the patch model's own arrivals, patch by day.
+    for i in eachindex(imp)
+        A = reshape(daily[i], NP, :)
+        @test size(A, 2) == N + H
+        @test imp[i] == vec(A[:, (N + 1):(N + H)])
+    end
     @test any(v -> any(>(0), v), imp)
-    @test all(i -> length(imp[i]) == length(inf[i]), eachindex(imp))
 end
 
 @testitem "the onset forecast is the fitted reporting hazard run forward" setup = [
