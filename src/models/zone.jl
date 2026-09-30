@@ -1976,9 +1976,13 @@ function zone_gravity_inputs(
     poz = patch_of_zone
     return (;
         log_pop = log.(Float64.(pops)),
-        log_distance = [d[z, q] > 0 ? log(d[z, q]) : 0.0 for z in 1:nz, q in 1:nz],
+        log_distance = [
+            d[z, q] > 0 ? log(d[z, q]) : 0.0 for z in 1:nz, q in 1:nz
+        ],
         off_diagonal = [Float64(z != q) for z in 1:nz, q in 1:nz],
-        same_patch = [Float64(z != q && poz[z] == poz[q]) for z in 1:nz, q in 1:nz],
+        same_patch = [
+            Float64(z != q && poz[z] == poz[q]) for z in 1:nz, q in 1:nz
+        ],
         parent_between = [
             poz[z] == poz[q] ? 0.0 : Float64(parent_kernel[poz[z], poz[q]])
                 for z in 1:nz, q in 1:nz
@@ -1993,7 +1997,8 @@ end
 ## `σ Q z` is `relative_multiplier`'s log contrast in one product.
 function _zone_destination_basis(patch_of_zone, np)
     zones = [findall(==(p), patch_of_zone) for p in 1:np]
-    Q = zeros(length(patch_of_zone), sum(max(length(zs) - 1, 0) for zs in zones))
+    k_all = sum(max(length(zs) - 1, 0) for zs in zones)
+    Q = zeros(length(patch_of_zone), k_all)
     off = 0
     for zs in zones
         k = length(zs) - 1
@@ -2012,7 +2017,7 @@ distance decay `γ` and log destination weights `ω`, from the fixed inputs
 `g` of [`zone_gravity_inputs`](@ref). The pull is
 `exp(log N_z + ω_z − γ log d_zq)`, so a draw costs one exponential per zone
 pair, and each origin's column is normalised over every destination patch.
-The totals into each patch are then the same at any `γ` and `ω`: both move
+The totals into each patch are the same at any `γ` and `ω`, so both move
 only the split over a patch's zones.
 """
 function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)

@@ -508,7 +508,8 @@ zero on the diagonal, and the destination population alone where the
 distance is zero. This is the one gravity form both spatial levels use.
 [`province_importation_kernel`](@ref) normalises its columns over the
 provinces; the health-zone model normalises the same pull within and
-between patches ([`zone_importation_blocks`](@ref)).
+between patches, on the log scale at its sampled decay
+([`zone_gravity_blocks`](@ref)).
 """
 function gravity_pull(
         pops::AbstractVector;
