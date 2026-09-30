@@ -442,7 +442,8 @@ and `S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`.
   `p` rather than at home. The diagonal should be zero, and each column's
   off-diagonal sum times `epsilon` must be at most one, so a patch cannot
   export more transmission than it generates. Both hold for
-  [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
+  [`province_importation_kernel`](@ref) and
+  [`mobility_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
 - `epsilon`: importation intensity of each origin, a scalar for every
   origin and day or an `n_patches x n_days` matrix. Importation
   is a transfer on the day it happens, so the origin patch is debited exactly
