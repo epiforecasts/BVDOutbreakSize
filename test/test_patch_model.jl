@@ -2232,3 +2232,32 @@ end
     @test flat ≈ arrivals(z_dest = [2.0, -1.0, 0.3], z_flow = fill(1.5, 5))
     @test !(flat ≈ arrivals(σ_flow = 0.5))
 end
+
+@testitem "bvd_joint: passes the flow basis through to the patch model" begin
+    using BVDOutbreakSize: bvd_joint, flow_pair_basis, load_observations
+    using Turing: sample, Prior
+    using Random: Xoshiro
+
+    obs = load_observations()
+    joint(; kw...) = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days, n_patches = 4, kw...
+    )
+    function n_flow(m)
+        chn = sample(Xoshiro(1), m, Prior(), 1; progress = false)
+        ks = [k for k in keys(chn) if occursin("z_flow", string(k))]
+        return sum(k -> length(first(vec(collect(chn[k])))), ks; init = 0)
+    end
+    ## Four patches have two symmetric and three antisymmetric directions.
+    @test n_flow(joint()) == 5
+    B = flow_pair_basis(4)
+    symmetric_only = (;
+        B.symmetric, antisymmetric = zeros(size(B.antisymmetric, 1), 0),
+    )
+    @test n_flow(joint(importation_flow_basis = symmetric_only)) == 2
+end

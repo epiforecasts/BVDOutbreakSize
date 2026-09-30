@@ -161,9 +161,11 @@ function sum_to_zero_moments(F::AbstractMatrix)
 end
 
 """
-Orthonormal bases of the double-centred flows between `n` patches, as
+    flow_pair_basis(n)
+
+Bases of the double-centred flows between `n` patches, as
 `(; symmetric, antisymmetric)` matrices of size `n² × d` whose columns
-reshape to `n × n` flow matrices.
+reshape to `n × n` flow matrices. The columns are orthonormal to rounding.
 
 A double-centred flow matrix has a zero diagonal and zero row and column
 sums. On the log scale of an importation kernel it is what is left of a
@@ -188,7 +190,7 @@ function flow_pair_basis(n::Integer)
     ]
     symmetric = _orthonormal_complement(vcat(centred, swapped(-1)), n^2)
     antisymmetric = _orthonormal_complement(vcat(centred, swapped(1)), n^2)
-    ## The diagonal is zero up to rounding; set it exactly.
+    ## Zero the diagonal exactly, which it already is to rounding.
     for p in 1:n
         symmetric[idx(p, p), :] .= 0
         antisymmetric[idx(p, p), :] .= 0
@@ -203,14 +205,14 @@ end
 ## differentiates.
 function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
     span = Vector{Float64}[]
-    function reduce!(v)
+    function project_out!(v)
         for b in span
             v .-= dot(b, v) .* b
         end
         return v
     end
     for c in constraints
-        v = reduce!(copy(c))
+        v = project_out!(copy(c))
         nv = sqrt(dot(v, v))
         nv > tol && push!(span, v ./ nv)
     end
@@ -218,17 +220,19 @@ function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
     for k in 1:m
         v = zeros(m)
         v[k] = 1
-        reduce!(v)
-        for b in basis
-            v .-= dot(b, v) .* b
-        end
+        project_out!(v)
         nv = sqrt(dot(v, v))
-        nv > tol && push!(basis, v ./ nv)
+        if nv > tol
+            push!(span, v ./ nv)
+            push!(basis, last(span))
+        end
     end
     return isempty(basis) ? zeros(m, 0) : reduce(hcat, basis)
 end
 
 """
+    flow_pair_deviation(B, σ, ρ, z)
+
 Double-centred flow deviation `U` (`n × n`) from the bases of
 [`flow_pair_basis`](@ref), a scale `σ`, a reciprocity `ρ` and
 standard-normal draws `z` (the symmetric directions first).
