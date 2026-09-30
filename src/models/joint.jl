@@ -495,11 +495,8 @@ end
     onset_detection_day(export_case_days)
 
 Grid day the outbreak was first detected, for the onset ascertainment step
-([`onset_detection_step`](@ref)): the first Uganda export's detection,
-11 May 2026, the earliest dated detection the data carry. On the onset-date
-axis the change sits a few days before the national declaration, since
-cases with onset shortly before it were still ill and could be tested. With
-no exports it is `-Inf`, which leaves ascertainment unchanged.
+([`onset_detection_step`](@ref)): the earliest dated export detection, or
+`-Inf` without one, which leaves ascertainment unchanged.
 """
 function onset_detection_day(export_case_days::AbstractVector{<:Integer})
     return isempty(export_case_days) ? -Inf :

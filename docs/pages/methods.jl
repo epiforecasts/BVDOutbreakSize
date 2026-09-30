@@ -1746,7 +1746,7 @@ cfr_prior_fig #hide
 # F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
 #     + \beta + \omega_u\bigr)\, s(u), \qquad
-# s(u) = \rho + (1 - \rho)\,\mathrm{logistic}\bigl((u - u_d) / 2.5\bigr).
+# s(u) = \rho + (1 - \rho)\,\mathrm{logistic}\bigl((u - u_d) / w\bigr).
 #     \tag{52}
 # ```
 #
@@ -1754,9 +1754,7 @@ cfr_prior_fig #hide
 # $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset and $\omega$ a weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$).
 # $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto the onset axis, so this triangle's ascertainment is tied to the confirmed pipeline's rather than left free.
 # The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
-# Most cases whose illness ended before the outbreak was detected were never tested, so onset dates before the detection day $u_d$ are ascertained at a fraction $\rho \sim \mathrm{Beta}(2,\ 2)$ of the later rate.
-# $u_d$ is the first Uganda export's detection on 11 May 2026, the earliest dated detection in the data.
-# The walk $\omega$ cannot make this change, since the change happens over a few days.
+# Onset dates before the detection day $u_d$, the earliest dated export detection, are ascertained at a fraction $\rho \sim \mathrm{Beta}(2,\ 2)$ of the later rate, with the change spread over $w = 2.5$ days.
 #
 # The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
 # The likelihood scores each onset date once.

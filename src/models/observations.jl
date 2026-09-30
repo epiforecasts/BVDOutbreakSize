@@ -3693,24 +3693,20 @@ function onset_report_ascertainment(
 end
 
 """
-    onset_detection_step(ρ, grid_start, nt, detection_day; width = 2.5)
+    onset_detection_step(ρ, grid_start, nt, detection_day, width)
 
-Relative ascertainment of cases by onset date around the outbreak's
-detection, for the `nt` onset dates from `grid_start`:
+Relative ascertainment of the `nt` onset dates from `grid_start` around the
+detection day `u_d`, with `w` the width of the change in days:
 
 ```math
 s(u) = \\rho + (1 - \\rho)\\,\\text{logistic}((u - u_d) / w).
 ```
 
-Cases whose illness ended before surveillance began were mostly never
-tested, so onset dates well before the detection day `u_d` are confirmed
-at the fraction `ρ` of the later rate, and dates well after it at the full
-rate. `w` is the width of the change in days. A `detection_day` of `-Inf`
-gives one everywhere.
+A `detection_day` of `-Inf` gives one everywhere.
 """
 function onset_detection_step(
-        ρ::Real, grid_start::Integer, nt::Integer, detection_day::Real;
-        width::Real = 2.5
+        ρ::Real, grid_start::Integer, nt::Integer, detection_day::Real,
+        width::Real
     )
     u = Int(grid_start):(Int(grid_start) + Int(nt) - 1)
     return ρ .+ (1 - ρ) .* logistic.((u .- detection_day) ./ width)
@@ -3842,13 +3838,9 @@ calendar walk exactly.
 
 The level is scaled by a one-sided step at the outbreak's detection
 ([`onset_detection_step`](@ref)), `alpha = α(u) · s(u)`. Onset dates before
-`detection_day` are confirmed at the fraction `ρ ~ detection_prior` of the
-later rate, since most of those cases died or recovered before anyone
-tested them. `detection_prior = Beta(2, 2)` centres that fraction on a
-half. The walk `ω` cannot make this change, since its tight prior lets it
-move by about a factor of two over five weeks and the change happens over a
-few days. Without the step, the reproduction number rises to reproduce the
-jump in the early onset bars instead. `detection_width = 2.5` days.
+`detection_day` are ascertained at the fraction `ρ ~ detection_prior` of
+the later rate, since most of those cases died or recovered before anyone
+tested them.
 
 Returns `(; alpha, β, σ_a, z_a, ω, ρ)`, `alpha` and `ω` length `nt =
 max(grid_end - grid_start + 1, 1)`.
@@ -3874,7 +3866,7 @@ max(grid_end - grid_start + 1, 1)`.
     ω = interpolate_knots(ω_knots, days, nt)
     ρ ~ detection_prior
     step = onset_detection_step(
-        ρ, grid_start, nt, detection_day; width = detection_width
+        ρ, grid_start, nt, detection_day, detection_width
     )
     alpha = onset_report_ascertainment(anchor_series, β, ω) .* step
     return (; alpha, β, σ_a, z_a, ω, ρ)
