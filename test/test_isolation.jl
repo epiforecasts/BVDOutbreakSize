@@ -98,14 +98,33 @@ end
     @test any(k -> occursin("C0", k), ks)
     C0 = vec(Array(chn[:C0]))
     @test all(C0 .> 0)
+end
 
-    ## The innovations are drawn centred, as a half-normal at the sampled
-    ## step size rather than a standard half-normal scaled by it. Both forms
-    ## are the same distribution, and the property that matters downstream is
-    ## that every step is non-negative, so the capacity path cannot fall back
-    ## below a level it has already reached.
-    steps = [collect(s) for s in vec(Array(chn[:steps]))]
-    @test all(s -> all(>=(0), s), steps)
+@testitem "bed_capacity_walk: a growth trend that can fall" begin
+    using Turing: fix, returned, @varname
+    using Random: Xoshiro
+    using BVDOutbreakSize: bed_capacity_walk_model
+
+    ## Prior draws both rise and fall from week to week.
+    m = bed_capacity_walk_model(60)
+    weekly = [diff(log.(returned(m, rand(Xoshiro(i), m)).C[1:7:end])) for i in 1:200]
+    @test any(w -> any(<(0), w), weekly)
+    @test any(w -> any(>(0), w), weekly)
+    ## With no innovations the weekly log growth stays at its starting rate,
+    ## past the cut-off too.
+    mh = bed_capacity_walk_model(54; cutoff = 40)
+    θ = rand(Xoshiro(1), mh)
+    fixed = fix(
+        mh, Dict(
+            @varname(growth0) => 0.1, @varname(σ_growth) => 0.0,
+            @varname(z) => zeros(length(θ[@varname(z)])),
+            @varname(z_future) => zeros(length(θ[@varname(z_future)])),
+        )
+    )
+    C = returned(fixed, rand(Xoshiro(2), fixed)).C
+    @test log(C[33] / C[26]) ≈ 0.1
+    @test log(C[54] / C[47]) ≈ 0.1
+    @test C[54] > C[40]
 end
 
 @testitem "isolation occupancy: conditioned fit stays positive" tags = [
