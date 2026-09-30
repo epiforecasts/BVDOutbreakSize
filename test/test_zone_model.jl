@@ -2090,6 +2090,15 @@ end
     @test_throws ErrorException zone_inputs(
         syn; zones = zone_metadata(syn), parent_forecast = no_imports
     )
+    ## So is one whose arrivals stop short of the horizon.
+    short_imports = zone_parent_forecast(syn)
+    short_imports[:forecast_importation_patch] = map(
+        v -> v[1:(size(syn.I_bar, 1) * horizon - 1)],
+        short_imports[:forecast_importation_patch]
+    )
+    @test_throws ErrorException zone_inputs(
+        syn; zones = zone_metadata(syn), parent_forecast = short_imports
+    )
     @test size(zf.I_bar, 2) == zd.n + horizon
 
     ## The forecast week's operator sums the delayed reports over

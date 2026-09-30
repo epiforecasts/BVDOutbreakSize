@@ -563,19 +563,20 @@ function zone_parent_scale(
     return reshape(exp.(weights * (L * η)), np, n)
 end
 
-## The mixing over the fitted days and the horizon: past the cut-off the
-## mean import odds are the parent forecast's own arrivals against its
-## infections, and the arrival shares follow the mean infections `I_ext`.
+## The arrival shares follow the mean infections `I_ext`, not each draw's
+## forecast: the draw's deformation moves them as on the fitted days.
 function _zone_forecast_mixing(mixing, forecast, future, I_ext, np, H)
     _has_key(forecast, :forecast_importation_patch) || error(
         "zone_forecast_block: the parent forecast carries no " *
             "`forecast_importation_patch`, which the mixed zones read past " *
             "the cut-off; draw it from `bvd_joint` with the patch structure on."
     )
-    imp = [
-        vec(reshape(Float64.(v), np, :)[:, 1:H])
-            for v in _draw_vectors(forecast, :forecast_importation_patch)
-    ]
+    imp_draws = _draw_vectors(forecast, :forecast_importation_patch)
+    all(v -> length(v) >= np * H, imp_draws) || error(
+        "zone_forecast_block: the parent forecast's arrivals cover fewer " *
+            "than the $H-day horizon in some draw."
+    )
+    imp = [vec(reshape(Float64.(v), np, :)[:, 1:H]) for v in imp_draws]
     lo = reshape(_mean_log_odds(imp, [vec(M) for M in future]), np, H)
     return merge(
         mixing, (;
@@ -601,11 +602,12 @@ zone_parent_epsilon(rows::AbstractMatrix, η::AbstractVector) = exp.(rows * η)
 $(TYPEDSIGNATURES)
 
 The between-patch movement of one parent draw, as
-[`zone_share_renewal`](@ref) reads it. The origin weights are the mean
-weights times `e` ([`zone_parent_epsilon`](@ref)) of the origin's patch,
-and the import fraction is the province model's arrivals formula on the
-curves deformed by `scale` ([`zone_parent_scale`](@ref)), on the log-odds
-scale so it stays below one:
+[`zone_share_renewal`](@ref) reads it, from the mean movement `mix` of
+[`zone_fit_inputs`](@ref). `scale` ([`zone_parent_scale`](@ref)) and `e`
+([`zone_parent_epsilon`](@ref)) are `nothing` at the parent's centre. The
+origin weights are the mean weights times `e` of the origin's patch, and
+the import fraction is the province model's arrivals formula on the curves
+deformed by `scale`, on the log-odds scale so it stays below one:
 
 ```math
 \\operatorname{logit} f_p(t) = \\bar o_p(t)
