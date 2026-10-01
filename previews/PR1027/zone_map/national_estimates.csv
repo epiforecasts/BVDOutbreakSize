@@ -1,0 +1,2 @@
+province,patch,pooled,cases,deaths,R_T_median,R_T_lower,R_T_upper,p_rt_above_one,forecast_median,forecast_lower,forecast_upper,as_of
+national,National,0,8116,3924,0.9247613767423171,0.635601893077339,1.2128041748661456,0.3695,483.0,348.0,667.0,2026-09-27
