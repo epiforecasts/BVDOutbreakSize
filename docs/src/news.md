@@ -62,6 +62,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - The overall fit diagnostics table on the National estimates page and the Summary dashboard carries the health-zone model and the tail effective sample size (#1051).
+- The Province estimates page gains a table of the joint fit's province-level parameters (#1051).
 
 ### Infrastructure
 
