@@ -37,9 +37,9 @@
     @test isempty(shared)
 end
 
-## A `<details>` fold meant for construction code must not end up wrapping
-## the display it was supposed to reveal: a fold whose only code line is a
-## hidden display leaves that figure or table collapsed by default (#1056).
+## A `<details>` fold meant for construction code can swallow the display
+## it should reveal: when a fold's only code line is a hidden display, that
+## figure or table stays collapsed by default (#1056).
 
 @testitem "forecast pages: a shown result is not left folded" tags = [
     :quality,
