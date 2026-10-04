@@ -182,6 +182,35 @@ end
     )
 end
 
+@testitem "province_map_estimates adds the deaths forecast and case-fatality ratio when given" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    d = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    kw = (;
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 1), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"]),
+    )
+    est = province_map_estimates(d, d; deaths_forecast = d, cfr = d, kw...)
+    for prefix in ("deaths_forecast", "cfr")
+        @test est[!, prefix * "_median"] ≈ [1.0, 2.0, 2.0]
+        @test est[!, prefix * "_lower"] ≈ [0.55, 2.0, 2.0]
+        @test est[!, prefix * "_upper"] ≈ [1.45, 2.0, 2.0]
+    end
+    bare = province_map_estimates(d, d; kw...)
+    @test !(:deaths_forecast_median in propertynames(bare))
+    @test !(:cfr_median in propertynames(bare))
+    ## From a chain, the case-fatality ratio is read from its per-patch
+    ## `CFR_patch`.
+    chn = (;
+        R_T_patch = [[d[1][i], d[2][i]] for i in 1:101],
+        CFR_patch = [[d[1][i], d[2][i]] for i in 1:101],
+    )
+    from_chn = province_map_estimates(chn, d; n_patches = 2, kw...)
+    @test from_chn.cfr_median ≈ [1.0, 2.0, 2.0]
+end
+
 @testitem "rt_quantile_table gives daily quantiles in long format" begin
     using BVDOutbreakSize: rt_quantile_table
     using Dates: Date

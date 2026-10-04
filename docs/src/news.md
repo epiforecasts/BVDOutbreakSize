@@ -59,6 +59,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
+- The dashboard map shows confirmed cases or confirmed deaths for its forecast, to-date and weekly views, names the count in every label, and adds a case fatality ratio view with the modelled ratio for provinces and the country (resolves #1053).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 
@@ -80,6 +81,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Fixed
 
 - The onset forecast's figure-total interval adds each figure's calibration error, with a scale drawn from a prior rather than fitted (#1045).
+- The embedded dashboard map grows its frame to fit its page in the narrow layout, so the layer switch no longer scrolls out of reach inside the frame (resolves #1052).
 - The health-zone forecast refuses parent arrivals that stop short of the horizon (#1037).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).

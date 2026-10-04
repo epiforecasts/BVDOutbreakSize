@@ -238,28 +238,35 @@ province_overlay_fig #hide
 #md # <details><summary>Write the province map estimates and time series</summary>
 #md # ```
 
-## The national row reads the joint's national reproduction number and the
-## provinces' summed forecast.
+## The national row reads the joint's national reproduction number and
+## case-fatality ratio and the provinces' summed forecasts.
 province_map_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(province_map_dir)
+has_death_forecast = :confirmed_deaths_new in propertynames(province_projection)
 CSV.write(
     joinpath(province_map_dir, "province_estimates.csv"),
     province_map_estimates(
         chn_joint, province_forecast_draws(:confirmed_new);
         n_patches = N_PATCHES,
+        deaths_forecast = has_death_forecast ?
+            province_forecast_draws(:confirmed_deaths_new) : nothing,
         confirmed_history = obs.province_confirmed_history,
         death_history = obs.province_death_history, cutoff = obs.cutoff
     )
 );
-national_forecast_draws = let d = province_projection
-    [float(sum(d.confirmed_new[d.draw .== i])) for i in sort(unique(d.draw))]
+national_forecast_draws(col) = let d = province_projection
+    [float(sum(d[d.draw .== i, col])) for i in sort(unique(d.draw))]
 end
 CSV.write(
     joinpath(province_map_dir, "national_estimates.csv"),
     province_map_estimates(
-        [vec(Array(chn_joint[:R_T]))], [national_forecast_draws];
+        [vec(Array(chn_joint[:R_T]))],
+        [national_forecast_draws(:confirmed_new)];
+        deaths_forecast = has_death_forecast ?
+            [national_forecast_draws(:confirmed_deaths_new)] : nothing,
+        cfr = [vec(Array(chn_joint[:CFR]))],
         confirmed_history = Dict("national" => obs.confirmed_history),
         death_history = Dict("national" => obs.confirmed_deaths_history),
         cutoff = obs.cutoff, patch_names = ["national"],
@@ -267,8 +274,8 @@ CSV.write(
         members = Dict("national" => ["national"])
     )
 );
-## The daily reproduction number and the weekly confirmed cases of each
-## patch and of the country, keyed by the patch label.
+## The daily reproduction number and the weekly confirmed cases and deaths
+## of each patch and of the country, keyed by the patch label.
 province_ts_rt_args = (;
     n = obs.n, breakpoint = _BREAKPOINT, rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
@@ -277,8 +284,23 @@ province_ts_rt_args = (;
 province_ts_inc = province_increment_matrix(
     obs.province_confirmed_history, PROVINCE_NAMES, N_PATCHES
 )
-national_ts_inc = let c = obs.confirmed_history.counts
-    isempty(c) ? zeros(Int, 1, 0) : reshape([c[1]; max.(diff(c), 0)], 1, :)
+province_ts_deaths = province_increment_matrix(
+    obs.province_death_history, PROVINCE_NAMES, N_PATCHES
+)
+national_increments(c) = isempty(c) ? zeros(Int, 1, 0) :
+    reshape([c[1]; max.(diff(c), 0)], 1, :)
+## Each patch's and the country's weekly counts from their increments.
+function province_weekly(inc, national)
+    return vcat(
+        weekly_count_table(
+            inc.days, inc.increments, PROVINCE_LABELS[1:N_PATCHES];
+            cutoff = obs.cutoff, n = obs.n
+        ),
+        weekly_count_table(
+            national.days, national_increments(national.counts),
+            ["National"]; cutoff = obs.cutoff, n = obs.n
+        )
+    )
 end
 ## Tag a long table with the series it holds.
 _with_series(t, s) = (t[!, :series] .= s; t)
@@ -299,17 +321,11 @@ CSV.write(
             ), "rt"
         ),
         _with_series(
-            vcat(
-                weekly_count_table(
-                    province_ts_inc.days, province_ts_inc.increments,
-                    PROVINCE_LABELS[1:N_PATCHES];
-                    cutoff = obs.cutoff, n = obs.n
-                ),
-                weekly_count_table(
-                    obs.confirmed_history.days, national_ts_inc,
-                    ["National"]; cutoff = obs.cutoff, n = obs.n
-                )
-            ), "cases"
+            province_weekly(province_ts_inc, obs.confirmed_history), "cases"
+        ),
+        _with_series(
+            province_weekly(province_ts_deaths, obs.confirmed_deaths_history),
+            "deaths"
         );
         cols = :union
     )

@@ -566,11 +566,12 @@ $(TYPEDSIGNATURES)
 
 The province estimates the interactive map reads, one row per source
 province in `members` (patches in `patch_names` order), keyed as the
-geojson's `province` property. `rt`, `forecast` and the optional
-`ascertainment` hold one draw vector per patch, and every member province
-takes its patch's summaries; `pooled` is 1 when a patch pools several
-provinces. `cases` and `deaths` are the province's own last cumulative
-counts.
+geojson's `province` property. `rt`, `forecast` (confirmed cases over the
+coming week) and the optional `deaths_forecast` (confirmed deaths over the
+same week), `cfr` (case-fatality ratio) and `ascertainment` hold one draw
+vector per patch, and every member province takes its patch's summaries;
+`pooled` is 1 when a patch pools several provinces. `cases` and `deaths`
+are the province's own last cumulative counts.
 """
 function province_map_estimates(
         rt::AbstractVector{<:AbstractVector},
@@ -579,11 +580,11 @@ function province_map_estimates(
         cutoff::Date, patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS,
         members::AbstractDict = PROVINCE_MEMBERS, level::Real = 0.9,
+        deaths_forecast::Union{Nothing, AbstractVector} = nothing,
+        cfr::Union{Nothing, AbstractVector} = nothing,
         ascertainment::Union{Nothing, AbstractVector} = nothing
     )
     r = province_map_summary(rt; level)
-    a = ascertainment === nothing ? nothing :
-        province_map_summary(ascertainment; level)
     f = province_map_summary(forecast; level)
     last_count(h, prov) = haskey(h, prov) && !isempty(h[prov].counts) ?
         h[prov].counts[end] : missing
@@ -602,11 +603,16 @@ function province_map_estimates(
             for (p, name) in enumerate(patch_names) for prov in members[name]
     ]
     df = DataFrame(rows)
-    if a !== nothing
-        patch_of = [p for (p, name) in enumerate(patch_names) for _ in members[name]]
-        df.ascertainment_median = a.values[patch_of]
-        df.ascertainment_lower = a.lower[patch_of]
-        df.ascertainment_upper = a.upper[patch_of]
+    patch_of = [p for (p, name) in enumerate(patch_names) for _ in members[name]]
+    for (prefix, draws) in (
+            (:deaths_forecast, deaths_forecast), (:cfr, cfr),
+            (:ascertainment, ascertainment),
+        )
+        draws === nothing && continue
+        s = province_map_summary(draws; level)
+        df[!, Symbol(prefix, :_median)] = s.values[patch_of]
+        df[!, Symbol(prefix, :_lower)] = s.lower[patch_of]
+        df[!, Symbol(prefix, :_upper)] = s.upper[patch_of]
     end
     return df
 end
@@ -616,18 +622,19 @@ $(TYPEDSIGNATURES)
 
 [`province_map_estimates`](@ref) with the reproduction number at the
 cut-off read from the per-patch `R_T_patch` of `chn`, for its first
-`n_patches` patches, and the ascertainment from its
-`province_ascertainment` when it carries one.
+`n_patches` patches, the case-fatality ratio from its `CFR_patch` and the
+ascertainment from its `province_ascertainment` when it carries them.
 """
 function province_map_estimates(
         chn, forecast::AbstractVector{<:AbstractVector};
         n_patches::Integer, kwargs...
     )
-    ascertainment = _has_key(chn, :province_ascertainment) ?
-        _per_patch(chn, :province_ascertainment, n_patches) : nothing
+    per_patch(key) = _has_key(chn, key) ?
+        _per_patch(chn, key, n_patches) : nothing
     return province_map_estimates(
-        _per_patch(chn, :R_T_patch, n_patches), forecast; ascertainment,
-        kwargs...
+        _per_patch(chn, :R_T_patch, n_patches), forecast;
+        cfr = per_patch(:CFR_patch),
+        ascertainment = per_patch(:province_ascertainment), kwargs...
     )
 end
 
