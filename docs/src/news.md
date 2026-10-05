@@ -81,6 +81,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The onset forecast's figure-total interval adds each figure's calibration error, with a scale drawn from a prior rather than fitted (#1045).
 - The onset forecast model no longer boxes its sampled scan scale inside the interval comprehension, so the boxed-captures check passes again.
+- The test environment declares the Downloads and Base64 standard libraries the SitRep downloader loads, so its tests run under the sandboxed test runner.
 - The health-zone forecast refuses parent arrivals that stop short of the horizon (#1037).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
