@@ -465,7 +465,7 @@ province_currency #hide
 # ## Province fit diagnostics
 #
 # The joint fit's province-level parameters: the reproduction number, infections to date, case-fatality ratio, the two case- and death-ascertainment ratios, and the importation intensity and export weight that set each province's share of imported infections.
-# The national [fit diagnostics](@ref "Fit diagnostics") summarise the same joint fit as a whole, and its [breakdown by parameter](@ref "Fit diagnostics by parameter") covers every parameter rather than only these.
+# The national [fit diagnostics](@ref national-fit-diagnostics) summarise the same joint fit as a whole, and its [breakdown by parameter](@ref "Fit diagnostics by parameter") covers every parameter rather than only these.
 
 #md # ```@raw html
 #md # <details><summary>Province-level parameter diagnostics</summary>

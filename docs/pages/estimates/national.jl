@@ -150,7 +150,7 @@ end;
 
 summary_ranges #hide
 
-# #### Fit diagnostics
+# #### [Fit diagnostics](@id national-fit-diagnostics)
 #
 # Fit diagnostics for the joint fit, the health-zone model melded from it and each individual fit.
 # These indicate how reliable the results are from the perspective of the inference algorithm.
