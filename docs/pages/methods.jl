@@ -2062,7 +2062,8 @@ cfr_prior_fig #hide
 #
 # The zone model takes three things from the joint model.
 # It samples the joint model's weekly infections in each patch and, when zones mix, the importation intensity of each origin patch at the cut-off.
-# It fixes the generation interval, the delays and the patch import fractions at their joint posterior means.
+# It fixes the generation interval and the delays at their joint posterior means.
+# It also fixes the mean import log odds and the arrival shares, and each draw recomputes the import fraction from its sampled curves.
 # The scales the two levels share take their priors from the joint posterior for the same scales between provinces.
 #
 # The sampling step is two-stage Markov melding [goudie2019](@cite) run one way.
