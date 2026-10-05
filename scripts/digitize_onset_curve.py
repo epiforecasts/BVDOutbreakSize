@@ -497,19 +497,28 @@ def _column_runs(page, neutral, light, crimson, darkpx, saturated, y0,
 
 def _tick_chain(xt):
     # The regular weekly chain ending on the rightmost tick, as (week index,
-    # x) pairs. Walking left, a spacing of one or two weeks within 8% (at
-    # least 2.5 px) of the median spacing continues the chain; anything else
-    # ends it.
+    # x) pairs. Walking left, a spacing of one to three weeks within 8% (at
+    # least 2.5 px) of the median spacing continues the chain; a cluster off
+    # the grid is stepped over when one of the next two lands on it, and
+    # anything else ends the chain.
     s = float(np.median(np.diff(xt)))
     ks = [0]
     xs = [xt[-1]]
-    for j in range(len(xt) - 2, -1, -1):
-        d = xt[j + 1] - xt[j]
+
+    def fits(d):
         k = round(d / s)
-        if not (1 <= k <= 2 and abs(d - k * s) <= max(2.5, 0.08 * s)):
+        return 1 <= k <= 3 and abs(d - k * s) <= max(2.5, 0.08 * s)
+
+    j = len(xt) - 2
+    while j >= 0:
+        skip = next((i for i in range(3) if j - i >= 0 and fits(xs[0] - xt[j - i])), None)
+        if skip is None:
             break
-        ks.insert(0, ks[0] - k)
+        j -= skip
+        d = xs[0] - xt[j]
+        ks.insert(0, ks[0] - round(d / s))
         xs.insert(0, xt[j])
+        j -= 1
     return ks, xs
 
 
