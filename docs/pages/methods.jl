@@ -2244,7 +2244,8 @@ cfr_prior_fig #hide
 # ```
 #
 # It is reported from the day the zone's cumulative infections reach ten in the median draw.
-# For a zone without innovations it is the patch value scaled by the zone's decaying deviation level.
+# For a zone without innovations it is the patch value scaled by the zone's decaying deviation level when zones do not mix.
+# With movement between zones, imported infections also enter the zone, so this holds only approximately.
 # The results rank zones by the posterior probability that it exceeds one.
 #
 # #### Zone model assumptions
