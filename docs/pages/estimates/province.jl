@@ -33,6 +33,42 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
+# The figure sets each province's confirmed cases over a week against its reproduction number on the last day of that week.
+# The weeks end on the last date the situation reports give provincial counts, and the dotted line traces the weeks before the most recent one.
+# The hollow diamond is the one-week-ahead forecast of both, as defined in the [province forecast](@ref "Province forecast") Methods section.
+# The horizontal line marks a reproduction number of one and the vertical line the median of the provinces' most recent weekly counts.
+
+#md # ```@raw html
+#md # <details><summary>Compute the weekly cases and reproduction number by province</summary>
+#md # ```
+
+## The provincial Rt trajectories, rebuilt on the same grid as the
+## reproduction number by province figure further down.
+province_summary_rt = reconstruct_patch_rt(
+    chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT, n_patches = N_PATCHES,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    ramp = RT_INTERVENTION_RAMP
+);
+## The week-ahead province forecast, read from the same draws as the
+## province forecasts page.
+province_summary_forecast = forecast_provinces(
+    fit_forecast("joint"); horizon = 7, n_patches = N_PATCHES
+);
+province_cases_rt = province_cases_rt_table(
+    province_summary_rt, province_cases.days, province_cases.increments;
+    cutoff = obs.cutoff, n = obs.n, weeks = 6,
+    forecast = province_summary_forecast, horizon = 7
+);
+province_cases_rt_fig = plot_province_cases_rt(province_cases_rt);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cases_rt_fig #hide
+
 # The table below compares the provinces, from the joint posterior.
 # Each range is an equal-tailed 90% credible interval, and the shares and probabilities are computed draw by draw.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.

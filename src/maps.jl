@@ -488,7 +488,8 @@ end
 ## provinces it pools, with the province names in place of zone labels.
 
 export province_map_summary, province_zone_values, plot_province_map,
-    province_map_estimates, rt_quantile_table, weekly_count_table
+    province_map_estimates, rt_quantile_table, weekly_count_table,
+    province_cases_rt_table
 
 """
 $(TYPEDSIGNATURES)
@@ -683,6 +684,97 @@ function weekly_count_table(
         push!(rows, (; area = String(area), date = cutoff - Day(n - hi), count = c))
     end
     return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Weekly confirmed cases against the reproduction number for each patch, the
+table [`plot_province_cases_rt`](@ref) draws. One `observed` row per patch
+and week, for the `weeks` seven-day windows ending at the last vintage in
+`days` (or at `n` if that is earlier): the window's confirmed cases from
+[`weekly_count_table`](@ref) and the median and 90% interval of the
+reproduction number on its last day from [`rt_quantile_table`](@ref). A week
+with no reproduction-number draws is left out.
+
+`rt` holds one `(ndraws × n)` matrix per patch and `increments` the
+`(patches × vintages)` new counts at each vintage in `days`, as
+[`province_increment_matrix`](@ref) gives them. `forecast` optionally adds
+one `forecast` row per patch from a [`forecast_provinces`](@ref) frame: the
+median and 90% interval of its new confirmed cases and of its reproduction
+number, dated `horizon` days after `cutoff`.
+
+Returns columns `patch`, `province`, `date`, `kind`, `cases`,
+`cases_lower`, `cases_upper`, `rt_median`, `rt_lower` and `rt_upper`,
+sorted by patch and date. An observed row's case bounds equal its count.
+"""
+function province_cases_rt_table(
+        rt::AbstractVector{<:AbstractMatrix},
+        days::AbstractVector{<:Integer}, increments::AbstractMatrix;
+        cutoff::Date, n::Integer, weeks::Integer = 6,
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        forecast::Union{Nothing, DataFrame} = nothing, horizon::Integer = 7
+    )
+    np = min(length(rt), length(patch_labels))
+    areas = String.(patch_labels[1:np])
+    out = DataFrame(
+        patch = Int[], province = String[], date = Date[], kind = String[],
+        cases = Float64[], cases_lower = Float64[], cases_upper = Float64[],
+        rt_median = Float64[], rt_lower = Float64[], rt_upper = Float64[]
+    )
+    if !isempty(days)
+        size(increments, 1) >= np || throw(
+            ArgumentError(
+                "province_cases_rt_table: `increments` has " *
+                    "$(size(increments, 1)) rows but `rt` has $np patches."
+            )
+        )
+        last_day = min(last(days), n)
+        counts = weekly_count_table(
+            days, increments[1:np, :], areas;
+            cutoff = cutoff - Day(n - last_day), n = last_day, weeks
+        )
+        rts = rt_quantile_table(
+            rt[1:np], areas; cutoff, n,
+            from = last_day - 7 * (weeks - 1)
+        )
+        at = Dict((r.area, r.date) => r for r in eachrow(rts))
+        for r in eachrow(counts)
+            q = get(at, (r.area, r.date), nothing)
+            q === nothing && continue
+            c = float(r.count)
+            push!(
+                out, (
+                    findfirst(==(r.area), areas), r.area, r.date,
+                    "observed", c, c, c, q.median, q.lower_90, q.upper_90,
+                )
+            )
+        end
+    end
+    if forecast !== nothing
+        for col in (:confirmed_new, :rt_forecast)
+            col in propertynames(forecast) || throw(
+                ArgumentError(
+                    "province_cases_rt_table: the forecast frame " *
+                        "carries no `$(col)` column."
+                )
+            )
+        end
+        for p in 1:np
+            rows = forecast.patch .== p
+            any(rows) || continue
+            c = float.(forecast[rows, :confirmed_new])
+            R = float.(forecast[rows, :rt_forecast])
+            push!(
+                out, (
+                    p, areas[p], cutoff + Day(horizon), "forecast",
+                    quantile(c, 0.5), quantile(c, 0.05), quantile(c, 0.95),
+                    quantile(R, 0.5), quantile(R, 0.05), quantile(R, 0.95),
+                )
+            )
+        end
+    end
+    return sort!(out, [:patch, :date])
 end
 
 ## Label position of each province in `geo`: the area-weighted mean of its

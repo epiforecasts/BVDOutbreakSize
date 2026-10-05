@@ -46,6 +46,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The province estimates page opens with a scatter of each province's weekly confirmed cases against its reproduction number at the end of the week (resolves #1054).
+  Each province carries a dotted trajectory over the past six weeks and its one-week-ahead forecast, with reference lines at one and at the median recent weekly count.
+  Fitted values do not change.
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
