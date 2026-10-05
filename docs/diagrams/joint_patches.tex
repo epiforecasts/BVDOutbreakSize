@@ -1,3 +1,5 @@
+% fix-cm makes the Computer Modern maths fonts scale to any size.
+\RequirePackage{fix-cm}
 \documentclass[tikz,border=6pt]{standalone}
 \input{style.tex}
 
@@ -12,7 +14,7 @@
 % ---- Reproduction numbers --------------------------------------------------
 \node[param, text width=12.6cm] (rt) at (0,0)
   {\textbf{Reproduction number of each patch}\quad
-   $R_{p,t} = R^{\text{trend}}_t\, e^{\delta_{p,t}}$, \quad $\sum_p \delta_{p,t} = 0$\\[1pt]
+   $R_{p,t} = R^{\text{trend}}_t \exp(\delta_{p,t})$, \quad $\sum_p \delta_{p,t} = 0$\\[1pt]
    {\footnotesize one weekly national trend, and patch deviations that revert towards it}};
 
 % ---- Patches, drawn as a square --------------------------------------------
@@ -37,7 +39,7 @@
   {Every arrow carries importation in both directions. Origin $q$ sends
    $\varepsilon_{q,t} K_{p,q}\, G_{q,t}$ of the infections $G_{q,t}$ it
    generates on day $t$ to destination $p$.\\
-   With importation on (the default) Ituri carries the whole seed $C_T$
+   With importation on (the default), Ituri carries the whole seed $C_T$,
    and the other patches are seeded by these arrivals.};
 
 \node[latent, text width=12.0cm] (imp) at (0,-10.0)
@@ -53,7 +55,7 @@
 \end{scope}
 \node[grouplabel=latentline] at (grp.north west)
   {Patch renewal with importation (schematic, not a map)};
-\draw[flow] (rt.south) -- (rt.south |- grp.north);
+\draw[flow] (3.4,0 |- rt.south) -- (3.4,0 |- grp.north);
 
 % ---- National sum and patch onsets ----------------------------------------
 \node[latent, text width=5.75cm, minimum height=15mm] (nat) at (-3.3,-13.15)
@@ -89,7 +91,7 @@
   \draw[flow] (\n.north |- pbus) -- (\n.north);
 
 \node[data, text width=12.6cm] (comp) at (0,-19.65)
-  {\textbf{Province tables}, scored given the national total $N_i$ of each vintage $i$\\[3pt]
+  {\textbf{Province tables}, scored given the national rise $N_i$ since the previous table\\[3pt]
    $y_{p,i} \sim \mathrm{BetaBinomial}\Bigl(N_i - \sum_{q < p} y_{q,i},\
      \text{mean } \dfrac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\
      \text{intra-class correlation } \rho\Bigr)$,\\[3pt]

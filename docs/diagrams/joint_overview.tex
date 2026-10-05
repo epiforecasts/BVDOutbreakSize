@@ -1,3 +1,5 @@
+% fix-cm makes the Computer Modern maths fonts scale to any size.
+\RequirePackage{fix-cm}
 \documentclass[tikz,border=6pt]{standalone}
 \input{style.tex}
 
@@ -25,21 +27,21 @@
 \node[param, text width=3.4cm, minimum height=26mm] (seed) at (-4.4,0)
   {\textbf{Seeding}\\[1pt] growth rate $r$ over $m$\\ generations gives the\\
    seed $C_T$, all in Ituri};
-\node[param, text width=3.4cm, minimum height=26mm] (rt) at (0.3,0)
+\node[param, text width=3.4cm, minimum height=26mm] (rt) at (0.05,0)
   {\textbf{Reproduction}\\ \textbf{number}\\[1pt]
-   $R_{p,t} = R^{\text{trend}}_t\, e^{\delta_{p,t}}$\\
+   $R_{p,t} = R^{\text{trend}}_t \exp(\delta_{p,t})$\\
    weekly trend from $R_0$,\\ patch deviation $\delta_{p,t}$};
-\node[param, text width=3.4cm, minimum height=26mm] (gi) at (5.0,0)
+\node[param, text width=3.4cm, minimum height=26mm] (gi) at (5.25,0)
   {\textbf{Generation}\\ \textbf{interval} $g_s$\\[1pt]
    probability of a lag\\ of $s$ days between\\ infections};
 \draw[flow] (gi.west) -- (rt.east)
-  node[edgelabel, midway, above=4pt, fill=none] {$R_0$\\ from $r$};
+  node[edgelabel, midway, above=4pt, fill=none] {$R_0$ from\\ $r$ and $g_s$};
 
 % ---- Infections ----------------------------------------------------------
 \node[latent, text width=10.9cm, inner sep=7pt] (inf) at (0.75,-3.0)
   {\textbf{Infections in each patch} $p$\\[3pt]
    $G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s$, \qquad
-   $I_{p,t} = S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr)$\\[3pt]
+   $I_{p,t} = S_{p,t-1}\bigl(1 - \exp(-Y_{p,t}/N_p)\bigr)$\\[3pt]
    {\footnotesize $G_{p,t}$ infections generated, $Y_{p,t}$ the same after importation}\\
    {\footnotesize between patches (next figure), $S_{p,t}$ susceptibles, $N_p$ population.}\\
    {\footnotesize National infections are $I_t = \sum_p I_{p,t}$.}};
@@ -76,7 +78,7 @@
    reporting fraction,}\\
    {\footnotesize $\lambda_{\text{bg},t}$ suspects who are not outbreak cases}};
 \node[latent, text width=\wh, minimum height=14mm] (tc) at (\xb,\yb)
-  {admissions from the\\ suspected cases, beds\\ as a running balance};
+  {admissions from the\\ suspected cases, occupied\\ beds as a running\\ balance};
 \node[latent, text width=\wh, minimum height=14mm] (lab) at (\xa,\yc)
   {suspected cases\\ through the receipt\\ delay, positivity};
 \node[latent, text width=\wh, minimum height=14mm] (rec) at (\xb,\yd)
@@ -100,7 +102,7 @@
 \node[data, text width=\wr] (d_tc) at (\xr,\yb)
   {\textbf{Treatment centres}\\ beds, admissions, deaths, rule-outs,\\ absconds (NegBin; occupancy censored\\ at capacity, admissions at free beds)};
 \node[data, text width=\wr] (d_lab) at (\xr,\yc)
-  {\textbf{Analysed specimens} (NegBin)\\ \textbf{Confirmed cases}\\ (Binomial on analysed count)};
+  {\textbf{Analysed specimens} (NegBin)\\ \textbf{Confirmed cases}\\ (beta-binomial on analysed count)};
 \node[data, text width=\wr] (d_rec) at (\xr,\yd)
   {\textbf{Recovered among confirmed}\\ (NegBin)};
 \node[data, text width=\wr] (d_cd) at (\xr,\ye)
