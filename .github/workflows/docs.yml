@@ -989,7 +989,7 @@ jobs:
             overlays: true
           - id: evaluation/insample/zone
             slug: evaluation-insample-zone
-            fits: fit-{joint,local}
+            fits: fit-{joint,local,frozen_validation,local_frozen_validation}
             overlays: false
           - id: evaluation/forecast/zone
             slug: evaluation-forecast-zone
