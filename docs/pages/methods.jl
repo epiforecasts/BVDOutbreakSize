@@ -205,17 +205,61 @@ MarkdownTable(vintage_table) #hide
 # ### Model overview
 #
 # We model a single outbreak seeded by a zoonotic introduction on a daily grid from a seeding date to the cut-off (day $n$).
-# The country is split into four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi.
-# Each patch runs its own discrete renewal equation at its own reproduction number, and the patches are coupled by importation.
-# National infection incidence is the sum over the patches.
-# Every national stream is fitted against that sum.
-# The patch reproduction numbers share one weekly trend and deviate from it, so a province with little data stays near the trend and one with data can separate from it.
-# The situation reports' per-province tables are exact partitions of the national totals, so they enter as composition likelihoods carrying the spatial split alone.
-# Setting the patch count to one collapses the model onto a single well-mixed population.
+# A joint model estimates national and provincial transmission from every national data stream and the provincial tables at once.
+# It splits the country into four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling four further provinces.
+# Each patch runs its own daily renewal equation at its own reproduction number, a shared weekly trend plus a deviation for that patch.
+# National infections are the sum over the patches, and each count stream observes a delayed and thinned view of the patch infections.
+# Setting the patch count to one collapses the model onto a single well-mixed population with no importation.
 #
 # We never observe infections directly.
 # Each data stream observes a thinned, delayed or transformed view of the same latent incidence.
 # This is the class of time-varying renewal model used in EpiNow2 [epinow2](@cite), with the streams fitted jointly here rather than in a pipeline.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/joint_overview.svg" target="_blank" rel="noopener"><img src="diagrams/joint_overview.svg" alt="Flow diagram of the joint model. Three parameter boxes at the top, the seeding of the outbreak in Ituri, the reproduction number of each patch as a weekly national trend times a patch deviation, and the generation interval, feed a box of infections in each patch. That box gives the renewal equation, in which each patch generates infections from its reproduction number and its past infections weighted by the generation interval, and the new infections deplete the patch's susceptible population after importation between patches. Infections pass through the incubation period to symptom onsets in each patch, summed over the patches. Below, each observation stream is a row with its expected series on the left and its observed data and likelihood on the right. Onsets through the onset-to-report delay give the suspected cases, a negative binomial on the increments between reports of the reporting fraction times the outbreak reports plus a non-outbreak background. The suspected reports feed the treatment-centre counts, which are beds, admissions, deaths, rule-outs and absconds, and the laboratory, whose analysed specimens are negative binomial and confirmed cases binomial. The laboratory feeds the recovered among confirmed. Onsets through the onset-to-death delay give the suspected deaths, which through the laboratory delay give the confirmed deaths, both negative binomial. Onsets through a reporting hazard give the digitised onset curve, with Student-t increments. The patch infections weighted by export propensity give the Uganda exports and export deaths, both Poisson. The outbreak age from the seeding gives the genetic bound on the time to the most recent common ancestor, a censored normal."></a>
+#md # <figcaption>The joint model as a generative chain. Grey boxes are parameters, blue boxes are latent quantities and orange boxes are observed data with their likelihoods. An asterisk is convolution with a delay distribution, and every symbol is defined in the sections below.</figcaption>
+#md # </figure>
+#md # ```
+
+# Importation couples the patches by moving a share of each day's new infections from one patch to another.
+# The share sent from an origin patch to a destination follows a gravity kernel on population size and the distance between population centres.
+# Its scale is an intensity for each origin patch that is partially pooled and changes once the outbreak is detected.
+# The outbreak starts from a cryptic exponential seed in Ituri, and the other patches start with no infections.
+# The receiving patch then grows the arrivals at its own reproduction number, so the secondary patches are seeded by importation rather than by separate seeds.
+#
+# Per-province confirmed cases, confirmed deaths and analysed specimens enter only as compositions of the national totals, so they inform the split across patches and not the national size.
+# The per-province counts of patients in isolation and of beds are split from the national counts in the same way.
+# Tight priors on provincial death ascertainment and lethality let the deaths set the split of incidence, so the cases identify relative case-finding as the residual.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="diagrams/joint_patches.svg" alt="Diagram of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as one weekly national trend times a patch deviation, with the deviations summing to zero across patches. Below it four patch boxes are drawn with Ituri in the centre, seeded with the cryptic outbreak, and Haut-Uele, Other provinces and Nord-Kivu around it, each starting with no infections. Double-headed arrows join every pair of patches. Each arrow from an origin to a destination moves the origin's importation intensity times the gravity kernel entry times the infections the origin generates that day. A box of equations gives the generated infections from the renewal, the infections after importation, which keep the share a patch does not export and add the arrivals from every other patch, and the new infections drawn from the susceptible pool. The patch infections sum to the national infections and onsets that feed every national stream. The onsets in each patch feed three province compositions: confirmed cases through the onset-to-report and laboratory delays weighted by relative case ascertainment, confirmed deaths through the onset-to-death and laboratory delays weighted by relative death ascertainment and lethality, and analysed specimens as the national outbreak volume split by ascertainment-weighted incidence plus a share of the background. All three are scored against the province tables as beta-binomial splits of each national total, allocated across the patches in turn."></a>
+#md # <figcaption>The patch structure of the joint model. Arrows between patches carry importation in both directions on the day the infections are generated. The patch sums feed the national streams, and the patch onsets feed the province compositions. Other provinces pools Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi. The province splits of the patients in isolation and of the beds are not drawn.</figcaption>
+#md # </figure>
+#md # ```
+
+# A health-zone model splits each patch's infections across its health zones, and it is fitted after the joint model without feeding back into it.
+# It takes three kinds of input from the joint fit, which differ in how much of the joint uncertainty they carry.
+# The zone model samples the weekly infections of each patch and the importation intensity of each origin patch from a multivariate normal fitted to the joint posterior draws.
+# The generation interval and the delays are fixed at their joint posterior means, so their uncertainty does not reach the zones.
+# The mean odds that an infection in each patch was imported are fixed in the same way, and each sampled draw moves them with its own curves and intensities.
+# Five parameters the two levels share take priors fitted to the joint posterior draws, among them the drift scale and the composition overdispersions.
+#
+# Within each patch every zone runs its own renewal equation, and each day's sampled patch infections are shared among the zones by their force of infection.
+# Arrivals from other patches are the joint model's own, so the zone model only decides which zones of the receiving patch they reach.
+# Spread between zones of the same patch follows a gravity kernel with an intensity estimated in the zone model.
+# Zone deviations in transmission sum to zero within each patch and are correlated more strongly between nearby zones.
+# The zone model is fitted to the per-zone confirmed cases and deaths as compositions of each patch total.
+# Its uncertainty covers the sampled patch curves and intensities but not the generation interval or the delays.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/zone_model.svg" target="_blank" rel="noopener"><img src="diagrams/zone_model.svg" alt="Diagram of the health-zone model and its inputs from the joint fit. A purple group at the top holds three boxes of joint-fit quantities. The first, sampled by melding, is the weekly infections of each patch and the importation intensity of each origin patch, drawn as a standard normal vector times a Cholesky factor fitted to the joint draws, which scales the joint posterior mean curves and intensities. The second, fixed at posterior means, holds those mean curves and intensities, the generation interval, the infection-to-confirmed-case delay, the infection-to-confirmed-death delay, the mean log odds that an infection in a patch was imported and the share of each patch's arrivals sent by each origin. The third holds the priors fitted to the joint draws: the drift scale, the deviation correlation, the two composition overdispersions and the ascertainment scale. A purple arrow carries the sampled infections and intensities to the movement step, another carries the fixed delays and import odds to the zone renewal, and a third carries the fitted priors to the zone deviations. Inside the zone model, initial shares and zone deviations that sum to zero in the patch and are correlated by distance feed the zone renewal, in which each zone's force of infection is its own past infections weighted by the generation interval, scaled by its deviation. The renewal and a within-patch spread intensity feed the movement step, in which each zone keeps part of its force and spreads the rest within the patch, the patch's imports are the joint import fraction times its sampled infections and are shared by the pull of zones in other patches, and the patch's own infections are shared by the mixed force, so the zone infections sum to the sampled patch infections. These pass through the delays to the expected confirmed cases and deaths of each zone, weighted by relative ascertainment and relative lethality within the patch. At the bottom the zone tables of confirmed cases and deaths are scored as Dirichlet-multinomial compositions of each patch total. Nothing returns to the joint fit."></a>
+#md # <figcaption>The health-zone model and what it takes from the joint fit. Purple marks a quantity taken from the joint fit, grouped by whether it is sampled, fixed at a posterior mean or used to fit a prior. Equation numbers refer to the health-zone model section below, where every symbol is defined.</figcaption>
+#md # </figure>
+#md # ```
+
 #
 # The model is assembled from modular Turing [ge2018turing](@cite) submodels, each holding the maths and priors for one part of the generative process.
 # We describe them in generative order, from the infection process through the epidemiological delays to the observation streams.
