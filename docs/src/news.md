@@ -48,6 +48,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
   The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#PR-NUMBER).
+- The methods score the confirmed positives as a beta-binomial with its intra-window correlation and prior, as the model does, not as a binomial (#PR-NUMBER).
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).

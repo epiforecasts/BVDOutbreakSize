@@ -251,10 +251,6 @@ MarkdownTable(vintage_table) #hide
 #md # ```
 
 #
-# We never observe infections directly.
-# Each data stream observes a thinned, delayed or transformed view of the same latent incidence.
-# This is the class of time-varying renewal model used in EpiNow2 [epinow2](@cite), with the streams fitted jointly here rather than in a pipeline.
-#
 # The model is assembled from modular Turing [ge2018turing](@cite) submodels, each holding the maths and priors for one part of the generative process.
 # We describe them in generative order, from the infection process through the epidemiological delays to the observation streams.
 # The implementation uses Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation, CensoredDistributions for delay discretisation, FlexiChains for chain handling, and PairPlots [pairplots_jl](@cite) with AlgebraOfGraphics [danisch2021makie](@cite) for the figures.
@@ -262,7 +258,7 @@ MarkdownTable(vintage_table) #hide
 #
 # The table below shows which parameters inform each observation submodel.
 # The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
-# The *confirmed* positives are scored as a Binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
+# The *confirmed* positives are scored as a beta-binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
 # The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
@@ -1426,7 +1422,7 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{42}
 # ```
 #
-# The confirmed positives in each laboratory window $v$ are scored as a Binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
+# The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
 # Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
@@ -1451,10 +1447,12 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{43}
+# C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{43}
 # ```
 #
-# with $c_v$ the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
+# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, which tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
+# We use this prior, with mean about 0.04, so the spread is set by the confirmed positives themselves.
+# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
 # The confirmed vintages before the first and after the last laboratory date carry no observed analysed denominator.
 # They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same composition-linked positivity.
 # This way all the confirmed data are used:
