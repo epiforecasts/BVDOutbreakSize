@@ -2081,13 +2081,13 @@ cfr_prior_fig #hide
 #
 # ```math
 # \eta \sim \mathrm{Normal}(0, I_d), \qquad
-# a = L\eta, \qquad
-# I_{p,t} = \bar I_{p,t}\, e^{a_p(t)}, \qquad
-# \varepsilon_q = \bar\varepsilon_q\, e^{c_q}. \tag{56}
+# \zeta = L\eta, \qquad
+# I_{p,t} = \bar I_{p,t} \exp \zeta_p(t), \qquad
+# \varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q. \tag{56}
 # ```
 #
 # Here $\bar I_{p,t}$ and $\bar\varepsilon_q$ are the exponentials of the joint posterior mean log infections and log intensities.
-# The deviation $a_p(t)$ interpolates patch $p$'s weekly cells of $a$ between week midpoints, and $c_q$ is the cell for origin $q$.
+# The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ is the cell for origin $q$.
 # The joint model has fewer draws than cells, so the covariance is shrunk toward its own diagonal by the least weight that factorises.
 #
 # A draw moves whole patch trajectories, and moves patches and intensities together where the joint posterior correlates them.
@@ -2139,7 +2139,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \operatorname{logit} f_{p,t} = \bar o_{p,t}
-#   + \log \sum_{q \ne p} s_{pq,t}\, e^{c_q + a_q(t)} - a_p(t),
+#   + \log \sum_{q \ne p} s_{pq,t} \exp\bigl(\zeta^{\varepsilon}_q + \zeta_q(t)\bigr) - \zeta_p(t),
 # \qquad
 # s_{pq,t} = \frac{\bar\varepsilon_q K_{pq} \bar I_{q,t}}
 #   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}}, \tag{59}
@@ -2411,7 +2411,7 @@ cfr_prior_fig #hide
 # The multivariate normal is fitted to each joint-model draw's log weekly patch infections over the fitted weeks and over the forecast week of the same draw's forecast, with the fitted block of its Cholesky factor held fixed:
 #
 # ```math
-# \begin{pmatrix} \mathbf a \\ \mathbf a^{\text{fc}} \end{pmatrix}
+# \begin{pmatrix} \boldsymbol\zeta \\ \boldsymbol\zeta^{\text{fc}} \end{pmatrix}
 # = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
 # \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
 # \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{69}
