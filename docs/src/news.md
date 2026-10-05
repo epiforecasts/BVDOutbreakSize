@@ -49,6 +49,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
+- The outbreak size, reproduction number and basic reproduction number by past release move to the national in-sample checks, and the summary page links them (resolves #1058).
 - The summary page has a table of the health zones with the most confirmed cases over the past two weeks (#1021).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
