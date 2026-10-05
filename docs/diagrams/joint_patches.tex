@@ -3,7 +3,8 @@
 
 % The patch structure of the joint model: one renewal per patch, coupled by
 % importation, summed to the national series, with the per-patch onsets
-% scored against the province tables as compositions.
+% scored against the province tables as compositions. The patch layout is
+% schematic, not geographic.
 
 \begin{document}
 \begin{tikzpicture}[x=1cm,y=1cm]
@@ -12,53 +13,54 @@
 \node[param, text width=12.6cm] (rt) at (0,0)
   {\textbf{Reproduction number of each patch}\quad
    $R_{p,t} = R^{\text{trend}}_t\, e^{\delta_{p,t}}$, \quad $\sum_p \delta_{p,t} = 0$\\[1pt]
-   {\footnotesize one weekly national trend, patch deviations that revert towards it}};
+   {\footnotesize one weekly national trend, and patch deviations that revert towards it}};
 
-% ---- Patches ---------------------------------------------------------------
-\def\pw{3.0cm}
-\node[latent, text width=\pw] (it) at (0,-4.35)
+% ---- Patches, drawn as a square --------------------------------------------
+\def\pw{3.2cm}
+\node[latent, text width=\pw] (it) at (-3.4,-2.6)
   {\textbf{Ituri}\\ $R_{1,t}$, $I_{1,t}$\\ seeded with $C_T$};
-\node[latent, text width=\pw] (hu) at (-4.2,-2.55)
-  {\textbf{Haut-Uele}\\ $R_{3,t}$, $I_{3,t}$\\ starts empty};
-\node[latent, text width=\pw] (op) at (4.2,-2.55)
-  {\textbf{Other provinces}\\ $R_{4,t}$, $I_{4,t}$\\ starts empty};
-\node[latent, text width=\pw] (nk) at (0,-7.15)
+\node[latent, text width=\pw] (nk) at (3.4,-2.6)
   {\textbf{Nord-Kivu}\\ $R_{2,t}$, $I_{2,t}$\\ starts empty};
+\node[latent, text width=\pw] (hu) at (-3.4,-6.0)
+  {\textbf{Haut-Uele}\\ $R_{3,t}$, $I_{3,t}$\\ starts empty};
+\node[latent, text width=\pw] (op) at (3.4,-6.0)
+  {\textbf{Other provinces}\\ $R_{4,t}$, $I_{4,t}$\\ starts empty};
 
-\draw[biflow] (hu) -- (op);
-\draw[biflow] (hu) -- (nk);
-\draw[biflow] (op) -- (nk);
-\draw[biflow] (it) -- (hu);
-\draw[biflow] (it) -- (op);
 \draw[biflow] (it) -- (nk);
+\draw[biflow] (hu) -- (op);
+\draw[biflow] (it) -- (hu);
+\draw[biflow] (nk) -- (op);
+\draw[biflow] (it.south east) -- (op.north west);
+\draw[biflow] (nk.south west) -- (hu.north east);
 
-\node[note, text width=3.4cm, anchor=north west] at (-6.0,-5.0)
-  {An arrow from origin $q$ to destination $p$ moves
-   $\varepsilon_{q,t} K_{p,q}\, G_{q,t}$ of the infections $q$ generates
-   on day $t$ into $p$.};
-\node[note, text width=3.4cm, anchor=north east] at (6.0,-5.0)
-  {The secondary patches are seeded by these arrivals.};
+\node[note, text width=12.4cm, align=center] (arrownote) at (0,-7.85)
+  {Every arrow carries importation in both directions. Origin $q$ sends
+   $\varepsilon_{q,t} K_{p,q}\, G_{q,t}$ of the infections $G_{q,t}$ it
+   generates on day $t$ to destination $p$.\\
+   With importation on (the default) Ituri carries the whole seed $C_T$
+   and the other patches are seeded by these arrivals.};
 
-\node[latent, text width=12.0cm] (imp) at (0,-9.75)
-  {$G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s$\\[3pt]
-   $Y_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+\node[latent, text width=12.0cm] (imp) at (0,-10.0)
+  {$Y_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
     + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}$\\[3pt]
-   $I_{p,t} = S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr)$\\[3pt]
-   {\footnotesize $K$: gravity kernel on population and distance between
-   population centres. $\varepsilon_{q,t}$: origin intensity, changing at detection.}};
+   \footnotesize $Y_{p,t}$ then depletes the susceptibles of $p$ (previous figure).
+   $K$ is a gravity kernel on population and the distance between population
+   centres. $\varepsilon_{q,t}$ is the intensity of origin $q$, partially pooled
+   and changing at detection.};
 
 \begin{scope}[on background layer]
-  \node[group=latentline, fit=(hu) (op) (nk) (imp), inner sep=10pt] (grp) {};
+  \node[group=latentline, fit=(it) (op) (arrownote) (imp), inner sep=9pt] (grp) {};
 \end{scope}
-\node[grouplabel=latentline] at (grp.north west) {Patch renewal with importation};
+\node[grouplabel=latentline] at (grp.north west)
+  {Patch renewal with importation (schematic, not a map)};
 \draw[flow] (rt.south) -- (rt.south |- grp.north);
 
 % ---- National sum and patch onsets ----------------------------------------
-\node[latent, text width=5.75cm, minimum height=15mm] (nat) at (-3.3,-12.95)
+\node[latent, text width=5.75cm, minimum height=15mm] (nat) at (-3.3,-13.15)
   {\textbf{National}\\[1pt] $I_t = \sum_p I_{p,t}$, \enspace
    $\text{onsets}_t = \sum_p \text{onsets}_{p,t}$\\[1pt]
    {\footnotesize feed every national stream (previous figure)}};
-\node[latent, text width=5.75cm, minimum height=15mm] (pon) at (3.3,-12.95)
+\node[latent, text width=5.75cm, minimum height=15mm] (pon) at (3.3,-13.15)
   {\textbf{Onsets in each patch}\\[1pt]
    $\text{onsets}_{p,t} = (I_p * f_{\text{inc}})_t$\\[1pt]
    {\footnotesize feed the province compositions}};
@@ -66,35 +68,42 @@
 \draw[flow] (3.3,0 |- grp.south) -- (pon.north);
 
 % ---- Province compositions -------------------------------------------------
-\def\cw{3.75cm}
-\node[latent, text width=\cw, minimum height=19mm] (pc) at (-4.3,-15.9)
+\def\cw{3.85cm}
+\node[latent, text width=\cw, minimum height=25mm] (pc) at (-4.35,-16.2)
   {\textbf{Confirmed cases}\\[1pt]
-   $\lambda_{p,i}$ from\\ $\text{onsets}_{p} * f_{\text{rep}} * f_{\text{rec}}$,\\
-   weight $a_p$};
-\node[latent, text width=\cw, minimum height=19mm] (pd) at (0,-15.9)
+   increments $\lambda_{p,i}$: onsets\\ through the report and\\ receipt delays,
+   weight $\omega_p = a_p$};
+\node[latent, text width=\cw, minimum height=25mm] (pd) at (0,-16.2)
   {\textbf{Confirmed deaths}\\[1pt]
-   $\lambda_{p,i}$ from\\ $\text{onsets}_{p} * f_{d} * f_{\text{rec}}$,\\
-   own weights $a_p \kappa_p$};
-\node[latent, text width=\cw, minimum height=19mm] (pl) at (4.3,-15.9)
+   increments $\lambda_{p,i}$: onsets\\ through the death and\\ receipt delays,
+   weight $\omega_p = a^{\text{d}}_p \kappa_p$};
+\node[latent, text width=\cw, minimum height=25mm] (pl) at (4.35,-16.2)
   {\textbf{Analysed specimens}\\[1pt]
-   national BVD volume split\\ by $a_p c_{p,t}$, plus a share\\
-   $w_p$ of the background};
+   national outbreak volume\\ split by $a_p$-weighted\\ onsets, plus a share\\
+   $w^{\text{bg}}_p$ of the background};
 
-\coordinate (pbus) at (0,-14.4);
-\draw[line width=0.9pt, draw=black!75] (-4.3,0 |- pbus) -- (4.3,0 |- pbus);
+\coordinate (pbus) at (0,-14.65);
+\draw[line width=0.9pt, draw=black!75] (-4.35,0 |- pbus) -- (4.35,0 |- pbus);
 \draw[line width=0.9pt, draw=black!75] (pon.south) -- (pon.south |- pbus);
 \foreach \n in {pc,pd,pl}
   \draw[flow] (\n.north |- pbus) -- (\n.north);
 
-\node[data, text width=12.6cm] (comp) at (0,-18.95)
+\node[data, text width=12.6cm] (comp) at (0,-19.65)
   {\textbf{Province tables}, scored given the national total $N_i$ of each vintage $i$\\[3pt]
    $y_{p,i} \sim \mathrm{BetaBinomial}\Bigl(N_i - \sum_{q < p} y_{q,i},\
-     \dfrac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\ \rho\Bigr)$, \qquad
-   $\pi_{p,i} = \dfrac{a_p \kappa_p \lambda_{p,i}}{\sum_q a_q \kappa_q \lambda_{q,i}}$\\[3pt]
-   {\footnotesize $\kappa_p = 1$ for the cases. The analysed specimens take the split above
-   in place of $a_p \kappa_p \lambda_{p,i}$.}};
+     \text{mean } \dfrac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\
+     \text{intra-class correlation } \rho\Bigr)$,\\[3pt]
+   $\pi_{p,i} = \dfrac{\omega_p \lambda_{p,i}}{\sum_q \omega_q \lambda_{q,i}}$
+   \quad (specimens: the split above, by week)\\[3pt]
+   {\footnotesize $a_p$ relative case ascertainment, $a^{\text{d}}_p$ the deaths' own
+   ascertainment and $\kappa_p$ relative lethality,}\\
+   {\footnotesize each summing to zero across patches on the log scale.
+   Each composition has its own $\rho$.}};
 \foreach \n in {pc,pd,pl}
   \draw[flow] (\n.south) -- (\n.south |- comp.north);
+
+% ---- Key -------------------------------------------------------------------
+\colourkey{(-6.3,-22.0)}
 
 \end{tikzpicture}
 \end{document}

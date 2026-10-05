@@ -1,121 +1,159 @@
 \documentclass[tikz,border=6pt]{standalone}
 \input{style.tex}
 
-% The health-zone model and what it takes from the joint fit. Purple marks
-% a quantity taken from the joint fit; equation numbers are those of the
-% health-zone section of the methods page.
+% The health-zone model and how the joint fit enters it. The zone model
+% runs top to bottom on the left. Each purple box on the right is an input
+% from the joint fit, level with the step it feeds and badged by how it
+% enters: sampled through the meld, fixed at a posterior mean, or used to
+% fit a prior. Purple symbols inside the zone boxes come from the joint fit.
 
 \newcommand{\J}[1]{{\color{jointline}#1}}
 
 \begin{document}
 \begin{tikzpicture}[x=1cm,y=1cm]
 
-% ---- From the joint fit ----------------------------------------------------
-\def\jw{3.75cm}
-\node[joint, text width=\jw, anchor=north, minimum height=37mm] (ja) at (-4.3,0)
-  {\textbf{Sampled (melded)}\\[2pt]
-   weekly infections of each patch and origin intensities, as a normal
-   fitted to the joint draws\\[3pt]
-   $\eta \sim \mathrm{Normal}(0, I_d)$, \enspace $a = L\eta$\\[2pt]
-   $I_{p,t} = \bar I_{p,t}\, e^{a_p(t)}$\\[1pt]
-   $\varepsilon_q = \bar\varepsilon_q\, e^{c_q}$ \quad (56)};
-\node[joint, text width=\jw, anchor=north, minimum height=37mm] (jb) at (0,0)
-  {\textbf{Fixed at posterior means}\\[2pt]
-   centres $\bar I_{p,t}$ and $\bar\varepsilon_q$\\
-   generation interval $\bar g$\\
-   case delay $\bar f = f_{\text{inc}} * f_{\text{rec}}$\\
-   death delay $f_{\text{inc}} * f_d * f_{\text{rec}}$\\
-   import log odds $\bar o_{p,t}$\\
-   arrival shares $s_{pq,t}$};
-\node[joint, text width=\jw, anchor=north, minimum height=37mm] (jc) at (4.3,0)
-  {\textbf{Priors fitted to draws}\\[2pt]
-   drift scale $\sigma_\delta$\\
-   deviation correlation $\rho_{\text{corr}}$\\
-   overdispersions $\rho$, $\rho_{\text{death}}$\\
-   ascertainment scale $\sigma_a$\\[3pt]
-   {\footnotesize log-normal for a scale,\\ beta for a correlation\\ or an overdispersion}};
+\def\xs{-2.6}     % zone stack centre
+\def\ws{9.6cm}    % zone stack text width
+\def\xj{5.3}      % joint input column centre
+\def\wj{4.0cm}    % joint input text width
 
-\begin{scope}[on background layer]
-  \node[group=jointline, fit=(ja) (jb) (jc), inner sep=8pt] (jgrp) {};
-\end{scope}
-\node[grouplabel=jointline] at (jgrp.north west)
-  {From the joint fit: its posterior given the national and province data};
+% ---- Sampled (melded) box at the top of the input column --------------------
+\node[grouplabel=jointline, anchor=south] at (\xj,0.05) {From the joint fit};
+\node[joint, text width=\wj, anchor=north] (meld) at (\xj,0)
+  {\textbf{Sampled (melded)}\\[1pt]
+   a normal fitted to the joint draws of log weekly patch infections and,
+   when zones mix, log origin intensities at the cut-off\\[3pt]
+   $\eta \sim \mathrm{Normal}(0, I)$, \enspace $\zeta = L\eta$\\[2pt]
+   $I_{p,t} = \bar I_{p,t}\, e^{\zeta_p(t)}$\\[2pt]
+   $\varepsilon_q = \bar\varepsilon_q\, e^{\zeta^{\varepsilon}_q}$\\[3pt]
+   {\footnotesize $\zeta$ meld deviation, $L$ Cholesky factor of the draws'
+   covariance, $\zeta_p(t)$ interpolated daily from patch $p$'s weekly cells,
+   $\zeta^{\varepsilon}_q$ origin $q$'s cell, $\varepsilon_q$ intensity of
+   origin patch $q$.}\\[3pt]
+   \badge{mean} $\bar I_{p,t}$, $\bar\varepsilon_q$: exp of the mean log draws};
 
-% ---- Zone model -------------------------------------------------------------
-\node[param, text width=3.45cm, minimum height=16mm] (w0) at (-4.3,-6.0)
-  {\textbf{Initial shares} $w_z$\\[1pt]
-   softmax within the patch};
-\node[param, text width=3.45cm, minimum height=16mm] (dev) at (4.3,-6.0)
+\node[note, text width=8.6cm, anchor=north west] (intro) at (-7.4,-0.2)
+  {\normalsize\textbf{Health-zone model}\\[3pt]
+   \small The zone model runs from top to bottom.
+   Each purple box on the right is an input from the joint fit, level with
+   the step it feeds. Its badge says how it enters:\\[3pt]
+   \badge{sampled} drawn with each sample from the normal above\\[2pt]
+   \badge{mean} fixed at the joint posterior mean\\[2pt]
+   \badge{prior} a prior fitted to the joint draws\\[3pt]
+   Purple symbols are taken from the joint fit or take a prior fitted to it.
+   Nothing returns to the joint fit.};
+
+% ---- Zone stack ---------------------------------------------------------------
+\def\yP{-9.0}
+\node[param, text width=2.6cm, minimum height=28mm] (w0) at (-6.05,\yP)
+  {\textbf{Initial shares}\\ $w^0_z$\\[1pt] softmax within the patch, held before day $t_0$};
+\node[param, text width=6.2cm, minimum height=28mm] (dev) at (-0.65,\yP)
   {\textbf{Deviations} $\delta_{z,t}$\\[1pt]
-   sum to zero in the patch,\\ correlation $e^{-d_{zq}/\ell}$ (63),\\
-   scales $\J{\sigma_\delta}$ and $\J{\rho_{\text{corr}}}$};
+   AR(1) on weekly knots, summing to zero\\ in each patch,
+   level scale $\sigma_L$, drift scale $\J{\sigma_\delta}$,\\
+   correlation $e^{-d_{zq}/\ell}$ with $\ell$ set by $\J{\rho_{\text{corr}}}$\\
+   {\footnotesize $d_{zq}$ distance between zone centroids;}\\
+   {\footnotesize innovations only in zones with $\ge 30$ cases}};
 
-\node[latent, text width=11.9cm] (ren) at (0,-8.25)
-  {\textbf{Zone renewal}\quad
-   $\Lambda_{z,t} = \sum_{s \ge 1} \J{\bar g_s}\, I_{z,t-s}$, \quad
-   $u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}$ \hfill (57)\\[1pt]
-   {\footnotesize from day $t_0$, before which each zone holds $I_{z,t} = w_z \J{I_{p,t}}$.
-   The zone reproduction number is $R_{z,t} = I_{z,t} / \Lambda_{z,t}$ (67).}};
+\node[latent, text width=\ws] (ren) at (\xs,-12.2)
+  {\textbf{Zone renewal} from day $t_0$\\[2pt]
+   $\Lambda_{z,t} = \sum_{s \ge 1} \J{\bar g_s}\, I_{z,t-s}$, \qquad
+   $u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}$\\[2pt]
+   $u$ sets each zone's share; the patch total is the sampled $\J{I_{p,t}}$\\[1pt]
+   {\footnotesize $t_0$ is 42 days before the first zone table. Before it,
+   $I_{z,t} = w^0_z \J{I_{p,t}}$. Zone $R_{z,t} = I_{z,t} / \Lambda_{z,t}$.}};
 
-\node[param, text width=3.45cm, minimum height=16mm] (eps) at (-4.3,-10.35)
-  {\textbf{Within-patch}\\ \textbf{intensity} $\varepsilon_z$\\[1pt]
-   pooled around $\varepsilon_{\text{w}}$ (62)};
+\node[latent, text width=\ws] (arr) at (\xs,-15.25)
+  {\textbf{(a) Arrivals from other patches} (count from the joint)\\[2pt]
+   $M_{p,t} = f_{p,t}\, \J{I_{p,t}}$\\[2pt]
+   $\operatorname{logit} f_{p,t} = \J{\bar o_{p,t}}
+     + \log \sum_{q \ne p} \J{s_{pq,t}}\, e^{\J{\zeta^{\varepsilon}_q} + \J{\zeta_q(t)}}
+     - \J{\zeta_p(t)}$\\[2pt]
+   {\footnotesize $\J{I_{p,t}}$ already includes these arrivals.}};
 
-\node[latent, text width=11.9cm] (mov) at (0,-13.25)
-  {\textbf{Movement and allocation within patch} $p$ \hfill (58--61)\\[3pt]
-   within the patch: \enspace $v_{z,t} = (1 - \varepsilon_z) u_{z,t}
-     + \sum_{q \in p,\, q \ne z} \varepsilon_q K^{\text{w}}_{zq}\, u_{q,t}$\\[2pt]
-   from other patches: \enspace $h_{z,t} = \sum_{p(q) \ne p} \J{\varepsilon_{p(q)}}\,
-     K^{\text{b}}_{zq}\, u_{q,t}$, \qquad
-   imports $M_{p,t} = f_{p,t}\, \J{I_{p,t}}$\\[2pt]
-   {\footnotesize $f_{p,t}$ follows from $\J{\bar o_{p,t}}$, $\J{s_{pq,t}}$
-   and the sampled $a$ and $c$ (59)}\\[3pt]
+\node[latent, text width=\ws] (land) at (\xs,-18.0)
+  {\textbf{(b) Where they land}\quad
+   $h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \J{\varepsilon_{p(q)}}\, K^{\text{b}}_{zq}\, u_{q,t}$\\[2pt]
+   {\footnotesize $K^{\text{b}}$: the joint kernel spread over zones by gravity
+   pull, so it sums to $K$ over a patch. $\J{\varepsilon_{p(q)}}$ only weights
+   origins against each other, since $h$ is normalised within the destination
+   patch. $p(q)$ is the patch of zone $q$.}};
+
+\node[param, text width=3.2cm] (epsw) at (-5.75,-20.55)
+  {\textbf{Within-patch}\\ \textbf{intensity} $\varepsilon^{\text{w}}_z$\\[1pt]
+   pooled around one level};
+
+\node[latent, text width=\ws] (alloc) at (\xs,-23.45)
+  {\textbf{(c) Allocation within the patch}\\[2pt]
+   $v_{z,t} = (1 - \varepsilon^{\text{w}}_z)\, u_{z,t}
+     + \sum_{q \in p,\, q \ne z} \varepsilon^{\text{w}}_q K^{\text{w}}_{zq}\, u_{q,t}$\\[3pt]
    $I_{z,t} = (\J{I_{p,t}} - M_{p,t})\,
      \dfrac{v_{z,t}}{\sum_{z' \in p} v_{z',t}}
-     + M_{p,t}\, \dfrac{h_{z,t}}{\sum_{z' \in p} h_{z',t}}$,
-   \qquad so $\sum_{z \in p} I_{z,t} = \J{I_{p,t}}$};
+     + M_{p,t}\, \dfrac{h_{z,t}}{\sum_{z' \in p} h_{z',t}}$\\[2pt]
+   so $\sum_{z \in p} I_{z,t} = \J{I_{p,t}}$\\[2pt]
+   {\footnotesize $K^{\text{w}}$: gravity pull among the zones of one patch,
+   normalised over that patch.
+   Without mixing, $I_{z,t} = \J{I_{p,t}}\, u_{z,t} / \sum_{z' \in p} u_{z',t}$.}};
 
-\node[latent, text width=11.9cm] (exc) at (0,-16.75)
-  {\textbf{Expected confirmed cases and deaths}\\[2pt]
-   $C_{z,v} = \sum_{t \in (d_{v-1}, d_v]} (\J{\bar f} * I_z)_t$, \qquad
-   $D_{z,v}$ the same through the death delay\\[2pt]
+\node[latent, text width=\ws] (exc) at (\xs,-27.0)
+  {\textbf{Expected confirmed cases and deaths} in the window of table $v$\\[2pt]
+   $C_{z,v} = \sum_{t \in (d_{v-1}, d_v]} (\J{\bar f} * I_z)_t$, \enspace
+   $D_{z,v}$ the same through the \J{death delay}\\[2pt]
    $\pi^{C}_{z,v} = \dfrac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}}$, \qquad
-   $\pi^{D}_{z,v} = \dfrac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}$
-   \hfill (64, 65)\\[2pt]
-   {\footnotesize $a_z$ and $\theta_z$ sum to zero on the log scale within the
-   patch, at scales $\J{\sigma_a}$ and $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.1)$ (66)}};
+   $\pi^{D}_{z,v} = \dfrac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}$\\[2pt]
+   {\footnotesize $d_v$ date of zone table $v$. Relative ascertainment $a_z$
+   (scale $\J{\sigma_a}$) and relative lethality $\theta_z$ (scale $\sigma_\theta$)
+   sum to zero on the log scale within the patch.}};
 
-\draw[flow] (w0.south) -- (ren.north -| w0.south);
-\draw[flow] (dev.south) -- (ren.north -| dev.south);
-\draw[flow] (eps.south) -- (eps.south |- mov.north);
-\draw[flow] (ren) -- (mov);
-\draw[flow] (mov) -- (exc);
-
-\begin{scope}[on background layer]
-  \node[group=latentline, fit=(w0) (dev) (exc), inner sep=8pt] (zgrp) {};
-\end{scope}
-\node[grouplabel=latentline] at (zgrp.north west)
-  {Health-zone model: zones $z$ of each patch $p$};
-
-% ---- Data -------------------------------------------------------------------
-\node[data, text width=11.9cm] (obs) at (0,-20.15)
+\node[data, text width=\ws] (obs) at (\xs,-30.5)
   {\textbf{Zone tables} (confirmed cases and deaths by health zone)\\[2pt]
-   $y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa\, \pi_{p,v}\bigr)$,
-   \quad $\kappa = (1 - \J{\rho}) / \J{\rho}$ \hfill (64)\\[1pt]
-   {\footnotesize The deaths take their own $\J{\rho_{\text{death}}}$.
-   Nothing returns to the joint fit.}};
+   $y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa_{\text{DM}}\, \pi_{p,v}\bigr)$,
+   \quad $\kappa_{\text{DM}} = (1 - \J{\rho}) / \J{\rho}$\\[2pt]
+   {\footnotesize $N_{p,v}$ patch total of table $v$. $\J{\rho}$ is an
+   intra-class correlation, and the deaths take their own $\J{\rho_{\text{death}}}$.}};
+
+% Zone flow.
+\draw[flow] (w0.south) -- (w0.south |- ren.north);
+\draw[flow] (dev.south) -- (dev.south |- ren.north);
+\draw[flow] (ren) -- (arr);
+\draw[flow] (arr) -- (land);
+\draw[flow] (land.south -| -0.5,0) -- (-0.5,0 |- alloc.north);
+\draw[flow] (epsw.south) -- (epsw.south |- alloc.north);
+\draw[flow] (alloc) -- (exc);
 \draw[flow] (exc) -- (obs);
 
-% ---- Joint inputs into the zone model ---------------------------------------
-\draw[jointflow] (ja.west) -- (ja.west -| -6.75,0) |- (mov.west)
-  node[edgelabel, pos=0.5, fill=white, text=jointline, rotate=90, anchor=south]
-  {sampled $I_{p,t}$ and $\varepsilon_q$};
-\draw[jointflow] (jb.south) -- (ren.north -| jb.south)
-  node[edgelabel, pos=0.66, left=3pt, text=jointline, fill=none]
-  {$\bar g$, $\bar f$, death delay,\\ $\bar o_{p,t}$, $s_{pq,t}$};
-\draw[jointflow] (jc.south) -- (dev.north);
-\node[note, anchor=north east, text=jointline] at ([yshift=-2pt]zgrp.south east)
-  {Purple symbols are taken from the joint fit.};
+\begin{scope}[on background layer]
+  \node[group=latentline, fit=(w0) (dev) (obs), inner sep=7pt] (zgrp) {};
+\end{scope}
+\node[grouplabel=latentline] at (zgrp.north west) {Zones $z$ of each patch $p$};
+
+% ---- Joint inputs, level with the step each feeds ---------------------------
+\node[joint, text width=\wj] (j1) at (\xj,\yP)
+  {\badge{prior} $\sigma_\delta$ drift scale,\\ $\rho_{\text{corr}}$ deviation correlation};
+\node[joint, text width=\wj] (j2) at (\xj,-12.2)
+  {\badge{mean} $\bar g$ generation interval\\[2pt]
+   \badge{sampled} $I_{p,t}$ patch infections};
+\node[joint, text width=\wj] (j3) at (\xj,-16.6)
+  {\badge{sampled} $I_{p,t}$, $\varepsilon_q$\\[2pt]
+   \badge{mean} $\bar o_{p,t}$ mean log odds that an infection in $p$ was imported\\[2pt]
+   \badge{mean} $s_{pq,t}$ share of $p$'s arrivals sent by $q$, from $\bar\varepsilon$,
+   $K$ and $\bar I$};
+\node[joint, text width=\wj] (j5) at (\xj,-27.0)
+  {\badge{mean} $\bar f$ infection to confirmed case: incubation then receipt delay\\[2pt]
+   \badge{mean} death delay: incubation, onset to death, receipt\\[2pt]
+   \badge{prior} $\sigma_a$ ascertainment scale};
+\node[joint, text width=\wj] (j6) at (\xj,-30.5)
+  {\badge{prior} $\rho$, $\rho_{\text{death}}$\\ intra-class correlations};
+
+\draw[jointflow] (j1.west) -- (dev.east);
+\draw[jointflow] (j2.west) -- (ren.east |- j2.west);
+\draw[jointflow] (j3.west) -- ++(-0.35,0) |- (arr.east);
+\draw[jointflow] (j3.west) -- ++(-0.35,0) |- (land.east);
+\draw[jointflow] (j5.west) -- (exc.east |- j5.west);
+\draw[jointflow] (j6.west) -- (obs.east |- j6.west);
+
+% ---- Key -------------------------------------------------------------------
+\colourkey[joint]{(-7.4,-33.0)}
 
 \end{tikzpicture}
 \end{document}

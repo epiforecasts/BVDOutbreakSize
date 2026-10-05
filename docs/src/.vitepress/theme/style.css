@@ -212,9 +212,12 @@ mjx-container > svg {
   border-radius: 8px;
   text-align: center;
 }
+/* The SVGs are about 400 px wide at their natural size, so they are scaled
+   up to fill the column, which keeps the smallest text near 12 px. */
 .vp-doc .bvd-diagram img {
   display: block;
-  max-width: 100%;
+  width: 100%;
+  max-width: 760px;
   height: auto;
   margin: 0 auto;
 }
