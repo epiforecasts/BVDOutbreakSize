@@ -4,9 +4,10 @@
 # per-zone confirmed-case and death tables as a within-patch composition,
 # with no feedback to stage one.
 # The shared quantity is the province model's weekly infections in each
-# patch. The zone stage samples it from a multivariate normal fitted to the
-# province model's draws (`zone_meld_block`) and conditions on the daily
-# patch trajectory it implies. The province model's uncertainty, and the
+# patch, with its generation-interval and delay parameters. The zone stage
+# samples it from a multivariate normal fitted to the province model's
+# draws (`zone_meld_block`) and conditions on the daily patch trajectory
+# and the delays it implies. The province model's uncertainty, and the
 # correlation it learns across patches, reach every zone quantity through
 # the fit. The functions here build the inputs from a
 # parent chain (`zone_fit_inputs`), run the share renewal and its
@@ -1119,8 +1120,8 @@ The delay convolution through the PMF `f` (lag 0) and its binning into the
 vintage windows `(d_{v−1}, d_v]` of `days` as one operator over the grid
 days `t0 … n`. `weights` `(n_days × n_vintages)` holds what one infection
 on each grid day adds to each window,
-`weights[k, v] = Σ_{j ∈ v, j ≥ k} f_{j − k}`, so a zone's binned reports
-are `weights' I`. `pre` `(n_zones × n_vintages)` is each window's pre-`t0`
+`weights[k, v] = Σ_{j ∈ v, j ≥ k} f_{j − k}`, so the binned reports of
+the zones' daily infections `I` `(n_days × n_zones)` are `Iᵀ weights`. `pre` `(n_zones × n_vintages)` is each window's pre-`t0`
 term at unit initial share, from the `report_pre` and `report_pre_cum`
 fields of `fixed` ([`zone_fixed_terms`](@ref), built on the same `f`).
 Generic in the element type, so the model can rebuild it for a sampled
