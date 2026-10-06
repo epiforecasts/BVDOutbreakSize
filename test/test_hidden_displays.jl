@@ -36,3 +36,50 @@
     end
     @test isempty(shared)
 end
+
+## A `<details>` fold meant for construction code can swallow the display
+## it should reveal: when a fold's only code line is a hidden display, that
+## figure or table stays collapsed by default (#1056).
+
+@testitem "forecast pages: a shown result is not left folded" tags = [
+    :quality,
+] begin
+    using BVDOutbreakSize
+    forecasts = joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "forecasts")
+    opens(l) = occursin(r"^\h*#md # <details>", l)
+    closes(l) = occursin(r"^\h*#md # </details>", l)
+    is_code(l) = !isempty(l) && !occursin(r"^\h*#", l)
+    ## A hidden line that shows a value rather than assigning or loading one.
+    shows(l) = occursin(r"#hide$", l) &&
+        !occursin(r";\s*#hide$", l) &&
+        !occursin(r"^\h*(using|import|include)\b", l) &&
+        !occursin(r"^[^=(]*[^=!<>]=[^=]", l)
+    folded = String[]
+    for (dir, _, files) in walkdir(forecasts), f in files
+        endswith(f, ".jl") || continue
+        path = joinpath(dir, f)
+        open_at_depth1 = false
+        saw_code = false
+        only_shows = true
+        for (i, l) in enumerate(eachline(path))
+            l = rstrip(l)
+            if opens(l)
+                open_at_depth1 = true
+                saw_code = false
+                only_shows = true
+                continue
+            end
+            if closes(l)
+                if open_at_depth1 && saw_code && only_shows
+                    push!(folded, "$(relpath(path, forecasts)):$i")
+                end
+                open_at_depth1 = false
+                continue
+            end
+            (open_at_depth1 && is_code(l)) || continue
+            saw_code = true
+            only_shows &= shows(l)
+        end
+    end
+    @test isempty(folded)
+end

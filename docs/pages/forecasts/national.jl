@@ -72,15 +72,7 @@ forecast_summary = forecast_table(forecast);
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>One-week-ahead forecast summary table</summary>
-#md # ```
-
 forecast_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # The latent figure shows the new infections, symptom onsets and deaths over the horizon, with the reproduction number left to keep evolving across it.
 
@@ -168,15 +160,7 @@ onset_forecast_summary = onset_forecast_table(onset_forecast);
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Symptom-onset nowcast and forecast summary table</summary>
-#md # ```
-
 onset_forecast_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # The left panel splits the coming week's new onset reports into reports of onsets that had already happened by the cut-off and reports of onsets still to come, and shows their sum.
 # The fourth bar is the same sum after it has been through the observation model, which is what the next vintage will actually print.
