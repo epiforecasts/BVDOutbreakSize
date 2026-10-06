@@ -18,6 +18,7 @@ It shades each province by its patients in isolation, its beds or the share of i
 Each is shown as last reported by the province, as modelled at the cut-off or as forecast a week ahead, with the modelled figures for the pooled provinces again shared.
 Hover over an area for its estimate, or click it for a side column with its key numbers, its reproduction number over time and its weekly counts against next week's forecast.
 With nothing selected the column shows the national figures, and the table sorts the areas by any column.
+Type an area's name in the box on the map, or click a row of the table, to zoom the map to that area and show its detail.
 The detail is on the [province estimates](estimates/province.md) and [health-zone estimates](estimates/zone.md) pages.
 
 ```@raw html

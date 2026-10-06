@@ -75,6 +75,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   Health zones report no treatment figures, so the view opens the province layer.
   Admissions are not shown, since the observations carry them for the country only.
   Fitted values do not change (#1080).
+- The dashboard map has a box that finds a health zone or province by name and zooms to it, and clicking a table row, or pressing Enter on it, does the same (#1079).
+  This also gives a keyboard route to every area.
+  Show national zooms back out to the whole map.
+- In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.

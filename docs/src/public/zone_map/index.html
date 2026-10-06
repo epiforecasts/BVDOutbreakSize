@@ -162,6 +162,7 @@ Nothing else is fetched.
   .chart .bar { fill: var(--neutral); }
   .chart .fc { stroke: var(--accent); stroke-width: 2; }
   .chart .fcpt { fill: var(--accent); }
+  #legend-slot { display: none; }
   .chart .beds { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
   .chart .bedfc { stroke: var(--ink-2); stroke-width: 2; }
   .chart .bedfcpt { fill: var(--ink-2); }
@@ -177,6 +178,15 @@ Nothing else is fetched.
     #stage { flex-direction: column; flex: none; }
     #mapwrap { flex: none; height: clamp(320px, 100vw, 560px); }
     #detail { width: auto; border-left: none; border-top: 1px solid var(--line); }
+    /* The legend sits under the map rather than covering it. */
+    #legend-slot { display: block; border-top: 1px solid var(--line); }
+    #legend-slot .legend {
+      box-shadow: none; border-radius: 0; max-width: none;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 0 12px;
+    }
+    #legend-slot .legend .t, #legend-slot .legend .note { grid-column: 1 / -1; }
+    .find input { width: 150px; }
   }
   #status {
     position: absolute; inset: 0; display: flex; align-items: center;
@@ -222,6 +232,17 @@ Nothing else is fetched.
   .tip-h { font-weight: 600; }
   .tip-s { color: var(--ink-2); font-size: 12px; }
   .leaflet-control-attribution { font-size: 10px; }
+  .find input {
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+    width: 190px; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
+  .find input:focus-visible { outline: 2px solid var(--accent); }
+  #table tbody tr { cursor: pointer; }
+  #table tbody tr:hover, #table tbody tr:focus-visible {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  #table tbody tr:focus-visible { outline: 2px solid var(--accent); }
 </style>
 </head>
 <body>
@@ -316,6 +337,7 @@ Nothing else is fetched.
     <div id="status">Loading the estimates.</div>
     <aside id="table" hidden aria-label="Estimates as a table"></aside>
   </div>
+  <div id="legend-slot"></div>
   <aside id="detail" aria-live="polite" aria-label="Detail for the selected area"></aside>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha256-XJrs/DDkVkUZ29zdzFOkGCJ9zHVo5hnpdi3c7HYJ7Uc=" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
@@ -706,6 +728,51 @@ Nothing else is fetched.
     return d;
   };
   legend.addTo(map);
+  // In the narrow layout the legend moves under the map, where it does not
+  // cover the shapes.
+  var legendHome = legend.getContainer().parentNode;
+  function placeLegend() {
+    var d = legend.getContainer();
+    var to = narrow.matches ? document.getElementById("legend-slot") : legendHome;
+    if (d.parentNode !== to) { to.appendChild(d); }
+  }
+  placeLegend();
+  if (narrow.addEventListener) { narrow.addEventListener("change", placeLegend); }
+
+  // Find an area by name and show it on the map (see focusArea).
+  var find = L.control({ position: "topleft" });
+  find.onAdd = function () {
+    var d = L.DomUtil.create("div", "find");
+    d.innerHTML = "<input type=\"search\" id=\"find\" list=\"find-list\" " +
+      "autocomplete=\"off\"><datalist id=\"find-list\"></datalist>";
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.disableScrollPropagation(d);
+    return d;
+  };
+  find.addTo(map);
+  // The datalist's labels, each mapped to its area's key, for the shown layer.
+  var findKeys = {};
+  function fillFind() {
+    var el = document.getElementById("find"), idx = layers[level].shapes;
+    var lab = level === "zone" ? "Find a health zone" : "Find a province";
+    el.placeholder = lab; el.setAttribute("aria-label", lab);
+    findKeys = {};
+    Object.keys(idx).forEach(function (k) {
+      var p = idx[k][0].feature.properties || {};
+      var t = level === "zone" ?
+        (p.label || p.nom || k) + " (" + provName(p.province) + ")" :
+        provName(p.province);
+      findKeys[t] = k;
+    });
+    document.getElementById("find-list").innerHTML = Object.keys(findKeys).sort()
+      .map(function (t) { return "<option value=\"" + esc(t) + "\">"; }).join("");
+  }
+  document.getElementById("find").addEventListener("change", function () {
+    var k = findKeys[this.value];
+    if (k === undefined) { return; }
+    this.value = ""; this.blur();
+    focusArea(k);
+  });
 
   // Per-layer rows keyed by zone or province, and the drawn layers. `rows`
   // and `byKey` point at the shown layer's.
@@ -847,11 +914,12 @@ Nothing else is fetched.
       .join("");
   }
 
-  function featureKey(f) {
+  function keyAt(lvl, f) {
     var p = f.properties || {};
-    return level === "province" ? p.province :
+    return lvl === "province" ? p.province :
       p.zone || slug(p.label || p.nom);
   }
+  function featureKey(f) { return keyAt(level, f); }
   function featureRow(f) { return byKey[featureKey(f)] || null; }
   function styleFor(f) {
     var r = featureRow(f);
@@ -1173,12 +1241,29 @@ Nothing else is fetched.
       esc(countWord + " in each week to the cut-off" + fcWord) + "</p>" +
       countChart(ts[stream], r);
     var b = document.getElementById("clear");
-    if (b) { b.addEventListener("click", function () { select(null); }); }
+    if (b) { b.addEventListener("click", function () { select(null); fitAll(); }); }
   }
   function select(key) {
     selected = key === null ? null : { key: key };
     if (layer) { layer.setStyle(styleFor); }
     renderDetail();
+  }
+  // Zoom to an area of the shown layer and select it, or open its tooltip
+  // when it has no row and so no detail. An open table that leaves part of the map uncovered keeps
+  // the area clear of it; one that covers the map closes.
+  function focusArea(key) {
+    var shapes = layers[level] && layers[level].shapes[key];
+    if (!shapes) { return; }
+    var t = document.getElementById("table"), pad = 10;
+    if (!t.hidden) {
+      if (t.offsetWidth >= document.getElementById("mapwrap").clientWidth - 1) {
+        toggleTable();
+      } else { pad = t.offsetWidth + 10; }
+    }
+    var b = L.featureGroup(shapes).getBounds();
+    map.fitBounds(b, { paddingTopLeft: [10, 10], paddingBottomRight: [pad, 10],
+                       maxZoom: 12 });
+    if (byKey[key]) { select(key); } else { shapes[0].openTooltip(b.getCenter()); }
   }
   // Long time-series rows grouped by area, then by series, in date order.
   function groupSeries(rows) {
@@ -1345,9 +1430,10 @@ Nothing else is fetched.
         "\" aria-sort=\"" + (i === k ? (sortDesc ? "descending" : "ascending") : "none") +
         "\">" + esc(c.title) + arrow + "</th>";
     }).join("") + "</tr></thead><tbody>" + sorted.map(function (r) {
-      return "<tr>" + cols.map(function (c) {
-        return "<td" + (c.num ? " class=\"num\"" : "") + ">" + c.html(r) + "</td>";
-      }).join("") + "</tr>";
+      return "<tr tabindex=\"0\" data-key=\"" + esc(r[level]) + "\">" +
+        cols.map(function (c) {
+          return "<td" + (c.num ? " class=\"num\"" : "") + ">" + c.html(r) + "</td>";
+        }).join("") + "</tr>";
     }).join("") + "</tbody></table>";
     t.querySelectorAll("th.sort").forEach(function (th) {
       th.addEventListener("click", function () {
@@ -1355,6 +1441,14 @@ Nothing else is fetched.
         sortDesc = i === k ? !sortDesc : true;
         sortKey = i;
         renderTable();
+      });
+    });
+    // A row, clicked or entered, shows its area on the map.
+    t.querySelectorAll("tbody tr").forEach(function (tr) {
+      function go() { focusArea(tr.dataset.key); }
+      tr.addEventListener("click", go);
+      tr.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
       });
     });
   }
@@ -1444,10 +1538,15 @@ Nothing else is fetched.
   }
 
   // The fill and hatch layers of one level's shapes, not yet on the map.
-  function buildLayers(geo) {
+  // `shapes` maps each area's key to its drawn shapes (several for a
+  // province drawn as its zones).
+  function buildLayers(geo, lvl) {
+    var shapes = {};
     var fill = L.geoJSON(geo, {
       style: styleFor,
       onEachFeature: function (f, l) {
+        var k = keyAt(lvl, f);
+        if (k) { (shapes[k] = shapes[k] || []).push(l); }
         l.bindTooltip(function () { return tipHTML(f); },
           { sticky: true, className: "zone-tip", opacity: 1 });
         l.on("click", function () { select(featureKey(f)); });
@@ -1464,7 +1563,7 @@ Nothing else is fetched.
       style: hatchStyle, interactive: false, pane: "hatch",
       renderer: L.svg({ pane: "hatch" })
     });
-    return { fill: fill, hatch: hatched };
+    return { fill: fill, hatch: hatched, shapes: shapes };
   }
   function showLevel() {
     var d = data[level], other = layers[level === "zone" ? "province" : "zone"];
@@ -1491,6 +1590,7 @@ Nothing else is fetched.
     document.getElementById("methods").href = "../methods#" +
       (zone ? "Health-zone-model" : "Joint-model");
     showAsOf();
+    fillFind();
     selected = null;
     recolour();
     renderDetail();
@@ -1503,6 +1603,9 @@ Nothing else is fetched.
     setTimeout(function () { status.hidden = true; }, 3000);
   }
 
+  function fitAll() {
+    map.fitBounds(layers.zone.fill.getBounds(), { padding: [10, 10] });
+  }
   function draw(geo) {
     // The hatching sits in its own pane above the fills and passes the
     // pointer through, so hover and click still reach the shape beneath.
@@ -1512,7 +1615,7 @@ Nothing else is fetched.
     var opane = map.createPane("outline");
     opane.style.zIndex = 460;
     opane.style.pointerEvents = "none";
-    layers.zone = buildLayers(geo);
+    layers.zone = buildLayers(geo, "zone");
     // Without Turf the province layer fills each zone with its province's
     // value and draws no outlines.
     var shapes = null;
@@ -1520,7 +1623,7 @@ Nothing else is fetched.
       if (typeof turf !== "undefined") { shapes = provinceShapes(geo); }
     } catch (e) { shapes = null; }
     provFromZones = !shapes;
-    layers.province = buildLayers(shapes || geo);
+    layers.province = buildLayers(shapes || geo, "province");
     if (shapes) {
       outline = L.geoJSON(shapes, {
         style: { color: cssVar("--ink"), weight: 1.8, opacity: 0.85,
@@ -1529,7 +1632,7 @@ Nothing else is fetched.
         renderer: L.svg({ pane: "outline" })
       }).addTo(map);
     }
-    map.fitBounds(layers.zone.fill.getBounds(), { padding: [10, 10] });
+    fitAll();
     labelProvinces(geo);
     showLevel();
     var area = params.get("area");
