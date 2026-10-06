@@ -203,6 +203,12 @@ const CONFIG = [
     ("134", Date(2026, 9, 25), Date(2026, 9, 21)),
     ("136", Date(2026, 9, 27), Date(2026, 9, 28)),
     ("137", Date(2026, 9, 28), Date(2026, 9, 28)),
+    # "138" is left out. Its render loses the outline between the 15 and
+    # 16 June bars, so 16 June reads 40 where every other vintage and the
+    # dashboard read 28 to 29, and its 14 May reads 12 against 8 (#1061).
+    ("139", Date(2026, 9, 30), Date(2026, 9, 28)),
+    ("140", Date(2026, 10, 1), Date(2026, 9, 28)),
+    ("141", Date(2026, 10, 2), Date(2026, 9, 28)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -263,7 +269,10 @@ const Y_AXIS_STEP = Dict(
     "133" => 25,
     "134" => 25,
     "136" => 25,
-    "137" => 25
+    "137" => 25,
+    "139" => 25,
+    "140" => 25,
+    "141" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -667,6 +676,13 @@ function bar_height(h, hp, nr, cols, cx, ppc)
     return hb, nr[jb]
 end
 
+# Whether a column with an outline reads within a pixel of another column.
+function two_agree(h, cols)
+    return any(
+        count(y -> abs(h[y] - h[x]) <= 1, cols) >= 2 for x in cols if h[x] > 0
+    )
+end
+
 function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
@@ -678,7 +694,9 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     yt = y_tick_rows(dark, line, base, H, W)
     ppc = median(diff(yt)) / float(y_step) # pixels per count
     y0 = yt[end]
-    # x scale from the weekly tick marks 2-6 rows below the baseline. The
+    # x scale from the weekly tick marks 2-5 rows below the baseline (on
+    # the short September renders the row below that reaches the tops of
+    # the date labels, whose strokes merge into the tick clusters). The
     # marks shrink with the render (down to 1 px tall on the JPEG figures)
     # and the strict mask loses some of them on the small renders, so both
     # masks are tried at every cut and the tick row whose regular weekly
@@ -687,7 +705,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     best_n = 0
     xt = Int[]
     for mask in (dark, line)
-        band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
+        band = vec(sum(mask[(base + 2):min(base + 5, H), :]; dims = 1))
         for cut in (4, 3, 2, 1)
             cand = cluster([x for x in 1:W if band[x] >= cut])
             length(cand) >= 8 || continue
@@ -723,6 +741,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     # neighbour's height, dropped when anything else is left
     isborder = (h .> 4) .&
         ((nd .>= max.(0.25 .* h, 6)) .| (ns .< 0.1 .* h) .| (nb .>= 3))
+    outline = (h .> 4) .& ((nd .>= max.(0.25 .* h, 6)) .| (nb .>= 3))
     soft = (h .> 4) .& (nd .>= max.(0.1 .* h, 5))
     nz = findall((h .> 2) .& .!isborder)
     # a column under the dashed line reads its bar from the outline; the
@@ -755,7 +774,10 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         # nearest outline on each side instead.
         c = round(Int, cx)
         reach = ceil(Int, ppd)
-        near = [x for x in max(1, c - reach):min(W, c + reach) if isborder[x]]
+        # past the last tick the bars are faded into the band and carry no
+        # saturated pixel, so only a dark outline bounds a bar there
+        border = off > 0 ? outline : isborder
+        near = [x for x in max(1, c - reach):min(W, c + reach) if border[x]]
         best = nothing
         for i in 1:(length(near) - 1)
             a, b = near[i], near[i + 1]
@@ -766,19 +788,47 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         if best !== nothing && best[1] <= ppd / 2
             lo, hi = best[2] + 1, best[3] - 1
         else
-            bl = findlast(x -> isborder[x], max(1, c - reach):(c - 1))
+            bl = findlast(x -> border[x], max(1, c - reach):(c - 1))
             bl === nothing || (lo = max(lo, max(1, c - reach) + bl))
-            br = findfirst(x -> isborder[x], (c + 1):min(W, c + reach))
+            br = findfirst(x -> border[x], (c + 1):min(W, c + reach))
             br === nothing || (hi = min(hi, c + br - 1))
         end
-        cols = [x for x in lo:hi if !soft[x] && !isborder[x]]
-        isempty(cols) && (cols = [x for x in lo:hi if !isborder[x]])
+        cols = [x for x in lo:hi if !border[x]]
+        if isempty(cols) && best !== nothing
+            # the clipped window holds only outline columns (two adjacent
+            # outlines on the day's centre): read the nearest outline pair
+            lo, hi = best[2] + 1, best[3] - 1
+            cols = [x for x in lo:hi if !border[x]]
+        end
+        interior = [x for x in cols if !soft[x]]
+        isempty(interior) || (cols = interior)
         isempty(cols) && continue
-        # washed fill on a tick column can read as gridline and break each run
-        # at a different row; a day that reads as neither empty nor a bar is
-        # read again without the skip
         bar = bar_height(hread, hp, nread, cols, cx, ppc)
-        bar === nothing && (bar = bar_height(h1, hp1, nr1, cols, cx, ppc))
+        # past the last tick a window can take in a column of the faded bar
+        # before it; when no two columns agree, the column nearest the day's
+        # centre is read (its fill extent when it shows no outline)
+        if off > 0 && bar isa Tuple && length(cols) >= 2 &&
+                !two_agree(hread, cols)
+            jn = argmin(x -> (abs(x - cx), x), cols)
+            hn = hread[jn] > 0 ? hread[jn] : hp[jn]
+            bar = (hn, nread[jn])
+        end
+        # washed fill on a tick column can read as gridline and break each run
+        # at a different row; a day that reads as neither empty nor a bar, or
+        # as a bar with no outline above the baseline's anti-alias in any
+        # column, is read again without the skip. That read can climb the
+        # gridline above the bar, so it is capped at the taller of the
+        # outline columns bounding the window
+        if bar === nothing || (bar isa Tuple && maximum(hread[cols]) <= 1)
+            bar = bar_height(h1, hp1, nr1, cols, cx, ppc)
+            edge = [
+                h[x] for x in (first(cols) - 1, last(cols) + 1)
+                    if 1 <= x <= W && isborder[x]
+            ]
+            if bar isa Tuple && !isempty(edge) && bar[1] > maximum(edge)
+                bar = (maximum(edge), min(bar[2], maximum(edge)))
+            end
+        end
         bar isa Tuple || continue
         hb, hr = bar
         total = round(Int, max(0.0, hb - 0.5) / ppc)
