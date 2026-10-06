@@ -67,7 +67,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The dashboard map gains a treatment-centre view by province: patients in isolation, beds and the share of beds in use, each as last reported, as modelled at the cut-off and as forecast a week ahead, with the reported series in the detail column.
   Health zones report no treatment figures, so the view opens the province layer.
   Admissions are not shown, since the observations carry them for the country only.
-  Fitted values do not change (#PRNUM).
+  Fitted values do not change (#1080).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
