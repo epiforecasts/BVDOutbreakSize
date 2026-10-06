@@ -950,6 +950,38 @@ end
     end
 end
 
+@testitem "onset_report_hazard_model draws the delay deviations centred" begin
+    ## The basis coordinates are drawn on the scale `σ_h0` and enter the
+    ## hazard unscaled, so the sampled name is `y_h0` and not a standard
+    ## `z_h0`. Their prior is unchanged: with `σ_h0 ~ N⁺(0, 1)`, so
+    ## `E[σ_h0²] = 1`, the deviations have covariance `I - J / D`.
+    using BVDOutbreakSize: onset_report_hazard_model, sum_to_zero_basis
+    using Turing: returned
+    using Random: MersenneTwister
+    using Statistics: cov
+
+    D = 5
+    model = onset_report_hazard_model(1, 1; D)
+    rng = MersenneTwister(20261005)
+    draw = rand(rng, model)
+    @test haskey(draw, :y_h0)
+    @test !haskey(draw, :z_h0)
+    out = returned(model, draw)
+    @test out.logit_h0 ≈ draw[:η0] .+ sum_to_zero_basis(D) * draw[:y_h0]
+
+    dev = reduce(
+        hcat,
+        (
+            let o = returned(model, rand(rng, model))
+                o.logit_h0 .- o.η0
+            end
+                for _ in 1:20_000
+        )
+    )
+    target = [(i == j) - 1 / D for i in 1:D, j in 1:D]
+    @test maximum(abs, cov(dev; dims = 2) .- target) < 0.05
+end
+
 @testitem "onset_reporting_model anchors the report-date walk at the first snapshot" begin
     ## Onset dates reach back well before the first figure (report day 40),
     ## as they do once every date's first print is scored as a level. No
