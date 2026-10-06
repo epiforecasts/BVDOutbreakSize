@@ -1003,13 +1003,17 @@ jobs:
   # This page reads every group. The sensitivity group is skipped on
   # pull requests, which would skip this job too under the default
   # `success()`, so the condition is spelled out.
+  # The national estimates page also reads the health-zone meld (`local`)
+  # for its fit diagnostics, so it waits on `fit_zone` too.
   render_all:
     name: Render ${{ matrix.id }}
-    needs: [fit_joint, fit_streams, fit_frozen, fit_sensitivity, overlays]
+    needs:
+      [fit_joint, fit_streams, fit_frozen, fit_zone, fit_sensitivity, overlays]
     if: >-
       ${{ !cancelled() && needs.fit_joint.result == 'success' &&
       needs.fit_streams.result == 'success' &&
       needs.fit_frozen.result == 'success' &&
+      needs.fit_zone.result == 'success' &&
       needs.overlays.result == 'success' &&
       (needs.fit_sensitivity.result == 'success' ||
       needs.fit_sensitivity.result == 'skipped') }}
