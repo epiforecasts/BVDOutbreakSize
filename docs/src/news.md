@@ -93,7 +93,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 - The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).
 - The national and province forecast summary tables show by default instead of being folded away behind their own dropdown (#1056).
-- The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (resolves #1063).
+- The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
 
 ## v2.2.0
 
