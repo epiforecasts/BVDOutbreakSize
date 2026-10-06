@@ -121,6 +121,28 @@ zone_map_fig = plot_zone_map_panels(
 
 zone_map_fig #hide
 
+# Each bubble is one of the twelve zones with the most confirmed cases over the past two weeks, set against its reproduction number, with the week before.
+
+#md # ```@raw html
+#md # <details><summary>Compute the weekly cases and reproduction number by zone</summary>
+#md # ```
+
+zone_cases_rt = cases_rt_table(
+    zone_rt_traj, zone_inputs.days, zone_inputs.counts;
+    cutoff = obs.cutoff, n = obs.n, areas = zone_inputs.zone_labels,
+    patch = zone_patch
+);
+zone_cases_rt_fig = plot_cases_rt(
+    zone_cases_rt; patch_labels = zone_inputs.patch_labels, top = 12,
+    unit = "health zone"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_cases_rt_fig #hide
+
 # The panels below trace the reproduction number of the twelve zones with the most infections over the past week as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
 # Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
 # The patch line averages all the patch's zones weighted by their recent infections, so the zones shown tend to move it most.
@@ -485,7 +507,7 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-## The health-zone maps and the one-week zone forecast for the summary
+## The health-zone maps, the weekly cases against R and the one-week zone forecast for the summary
 ## dashboard, and the per-zone estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number and the chance it exceeds one, the one-week forecast and the
@@ -493,6 +515,7 @@ mkpath(dashboard_dir)
 ## is modelled separately (`walking`) and the data cut-off. A zone below the
 ## reporting floor carries no reproduction number.
 CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
+CairoMakie.save(joinpath(dashboard_dir, "cases_rt_zones.png"), zone_cases_rt_fig)
 _zone_deaths = [
     let h = obs.zone_death_history
         haskey(h, prov) && haskey(h[prov], z) &&

@@ -33,10 +33,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
-# The figure sets each province's confirmed cases over a week against its reproduction number on the last day of that week.
-# The weeks end on the last date the situation reports give provincial counts, and the dotted line traces the weeks before the most recent one.
-# The hollow diamond is the one-week-ahead forecast of both, as defined in the [province forecast](@ref "Province forecast") Methods section.
-# The horizontal line marks a reproduction number of one and the vertical line the median of the provinces' most recent weekly counts.
+# Each bubble is a province's confirmed cases over the most recent week against its reproduction number, with the week before and the [forecast](@ref "Province forecast") week ahead.
 
 #md # ```@raw html
 #md # <details><summary>Compute the weekly cases and reproduction number by province</summary>
@@ -56,12 +53,11 @@ province_summary_rt = reconstruct_patch_rt(
 province_summary_forecast = forecast_provinces(
     fit_forecast("joint"); horizon = 7, n_patches = N_PATCHES
 );
-province_cases_rt = province_cases_rt_table(
+province_cases_rt = cases_rt_table(
     province_summary_rt, province_cases.days, province_cases.increments;
-    cutoff = obs.cutoff, n = obs.n, weeks = 6,
-    forecast = province_summary_forecast, horizon = 7
+    cutoff = obs.cutoff, n = obs.n, forecast = province_summary_forecast
 );
-province_cases_rt_fig = plot_province_cases_rt(province_cases_rt);
+province_cases_rt_fig = plot_cases_rt(province_cases_rt);
 
 #md # ```@raw html
 #md # </details>
@@ -500,9 +496,9 @@ province_currency #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison and the reproduction
-# number by province, so they are written here rather than on the National
-# page.
+# The summary dashboard shows the province comparison, the reproduction
+# number by province and the weekly cases against the reproduction number,
+# so they are written here rather than on the National page.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -513,6 +509,9 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+CairoMakie.save(
+    joinpath(dashboard_dir, "cases_rt_provinces.png"), province_cases_rt_fig
+)
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, province_headline_md)
 end

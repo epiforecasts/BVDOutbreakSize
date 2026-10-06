@@ -52,8 +52,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The province estimates page opens with a scatter of each province's weekly confirmed cases against its reproduction number at the end of the week (#1072, resolves #1054).
-  Each province carries a dotted trajectory over the past six weeks and its one-week-ahead forecast, with reference lines at one and at the median recent weekly count.
+- A bubble plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
+  Bubble size shows the uncertainty in the reproduction number, a faded triangle the week before and, for provinces, a hollow bubble the forecast week ahead.
   Fitted values do not change.
 - The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
   The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#1073).
