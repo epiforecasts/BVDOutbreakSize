@@ -15,7 +15,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
 - The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
 - The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
-- The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient; fitted values do not change (#1048).
+- The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
+  This cuts the zone gradient by about 5%, with the timings in #1081.
+  The model does not change.
 
 ### Model
 
