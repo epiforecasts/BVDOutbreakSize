@@ -39,6 +39,7 @@ frozen_results = [frozen_by_cutoff[c] for c in frozen_cutoffs]
 if RUN_SENSITIVITY
     chn_joint_community_delay = load_fit("sens_community_delay")
     chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
+    chn_joint_patch_partition = load_fit("sens_patch_partition")
 end
 posterior_C_joint = vec(Array(chn_joint[:C_T]))
 prior_chn = joint_prior_draws();
@@ -176,6 +177,7 @@ fit_diagnostics_table = diagnostics_table(
             [
                 "delay sensitivity" => chn_joint_community_delay,
                 "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
+                "partitioned patches" => chn_joint_patch_partition,
             ] :
             []
     )...

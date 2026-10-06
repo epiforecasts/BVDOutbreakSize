@@ -12,7 +12,9 @@
     @test headline.n_patches == length(PROVINCE_NAMES)
 
     overrides = sensitivity_overrides(obs)
-    @test keys(overrides) == (:sens_community_delay, :sens_exp_growth_clock)
+    @test keys(overrides) == (
+        :sens_community_delay, :sens_exp_growth_clock, :sens_patch_partition,
+    )
     for ov in overrides
         variant = headline_joint_args(obs; ov...)
         @test issetequal(keys(variant), union(keys(headline), keys(ov)))
@@ -21,6 +23,10 @@
         end
     end
     @test overrides.sens_exp_growth_clock.tmrca_days != headline.tmrca_days
+    ## The headline keeps `bvd_joint`'s free patch renewal.
+    @test !haskey(headline, :patch_infection)
+    @test overrides.sens_patch_partition.patch_infection ===
+        partitioned_patch_infection_model
 
     withenv("BVD_RUN_SENSITIVITY" => "true") do
         ids = fit_ids(obs)

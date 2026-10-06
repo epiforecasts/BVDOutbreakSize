@@ -22,6 +22,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- A partitioned form of the patch model runs one national renewal at the national trend and splits each day's infections across the provinces by their force of infection after importation (#1076).
+  The provinces then sum to the national renewal by construction and cannot go negative, and the province deviations move only the split, not the national size.
+  It is selected with `patch_infection = partitioned_patch_infection_model` and fitted as the `sens_patch_partition` sensitivity re-fit, which runs alongside the other sensitivity re-fits on `main` and is compared with the headline on the national in-sample checks page.
+  The headline model is unchanged, so its fitted values move only by the sampling noise of the refit the new sources trigger.
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
