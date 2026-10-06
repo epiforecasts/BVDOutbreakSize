@@ -18,6 +18,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The onset reporting hazard draws its delay deviations in centred form, on the scale $\sigma_{h0}$, so `z_h0` becomes `y_h0` (#1060).
+  The triangle pins the hazard between two and eleven days' delay, and the non-centred form tied those deviations to $\sigma_{h0}$, which failed the joint fit's convergence check (R-hat 1.10 and 28 bulk effective samples, reported in #1060).
+  On local onsets-only fits at two seeds (two chains of 500 draws each, reported in the pull request) the centred form raises the bulk effective samples of $\sigma_{h0}$ from 106 and 54 to 476 and 396, with the same posterior.
+  The prior is unchanged, so fitted values change only by sampling noise.
 - The capacity growth SD prior is `N⁺(0, 0.05)`, so its 95th percentile covers the fitted 0.07; fitted values change (#1050).
 - The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
 - The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
@@ -36,12 +40,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 136, 27 September.
+- The model cut-off advances to SitRep 141, 2 October.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
-  SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018).
+  SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
+  SitReps 138 to 141 are not added to the onset curve, because the reader still misreads bars on their renders (#1061).
+  The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 136 (27 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
@@ -49,6 +55,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The province estimates page opens with a scatter of each province's weekly confirmed cases against its reproduction number at the end of the week (#1072, resolves #1054).
   Each province carries a dotted trajectory over the past six weeks and its one-week-ahead forecast, with reference lines at one and at the median recent weekly count.
   Fitted values do not change.
+- The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
+  The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#1073).
+- The methods score the confirmed positives as a beta-binomial with its intra-window correlation and prior, as the model does, not as a binomial (#1073).
 - The health-zone methods are shorter and say plainly what the zone model takes from the joint model: sampled weekly patch infections and origin intensities, fixed delays and mean import odds, and inherited priors (resolves #1057).
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
