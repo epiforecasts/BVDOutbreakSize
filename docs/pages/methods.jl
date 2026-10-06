@@ -1247,7 +1247,7 @@ cfr_prior_fig #hide
 # The latent demand is never capped, because the demand is the quantity of interest.
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
-# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.02)$.
+# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
@@ -2097,13 +2097,21 @@ cfr_prior_fig #hide
 
 # ### Health-zone model
 #
-# The situation reports also give cumulative confirmed cases and deaths per health zone within each province.
-# A second-stage model splits each patch's infections across its zones, conditional on the fitted joint model above.
-# This is a two-stage Markov melding [goudie2019](@cite) run one way.
-# The zone stage takes the joint model's posterior over the shared quantity as its prior and updates it with the zone data, as the equation below writes.
-# The zone data do not update the joint model, so the national and province estimates are unchanged.
-# Write $\xi$ for the quantity the two stages share, $\psi$ for the zone parameters, $Y_1$ for the national and provincial data and $Y_2$ for the zone tables.
-# The zone stage samples
+# The situation reports also give cumulative confirmed cases and deaths for each health zone.
+# A second model splits the joint model's infections in each patch across the health zones of that patch.
+# It is fitted after the joint model, to the same cut-off, and does not feed back into it.
+# The national and province estimates are therefore unchanged.
+#
+# #### Inputs from the joint model
+#
+# The zone model takes three things from the joint model.
+# It samples the joint model's weekly infections in each patch and, when zones mix, the importation intensity of each origin patch at the cut-off.
+# It fixes the generation interval and the delays at their joint posterior means.
+# It also fixes the mean import log odds and the arrival shares, and each draw recomputes the import fraction from its sampled curves.
+# The scales the two levels share take their priors from the joint posterior for the same scales between provinces.
+#
+# The sampling step is two-stage Markov melding [goudie2019](@cite) run one way.
+# With $\xi$ the sampled joint quantities, $\psi$ the zone parameters, $Y_1$ the national and province data and $Y_2$ the zone tables, the zone model samples
 #
 # ```math
 # p(\psi, \xi \mid Y_1, Y_2) \;\propto\;
@@ -2111,62 +2119,56 @@ cfr_prior_fig #hide
 # ```
 #
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
-#
-# The shared quantity is the joint model's weekly infections in each patch, $S_{p,w}$.
-# A window in which a patch's mean infections stay below one is dropped as not yet seeded.
-# When the zones mix, the log importation intensity of each origin patch at the cut-off, $\log \varepsilon_q$ of Equation (15), is appended after the kept pairs $(p, w)$, for $d$ cells in all.
-# Over the joint model's draws the kept cells have sample covariance $\hat\Sigma$.
-# Its Cholesky factor $L$ is taken after adding $10^{-6}$ of each cell's own variance to the diagonal, which conditions the factorisation without rescaling any week.
-# The joint model carries fewer draws than there are cells, so $\hat\Sigma$ can still be singular.
-# The factorisation then blends toward its own diagonal, $(1 - \lambda)\hat\Sigma + \lambda\,\mathrm{diag}(\hat\Sigma)$, at the smallest $\lambda$ that succeeds.
-# Shrinking toward the diagonal of $\hat\Sigma$ rather than toward the identity keeps every week's own variance and gives up only the correlations.
+# We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections and the log intensities $\log \varepsilon_q$ of Equation (15).
+# A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
+# With $L$ the Cholesky factor of the draws' sample covariance over the $d$ kept cells, one draw is
 #
 # ```math
 # \eta \sim \mathrm{Normal}(0, I_d), \qquad
-# a = L\eta, \qquad
-# I_{p,t} = \bar I_{p,t}\, e^{a_p(t)}. \tag{56}
+# \zeta = L\eta, \qquad
+# I_{p,t} = \bar I_{p,t} \exp \zeta_p(t), \qquad
+# \varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q. \tag{56}
 # ```
 #
-# Here $a_p(t)$ interpolates patch $p$'s kept week midpoints and holds flat outside them, and $\bar I_{p,t}$ is the exponential of the joint model's posterior mean log infections.
-# The rows of $a$ for the intensities, $c_q$, give the draw's intensity $\varepsilon_q = \bar\varepsilon_q e^{c_q}$, with $\bar\varepsilon_q$ the exponential of the joint model's posterior mean log intensity.
-# One draw moves whole patch trajectories, and moves the patches and the intensities together where the joint model says they move together.
-# Nothing else in the zone stage carries a second term from that posterior.
-# The zone infections sum to the sampled patch totals by construction, so scoring those sums again would count the same posterior twice, in every direction the draw already sets.
+# Here $\bar I_{p,t}$ and $\bar\varepsilon_q$ are the exponentials of the joint posterior mean log infections and log intensities.
+# The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ is the cell for origin $q$.
+# The joint model has fewer draws than cells, so the covariance is shrunk toward its own diagonal by the least weight that factorises.
 #
-# The generation interval $\bar g$ and the infection-to-report delay $\bar f$ are the joint model's posterior mean distributions, $\bar f$ the incubation period convolved with the report-to-receipt delay.
-# The infection-to-confirmed-death delay adds the onset-to-death delay.
+# A draw moves whole patch trajectories, and moves patches and intensities together where the joint posterior correlates them.
+# The zone infections of a patch sum to its sampled infections by construction.
+# This is the only term from the joint posterior, since scoring the zone sums again would count it twice.
 #
-# The units are the health zones that have reported a confirmed case, nested in the four patches, so the pooled patch's zones span Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi.
-# The zone tables are read at the vintages $d_1 < \dots < d_V$ they were printed on, from Tableau 2 of the same situation reports [insp_sitrep_2026](@cite).
-# Zone populations and centroids come from the Ministry of Health health-zone boundaries [hdx_drc_health_zones](@cite) with WorldPop population counts [worldpop_2025](@cite).
-# The zone stage and the joint model it melds from are fitted to the same cut-off, the one this report carries throughout.
-# A parent fitted to a different one is refused rather than aligned.
-# A zone's increment $y_{z,v}$ at vintage $v$ is the difference of its cumulative count from the previous vintage, clamped at zero, and the first vintage's increment is its cumulative count.
-# The allocated patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ excludes the report's unallocated row.
-# A patch and vintage with no allocated cases is not scored.
-# A vintage on which a province's unallocated count falls is a reattribution of counts into named zones rather than new cases, so that province's zone split is not scored on that date.
-# The zone grid starts on day $t_0$, 42 days before the first zone vintage, and carries weekly knots $k = 1, \dots, K$ from there to the cut-off.
+# #### Zone data
 #
-# The shares start from a within-patch softmax of standard-normal draws at a fixed scale of two, centred within the patch:
+# The zone tables are Tableau 2 of the same situation reports [insp_sitrep_2026](@cite), read at the vintages $d_1 < \dots < d_V$ on which they were printed.
+# The units are the health zones that have reported a confirmed case.
+# Zone populations and centroids come from the Ministry of Health health-zone boundaries [hdx_drc_health_zones](@cite) and WorldPop [worldpop_2025](@cite).
+# A zone's increment $y_{z,v}$ is the rise in its cumulative count since the previous vintage (or since zero at the first), floored at zero.
+# The patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ leaves out the report's unallocated row.
 #
-# ```math
-# w_{z,t_0} = \frac{\exp\bigl(2\,(z^w_z - \bar z^w_p)\bigr)}
-#   {\sum_{z' \in p} \exp\bigl(2\,(z^w_{z'} - \bar z^w_p)\bigr)}, \qquad
-# z^w_z \sim \mathrm{Normal}(0, 1). \tag{57}
-# ```
+# A vintage can move earlier counts into named zones rather than add new ones.
+# The case composition leaves out a patch on a vintage on which the unallocated count of one of its provinces falls in either table.
+# The death composition leaves out a patch on a vintage on which its unallocated deaths fall or a named zone loses more than one death.
 #
-# From the grid start each zone runs the renewal on its own past infections, scaled by a log-transmission deviation $\delta_{z,t}$:
+# #### Zone infections
+#
+# The zone model starts on day $t_0$, 42 days before the first zone vintage, with weekly knots from there to the cut-off.
+# Before $t_0$ zone $z$ holds an initial share $w_z$ of its patch, a softmax within the patch of standard-normal draws at a fixed scale of two.
+# From $t_0$ each zone runs the renewal on its own past infections, scaled by a log-transmission deviation $\delta_{z,t}$:
 #
 # ```math
 # \Lambda_{z,t} = \sum_{s \ge 1} \bar g_s\, I_{z,t-s}, \qquad
-# u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{58}
+# u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{57}
 # ```
 #
-# with $I_{z,t} = I_{p,t}\, w_{z,t_0}$ on the days before the grid start.
+# with $\bar g$ the joint posterior mean generation interval and $I_{z,t} = w_z I_{p,t}$ before $t_0$.
+# Without movement between zones, zone $z$ takes the share $u_{z,t} / \sum_{z' \in p} u_{z',t}$ of $I_{p,t}$.
 #
-# Infections cross zone boundaries as they cross provincial ones in Equation (18), through a gravity kernel at a per-origin intensity.
-# The kernel is decomposed so that the movement the joint model already estimated is not estimated again.
-# Both blocks are normalisations of one gravity pull over all zones, the form of Equation (14) and the coupling of [xia2004](@citet) with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
+# #### Movement between zones
+#
+# Movement between patches is the joint model's own, and only movement within a patch is estimated here.
+# With $p(z)$ the patch of zone $z$, $N_z$ its population and $d_{zq}$ the distance between zone centroids, both blocks normalise one gravity pull over all zones.
+# This is the form of Equation (14) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
 #
 # ```math
 # \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
@@ -2182,80 +2184,77 @@ cfr_prior_fig #hide
 # K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
 #     {\sum_{z' \in p(q)} \mathrm{pull}_{z'q}}, \qquad
 # K^{\text{b}}_{zq} = K_{p(z)p(q)}\,
-#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{59}
+#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{58}
 # ```
 #
-# the first for zones in the same patch and the second for zones in different ones, with $K$ the provincial kernel of Equation (14).
+# the first within a patch and the second between patches, with $K$ the province kernel.
 # Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$ and $\omega$, so they move only where a flow lands among the patch's zones.
 #
-# Between patches the arrivals are the joint model's own, $M_{p,t} = f_{p,t} I_{p,t}$.
-# The import fraction $f_{p,t}$ is the joint model's arrivals formula on the draw's curves and intensities:
+# Patch $p$ receives $M_{p,t} = f_{p,t} I_{p,t}$ imported infections on day $t$.
+# The import fraction $f_{p,t}$ is the joint model's arrivals formula on the sampled curves and intensities:
 #
 # ```math
 # \operatorname{logit} f_{p,t} = \bar o_{p,t}
-#   + \log \sum_{q \ne p} s_{pq,t}\, e^{c_q + a_q(t)} - a_p(t),
+#   + \log \sum_{q \ne p} s_{pq,t} \exp\bigl(\zeta^{\varepsilon}_q + \zeta_q(t)\bigr) - \zeta_p(t),
 # \qquad
 # s_{pq,t} = \frac{\bar\varepsilon_q K_{pq} \bar I_{q,t}}
-#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}},
+#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}}, \tag{59}
 # ```
 #
-# with $\bar o_{p,t}$ the joint model's posterior mean log odds that an infection in $p$ was imported.
-# Within a patch the spill is a transfer:
+# with $\bar o_{p,t}$ the joint posterior mean log odds that an infection in $p$ was imported.
+# Within a patch, zone $q$ keeps $1 - \varepsilon_q$ of its force and spreads $\varepsilon_q$ over the other zones of its patch.
+# The patch's own infections are shared in proportion to the result, and its imports in proportion to the pull $h_{z,t}$ of zones in other patches:
 #
 # ```math
 # v_{z,t} = (1 - \varepsilon_z) u_{z,t}
 #   + \sum_{q \in p,\, q \ne z} \varepsilon_q K^{\text{w}}_{zq}\, u_{q,t},
 # \qquad
-# c_{p,t} = \frac{I_{p,t} - M_{p,t}}{\sum_{z \in p} v_{z,t}}, \tag{60}
+# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \varepsilon_{p(q)}
+#     K^{\text{b}}_{zq}\, u_{q,t}, \tag{60}
 # ```
 #
 # ```math
-# h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \varepsilon_{p(q)}
-#     K^{\text{b}}_{zq}\, u_{q,t},
-# \qquad
-# I_{z,t} = c_{p,t}\, v_{z,t}
+# I_{z,t} = (I_{p,t} - M_{p,t}) \frac{v_{z,t}}{\sum_{z' \in p} v_{z',t}}
 #   + M_{p,t}\, \frac{h_{z,t}}{\sum_{z' \in p} h_{z',t}},
 # \qquad
-# w_{z,t} = \frac{I_{z,t}}{I_{p,t}}, \tag{61}
+# w_{z,t} = \frac{I_{z,t}}{I_{p,t}}. \tag{61}
 # ```
 #
-# Here $\varepsilon_{p}$ is the draw's per-origin intensity of Equation (56).
-# It enters only as a relative weight across origin patches.
-# The zone infections of a patch therefore sum to $I_{p,t}$ exactly.
-# The within-patch spill is the zone stage's own mechanism and carries its own intensity, one level with a pooled per-origin deviation:
+# The origin intensities $\varepsilon_{p(q)}$ are the sampled ones of Equation (56), and the zone infections of a patch sum to $I_{p,t}$ exactly.
+# The within-patch intensity has one level and a pooled deviation for each origin zone, with priors of our choice:
 #
 # ```math
 # \operatorname{logit} \varepsilon_z = \operatorname{logit} \varepsilon_{\text{w}}
 #     + \tau (z^\varepsilon_z - \bar z^\varepsilon), \qquad
 # \varepsilon_{\text{w}} \sim \mathrm{Beta}(1,\ 20), \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5). \tag{62}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# z^\varepsilon_z \sim \mathrm{Normal}(0, 1). \tag{62}
 # ```
 #
-# The deviations are the patch deviation process of Equation (6), run with one group per patch and the zones of a patch as its units.
-# The level and the innovations are drawn on the sum-to-zero basis of the patch and correlated within it, so each patch sums to zero at every knot.
-# The correlation decays with the distance between zone centroids, and $\rho_{\text{corr}}$ is the correlation of two zones a reference distance $\bar d$ apart, $\bar d$ being the mean distance between the provincial population centres:
+# #### Zone deviations
+#
+# The deviations $\delta_{z,t}$ follow the province deviation process of Equation (6), with the zones of each patch as its units.
+# They sum to zero within each patch at every knot, and their correlation decays with the distance between zone centroids [diggle1998](@cite):
 #
 # ```math
 # C_{zq} = \exp(-d_{zq} / \ell), \qquad
-# \ell = -\bar d / \log \rho_{\text{corr}}. \tag{63}
+# \ell = -\bar d / \log \rho_{\text{corr}}, \tag{63}
 # ```
 #
-# A ridge of $10^{-6}$ on the diagonal of $C$ conditions its Cholesky factorisation.
-# In place of the Wishart factor of Equation (7), $A_p$ is the Cholesky factor of $Q_p^{\top} C_p Q_p$, with $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$.
-# The level $\sigma_L Q_p A_p \mathbf{z}^{L}_p$ then has covariance $\sigma_L^2 P_p C_p P_p$ with $P_p = I - J/n_p$, that of correlated zone draws centred within the patch, from $n_p - 1$ draws.
-# The innovations are built the same way over the walking zones of the patch.
+# with $\rho_{\text{corr}}$ the correlation at $\bar d$, the mean distance between provincial population centres.
+# In place of the Wishart factor of Equation (7), patch $p$ uses the Cholesky factor of $Q_p^{\top} C_p Q_p$.
+# $C_p$ is the block of $C$ for the $n_p$ zones of $p$ and $Q_p$ is their sum-to-zero basis.
 #
-# Zones enter through the distance between their centroids rather than through shared borders, so the correlation is the exponential covariance of model-based geostatistics [diggle1998](@cite), a Matérn kernel at $\nu = 1/2$.
-# Only walking zones carry innovations, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones.
-# Every other zone decays along the mean path $\phi_{\text{z}}^{k-1}\,\delta_{z,1}$ from its level.
-# The level scale takes $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$, twice the province model's, and the half-life keeps the province model's prior $h_{\text{z}} \sim \mathrm{LogNormal}(\log 42, 0.6)$ with $\phi_{\text{z}} = 2^{-7/h_{\text{z}}}$.
-# Each patch has its own drift scale $\sigma_{\delta,p}$ as in Equation (7).
+# Only zones with at least 30 cumulative confirmed cases at the cut-off take weekly innovations, and only in patches with two or more such zones.
+# The other zones keep a level that decays toward zero.
+# We use a prior of $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$ for the level scale, twice the province one, and keep the province half-life prior.
+# The drift scale of each patch and $\rho_{\text{corr}}$ take log-normal and beta priors fitted to the joint model's draws, as do the composition overdispersions and the ascertainment scale below.
+# A negative province correlation enters as zero, since provinces moving apart says nothing about how neighbouring zones move.
 #
-# Every scale the two levels share takes its prior from the joint model's posterior for the same quantity between provinces, fitted to its draws: a log-normal for each positive scale and a beta for each correlation and overdispersion.
-# This is what makes a zone start at its province's estimate and depart only as far as its own counts require.
-# A negative provincial correlation enters the zone prior as no correlation, since two provinces moving apart says nothing about how far two neighbouring zones move together.
+# #### Zone observations
 #
-# The expected confirmed reports of a zone in the window of vintage $v$ carry its infections through $\bar f$, and the observed increments of each patch and vintage follow a Dirichlet-multinomial on the allocated total, the composition of Equation (54) in its unsequenced form:
+# Expected confirmed cases carry each zone's infections through the infection-to-report delay $\bar f$, the incubation period convolved with the report-to-receipt delay.
+# Each patch and vintage then follows a Dirichlet-multinomial on its total, the composition of Equation (54) without the ordering:
 #
 # ```math
 # C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} \bar f_s\, I_{z,t-s},
@@ -2265,61 +2264,54 @@ cfr_prior_fig #hide
 # \kappa = \frac{1 - \rho}{\rho}. \tag{64}
 # ```
 #
-# The allocated confirmed deaths of every vintage follow a second Dirichlet-multinomial of the same form, on the infection-to-confirmed-death delay, with its own intra-class correlation $\rho_{\text{death}}$.
-# A case table and a death table do not disperse alike.
-# The two do not share one concentration.
-#
-# Cases observe incidence times case-finding and deaths incidence times lethality, and each composition is normalised within its patch:
+# Expected confirmed deaths $D_{z,v}$ use the incubation period convolved with the joint model's onset-to-confirmed-death delay.
+# They follow a second Dirichlet-multinomial with its own intra-class correlation $\rho_{\text{death}}$.
+# Cases scale with case-finding and deaths with lethality, so the two compositions are
 #
 # ```math
 # \pi^{C}_{z,v} = \frac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}},
 # \qquad
-# \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}. \tag{65}
+# \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{65}
 # ```
 #
-# Relative ascertainment $a_z$ and relative fatality $\theta_z$ are the provincial composition's own multiplier over the zones of a patch, log contrasts summing to zero within the patch:
+# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built as in the [province compositions](@ref methods-province-compositions):
 #
 # ```math
 # a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
 # \qquad
-# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr), \tag{66}
+# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr),
+# \qquad
+# \mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1}). \tag{66}
 # ```
 #
-# with $\mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1})$ and $Q_p$ the sum-to-zero basis over the $n_p$ zones of patch $p$, as in the [province compositions](@ref methods-province-compositions).
-# A composition identifies only the product of a multiplier and the incidence split, so the pooling is what separates them: as $\sigma$ shrinks the shares weight zones by incidence alone.
+# Both are relative to the zone's own province, because a factor common to a patch cancels within it.
+# We report their product with the province multipliers as each zone's ascertainment and fatality against the national average.
 #
-# Both are relative to the zone's own province.
-# A factor common to a patch cancels in a within-patch composition, so the province level of each multiplier is the one the [province compositions](@ref methods-province-compositions) estimate, and only the zone level is estimated here.
-# The ascertainment scale $\sigma_a$ takes its prior from the province posterior for the same scale between provinces, so the two levels are pooled toward a common national value.
-# The fatality scale is tight, $\sigma_\theta \sim \mathrm{Normal}^{+}(0,\ 0.1)$.
 # Two compositions carry three unknowns per zone, so one has to be pinned.
-# A tight $\sigma_\theta$ asserts that deaths per infection vary little between the zones of a patch, which lets the death composition pin the incidence split and the case composition identify ascertainment as the residual.
-# It is the asymmetry the [province compositions](@ref methods-province-compositions) make between death ascertainment and provincial lethality, one level down.
-# The assumption is stronger here, since zones within a province differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
-# The product of the two contrasts is reported as each zone's ascertainment and fatality against the national average.
+# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.1)$, which assumes that deaths per infection vary little between the zones of a patch.
+# The death composition then sets the split of incidence and the case composition gives ascertainment as the residual.
+# Zones differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
 #
-# The implied zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
+# #### Zone reproduction number
+#
+# The zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
 #
 # ```math
 # R_{z,t} = \frac{I_{z,t}}{\Lambda_{z,t}}. \tag{67}
 # ```
 #
-# It is reported only from the day the zone's cumulative infections reach ten in the median draw.
-# For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
-# The results rank zones by the posterior probability that the reproduction number exceeds one.
+# It is reported from the day the zone's cumulative infections reach ten in the median draw.
+# For a zone without innovations it is the patch value scaled by the zone's decaying deviation level when zones do not mix.
+# With movement between zones, imported infections also enter the zone, so this holds only approximately.
+# The results rank zones by the posterior probability that it exceeds one.
 #
-# We assume the generation interval and the two delays are the joint model's posterior means.
-# The weekly patch infections and the per-origin intensities are melded, so the zone stage carries the joint model's uncertainty in those and not in the delays.
-# The import fraction follows from them through the arrivals formula, which leaves out the joint model's change in intensity at detection.
-# Straight-line distance stands for the roads, the lake and the international border that carry movement.
-# We assume the gravity form, with its decay and destination weights fitted to the zone counts, carries movement between zones, with no mobility data to check it against.
-# The increments are consecutive-vintage differences clamped at zero.
-# The walking set depends on the data and can differ between fits at different cut-offs.
-# A revision can move counts out of named zones.
-# That leaves the unallocated row flat and the clamp absorbing the fall.
-# The death composition therefore leaves out any vintage on which a named zone loses more than one death.
-# That is five vintages beyond those the unallocated row identifies.
-# The case composition keeps the unallocated rule.
+# #### Zone model assumptions
+#
+# We assume the generation interval and delays are the joint posterior means, so their uncertainty does not reach the zones.
+# The sampled import fraction leaves out the joint model's change in intensity at detection.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
+# Straight-line distance stands in for the roads, the lake and the international border that carry movement.
+# The zones that take innovations depend on the data and can differ between cut-offs.
 
 #md # ```@raw html
 #md # <details><summary>Model: bvd_zone</summary>
@@ -2471,11 +2463,11 @@ cfr_prior_fig #hide
 #
 # The one-week zone forecast is drawn from the fitted zone model run a week past the cut-off, as the other forecasts are.
 # Each draw keeps its fitted parameters.
-# The shared quantity of Equation (56) is extended over the forecast week.
+# The sampled joint quantities of Equation (56) are extended over the forecast week.
 # The multivariate normal is fitted to each joint-model draw's log weekly patch infections over the fitted weeks and over the forecast week of the same draw's forecast, with the fitted block of its Cholesky factor held fixed:
 #
 # ```math
-# \begin{pmatrix} \mathbf a \\ \mathbf a^{\text{fc}} \end{pmatrix}
+# \begin{pmatrix} \boldsymbol\zeta \\ \boldsymbol\zeta^{\text{fc}} \end{pmatrix}
 # = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
 # \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
 # \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{69}
@@ -2483,7 +2475,7 @@ cfr_prior_fig #hide
 #
 # The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
 # Over the forecast week the mean import log odds $\bar o_{p,t}$ are the joint model's forecast arrivals against its forecast infections, and the arrival shares $s_{pq,t}$ follow its mean forecast infections, so each draw's import fraction $f_{p,t}$ runs on with its forecast trajectories.
-# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the share renewal of Equation (58) runs on to the end of the week.
+# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the zone renewal of Equation (57) runs on to the end of the week.
 # Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
 #
 # ```math

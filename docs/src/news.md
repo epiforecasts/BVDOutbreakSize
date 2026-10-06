@@ -20,6 +20,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The importation kernel keeps gravity as its centre and gains a log deviation per directed flow: a destination effect correlated with each province's origin deviation, plus a double-centred flow term with a reciprocity correlation, holding each origin's export total (#1030).
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
+- The capacity growth SD prior is `N⁺(0, 0.05)`, so its 95th percentile covers the fitted 0.07; fitted values change (#1050).
 - The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
 - The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
 - Onset dates before the outbreak's detection (the first export, 11 May) are ascertained at a sampled fraction of the later rate, so the early onset jump no longer makes $R_t$ spike in early May (#1034).
@@ -47,9 +48,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The health-zone methods are shorter and say plainly what the zone model takes from the joint model: sampled weekly patch infections and origin intensities, fixed delays and mean import odds, and inherited priors (resolves #1057).
 - The zone reproduction-number figure labels its coloured bands as the zones and its dark line as the whole patch (#1026).
 - The zone reproduction-number figure picks its panels by recent infections and marks zones whose R is from their province (#1031).
 - The sensitivity page is split up: per-stream estimates, fit diagnostics and sensitivity re-fits move to the in-sample pages, the by-release estimates to the forecast evaluation, and the McCabe and Chamla comparisons to a new Comparisons page (#1024).
+- The outbreak size, reproduction number and basic reproduction number by past release move to the national in-sample checks, and the summary page links them (resolves #1058).
 - The summary page has a table of the health zones with the most confirmed cases over the past two weeks (#1021).
 - The methods describe the health-zone stage as one-way melding rather than a cut, and the limitations page has a health-zone section (#976).
 - The health zones have estimates, forecasts, in-sample evaluation and forecast evaluation pages mirroring the province ones, with the in-sample page checking both the confirmed case and the confirmed death composition (#779).
@@ -62,6 +65,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
+- Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
+  Fitted values do not change (resolves #1055).
 
 ### Infrastructure
 
@@ -81,10 +86,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Fixed
 
 - The onset forecast's figure-total interval adds each figure's calibration error, with a scale drawn from a prior rather than fitted (#1045).
+- The onset forecast model no longer boxes its sampled scan scale inside the interval comprehension, so the boxed-captures check passes again.
+- The test environment declares the Downloads and Base64 standard libraries the SitRep downloader loads, so its tests run under the sandboxed test runner.
 - The health-zone forecast refuses parent arrivals that stop short of the horizon (#1037).
 - The Chamla comparison reads the observed confirmed total at 24 June from the history at that date, not the current cut-off total (#964).
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 - The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).
+- The national and province forecast summary tables show by default instead of being folded away behind their own dropdown (#1056).
 
 ## v2.2.0
 
