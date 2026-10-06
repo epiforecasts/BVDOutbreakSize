@@ -13,8 +13,8 @@
         deviation_knot_dims, zone_fixed_terms, zone_binned_operator,
         zone_binned_increments, zone_forward, discretise_censored,
         lognormal_meansd, convolve_pmf, knot_days,
-        zone_interpolation_weights, zone_delay_operator,
-        zone_report_pre_rows, future_knot_days
+        zone_interpolation_weights, future_knot_days, zone_delay_pmfs,
+        zone_delay_terms
     using Dates: Date, Day
     using Distributions: Gamma, Multinomial
     using Random: Xoshiro
@@ -32,13 +32,14 @@
             I_bar[1, t] = 30.0 * exp(0.03 * min(t, 80)) * total_scale
             I_bar[2, t] = 5.0 * exp(0.02 * min(t, 80)) * total_scale
         end
-        g = let pmf = discretise_censored(Gamma(2.71, 5.65), 40)
-            pmf[2:end] ./ sum(pmf[2:end])
-        end
-        f = convolve_pmf(
-            discretise_censored(lognormal_meansd(6.3, 3.5), 16),
-            discretise_censored(lognormal_meansd(4.5, 4.0), 17)
-        )
+        ## The delay parameters of every parent draw, in the order of
+        ## `_ZONE_DELAY_KEYS`, at the centres of the parent's priors.
+        delay_params = [
+            2.71 * 5.65, sqrt(2.71) * 5.65, 6.3, 3.5, 1.178, 3.694,
+            4.5, 4.0, 1.178, 3.694, 2.151, 3.906,
+        ]
+        pmfs = zone_delay_pmfs(delay_params)
+        g, f = pmfs.g, pmfs.f
         zones = [
             ("a", ["z1", "z2", "z3", "z4", "z5"]),
             ("b", ["y1", "y2", "y3"]),
@@ -75,16 +76,12 @@
             z_level, z_drift, σ_level, σ_δ, φ,
             patch_ranges, Matrix{Float64}[], Matrix{Float64}[], walking, K
         )
-        fixed = zone_fixed_terms(I_bar, g, f, t0)
+        terms = zone_delay_terms(I_bar, pmfs, t0, days, patch_of_zone)
         zd = (;
-            I_bar, g, f, patch_ranges, knots, t0, n, days,
-            fixed.force_pre, fixed.infections_pre, mixing = nothing,
+            I_bar, g, f, patch_ranges, patch_of_zone, knots, t0, n, days,
+            terms.force_pre, terms.infections_pre, mixing = nothing,
             interp = zone_interpolation_weights(knots, t0, n),
-            report_bin = zone_binned_operator(
-                zone_delay_operator(f, n - t0 + 1),
-                zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n),
-                fixed.report_pre_cum, days, t0, patch_of_zone
-            ),
+            terms.report_bin, terms.death_bin,
         )
         fw = zone_forward(zd, δ_knots, w0, nothing)
         ## Observed counts: each vintage's allocated total is the rounded
@@ -139,10 +136,16 @@
             Symbol("gi_state.gi_sd") => fill(sqrt(2.71) * 5.65, ndraw, 1),
             Symbol("inc_state.delay_mean") => fill(6.3, ndraw, 1),
             Symbol("inc_state.delay_sd") => fill(3.5, ndraw, 1),
+            Symbol("cases_state.report_state.α") => fill(1.178, ndraw, 1),
+            Symbol("cases_state.report_state.θ") => fill(3.694, ndraw, 1),
             Symbol("confirmed_state.receipt_state.d.delay_mean") =>
                 fill(4.5, ndraw, 1),
             Symbol("confirmed_state.receipt_state.d.delay_sd") =>
                 fill(4.0, ndraw, 1),
+            Symbol("deaths_state.od_state.oa.α") => fill(1.178, ndraw, 1),
+            Symbol("deaths_state.od_state.oa.θ") => fill(3.694, ndraw, 1),
+            Symbol("deaths_state.od_state.ad.α") => fill(2.151, ndraw, 1),
+            Symbol("deaths_state.od_state.ad.θ") => fill(3.906, ndraw, 1),
             :C_T => fill(sum(I_bar), ndraw, 1),
             ## The province model's own between-patch movement: a per-origin
             ## intensity and the arrivals into each patch, a twentieth of
@@ -170,10 +173,24 @@
             infections = fw.infections, forces = fw.forces,
         )
         return (;
-            obs, chain, truth, I_bar, g, f, patch_ranges, days, t0,
-            knots, counts, nz,
+            obs, chain, truth, I_bar, g, f, pmfs, delay_params,
+            patch_ranges, days, t0, knots, counts, nz,
         )
     end
+
+    ## Reference forms of the delay convolution, from the formula: the
+    ## lower-triangular Toeplitz matrix with `F[j, j − s] = f_s` over the
+    ## grid days, and each zone's patch's pre-`t0` term on those days.
+    function reference_delay_matrix(f, nd)
+        F = zeros(nd, nd)
+        for j in 1:nd, s in 0:min(length(f) - 1, j - 1)
+
+            F[j, j - s] = f[s + 1]
+        end
+        return F
+    end
+    reference_pre_rows(report_pre, patch_of_zone, t0, n) =
+        [report_pre[p, t] for t in t0:n, p in patch_of_zone]
 
     function zone_inputs(
             syn; zones = nothing, walk_threshold = 30,
@@ -394,8 +411,8 @@ end
         zd.force_pre
     )
     fixed = zone_fixed_terms(zd.I_bar, zd.g, zd.f, t0)
-    r_op = zone_delay_operator(zd.f, nd) * st.infections .+
-        zone_report_pre_rows(fixed.report_pre, zd.patch_of_zone, t0, n) .*
+    r_op = reference_delay_matrix(zd.f, nd) * st.infections .+
+        reference_pre_rows(fixed.report_pre, zd.patch_of_zone, t0, n) .*
         transpose(w0)
     for (p, zs) in enumerate(zd.patch_ranges), z in zs, j in 1:7:nd
         t = t0 + j - 1
@@ -569,6 +586,9 @@ end
     @test zd.I_bar ≈ syn.I_bar rtol = 1.0e-10
     @test zd.g ≈ syn.g
     @test zd.f ≈ syn.f
+    ## The multiplier basis is built once, over the patches.
+    @test zd.multiplier_basis ==
+        BVDOutbreakSize.relative_multiplier_basis(inputs.patch_ranges)
     ## The walking set needs the threshold and at least two zones per patch.
     @test all(
         z -> inputs.walking[z] == (inputs.cumulative[z] >= 30) &&
@@ -945,8 +965,8 @@ end
     infections = rand(Xoshiro(2), nd, nz)
     w0 = syn.truth.w0
     patch_of_zone = [p for (p, zs) in enumerate(syn.patch_ranges) for _ in zs]
-    F = zone_delay_operator(syn.f, nd)
-    pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n)
+    F = reference_delay_matrix(syn.f, nd)
+    pre_rows = reference_pre_rows(fixed.report_pre, patch_of_zone, t0, n)
     reports = F * infections .+ pre_rows .* transpose(w0)
     ## Each window `(d_{v−1}, d_v]` sums the pre-`t0` patch term at the
     ## initial share and the zone's own daily reports from `t0`.
@@ -970,9 +990,7 @@ end
     ## The fit's windows (the first opens before `t0`), windows entirely
     ## before `t0`, and windows that open after it.
     for days in (syn.days, [t0 - 10, t0 - 3, t0 + 5, n], [t0 + 3, t0 + 20, n])
-        op = zone_binned_operator(
-            F, pre_rows, fixed.report_pre_cum, days, t0, patch_of_zone
-        )
+        op = zone_binned_operator(syn.f, fixed, days, t0, n, patch_of_zone)
         C = zone_binned_increments(op, infections, w0)
         @test size(C) == (nz, length(days))
         for v in eachindex(days)
@@ -1007,22 +1025,17 @@ end
     )
     @test inputs.model_data.I_bar ≈
         exp(mean(log.(scales))) .* syn.I_bar rtol = 1.0e-10
-    ## A parent carrying the scales and the death delay: each scale prior
-    ## is the log-normal matched to its draws, and the death PMF is the
-    ## incubation convolved with the parent's own confirmation delay.
+    ## A parent carrying the scales: each scale prior is the log-normal
+    ## matched to its draws.
     with_priors = copy(chain)
     with_priors[:province_ascertainment_sd] = reshape(
         [0.1, 0.2, 0.3, 0.4], 4, 1
     )
     with_priors[:region_drift_sd] = reshape([0.04, 0.05, 0.06, 0.07], 4, 1)
-    with_priors[:onset_to_death_confirmation_pmf] = reshape(
-        [[0.2, 0.5, 0.3] for _ in 1:4], 4, 1
-    )
     p = zone_parent_inputs(with_priors).priors
     @test p.ascertainment_sd[1] ≈ mean(log.([0.1, 0.2, 0.3, 0.4]))
     @test p.drift_sd[1] ≈ mean(log.([0.04, 0.05, 0.06, 0.07]))
     @test all(>(0), (p.ascertainment_sd[2], p.drift_sd[2]))
-    dp = zone_parent_inputs(with_priors).death_pmf
     ## The movement is centred as the infections are: the geometric mean of
     ## the intensity and of the odds that an infection was imported.
     spread = zone_spread_chain(syn)
@@ -1033,10 +1046,53 @@ end
     lo = reshape(mv.import_log_odds, 2, :)
     @test all(lo[2, :] .≈ mean(log.(odds)))
     @test all(lo[1, :] .< -700)
-    @test isempty(avg.death_pmf)
-    @test length(dp) > 3
-    @test all(>=(0), dp)
-    @test 0.9 < sum(dp) <= 1 + 1.0e-8
+    ## The delays are the mean of the per-draw PMFs, and each draw's log
+    ## parameters are carried for the meld.
+    gi_means = [12.0, 14.0, 15.0, 17.0]
+    varied = copy(chain)
+    varied[Symbol("gi_state.gi_mean")] = reshape(gi_means, 4, 1)
+    vd = zone_parent_inputs(varied)
+    per_draw = [
+        zone_delay_pmfs(
+            [m; syn.delay_params[2:end]]
+        ).g for m in gi_means
+    ]
+    @test vd.g ≈ mean(per_draw) rtol = 1.0e-12
+    @test vd.delay_log_draws[:, 1] ≈ log.(gi_means)
+    @test vd.delay_log_draws[1, 2:end] ≈ log.(syn.delay_params[2:end])
+    @test size(vd.delay_log_draws) == (4, 12)
+end
+
+@testitem "zone_delay_pmfs: the joint's delays, onset to report included" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: ZONE_GI_NMAX, ZONE_INCUBATION_NMAX,
+        ZONE_REPORT_NMAX, ZONE_RECEIPT_NMAX, ZONE_ONSET_DEATH_NMAX
+    using Distributions: Gamma
+
+    syn = zone_synthetic()
+    p = syn.delay_params
+    pm = zone_delay_pmfs(p)
+    disc(d, nmax) = discretise_censored(d, nmax)
+    inc = disc(lognormal_meansd(p[3], p[4]), ZONE_INCUBATION_NMAX)
+    report = disc(Gamma(p[5], p[6]), ZONE_REPORT_NMAX)
+    receipt = disc(lognormal_meansd(p[7], p[8]), ZONE_RECEIPT_NMAX)
+    ## The case delay is the joint's onset-to-confirmation kernel after the
+    ## incubation period: incubation, onset to report, then receipt.
+    @test pm.f ≈ convolve_pmf(convolve_pmf(inc, report), receipt)
+    ## The death delay is onset to death, the two atomic delays truncated
+    ## and renormalised, then receipt.
+    od = convolve_pmf(
+        disc(Gamma(p[9], p[10]), ZONE_ONSET_DEATH_NMAX),
+        disc(Gamma(p[11], p[12]), ZONE_ONSET_DEATH_NMAX)
+    )[1:(ZONE_ONSET_DEATH_NMAX + 1)]
+    @test pm.death_pmf ≈
+        convolve_pmf(convolve_pmf(inc, od ./ sum(od)), receipt)
+    ## The generation interval drops lag 0 and renormalises.
+    gi = disc(Gamma((p[1] / p[2])^2, p[2]^2 / p[1]), ZONE_GI_NMAX)
+    @test pm.g ≈ gi[2:end] ./ sum(gi[2:end])
+    @test sum(pm.g) ≈ 1
+    @test_throws DimensionMismatch zone_delay_pmfs(p[1:11])
 end
 
 @testitem "zone_fit_inputs: refuses inconsistent inputs" setup = [
@@ -1450,13 +1506,16 @@ end
     )
     mc = zone_meld_check(chn, inputs)
     @test mc.dimension == meld.d
-    @test nrow(mc.table) == meld.d
+    ## The infection cells have a row each; the delay cells have none.
+    n_cells = length(meld.cells_patch)
+    @test nrow(mc.table) == n_cells
     @test mc.table.patch ==
         [inputs.patch_labels[p] for p in meld.cells_patch]
     @test mc.table.midpoint == [meld.midpoints[k] for k in meld.cells_week]
     @test mc.table.date ==
         [inputs.seeding + Day(m - 1) for m in mc.table.midpoint]
-    @test mc.table.parent_sd ≈ sqrt.(vec(sum(abs2, meld.L; dims = 2)))
+    @test mc.table.parent_sd ≈
+        sqrt.(vec(sum(abs2, meld.L[1:n_cells, :]; dims = 2)))
     @test all(isfinite, mc.table.eta_mean)
     @test all(>(0), mc.table.eta_sd)
     @test isfinite(mc.mean_norm_sq) && mc.mean_norm_sq > 0
@@ -2108,8 +2167,8 @@ end
     fx = zone_fixed_terms(zf.I_bar, zd.g, zd.f, zd.t0)
     I_ext = rand(Xoshiro(3), nd, nz)
     w = rand(Xoshiro(4), nz)
-    daily = zone_delay_operator(zd.f, nd) * I_ext .+
-        zone_report_pre_rows(
+    daily = reference_delay_matrix(zd.f, nd) * I_ext .+
+        reference_pre_rows(
         fx.report_pre, zd.patch_of_zone, zd.t0, zd.n + horizon
     ) .* transpose(w)
     week = (zd.n - zd.t0 + 2):nd
@@ -2143,7 +2202,7 @@ end
     end
 end
 
-@testitem "zone meld: the origin intensities join the shared quantity" setup = [
+@testitem "zone meld: the origin intensities and delays join the shared quantity" setup = [
     ZoneSynthetic,
 ] begin
     syn = zone_synthetic()
@@ -2152,24 +2211,74 @@ end
     plain = zone_inputs(spread)
     mixed = zone_inputs(spread; zones = zone_metadata(syn))
     np = 2
-    d0 = plain.meld.d
-    ## One log intensity per origin patch, after the infection cells, and
-    ## only where the zones mix.
-    @test mixed.meld.d == d0 + np
-    @test mixed.meld.extra_cells == (d0 + 1):(d0 + np)
-    @test isempty(plain.meld.extra_cells)
-    @test mixed.meld.log_sums[:, mixed.meld.extra_cells] ≈ reduce(
+    nθ = length(syn.delay_params)
+    d0 = length(plain.meld.cells_patch)
+    ## After the infection cells, one log intensity per origin patch where
+    ## the zones mix, then the log delay parameters.
+    @test plain.meld.d == d0 + nθ
+    @test mixed.meld.d == d0 + np + nθ
+    @test mixed.meld.extra_cells == (d0 + 1):(d0 + np + nθ)
+    @test plain.meld.extra_cells == (d0 + 1):(d0 + nθ)
+    eps_cells = d0 .+ (1:np)
+    @test mixed.meld.log_sums[:, eps_cells] ≈ reduce(
         vcat, [transpose(log.(v)) for v in vec(chain[:importation_epsilon_patch])]
     )
     ## The infection block of the shared quantity is unchanged, and the
-    ## intensities do not deform the patch trajectories directly.
-    @test mixed.meld.L[1:d0, 1:d0] ≈ plain.meld.L rtol = 1.0e-12
-    @test mixed.meld.weights[:, 1:d0] == plain.meld.weights
+    ## extra cells do not deform the patch trajectories directly.
+    @test mixed.meld.L[1:d0, 1:d0] ≈ plain.meld.L[1:d0, 1:d0] rtol = 1.0e-12
+    @test mixed.meld.weights[:, 1:d0] == plain.meld.weights[:, 1:d0]
     @test all(iszero, mixed.meld.weights[:, mixed.meld.extra_cells])
     zd = mixed.model_data
-    @test zd.meld_d == d0 + np
-    @test zd.meld_epsilon_rows == mixed.meld.L[mixed.meld.extra_cells, :]
+    @test zd.meld_d == d0 + np + nθ
+    @test zd.meld_epsilon_rows == mixed.meld.L[eps_cells, :]
+    @test zd.meld_delay_rows == mixed.meld.L[(d0 + np) .+ (1:nθ), :]
+    @test zd.meld_delay_mean ≈ log.(syn.delay_params)
     @test size(plain.model_data.meld_epsilon_rows, 1) == 0
+    @test plain.model_data.meld_delay_rows == plain.meld.L[d0 .+ (1:nθ), :]
+end
+
+@testitem "bvd_zone: each draw carries its own generation interval and delays" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_delay_parameters, _zone_states,
+        _draw_vectors
+    using Statistics: std
+    using Turing: sample, Prior
+    import FlexiChains
+
+    syn = zone_synthetic()
+    ## Parent draws that disagree on the generation-interval mean and the
+    ## incubation mean.
+    chain = copy(syn.chain)
+    chain[Symbol("gi_state.gi_mean")] = reshape([12.0, 14.0, 15.0, 17.0], 4, 1)
+    chain[Symbol("inc_state.delay_mean")] = reshape([5.5, 6.0, 6.5, 7.5], 4, 1)
+    inputs = zone_inputs(merge(syn, (; chain)))
+    zd = inputs.model_data
+    chn = sample(
+        bvd_zone(zd), Prior(), 8; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
+    θ = _draw_vectors(chn, :delay_parameters_zone)
+    η = _draw_vectors(chn, :parent_eta_zone)
+    ## The drawn parameters are the shared draw's delay cells, and they move
+    ## from draw to draw as the parent's do.
+    for i in eachindex(θ)
+        @test θ[i] ≈ zone_delay_parameters(zd, η[i])
+    end
+    @test std([t[1] for t in θ]) > 0.1
+    @test std([t[3] for t in θ]) > 0.05
+    ## The render rebuilds each draw's generation interval and delays from
+    ## the same draw.
+    states = _zone_states(chn, inputs)
+    for i in (1, 5)
+        pm = zone_delay_pmfs(θ[i])
+        @test states[i].def.g ≈ pm.g
+        @test states[i].def.report_bin.weights ≈ zone_binned_operator(
+            pm.f, BVDOutbreakSize.zone_fixed_terms(zd.I_bar, pm.g, pm.f, zd.t0),
+            zd.days, zd.t0, zd.n, zd.patch_of_zone
+        ).weights
+    end
+    @test !(states[1].def.g ≈ states[5].def.g)
 end
 
 @testitem "zone mixing: each draw's arrivals follow its origin intensities" setup = [
@@ -2198,7 +2307,7 @@ end
     ## imported infection move with the first origin's intensity and the
     ## ratio of the two deformed trajectories.
     η = zeros(zd.meld_d)
-    η[end - 1] = 1.5
+    η[length(inputs.meld.cells_patch) + 1] = 1.5
     η[1] = 0.7
     scale = zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n)
     e = zone_parent_epsilon(zd.meld_epsilon_rows, η)

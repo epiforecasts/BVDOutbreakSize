@@ -494,6 +494,44 @@ end;
 
 province_currency #hide
 
+# ## Province fit diagnostics
+#
+# The joint fit's province-level parameters: the reproduction number, infections to date, case-fatality ratio, the two case- and death-ascertainment ratios, and the importation intensity and export weight that set each province's share of imported infections.
+# The national [fit diagnostics](@ref national-fit-diagnostics) summarise the same joint fit as a whole, and its [breakdown by parameter](@ref "Fit diagnostics by parameter") covers every parameter rather than only these.
+
+#md # ```@raw html
+#md # <details><summary>Province-level parameter diagnostics</summary>
+#md # ```
+
+## The quantities the sections above hold one per province: the
+## reproduction number and infections to date from the renewal equation,
+## the case-fatality ratio and the two ascertainment ratios the province
+## compositions identify, and the importation intensity and export weight
+## the per-province pair plots show.
+province_diagnostic_quantities = [
+    :R_T_patch, :C_T_patch, :CFR_patch, :province_ascertainment,
+    :province_death_ascertainment, :importation_epsilon_patch, :export_weight,
+]
+province_diagnostics_labels = merge(
+    province_pair_labels, Dict(:C_T_patch => "Infections to date")
+)
+province_diagnostics_frame = let df = parameter_diagnostics(chn_joint)
+    df[in.(Symbol.(df.parameter), Ref(province_diagnostic_quantities)), :]
+end
+province_diagnostics_table = MarkdownTable(
+    family_diagnostics_table(
+        province_diagnostics_frame;
+        n = length(province_diagnostic_quantities),
+        labels = province_diagnostics_labels
+    )
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_diagnostics_table #hide
+
 # ## Saving province assets
 #
 # The summary dashboard shows the province comparison, the reproduction
