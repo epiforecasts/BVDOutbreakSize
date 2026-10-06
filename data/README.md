@@ -15,7 +15,7 @@ The nightly data-update routine follows `DAILY_UPDATE.md` in this directory, whi
 | `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `health_zones.csv` | One row per health zone that has reported a confirmed case: manifest key, label, province, WorldPop population, polygon centroid and DHIS2 code. Read by `load_health_zones()`. See the health-zone section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
-| `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's inline SVG charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
+| `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's onset charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
 
 ## Where the data comes from
@@ -284,19 +284,21 @@ print(json.loads(base64.urlsafe_b64decode(b))["url"])'
 ## Dashboard symptom-onset curves (`onset_dashboard_history.csv`)
 
 The INRB-UMIE epidemic dashboard (<https://inrb-umie.github.io/BDBV2026-Epidemic_Dashboard/trends.html>) draws confirmed cases by symptom-onset date for the country, each province and each health zone.
-Each chart is an inline SVG with exact bar heights, stacked into cases with an observed onset date and cases whose onset date was imputed.
+Each chart is stacked into cases with an observed onset date and cases whose onset date was imputed.
+Builds up to 24 September inline each chart as an SVG with exact bar heights.
+Builds from 25 September draw the charts in the browser from daily counts embedded in the page, which are read directly.
 The basis is the INSP/INRB laboratory line list, not the DHIS2 line list behind the SitRep figure, and there is no alive/dead split.
 The two sources differ: on 23 September the dashboard has 6018 observed plus 1175 imputed cases where the SitRep 130 figure prints n = 5 944.
 The dashboard's observed total tracks the printed figure n to within about 5% in every vintage.
 Against the scanned SitRep curve the observed series agrees in every vintage (Pearson r 0.96 to 0.998 on common onset days, mean absolute difference 0.6 to 3.7 cases a day).
 
 The page is rebuilt by CI and committed to <https://github.com/INRB-UMIE/BDBV2026-Epidemic_Dashboard>, so the git history of `trends.html` is the vintage archive.
-`scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the bars back through each chart's own axis labels, and keeps one snapshot per distinct data version.
-The history holds 24 distinct snapshots from 2026-07-29 to 2026-09-23 out of 106 page builds.
-Builds from 25 September draw the charts in the browser and carry no chart SVG, so the extractor reads nothing newer than 23 September (issue #1062).
+`scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the SVG bars back through each chart's own axis labels or takes the embedded counts, and keeps one snapshot per distinct data version.
+The history holds 25 distinct snapshots from 2026-07-29 to 2026-10-02 out of 132 page builds.
+On the 23 September data, built both ways, the two readings agree on every row (issue #1062).
 The snapshot cadence is irregular, 1 to 8 days between builds, so a SitRep block is compared with the nearest snapshot within two days of its report date (`task onset-cross-check`).
 At the reporting edge the dashboard's line list lagged the SitRep extract by up to 5 cases per day in early August and led it in September.
-Columns are `snapshot_date` (the processed-data date in the chart file paths), `commit_date`, `commit_sha`, `level` (`national`, `province` or `zone`), `unit`, `onset_date`, `observed` and `imputed`.
+Columns are `snapshot_date` (the processed-data date in the chart file paths, or the payload's `trends.asof` from 25 September), `commit_date`, `commit_sha`, `level` (`national`, `province` or `zone`), `unit`, `onset_date`, `observed` and `imputed`.
 Health-zone rows are in `onset_dashboard_history_zones.csv.gz` with the same columns.
 Days inside a chart's range with no cases are written as zero rows.
 Provinces and zones each sum to the national chart in every snapshot, except that the 26 and 27 August builds carry a `Kasai` and a `Kasaï` province chart with the same two cases.

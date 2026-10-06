@@ -54,6 +54,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   SitReps 138 to 141 are not added to the onset curve, because the reader still misreads bars on their renders (#1061).
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
+- The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
+  It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
+  On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
