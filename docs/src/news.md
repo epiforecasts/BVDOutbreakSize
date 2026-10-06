@@ -52,8 +52,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The model cut-off advances to SitRep 141, 2 October.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
-  SitReps 138 to 141 are not added to the onset curve, because the reader still misreads bars on their renders (#1061).
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
+- The onset curve adds SitReps 139, 140 and 141 (30 September to 2 October), after three reader fixes (#1061).
+  The weekly tick row leaves out the date labels' tops, which moved single ticks on these renders and shifted runs of days onto their neighbours.
+  A washed bar on a tick column is read again without the gridline skip, capped at its outline columns.
+  Past the last tick only dark outlines bound a day, and a day whose columns disagree is read from its centre column, so the last faded bars no longer repeat the bar before them.
+  A rebuild changes six earlier cells, each towards its neighbouring vintages: SitRep 100's 17 August (0 to 15), 113's 2 September (22 to 16), 121's 9 September (22 to 9) and 128's 15 September (25 to 14), and adds 112's 2 September and 126's 16 September (2 each).
+  SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
@@ -101,6 +106,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The national estimates render waits for the health-zone fits, since its fit diagnostics read the `local` meld; it could start before that fit finished and fail on a cache miss.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
@@ -112,6 +118,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 - The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
 - `importation_from_kernel` is removed, since no model calls it (#1038).
+- The per-fit job summary, the convergence gate report and each fit's diagnostics bundle give, per chain, the share of draws at the tree-depth cap, the mean acceptance statistic and the energy fraction of missing information beside the step size, so a fit that spends every draw at the cap is visible in CI (#1093, part of #1060).
+  The cached CI headline joint fit `joint__71835cdb61145210` (SitRep 136) reaches the cap of 10 on every draw of both chains, at a step size of 0.0015, with mean acceptance 0.95 against its target of 0.80 and E-BFMI 0.84 and 0.81.
+  Fitted values do not change.
 - The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
 
 ### Fixed
