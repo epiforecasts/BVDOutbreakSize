@@ -1204,6 +1204,91 @@ function Mooncake.rrule!!(
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end
 
+## The health-zone delay terms the model rebuilds on every draw's
+## generation interval and delays: the pre-`t0` part of a convolution, and
+## the window weights from the cumulative PMF.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_pre_convolution), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat}, Integer, Integer,
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_window_weights), Vector{<:Mooncake.IEEEFloat},
+        Vector{<:Integer}, Vector{<:Integer}, Integer,
+    },
+)
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_pre_convolution)},
+        I_bar::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        w::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        t0::CoDual{<:Integer}, first_lag::CoDual{<:Integer}
+    )
+    Ip, wp = primal(I_bar), primal(w)
+    t0p, lag = primal(t0), primal(first_lag)
+    Ī, w̄ = tangent(I_bar), tangent(w)
+    y = zone_pre_convolution(Ip, wp, t0p, lag)
+    ȳ = zero(y)
+    function zone_pre_convolution_pullback!!(::NoRData)
+        ## `y[p, t] += w[i] · I[p, t − s]` for each valid lag, so
+        ##
+        ##     w̄[i]          += ȳ[p, t] · I[p, t − s]
+        ##     Ī[p, t − s]   += ȳ[p, t] · w[i]
+        np, n = size(Ip)
+        L = length(wp)
+        @inbounds for t in 1:n
+            lo = max(lag, t - t0p + 1)
+            hi = min(L - 1 + lag, t - 1)
+            for s in lo:hi, p in 1:np
+
+                i = s - lag + 1
+                w̄[i] += ȳ[p, t] * Ip[p, t - s]
+                Ī[p, t - s] += ȳ[p, t] * wp[i]
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), zone_pre_convolution_pullback!!
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_window_weights)},
+        f::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        starts::CoDual{<:Vector{<:Integer}},
+        stops::CoDual{<:Vector{<:Integer}}, nd::CoDual{<:Integer}
+    )
+    fp, a_, b_ = primal(f), primal(starts), primal(stops)
+    f̄ = tangent(f)
+    y = zone_window_weights(fp, a_, b_, primal(nd))
+    ȳ = zero(y)
+    function zone_window_weights_pullback!!(::NoRData)
+        ## Each weight is a difference of two entries of the cumulative PMF
+        ## `cf`, so the adjoint gathers onto `cf` and then reverses the
+        ## cumulative sum onto `f`.
+        L = length(fp)
+        c̄ = zeros(eltype(fp), L)
+        @inbounds for v in eachindex(a_)
+            a, b = a_[v], b_[v]
+            a <= b || continue
+            for k in max(1, a - L + 1):b
+                c̄[min(b - k, L - 1) + 1] += ȳ[k, v]
+                a - 1 - k < 0 || (c̄[min(a - 1 - k, L - 1) + 1] -= ȳ[k, v])
+            end
+        end
+        acc = zero(eltype(fp))
+        @inbounds for i in L:-1:1
+            acc += c̄[i]
+            f̄[i] += acc
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), zone_window_weights_pullback!!
+end
+
 ## The health-zone renewal is a coupled loop: every zone's own force first,
 ## then a mixing step that reads the zones of the other patches on the same
 ## day. It cannot call `renewal_infections`, so it carries its own rule.

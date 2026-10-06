@@ -2103,9 +2103,8 @@ cfr_prior_fig #hide
 # #### Inputs from the joint model
 #
 # The zone model takes three things from the joint model.
-# It samples the joint model's weekly infections in each patch and, when zones mix, the importation intensity of each origin patch at the cut-off.
-# It fixes the generation interval and the delays at their joint posterior means.
-# It also fixes the mean import log odds and the arrival shares, and each draw recomputes the import fraction from its sampled curves.
+# It samples the joint model's weekly infections in each patch, the parameters of the generation interval and the delays and, when zones mix, the importation intensity of each origin patch at the cut-off.
+# It fixes the mean import log odds and the arrival shares, and each draw recomputes the import fraction from its sampled curves.
 # The scales the two levels share take their priors from the joint posterior for the same scales between provinces.
 #
 # The sampling step is two-stage Markov melding [goudie2019](@cite) run one way.
@@ -2117,7 +2116,7 @@ cfr_prior_fig #hide
 # ```
 #
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
-# We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections and the log intensities $\log \varepsilon_q$ of Equation (15).
+# We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (15) and the log parameters $\log \theta_k$ of the generation interval and delays.
 # A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
 # With $L$ the Cholesky factor of the draws' sample covariance over the $d$ kept cells, one draw is
 #
@@ -2125,11 +2124,14 @@ cfr_prior_fig #hide
 # \eta \sim \mathrm{Normal}(0, I_d), \qquad
 # \zeta = L\eta, \qquad
 # I_{p,t} = \bar I_{p,t} \exp \zeta_p(t), \qquad
-# \varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q. \tag{56}
+# \varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q, \qquad
+# \theta_k = \bar\theta_k \exp \zeta^{\theta}_k. \tag{56}
 # ```
 #
-# Here $\bar I_{p,t}$ and $\bar\varepsilon_q$ are the exponentials of the joint posterior mean log infections and log intensities.
-# The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ is the cell for origin $q$.
+# Here $\bar I_{p,t}$, $\bar\varepsilon_q$ and $\bar\theta_k$ are the exponentials of the joint posterior mean log infections, log intensities and log parameters.
+# The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ and $\zeta^{\theta}_k$ are the cells for origin $q$ and parameter $k$.
+# The parameters are the mean and standard deviation of the generation interval and of the incubation period, the shape and scale of the onset-to-report delay, the mean and standard deviation of the report-to-receipt delay, and the shapes and scales of the two onset-to-death components.
+# Each draw rebuilds its delay distributions from them as the joint model does.
 # The joint model has fewer draws than cells, so the covariance is shrunk toward its own diagonal by the least weight that factorises.
 #
 # A draw moves whole patch trajectories, and moves patches and intensities together where the joint posterior correlates them.
@@ -2155,11 +2157,11 @@ cfr_prior_fig #hide
 # From $t_0$ each zone runs the renewal on its own past infections, scaled by a log-transmission deviation $\delta_{z,t}$:
 #
 # ```math
-# \Lambda_{z,t} = \sum_{s \ge 1} \bar g_s\, I_{z,t-s}, \qquad
+# \Lambda_{z,t} = \sum_{s \ge 1} g_s\, I_{z,t-s}, \qquad
 # u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{57}
 # ```
 #
-# with $\bar g$ the joint posterior mean generation interval and $I_{z,t} = w_z I_{p,t}$ before $t_0$.
+# with $g$ the draw's generation interval and $I_{z,t} = w_z I_{p,t}$ before $t_0$.
 # Without movement between zones, zone $z$ takes the share $u_{z,t} / \sum_{z' \in p} u_{z',t}$ of $I_{p,t}$.
 #
 # #### Movement between zones
@@ -2239,18 +2241,18 @@ cfr_prior_fig #hide
 #
 # #### Zone observations
 #
-# Expected confirmed cases carry each zone's infections through the infection-to-report delay $\bar f$, the incubation period convolved with the report-to-receipt delay.
+# Expected confirmed cases carry each zone's infections through the draw's infection-to-receipt delay $f = f_{\text{inc}} * f_{\text{rep}} * f_{\text{rec}}$, the delay the province compositions apply to infections.
 # Each patch and vintage then follows a Dirichlet-multinomial on its total, the composition of Equation (54) without the ordering:
 #
 # ```math
-# C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} \bar f_s\, I_{z,t-s},
+# C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} f_s\, I_{z,t-s},
 # \qquad
 # y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa\, \pi_{p,v}\bigr),
 # \qquad
 # \kappa = \frac{1 - \rho}{\rho}. \tag{64}
 # ```
 #
-# Expected confirmed deaths $D_{z,v}$ use the incubation period convolved with the joint model's onset-to-confirmed-death delay.
+# Expected confirmed deaths $D_{z,v}$ use the incubation period convolved with the draw's onset-to-death and report-to-receipt delays.
 # They follow a second Dirichlet-multinomial with its own intra-class correlation $\rho_{\text{death}}$.
 # Cases scale with case-finding and deaths with lethality, so the two compositions are
 #
@@ -2293,7 +2295,8 @@ cfr_prior_fig #hide
 #
 # #### Zone model assumptions
 #
-# We assume the generation interval and delays are the joint posterior means, so their uncertainty does not reach the zones.
+# We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
+# The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
 # We assume the gravity form describes movement between zones as it does between provinces, with no mobility data to check it against.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.

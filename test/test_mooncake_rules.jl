@@ -25,7 +25,8 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, _province_bed_floors, _national_bed_floor
+        zone_share_renewal_kernel, _province_bed_floors, _national_bed_floor,
+        zone_pre_convolution, zone_window_weights
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -487,6 +488,29 @@
             "62 zones, n = 220", zone,
             zone_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)...;
             perf = true
+        )
+
+        ## The health-zone delay terms the model rebuilds on every draw: the
+        ## part of a convolution that reaches back before the grid start,
+        ## for a generation interval (lag 1) and a delay (lag 0) longer than
+        ## the days before it, and the window weights over a window that
+        ## opens before the grid, one that closes before it, one day and
+        ## the windows after.
+        Iz = 10 .* rand(zrng, 3, 40) .+ 1
+        add!("lag 1", zone_pre_convolution, Iz, pmf(zrng, 12), 15, 1)
+        add!("lag 0, long PMF", zone_pre_convolution, Iz, pmf(zrng, 20), 8, 0)
+        add!(
+            "4 patches, n = 227", zone_pre_convolution,
+            10 .* rand(zrng, 4, 227) .+ 1, pmf(zrng, 45), 67, 0; perf = true
+        )
+        add!(
+            "4 windows", zone_window_weights, pmf(zrng, 12),
+            [1, 1, 5, 6], [3, 0, 5, 30], 30
+        )
+        vstops = collect(61:161)
+        add!(
+            "101 vintages", zone_window_weights, pmf(zrng, 45),
+            [1; vstops[1:(end - 1)] .+ 1], vstops, 161; perf = true
         )
 
         ## The data-only helpers pass no derivative. Their inputs are the
