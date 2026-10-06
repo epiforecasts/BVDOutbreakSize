@@ -50,6 +50,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
+- Each province's occupancy is capped at its beds at the cut-off and in the forecast, where it admits up to its free beds; the national figures are the province sums (#958).
+- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
 
 ### Data
 
@@ -67,6 +69,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
+- `province_admissions_history` block, sparse by province, to SitRep 141 (2 October), and province beds raised to the patients held or the rate-implied beds where the patients exceed the printed beds (#958).
 
 ### Report
 
@@ -142,6 +145,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
+- Admissions are uncensored in the fit and capped at the free beds only in the forecast (#918).
+- The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
+- Province beds cover the patients each report counts, so Nord-Kivu shows no spurious shortfall (#920).
 
 ## v2.2.0
 
@@ -187,8 +193,6 @@ Changes since v2.1.0.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
 - The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
-- Each province's occupancy is capped at its beds at the cut-off and in the forecast, where it admits up to its free beds; the national figures are the province sums (#958).
-- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
@@ -244,7 +248,6 @@ Changes since v2.1.0.
   SitRep 133 and its reprint in 134 stay out until the reader reads 133's count scale correctly (#952).
 - `province_isolation_history` and `province_bed_capacity_history` blocks, sparse by province, to SitRep 130 (#784).
   They are transcribed from the occupation tables to SitRep 080 and the per-province care prose from 081, with `scripts/scan_province_care.jl` and a blind second read reconciled against each other.
-- `province_admissions_history` block, and province beds raised to the patients held or the rate-implied beds where the patients exceed the printed beds (#958).
 - The onset figure digitiser reads each bar's top as its outline rather than a colour-mask flood, calibrates the day grid by least squares over the tick chain and covers the axis from its start, so every figure that prints an n is read within 2.1% of it (#875).
 - `scripts/audit_onset_curve.jl` checks the digitised onset curve against the figures' printed totals and between consecutive snapshots, and `data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's exact onset curves by vintage at national and province level (#875).
 
@@ -353,9 +356,6 @@ Changes since v2.1.0.
 - A count at its censoring ceiling now has a Mooncake gradient, from a censored NegativeBinomial tail through `SpecialFunctions.beta_inc` (#856).
 - `plot_pair` drops non-finite draws with a warning, such as `r = -Inf` from a prior draw that exhausts its pool (#912).
 - The delay and tree-prior sensitivity re-fits are built from the headline's keywords, so they keep its provinces and in-care split and differ from it only in the delay or the common-ancestor date (#916).
-- Admissions are uncensored in the fit and capped at the free beds only in the forecast (#918).
-- The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
-- Province beds cover the patients each report counts, so Nord-Kivu shows no spurious shortfall (#920).
 
 ### Infrastructure
 
