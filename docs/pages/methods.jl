@@ -626,6 +626,20 @@ MarkdownTable(vintage_table) #hide
 #
 # The current growth rate is the exponential growth implied by the cut-off reproduction number and the generation interval through forward Euler–Lotka.
 # The current doubling time is $\log 2$ divided by that rate.
+#
+# As a sensitivity analysis we also fit a partitioned form, in which one national renewal sets the national infections and the patches share them out.
+# The national infections follow equation (18) for a single patch at the trend $R^{\text{trend}}_t$, from the summed seeds and the summed population.
+# Each day's national infections are then split across the patches:
+#
+# ```math
+# I_{p,t} = I_t\, \frac{Y_{p,t}}{\sum_q Y_{q,t}}, \qquad
+# S_{p,t} = \max\bigl(S_{p,t-1} - I_{p,t},\, 0\bigr),
+# ```
+#
+# where $Y_{p,t}$ is the transfer of equation (18) with each $G_{p,t}$ multiplied by the patch's susceptible share $S_{p,t-1}/N_p$.
+# A factor common to every patch cancels from the split, so the trend sets the national size and the patch deviations set only how it is shared.
+# The patch infections therefore sum to the national infections and cannot fall below zero.
+# In this form $R^{\text{nat}}_t$ is the trend net of depletion, not the force-weighted mean of the patch reproduction numbers.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: patch_infection_model</summary>

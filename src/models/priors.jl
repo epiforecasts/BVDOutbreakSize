@@ -1657,6 +1657,18 @@ national cryptic seed rather than adding to it, so the growth submodel's
 `C_T` stays the national daily incidence at the renewal start and
 comparable across any patch count.
 
+### National total
+
+`patch_renewal` sets how the patches make up the national trajectory. The
+default, [`free_patch_renewal`](@ref), runs a renewal per patch and sums
+them, so the national reproduction number is the force-weighted mean of the
+patch ones rather than the trend `μ(t)` they are centred on.
+[`partitioned_patch_renewal`](@ref) runs one national renewal at `μ(t)` and
+splits each day's infections across the patches in proportion to their
+force after importation, so the patch deviations move only the split.
+[`partitioned_patch_infection_model`](@ref) is this model with that
+renewal.
+
 ### Returns
 
 The per-patch state, plus the national aggregates the observation models
@@ -1700,6 +1712,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         populations::AbstractVector{<:Real} = n_patches == 1 ?
             [float(sum(PROVINCE_POPULATIONS))] :
             float.(PROVINCE_POPULATIONS[1:n_patches]),
+        patch_renewal = free_patch_renewal,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Grid length, past the cut-off `n` when forecasting.
@@ -1820,14 +1833,15 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
     end
-    ## 6. Multi-patch renewal. Each province runs its own renewal at its own
-    ##    reproduction number and the national trajectory is their sum. There
-    ##    is no separate national process and nothing rescales the patches to
-    ##    match one. `mu(t)` is a central trend the provinces pool toward, and
-    ##    the reproduction number the country actually ran at is read back off
-    ##    the summed infections in step 9.
-    renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
+    ## 6. Multi-patch renewal. With the default `patch_renewal` each province
+    ##    runs its own renewal at its own reproduction number and the
+    ##    national trajectory is their sum, so `mu(t)` is a central trend the
+    ##    provinces pool toward and the reproduction number the country ran
+    ##    at is read back off the summed infections in step 7.
+    ##    [`partitioned_patch_renewal`](@ref) instead runs the national
+    ##    renewal at `mu(t)` and splits it across the provinces.
+    renewal_state = patch_renewal(
+        Rt_matrix, rt_state.Rt_national, g, seeds_matrix,
         importation_kernel, ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
@@ -1848,7 +1862,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     T_total = growth_state.T + τ_obs
     return (;
         infections_matrix, onsets_matrix,
-        Rt_matrix, importation_matrix,
+        Rt_matrix = renewal_state.Rt_matrix, importation_matrix,
         δ_patch, δ_knots = rt_state.δ_knots,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
@@ -1861,6 +1875,29 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         seed_at_renewal_start = seed0_total, seed_fraction,
         incubation_pmf = inc_state.pmf, populations,
         headlines...,
+    )
+end
+
+"""
+[`patch_infection_model`](@ref) with the national infections from one
+renewal at the national trend and the patches partitioning them
+([`partitioned_patch_renewal`](@ref)). Takes the same arguments and
+returns the same state, so it drops into [`bvd_joint`](@ref) as
+`patch_infection`.
+
+The national trend `μ(t)` is then the national reproduction number in a
+fully susceptible population, and the sum-to-zero patch deviations set
+only each patch's share of the national infections. The national size no
+longer moves with the deviations, which in the free patch renewal shift
+the force-weighted national reproduction number. The reported patch
+reproduction numbers are those the patches ran at after the rescaling onto
+the national total.
+"""
+function partitioned_patch_infection_model(
+        n::Integer, n_patches::Integer; kwargs...
+    )
+    return patch_infection_model(
+        n, n_patches; patch_renewal = partitioned_patch_renewal, kwargs...
     )
 end
 

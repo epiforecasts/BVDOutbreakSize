@@ -520,6 +520,120 @@ function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
 end
 
 """
+    free_patch_renewal(Rt_matrix, Rt_national, g, seeds_matrix,
+                       importation_kernel, epsilon, N)
+
+The default national total of [`patch_infection_model`](@ref): each patch
+runs its own renewal ([`patch_infections`](@ref)) and the national
+trajectory is their sum. `Rt_national` is not read. Returns
+`(; infections, importation, Rt_matrix)`, with `Rt_matrix` passed through.
+"""
+function free_patch_renewal(
+        Rt_matrix::AbstractMatrix, Rt_national::AbstractVector,
+        g::AbstractVector, seeds_matrix::AbstractMatrix,
+        importation_kernel::AbstractMatrix,
+        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
+    )
+    st = patch_infections(
+        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N
+    )
+    return (; st.infections, st.importation, Rt_matrix)
+end
+
+"""
+    partitioned_patch_renewal(Rt_matrix, Rt_national, g, seeds_matrix,
+                              importation_kernel, epsilon, N)
+
+Multi-patch renewal whose national total is a single renewal and whose
+patches partition it. The national infections `I_t` come from
+[`renewal_infections`](@ref) at `Rt_national` on the summed seeds and the
+summed pool `Σ_p N_p`. Each patch's share of a day's infections is its
+weight after importation, with the generated term, the transfer and the
+kernel as in [`patch_infections`](@ref):
+
+```math
+G_{p,t} = R_{p,t} \\frac{S_{p,t-1}}{N_p} \\sum_{s \\ge 1} I_{p,t-s}\\, g_s,
+\\qquad
+I_{p,t} = I_t \\frac{Y_{p,t}}{\\sum_q Y_{q,t}},
+\\qquad
+S_{p,t} = \\max(S_{p,t-1} - I_{p,t}, 0),
+```
+
+with `Y_{p,t}` the transfer of `G` through the kernel. The patches sum to
+`I_t` on every day and are non-negative, since each share is a ratio of
+non-negative weights. A factor common to every patch on a day cancels from
+the shares, so `Rt_national` sets the national size alone and the patch
+deviations `R_{p,t} / Rt_national[t]` set only the split. When every
+weight is zero the day is split evenly.
+
+The returned `Rt_matrix` is the reproduction number each patch ran at,
+`c_t R_{p,t}` with `c_t = I_t / Σ_q Y_{q,t}` the common factor that
+rescales the patches onto the national total (one on the seeded days).
+`importation` is the arrivals term on the same scale.
+Returns `(; infections, importation, Rt_matrix)`, each
+`(n_patches × n_days)`.
+"""
+function partitioned_patch_renewal(
+        Rt_matrix::AbstractMatrix, Rt_national::AbstractVector,
+        g::AbstractVector, seeds_matrix::AbstractMatrix,
+        importation_kernel::AbstractMatrix,
+        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
+    )
+    np, n = size(Rt_matrix)
+    L = size(seeds_matrix, 2)
+    national = renewal_infections(
+        Rt_national, g, vec(sum(seeds_matrix; dims = 1)), sum(N)
+    )
+    Tp = promote_type(
+        eltype(Rt_matrix), eltype(national), eltype(seeds_matrix),
+        eltype(importation_kernel),
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon),
+        float(eltype(N))
+    )
+    I = zeros(Tp, np, n)
+    imports = zeros(Tp, np, n)
+    Rt_eff = zeros(Tp, np, n)
+    outflow = _patch_outflow(Tp, importation_kernel, np)
+    pool = zeros(Tp, np)
+    @inbounds for p in 1:np
+        for j in 1:min(L, n)
+            I[p, j] = seeds_matrix[p, j]
+            Rt_eff[p, j] = Rt_matrix[p, j]
+        end
+        pool[p] = _pool_after_seed(N[p], view(I, p, 1:min(L, n)))
+    end
+    gen = zeros(Tp, np)
+    arrivals = zeros(Tp, np)
+    y = zeros(Tp, np)
+    @inbounds for t in (L + 1):n
+        for p in 1:np
+            gen[p] = Rt_matrix[p, t] * _patch_force(I, g, p, t) *
+                pool[p] / N[p]
+        end
+        total = zero(Tp)
+        for p in 1:np
+            a = zero(Tp)
+            for q in 1:np
+                q == p && continue
+                a += _eps(epsilon, q, t) * importation_kernel[p, q] * gen[q]
+            end
+            arrivals[p] = a
+            y[p] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] + a
+            total += y[p]
+        end
+        positive = total > zero(Tp)
+        c = positive ? national[t] / total : one(Tp)
+        for p in 1:np
+            I[p, t] = positive ? c * y[p] : national[t] / np
+            imports[p, t] = c * arrivals[p]
+            Rt_eff[p, t] = c * Rt_matrix[p, t]
+            pool[p] = max(pool[p] - I[p, t], zero(Tp))
+        end
+    end
+    return (; infections = I, importation = imports, Rt_matrix = Rt_eff)
+end
+
+"""
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`

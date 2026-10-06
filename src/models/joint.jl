@@ -1093,6 +1093,9 @@ by importation, with every national stream above fitted against the summed
 provinces. The default `n_patches = 1` collapses it onto the
 single-population model, since the sum-to-zero deviations vanish, there is
 nothing to import between, and no per-province likelihood is scored.
+Passing `patch_infection = partitioned_patch_infection_model`
+([`partitioned_patch_infection_model`](@ref)) runs one national renewal
+instead and splits it across the provinces.
 
 The spatial information enters through two composition terms. The
 per-province confirmed cases and confirmed deaths in the situation
