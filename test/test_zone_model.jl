@@ -1356,6 +1356,7 @@ end
     using BVDOutbreakSize: bvd_zone, zone_gravity_blocks, gravity_pull,
         province_distance_matrix, _zone_states
     using Turing: sample, Prior
+    using Statistics: median, quantile
     import FlexiChains
 
     syn = zone_synthetic()
@@ -1432,6 +1433,11 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
     γs = vec(collect(chn[:mixing_decay_zone]))
+    ## The decay prior keeps its median at the conventional 1 and its 95%
+    ## point above 3.7, the upper end of the decay a 63-zone fit estimated.
+    decay_prior = bvd_zone(zd).defaults.mixing_decay_prior
+    @test median(decay_prior) ≈ 1
+    @test quantile(decay_prior, 0.95) > 3.7
     ωs = [collect(v) for v in vec(collect(chn[:mixing_destination_zone]))]
     @test all(>(0), γs)
     @test all(>(0), vec(collect(chn[:mixing_destination_sd_zone])))

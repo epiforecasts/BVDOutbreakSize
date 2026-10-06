@@ -229,6 +229,10 @@ joint_max_depth() = parse(
     get(ENV, "BVD_JOINT_MAX_DEPTH", "10")
 )
 
+## The tree-depth cap fit `id` samples at, which the diagnostics need to
+## count how often a tree reached it.
+fit_max_depth(id) = id in JOINT_SAMPLER_FITS ? joint_max_depth() : 10
+
 ## The fits that splat `joint_sampler_args()`: the headline, its spatial
 ## control, the one-week-back validation joint and the two sensitivity
 ## re-fits of the joint.

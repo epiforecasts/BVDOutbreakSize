@@ -56,6 +56,6 @@ else
     ## Keys are rebuilt before the diagnostics read them: a chain that came
     ## back from the cache was serialised by another FlexiChains version.
     repaired = repair_chain_keys(result)
-    write_fit_summary(ID, repaired)
-    write_fit_extras(ID, key, repaired, CACHE)
+    write_fit_summary(ID, repaired; max_depth = fit_max_depth(ID))
+    write_fit_extras(ID, key, repaired, CACHE; max_depth = fit_max_depth(ID))
 end

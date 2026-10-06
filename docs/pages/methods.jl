@@ -350,7 +350,7 @@ MarkdownTable(vintage_table) #hide
 # A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
 #
 # ```math
-# \boldsymbol\delta_{1} = \sigma_{\text{lvl}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z},
+# \boldsymbol\delta_{1} = \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{u},
 # \qquad
 # \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
 #   + \sigma_{\text{drift}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z}_k, \tag{6}
@@ -363,7 +363,7 @@ MarkdownTable(vintage_table) #hide
 # AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
 # ```
 #
-# with $\mathbf{z}, \mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# with $\mathbf{u} \sim \mathrm{Normal}(0, \sigma_{\text{lvl}}^2 I_{P-1})$, $\mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
 # $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
 # $A$ sets the shape of the innovation covariance and $\sigma_{\text{drift}}$ its size, since the covariance has trace $\sigma_{\text{drift}}^2 (P - 1)$ whatever $A$ is.
 # Together they are a full covariance of a sum-to-zero vector, and $\sigma_{\text{drift}} \to 0$ gives every patch the trend's shape.
@@ -2222,7 +2222,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
-# \gamma \sim \mathrm{LogNormal}(0,\ 0.5), \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 1), \qquad
 # \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
 # \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
 # ```
