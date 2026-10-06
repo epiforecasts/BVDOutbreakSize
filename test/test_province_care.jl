@@ -236,11 +236,22 @@ end
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
 end
 
+@testitem "_median_ci: drops non-finite draws" begin
+    using BVDOutbreakSize: _median_ci
+
+    ## Median 2, and the 5% and 95% quantiles of 1, 2, 3 are 1.1 and 2.9.
+    @test _median_ci([1.0, NaN, 2.0, Inf, 3.0, -Inf]; digits = 1) ==
+        "2.0 (1.1–2.9)"
+    @test _median_ci([1.0, NaN, 2.0, 3.0]; digits = 0) == "2 (1–3)"
+    @test _median_ci([NaN, Inf]) == "—"
+end
+
 @testitem "province_bed_table: beds, demand and shortfall by province" tags = [
     :slow,
 ] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
+    using Random: Xoshiro
     import FlexiChains
     using DataFrames: nrow, names
 
@@ -265,7 +276,8 @@ end
         tmrca_days = obs.tmrca_days
     )
     chn = sample(
-        m, Prior(), 50; chain_type = FlexiChains.VNChain, progress = false
+        Xoshiro(20261006), m, Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false
     )
     df = province_bed_table(chn, np)
     @test nrow(df) == np
@@ -279,6 +291,7 @@ end
 
     ## A single-population chain carries no per-province beds.
     single = sample(
+        Xoshiro(20261006),
         bvd_joint(
             obs.n,
             obs.exported_cases, obs.total_deaths, obs.reported_cases,
