@@ -127,6 +127,12 @@ end
     @test c.id == "demo"
     @test c.diagnostics.n_draws == 800
     @test c.status in (:pass, :warn)
+    @test c.sampler.chain == [1, 2]
+    ## The per-chain sampler table is reported whatever the verdict.
+    md_pass = convergence_markdown([c])
+    @test occursin("Sampler behaviour by chain", md_pass)
+    @test occursin("percent_at_max_depth", md_pass)
+    @test occursin("ebfmi", md_pass)
 
     ## Forcing a failure makes the per-parameter breakdown available, and the
     ## report then names the parameters rather than only the headline number.

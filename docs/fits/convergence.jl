@@ -13,7 +13,7 @@
 # so tightening the gate as the fit improves is a variable, not a code change.
 
 using BVDOutbreakSize: fit_diagnostics, parameter_diagnostics,
-    worst_parameters_table, family_diagnostics_table,
+    sampler_by_chain_table, worst_parameters_table, family_diagnostics_table,
     divergence_location_table, markdown_table
 
 include(joinpath(@__DIR__, "shared.jl"))
@@ -174,18 +174,28 @@ function convergence_summary(label, d; thresholds = convergence_thresholds())
 end
 
 """
-    fit_convergence(id, chn; thresholds = convergence_thresholds())
+    fit_convergence(id, chn; thresholds = convergence_thresholds(),
+                    max_depth = 10)
 
-Gate one fit. Returns the verdict merged with `(; id, diagnostics)`, and,
-unless the fit passed, the per-parameter frame the report's diagnostics
-tables are built from, so the caller can say which parameters are at fault
-without recomputing several thousand R-hats.
+Gate one fit. Returns the verdict merged with `(; id, diagnostics, sampler)`,
+where `sampler` is the per-chain sampler table
+([`sampler_by_chain_table`](@ref)) with the tree-depth cap the fit ran at,
+`max_depth`. Unless the fit passed it also carries the per-parameter frame
+the report's diagnostics tables are built from, so the caller can say which
+parameters are at fault without recomputing several thousand R-hats.
 """
-function fit_convergence(id, chn; thresholds = convergence_thresholds())
+function fit_convergence(
+        id, chn; thresholds = convergence_thresholds(),
+        max_depth::Integer = 10
+    )
     d = fit_diagnostics(chn)
     v = convergence_verdict(d; thresholds = thresholds)
     per_parameter = v.status === :pass ? nothing : parameter_diagnostics(chn)
-    return (; id = String(id), diagnostics = d, per_parameter, chain = chn, v...)
+    sampler = sampler_by_chain_table(chn; max_depth)
+    return (;
+        id = String(id), diagnostics = d, per_parameter, sampler,
+        chain = chn, v...,
+    )
 end
 
 const _STATUS_MARK = Dict(
@@ -218,6 +228,23 @@ function _headline_table(io, checks)
         )
     end
     return println(io)
+end
+
+## Per-chain sampler behaviour of every gated fit that carries it: step
+## size, how often the tree-depth cap was hit, mean acceptance and E-BFMI.
+## Printed whatever the verdict, since a fit can pass while spending every
+## draw at the depth cap.
+function _sampler_tables(io, checks)
+    any(c -> get(c, :sampler, nothing) !== nothing, checks) || return nothing
+    println(io, "<details><summary>Sampler behaviour by chain</summary>\n")
+    for c in checks
+        t = get(c, :sampler, nothing)
+        t === nothing && continue
+        println(io, "`", c.id, "`:\n")
+        println(io, markdown_table(t))
+        println(io)
+    end
+    return println(io, "</details>\n")
 end
 
 ## Which parameters are responsible, the same three views the in-sample
@@ -295,6 +322,7 @@ function convergence_markdown(
     println(io)
     isempty(context) || (println(io, context); println(io))
     _headline_table(io, checks)
+    _sampler_tables(io, checks)
     for c in checks
         (isempty(c.failures) && isempty(c.warnings)) && continue
         println(io, "### `", c.id, "`: ", _STATUS_MARK[c.status])
