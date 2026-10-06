@@ -130,8 +130,8 @@ zone_map_fig #hide
 #md # ```
 
 ## Each patch's implied reproduction number from the joint draws with the
-## same generation interval the zone stage fixes, so the patch line is close
-## to the quantity the zone values average to.
+## joint posterior mean generation interval, so the patch line is close to
+## the quantity the zone values average to.
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [
@@ -321,7 +321,7 @@ MarkdownTable(zone_diagnostics) #hide
 #md # ```
 
 # The figure below sets the reproduction number implied by the zone stage's own patch trajectories against the one implied by the headline joint fit, nationally and for each patch.
-# Both are computed from infections with the generation interval the zone stage fixes.
+# Both are computed from infections with the joint posterior mean generation interval.
 # Agreement says the melding stage has kept the joint's patch trajectories rather than moved them to fit the zone data.
 
 #md # ```@raw html
