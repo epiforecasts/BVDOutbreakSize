@@ -99,6 +99,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The derived gradient of `abscond_thinned_flows`, used without the Mooncake rules, passes zero-admission days their derivative (#968).
 - The zone-ranking plot test matches the level-only legend label renamed in #981 (#997).
 - The national and province forecast summary tables show by default instead of being folded away behind their own dropdown (#1056).
+- Two patch-model tests pinned values the SitRep 141 data moved past, and now check the property each was written for (#1065).
+  The province positivity test asks that Ituri's positivity exceed Nord-Kivu's by more than binomial sampling noise, not by a factor of two.
+  The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
+  Fitted values do not change.
 
 ## v2.2.0
 
