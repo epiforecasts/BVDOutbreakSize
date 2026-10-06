@@ -1367,7 +1367,6 @@ function zone_sampler_diagnostics(
     steps = _zone_stat(chn, :step_size)
     per_chain(m, f) = m === nothing ? Float64[] :
         [f(view(m, :, c)) for c in 1:size(m, 2)]
-    ebfmi(E) = sum(abs2, diff(E)) / max(sum(abs2, E .- mean(E)), floatmin())
     exclude = (_DIAGNOSTIC_EXCLUDE..., "R_T_zone")
     finite(v) = filter(isfinite, v)
     conv = _zone_convergence(chn)
@@ -1392,7 +1391,7 @@ function zone_sampler_diagnostics(
     return (;
         base..., max_rhat_R_T_walking = walking_rt,
         depth_cap_fraction = per_chain(depth, x -> mean(x .>= max_depth)),
-        ebfmi = per_chain(energy, ebfmi),
+        ebfmi = per_chain(energy, _ebfmi),
         step_size = per_chain(steps, x -> x[end]),
     )
 end
