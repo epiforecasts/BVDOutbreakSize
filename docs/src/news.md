@@ -111,6 +111,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The recovery seeds fit with two chains, the benchmark runs once and stops when its pull request closes, and the test matrix drops the cell the coverage job repeats (#1004).
 - The path gates and the benchmark fetch only the commits they diff, so the gates finish within their timeout (#1028).
 - `importation_from_kernel` is removed, since no model calls it (#1038).
+- The per-fit job summary, the convergence gate report and each fit's diagnostics bundle give, per chain, the share of draws at the tree-depth cap, the mean acceptance statistic and the energy fraction of missing information beside the step size, so a fit that spends every draw at the cap is visible in CI (#1060).
+  The cached CI headline joint fit `joint__71835cdb61145210` (SitRep 136) reaches the cap of 10 on every draw of both chains, at a step size of 0.0015, with mean acceptance 0.95 against its target of 0.80 and E-BFMI 0.84 and 0.81.
+  Fitted values do not change.
 - The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
 
 ### Fixed

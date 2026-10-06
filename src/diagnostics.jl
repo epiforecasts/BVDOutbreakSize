@@ -287,14 +287,23 @@ end
 
 """
 Sampler behaviour per chain: how many draws each chain took, how many of
-them were divergent, the step size it adapted to and the deepest tree it
-built.
+them were divergent, the step size it adapted to, the deepest tree it built,
+the share of its draws whose tree reached `max_depth`, its mean acceptance
+statistic and its energy Bayesian fraction of missing information (E-BFMI:
+the mean squared change in Hamiltonian energy between draws over the
+energy's variance).
+
+A tree that reaches `max_depth` stops its trajectory before it turns back,
+so a chain that hits the cap on most draws moves less far per draw than NUTS
+would take it. A mean acceptance well above the target the sampler adapted
+to marks a step size smaller than that target asked for. An E-BFMI below
+about 0.3 marks a chain that moves poorly between energy levels.
 
 One chain with a far smaller step size and far deeper trees than the others
 is a chain stuck somewhere the rest of the posterior never visits, which is
 a different problem from divergences spread evenly across chains.
 """
-function sampler_by_chain_table(chn)
+function sampler_by_chain_table(chn; max_depth::Integer = 10)
     nd, nc = size(chn)
     ## Flatten each statistic the way parameter draws flatten, then read one
     ## chain's block out of it, so a chain's draws stay together.
@@ -306,6 +315,8 @@ function sampler_by_chain_table(chn)
     div = flat(:numerical_error)
     step = flat(:step_size)
     depth = flat(:tree_depth)
+    accept = flat(:acceptance_rate)
+    energy = flat(:hamiltonian_energy)
     divergences = [
         isnothing(div) ? 0 :
             count(x -> x === true, block(div, c)) for c in 1:nc
@@ -319,14 +330,38 @@ function sampler_by_chain_table(chn)
             round(Int, _max_finite(Float64.(block(depth, c))))
             for c in 1:nc
     ]
+    at_cap = [
+        isnothing(depth) ? NaN :
+            100 * count(>=(max_depth), Float64.(block(depth, c))) / nd
+            for c in 1:nc
+    ]
+    acceptance = [
+        isnothing(accept) ? NaN : mean(Float64.(block(accept, c)))
+            for c in 1:nc
+    ]
+    ebfmi = [
+        isnothing(energy) ? NaN : _ebfmi(Float64.(block(energy, c)))
+            for c in 1:nc
+    ]
     return DataFrame(
         chain = collect(1:nc),
         draws = fill(nd, nc),
         divergences = divergences,
         percent_divergent = round.(100 .* divergences ./ nd; digits = 1),
         step_size = round.(steps; sigdigits = 3),
-        deepest_tree = depths
+        deepest_tree = depths,
+        percent_at_max_depth = round.(at_cap; digits = 1),
+        mean_acceptance = round.(acceptance; digits = 3),
+        ebfmi = round.(ebfmi; digits = 3)
     )
+end
+
+# Energy Bayesian fraction of missing information of one chain's Hamiltonian
+# energies `E`: the mean squared change in energy between draws over the
+# energy's variance. `NaN` for fewer than two draws.
+function _ebfmi(E::AbstractVector)
+    length(E) < 2 && return NaN
+    return sum(abs2, diff(E)) / max(sum(abs2, E .- mean(E)), floatmin())
 end
 
 # Middle `width` interval of `x` as a printable range.
