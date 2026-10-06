@@ -505,3 +505,34 @@ end
     @test log.(m[5:8]) ≈ 0.3 .* (sum_to_zero_basis(4) * z[3:5])
     @test_throws DimensionMismatch relative_multiplier(zeros(8), 0.3, groups)
 end
+
+@testitem "relative_multiplier: the block basis matches the per-group factors" begin
+    using BVDOutbreakSize: relative_multiplier, relative_multiplier_basis,
+        relative_multiplier_dims, sum_to_zero_basis, sum_to_zero_factor
+    using Random: Xoshiro
+
+    ## Uneven groups, with a group of one unit and an empty group between.
+    groups = [1:5, 6:6, 7:8, 9:8, 9:15, 16:18]
+    Q = relative_multiplier_basis(groups)
+    @test size(Q) == (18, relative_multiplier_dims(groups))
+    @test all(iszero, Q[6, :])
+    rng = Xoshiro(7)
+    for σ in (0.05, 0.3, 1.7)
+        z = randn(rng, relative_multiplier_dims(groups))
+        ## Each group's log multipliers from its own loading matrix.
+        ref = ones(18)
+        off = 0
+        for us in groups
+            k = length(us) - 1
+            k >= 1 || continue
+            F = sum_to_zero_factor(sum_to_zero_basis(k + 1), σ)
+            ref[us] = exp.(F * z[(off + 1):(off + k)])
+            off += k
+        end
+        @test relative_multiplier(z, σ, Q) ≈ ref rtol = 1.0e-14
+        @test relative_multiplier(z, σ, groups) ≈ ref rtol = 1.0e-14
+    end
+    @test relative_multiplier_basis([1:1, 2:2]) == zeros(2, 0)
+    @test relative_multiplier(Float64[], 0.3, [1:1, 2:2]) == ones(2)
+    @test_throws DimensionMismatch relative_multiplier(zeros(3), 0.3, Q)
+end
