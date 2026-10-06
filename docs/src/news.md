@@ -38,12 +38,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 136, 27 September.
+- The model cut-off advances to SitRep 141, 2 October.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
-  SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018).
+  SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
+  SitReps 138 to 141 are not added to the onset curve, because the reader still misreads bars on their renders (#1061).
+  The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 136 (27 September), scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
