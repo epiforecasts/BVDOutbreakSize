@@ -1746,13 +1746,13 @@ cfr_prior_fig #hide
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
-# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
+# The baseline hazard is a logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0 = \eta_0 + \sigma_{h0}\,Q\,\mathbf{z}_{h0}, \qquad
-# \mathbf{z}_{h0} \sim \mathrm{Normal}(0, I_{D-1}). \tag{50}
+# \mathrm{logit}\,h_0 = \eta_0 + Q\,\mathbf{y}_{h0}, \qquad
+# \mathbf{y}_{h0} \sim \mathrm{Normal}(0,\ \sigma_{h0}^2 I_{D-1}). \tag{50}
 # ```
 #
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
