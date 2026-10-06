@@ -5,7 +5,6 @@
 # probability of at least a few cases, zone by zone.
 # The [health-zone model](@ref "Health-zone model") on the methods page gives the maths.
 # This page carries its results and the checks of the fit, and the interactive map is on the [dashboard](@ref "Dashboard").
-# The change in each zone's estimate over the past week has its own section below.
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
 #md # ```@raw html
@@ -18,18 +17,17 @@ using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #-
 ## The fits this page reads, loaded from the cache here: the headline joint,
-## the zone fit melded from it, and the frozen zone fit the week-on-week
-## comparison reads.
+## the zone fit melded from it, and the frozen zone fit the sampler
+## diagnostics read.
 chn_joint = load_fit("joint");
 chn_local = load_fit("local");
 frozen_local = load_fit("local_frozen_validation");
 
-## The zone stage's fixed inputs with the joint's forecast, and the frozen
-## fit's inputs for the comparison below, both from the shared setup, so the
-## health-zone forecast page draws the same forecast from the same inputs.
+## The zone stage's fixed inputs with the joint's forecast, from the shared
+## setup, so the health-zone forecast page draws the same forecast from the
+## same inputs.
 zone_inputs = zone_stage_inputs(; forecast = true);
 zone_patch = zone_inputs.patch_of_zone;
-frozen_zone_inputs = frozen_zone_stage_inputs();
 
 #md # ```@raw html
 #md # </details>
@@ -123,9 +121,9 @@ zone_map_fig = plot_zone_map_panels(
 
 zone_map_fig #hide
 
-# The panels below trace the reproduction number of the twelve zones with most confirmed cases as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
+# The panels below trace the reproduction number of the twelve zones with the most infections over the past week as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
 # Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
-# The patch line averages all the patch's zones weighted by their recent infections, so it can sit above or below every zone shown when a zone outside the twelve drives the patch.
+# The patch line averages all the patch's zones weighted by their recent infections, so the zones shown tend to move it most.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
@@ -133,8 +131,7 @@ zone_map_fig #hide
 
 ## Each patch's implied reproduction number from the joint draws with the
 ## same generation interval the zone stage fixes, so the patch line is close
-## to the quantity the zone values average to (the zone stage's own patch
-## trajectories, compared with these further down the page).
+## to the quantity the zone values average to.
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [
@@ -150,12 +147,20 @@ patch_implied_rt = [
     end
         for p in 1:N_PATCHES
 ];
+## Each zone's infections over the past week, the median over draws, which
+## chooses the panels.
+zone_week_infections = [
+    median(vec(sum(m[:, (obs.n - 6):obs.n]; dims = 2)))
+        for m in zone_infections(chn_local, zone_inputs)
+];
 zone_rt_fig = plot_rt_zones(
     [replace(m[:, zone_grid], NaN => missing) for m in zone_rt_traj],
     zone_inputs.zone_labels, zone_patch;
     patch_labels = zone_inputs.patch_labels,
     dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
-    cumulative = zone_inputs.cumulative, top = 12,
+    ranking = zone_week_infections,
+    ranking_label = "infections over the past week", top = 12,
+    modelled = zone_inputs.walking,
     patch_rt = [m[:, zone_grid] for m in patch_implied_rt]
 );
 
@@ -351,7 +356,7 @@ zone_meld_rt_fig = plot_rt_zones(
     patch_labels = vcat(zone_inputs.patch_labels, ["National"]),
     patch_colours = [:firebrick, :steelblue, :seagreen, :darkorange, :black],
     dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
-    top = N_PATCHES + 1, ncols = 3,
+    top = N_PATCHES + 1, ncols = 3, unit = "patch",
     reference_rt = [m[:, zone_grid] for m in joint_stage_rt],
     reference_label = "Headline joint fit",
     title = "Reproduction number from the zone stage and the joint fit"
@@ -465,152 +470,7 @@ zone_hyper_pair_fig #hide
 
 # ## Change over the past week
 #
-# The [health-zone model](@ref "Health-zone model") is melded onto the headline fit's patch infections one way, so the zone data do not update the national and province estimates.
-# The comparison below reads the reproduction number of every zone walking in both fits at the frozen and live cut-offs, matched by key.
-# The dot plot shows the fifteen zones the frozen fit ranks highest, the trajectories the twelve with most confirmed cases, and the table the ten with most confirmed cases.
-
-#md # ```@raw html
-#md # <details><summary>Zone cut-off summaries shared by the comparisons</summary>
-#md # ```
-
-## One row per zone in `zs` with the median and the 50% and 90% intervals
-## of its draws (one vector per zone), in the schema the zone dot plots
-## read, plus the zone's key to match variants by and its confirmed cases
-## to rank by. A zone with no finite draw is left out.
-function _zone_cutoff_summary(draws, inputs, zs = eachindex(draws))
-    keep = [i for (i, v) in enumerate(draws) if any(isfinite, v)]
-    z = zs[keep]
-    tbl = zone_summary_table(
-        [filter(isfinite, draws[i]) for i in keep],
-        inputs.zone_labels[z], inputs.patch_of_zone[z]
-    )
-    tbl.key = inputs.zone_keys[z]
-    tbl.cases = inputs.cumulative[z]
-    return tbl
-end
-
-## The `top` zones by confirmed cases in the first variant, one column per
-## variant for the reproduction number. Each cell is a median with its 90%
-## interval. Variants are matched by zone key.
-function _zone_comparison_table(variants; top::Integer = 10)
-    function cell(t, key, d, scale)
-        i = findfirst(==(key), t.key)
-        i === nothing && return ""
-        f(x) = string(round(scale * x; digits = d))
-        return string(f(t.median[i]), " (", f(t.lo90[i]), "–", f(t.hi90[i]), ")")
-    end
-    base = first(last(first(variants)))
-    order = sortperm(base.cases; rev = true)[1:min(top, size(base, 1))]
-    df = DataFrame(
-        "Zone" => base.label[order],
-        "Province" => [PROVINCE_LABELS[p] for p in base.patch[order]],
-        "Cases" => base.cases[order]
-    )
-    for (q, name, d, scale) in ((:R, "R", 2, 1),),
-            (label, s) in variants
-
-        haskey(s, q) || continue
-        df[!, "$name ($label)"] = [
-            cell(s[q], k, d, scale)
-                for k in base.key[order]
-        ]
-    end
-    return df
-end
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#
-# The frozen zone fit and the live one condition on different weeks of data and on different parent fits.
-# The comparison reads each zone's reproduction number on the frozen cut-off day from both fits, alongside the live estimate at the current cut-off.
-# A zone carries its own walk only once it has reported 30 confirmed cases, and the comparison is restricted to zones walking in both fits.
-# The trajectory panels draw the frozen fit behind the live one for the twelve such zones with most confirmed cases.
-
-#md # ```@raw html
-#md # <details><summary>Zone reproduction numbers from the frozen and live fits</summary>
-#md # ```
-
-## Daily reproduction numbers rebuilt from both fits, and the zones walking
-## in both as live index => frozen index, matched by key. The summaries
-## take their labels and cases from the live inputs.
-zone_rt_live = reconstruct_zone_rt(chn_local, zone_inputs)
-zone_rt_frozen = reconstruct_zone_rt(frozen_local.chn, frozen_zone_inputs)
-zone_week_pairs = [
-    z => j
-        for (z, k) in enumerate(zone_inputs.zone_keys)
-        for j in (findfirst(==(k), frozen_zone_inputs.zone_keys),)
-        if j !== nothing && zone_inputs.walking[z] &&
-        frozen_zone_inputs.walking[j]
-]
-zone_week_variants = let zs = first.(zone_week_pairs), js = last.(zone_week_pairs),
-        n_f = frozen_zone_inputs.n
-
-    [
-        "frozen fit at its cut-off" => (;
-            R = _zone_cutoff_summary(
-                [zone_rt_frozen[j][:, n_f] for j in js],
-                zone_inputs, zs
-            ),
-        ),
-        "live fit on the same day" => (;
-            R = _zone_cutoff_summary(
-                [zone_rt_live[z][:, n_f] for z in zs],
-                zone_inputs, zs
-            ),
-        ),
-        "live fit at its cut-off" => (;
-            R = _zone_cutoff_summary(
-                [zone_rt_live[z][:, end] for z in zs],
-                zone_inputs, zs
-            ),
-        ),
-    ]
-end
-zone_week_table = _zone_comparison_table(zone_week_variants);
-zone_week_fig = plot_zone_comparison(
-    [l => s.R for (l, s) in zone_week_variants];
-    xlabel = "Reproduction number", reference_line = 1.0,
-    title = "Zone reproduction number from the frozen and live fits"
-);
-
-## The frozen trajectories padded onto the live grid, undefined past the
-## frozen cut-off, behind the live ones over the zone grid. The plot reads
-## an undefined day as `missing`, where the reconstruction writes `NaN`.
-zone_week_rt_fig = let grid = zone_inputs.t0:obs.n, n_f = frozen_zone_inputs.n
-    asmissing(m) = replace(m, NaN => missing)
-    frozen = map(zone_week_pairs) do (z, j)
-        m = fill(NaN, size(zone_rt_frozen[j], 1), obs.n)
-        m[:, 1:n_f] .= zone_rt_frozen[j]
-        asmissing(m[:, grid])
-    end
-    zs = first.(zone_week_pairs)
-    plot_rt_zones(
-        [asmissing(zone_rt_live[z][:, grid]) for z in zs],
-        zone_inputs.zone_labels[zs], zone_inputs.patch_of_zone[zs];
-        patch_labels = zone_inputs.patch_labels,
-        dates = grid_date.(grid), as_of_date = obs.cutoff,
-        cumulative = zone_inputs.cumulative[zs], top = 12,
-        reference_rt = frozen, reference_label = "Frozen fit",
-        title = "Zone reproduction number from the live fit, " *
-            "with the frozen fit behind"
-    )
-end
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(zone_week_table) #hide
-
-#-
-
-zone_week_fig #hide
-
-#-
-
-zone_week_rt_fig #hide
+# How each zone's reproduction number has moved between the fit a week earlier and the current one is on the [in-sample checks](@ref zone-change-past-week) page.
 
 # ## Saving zone assets
 #

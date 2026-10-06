@@ -165,22 +165,39 @@ Future vintages of the symptom-onset reporting triangle. Each future
 vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 [`onset_report_expected_total`](@ref) as of `v`, over the onsets the model
 runs past the cut-off `n`. Its increment over the total at the cut-off is
-drawn with the Student-t the scored cells take, at the scale
+drawn with the Student-t the scored cells take. Its variance is the one
 [`onset_report_scale`](@ref) gives a correction read off two bars with the
-fitted read SD `τ`. The increment is drawn on the whole figure, not per
-onset date, since the figure's total is the quantity the forecast is
-scored on. The split of each
+fitted read SD `τ`, plus each figure's calibration error on its total,
+`σ_scan² (then² + now²)`, with `then` and `now` the two figures' totals.
+`σ_scan` (`forecast_scan_sd ~ scan_sd_prior`) is not fitted, since the
+scored cells carry no per-figure level, so `predict` draws it from its
+prior. The prior is centred on the estimate of a fit that sampled a
+per-figure level (884a047), 0.41% (0.09–0.75%). The increment is drawn on the whole figure,
+not per onset date, since the figure's total is the quantity the forecast
+is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
 """
-@model function onset_forecast_model(onsets, state, n, vintages)
+@model function onset_forecast_model(
+        onsets, state, n, vintages;
+        scan_sd_prior = truncated(Normal(0.0041, 0.0017); lower = 0.0)
+    )
     past = onsets[1:n]
     now = _onset_total(onsets, state, n)
     then = [_onset_total(onsets, state, v) for v in vintages]
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
-    sds = [onset_report_scale(means[j], state.τ, 2) for j in eachindex(vintages)]
+    forecast_scan_sd ~ scan_sd_prior
+    ## `~` rebinds its left side, so the comprehension reads a name bound
+    ## once; capturing the sampled name itself would box it.
+    scan_sd = forecast_scan_sd
+    sds = [
+        hypot(
+            onset_report_scale(means[j], state.τ, 2),
+            scan_sd * hypot(then[j], now)
+        ) for j in eachindex(vintages)
+    ]
     forecast_onset_reports ~ to_submodel(
         onset_increments_model(means, sds, missing, state.ν)
     )
@@ -492,6 +509,18 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
 end
 
 """
+    onset_detection_day(export_case_days)
+
+Grid day the outbreak was first detected, for the onset ascertainment step
+([`onset_detection_step`](@ref)): the earliest dated export detection, or
+`-Inf` without one, which leaves ascertainment unchanged.
+"""
+function onset_detection_day(export_case_days::AbstractVector{<:Integer})
+    return isempty(export_case_days) ? -Inf :
+        float(minimum(export_case_days))
+end
+
+"""
 Onsets-only composer (the direct-observation analogue). Runs the infection
 process and onset staging, then conditions on the symptom-onset reporting-
 triangle likelihood alone. See [`onset_reporting_model`](@ref) for the
@@ -501,7 +530,9 @@ maths.
 This stream needs no dispersion submodel of its own. `onset_report`
 samples its own ascertainment level and is the only injected submodel. No
 confirmed pipeline is available to anchor ascertainment on, so it falls
-back to its constant `0.15` anchor.
+back to its constant `0.15` anchor. `export_case_days` only dates the
+outbreak's detection for the onset ascertainment step
+([`onset_detection_day`](@ref)); the exports are not fitted here.
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the un-prefixed name [`bvd_joint`](@ref) uses,
@@ -522,13 +553,17 @@ the digitised level.
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         onset_report = onset_reporting_model,
+        export_case_days::AbstractVector{<:Integer} = Int[],
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence; forecast), false
     )
     onset_report_state ~ to_submodel(
-        onset_report(onset_curve_history, latent.onsets)
+        onset_report(
+            onset_curve_history, latent.onsets;
+            detection_day = onset_detection_day(export_case_days)
+        )
     )
     ## Reported only, so built only when `:=` values are recorded.
     if _reporting(__varinfo__)
@@ -555,13 +590,15 @@ Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the reported-
 cases stream (in predictive mode, to supply the non-BVD background the death
 background is scaled from) and the suspected-deaths stream, then conditions
-on the confirmed-death likelihood alone. See
-[`confirmed_deaths_model`](@ref).
+on the confirmed-death likelihood alone. The suspected deaths reach the
+laboratory through a report-to-receipt delay drawn from the prior the joint
+uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
 """
 @model function confirmed_deaths_only_model(
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
@@ -572,6 +609,7 @@ on the confirmed-death likelihood alone. See
         deaths = deaths_model,
         cases = reported_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        receipt = lab_delay_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
@@ -593,15 +631,18 @@ on the confirmed-death likelihood alone. See
     deaths_state ~ to_submodel(
         deaths(
             deaths_history, total_deaths, latent.onsets, k;
+            suspected_daily_deaths_history,
             case_bg_daily = cases_state.bg_daily, ckw...
         )
     )
+    receipt_state ~ to_submodel(receipt)
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(
             confirmed_deaths, total_deaths,
             deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
             deaths_state.bg_death_daily, k;
-            confirmed_deaths_history, confirmed_break_days,
+            confirmed_deaths_history, receipt_pmf = receipt_state.pmf,
+            confirmed_break_days,
             confirmed_break_gross = confirmed_break_gross_deaths,
             confirmed_break_sd, ckw...
         )
@@ -1322,7 +1363,8 @@ density there, is the fitted model's.
     onset_report_state ~ to_submodel(
         onset_report(
             onset_curve_history, onsets;
-            anchor = onset_anchor_daily
+            anchor = onset_anchor_daily,
+            detection_day = onset_detection_day(export_case_days)
         )
     )
 
@@ -1751,6 +1793,7 @@ density there, is the fitted model's.
         ## and overdispersion the province tables are fitted with, so the
         ## provinces add up to the national counts drawn above.
         forecast_infections_patch := vec(patch_state.infections_matrix[:, fd])
+        forecast_importation_patch := vec(patch_state.importation_matrix[:, fd])
         if _reporting(__varinfo__)
             frf = _patch_fractions(patch_state)
             forecast_rt_patch := vec(

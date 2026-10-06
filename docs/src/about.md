@@ -27,6 +27,11 @@ It has since grown into a joint model fitted to more of the published data strea
 The [aim and origins](aim.md) page sets out what has changed since the replication.
 The onset-to-admission and onset-to-death delays come from a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the line list from the 2012 Bundibugyo outbreak in Isiro [rosello2015](@cite).
 
+## Draft paper (work in progress)
+
+The [draft paper](https://epiforecasts.io/BVDOutbreakSize/dev/paper/) describes how this work developed, the current model, its evaluation and the lessons learnt.
+It is a work in progress, has not been peer reviewed and will change.
+
 ## Citing this work
 
 The repository carries a `CITATION.cff` with the current metadata, and each release is archived with a DOI.

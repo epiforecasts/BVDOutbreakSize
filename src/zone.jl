@@ -10,8 +10,9 @@
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
 ## quantity and the patch trajectory and between-patch movement it implies,
-## and, with mixing, the per-zone mixing fractions. A chain with no kept meld cell carries an
-## empty `η` and every draw reads the province model's mean curve.
+## and, with mixing, the per-zone mixing fractions. A chain with no kept
+## meld cell carries an empty `η` and every draw reads the province model's
+## mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
     zd = inputs.model_data
     nz = length(inputs.zone_keys)
@@ -24,6 +25,14 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         _draw_vectors(chn, :mixing_epsilon_zone) : nothing
     eta = _has_key(chn, :parent_eta_zone) ?
         _draw_vectors(chn, :parent_eta_zone) : nothing
+    decay = _has_key(chn, :mixing_decay_zone) ?
+        _draws(chn, :mixing_decay_zone) : nothing
+    dest = _has_key(chn, :mixing_destination_zone) ?
+        _draw_vectors(chn, :mixing_destination_zone) : nothing
+    (decay === nothing) == (dest === nothing) || error(
+        "_zone_states: the chain carries only one of `mixing_decay_zone` " *
+            "and `mixing_destination_zone`."
+    )
     ndraws = length(knots)
     isempty(knots) || length(knots[1]) == nz * K ||
         error(
@@ -46,6 +55,10 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
     epsilon(i) = shared(i) && size(zd.meld_epsilon_rows, 1) > 0 ?
         zone_parent_epsilon(zd.meld_epsilon_rows, Float64.(eta[i])) :
         nothing
+    blocks(i) = decay === nothing || zd.mixing === nothing ? nothing :
+        zone_gravity_blocks(
+            zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i])
+        )
     return [
         (;
             δ_knots = reshape(Float64.(knots[i]), nz, K),
@@ -53,7 +66,7 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
             φ = exp2(-week / halflife[i]),
             ε = eps_ === nothing ? nothing : Float64.(eps_[i]),
             η = eta === nothing ? Float64[] : Float64.(eta[i]),
-            def = zone_deformation(zd, scale(i), epsilon(i)),
+            def = zone_deformation(zd, scale(i), epsilon(i), blocks(i)),
         )
             for i in 1:ndraws
     ]
@@ -117,9 +130,9 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. The origin intensity cells have no row. `mean_norm_sq`
-is the mean of `‖η‖²` over every component, which is `dimension` when the
-fit reproduces the prior.
+weekly infections there. The origin intensity cells have no row.
+`mean_norm_sq` is the mean of `‖η‖²` over every component, which is
+`dimension` when the fit reproduces the prior.
 """
 function zone_meld_check(chn, inputs)
     meld = inputs.meld

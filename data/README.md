@@ -52,6 +52,13 @@ The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_h
 A province that prints nothing on a day has no entry; a printed zero is a zero.
 Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total and the beds are the normed count the printed rate refers to.
 The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
+From SitRep 081 the national `bed_capacity_history` is the sum of the provinces that print a bed count that day.
+A day on which a province holding at least 5% of the beds prints none is dropped from the national capacity likelihood, so a silent province is not read as closed beds.
+The share is taken against the sum of each province's last printed beds.
+A day is kept when the national figure still carries the silent province's beds.
+A province silent for more than 14 days is treated as no longer reporting.
+The longest gap after which a province printed beds again is 10 days, for Nord-Kivu in August.
+Nord-Kivu and Haut-Uélé each hold more than 5% of the beds, and Sud-Kivu, Tshopo and Bas-Uélé each hold at most 2%.
 
 ## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)
 
@@ -100,7 +107,7 @@ SitRep 087's figure broke the y-axis count scale instead. Every figure through S
 SitReps 090 and 091 reprint 088's figure, and SitRep 093 reprints 092's.
 SitRep 094's last tick is 17 August, one day past its own rapportage date and equal to its `date de publication`; SitReps 095 and 096 reprint its figure.
 SitReps 068, 082, 094, 101, 108, 115, 122 and 129 all carry that one-day lag, while 102, 116 and 130 print a tick equal to their own rapportage date.
-The axis is anchored to a fixed weekly grid, so the last tick holds while the report date advances: 17 August for 094 to 100, 24 August for 101 to 107, 31 August for 108 to 114, 07 September for 115 to 121, 14 September for 122 to 128 and 21 September for 129 to 134.
+The axis is anchored to a fixed weekly grid, so the last tick holds while the report date advances: 17 August for 094 to 100, 24 August for 101 to 107, 31 August for 108 to 114, 07 September for 115 to 121, 14 September for 122 to 128, 21 September for 129 to 134 and 28 September for 136.
 Every tick was read off the rendered figure, most by two blind readers, and the L1 date-alignment check in `test/test_onset_digitiser.jl` lands on shift 0 for every consecutive pair.
 SitRep 098 is not digitised.
 Its figure is the only one embedded losslessly (1267x789 against JPEG at about 830x510 for its neighbours) and the colour-mask reader read it 7% high on the same data; the outline reader has not been checked on it, so see issue #594 before adding it back.
@@ -113,7 +120,8 @@ SitRep 134 reprints 133's figure (byte-identical embedded JPEG).
 SitRep 110 is not digitised: its page-4 caption still reads "par date de début des symptômes" but the embedded chart is titled and axis-labelled "par date de notification" (n = 5 710), a different basis; see issue #644.
 SitReps 111 to 114 resume the onset-date basis.
 SitRep 135 is not digitised for the same reason: its page-4 caption is unchanged, but the embedded chart is titled and axis-labelled "par date de notification" (n = 7 368).
-SitRep 136 returns to the onset-date basis (n = 6 256, last tick 28 September) on a new 735x502 render, but the reader reads it 3.6% low and drops whole bars, so it is not digitised yet; see issue #1018.
+SitRep 136 returns to the onset-date basis (n = 6 256, last tick 28 September) on a new 735x502 render.
+Its washed fill on the tick columns reads as gridline and dropped two bars, so the reader now reads such a day again without the tick-column skip; 136 reads 6 172 (-1.3%, issue #1018).
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
 SitRep 115's figure draws bars past its last tick inside the "données potentiellement incomplètes" band, so the reader drops rows later than the report date plus one day.

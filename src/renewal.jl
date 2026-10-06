@@ -354,43 +354,6 @@ end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
 
-"""
-    importation_from_kernel(K, I_prev, epsilon)
-
-Per-patch importation into each of `n_patches` patches on a single day,
-given the `n_patches x n_patches` importation kernel `K`, the previous
-day's infections per patch `I_prev` (length `n_patches`), and the
-importation intensity `epsilon`.
-
-```math
-\\text{importation}_p = \\varepsilon \\sum_{q} K_{p,q} I_{q,t-1}
-```
-
-`K[p, q]` is the per-capita daily travel rate from patch `q` to patch `p`
-(the first index is the destination). Diagonal entries should be zero (no
-self-importation). Each entry is unitless (a rate per day per traveller in
-the source patch).
-
-Returns a length-`n_patches` vector of imported infections expected on the
-current day. AD-transparent under Mooncake.
-"""
-function importation_from_kernel(
-        K::AbstractMatrix, I_prev::AbstractVector,
-        epsilon::Real
-    )
-    np = size(K, 1)
-    Tp = promote_type(eltype(K), eltype(I_prev), typeof(float(epsilon)))
-    imp = zeros(Tp, np)
-    @inbounds for p in 1:np
-        acc = zero(Tp)
-        for q in 1:np
-            acc += K[p, q] * I_prev[q]
-        end
-        imp[p] = epsilon * acc
-    end
-    return imp
-end
-
 ## Importation intensity of origin `q` on day `t`. A scalar applies to every
 ## origin and every day; a matrix carries one level per origin over time.
 @inline _eps(e::Real, q::Integer, t::Integer) = e

@@ -8,8 +8,6 @@ format:
   html:
     toc: true
     number-sections: false
-    include-in-header:
-      text: <meta name="robots" content="noindex">
   pdf:
     toc: true
     number-sections: false

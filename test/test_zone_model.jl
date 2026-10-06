@@ -188,7 +188,8 @@
     ## Stand-in parent forecast for the chain of `zone_synthetic`: each draw
     ## holds its patch infections at the cut-off level, a little apart from
     ## draw to draw, for `H` days, and predicts `totals` confirmed cases per
-    ## patch in every forecast week.
+    ## patch in every forecast week. The arrivals into the second patch grow
+    ## from a twentieth of its infections by a fiftieth a day.
     function zone_parent_forecast(syn; H = 28, totals = [80, 20])
         np, n = size(syn.I_bar)
         nw = length(future_knot_days(0, H))
@@ -198,8 +199,18 @@
                 for i in 1:ndraw
         ]
         conf = [vec(repeat(totals, 1, nw)) for _ in 1:ndraw]
+        imp = [
+            vec(
+                [
+                    p == 2 ? 0.05 * (1 + 0.02 * d) * reshape(v, np, H)[p, d] :
+                        0.0 for p in 1:np, d in 1:H
+                ]
+            )
+                for v in inf
+        ]
         return Dict{Symbol, Any}(
             :forecast_infections_patch => reshape(inf, ndraw, 1),
+            :forecast_importation_patch => reshape(imp, ndraw, 1),
             :forecast_province_confirmed => reshape(conf, ndraw, 1),
         )
     end
@@ -1175,41 +1186,35 @@ end
     end
     ## Arrivals stay a proper fraction of a patch's own infections.
     @test all(0 .<= zone_draw_mixing(mix, nothing, nothing).import_fraction .< 1)
-    ## A parent destination weighting reaches the blocks through
-    ## `destination_weighted_kernel`: a wrong-length effect throws there
-    ## rather than being skipped.
-    function tilted(effect)
+    ## A parent's log weights reach the blocks through
+    ## `destination_weighted_kernel`: a malformed one throws there rather
+    ## than being skipped.
+    function tilted(flow)
         chain = copy(syn.chain)
-        chain[:importation_destination_effect] = reshape(
-            [effect for _ in 1:4], 4, 1
-        )
+        chain[:importation_flow_effect] = reshape([flow for _ in 1:4], 4, 1)
         return zone_inputs(
             merge(syn, (; chain)); zones = zone_metadata(syn)
         ).model_data.mixing
     end
-    @test_throws DimensionMismatch tilted([0.5, 0.0, -0.5])
-    ## A parent per-flow weighting takes precedence over the destination
-    ## one: a well-formed flow effect is used even beside a malformed
-    ## destination effect, and a malformed one throws.
-    function flow_tilted(flow; dest = nothing)
-        chain = copy(syn.chain)
-        chain[:importation_flow_effect] = reshape(
-            [flow for _ in 1:4], 4, 1
-        )
-        if dest !== nothing
-            chain[:importation_destination_effect] = reshape(
-                [dest for _ in 1:4], 4, 1
-            )
-        end
-        return zone_inputs(
-            merge(syn, (; chain)); zones = zone_metadata(syn)
-        ).model_data.mixing
-    end
-    @test_throws DimensionMismatch flow_tilted(zeros(3))
+    @test_throws DimensionMismatch tilted(zeros(3))
     ## With two patches each origin has one destination, so any weighting
     ## cancels and the blocks are the unweighted ones.
-    @test flow_tilted([0.0, 0.4, -0.7, 0.0]; dest = zeros(3)).between ≈
-        mix.between
+    @test tilted([0.0, 0.4, -0.7, 0.0]).between ≈ mix.between
+    ## The parent kernel is the posterior mean of the weighted kernels over
+    ## draws, not the kernel at the mean log weight.
+    Ws = [
+        [0.0 1.5 -0.4; 2.0 0.0 0.3; -1.0 0.2 0.0],
+        [0.0 -1.2 0.8; -0.5 0.0 1.1; 0.9 -0.7 0.0],
+        [0.0 0.3 0.1; 0.4 0.0 -2.0; 1.6 0.5 0.0],
+        [0.0 -0.2 -1.5; 1.0 0.0 0.0; -0.3 1.8 0.0],
+    ]
+    chain3 = copy(syn.chain)
+    chain3[:importation_flow_effect] = reshape(vec.(Ws), 4, 1)
+    K3p = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    mean_kernel = sum(destination_weighted_kernel(K3p, W) for W in Ws) ./ 4
+    got = BVDOutbreakSize._mean_parent_kernel(chain3, :importation_flow_effect)
+    @test got ≈ mean_kernel
+    @test !(got ≈ destination_weighted_kernel(K3p, sum(Ws) ./ 4))
     ## With three patches a non-zero weighting changes the between block,
     ## and its column over a destination patch's zones is the weighted
     ## kernel's entry.
@@ -1287,6 +1292,102 @@ end
     @test zone_inputs(
         merge(syn, (; chain = flat)); zones = zone_metadata(syn)
     ).model_data.mixing === nothing
+end
+
+@testitem "zone mixing: the sampled decay and destination weights" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_gravity_blocks, gravity_pull,
+        province_distance_matrix, _zone_states
+    using Turing: sample, Prior
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn; zones = zone_metadata(syn))
+    zd = inputs.model_data
+    mix = zd.mixing
+    poz = inputs.patch_of_zone
+    nz = syn.nz
+    meta = zone_metadata(syn)
+    pops = Float64[r.population for r in meta]
+    coords = [(r.lat, r.lon) for r in meta]
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:2])
+    ## The gravity blocks written out from the pull at decay `γ`, each
+    ## destination weighted by `exp(ω_z)`.
+    function reference(γ, ω = zeros(nz))
+        pull = gravity_pull(
+            pops; distances = province_distance_matrix(coords), decay = γ
+        ) .* exp.(ω)
+        within = zeros(nz, nz)
+        between = zeros(nz, nz)
+        for q in 1:nz, z in 1:nz
+
+            zs = findall(==(poz[z]), poz)
+            s = sum(pull[zs, q])
+            s > 0 || continue
+            if poz[z] == poz[q]
+                within[z, q] = pull[z, q] / s
+            else
+                between[z, q] = K[poz[z], poz[q]] * pull[z, q] / s
+            end
+        end
+        return (; within, between)
+    end
+    ## Unit decay and no destination weight recover the fixed blocks.
+    blocks(γ, ω) = zone_gravity_blocks(mix.gravity, γ, ω)
+    b1 = blocks(1.0, zeros(nz))
+    @test b1.within ≈ mix.within rtol = 1.0e-12
+    @test b1.between ≈ mix.between rtol = 1.0e-12
+    @test b1.within ≈ reference(1.0).within rtol = 1.0e-12
+    @test b1.between ≈ reference(1.0).between rtol = 1.0e-12
+    ## Another decay is the gravity pull at that decay.
+    @test blocks(2.5, zeros(nz)).within ≈ reference(2.5).within rtol = 1.0e-12
+    ## A weight shared within a patch cancels.
+    ω_flat = [fill(0.7, 5); fill(-0.7, 3)]
+    @test blocks(1.0, ω_flat).within ≈ mix.within
+    @test blocks(1.0, ω_flat).between ≈ mix.between
+    ## At any decay and weight the within block stays column-stochastic in
+    ## the origin's patch and the between block's column over a destination
+    ## patch is still the parent's flow; only the split moves.
+    ω = [1.2, -0.4, 0.3, -0.9, -0.2, 0.8, -1.1, 0.3]
+    for γ in (0.05, 0.6, 4.0)
+        b = blocks(γ, ω)
+        @test b.within ≈ reference(γ, ω).within rtol = 1.0e-10
+        @test b.between ≈ reference(γ, ω).between rtol = 1.0e-10
+        for q in 1:nz, p in 1:2
+
+            zs = findall(==(p), poz)
+            if p == poz[q]
+                @test sum(b.within[zs, q]) ≈ 1 rtol = 1.0e-12
+                @test b.within[q, q] == 0
+                @test all(iszero, b.between[zs, q])
+            else
+                @test sum(b.between[zs, q]) ≈ K[p, poz[q]] rtol = 1.0e-12
+                @test all(iszero, b.within[zs, q])
+            end
+        end
+        @test !(b.within ≈ mix.within)
+    end
+    ## The model records the decay, the weight scale and the log weights,
+    ## which sum to zero within every patch, and the states rebuild each
+    ## draw's blocks from them.
+    chn = sample(
+        bvd_zone(zd), Prior(), 4;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    γs = vec(collect(chn[:mixing_decay_zone]))
+    ωs = [collect(v) for v in vec(collect(chn[:mixing_destination_zone]))]
+    @test all(>(0), γs)
+    @test all(>(0), vec(collect(chn[:mixing_destination_sd_zone])))
+    for v in ωs, zs in inputs.patch_ranges
+        @test abs(sum(v[zs])) < 1.0e-10
+    end
+    states = _zone_states(chn, inputs)
+    for (i, st) in enumerate(states)
+        b = blocks(γs[i], ωs[i])
+        @test st.def.mixing.within ≈ b.within
+        @test st.def.mixing.between ≈ b.between
+    end
 end
 
 @testitem "bvd_zone: the two compositions sum to the likelihood" setup = [
@@ -1386,12 +1487,13 @@ end
     dim = syn.nz + 3 * nc + nd * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
-    ## offset per zone, where the inputs carry the kernel blocks, and one
+    ## offset per zone, the zone decay, the destination weight scale and its
+    ## contrasts within each patch, where the inputs carry the kernel, and one
     ## origin intensity per patch to the shared draw. The same metadata gives
     ## the zones centroids, so the correlation block switches on too and adds
     ## its reference correlation.
     zdm = zone_inputs(syn; zones = zone_metadata(syn)).model_data
-    @test dimension(bvd_zone(zdm)) == dim + 3 + syn.nz + np
+    @test dimension(bvd_zone(zdm)) == dim + 5 + syn.nz + nc + np
     ## With no kept meld cell the shared draw is absent.
     zdc = merge(
         zd, (;
@@ -1665,10 +1767,10 @@ end
 @testitem "AD gradient: bvd_zone with mixing, correlation and the meld" tags = [
     :ad,
 ] setup = [ZoneSynthetic] begin
-    using BVDOutbreakSize: bvd_zone, default_adtype
+    using BVDOutbreakSize: bvd_zone, default_adtype, relative_multiplier_dims
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity_and_gradient
-    using Random: seed!
+    using Random: seed!, Xoshiro
 
     ## The configuration the registry fits: metadata for every zone, so the
     ## mixing blocks and the distance correlation are on, and the shared
@@ -1689,6 +1791,25 @@ end
     @test length(grad) == length(x0)
     @test all(isfinite, grad)
     @test any(!iszero, grad)
+    ## The gradient stays finite at the extremes of the zone decay and the
+    ## destination weights, and the decay reaches the likelihood.
+    nc = relative_multiplier_dims(zd.patch_ranges)
+    lps = map((0.02, 6.0)) do γ
+        params = (;
+            γ_zone = γ, σ_destination = 4.0,
+            z_destination = [(-1)^k * 3.0 for k in 1:nc],
+        )
+        vix = DynamicPPL.link(
+            DynamicPPL.VarInfo(
+                Xoshiro(3), model, DynamicPPL.InitFromParams(params)
+            ), model
+        )
+        lp, gr = logdensity_and_gradient(ldf, collect(vix[:]))
+        @test isfinite(lp)
+        @test all(isfinite, gr)
+        lp
+    end
+    @test lps[1] != lps[2]
 end
 
 @testitem "fit_zone: a short NUTS fit with mixing and correlation on" tags = [
@@ -2114,17 +2235,35 @@ end
     horizon = zf.horizon
     @test zd.mixing !== nothing
 
-    ## Every per-day term reaches the last day the renewal indexes, the
-    ## mean import odds and arrival shares held at the cut-off over the
-    ## forecast.
+    ## Every per-day term reaches the last day the renewal indexes. Past
+    ## the cut-off the mean import odds are the parent forecast's own, and
+    ## the arrival shares follow its mean infections.
     @test size(zf.mixing.import_log_odds, 2) == zd.n + horizon
     @test size(zf.mixing.arrival_shares, 3) == zd.n + horizon
+    @test zf.mixing.import_log_odds[:, 1:zd.n] == zd.mixing.import_log_odds
     for d in 1:horizon
-        @test zf.mixing.import_log_odds[:, zd.n + d] ==
-            zd.mixing.import_log_odds[:, zd.n]
-        @test zf.mixing.arrival_shares[:, :, zd.n + d] ==
-            zd.mixing.arrival_shares[:, :, zd.n]
+        f = 0.05 * (1 + 0.02 * d)
+        @test zf.mixing.import_log_odds[2, zd.n + d] ≈ log(f / (1 - f))
+        @test all(zf.mixing.import_log_odds[1, zd.n + d] .< -700)
+        for p in 1:2
+            @test sum(zf.mixing.arrival_shares[p, :, zd.n + d]) ≈ 1
+        end
     end
+    ## A parent forecast without the arrivals is refused when the zones mix.
+    no_imports = zone_parent_forecast(syn)
+    delete!(no_imports, :forecast_importation_patch)
+    @test_throws ErrorException zone_inputs(
+        syn; zones = zone_metadata(syn), parent_forecast = no_imports
+    )
+    ## So is one whose arrivals stop short of the horizon.
+    short_imports = zone_parent_forecast(syn)
+    short_imports[:forecast_importation_patch] = map(
+        v -> v[1:(size(syn.I_bar, 1) * horizon - 1)],
+        short_imports[:forecast_importation_patch]
+    )
+    @test_throws ErrorException zone_inputs(
+        syn; zones = zone_metadata(syn), parent_forecast = short_imports
+    )
     @test size(zf.I_bar, 2) == zd.n + horizon
 
     ## The forecast week's operator sums the delayed reports over

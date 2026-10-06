@@ -310,6 +310,27 @@ end
     end
 end
 
+@testitem "the patch forecast records each patch's arrivals" setup = [
+    HorizonFixtures,
+] begin
+    m0 = patch_joint()
+    chn = sample(
+        Xoshiro(12), m0, Prior(), 4;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    pp = predict(Xoshiro(13), with_horizon(m0, H), chn)
+    draws(key) = [collect(v) for v in vec(collect(pp[Symbol(key)]))]
+    imp = draws("forecast_importation_patch")
+    daily = draws("importation_patch")
+    ## The future columns of the patch model's own arrivals, patch by day.
+    for i in eachindex(imp)
+        A = reshape(daily[i], NP, :)
+        @test size(A, 2) == N + H
+        @test imp[i] == vec(A[:, (N + 1):(N + H)])
+    end
+    @test any(v -> any(>(0), v), imp)
+end
+
 @testitem "the onset forecast is the fitted reporting hazard run forward" setup = [
     HorizonFixtures,
 ] begin
@@ -326,6 +347,35 @@ end
     ## less the total at the cut-off.
     @test rh.forecast_means.onset_reports ≈
         [total(N + 7) - total(N), total(N + 14) - total(N)]
+end
+
+@testitem "the onset forecast scale carries the per-figure scan level" setup = [
+    HorizonFixtures,
+] begin
+    using BVDOutbreakSize: onset_report_expected_total, onset_report_scale,
+        onset_forecast_model
+    m0 = joint()
+    mh = with_horizon(m0, 14)
+    d = future_draws(m0, mh, Xoshiro(11))
+    rh = returned(fix_future(mh, d.θh, d.fut), d.θ0)
+    st = rh.onset_report_state
+    total(as_of) = onset_report_expected_total(
+        rh.onsets, st.logit_h0, st.γ, st.grid_start, st.alpha, as_of
+    )
+    vintages = [N + 7, N + 14]
+    fm = onset_forecast_model(rh.onsets, st, N, vintages)
+    sds(σ) = fix(fm, (; forecast_scan_sd = σ))().sds
+    now = total(N)
+    then = total.(vintages)
+    ## A whole figure's total carries both figures' calibration error on
+    ## top of the two bar reads.
+    for σ in (0.0, 0.004, 0.02)
+        @test sds(σ) ≈ sqrt.(
+            onset_report_scale.(then .- now, st.τ, 2) .^ 2 .+
+                σ^2 .* (then .^ 2 .+ now^2)
+        )
+    end
+    @test all(sds(0.02) .> sds(0.004) .> sds(0.0))
 end
 
 @testitem "an explosive draw forecasts finite counts" setup = [

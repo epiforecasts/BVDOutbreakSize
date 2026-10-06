@@ -498,17 +498,9 @@ end
     destination_weighted_kernel(K, W)
 
 Importation kernel `K` with each flow `q → p` weighted by `exp(W_pq)` and
-each origin column rescaled to its original total,
-
-```math
-K'_{p,q} = K_{p,q} e^{W_{p,q}}
-    \\frac{\\sum_r K_{r,q}}{\\sum_r K_{r,q} e^{W_{r,q}}}.
-```
-
-`W` is an `n × n` matrix of per-flow log weights, or a vector `η` of
-destination weights shared by every origin (`W_{p,q} = η_p`). Each origin
-column keeps its total, so `W` moves where exports land, not how much
-leaves, and a shift shared within a column cancels.
+each origin column rescaled to its original total. `W` is an `n × n` matrix
+of per-flow log weights, or a vector `η` of destination weights shared by
+every origin (`W_{p,q} = η_p`). A shift shared within a column cancels.
 """
 function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
     np = size(K, 1)
@@ -519,7 +511,11 @@ function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
                 "$(size(W)) weights."
         )
     )
-    KW = K .* exp.(W)
+    ## Each column is shifted by its largest reachable log weight, which
+    ## cancels in the rescale and keeps `exp` from overflowing.
+    Wr = ifelse.(K .> 0, W, oftype(float(first(W)), -Inf))
+    top = maximum(Wr; dims = 1)
+    KW = K .* exp.(Wr .- ifelse.(isfinite.(top), top, zero.(top)))
     weighted = sum(KW; dims = 1)
     ## An origin that exports nothing keeps an all-zero column rather than
     ## 0/0, which would turn the renewal and its gradient into NaN.
@@ -593,7 +589,8 @@ zero on the diagonal, and the destination population alone where the
 distance is zero. This is the one gravity form both spatial levels use.
 [`province_importation_kernel`](@ref) normalises its columns over the
 provinces; the health-zone model normalises the same pull within and
-between patches ([`zone_importation_blocks`](@ref)).
+between patches, on the log scale at its sampled decay
+([`zone_gravity_blocks`](@ref)).
 """
 function gravity_pull(
         pops::AbstractVector;
