@@ -245,7 +245,8 @@ Cumulative `(cases, deaths)` from an unallocated row, or `nothing`.
 The "A ventiler" row prints NA in its cases cell (the row holds deaths in
 the treatment centres not yet attributed to a zone) and a footnote marker
 where the deaths figure can be displaced onto the following line, which
-`next` carries. NA reads as zero. The earlier "Autres ZS" and "Non
+`next` carries. NA reads as zero, as does the transposed AN that SitRep
+140 prints there. The earlier "Autres ZS" and "Non
 identifiées" rows are ordinary rows.
 """
 function parse_unallocated(
@@ -255,7 +256,7 @@ function parse_unallocated(
     any(p -> occursin('%', p), parts) && return parse_row(parts, 2)
     cells = String[]
     for p in parts[2:end]
-        if occursin(r"^NA$", strip(p))
+        if occursin(r"^(NA|AN)$", strip(p))
             push!(cells, "0")
         elseif occursin(r"^[0-9][0-9 ]*$", strip(p))
             push!(cells, p)
