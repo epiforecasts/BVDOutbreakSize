@@ -202,6 +202,7 @@ const CONFIG = [
     ("133", Date(2026, 9, 24), Date(2026, 9, 21)),
     ("134", Date(2026, 9, 25), Date(2026, 9, 21)),
     ("136", Date(2026, 9, 27), Date(2026, 9, 28)),
+    ("137", Date(2026, 9, 28), Date(2026, 9, 28)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -261,7 +262,8 @@ const Y_AXIS_STEP = Dict(
     "132" => 25,
     "133" => 25,
     "134" => 25,
-    "136" => 25
+    "136" => 25,
+    "137" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -528,21 +530,33 @@ function column_runs(
 end
 
 # The regular weekly chain ending on the rightmost tick, as (week index, x)
-# pairs. Walking left, a spacing of one or two weeks within 8% (at least
+# pairs. Walking left, a spacing of one to three weeks within 8% (at least
 # 2.5 px) of the median spacing continues the chain; anything else ends it,
 # which drops the y-axis line and label strokes that cluster as ticks at
 # the left, and a stray cluster right of the last tick leaves a chain of
-# one.
+# one. The near-grey mask on the September renders splits a tick in two or
+# sees a stroke beside it (SitReps 138 and 141), so up to two clusters off
+# the grid are stepped over when the next one lands on it.
 function tick_chain(xt)
     s = median(diff(xt))
     ks = [0]
     xs = [xt[end]]
-    for j in (length(xt) - 1):-1:1
-        d = xt[j + 1] - xt[j]
-        k = round(Int, d / s)
-        (1 <= k <= 2 && abs(d - k * s) <= max(2.5, 0.08 * s)) || break
-        pushfirst!(ks, ks[1] - k)
+    fits(d) = (
+        k = round(Int, d / s);
+        1 <= k <= 3 && abs(d - k * s) <= max(2.5, 0.08 * s)
+    )
+    j = length(xt) - 1
+    while j >= 1
+        # a cluster off the weekly grid (a tick split in two, or a stray
+        # stroke beside one) is stepped over when one of the next two
+        # clusters lands on the grid
+        skip = findfirst(i -> j - i >= 1 && fits(xs[1] - xt[j - i]), 0:2)
+        skip === nothing && break
+        j -= skip - 1
+        d = xs[1] - xt[j]
+        pushfirst!(ks, ks[1] - round(Int, d / s))
         pushfirst!(xs, xt[j])
+        j -= 1
     end
     return ks, xs
 end

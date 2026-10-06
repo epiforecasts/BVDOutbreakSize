@@ -751,32 +751,48 @@ applied with one group per patch over its health zones in
 
 `z` holds each group's draws in turn, [`relative_multiplier_dims`](@ref) in
 all. A group of one unit takes no draw and its multiplier is one.
+
+With `Q` the block-diagonal basis of [`relative_multiplier_basis`](@ref)
+the log multipliers are the one product `σ Q z`. Pass `Q` in place of
+`groups` to build it once rather than on every call.
 """
 function relative_multiplier(
         z::AbstractVector, σ::Real,
         groups::AbstractVector{<:UnitRange}
     )
-    length(z) == relative_multiplier_dims(groups) || throw(
+    return relative_multiplier(z, σ, relative_multiplier_basis(groups))
+end
+
+function relative_multiplier(z::AbstractVector, σ::Real, Q::AbstractMatrix)
+    length(z) == size(Q, 2) || throw(
         DimensionMismatch(
             "relative_multiplier: $(length(z)) draws for " *
-                "$(relative_multiplier_dims(groups)) contrasts"
+                "$(size(Q, 2)) contrasts"
         )
     )
-    Tp = promote_type(eltype(z), typeof(float(σ)))
+    return exp.(σ .* (Q * z))
+end
+
+"""
+Block-diagonal sum-to-zero basis of [`relative_multiplier`](@ref),
+`(n_units × relative_multiplier_dims(groups))`.
+
+Group `g` holds its basis `Q_g` ([`sum_to_zero_basis`](@ref)) on its own
+rows and its own [`relative_multiplier_dims`](@ref) columns, in the order of
+`groups`. Every other entry is zero, so a unit in a group of one, or in no
+group, has a zero row. `n_units` is the last unit of any group.
+"""
+function relative_multiplier_basis(groups::AbstractVector{<:UnitRange})
     nu = maximum((last(us) for us in groups if !isempty(us)); init = 0)
-    out = ones(Tp, nu)
+    Q = zeros(nu, relative_multiplier_dims(groups))
     off = 0
     for us in groups
         k = length(us) - 1
         k >= 1 || continue
-        F = sum_to_zero_factor(sum_to_zero_basis(k + 1), σ)
-        δ = sum_to_zero(F, view(z, (off + 1):(off + k)))
-        @inbounds for (a, u) in enumerate(us)
-            out[u] = exp(δ[a])
-        end
+        Q[us, (off + 1):(off + k)] = sum_to_zero_basis(k + 1)
         off += k
     end
-    return out
+    return Q
 end
 
 "Number of draws [`relative_multiplier`](@ref) takes over `groups`."
