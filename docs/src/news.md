@@ -24,6 +24,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The importation kernel keeps gravity as its centre and gains a log deviation per directed flow: a destination effect correlated with each province's origin deviation, plus a double-centred flow term with a reciprocity correlation, holding each origin's export total (#1030).
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
+- The health-zone distance-decay prior is `LogNormal(0, 1)`, so its 95th percentile of 5.2 covers the 90% interval of 1.7 to 3.7 a 63-zone fit estimated (results comment on #1030), which sat above the `LogNormal(0, 0.5)` prior's 2.3; fitted values change (#1077).
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
