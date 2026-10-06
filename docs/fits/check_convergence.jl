@@ -55,7 +55,10 @@ checks = map(IDS) do id
         fit_key(id), () -> nothing;
         cache_dir = CACHE, strict = true
     )
-    fit_convergence(id, fit_chain(result))
+    fit_convergence(
+        id, fit_chain(result);
+        max_depth = fit_max_depth(id)
+    )
 end
 
 md = convergence_markdown(checks; marker = MARKER, context = _context())

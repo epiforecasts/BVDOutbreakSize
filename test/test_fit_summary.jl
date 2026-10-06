@@ -26,8 +26,10 @@
     )
     @test occursin("| `C_T` |", md)
     @test occursin("| `R_T` |", md)
-    ## Scannable in the run UI: a heading, the two tables and their rows.
-    @test count("\n", md) <= 12
+    ## Scannable in the run UI: a heading, the three tables and their rows.
+    @test occursin("| chain | step size | % at max depth 10 |", md)
+    @test occursin("\n| 2 | ", md)
+    @test count("\n", md) <= 17
 
     ## The frozen fits hand back `(; cutoff, o, chn)` rather than a chain, and
     ## the summary is appended to the job-summary file when one is named.

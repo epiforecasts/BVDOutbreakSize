@@ -78,8 +78,12 @@ def main():
     lastdate = dt.date.fromisoformat(d.CONFIG[sr][1])
     ppd, ppc, base = cal["ppd"], cal["ppc"], cal["y0"]
     ytop, H, W = cal["yt"][0], cal["H"], cal["W"]
-    y0, y1 = max(0, ytop - 8), min(H, base + 4)
-    ymax = int((base - ytop) / ppc)
+    # reach above the top gridline to the tallest digitised bar, so the
+    # panels cover the peak when it stands above the top tick
+    tallest = max(a + b for a, b in rows.values())
+    y0 = max(0, min(ytop - 8, int(base - (tallest + 5) * ppc)))
+    y1 = min(H, base + 4)
+    ymax = int((base - y0) / ppc)
     dates = sorted(rows)
     first, last_day = dt.date.fromisoformat(dates[0]), dt.date.fromisoformat(dates[-1])
     k = 0
