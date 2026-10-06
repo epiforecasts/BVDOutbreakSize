@@ -30,9 +30,15 @@ Runtime inputs, fetched by relative URL from this directory:
                         forecast_median/lower/upper (confirmed cases over
                         the next 7 days), as_of and, when the build has
                         them, deaths_forecast_median/lower/upper
-                        (confirmed deaths over the next 7 days) and
+                        (confirmed deaths over the next 7 days),
                         cfr_median/lower/upper (modelled case-fatality
-                        ratio)
+                        ratio) and the treatment-centre columns:
+                        isolation_reported and beds_reported (each with a
+                        _date) and bed_use_reported (patients over beds),
+                        the province's own last report, then
+                        isolation_, beds_ and bed_use_median/lower/upper
+                        (its patch modelled at the cut-off) and the same
+                        with isolation_forecast_ and so on (7 days ahead)
   national_estimates.csv one row in the province CSV's columns for the
                         country, shown in the detail column when no area is
                         selected
@@ -43,7 +49,11 @@ Runtime inputs, fetched by relative URL from this directory:
                         series "cases" the confirmed cases (count) in the
                         week ending on that date and series "deaths" the
                         confirmed deaths; zones are keyed as in the
-                        zone CSV, provinces by patch label plus "National"
+                        zone CSV, provinces by patch label plus "National".
+                        The province file also carries series "isolation"
+                        and "beds", the reported patients in isolation and
+                        beds on each reported day, keyed by province plus
+                        "National"
   health_zones.geojson copied from src/assets/health_zones.geojson by
                         docs/make.jl; the province shapes are its zones
                         dissolved by province
@@ -152,6 +162,13 @@ Nothing else is fetched.
   .chart .bar { fill: var(--neutral); }
   .chart .fc { stroke: var(--accent); stroke-width: 2; }
   .chart .fcpt { fill: var(--accent); }
+  .chart .beds { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
+  .chart .bedfc { stroke: var(--ink-2); stroke-width: 2; }
+  .chart .bedfcpt { fill: var(--ink-2); }
+  #detail table.care { margin: 4px 0 6px; font-size: 12px; }
+  #detail table.care th { font-weight: 600; color: var(--ink-2); }
+  #detail table.care th[scope=row] { text-align: left; }
+  #detail table.care .ci { display: block; color: var(--ink-2); font-size: 11px; }
   /* Narrow: the page stacks and grows, so the map height follows the
      width. Embedded, the frame takes the page's height (see fitFrame), so
      the header never scrolls away inside it. */
@@ -173,7 +190,7 @@ Nothing else is fetched.
     z-index: 600; padding: 8px 12px;
   }
   #table[hidden] { display: none; }
-  .zone-only[hidden] { display: none; }
+  .zone-only[hidden], #care[hidden] { display: none; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -228,7 +245,26 @@ Nothing else is fetched.
     <label class="zone-only"><input type="radio" name="metric" value="p_ge"><span>Chance of K+ cases</span></label>
     <label><input type="radio" name="metric" value="p_rt"><span>Chance R &gt; 1</span></label>
     <label><input type="radio" name="metric" value="cfr"><span>Case fatality ratio</span></label>
+    <label><input type="radio" name="metric" value="care"><span>Treatment centres</span></label>
   </div>
+  <select class="plain" id="care" hidden
+    aria-label="Treatment-centre figure shown by province">
+    <optgroup label="Last reported">
+      <option value="reported:isolation" selected>Patients in isolation</option>
+      <option value="reported:beds">Beds</option>
+      <option value="reported:bed_use">Beds in use</option>
+    </optgroup>
+    <optgroup label="Modelled, at the cut-off">
+      <option value="modelled:isolation">Patients in isolation</option>
+      <option value="modelled:beds">Beds</option>
+      <option value="modelled:bed_use">Beds in use</option>
+    </optgroup>
+    <optgroup label="Forecast, 7 days ahead">
+      <option value="forecast:isolation">Patients in isolation</option>
+      <option value="forecast:beds">Beds</option>
+      <option value="forecast:bed_use">Beds in use</option>
+    </optgroup>
+  </select>
   <select class="plain" id="stream"
     aria-label="Count shown by the forecast and to-date metrics and the weekly chart"
     title="Applies to the forecast and to-date metrics and the weekly chart">
@@ -354,6 +390,8 @@ Nothing else is fetched.
   // Fixed cuts for the chance-of-K+-cases metric, so colours stay
   // comparable when the threshold changes; six classes to match BLUES.
   var P_GE_CUTS = [0.1, 0.25, 0.5, 0.75, 0.9];
+  // Fixed cuts for the share of beds in use, the last class over full.
+  var BED_USE_CUTS = [0.25, 0.5, 0.75, 0.9, 1];
   var RT_BINS = [
     { max: 0.7, c: "#256abf", l: "below 0.7" },
     { max: 0.9, c: "#86b6ef", l: "0.7 to 0.9" },
@@ -409,6 +447,55 @@ Nothing else is fetched.
   function modelledCfrText(r) {
     return "Modelled case fatality ratio " + fmtPct(r.cfr_median) +
       " (90% interval " + fmtPct(r.cfr_lower) + " to " + fmtPct(r.cfr_upper) + ")";
+  }
+  // The treatment-centre figures, reported by province and for the country
+  // only. Each is read as last reported, as modelled at the cut-off or as
+  // forecast 7 days ahead; `col` is its CSV column prefix.
+  var CARE = {
+    isolation: { name: "patients in isolation", col: "isolation", fmt: fmt0 },
+    beds: { name: "beds", col: "beds", fmt: fmt0 },
+    bed_use: { name: "beds in use", col: "bed_use", fmt: fmtPct }
+  };
+  var CARE_BASES = {
+    reported: "last reported",
+    modelled: "modelled at the cut-off",
+    forecast: "forecast 7 days ahead"
+  };
+  var care = { basis: "reported", q: "isolation" };
+  function careSet(v) {
+    var parts = String(v).split(":");
+    if (!CARE_BASES[parts[0]] || !CARE[parts[1]]) { return false; }
+    care = { basis: parts[0], q: parts[1] };
+    return true;
+  }
+  // The figure's column: `_reported` as last reported, otherwise the
+  // posterior summary `which` (median, lower or upper).
+  function careValue(r, basis, q, which) {
+    var c = CARE[q].col;
+    if (basis === "reported") { return r[c + "_reported"]; }
+    return r[c + (basis === "forecast" ? "_forecast_" : "_") + (which || "median")];
+  }
+  function careLabel(basis, q) { return cap(CARE[q].name) + ", " + CARE_BASES[basis]; }
+  // The share of beds in use is dated by its count of patients.
+  function careDate(r, q) {
+    return r[(q === "bed_use" ? "isolation" : CARE[q].col) + "_reported_date"];
+  }
+  // One figure in words: the reported value with its date, or the median
+  // with its 90% interval.
+  function careText(r, basis, q) {
+    var f = CARE[q].fmt, v = careValue(r, basis, q);
+    if (!num(v)) { return "No figure for " + CARE[q].name + ", " + CARE_BASES[basis]; }
+    if (basis === "reported") {
+      var d = careDate(r, q);
+      return cap(CARE[q].name) + " " + f(v) + (d ? ", reported " + longDate(d) : "");
+    }
+    return careLabel(basis, q) + " " + f(v) + " (90% interval " +
+      interval(careValue(r, basis, q, "lower"), careValue(r, basis, q, "upper"), f) + ")";
+  }
+  function longDate(d) {
+    var t = new Date(d + "T00:00:00Z");
+    return isNaN(t) ? String(d) : t.toLocaleDateString("en-GB",
+      { day: "numeric", month: "long", timeZone: "UTC" });
   }
   var METRICS = {
     R_T: {
@@ -504,6 +591,20 @@ Nothing else is fetched.
           "Chance the reproduction number exceeds one: " + fmtPct(v) :
           "No estimate of the chance the reproduction number exceeds one";
       }
+    },
+    care: {
+      title: function () { return careLabel(care.basis, care.q); },
+      legend: function () {
+        return careLabel(care.basis, care.q) +
+          (care.basis === "reported" ? "" : summarySuffix());
+      },
+      kind: "sequential",
+      fmt: function (x) { return CARE[care.q].fmt(x); },
+      value: function (r) {
+        return careValue(r, care.basis, care.q,
+          care.basis === "reported" ? null : summary);
+      },
+      text: function (r) { return careText(r, care.basis, care.q); }
     }
   };
 
@@ -625,7 +726,10 @@ Nothing else is fetched.
   var sortKey = null, sortDesc = true;
   // The posterior-summary selector only has meaning for the two metrics
   // that carry an interval; other metrics ignore it.
-  function summaryApplies() { return metric === "R_T" || metric === "forecast"; }
+  function summaryApplies() {
+    return metric === "R_T" || metric === "forecast" ||
+      metric === "care" && care.basis !== "reported";
+  }
   function summaryValue(r, prefix) {
     if (summary === "lower") { return r[prefix + "_lower"]; }
     if (summary === "upper") { return r[prefix + "_upper"]; }
@@ -638,16 +742,21 @@ Nothing else is fetched.
   }
   function updateSummaryDisabled() {
     document.getElementById("summary").disabled = !summaryApplies();
+    document.getElementById("care").hidden = metric !== "care";
   }
   // Deep links: `?layer=zone|province`, `?area=<zone or province key>`,
   // `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
   // `?summary=median|lower|upper`, `?filter=all|with|without`,
-  // `?window=7|14|28`, `?r=all|modelled|province`, `?stream=cases|deaths`
-  // and `?table=1`.
+  // `?window=7|14|28`, `?r=all|modelled|province`, `?stream=cases|deaths`,
+  // `?care=<basis>:<figure>` (the treatment-centre menu's values) and
+  // `?table=1`. The treatment-centre metric opens the province layer.
   if (METRICS[params.get("metric")]) {
     metric = params.get("metric");
     document.querySelector("input[name=metric][value=" + metric + "]")
       .checked = true;
+  }
+  if (careSet(params.get("care"))) {
+    document.getElementById("care").value = care.basis + ":" + care.q;
   }
   if (STREAMS[params.get("stream")]) {
     stream = params.get("stream");
@@ -695,13 +804,17 @@ Nothing else is fetched.
     return level === "zone" && !!r && r.walking === 0;
   }
   // A province pooled with others takes the pool's reproduction number and
-  // forecast, and is hatched on those metrics. Its counts to date and their
-  // ratio are its own.
-  function pooledMetric() { return metric !== "cases" && metric !== "cfr"; }
+  // forecast, and is hatched on those metrics. Its counts to date, their
+  // ratio and its reported treatment-centre figures are its own.
+  function pooledMetric() {
+    return metric !== "cases" && metric !== "cfr" &&
+      !(metric === "care" && care.basis === "reported");
+  }
   function pooled(r) {
     return level === "province" && !!r && r.pooled === 1 && pooledMetric();
   }
   function pooledText(r) {
+    if (metric === "care") { return "Modelled for " + r.patch + " combined"; }
     return "R and forecast for " + r.patch + " combined";
   }
   var LEVEL_ONLY_TEXT = "R from its province, not modelled separately";
@@ -947,6 +1060,87 @@ Nothing else is fetched.
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
         (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fcEl + yt + xt);
   }
+  // Reported patients in isolation and beds by day, then the forecast 7
+  // days on as points with their 90% intervals.
+  function careChart(iso, beds, r, withFc) {
+    iso = iso || []; beds = beds || [];
+    var end = dayOf(r.as_of) + 7;
+    var fcs = withFc ? ["isolation", "beds"].filter(function (q) {
+      return num(careValue(r, "forecast", q));
+    }) : [];
+    if (!iso.length && !beds.length && !fcs.length) {
+      return "<p class=\"cap\">No reported patients in isolation or beds.</p>";
+    }
+    var all = iso.concat(beds).map(function (p) { return p.count; })
+      .concat(fcs.map(function (q) { return careValue(r, "forecast", q, "upper"); }));
+    var days = iso.concat(beds).map(function (p) { return dayOf(p.date); });
+    var x0 = days.length ? Math.min.apply(null, days) : end - 7;
+    var W = 340, H = 150, L0 = 34, R0 = 8, T0 = 6, B0 = 20;
+    var top = Math.max(1, Math.max.apply(null, all.filter(num)));
+    var step = Math.pow(10, Math.floor(Math.log10(top * 1.05)) - 1);
+    top = Math.ceil(top * 1.05 / step) * step;
+    function X(d) { return L0 + (W - L0 - R0) * (end > x0 ? (d - x0) / (end - x0) : 0.5); }
+    function Y(v) { return T0 + (H - T0 - B0) * (1 - v / top); }
+    function line(pts, cls) {
+      return pts.length ? "<polyline class=\"" + cls + "\" points=\"" +
+        pts.map(function (p) {
+          return X(dayOf(p.date)).toFixed(1) + "," + Y(p.count).toFixed(1);
+        }).join(" ") + "\"/>" : "";
+    }
+    var fcEl = fcs.map(function (q) {
+      var cx = X(end), cls = q === "beds" ? "bedfc" : "fc";
+      var lo = careValue(r, "forecast", q, "lower"), hi = careValue(r, "forecast", q, "upper");
+      var med = careValue(r, "forecast", q);
+      return "<line class=\"" + cls + "\" x1=\"" + cx + "\" x2=\"" + cx + "\" y1=\"" +
+        Y(lo) + "\" y2=\"" + Y(hi) + "\"/><circle class=\"" + cls + "pt\" cx=\"" + cx +
+        "\" cy=\"" + Y(med) + "\" r=\"3.5\"><title>" +
+        esc(cap(CARE[q].name) + " in 7 days: " + fmt0(med) + " (90% interval " +
+          interval(lo, hi, fmt0) + ")") + "</title></circle>";
+    }).join("");
+    var yt = [0, top / 2, top].map(function (v) {
+      return "<text x=\"" + (L0 - 4) + "\" y=\"" + (Y(v) + 4) +
+        "\" text-anchor=\"end\">" + fmt0(v) + "</text>";
+    }).join("");
+    var xt = "<text x=\"" + L0 + "\" y=\"" + (H - 4) + "\" text-anchor=\"start\">" +
+      shortDate(x0) + "</text><text x=\"" + (W - R0) + "\" y=\"" + (H - 4) +
+      "\" text-anchor=\"end\">" + shortDate(end) + "</text>";
+    return svgEl(W, H, "Reported patients in isolation and beds by day" +
+        (fcs.length ? ", and the forecast 7 days on" : ""),
+      "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
+        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + line(beds, "beds") +
+        line(iso, "med") + fcEl + yt + xt);
+  }
+  // The treatment-centre figures of a province or the country: last
+  // reported, modelled at the cut-off and forecast 7 days ahead, then the
+  // reported series over time.
+  function careDetail(r, ts) {
+    var bases = ["reported", "modelled", "forecast"];
+    var head = ["", "Reported", "Modelled now", "In 7 days"];
+    var body = Object.keys(CARE).map(function (q) {
+      return "<tr><th scope=\"row\">" + esc(cap(CARE[q].name)) + "</th>" +
+        bases.map(function (b) {
+          var v = careValue(r, b, q), f = CARE[q].fmt;
+          var ci = b === "reported" || !num(v) ? "" : "<span class=\"ci\">" +
+            esc(interval(careValue(r, b, q, "lower"), careValue(r, b, q, "upper"), f)) +
+            "</span>";
+          return "<td class=\"num\">" + esc(f(v)) + ci + "</td>";
+        }).join("") + "</tr>";
+    }).join("");
+    var d = careDate(r, "isolation"), bd = careDate(r, "beds");
+    var notes = [
+      "Reported: the last report" + (d ? ", patients on " + longDate(d) : "") +
+        (bd ? ", beds on " + longDate(bd) : "") + ".",
+      "Modelled and forecast: median and 90% interval" +
+        (r.pooled === 1 ? ", for " + r.patch + " combined." : ".")
+    ];
+    return "<h3>Treatment centres</h3><table class=\"care\"><thead><tr>" +
+      head.map(function (h) { return "<th class=\"num\">" + esc(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>" + body + "</tbody></table>" +
+      notes.map(function (n) { return "<p class=\"cap\">" + esc(n) + "</p>"; }).join("") +
+      "<p class=\"cap\">Patients in isolation (solid) and beds (grey), as reported" +
+      (r.pooled === 1 ? "." : ", with the forecast 7 days on.") + "</p>" +
+      careChart(ts.isolation, ts.beds, r, r.pooled !== 1);
+  }
   function renderDetail() {
     var d = document.getElementById("detail"), r, name, sub, ts, lvl;
     if (selected && byKey[selected.key]) {
@@ -976,8 +1170,10 @@ Nothing else is fetched.
     var fcWord = num(r[S().fc + "_median"]) ?
       ", and the forecast for the next 7 days with its 90% interval." :
       ". There is no forecast of " + S().name + " at this level.";
+    var careKey = lvl === "national" ? "National" : r.province;
     d.innerHTML = "<h2>" + esc(name) + clear + "</h2><p class=\"sub\">" + esc(sub) +
-      "</p>" + keyNumbers(r, lvl) +
+      "</p>" + (metric === "care" && lvl !== "zone" ?
+        careDetail(r, series.province[careKey] || {}) : "") + keyNumbers(r, lvl) +
       "<h3>Reproduction number</h3><p class=\"cap\">Median with 50% and 90% " +
       "intervals; the dashed line is one.</p>" + rtChart(ts.rt) +
       "<h3>" + esc(cap(S().name)) + " per week</h3><p class=\"cap\">" +
@@ -995,11 +1191,12 @@ Nothing else is fetched.
   function groupSeries(rows) {
     var out = {};
     rows.forEach(function (r) {
-      var a = out[r.area] = out[r.area] || { rt: [], cases: [], deaths: [] };
+      var a = out[r.area] = out[r.area] ||
+        { rt: [], cases: [], deaths: [], isolation: [], beds: [] };
       if (a[r.series]) { a[r.series].push(r); }
     });
     Object.keys(out).forEach(function (k) {
-      ["rt", "cases", "deaths"].forEach(function (s) {
+      ["rt", "cases", "deaths", "isolation", "beds"].forEach(function (s) {
         out[k][s].sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       });
     });
@@ -1008,6 +1205,9 @@ Nothing else is fetched.
   function computeBins() {
     var m = METRICS[metric];
     if (metric === "p_ge") { bins = binsFromCuts(P_GE_CUTS, fmtPct); }
+    else if (metric === "care" && care.q === "bed_use") {
+      bins = binsFromCuts(BED_USE_CUTS, fmtPct);
+    }
     else if (metric === "p_rt") { bins = P_RT_BINS; }
     else if (m.kind === "diverging") { bins = RT_BINS; }
     else { bins = sequentialBins(visibleRows().map(m.value), m.fmt); }
@@ -1026,6 +1226,10 @@ Nothing else is fetched.
     var notes = [];
     if (metric === "R_T") {
       notes.push("Paler: the 90% interval spans one.");
+    }
+    if (metric === "care") {
+      notes.push("By province only: health zones have no figure." +
+        (care.basis === "reported" ? " A last report can predate the cut-off." : ""));
     }
     if (metric === "forecast" && !visibleRows().some(function (r) {
       return num(m.value(r));
@@ -1081,6 +1285,21 @@ Nothing else is fetched.
         } });
       }
       return cols;
+    }
+    if (metric === "care") {
+      if (care.basis === "reported") {
+        return [{ title: "Reported on", value: function (r) {
+          var d = careDate(r, care.q);
+          return d ? esc(d) : "–";
+        } }];
+      }
+      return [
+        { title: "90% interval", value: function (r) {
+          return interval(careValue(r, care.basis, care.q, "lower"),
+            careValue(r, care.basis, care.q, "upper"), CARE[care.q].fmt);
+        } },
+        { title: "Patch", value: function (r) { return esc(r.patch); } }
+      ];
     }
     if (metric === "share" || level === "province") {
       return [{ title: "Patch", value: function (r) { return esc(r.patch); } }];
@@ -1155,8 +1374,14 @@ Nothing else is fetched.
 
   document.querySelectorAll("input[name=metric]").forEach(function (el) {
     el.addEventListener("change", function () {
-      metric = el.value; updateSummaryDisabled(); recolour();
+      metric = el.value; updateSummaryDisabled();
+      // Treatment-centre figures exist by province only.
+      if (metric === "care" && level === "zone") { setLevel("province"); return; }
+      recolour(); renderDetail();
     });
+  });
+  document.getElementById("care").addEventListener("change", function () {
+    careSet(this.value); updateSummaryDisabled(); recolour(); renderDetail();
   });
   document.getElementById("stream").addEventListener("change", function () {
     stream = this.value; recolour(); renderDetail();
@@ -1264,7 +1489,8 @@ Nothing else is fetched.
     document.querySelectorAll(".zone-only").forEach(function (el) {
       el.hidden = level === "province";
     });
-    if (level === "province" && (metric === "share" || metric === "p_ge")) {
+    if (level === "province" && (metric === "share" || metric === "p_ge") ||
+        level === "zone" && metric === "care") {
       metric = "R_T";
       document.querySelector("input[name=metric][value=R_T]").checked = true;
       updateSummaryDisabled();
@@ -1321,15 +1547,16 @@ Nothing else is fetched.
     var area = params.get("area");
     if (area && byKey[area]) { select(area); }
   }
+  function setLevel(v) {
+    level = v;
+    document.querySelector("input[name=layer][value=" + v + "]").checked = true;
+    if (layers.zone) { showLevel(); }
+  }
   document.querySelectorAll("input[name=layer]").forEach(function (el) {
-    el.addEventListener("change", function () {
-      level = el.value;
-      if (layers.zone) { showLevel(); }
-    });
+    el.addEventListener("change", function () { setLevel(el.value); });
   });
-  if (params.get("layer") === "province") {
-    level = "province";
-    document.querySelector("input[name=layer][value=province]").checked = true;
+  if (params.get("layer") === "province" || metric === "care") {
+    setLevel("province");
   }
 
   // The data cut-off, from the first row, in the site's date style.

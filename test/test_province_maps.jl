@@ -211,6 +211,84 @@ end
     @test from_chn.cfr_median ≈ [1.0, 2.0, 2.0]
 end
 
+@testitem "province_map_estimates adds the treatment-centre columns when given" begin
+    using BVDOutbreakSize: province_map_estimates
+    using Dates: Date
+    d = [collect(0.5:0.01:1.5), fill(2.0, 101)]
+    kw = (;
+        confirmed_history = Dict(), death_history = Dict(),
+        cutoff = Date(2026, 9, 20), patch_names = ["x", "y"],
+        patch_labels = ["X", "Pool"],
+        members = Dict("x" => ["a"], "y" => ["b", "c"]),
+    )
+    care = (;
+        isolation = d, beds = d, bed_use = d, isolation_forecast = d,
+        beds_forecast = d, bed_use_forecast = d,
+    )
+    est = province_map_estimates(d, d; care..., kw...)
+    for prefix in keys(care)
+        @test est[!, string(prefix, "_median")] ≈ [1.0, 2.0, 2.0]
+        @test est[!, string(prefix, "_lower")] ≈ [0.55, 2.0, 2.0]
+        @test est[!, string(prefix, "_upper")] ≈ [1.45, 2.0, 2.0]
+    end
+    bare = province_map_estimates(d, d; kw...)
+    @test !any(
+        c -> occursin("isolation", c) || occursin("bed", c), names(bare)
+    )
+    ## The reported counts are each province's own last report. On a
+    ## 20-day grid ending 20 September, `a` reports 30 patients on day 18
+    ## against 40 beds printed on day 4 (14 days earlier); `c` reports 6 on
+    ## day 20 against 5 beds printed on day 5, 15 days earlier, so no
+    ## share; `b` reports nothing.
+    sparse(days, counts) = (; days, counts)
+    obs = province_map_estimates(
+        d, d; kw..., n = 20,
+        isolation_history = Dict(
+            "a" => sparse([2, 18], [10, 30]), "c" => sparse([20], [6])
+        ),
+        bed_history = Dict(
+            "a" => sparse([4, 19], [40, 50]), "c" => sparse([5], [5])
+        )
+    )
+    @test isequal(obs.isolation_reported, [30, missing, 6])
+    @test isequal(
+        obs.isolation_reported_date, ["2026-09-18", missing, "2026-09-20"]
+    )
+    @test isequal(obs.beds_reported, [50, missing, 5])
+    @test isequal(
+        obs.beds_reported_date, ["2026-09-19", missing, "2026-09-05"]
+    )
+    @test isequal(obs.bed_use_reported, [30 / 40, missing, missing])
+    @test_throws ArgumentError province_map_estimates(
+        d, d; kw..., isolation_history = Dict("a" => sparse([1], [1]))
+    )
+    ## From a chain, the cut-off values are read from its per-patch
+    ## isolation, bed and utilisation deterministics.
+    draws(v) = [[v[1][i], v[2][i]] for i in 1:101]
+    chn = (;
+        R_T_patch = draws(d), province_expected_isolation = draws(d),
+        province_bed_capacity = draws(d), province_bed_utilisation = draws(d),
+    )
+    from_chn = province_map_estimates(chn, d; n_patches = 2, kw...)
+    for prefix in ("isolation", "beds", "bed_use")
+        @test from_chn[!, prefix * "_median"] ≈ [1.0, 2.0, 2.0]
+    end
+end
+
+@testitem "reported_level_table lists each area's reports in the window" begin
+    using BVDOutbreakSize: reported_level_table
+    using Dates: Date
+    h = Dict(
+        "b" => (; days = [3, 9, 10], counts = [7, 8, 9]),
+        "a" => (; days = [1, 6], counts = [1, 2]),
+    )
+    t = reported_level_table(h; cutoff = Date(2026, 9, 9), n = 9, from = 2)
+    @test t.area == ["a", "b", "b"]
+    @test t.date == Date.(["2026-09-06", "2026-09-03", "2026-09-09"])
+    @test t.count == [2, 7, 8]
+    @test size(reported_level_table(Dict(); cutoff = Date(2026, 9, 9), n = 9), 1) == 0
+end
+
 @testitem "rt_quantile_table gives daily quantiles in long format" begin
     using BVDOutbreakSize: rt_quantile_table
     using Dates: Date
