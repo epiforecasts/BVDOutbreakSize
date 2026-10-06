@@ -130,8 +130,8 @@ zone_map_fig #hide
 #md # ```
 
 ## Each patch's implied reproduction number from the joint draws with the
-## same generation interval the zone stage fixes, so the patch line is close
-## to the quantity the zone values average to.
+## joint posterior mean generation interval, so the patch line is close to
+## the quantity the zone values average to.
 zone_grid = zone_inputs.t0:obs.n
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [
@@ -321,7 +321,7 @@ MarkdownTable(zone_diagnostics) #hide
 #md # ```
 
 # The figure below sets the reproduction number implied by the zone stage's own patch trajectories against the one implied by the headline joint fit, nationally and for each patch.
-# Both are computed from infections with the generation interval the zone stage fixes.
+# Both are computed from infections with the joint posterior mean generation interval.
 # Agreement says the melding stage has kept the joint's patch trajectories rather than moved them to fit the zone data.
 
 #md # ```@raw html
@@ -531,9 +531,29 @@ zone_estimates = DataFrame(
     as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
-## Each zone's daily reproduction number and weekly allocated confirmed
-## cases, for the dashboard map's detail column.
+## Each zone's daily reproduction number, weekly allocated confirmed cases
+## and weekly confirmed deaths, for the dashboard map's detail column. A
+## zone's deaths are its own cumulative series, so each zone is binned on
+## its own vintages.
 _with_series(t, s) = (t[!, :series] .= s; t)
+_zone_weekly_deaths = let h = obs.zone_death_history
+    out = DataFrame(area = String[], date = Date[], count = Int[])
+    for (prov, z, key) in zip(
+            zone_inputs.zone_province, zone_inputs.zone_names, zone_map_keys
+        )
+        haskey(h, prov) && haskey(h[prov], z) &&
+            !isempty(h[prov][z].counts) || continue
+        c = h[prov][z].counts
+        append!(
+            out,
+            weekly_count_table(
+                h[prov][z].days, reshape([c[1]; max.(diff(c), 0)], 1, :),
+                [key]; cutoff = obs.cutoff, n = obs.n
+            )
+        )
+    end
+    out
+end
 CSV.write(
     joinpath(dashboard_dir, "zone_timeseries.csv"),
     vcat(
@@ -548,7 +568,8 @@ CSV.write(
                 zone_inputs.days, zone_inputs.counts, zone_map_keys;
                 cutoff = obs.cutoff, n = zone_inputs.n
             ), "cases"
-        );
+        ),
+        _with_series(_zone_weekly_deaths, "deaths");
         cols = :union
     )
 )

@@ -488,7 +488,8 @@ end
 ## provinces it pools, with the province names in place of zone labels.
 
 export province_map_summary, province_zone_values, plot_province_map,
-    province_map_estimates, rt_quantile_table, weekly_count_table
+    province_map_estimates, rt_quantile_table, weekly_count_table,
+    reported_level_table
 
 """
 $(TYPEDSIGNATURES)
@@ -566,11 +567,22 @@ $(TYPEDSIGNATURES)
 
 The province estimates the interactive map reads, one row per source
 province in `members` (patches in `patch_names` order), keyed as the
-geojson's `province` property. `rt`, `forecast` and the optional
-`ascertainment` hold one draw vector per patch, and every member province
-takes its patch's summaries; `pooled` is 1 when a patch pools several
-provinces. `cases` and `deaths` are the province's own last cumulative
-counts.
+geojson's `province` property. `rt`, `forecast` (confirmed cases over the
+coming week) and the optional `deaths_forecast` (confirmed deaths over the
+same week), `cfr` (case-fatality ratio) and `ascertainment` hold one draw
+vector per patch, and every member province takes its patch's summaries;
+`pooled` is 1 when a patch pools several provinces. `cases` and `deaths`
+are the province's own last cumulative counts.
+
+The treatment-centre columns are optional too. `isolation`, `beds` and
+`bed_use` (patients in isolation, beds, and their ratio at the cut-off)
+and the same three with a `_forecast` suffix (at the forecast horizon) are
+draw vectors per patch, summarised as above. `isolation_history` and
+`bed_history` map a province to its sparse `(days, counts)` reports and
+need the grid length `n`. They give the province's own last report as
+`isolation_reported` and `beds_reported`, each with its `_date`, and
+`bed_use_reported`, the reported patients over the last bed count printed
+on or before that day and at most `max_silence` days earlier.
 """
 function province_map_estimates(
         rt::AbstractVector{<:AbstractVector},
@@ -579,11 +591,20 @@ function province_map_estimates(
         cutoff::Date, patch_names::AbstractVector = PROVINCE_NAMES,
         patch_labels::AbstractVector = PROVINCE_LABELS,
         members::AbstractDict = PROVINCE_MEMBERS, level::Real = 0.9,
-        ascertainment::Union{Nothing, AbstractVector} = nothing
+        deaths_forecast::Union{Nothing, AbstractVector} = nothing,
+        cfr::Union{Nothing, AbstractVector} = nothing,
+        ascertainment::Union{Nothing, AbstractVector} = nothing,
+        isolation::Union{Nothing, AbstractVector} = nothing,
+        beds::Union{Nothing, AbstractVector} = nothing,
+        bed_use::Union{Nothing, AbstractVector} = nothing,
+        isolation_forecast::Union{Nothing, AbstractVector} = nothing,
+        beds_forecast::Union{Nothing, AbstractVector} = nothing,
+        bed_use_forecast::Union{Nothing, AbstractVector} = nothing,
+        isolation_history::Union{Nothing, AbstractDict} = nothing,
+        bed_history::Union{Nothing, AbstractDict} = nothing,
+        n::Union{Nothing, Integer} = nothing, max_silence::Integer = 14
     )
     r = province_map_summary(rt; level)
-    a = ascertainment === nothing ? nothing :
-        province_map_summary(ascertainment; level)
     f = province_map_summary(forecast; level)
     last_count(h, prov) = haskey(h, prov) && !isempty(h[prov].counts) ?
         h[prov].counts[end] : missing
@@ -602,13 +623,50 @@ function province_map_estimates(
             for (p, name) in enumerate(patch_names) for prov in members[name]
     ]
     df = DataFrame(rows)
-    if a !== nothing
-        patch_of = [p for (p, name) in enumerate(patch_names) for _ in members[name]]
-        df.ascertainment_median = a.values[patch_of]
-        df.ascertainment_lower = a.lower[patch_of]
-        df.ascertainment_upper = a.upper[patch_of]
+    patch_of = [p for (p, name) in enumerate(patch_names) for _ in members[name]]
+    for (prefix, draws) in (
+            (:deaths_forecast, deaths_forecast), (:cfr, cfr),
+            (:ascertainment, ascertainment), (:isolation, isolation),
+            (:beds, beds), (:bed_use, bed_use),
+            (:isolation_forecast, isolation_forecast),
+            (:beds_forecast, beds_forecast),
+            (:bed_use_forecast, bed_use_forecast),
+        )
+        draws === nothing && continue
+        s = province_map_summary(draws; level)
+        df[!, Symbol(prefix, :_median)] = s.values[patch_of]
+        df[!, Symbol(prefix, :_lower)] = s.lower[patch_of]
+        df[!, Symbol(prefix, :_upper)] = s.upper[patch_of]
+    end
+    (isolation_history === nothing && bed_history === nothing) && return df
+    n === nothing && throw(
+        ArgumentError(
+            "province_map_estimates: the reported treatment-centre " *
+                "counts need the grid length `n`."
+        )
+    )
+    date_of(d) = ismissing(d) ? missing : string(cutoff - Day(n - d))
+    iso = [_last_report(isolation_history, p) for p in df.province]
+    bed = [_last_report(bed_history, p) for p in df.province]
+    df.isolation_reported = first.(iso)
+    df.isolation_reported_date = date_of.(last.(iso))
+    df.beds_reported = first.(bed)
+    df.beds_reported_date = date_of.(last.(bed))
+    df.bed_use_reported = map(df.province, iso) do p, (c, d)
+        ismissing(d) && return missing
+        b, bd = _last_report(bed_history, p, d)
+        return !ismissing(b) && b > 0 && d - bd <= max_silence ? c / b :
+            missing
     end
     return df
+end
+
+## The last count of `province` in the sparse `history` printed on or
+## before grid day `day`, with its day, or two `missing`s.
+function _last_report(history, province, day::Integer = typemax(Int))
+    h = history === nothing ? nothing : get(history, province, nothing)
+    i = h === nothing ? 0 : searchsortedlast(h.days, day)
+    return i == 0 ? (missing, missing) : (h.counts[i], h.days[i])
 end
 
 """
@@ -616,18 +674,25 @@ $(TYPEDSIGNATURES)
 
 [`province_map_estimates`](@ref) with the reproduction number at the
 cut-off read from the per-patch `R_T_patch` of `chn`, for its first
-`n_patches` patches, and the ascertainment from its
-`province_ascertainment` when it carries one.
+`n_patches` patches, the case-fatality ratio from its `CFR_patch` and the
+ascertainment from its `province_ascertainment` when it carries them. The
+patients in isolation, beds and their ratio at the cut-off are read from
+its `province_expected_isolation`, `province_bed_capacity` and
+`province_bed_utilisation` when it carries them.
 """
 function province_map_estimates(
         chn, forecast::AbstractVector{<:AbstractVector};
         n_patches::Integer, kwargs...
     )
-    ascertainment = _has_key(chn, :province_ascertainment) ?
-        _per_patch(chn, :province_ascertainment, n_patches) : nothing
+    per_patch(key) = _has_key(chn, key) ?
+        _per_patch(chn, key, n_patches) : nothing
     return province_map_estimates(
-        _per_patch(chn, :R_T_patch, n_patches), forecast; ascertainment,
-        kwargs...
+        _per_patch(chn, :R_T_patch, n_patches), forecast;
+        cfr = per_patch(:CFR_patch),
+        ascertainment = per_patch(:province_ascertainment),
+        isolation = per_patch(:province_expected_isolation),
+        beds = per_patch(:province_bed_capacity),
+        bed_use = per_patch(:province_bed_utilisation), kwargs...
     )
 end
 
@@ -682,6 +747,30 @@ function weekly_count_table(
         c = sum(increments[i, v] for v in eachindex(days) if lo < days[v] <= hi; init = 0)
         push!(rows, (; area = String(area), date = cutoff - Day(n - hi), count = c))
     end
+    return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Reported levels per area in long format, one row per area and reported
+day from grid day `from` to `n`: `area`, `date` and `count`. `history` maps
+an area to its sparse `(days, counts)` reports, and the areas are written
+in sorted order. Grid day `d` is dated `cutoff - (n - d)` days.
+"""
+function reported_level_table(
+        history::AbstractDict; cutoff::Date, n::Integer, from::Integer = 1
+    )
+    rows = [
+        (;
+            area = String(area), date = cutoff - Day(n - d),
+            count = history[area].counts[i],
+        )
+            for area in sort!(collect(keys(history)))
+            for (i, d) in enumerate(history[area].days) if from <= d <= n
+    ]
+    isempty(rows) &&
+        return DataFrame(area = String[], date = Date[], count = Int[])
     return DataFrame(rows)
 end
 

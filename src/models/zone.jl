@@ -4,9 +4,10 @@
 # per-zone confirmed-case and death tables as a within-patch composition,
 # with no feedback to stage one.
 # The shared quantity is the province model's weekly infections in each
-# patch. The zone stage samples it from a multivariate normal fitted to the
-# province model's draws (`zone_meld_block`) and conditions on the daily
-# patch trajectory it implies. The province model's uncertainty, and the
+# patch, with its generation-interval and delay parameters. The zone stage
+# samples it from a multivariate normal fitted to the province model's
+# draws (`zone_meld_block`) and conditions on the daily patch trajectory
+# and the delays it implies. The province model's uncertainty, and the
 # correlation it learns across patches, reach every zone quantity through
 # the fit. The functions here build the inputs from a
 # parent chain (`zone_fit_inputs`), run the share renewal and its
@@ -14,12 +15,15 @@
 # define the Turing model (`bvd_zone`) and fit it (`fit_zone`).
 
 ## Truncation lags of the stage-1 delay PMFs, the defaults of
-## `patch_infection_model` (generation interval, incubation) and
-## `lab_delay_model` (receipt), so the PMFs built here are discretised as
-## the parent fit discretised them.
+## `patch_infection_model` (generation interval, incubation),
+## `reported_cases_model` (onset to report), `lab_delay_model` (receipt) and
+## `deaths_model` (onset to death), so the PMFs built here are discretised
+## as the parent fit discretised them.
 const ZONE_GI_NMAX = cdf_nmax(Gamma(2.71, 5.65))
 const ZONE_INCUBATION_NMAX = cdf_nmax(lognormal_meansd(6.3, 3.5))
+const ZONE_REPORT_NMAX = cdf_nmax(Gamma(1.178, 3.694))
 const ZONE_RECEIPT_NMAX = cdf_nmax(lognormal_meansd(4.5, 4.0))
+const ZONE_ONSET_DEATH_NMAX = cdf_nmax(Gamma(3.33, 3.83))
 
 ## Chain keys of the parent quantities the cut reads. The joint attaches its
 ## latent submodel unprefixed, so the generation interval and incubation
@@ -30,10 +34,15 @@ const _ZONE_PARENT_KEYS = (
     gi_sd = Symbol("gi_state.gi_sd"),
     inc_mean = Symbol("inc_state.delay_mean"),
     inc_sd = Symbol("inc_state.delay_sd"),
+    report_alpha = Symbol("cases_state.report_state.α"),
+    report_theta = Symbol("cases_state.report_state.θ"),
     receipt_mean = Symbol("confirmed_state.receipt_state.d.delay_mean"),
     receipt_sd = Symbol("confirmed_state.receipt_state.d.delay_sd"),
+    admission_alpha = Symbol("deaths_state.od_state.oa.α"),
+    admission_theta = Symbol("deaths_state.od_state.oa.θ"),
+    death_alpha = Symbol("deaths_state.od_state.ad.α"),
+    death_theta = Symbol("deaths_state.od_state.ad.θ"),
     infections = :infections_patch,
-    death_confirmation = :onset_to_death_confirmation_pmf,
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
     importation_flow = :importation_flow_effect,
@@ -45,6 +54,14 @@ const _ZONE_PARENT_KEYS = (
     rho_death = :province_death_composition_rho,
     drift_sd = :region_drift_sd,
     correlation = :region_corr_primary_secondary,
+)
+
+## The parameters of the generation interval and the delays, in the order
+## the meld appends their logs and [`zone_delay_pmfs`](@ref) reads them.
+const _ZONE_DELAY_KEYS = (
+    :gi_mean, :gi_sd, :inc_mean, :inc_sd, :report_alpha, :report_theta,
+    :receipt_mean, :receipt_sd, :admission_alpha, :admission_theta,
+    :death_alpha, :death_theta,
 )
 
 ## Every parent key the zone stage and its diagnostics read, so an extract
@@ -155,47 +172,9 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The delay convolution over the days `t0 … n` as an `(n_days × n_days)`
-lower-triangular Toeplitz matrix `F` with `F[j, j − s] = f_s` (lag 0 on
-the diagonal), so the convolution of every zone's infections is one
-matrix product `F I`. The days before `t0` enter separately through
-[`zone_report_pre_rows`](@ref).
-"""
-function zone_delay_operator(f::AbstractVector, nd::Integer)
-    F = zeros(Float64, nd, nd)
-    for j in 1:nd, s in 0:min(length(f) - 1, j - 1)
-
-        F[j, j - s] = f[s + 1]
-    end
-    return F
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The pre-`t0` reporting term of each zone's patch on the days `t0 … n`, as
-an `(n_days × n_zones)` matrix so that a zone's daily reports are
-`F I[:, z] + w_z(t_0) pre[:, z]`. `report_pre` is the `(n_patches × n)`
-term of [`zone_fixed_terms`](@ref).
-"""
-function zone_report_pre_rows(
-        report_pre::AbstractMatrix,
-        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, n::Integer
-    )
-    nd = n - t0 + 1
-    out = zeros(Float64, nd, length(patch_of_zone))
-    for (z, p) in enumerate(patch_of_zone), j in 1:nd
-
-        out[j, z] = report_pre[p, t0 + j - 1]
-    end
-    return out
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The parts of the zone renewal and its delays that involve only patch
-infections before the grid start `t0`, which are constant under the cut.
+The parts of the zone renewal and its delays that involve only the mean
+patch infections before the grid start `t0`, for one generation interval
+and delay.
 Every zone holds its initial share over those days, so each term enters a
 zone's series multiplied by `w_z(t0)` only.
 
@@ -217,26 +196,12 @@ function zone_fixed_terms(
         f::AbstractVector, t0::Integer
     )
     np, n = size(I_bar)
-    Tp = promote_type(eltype(I_bar), eltype(g), eltype(f))
-    force_pre = zeros(Tp, np, n)
-    report_pre = zeros(Tp, np, n)
+    force_pre = zone_pre_convolution(I_bar, g, t0, 1)
+    report_pre = zone_pre_convolution(I_bar, f, t0, 0)
+    Tp = eltype(report_pre)
     report_pre_cum = zeros(Tp, np, n)
-    infections_pre = zeros(Tp, np)
+    infections_pre = zeros(eltype(I_bar), np)
     @inbounds for p in 1:np
-        for t in 1:n
-            acc = zero(Tp)
-            for s in 1:min(length(g), t - 1)
-                t - s < t0 || continue
-                acc += g[s] * I_bar[p, t - s]
-            end
-            force_pre[p, t] = acc
-            acc = zero(Tp)
-            for s in 0:min(length(f) - 1, t - 1)
-                t - s < t0 || continue
-                acc += f[s + 1] * I_bar[p, t - s]
-            end
-            report_pre[p, t] = acc
-        end
         run = zero(Tp)
         for t in 1:n
             t < t0 && (run += report_pre[p, t])
@@ -247,6 +212,42 @@ function zone_fixed_terms(
         end
     end
     return (; force_pre, report_pre, report_pre_cum, infections_pre)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The part of the convolution of each patch's infections `I_bar`
+`(n_patches × n)` with the PMF `w` that reaches back before the grid start
+`t0`: `out[p, t] = Σ_s w_s Ī_p(t − s)` over the lags `s` with
+`1 ≤ t − s < t0`, where `w[i]` is the weight of lag `s = i − 1 +
+first_lag`. `first_lag` is 1 for the generation interval and 0 for a
+delay. A plain loop with its own reverse rule, since the model rebuilds it
+on every draw's delays.
+"""
+function zone_pre_convolution(
+        I_bar::AbstractMatrix, w::AbstractVector, t0::Integer,
+        first_lag::Integer
+    )
+    np, n = size(I_bar)
+    out = zeros(promote_type(eltype(I_bar), eltype(w)), np, n)
+    _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
+    return out
+end
+
+## Only the lags reaching back before `t0` contribute, `s > t − t0`.
+function _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
+    np, n = size(I_bar)
+    L = length(w)
+    @inbounds for t in 1:n
+        lo = max(first_lag, t - t0 + 1)
+        hi = min(L - 1 + first_lag, t - 1)
+        for s in lo:hi, p in 1:np
+
+            out[p, t] += w[s - first_lag + 1] * I_bar[p, t - s]
+        end
+    end
+    return out
 end
 
 ## --- The shared quantity -------------------------------------------------
@@ -305,9 +306,10 @@ succeeds (`_zone_meld_factor`). Shrinking toward the diagonal of
 gives up only the correlations, which is the direction the parent's
 posterior supports least.
 
-Only the deviation `a = L η` is used, never `m`, because the zone stage
-multiplies the parent's own mean curve by `exp(a)`. `weights` is the
-linear map from `a` to that daily log deviation on every patch and day, an
+For the patch cells only the deviation `a = L η` is used, never `m`,
+because the zone stage multiplies the parent's own mean curve by
+`exp(a)`. `weights` is the linear map from `a` to that daily log
+deviation on every patch and day, an
 `(n_patches · n) × d` matrix whose rows are flattened patch-major as the
 parent stores `infections_patch`. It interpolates each patch's kept
 midpoints ([`zone_week_midpoints`](@ref)) and holds flat outside them.
@@ -322,7 +324,8 @@ column each, on the scale they are melded on. They are appended after the
 patch-week cells as `extra_cells`, so the infection block of `L` is the
 leading block, and their rows of `weights` are zero: they reach the zone
 model through `L η` alone. The zone stage passes the per-origin log
-importation intensity here when the zones mix.
+importation intensity here when the zones mix, followed by the log
+generation-interval and delay parameters.
 
 Returns `(; weights, L, cells_patch, cells_week, midpoints, d, extra_cells,
 mean_log, log_sums)`, `log_sums` holding the per-draw log sums and the
@@ -411,7 +414,9 @@ The fixed inputs [`bvd_zone`](@ref) reads past the cut-off `n` when run with
 a [`ForecastHorizon`](@ref) of `horizon` days, built from the fitted
 shared quantity `meld` ([`zone_meld_block`](@ref)) and the parent's
 posterior-predictive draws `forecast` ([`forecast_draws`](@ref) on the
-parent), which carry one draw per parent draw in the same order.
+parent), which carry one draw per parent draw in the same order. `pmfs`
+holds the posterior mean PMFs of [`zone_delay_pmfs`](@ref), which the
+model replaces with each draw's own.
 
 The shared quantity is extended over the forecast weeks. Each parent draw's
 log weekly patch infections over the fitted cells of `meld` and over the
@@ -443,8 +448,7 @@ forecast splits. `horizon` must be one of the parent's weekly forecast
 vintages.
 """
 function zone_forecast_block(
-        forecast, meld, I_bar::AbstractMatrix, g::AbstractVector,
-        f::AbstractVector, death_pmf::AbstractVector, t0::Integer,
+        forecast, meld, I_bar::AbstractMatrix, pmfs, t0::Integer,
         knots::AbstractVector{<:Integer}, days::AbstractVector{<:Integer},
         patch_of_zone, mixing;
         horizon::Integer = 7, week::Integer = 7,
@@ -511,16 +515,9 @@ function zone_forecast_block(
             end
         end
     end
-    fixed = zone_fixed_terms(I_ext, g, f, t0)
-    death_fixed = zone_fixed_terms(I_ext, g, death_pmf, t0)
-    nd = n + H - t0 + 1
-    binned(pmf, fx, ds) = zone_binned_operator(
-        zone_delay_operator(pmf, nd),
-        zone_report_pre_rows(fx.report_pre, patch_of_zone, t0, n + H),
-        fx.report_pre_cum, ds, t0, patch_of_zone
+    terms = zone_delay_terms(
+        I_ext, pmfs, t0, days, patch_of_zone; future = n
     )
-    ## The forecast week as the second of the windows `(…, n]`, `(n, n + H]`.
-    week_op = binned(f, fixed, [n, n + H])
     knots_ext = vcat(knots, future_knot_days(n, H; week))
     mixing_ext = mixing === nothing ? nothing :
         _zone_forecast_mixing(mixing, forecast, future, I_ext, np, H)
@@ -537,13 +534,9 @@ function zone_forecast_block(
         horizon = H, knots = knots_ext,
         n_future_knots = length(knots_ext) - length(knots),
         meld_weights = weights, meld_L = L, meld_d_future = df,
-        I_bar = I_ext, fixed.force_pre, fixed.infections_pre,
+        I_bar = I_ext, terms.force_pre, terms.infections_pre,
         interp = zone_interpolation_weights(knots_ext, t0, n + H),
-        report_bin = binned(f, fixed, days),
-        death_bin = binned(death_pmf, death_fixed, days),
-        report_future = (;
-            weights = week_op.weights[:, 2:2], pre = week_op.pre[:, 2:2],
-        ),
+        terms.report_bin, terms.death_bin, terms.report_future,
         mixing = mixing_ext, totals,
     )
 end
@@ -664,34 +657,60 @@ The patch quantities the zone renewal reads, deformed by the sampled
 parent draw. `scale` is the multiplier of [`zone_parent_scale`](@ref) and
 `e` that of [`zone_parent_epsilon`](@ref), or `nothing` for the cut, which
 reads the province model's posterior mean and carries none of its
-uncertainty. Because the deformation is constant over the days before the
-grid start, every pre-`t0` term of [`zone_fixed_terms`](@ref) is the fixed
-one times one factor per patch, which `zone_pre` holds for each zone.
-`mixing` is the draw's between-patch movement
-([`zone_draw_mixing`](@ref)) on its kernel `blocks`, `nothing` when the
-zones do not mix.
+uncertainty. `delays` holds the draw's generation interval and delay terms
+([`zone_delay_terms`](@ref)), or `nothing` for the terms at the posterior
+mean PMFs that `zd` carries. Because the deformation is constant over the
+days before the grid start, every pre-`t0` term of
+[`zone_fixed_terms`](@ref) is the undeformed one times one factor per
+patch, which `zone_pre` holds for each zone. `mixing` is the draw's
+between-patch movement ([`zone_draw_mixing`](@ref)), `nothing` when the
+zones do not mix; `blocks` is its gravity kernel blocks, or `nothing` for
+the fixed kernel. The result also carries the generation interval `g` and
+the binned operators `report_bin` and `death_bin` of the draw.
 """
-function zone_deformation(zd, scale, e = nothing, blocks = nothing)
+function zone_deformation(
+        zd, scale, e = nothing, delays = nothing, blocks = nothing
+    )
+    dl = delays === nothing ?
+        (;
+            zd.g, zd.force_pre, zd.infections_pre, zd.report_bin,
+            zd.death_bin,
+        ) : delays
     mixing = zd.mixing === nothing ? nothing :
         zone_draw_mixing(zd.mixing, scale, e, blocks)
-    return merge(_zone_deformed_patches(zd, scale), (; mixing))
+    return merge(
+        _zone_deformed_patches(zd, dl, scale),
+        (; mixing, dl.g, dl.report_bin, dl.death_bin)
+    )
 end
 
-function _zone_deformed_patches(zd, ::Nothing)
+function _zone_deformed_patches(zd, dl, ::Nothing)
     return (;
-        zd.I_bar, zd.force_pre, zd.infections_pre,
+        zd.I_bar, dl.force_pre, dl.infections_pre,
         zone_pre = ones(Float64, length(_zone_patch_index(zd))),
     )
 end
 
-function _zone_deformed_patches(zd, scale::AbstractMatrix)
+function _zone_deformed_patches(zd, dl, scale::AbstractMatrix)
     pre = scale[:, 1]
     return (;
         I_bar = zd.I_bar .* scale,
-        force_pre = zd.force_pre .* pre,
-        infections_pre = zd.infections_pre .* pre,
+        force_pre = dl.force_pre .* pre,
+        infections_pre = dl.infections_pre .* pre,
         zone_pre = pre[_zone_patch_index(zd)],
     )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The generation-interval and delay parameters of one draw `η` of the
+shared quantity, in the order of `_ZONE_DELAY_KEYS`: the province model's
+posterior mean of each log parameter plus its row of `L η`,
+exponentiated.
+"""
+function zone_delay_parameters(zd, η::AbstractVector)
+    return exp.(zd.meld_delay_mean .+ zd.meld_delay_rows * η)
 end
 
 ## The patch of every zone, from data that may carry the ranges alone.
@@ -1125,36 +1144,135 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The delay convolution and its binning into the vintage windows
-`(d_{v−1}, d_v]` of `days` as one fixed operator. `weights`
-`(n_days × n_vintages)` sums the rows of the delay operator `F` over each
-window. `pre` `(n_zones × n_vintages)` is each window's pre-`t0` term at
-unit initial share, from the pre-`t0` rows `pre_rows` and each patch's
-accrual before `t0`, `pre_cum` ([`zone_fixed_terms`](@ref)).
+The delay convolution through the PMF `f` (lag 0) and its binning into the
+vintage windows `(d_{v−1}, d_v]` of `days` as one operator over the grid
+days `t0 … n`. `weights` `(n_days × n_vintages)` holds what one infection
+on each grid day adds to each window,
+`weights[k, v] = Σ_{j ∈ v, j ≥ k} f_{j − k}`, so the binned reports of
+the zones' daily infections `I` `(n_days × n_zones)` are `Iᵀ weights`. `pre` `(n_zones × n_vintages)` is each window's pre-`t0`
+term at unit initial share, from the `report_pre` and `report_pre_cum`
+fields of `fixed` ([`zone_fixed_terms`](@ref), built on the same `f`).
+Generic in the element type, so the model can rebuild it for a sampled
+delay.
 """
 function zone_binned_operator(
-        F::AbstractMatrix, pre_rows::AbstractMatrix,
-        pre_cum::AbstractMatrix, days::AbstractVector{<:Integer},
-        t0::Integer, patch_of_zone::AbstractVector{<:Integer}
+        f::AbstractVector, fixed, days::AbstractVector{<:Integer},
+        t0::Integer, n::Integer, patch_of_zone::AbstractVector{<:Integer}
     )
-    nd = size(F, 1)
+    nd = n - t0 + 1
     nv = length(days)
-    weights = zeros(Float64, nd, nv)
-    pre = zeros(Float64, length(patch_of_zone), nv)
-    for v in 1:nv
-        lo = v == 1 ? 1 : Int(days[v - 1]) + 1
-        hi = Int(days[v])
-        rows = (max(lo, t0) - t0 + 1):min(hi - t0 + 1, nd)
-        weights[:, v] = vec(sum(view(F, rows, :); dims = 1))
-        pre[:, v] = vec(sum(view(pre_rows, rows, :); dims = 1))
+    np = size(fixed.report_pre, 1)
+    Tp = promote_type(eltype(f), eltype(fixed.report_pre))
+    rows = _zone_window_rows(days, t0, n)
+    weights = zone_window_weights(f, rows.starts, rows.stops, nd)
+    patch_pre = zeros(Tp, np, nv)
+    @inbounds for v in 1:nv
+        for j in rows.starts[v]:rows.stops[v], p in 1:np
+
+            patch_pre[p, v] += fixed.report_pre[p, t0 + j - 1]
+        end
         ## Accrued before the grid start, by difference of the cumulative.
+        lo = v == 1 ? 1 : Int(days[v - 1]) + 1
         lo < t0 || continue
-        top = min(hi, t0 - 1)
-        for (z, p) in enumerate(patch_of_zone)
-            pre[z, v] += pre_cum[p, top] - (lo > 1 ? pre_cum[p, lo - 1] : 0.0)
+        top = min(Int(days[v]), t0 - 1)
+        for p in 1:np
+            patch_pre[p, v] += fixed.report_pre_cum[p, top] -
+                (lo > 1 ? fixed.report_pre_cum[p, lo - 1] : zero(Tp))
         end
     end
+    pre = patch_pre[patch_of_zone, :]
     return (; weights, pre)
+end
+
+## The grid rows `starts[v] … stops[v]` of each vintage window
+## `(d_{v−1}, d_v]` on the days `t0 … n`, empty (`starts > stops`) for a
+## window that closes before `t0`.
+function _zone_window_rows(
+        days::AbstractVector{<:Integer}, t0::Integer, n::Integer
+    )
+    nd = n - t0 + 1
+    starts = [
+        max(v == 1 ? 1 : Int(days[v - 1]) + 1, t0) - t0 + 1
+            for v in eachindex(days)
+    ]
+    stops = [min(Int(days[v]) - t0 + 1, nd) for v in eachindex(days)]
+    return (; starts, stops)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+What one infection on each grid row adds to each vintage window through
+the delay PMF `f` (lag 0), as an `(nd × n_vintages)` matrix:
+`weights[k, v] = Σ_{j = starts[v]}^{stops[v]} f_{j − k}` over `j ≥ k`.
+Built from the cumulative PMF, with its own reverse rule, since the model
+rebuilds it on every draw's delays.
+"""
+function zone_window_weights(
+        f::AbstractVector, starts::AbstractVector{<:Integer},
+        stops::AbstractVector{<:Integer}, nd::Integer
+    )
+    L = length(f)
+    ## `cf[m + 1]` is the mass of lags `0 … m`.
+    cf = cumsum(f)
+    weights = zeros(eltype(cf), nd, length(starts))
+    @inbounds for v in eachindex(starts)
+        a, b = starts[v], stops[v]
+        a <= b || continue
+        for k in max(1, a - L + 1):b
+            hi = cf[min(b - k, L - 1) + 1]
+            lo = a - 1 - k < 0 ? zero(eltype(cf)) :
+                cf[min(a - 1 - k, L - 1) + 1]
+            weights[k, v] = hi - lo
+        end
+    end
+    return weights
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Every term of the zone renewal and its observation model that depends on
+the generation interval or the delays, for the PMFs `pmfs`
+([`zone_delay_pmfs`](@ref)) on the grid of the mean patch infections
+`I_bar` `(n_patches × n)`: the generation interval `g`, the pre-`t0` force
+and infections of [`zone_fixed_terms`](@ref), and the binned case and
+death operators over the vintage `days`
+([`zone_binned_operator`](@ref)). With `future` a day `d`, `report_future`
+bins the expected reports of `(d, n]`, the forecast window; it is
+`nothing` otherwise. The model calls this once per evaluation on the
+draw's delays, and the input builder once on the posterior mean PMFs.
+Returns `(; g, force_pre, infections_pre, report_bin, death_bin,
+report_future)`.
+"""
+function zone_delay_terms(
+        I_bar::AbstractMatrix, pmfs, t0::Integer,
+        days::AbstractVector{<:Integer},
+        patch_of_zone::AbstractVector{<:Integer};
+        future::Union{Nothing, Integer} = nothing
+    )
+    n = size(I_bar, 2)
+    fixed = zone_fixed_terms(I_bar, pmfs.g, pmfs.f, t0)
+    death_fixed = zone_fixed_terms(I_bar, pmfs.g, pmfs.death_pmf, t0)
+    report_bin = zone_binned_operator(
+        pmfs.f, fixed, days, t0, n, patch_of_zone
+    )
+    death_bin = zone_binned_operator(
+        pmfs.death_pmf, death_fixed, days, t0, n, patch_of_zone
+    )
+    report_future = if future === nothing
+        nothing
+    else
+        ## The forecast window as the second of `(…, d]`, `(d, n]`.
+        op = zone_binned_operator(
+            pmfs.f, fixed, [future, n], t0, n, patch_of_zone
+        )
+        (; weights = op.weights[:, 2:2], pre = op.pre[:, 2:2])
+    end
+    return (;
+        g = pmfs.g, fixed.force_pre, fixed.infections_pre, report_bin,
+        death_bin, report_future,
+    )
 end
 
 """
@@ -1267,10 +1385,10 @@ One forward pass of the zone model from its fixed data `zd` (the
 `ε` (`nothing` when mixing is off): the daily deviations (the
 interpolation weights times the knots), the share renewal and the binned
 expected reports ([`zone_binned_increments`](@ref)). `def` is the patch
-trajectory the draw's shared quantity implies
-([`zone_deformation`](@ref)); its default is the cut, the province model's
-posterior mean. Called by the model and, per draw, by the render. Returns
-`(; shares, forces, infections, imports, increments)`.
+trajectory, generation interval and delays the draw's shared quantity
+implies ([`zone_deformation`](@ref)); its default is the cut, the province
+model's posterior mean. Called by the model and, per draw, by the render.
+Returns `(; shares, forces, infections, imports, increments)`.
 """
 function zone_forward(
         zd, δ_knots::AbstractMatrix, w0::AbstractVector,
@@ -1280,11 +1398,11 @@ function zone_forward(
     δ_daily = zd.interp * transpose(δ_knots)
     mix = ε === nothing ? nothing : def.mixing
     st = zone_share_renewal(
-        def.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
+        def.I_bar, def.g, δ_daily, w0, zd.patch_ranges,
         zd.t0, def.force_pre; mix, ε
     )
     increments = zone_binned_increments(
-        zd.report_bin, st.infections, def.zone_pre .* w0
+        def.report_bin, st.infections, def.zone_pre .* w0
     )
     return (; st.shares, st.forces, st.infections, st.imports, increments)
 end
@@ -1404,12 +1522,12 @@ end
 
 """
 Health-zone composition model, stage two of the melding. `zd` is the
-`model_data` of [`zone_fit_inputs`](@ref): the fixed stage-1 inputs (patch
-infections `Ī_p`, the generation-interval and infection-to-report PMFs),
-the zone count matrix and the scored cells, the knot days and the walking
-mask, all plain arrays, plus the softmax scale `share_scale`, the knot
-spacing `week` and the reporting floor `rt_floor`. Nothing in it is
-sampled here.
+`model_data` of [`zone_fit_inputs`](@ref): the stage-1 inputs (the mean
+patch infections `Ī_p`, the posterior mean generation-interval and delay
+PMFs and the shared quantity's factor), the zone count matrix and the
+scored cells, the knot days and the walking mask, all plain arrays, plus
+the softmax scale `share_scale`, the knot spacing `week` and the reporting
+floor `rt_floor`.
 
 ### Parameters
 
@@ -1461,16 +1579,19 @@ province's estimate and departs only as far as its own counts require.
 ### The shared quantity
 
 `η ~ N(0, I_d)` is the whitened draw of the province model's weekly
-infections in each patch and, when the zones mix, of its log importation
-intensity per origin patch, the quantities the two stages share
+infections in each patch, when the zones mix of its log importation
+intensity per origin patch, and of its log generation-interval and delay
+parameters, the quantities the two stages share
 ([`zone_meld_block`](@ref)). Its Cholesky factor carries the province
 model's joint posterior over all patches, weeks and origins together, so a
 draw moves whole patch trajectories, and moves the patches together where
 the province model says they move together. The daily patch trajectory the
 draw implies is the province model's mean curve times `exp(a_p(t))` with
 `a = L η` ([`zone_parent_scale`](@ref)), its origin intensities the mean
-times `e = exp(c)` ([`zone_parent_epsilon`](@ref)), and the zone model is
-conditional on both.
+times `e = exp(c)` ([`zone_parent_epsilon`](@ref)), and its generation
+interval and delays are rebuilt from the drawn parameters
+([`zone_delay_parameters`](@ref), [`zone_delay_terms`](@ref)). The zone
+model is conditional on all three.
 
 This is the model's only parent term. The zone infections sum to the
 sampled patch total by construction. Scoring those sums against the
@@ -1548,6 +1669,8 @@ n_knots)`, `share_knots_zone` `(n_zones × n_knots)`, `delta_T_zone`,
 `zd.rt_floor` cumulative zone infections), `region_sd_zone` (`σ_L`),
 `region_drift_sd_zone` (`σ_δ`, one per patch), `region_halflife_zone`
 (`h`), `composition_rho_zone` (`ρ`), `composition_rho_death_zone`,
+`delay_parameters_zone` (the drawn generation-interval and delay
+parameters, in the order of `_ZONE_DELAY_KEYS`),
 `zone_ascertainment_national` and `zone_severity_national` (the same
 multipliers against the national average, the province model's contrast
 times the zone's own),
@@ -1676,6 +1799,18 @@ quantity is computed on the fitted days as without a forecast.
         )
     e_mix = size(zd.meld_epsilon_rows, 1) > 0 ?
         zone_parent_epsilon(zd.meld_epsilon_rows, η) : nothing
+    ## The draw's generation interval and delays, and every term built on
+    ## them, on the grid the model runs over.
+    delays = if n_meld > 0 && size(zd.meld_delay_rows, 1) > 0
+        θ_delay = zone_delay_parameters(zd, η)
+        delay_parameters_zone := θ_delay
+        zone_delay_terms(
+            zx.I_bar, zone_delay_pmfs(θ_delay), zd.t0, zd.days,
+            zd.patch_of_zone; future = H > 0 ? zd.n : nothing
+        )
+    else
+        nothing
+    end
     if H > 0 && zf.meld_d_future > 0
         η_future ~ product_distribution(fill(offset_prior, zf.meld_d_future))
         scale = zone_parent_scale(
@@ -1690,7 +1825,7 @@ quantity is computed on the fitted days as without a forecast.
             zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n) :
             nothing
     end
-    def = zone_deformation(zx, scale, e_mix, blocks)
+    def = zone_deformation(zx, scale, e_mix, delays, blocks)
     ## The correlation of two zones a reference distance apart, the prior
     ## taken from the province model's own learned correlation between its
     ## patches at the distance between their population centres.
@@ -1728,7 +1863,7 @@ quantity is computed on the fitted days as without a forecast.
     δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
     fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
     asc = relative_multiplier(
-        z_ascertainment, σ_ascertainment, zd.patch_ranges
+        z_ascertainment, σ_ascertainment, zd.multiplier_basis
     )
     zone_ascertainment_sd := σ_ascertainment
     zone_ascertainment_relative := asc
@@ -1743,9 +1878,9 @@ quantity is computed on the fitted days as without a forecast.
     )
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
-    D = zone_binned_increments(zx.death_bin, fw.infections, def.zone_pre .* w0)
+    D = zone_binned_increments(def.death_bin, fw.infections, def.zone_pre .* w0)
     sev = relative_multiplier(
-        z_severity, σ_severity, zd.patch_ranges
+        z_severity, σ_severity, zd.multiplier_basis
     )
     zone_severity_sd := σ_severity
     zone_severity_relative := sev
@@ -1768,7 +1903,9 @@ quantity is computed on the fitted days as without a forecast.
         forecast_zone ~ to_submodel(
             _zone_forecast_counts(
                 zd, zf, fw, zone_binned_increments(
-                    zf.report_future, fw.infections, def.zone_pre .* w0
+                    delays === nothing ? zf.report_future :
+                        delays.report_future,
+                    fw.infections, def.zone_pre .* w0
                 ), asc, ρ, nd
             ), false
         )
@@ -1815,11 +1952,69 @@ function _zone_parent_draws(chn, key::Symbol; vectors::Bool = false)
     return vectors ? _draw_vectors(chn, key) : _draws(chn, key)
 end
 
-## Generation-interval PMF (lag 1) of one parent draw from its Gamma mean
-## and SD, discretised as the parent did.
-function _zone_gi_pmf(m::Real, s::Real)
-    pmf = discretise_censored(Gamma((m / s)^2, s^2 / m), ZONE_GI_NMAX)
-    return pmf[2:end] ./ sum(pmf[2:end])
+"""
+$(TYPEDSIGNATURES)
+
+The generation interval and the delays the zone model reads, from the
+parameters `p` of one parent draw in the order of `_ZONE_DELAY_KEYS`: the
+generation-interval Gamma mean and SD, the incubation log-normal mean and
+SD, the onset-to-report Gamma shape and scale, the report-to-receipt
+log-normal mean and SD, and the Gamma shapes and scales of onset to
+admission and admission to death. Each is discretised as the parent
+discretises it. Returns `(; g, f, death_pmf)`: the generation interval `g`
+(lag 1), the infection-to-confirmed-report PMF
+`f = incubation ⊛ onset-to-report ⊛ receipt` (lag 0), the delay the
+parent's per-province composition applies to infections, and the
+infection-to-confirmed-death PMF
+`death_pmf = incubation ⊛ onset-to-death ⊛ receipt`.
+"""
+function zone_delay_pmfs(p::AbstractVector)
+    length(p) == length(_ZONE_DELAY_KEYS) || throw(
+        DimensionMismatch(
+            "zone_delay_pmfs: $(length(p)) parameters for " *
+                "$(length(_ZONE_DELAY_KEYS)) delay keys."
+        )
+    )
+    gi = discretise_censored(
+        Gamma((p[1] / p[2])^2, p[2]^2 / p[1]; check_args = false),
+        ZONE_GI_NMAX
+    )
+    g = gi[2:end] ./ sum(gi[2:end])
+    inc = discretise_censored(
+        lognormal_meansd(p[3], p[4]), ZONE_INCUBATION_NMAX
+    )
+    report = discretise_censored(
+        Gamma(p[5], p[6]; check_args = false), ZONE_REPORT_NMAX
+    )
+    receipt = discretise_censored(
+        lognormal_meansd(p[7], p[8]), ZONE_RECEIPT_NMAX
+    )
+    ## Onset to death as `onset_to_death_model` builds it: the two atomic
+    ## delays convolved, truncated back to its lags and renormalised.
+    od_full = convolve_pmf(
+        discretise_censored(
+            Gamma(p[9], p[10]; check_args = false), ZONE_ONSET_DEATH_NMAX
+        ),
+        discretise_censored(
+            Gamma(p[11], p[12]; check_args = false), ZONE_ONSET_DEATH_NMAX
+        )
+    )
+    od_trim = od_full[1:(ZONE_ONSET_DEATH_NMAX + 1)]
+    od = od_trim ./ sum(od_trim)
+    f = convolve_pmf(convolve_pmf(inc, report), receipt)
+    death_pmf = convolve_pmf(convolve_pmf(inc, od), receipt)
+    return (; g, f, death_pmf)
+end
+
+## Log of each delay parameter in every parent draw, one row per draw and
+## one column per key of `_ZONE_DELAY_KEYS`.
+function _zone_delay_log_draws(chn)
+    cols = [
+        _floored_log.(
+            _zone_parent_draws(chn, getfield(_ZONE_PARENT_KEYS, k))
+        ) for k in _ZONE_DELAY_KEYS
+    ]
+    return reduce(hcat, cols)
 end
 
 ## Mean over the parent's draws of a per-draw PMF.
@@ -1836,23 +2031,23 @@ $(TYPEDSIGNATURES)
 
 The stage-1 quantities the zone model conditions on, read from a
 `bvd_joint` parent chain: the patch infections `Ī_p(t)` `(n_patches × n)`,
-the generation-interval PMF `g` (lag 1), the infection-to-confirmed-report
-PMF `f = incubation ⊛ receipt` (lag 0, the delay the parent's per-province
-composition applies to infections) and the infection-to-confirmed-death PMF
-`death_pmf = incubation ⊛ onset-to-death ⊛ receipt`, with the
-between-patch movement: the per-origin importation intensity
+the generation interval and the delays ([`zone_delay_pmfs`](@ref)), with
+the between-patch movement: the per-origin importation intensity
 `origin_epsilon` and the log odds `import_log_odds` that an infection in a
 patch was imported, flattened as `infections_patch`.
 
 Each is a posterior mean: `log_infections` is the mean over draws of the
 log infections per day, so `Ī_p` is its exponential reshaped to
 `(n_patches × n)`, the movement is centred on the log scale in the same
-way, and the PMFs are the mean of the per-draw PMFs. The parent's
-uncertainty about the patch trajectory and the intensity does not enter
-here: it enters the fit through the shared quantity of
-[`zone_meld_block`](@ref), which deforms these centres.
-Returns `(; log_infections, g, f, death_pmf, origin_epsilon,
-import_log_odds, priors, province_ascertainment, province_severity)`.
+way, and the PMFs `g`, `f` and `death_pmf` are the mean of the per-draw
+PMFs. `delay_log_draws` holds the log delay parameters of every draw, one
+row per draw. The parent's uncertainty about the patch trajectory, the
+intensity and the delays does not enter here: it enters the fit through
+the shared quantity of [`zone_meld_block`](@ref), which deforms the
+centres and draws the delays.
+Returns `(; log_infections, g, f, death_pmf, delay_log_draws,
+origin_epsilon, import_log_odds, priors, province_ascertainment,
+province_severity)`.
 """
 function zone_parent_inputs(chn)
     chn = _zone_parent_chain(chn)
@@ -1865,30 +2060,11 @@ function zone_parent_inputs(chn)
         end
         acc ./ ndraws
     end
-    gi_m = _zone_parent_draws(chn, keys_.gi_mean)
-    gi_s = _zone_parent_draws(chn, keys_.gi_sd)
-    inc_m = _zone_parent_draws(chn, keys_.inc_mean)
-    inc_s = _zone_parent_draws(chn, keys_.inc_sd)
-    rec_m = _zone_parent_draws(chn, keys_.receipt_mean)
-    rec_s = _zone_parent_draws(chn, keys_.receipt_sd)
-    g = _zone_mean_pmf(i -> _zone_gi_pmf(gi_m[i], gi_s[i]), ndraws)
-    inc_pmf(i) = discretise_censored(
-        lognormal_meansd(inc_m[i], inc_s[i]),
-        ZONE_INCUBATION_NMAX
-    )
-    rec_pmf(i) = discretise_censored(
-        lognormal_meansd(rec_m[i], rec_s[i]),
-        ZONE_RECEIPT_NMAX
-    )
-    f = _zone_mean_pmf(i -> convolve_pmf(inc_pmf(i), rec_pmf(i)), ndraws)
-    death_pmf = if _has_key(chn, keys_.death_confirmation)
-        dc = _draw_vectors(chn, keys_.death_confirmation)
-        _zone_mean_pmf(
-            i -> convolve_pmf(inc_pmf(i), Float64.(dc[i])), ndraws
-        )
-    else
-        Float64[]
-    end
+    delay_log_draws = _zone_delay_log_draws(chn)
+    pmfs = [zone_delay_pmfs(exp.(r)) for r in eachrow(delay_log_draws)]
+    g = _zone_mean_pmf(i -> pmfs[i].g, ndraws)
+    f = _zone_mean_pmf(i -> pmfs[i].f, ndraws)
+    death_pmf = _zone_mean_pmf(i -> pmfs[i].death_pmf, ndraws)
     ## The province model's own between-patch movement, centred on the log
     ## scale as the infections are: the per-origin export intensity, and
     ## the log odds that an infection in a patch arrived from elsewhere. The
@@ -1925,9 +2101,8 @@ function zone_parent_inputs(chn)
         ),
     )
     return (;
-        log_infections = logI, g, f, death_pmf,
-        origin_epsilon, flow_kernel, import_log_odds,
-        priors,
+        log_infections = logI, g, f, death_pmf, delay_log_draws,
+        origin_epsilon, flow_kernel, import_log_odds, priors,
         province_ascertainment, province_severity,
     )
 end
@@ -2365,14 +2540,7 @@ function zone_fit_inputs(
     ## Grid and knots.
     t0 = clamp(days[1] - lead_days, 1, n)
     knots = knot_days(n; week, start = t0)
-    fixed = zone_fixed_terms(I_bar, parent.g, parent.f, t0)
-    nd = n - t0 + 1
     interp = zone_interpolation_weights(knots, t0, n)
-    report_bin = zone_binned_operator(
-        zone_delay_operator(parent.f, nd),
-        zone_report_pre_rows(fixed.report_pre, patch_of_zone, t0, n),
-        fixed.report_pre_cum, days, t0, patch_of_zone
-    )
     ## Death composition, scored per vintage as the cases are. The rows are
     ## built by looking each zone up by name rather than by restacking the
     ## death table, so they line up with the case rows even where a zone is
@@ -2430,13 +2598,10 @@ function zone_fit_inputs(
         push!(death_cell_total, N)
         push!(death_cell_const, _zone_cell_const(death_counts, zs, v))
     end
-    death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
-    death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
-    death_bin = zone_binned_operator(
-        zone_delay_operator(death_pmf, nd),
-        zone_report_pre_rows(death_fixed.report_pre, patch_of_zone, t0, n),
-        death_fixed.report_pre_cum, days, t0, patch_of_zone
-    )
+    ## The delay terms at the posterior mean PMFs, which the model rebuilds
+    ## on each draw's delays and which a forward pass without a draw reads.
+    pmfs = (; parent.g, parent.f, parent.death_pmf)
+    terms = zone_delay_terms(I_bar, pmfs, t0, days, patch_of_zone)
     ## Great-circle distances between the centroids of each patch's zones,
     ## over all of them for the deviation level and over its walking zones
     ## for the innovations.
@@ -2473,27 +2638,37 @@ function zone_fit_inputs(
     )
     log_eps = mixing === nothing ? zeros(Float64, length(inf_draws), 0) :
         _zone_log_epsilon_draws(parent_chain, np)
+    ## The log delay parameters follow the intensities, so the extra cells
+    ## are the origin intensities first and then the delays.
     meld = zone_meld_block(
         inf_draws, np, n, knots, I_bar, t0;
-        extra = log_eps, min_infections = meld_min_infections
+        extra = hcat(log_eps, parent.delay_log_draws),
+        min_infections = meld_min_infections
     )
+    n_eps = size(log_eps, 2)
+    epsilon_cells = meld.extra_cells[1:n_eps]
+    delay_cells = meld.extra_cells[(n_eps + 1):end]
     forecast = parent_forecast === nothing ? nothing :
         zone_forecast_block(
-            parent_forecast, meld, I_bar, parent.g, parent.f, death_pmf, t0,
+            parent_forecast, meld, I_bar, pmfs, t0,
             knots, days, patch_of_zone, mixing; horizon, week,
             min_infections = meld_min_infections
         )
     model_data = (;
         counts, cell_patch, cell_vintage, cell_total, cell_const,
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, patch_of_zone,
+        multiplier_basis = relative_multiplier_basis(patch_ranges),
         knots, t0, n,
         week, share_scale, rt_floor,
         walking = collect(walking), n_walking,
-        fixed.force_pre, fixed.infections_pre, mixing, interp, report_bin,
+        terms.force_pre, terms.infections_pre, mixing, interp,
+        terms.report_bin,
         death_counts, death_cell_patch, death_cell_vintage,
-        death_cell_total, death_cell_const, death_bin,
+        death_cell_total, death_cell_const, terms.death_bin,
         meld_weights = meld.weights, meld_L = meld.L, meld_d = meld.d,
-        meld_epsilon_rows = meld.L[meld.extra_cells, :],
+        meld_epsilon_rows = meld.L[epsilon_cells, :],
+        meld_delay_rows = meld.L[delay_cells, :],
+        meld_delay_mean = meld.mean_log[delay_cells],
         zone_distances, zone_walk_distances,
         correlation_distance, parent_priors = parent.priors,
         province_ascertainment = _zone_province_factor(
@@ -2513,7 +2688,7 @@ function zone_fit_inputs(
         days, dates, counts, cumulative, excluded, walking = collect(walking),
         walk_threshold, knots, t0, n, week, share_scale, rt_floor,
         seeding = obs.seeding, cutoff = obs.cutoff,
-        I_bar, g = parent.g, f = parent.f, death_pmf, meld,
+        I_bar, g = parent.g, f = parent.f, parent.death_pmf, meld,
     )
 end
 

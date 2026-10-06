@@ -157,6 +157,10 @@ A new page needs:
 Setup and table-construction code sits inside `<details>` dropdowns via `#md # @raw html` blocks.
 The bare result object follows with `#hide`, so only the output renders.
 
+The model diagrams on the methods page are TikZ sources in `docs/diagrams/`, sharing `docs/diagrams/style.tex`.
+After editing one, rebuild the SVGs in `docs/src/public/diagrams/` with `scripts/build_diagrams.sh` and commit them, since CI has no LaTeX.
+Check each diagram against the model code it draws.
+
 The shared front matter (title, authors, abstract, scope) is single-sourced in `README.md`, up to the `<!-- SHARED:END -->` marker.
 Edit it in `README.md` only.
 `docs/front_matter.jl` reads it at build time and fills in the dates.
