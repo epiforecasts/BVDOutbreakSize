@@ -525,7 +525,7 @@ jobs:
         uses: ./.github/actions/bvd-pkgimage
         with:
           mode: restore
-      # Refresh the released-estimate overlay so the forecast evaluation's
+      # Refresh the released-estimate overlay so the in-sample page's
       # "Estimate evolution across releases" figure picks up the newest
       # results-v* release. Best-effort: on any failure it uses the committed
       # data/released_estimates.csv.
@@ -886,15 +886,18 @@ jobs:
     steps: *render-steps
 
   # The national in-sample page sets the joint against the single-stream,
-  # one-week-back and sensitivity fits. The sensitivity group is skipped on
-  # pull requests, so the condition is spelled out as for `render_all`.
+  # frozen and sensitivity fits, and its estimates against the past releases
+  # in the rescored overlays. The sensitivity group is skipped on pull
+  # requests, so the condition is spelled out as for `render_all`.
   render_insample:
     name: Render ${{ matrix.id }}
-    needs: [fit_joint, fit_streams, fit_frozen, fit_sensitivity, recovery]
+    needs:
+      [fit_joint, fit_streams, fit_frozen, fit_sensitivity, overlays, recovery]
     if: >-
       ${{ !cancelled() && needs.fit_joint.result == 'success' &&
       needs.fit_streams.result == 'success' &&
       needs.fit_frozen.result == 'success' &&
+      needs.overlays.result == 'success' &&
       (needs.fit_sensitivity.result == 'success' ||
       needs.fit_sensitivity.result == 'skipped') }}
     runs-on: ubuntu-latest
@@ -906,7 +909,7 @@ jobs:
           - id: evaluation/insample/national
             slug: evaluation-insample-national
             fits: fit-*
-            overlays: false
+            overlays: true
             recovery: true
     steps: *render-steps
 
@@ -947,8 +950,8 @@ jobs:
             recovery: false
     steps: *render-steps
 
-  # The national forecast evaluation also draws each single-stream fit's
-  # band behind the per-release estimates.
+  # The national forecast evaluation reads the frozen fits and the rescored
+  # release overlays.
   render_evaluation:
     name: Render ${{ matrix.id }}
     needs: [fit_joint, fit_streams, fit_frozen, overlays]
@@ -989,7 +992,7 @@ jobs:
             overlays: true
           - id: evaluation/insample/zone
             slug: evaluation-insample-zone
-            fits: fit-{joint,local}
+            fits: fit-{joint,local,frozen_validation,local_frozen_validation}
             overlays: false
           - id: evaluation/forecast/zone
             slug: evaluation-forecast-zone
