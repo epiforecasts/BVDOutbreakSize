@@ -194,25 +194,12 @@ function zone_fixed_terms(
         f::AbstractVector, t0::Integer
     )
     np, n = size(I_bar)
-    Tp = promote_type(eltype(I_bar), eltype(g), eltype(f))
-    force_pre = zeros(Tp, np, n)
-    report_pre = zeros(Tp, np, n)
+    force_pre = zone_pre_convolution(I_bar, g, t0, 1)
+    report_pre = zone_pre_convolution(I_bar, f, t0, 0)
+    Tp = eltype(report_pre)
     report_pre_cum = zeros(Tp, np, n)
-    infections_pre = zeros(Tp, np)
-    ## Only the lags reaching back before `t0` contribute, `s > t − t0`.
+    infections_pre = zeros(eltype(I_bar), np)
     @inbounds for p in 1:np
-        for t in 1:n
-            acc = zero(Tp)
-            for s in max(1, t - t0 + 1):min(length(g), t - 1)
-                acc += g[s] * I_bar[p, t - s]
-            end
-            force_pre[p, t] = acc
-            acc = zero(Tp)
-            for s in max(0, t - t0 + 1):min(length(f) - 1, t - 1)
-                acc += f[s + 1] * I_bar[p, t - s]
-            end
-            report_pre[p, t] = acc
-        end
         run = zero(Tp)
         for t in 1:n
             t < t0 && (run += report_pre[p, t])
@@ -223,6 +210,42 @@ function zone_fixed_terms(
         end
     end
     return (; force_pre, report_pre, report_pre_cum, infections_pre)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The part of the convolution of each patch's infections `I_bar`
+`(n_patches × n)` with the PMF `w` that reaches back before the grid start
+`t0`: `out[p, t] = Σ_s w_s Ī_p(t − s)` over the lags `s` with
+`1 ≤ t − s < t0`, where `w[i]` is the weight of lag `s = i − 1 +
+first_lag`. `first_lag` is 1 for the generation interval and 0 for a
+delay. A plain loop with its own reverse rule, since the model rebuilds it
+on every draw's delays.
+"""
+function zone_pre_convolution(
+        I_bar::AbstractMatrix, w::AbstractVector, t0::Integer,
+        first_lag::Integer
+    )
+    np, n = size(I_bar)
+    out = zeros(promote_type(eltype(I_bar), eltype(w)), np, n)
+    _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
+    return out
+end
+
+## Only the lags reaching back before `t0` contribute, `s > t − t0`.
+function _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
+    np, n = size(I_bar)
+    L = length(w)
+    @inbounds for t in 1:n
+        lo = max(first_lag, t - t0 + 1)
+        hi = min(L - 1 + first_lag, t - 1)
+        for s in lo:hi, p in 1:np
+
+            out[p, t] += w[s - first_lag + 1] * I_bar[p, t - s]
+        end
+    end
+    return out
 end
 
 ## --- The shared quantity -------------------------------------------------
@@ -1111,29 +1134,18 @@ function zone_binned_operator(
     nv = length(days)
     np = size(fixed.report_pre, 1)
     Tp = promote_type(eltype(f), eltype(fixed.report_pre))
-    L = length(f)
-    ## `cf[m + 1]` is the mass of lags `0 … m`.
-    cf = cumsum(f)
-    mass(m) = m < 0 ? zero(Tp) : cf[min(m, L - 1) + 1]
-    weights = zeros(Tp, nd, nv)
+    rows = _zone_window_rows(days, t0, n)
+    weights = zone_window_weights(f, rows.starts, rows.stops, nd)
     patch_pre = zeros(Tp, np, nv)
     @inbounds for v in 1:nv
-        lo = v == 1 ? 1 : Int(days[v - 1]) + 1
-        hi = Int(days[v])
-        first_row = max(lo, t0) - t0 + 1
-        last_row = min(hi - t0 + 1, nd)
-        if first_row <= last_row
-            for k in 1:last_row
-                weights[k, v] = mass(last_row - k) - mass(first_row - 1 - k)
-            end
-            for p in 1:np, j in first_row:last_row
+        for j in rows.starts[v]:rows.stops[v], p in 1:np
 
-                patch_pre[p, v] += fixed.report_pre[p, t0 + j - 1]
-            end
+            patch_pre[p, v] += fixed.report_pre[p, t0 + j - 1]
         end
         ## Accrued before the grid start, by difference of the cumulative.
+        lo = v == 1 ? 1 : Int(days[v - 1]) + 1
         lo < t0 || continue
-        top = min(hi, t0 - 1)
+        top = min(Int(days[v]), t0 - 1)
         for p in 1:np
             patch_pre[p, v] += fixed.report_pre_cum[p, top] -
                 (lo > 1 ? fixed.report_pre_cum[p, lo - 1] : zero(Tp))
@@ -1141,6 +1153,51 @@ function zone_binned_operator(
     end
     pre = patch_pre[patch_of_zone, :]
     return (; weights, pre)
+end
+
+## The grid rows `starts[v] … stops[v]` of each vintage window
+## `(d_{v−1}, d_v]` on the days `t0 … n`, empty (`starts > stops`) for a
+## window that closes before `t0`.
+function _zone_window_rows(
+        days::AbstractVector{<:Integer}, t0::Integer, n::Integer
+    )
+    nd = n - t0 + 1
+    starts = [
+        max(v == 1 ? 1 : Int(days[v - 1]) + 1, t0) - t0 + 1
+            for v in eachindex(days)
+    ]
+    stops = [min(Int(days[v]) - t0 + 1, nd) for v in eachindex(days)]
+    return (; starts, stops)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+What one infection on each grid row adds to each vintage window through
+the delay PMF `f` (lag 0), as an `(nd × n_vintages)` matrix:
+`weights[k, v] = Σ_{j = starts[v]}^{stops[v]} f_{j − k}` over `j ≥ k`.
+Built from the cumulative PMF, with its own reverse rule, since the model
+rebuilds it on every draw's delays.
+"""
+function zone_window_weights(
+        f::AbstractVector, starts::AbstractVector{<:Integer},
+        stops::AbstractVector{<:Integer}, nd::Integer
+    )
+    L = length(f)
+    ## `cf[m + 1]` is the mass of lags `0 … m`.
+    cf = cumsum(f)
+    weights = zeros(eltype(cf), nd, length(starts))
+    @inbounds for v in eachindex(starts)
+        a, b = starts[v], stops[v]
+        a <= b || continue
+        for k in max(1, a - L + 1):b
+            hi = cf[min(b - k, L - 1) + 1]
+            lo = a - 1 - k < 0 ? zero(eltype(cf)) :
+                cf[min(a - 1 - k, L - 1) + 1]
+            weights[k, v] = hi - lo
+        end
+    end
+    return weights
 end
 
 """
