@@ -1532,7 +1532,7 @@ zones and the same movement is not counted at both levels. Within
 a patch the spill is the zone stage's own mechanism and carries its own
 intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation
 `τ (z − z̄)` on the logit scale. Both blocks are rebuilt per draw at a
-sampled distance decay `γ ~ LogNormal(0, 0.5)` and weighted by destination
+sampled distance decay `γ ~ LogNormal(0, 1)` and weighted by destination
 zone with log weights centred within each patch, `σ_ω ~ Normal⁺(0, 0.5)`
 ([`zone_gravity_blocks`](@ref)); every origin's total into each patch is
 held, so they move only the split over a patch's zones. Mixing is off
@@ -1581,7 +1581,7 @@ quantity is computed on the fitted days as without a forecast.
         severity_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         mixing_within_prior = Beta(1, 20),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
-        mixing_decay_prior = LogNormal(0, 0.5),
+        mixing_decay_prior = LogNormal(0, 1),
         mixing_destination_prior = truncated(Normal(0, 0.5); lower = 0),
         offset_prior = Normal(0, 1),
         forecast::Union{Nothing, ForecastHorizon} = nothing

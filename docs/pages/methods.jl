@@ -2172,7 +2172,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
-# \gamma \sim \mathrm{LogNormal}(0,\ 0.5), \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 1), \qquad
 # \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
 # \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
 # ```
