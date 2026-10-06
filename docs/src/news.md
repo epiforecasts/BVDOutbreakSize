@@ -93,14 +93,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 - In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
-- The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the health-zone model and the tail effective sample size (#1051).
+- The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the tail effective sample size (#1051).
+  The health-zone model's diagnostics stay on the Health-zone estimates page, so the national page no longer needs the health-zone fit.
 - The Province estimates page gains a table of the joint fit's province-level parameters (#1051).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
   Fitted values do not change (resolves #1055).
 
 ### Infrastructure
 
-- The national estimates render waits for the health-zone fits, since its fit diagnostics read the `local` meld; it could start before that fit finished and fail on a cache miss.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
