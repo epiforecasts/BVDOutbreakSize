@@ -200,3 +200,31 @@ mjx-container > svg {
   border-radius: 8px;
   background: var(--vp-c-bg);
 }
+
+/* Model diagrams on the methods page: black-on-transparent SVGs on a white
+   card, so they read in the dark theme too. */
+.vp-doc .bvd-diagram {
+  margin: 1.5rem auto;
+  padding: 1rem;
+  max-width: 100%;
+  background: #ffffff;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  text-align: center;
+}
+/* The SVGs are about 400 px wide at their natural size, so they are scaled
+   up to fill the column, which keeps the smallest text near 12 px. */
+.vp-doc .bvd-diagram img {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+  margin: 0 auto;
+}
+.vp-doc .bvd-diagram figcaption {
+  margin-top: 0.75rem;
+  color: #3c3c43;
+  font-size: 0.9em;
+  line-height: 1.5;
+  text-align: left;
+}
