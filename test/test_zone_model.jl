@@ -569,6 +569,9 @@ end
     @test zd.I_bar ≈ syn.I_bar rtol = 1.0e-10
     @test zd.g ≈ syn.g
     @test zd.f ≈ syn.f
+    ## The multiplier basis is built once, over the patches.
+    @test zd.multiplier_basis ==
+        BVDOutbreakSize.relative_multiplier_basis(inputs.patch_ranges)
     ## The walking set needs the threshold and at least two zones per patch.
     @test all(
         z -> inputs.walking[z] == (inputs.cumulative[z] >= 30) &&
