@@ -21,7 +21,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
-  Fitted zone values change, mostly through the zone reproduction numbers, which move with the generation interval.
+  Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
 - The health-zone case delay includes the onset-to-report step, so it is the delay the joint's province compositions apply to infections (#1085).
   It ran from infection to receipt without that step, about two and a half days short at the posterior mean.
 - The capacity growth SD prior is `N⁺(0, 0.05)`, so its 95th percentile covers the fitted 0.07; fitted values change (#1050).

@@ -2254,6 +2254,7 @@ cfr_prior_fig #hide
 # #### Zone model assumptions
 #
 # We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
+# The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
 # We assume the gravity form describes movement between zones as it does between provinces, with no mobility data to check it against.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.
