@@ -9,8 +9,9 @@
 
 ## One draw's state from the chain: the deviation knots `(n_zones ×
 ## n_knots)`, the initial shares, the AR retention, the draw of the shared
-## quantity and the patch trajectory and between-patch movement it implies,
-## and, with mixing, the per-zone mixing fractions. A chain with no kept
+## quantity and the patch trajectory, between-patch movement, generation
+## interval and delays it implies, and, with mixing, the per-zone mixing
+## fractions. A chain with no kept
 ## meld cell carries an empty `η` and every draw reads the province model's
 ## mean curve.
 function _zone_states(chn, inputs; week::Integer = inputs.week)
@@ -59,6 +60,12 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         zone_gravity_blocks(
             zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i])
         )
+    delays(i) = shared(i) && size(zd.meld_delay_rows, 1) > 0 ?
+        zone_delay_terms(
+            zd.I_bar,
+            zone_delay_pmfs(zone_delay_parameters(zd, Float64.(eta[i]))),
+            zd.t0, zd.days, zd.patch_of_zone
+        ) : nothing
     return [
         (;
             δ_knots = reshape(Float64.(knots[i]), nz, K),
@@ -66,7 +73,9 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
             φ = exp2(-week / halflife[i]),
             ε = eps_ === nothing ? nothing : Float64.(eps_[i]),
             η = eta === nothing ? Float64[] : Float64.(eta[i]),
-            def = zone_deformation(zd, scale(i), epsilon(i), blocks(i)),
+            def = zone_deformation(
+                zd, scale(i), epsilon(i), delays(i), blocks(i)
+            ),
         )
             for i in 1:ndraws
     ]
@@ -130,7 +139,7 @@ Returns `(; table, mean_norm_sq, dimension)`. The table has one row per
 kept patch-week cell: the patch, the window's midpoint day and date, the
 posterior mean and standard deviation of that component of the whitened
 draw, and the province model's own posterior standard deviation of the log
-weekly infections there. The origin intensity cells have no row.
+weekly infections there. The origin intensity and delay cells have no row.
 `mean_norm_sq` is the mean of `‖η‖²` over every component, which is
 `dimension` when the fit reproduces the prior.
 """
@@ -222,7 +231,7 @@ function reconstruct_zone_rt(
     for (i, st) in enumerate(states)
         shares = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def).shares
         r, first_day[i, :] = _zone_rt_daily(
-            shares, st.w0, st.def.I_bar, zd.g,
+            shares, st.w0, st.def.I_bar, st.def.g,
             inputs.patch_of_zone, zd.t0, rt_floor
         )
         for z in 1:nz, j in 1:nd
@@ -899,7 +908,7 @@ function _zone_allocated_increments(zd, st, stream::Symbol)
     fw = zone_forward(zd, st.δ_knots, st.w0, st.ε, st.def)
     stream === :cases && return fw.increments
     return zone_binned_increments(
-        zd.death_bin, fw.infections, st.def.zone_pre .* st.w0
+        st.def.death_bin, fw.infections, st.def.zone_pre .* st.w0
     )
 end
 
