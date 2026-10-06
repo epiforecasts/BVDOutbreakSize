@@ -402,14 +402,6 @@ Nothing else is fetched.
   var stream = "cases";
   function S() { return STREAMS[stream]; }
   function cap(t) { return t.charAt(0).toUpperCase() + t.slice(1); }
-  // Confirmed deaths over confirmed cases to date, the observed ratio.
-  function crudeCfr(r) {
-    return num(r.cases) && r.cases > 0 && num(r.deaths) ? r.deaths / r.cases : null;
-  }
-  function modelledCfrText(r) {
-    return "Modelled case fatality ratio " + fmtPct(r.cfr_median) +
-      " (90% interval " + fmtPct(r.cfr_lower) + " to " + fmtPct(r.cfr_upper) + ")";
-  }
   var METRICS = {
     R_T: {
       title: "Reproduction number",
@@ -455,15 +447,17 @@ Nothing else is fetched.
           ", confirmed deaths " + fmt0(r.deaths);
       }
     },
+    // The modelled, delay-adjusted ratio; the health-zone model has none.
     cfr: {
       title: "Case fatality ratio",
-      legend: "Confirmed deaths over confirmed cases to date",
+      legend: function () { return "Modelled case fatality ratio" + summarySuffix(); },
       kind: "sequential", fmt: fmtPct,
-      value: crudeCfr,
+      value: function (r) { return summaryValue(r, "cfr"); },
       text: function (r) {
-        var t = "Confirmed deaths over confirmed cases to date " +
-          fmtPct(crudeCfr(r)) + " (" + fmt0(r.deaths) + " of " + fmt0(r.cases) + ")";
-        return num(r.cfr_median) ? t + ". " + modelledCfrText(r) : t;
+        if (!num(r.cfr_median)) { return "No modelled case fatality ratio"; }
+        return "Modelled case fatality ratio " + fmtPct(r.cfr_median) +
+          " (90% interval " + fmtPct(r.cfr_lower) + " to " +
+          fmtPct(r.cfr_upper) + ")";
       }
     },
     share: {
@@ -623,9 +617,11 @@ Nothing else is fetched.
   var rSource = "all";
   // The table's sort column (null sorts by the metric) and direction.
   var sortKey = null, sortDesc = true;
-  // The posterior-summary selector only has meaning for the two metrics
-  // that carry an interval; other metrics ignore it.
-  function summaryApplies() { return metric === "R_T" || metric === "forecast"; }
+  // The posterior-summary selector only has meaning for the metrics that
+  // carry an interval; other metrics ignore it.
+  function summaryApplies() {
+    return metric === "R_T" || metric === "forecast" || metric === "cfr";
+  }
   function summaryValue(r, prefix) {
     if (summary === "lower") { return r[prefix + "_lower"]; }
     if (summary === "upper") { return r[prefix + "_upper"]; }
@@ -694,15 +690,15 @@ Nothing else is fetched.
   function levelOnly(r) {
     return level === "zone" && !!r && r.walking === 0;
   }
-  // A province pooled with others takes the pool's reproduction number and
-  // forecast, and is hatched on those metrics. Its counts to date and their
-  // ratio are its own.
-  function pooledMetric() { return metric !== "cases" && metric !== "cfr"; }
+  // A province pooled with others takes the pool's reproduction number,
+  // forecasts and case fatality ratio, and is hatched on those metrics. Its
+  // counts to date are its own.
+  function pooledMetric() { return metric !== "cases"; }
   function pooled(r) {
     return level === "province" && !!r && r.pooled === 1 && pooledMetric();
   }
   function pooledText(r) {
-    return "R and forecast for " + r.patch + " combined";
+    return "Modelled estimates for " + r.patch + " combined";
   }
   var LEVEL_ONLY_TEXT = "R from its province, not modelled separately";
   var WALKING_TEXT = "R modelled separately";
@@ -816,8 +812,7 @@ Nothing else is fetched.
     });
     out.push(
       ["Confirmed cases to date", fmt0(r.cases)],
-      ["Confirmed deaths to date", fmt0(r.deaths)],
-      ["Deaths over cases to date", fmtPct(crudeCfr(r))]
+      ["Confirmed deaths to date", fmt0(r.deaths)]
     );
     if (num(r.cfr_median)) {
       out.push(["Modelled case fatality ratio", fmtPct(r.cfr_median) + " (" +
@@ -1027,13 +1022,15 @@ Nothing else is fetched.
     if (metric === "R_T") {
       notes.push("Paler: the 90% interval spans one.");
     }
-    if (metric === "forecast" && !visibleRows().some(function (r) {
-      return num(m.value(r));
-    })) {
+    var none = !visibleRows().some(function (r) { return num(m.value(r)); });
+    if (metric === "forecast" && none) {
       notes.push("No forecast of " + S().name + " at this level.");
     }
+    if (metric === "cfr" && none) {
+      notes.push("No modelled case fatality ratio at this level.");
+    }
     var pool = rows.filter(function (r) { return r.pooled === 1; })[0];
-    if (level === "zone") {
+    if (level === "zone" && !none) {
       notes.push("Hatched: " + LEVEL_ONLY_TEXT + ".");
     } else if (pool && pooledMetric()) {
       notes.push("Hatched: " + pooledText(pool) + ".");
@@ -1070,17 +1067,10 @@ Nothing else is fetched.
       } }];
     }
     if (metric === "cfr") {
-      var cols = [
-        { title: "Confirmed deaths", value: function (r) { return fmt0(r.deaths); } },
-        { title: "Confirmed cases", value: function (r) { return fmt0(r.cases); } }
-      ];
-      if (rows.some(function (r) { return num(r.cfr_median); })) {
-        cols.push({ title: "Modelled", value: function (r) {
-          return fmtPct(r.cfr_median) + " (" +
-            interval(r.cfr_lower, r.cfr_upper, fmtPct) + ")";
-        } });
-      }
-      return cols;
+      if (!rows.some(function (r) { return num(r.cfr_median); })) { return []; }
+      return [{ title: "90% interval", value: function (r) {
+        return interval(r.cfr_lower, r.cfr_upper, fmtPct);
+      } }];
     }
     if (metric === "share" || level === "province") {
       return [{ title: "Patch", value: function (r) { return esc(r.patch); } }];
