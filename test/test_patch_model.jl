@@ -1008,17 +1008,18 @@ end
     end
 
     ## The finding that motivates using this data at all: the provinces test
-    ## very differently-selected pools, so confirmed-case share is not
-    ## infection share. Ituri runs ~32% positivity against Nord-Kivu's ~6%.
-    it_pos = sum(lab["ituri_positive"].counts) /
-        sum(lab["ituri_analysed"].counts)
-    nk_pos = sum(lab["nord_kivu_positive"].counts) /
-        sum(lab["nord_kivu_analysed"].counts)
-    ## Ituri ran 24.3% positivity against Nord-Kivu's 11.1% over the window.
-    ## The gap has narrowed as Nord-Kivu's epidemic grew, from better than
-    ## threefold when the series stopped in July to roughly twofold now, so
-    ## this pins the gap surviving rather than its old size.
-    @test it_pos > 2 * nk_pos
+    ## differently-selected pools, so confirmed-case share is not infection
+    ## share, and the background dominates where positivity is low. Ituri's
+    ## positivity over the window is higher than Nord-Kivu's. The gap moves
+    ## with each province's epidemic, so this pins the gap exceeding binomial
+    ## sampling noise, not its size.
+    function pooled(p)
+        k = sum(lab["$(p)_positive"].counts)
+        m = sum(lab["$(p)_analysed"].counts)
+        return (; pos = k / m, var = (k / m) * (1 - k / m) / m)
+    end
+    it, nk = pooled("ituri"), pooled("nord_kivu")
+    @test (it.pos - nk.pos) / sqrt(it.var + nk.var) > 3
 end
 
 @testitem "patch_rt_model: the drift prior permits real divergence" tags = [:slow] begin
@@ -1068,36 +1069,34 @@ end
     using Distributions: Gamma, LogNormal, quantile
     using Random: seed!
 
-    ## With importation off (the default), a secondary patch has only two
-    ## routes to infections: its own seed and its own Rt. So the seed prior
-    ## must be able to reach the observed provincial split on its own, at
-    ## zero Rt difference. If it cannot, the log-Rt deviation is forced to
-    ## absorb the level difference and the reported provincial Rt gap becomes
-    ## an artefact of the seed prior -- which is the one thing the patch model
+    ## With an all-zero importation kernel the seed fractions are sampled, and
+    ## a secondary patch has only two routes to infections: its own seed and
+    ## its own Rt. The seed sets the level of the provincial split and the
+    ## log-Rt deviation is identified by its time trend. So the seed prior
+    ## must be able to reach the level of the observed split on its own, at
+    ## zero Rt difference. If it cannot, the deviation is forced to absorb the
+    ## level difference and the reported provincial Rt gap becomes an
+    ## artefact of the seed prior, which is the one thing the patch model
     ## exists to estimate.
-    ##
-    ## An earlier version used an ABSOLUTE seed prior N+(0.01, 0.01) against
-    ## the primary patch's 2^m ~ 164: a seed ratio of ~13,700:1, reaching only
-    ## 0.007% of infections where the data want ~9%. Reaching 9% then needed a
-    ## 3.4-sigma draw on the deviation prior. The seed is now a FRACTION of the
-    ## primary seed, so the level is explained by the seed and the deviation is
-    ## identified by the time trend.
     obs = load_observations()
     n = obs.n
     rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
 
-    ## The observed Nord-Kivu share of confirmed cases.
+    ## The level is the Nord-Kivu share of confirmed cases at the first
+    ## province report. The first increment is the cumulative count to that
+    ## report, so this is the split before the later reports add a trend. At
+    ## zero Rt difference the modelled share is the same on every day, so
+    ## only this level is the seed's to reach. The share over later reports
+    ## rises, which is the trend the deviation is there to fit.
     prov = province_increment_matrix(
         obs.province_confirmed_history,
         PROVINCE_NAMES, length(PROVINCE_NAMES)
     )
-    it = sum(prov.increments[1, :])
-    nk = sum(prov.increments[2, :])
+    it, nk = prov.increments[1, 1], prov.increments[2, 1]
     obs_share = nk / (it + nk)
-    ## ~17% over the full window, up from ~9% when the series stopped in
-    ## July. Guards the fixture, so a scan that silently changed the split
-    ## would be caught here rather than in a fit.
-    @test 0.1 < obs_share < 0.25
+    ## The first report is fixed, so this guards the fixture: a scan that
+    ## changed the split would be caught here rather than in a fit.
+    @test 0.05 < obs_share < 0.12
 
     seed!(1)
     g = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))().g
@@ -1122,7 +1121,7 @@ end
         return b / (a + b)
     end
 
-    ## The default prior on the seed fraction must BRACKET the observed share
+    ## The default prior on the seed fraction must BRACKET the observed level
     ## at zero Rt difference: the 5th percentile below it, the 95th above.
     prior = LogNormal(log(0.05), 1.0)
     lo, hi = quantile(prior, 0.05), quantile(prior, 0.95)
