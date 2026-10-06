@@ -21,6 +21,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw.
+  The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
+  The model is the same with one dimension fewer, so fitted values change only by sampling noise.
 - The onset reporting hazard draws its delay deviations in centred form, on the scale $\sigma_{h0}$, so `z_h0` becomes `y_h0` (#1060).
   The triangle pins the hazard between two and eleven days' delay, and the non-centred form tied those deviations to $\sigma_{h0}$, which failed the joint fit's convergence check (R-hat 1.10 and 28 bulk effective samples, reported in #1060).
   On local onsets-only fits at two seeds (two chains of 500 draws each, reported in the pull request) the centred form raises the bulk effective samples of $\sigma_{h0}$ from 106 and 54 to 476 and 396, with the same posterior.
