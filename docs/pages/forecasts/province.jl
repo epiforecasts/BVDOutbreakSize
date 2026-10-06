@@ -108,15 +108,9 @@ province_forecast_map = plot_province_map(
 
 province_forecast_map #hide
 
-#md # ```@raw html
-#md # <details><summary>Forecast summary table by province</summary>
-#md # ```
+#-
 
 MarkdownTable(province_forecast) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ## Forecast for each province
 #

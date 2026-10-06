@@ -189,10 +189,13 @@ printed by the cut-off.
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
     forecast_scan_sd ~ scan_sd_prior
+    ## `~` rebinds its left side, so the comprehension reads a name bound
+    ## once; capturing the sampled name itself would box it.
+    scan_sd = forecast_scan_sd
     sds = [
         hypot(
             onset_report_scale(means[j], state.τ, 2),
-            forecast_scan_sd * hypot(then[j], now)
+            scan_sd * hypot(then[j], now)
         ) for j in eachindex(vintages)
     ]
     forecast_onset_reports ~ to_submodel(
