@@ -108,15 +108,9 @@ province_forecast_map = plot_province_map(
 
 province_forecast_map #hide
 
-#md # ```@raw html
-#md # <details><summary>Forecast summary table by province</summary>
-#md # ```
+#-
 
 MarkdownTable(province_forecast) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ## Forecast for each province
 #
@@ -238,37 +232,88 @@ province_overlay_fig #hide
 #md # <details><summary>Write the province map estimates and time series</summary>
 #md # ```
 
-## The national row reads the joint's national reproduction number and the
-## provinces' summed forecast.
+## The national row reads the joint's national reproduction number and
+## case-fatality ratio and the provinces' summed forecasts, patients in
+## isolation and beds.
 province_map_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(province_map_dir)
+has_death_forecast = :confirmed_deaths_new in propertynames(province_projection)
+has_care_forecast = :isolation_level in propertynames(province_projection) &&
+    :bed_capacity in propertynames(province_projection)
+has_care = BVDOutbreakSize._has_key(chn_joint, :province_bed_capacity)
+## Patients in isolation over beds, draw by draw.
+care_ratio(iso, beds) = [i ./ b for (i, b) in zip(iso, beds)]
+province_care_forecast = has_care_forecast ? (;
+        isolation_forecast = province_forecast_draws(:isolation_level),
+        beds_forecast = province_forecast_draws(:bed_capacity),
+        bed_use_forecast = care_ratio(
+            province_forecast_draws(:isolation_level),
+            province_forecast_draws(:bed_capacity)
+        ),
+    ) : (;)
 CSV.write(
     joinpath(province_map_dir, "province_estimates.csv"),
     province_map_estimates(
         chn_joint, province_forecast_draws(:confirmed_new);
         n_patches = N_PATCHES,
+        deaths_forecast = has_death_forecast ?
+            province_forecast_draws(:confirmed_deaths_new) : nothing,
         confirmed_history = obs.province_confirmed_history,
-        death_history = obs.province_death_history, cutoff = obs.cutoff
+        death_history = obs.province_death_history, cutoff = obs.cutoff,
+        isolation_history = obs.province_isolation_history,
+        bed_history = obs.province_bed_capacity_history, n = obs.n,
+        province_care_forecast...
     )
 );
-national_forecast_draws = let d = province_projection
-    [float(sum(d.confirmed_new[d.draw .== i])) for i in sort(unique(d.draw))]
+national_forecast_draws(col) = let d = province_projection
+    [float(sum(d[d.draw .== i, col])) for i in sort(unique(d.draw))]
 end
+## The provinces' cut-off draws summed into one national draw vector.
+national_care_draws(key) = let v = BVDOutbreakSize._per_patch(
+        chn_joint, key, N_PATCHES
+    )
+    [sum(x[i] for x in v) for i in eachindex(first(v))]
+end
+national_care = has_care ? (;
+        isolation = [national_care_draws(:province_expected_isolation)],
+        beds = [national_care_draws(:province_bed_capacity)],
+        bed_use = care_ratio(
+            [national_care_draws(:province_expected_isolation)],
+            [national_care_draws(:province_bed_capacity)]
+        ),
+    ) : (;)
+national_care_forecast = has_care_forecast ? (;
+        isolation_forecast = [national_forecast_draws(:isolation_level)],
+        beds_forecast = [national_forecast_draws(:bed_capacity)],
+        bed_use_forecast = care_ratio(
+            [national_forecast_draws(:isolation_level)],
+            [national_forecast_draws(:bed_capacity)]
+        ),
+    ) : (;)
 CSV.write(
     joinpath(province_map_dir, "national_estimates.csv"),
     province_map_estimates(
-        [vec(Array(chn_joint[:R_T]))], [national_forecast_draws];
+        [vec(Array(chn_joint[:R_T]))],
+        [national_forecast_draws(:confirmed_new)];
+        deaths_forecast = has_death_forecast ?
+            [national_forecast_draws(:confirmed_deaths_new)] : nothing,
+        cfr = [vec(Array(chn_joint[:CFR]))],
         confirmed_history = Dict("national" => obs.confirmed_history),
         death_history = Dict("national" => obs.confirmed_deaths_history),
         cutoff = obs.cutoff, patch_names = ["national"],
         patch_labels = ["National"],
-        members = Dict("national" => ["national"])
+        members = Dict("national" => ["national"]),
+        isolation_history = Dict("national" => obs.isolation_history),
+        bed_history = Dict("national" => obs.bed_capacity_history),
+        n = obs.n, national_care..., national_care_forecast...
     )
 );
-## The daily reproduction number and the weekly confirmed cases of each
-## patch and of the country, keyed by the patch label.
+## The daily reproduction number and the weekly confirmed cases and deaths
+## of each patch and of the country, keyed by the patch label, and the
+## reported patients in isolation and beds over the same eight weeks, keyed
+## by source province.
 province_ts_rt_args = (;
     n = obs.n, breakpoint = _BREAKPOINT, rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
@@ -277,8 +322,23 @@ province_ts_rt_args = (;
 province_ts_inc = province_increment_matrix(
     obs.province_confirmed_history, PROVINCE_NAMES, N_PATCHES
 )
-national_ts_inc = let c = obs.confirmed_history.counts
-    isempty(c) ? zeros(Int, 1, 0) : reshape([c[1]; max.(diff(c), 0)], 1, :)
+province_ts_deaths = province_increment_matrix(
+    obs.province_death_history, PROVINCE_NAMES, N_PATCHES
+)
+national_increments(c) = isempty(c) ? zeros(Int, 1, 0) :
+    reshape([c[1]; max.(diff(c), 0)], 1, :)
+## Each patch's and the country's weekly counts from their increments.
+function province_weekly(inc, national)
+    return vcat(
+        weekly_count_table(
+            inc.days, inc.increments, PROVINCE_LABELS[1:N_PATCHES];
+            cutoff = obs.cutoff, n = obs.n
+        ),
+        weekly_count_table(
+            national.days, national_increments(national.counts),
+            ["National"]; cutoff = obs.cutoff, n = obs.n
+        )
+    )
 end
 ## Tag a long table with the series it holds.
 _with_series(t, s) = (t[!, :series] .= s; t)
@@ -299,17 +359,27 @@ CSV.write(
             ), "rt"
         ),
         _with_series(
-            vcat(
-                weekly_count_table(
-                    province_ts_inc.days, province_ts_inc.increments,
-                    PROVINCE_LABELS[1:N_PATCHES];
-                    cutoff = obs.cutoff, n = obs.n
-                ),
-                weekly_count_table(
-                    obs.confirmed_history.days, national_ts_inc,
-                    ["National"]; cutoff = obs.cutoff, n = obs.n
-                )
-            ), "cases"
+            province_weekly(province_ts_inc, obs.confirmed_history), "cases"
+        ),
+        _with_series(
+            province_weekly(province_ts_deaths, obs.confirmed_deaths_history),
+            "deaths"
+        ),
+        _with_series(
+            reported_level_table(
+                merge(
+                    obs.province_isolation_history,
+                    Dict("National" => obs.isolation_history)
+                ); cutoff = obs.cutoff, n = obs.n, from = obs.n - 55
+            ), "isolation"
+        ),
+        _with_series(
+            reported_level_table(
+                merge(
+                    obs.province_bed_capacity_history,
+                    Dict("National" => obs.bed_capacity_history)
+                ); cutoff = obs.cutoff, n = obs.n, from = obs.n - 55
+            ), "beds"
         );
         cols = :union
     )

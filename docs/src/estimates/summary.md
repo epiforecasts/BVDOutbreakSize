@@ -9,7 +9,9 @@ Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
 This page summarises the headline results.
-See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored, each with a province and a health-zone page alongside.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and how its estimates moved across past releases.
+See the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored.
+Each has a province and a health-zone page alongside.
 See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Comparisons](../comparisons.md) for the comparisons with published estimates.
 
 ## Headline estimates

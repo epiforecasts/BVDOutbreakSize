@@ -386,7 +386,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## The same inputs for the frozen fits, rebuilt from the frozen joint and
     ## the observations the frozen zone fit was fitted to, with the frozen
-    ## joint's forecast under `forecast`. The zone estimates page compares
+    ## joint's forecast under `forecast`. The zone in-sample page compares
     ## the two cut-offs and the zone forecast evaluation scores the frozen
     ## split.
     _frozen_zone_inputs_cache = Dict{Bool, Any}()

@@ -1,0 +1,75 @@
+% Shared style for the model diagrams in this folder.
+% Each diagram is a standalone document that loads fix-cm, then
+% \documentclass[tikz,border=6pt]{standalone}, then inputs this file.
+% scripts/build_diagrams.sh compiles every diagram except this file.
+
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.95]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{amsmath,amssymb}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc,shapes.misc}
+
+% Palette: one colour per role.
+% Latent quantities are blue, observed data orange, quantities taken from
+% the joint fit purple, and parameters a neutral grey.
+\definecolor{latentfill}{HTML}{E3EEF9}
+\definecolor{latentline}{HTML}{2B5C8A}
+\definecolor{datafill}{HTML}{FCE9D6}
+\definecolor{dataline}{HTML}{B35A12}
+\definecolor{jointfill}{HTML}{EEE4F5}
+\definecolor{jointline}{HTML}{6A3D9A}
+\definecolor{paramfill}{HTML}{F2F2F2}
+\definecolor{paramline}{HTML}{6E6E6E}
+\definecolor{textgrey}{HTML}{4A4A4A}
+
+\tikzset{
+  every node/.style={font=\small, text=black,
+    execute at begin node={\thickmuskip=5mu\medmuskip=4mu\thinmuskip=3mu
+      \hyphenpenalty=10000\exhyphenpenalty=10000}},
+  box/.style={rectangle, rounded corners=3pt, draw, line width=0.8pt,
+    align=center, inner sep=5pt, minimum height=9mm},
+  latent/.style={box, fill=latentfill, draw=latentline},
+  data/.style={box, fill=datafill, draw=dataline},
+  joint/.style={box, fill=jointfill, draw=jointline},
+  param/.style={box, fill=paramfill, draw=paramline},
+  group/.style={rectangle, rounded corners=6pt, draw=#1, line width=0.8pt,
+    dashed, inner sep=8pt},
+  grouplabel/.style={font=\small\bfseries, text=#1, anchor=south west,
+    inner sep=2pt},
+  flow/.style={-{Stealth[length=2.6mm,width=2mm]}, line width=0.9pt,
+    draw=black!75},
+  jointflow/.style={flow, draw=jointline, line width=1.1pt},
+  biflow/.style={{Stealth[length=2.4mm,width=1.9mm]}-{Stealth[length=2.4mm,width=1.9mm]},
+    line width=0.9pt, draw=latentline},
+  edgelabel/.style={font=\footnotesize, text=textgrey, fill=white,
+    inner sep=1.5pt, align=center},
+  note/.style={font=\footnotesize, text=textgrey, align=left},
+  title/.style={font=\normalsize\bfseries, align=center},
+  tag/.style={rectangle, rounded corners=2pt, fill=jointline,
+    text=white, font=\footnotesize\bfseries, inner sep=2pt},
+  keyswatch/.style={rectangle, rounded corners=2pt, line width=0.8pt,
+    minimum width=7mm, minimum height=4mm, inner sep=0pt},
+}
+
+% A badge naming how a joint-fit quantity enters the zone model.
+\newcommand{\badge}[1]{{\setlength{\fboxsep}{1.5pt}%
+  \colorbox{jointline}{\textcolor{white}{\footnotesize\bfseries #1}}}}
+
+% Colour key, a row of swatches starting at the coordinate #2 (west end).
+% Pass [joint] to add the joint-input swatch.
+\newcommand{\colourkey}[2][]{%
+  \node[keyswatch, fill=paramfill, draw=paramline, anchor=west] (k1) at #2 {};
+  \node[note, anchor=west] (l1) at (k1.east) {parameter};
+  \node[keyswatch, fill=latentfill, draw=latentline, right=3mm of l1] (k2) {};
+  \node[note, anchor=west] (l2) at (k2.east) {latent quantity};
+  \node[keyswatch, fill=datafill, draw=dataline, right=3mm of l2] (k3) {};
+  \node[note, anchor=west] (l3) at (k3.east) {observed data and likelihood};
+  \ifx\relax#1\relax\else
+    \node[keyswatch, fill=jointfill, draw=jointline, right=3mm of l3] (k4) {};
+    \node[note, anchor=west] (l4) at (k4.east) {joint input};
+  \fi
+}
+
+% The smallest text size. The figures are scaled to the page column, about
+% 1.5 times their natural width, so 8.5 pt renders at about 12.5 px.
+\renewcommand{\footnotesize}{\fontsize{8.5}{10.2}\selectfont}

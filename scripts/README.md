@@ -176,6 +176,13 @@ CI uses `--project=docs` because that environment is already instantiated at tha
 It takes no project flag.
 The pre-commit hook does not: pre-commit builds the hook its own environment from the Runic version in `.pre-commit-config.yaml`, and `test/package/CodeFormatting.jl` checks that version against the pin in `test/formatter/Project.toml`.
 
+## Model diagrams
+
+`build_diagrams.sh` compiles each TikZ diagram in `docs/diagrams/` (all but the shared `style.tex`) with `pdflatex` and writes `docs/src/public/diagrams/<name>.svg`, which the methods page embeds.
+It needs no Julia project, only `pdflatex` (TeX Live with the `pgf`, `standalone` and `helvet` packages) and poppler's `pdftocairo` on `PATH`.
+Run it after editing a diagram and commit the SVGs, since CI has no LaTeX.
+`--png` also writes 150 dpi PNG previews to `output/diagrams/`, or to `BVD_DIAGRAM_PNG_DIR` when that is set.
+
 ## Developer diagnostics (`--project=.`)
 
 These are not wired into CI, the Taskfile or any workflow.

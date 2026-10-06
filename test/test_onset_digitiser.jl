@@ -379,6 +379,36 @@ end
 
 ## --- End to end against the real figures ----------------------------------
 
+@testitem "tick_chain steps over a split tick and a missing one" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## SitRep 141's near-grey tick row: the tick at 169 splits into 166
+    ## and 172, and 33 is the y-axis line.
+    xt = [
+        33, 74, 98, 121, 145, 166, 172, 192, 215, 238, 260, 285, 309, 331,
+        354, 378, 403, 425, 448, 471, 495, 519, 542, 564, 588, 612, 634, 658,
+    ]
+    ks, xs = tick_chain(xt)
+    @test xs[1] == 74
+    @test !(166 in xs) && !(172 in xs)
+    @test ks[1] == -25
+    ## SitRep 138's strict tick row loses the ticks at 219 and 243, a gap
+    ## of three weeks between 195 and 267.
+    xt = [
+        32, 75, 99, 123, 147, 171, 195, 267, 314, 362, 386, 434, 458, 482,
+        506, 530, 554, 578, 602, 626, 650, 674,
+    ]
+    ks, xs = tick_chain(xt)
+    @test xs[1] == 75
+    @test ks[1] == -25
+end
+
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date

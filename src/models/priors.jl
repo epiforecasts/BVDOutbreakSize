@@ -701,7 +701,7 @@ g_k = g_0 + σ_{growth} \\sum_{j \\le k} z_j, \\qquad
 ```
 
 The walk is non-centred. The priors are `g_0 ~ N(0, 0.05)`,
-`σ_growth ~ N⁺(0, 0.02)` and `C_0 ~ LogNormal(log 450, 0.42)`. The
+`σ_growth ~ N⁺(0, 0.05)` and `C_0 ~ LogNormal(log 450, 0.42)`. The
 implied-capacity series the isolation submodel fits pins `C(t)` on the
 days a rate is published.
 
@@ -724,7 +724,7 @@ from the last fitted value.
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
         growth_prior = Normal(0.0, 0.05),
-        growth_sd_prior = truncated(Normal(0.0, 0.02); lower = 0),
+        growth_sd_prior = truncated(Normal(0.0, 0.05); lower = 0),
         cutoff::Union{Nothing, Integer} = nothing
     )
     C0 ~ baseline_prior

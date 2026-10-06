@@ -3739,16 +3739,16 @@ end
 
 """
 Discrete symptom-onset reporting-delay hazard, nonparametric over the delay
-and drifting over calendar time. Two non-centred random effects:
+and drifting over calendar time. Two random effects:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`, a
-    partially-pooled non-centred random effect over delay whose deviations
+    partially-pooled centred random effect over delay whose deviations
     sum to zero, so `η0` is the mean logit hazard:
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
-    \\mathbf z_{h0} \\sim \\mathcal N(0, I_{D-1}), \\quad
-    \\text{logit\\_h0} = \\eta_0 + \\sigma_{h0} Q \\mathbf z_{h0};
+    \\mathbf y_{h0} \\sim \\mathcal N(0, \\sigma_{h0}^2 I_{D-1}), \\quad
+    \\text{logit\\_h0} = \\eta_0 + Q \\mathbf y_{h0};
     ```
     with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)).
   - a calendar-time random walk on report date, weekly knots linearly
@@ -3761,6 +3761,13 @@ and drifting over calendar time. Two non-centred random effects:
     \\gamma_{\\text{knot},k+1} = \\gamma_{\\text{knot},k} +
         \\sigma_\\gamma z_{\\gamma,k}.
     ```
+
+The delay deviations are centred because the triangle informs them. On
+the onsets-only fit the basis directions for delays 2 to 11 have a
+posterior SD of about a fifth of `σ_h0`. A non-centred `σ_h0 Q z_h0` then
+ties each of their `z` to `σ_h0`, at a correlation of 0.6 to 0.8 with
+`log σ_h0`, and `σ_h0` mixes slowly along that ridge. Both forms carry the
+same prior, so only the sampled coordinates differ.
 
 The walk is indexed on the report-date grid `[grid_start, grid_end]`, not
 the onset/infection-date axis [`rt_walk_model`](@ref) already carries a
@@ -3817,9 +3824,13 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     σ_h0 ~ pooling_prior
     ## Sum-to-zero deviations, so `η0` is the mean logit hazard. With `D`
     ## free deviations their mean duplicated `η0` and only the sum of the
-    ## two was identified.
-    z_h0 ~ product_distribution(fill(Normal(0, 1), D - 1))
-    logit_h0 = η0 .+ sum_to_zero(sum_to_zero_factor(basis, σ_h0), z_h0)
+    ## two was identified. Each basis coordinate is drawn centred, on the
+    ## scale `σ_h0`. `eps` floors the SD so a `σ_h0 ≈ 0` draw stays a proper
+    ## distribution.
+    y_h0 ~ product_distribution(
+        fill(Normal(0, σ_h0 + eps(typeof(float(σ_h0)))), D - 1)
+    )
+    logit_h0 = η0 .+ basis * y_h0
 
     ## The local day count `nt` is floored at 1 so an empty or degenerate
     ## grid (the no-op path) still returns a well-formed length-1 `γ`.
