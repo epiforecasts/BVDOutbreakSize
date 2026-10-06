@@ -15,9 +15,15 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
 - The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
 - The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
+- Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 
 ### Model
 
+- The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
+  They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
+  Fitted zone values change, mostly through the zone reproduction numbers, which move with the generation interval.
+- The health-zone case delay includes the onset-to-report step, so it is the delay the joint's province compositions apply to infections (#1085).
+  It ran from infection to receipt without that step, about two and a half days short at the posterior mean.
 - The capacity growth SD prior is `N⁺(0, 0.05)`, so its 95th percentile covers the fitted 0.07; fitted values change (#1050).
 - The national bed capacity is a local linear trend on log capacity, so it can fall and its forecast continues the trend; `bed_capacity_walk_model`'s `innovation_prior` becomes `growth_sd_prior` and `growth_prior` (#1042, resolves #1016).
 - The confirmed-deaths-only fit gates the death volume before the first confirmed-death vintage, carries suspected deaths through the joint's report-to-receipt delay and scores the daily suspected deaths, as the joint does (#1046).
