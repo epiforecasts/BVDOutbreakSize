@@ -62,10 +62,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
 - The dashboard map shows confirmed cases or confirmed deaths for its forecast, to-date and weekly views, names the count in every label, and adds a case fatality ratio view with the modelled ratio for provinces and the country (resolves #1053).
-- The dashboard map has a box that finds a health zone or province by name and zooms to it, and clicking a table row, or pressing Enter on it, does the same (#PRNUM).
+- The dashboard map has a box that finds a health zone or province by name and zooms to it, and clicking a table row, or pressing Enter on it, does the same (#1079).
   This also gives a keyboard route to every area.
   Show national zooms back out to the whole map.
-- In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#PRNUM).
+- In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
