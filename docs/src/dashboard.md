@@ -15,6 +15,7 @@ The health-zone layer adds each zone's share of its patch and the chance of at l
 The province layer takes the reproduction number, forecasts and modelled case fatality ratio from the joint model's patches, so the pooled provinces share one estimate and are hatched.
 Hover over an area for its estimate, or click it for a side column with its key numbers, its reproduction number over time and its weekly counts against next week's forecast.
 With nothing selected the column shows the national figures, and the table sorts the areas by any column.
+Type an area's name in the box on the map, or click a row of the table, to zoom the map to that area and show its detail.
 The detail is on the [province estimates](estimates/province.md) and [health-zone estimates](estimates/zone.md) pages.
 
 ```@raw html
