@@ -15,12 +15,18 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
 - The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
 - The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
+- Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
   The model does not change.
 
 ### Model
 
+- The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
+  They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
+  Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
+- The health-zone case delay includes the onset-to-report step, so it is the delay the joint's province compositions apply to infections (#1085).
+  It ran from infection to receipt without that step, about two and a half days short at the posterior mean.
 - The onset reporting hazard draws its delay deviations in centred form, on the scale $\sigma_{h0}$, so `z_h0` becomes `y_h0` (#1060).
   The triangle pins the hazard between two and eleven days' delay, and the non-centred form tied those deviations to $\sigma_{h0}$, which failed the joint fit's convergence check (R-hat 1.10 and 28 bulk effective samples, reported in #1060).
   On local onsets-only fits at two seeds (two chains of 500 draws each, reported in the pull request) the centred form raises the bulk effective samples of $\sigma_{h0}$ from 106 and 54 to 476 and 396, with the same posterior.
