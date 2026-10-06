@@ -1685,7 +1685,7 @@ quantity is computed on the fitted days as without a forecast.
     δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
     fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
     asc = relative_multiplier(
-        z_ascertainment, σ_ascertainment, zd.patch_ranges
+        z_ascertainment, σ_ascertainment, zd.multiplier_basis
     )
     zone_ascertainment_sd := σ_ascertainment
     zone_ascertainment_relative := asc
@@ -1702,7 +1702,7 @@ quantity is computed on the fitted days as without a forecast.
     ## infection-to-confirmed-death delay rather than the case delay.
     D = zone_binned_increments(zx.death_bin, fw.infections, def.zone_pre .* w0)
     sev = relative_multiplier(
-        z_severity, σ_severity, zd.patch_ranges
+        z_severity, σ_severity, zd.multiplier_basis
     )
     zone_severity_sd := σ_severity
     zone_severity_relative := sev
@@ -2371,6 +2371,7 @@ function zone_fit_inputs(
     model_data = (;
         counts, cell_patch, cell_vintage, cell_total, cell_const,
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, patch_of_zone,
+        multiplier_basis = relative_multiplier_basis(patch_ranges),
         knots, t0, n,
         week, share_scale, rt_floor,
         walking = collect(walking), n_walking,
