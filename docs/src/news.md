@@ -18,7 +18,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#PRNUM).
+- The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
