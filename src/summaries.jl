@@ -659,12 +659,16 @@ end
 
 ## Median and 90% credible interval as one cell, `median (lower–upper)`. The
 ## cross-province overview puts several quantities side by side, so it trades
-## the six-column interval layout for one column per quantity.
+## the six-column interval layout for one column per quantity. Non-finite
+## draws are dropped, as the province CFR table drops them, and a cell with
+## no finite draw reads "—".
 function _median_ci(draws; digits::Integer = 2)
+    finite = filter(isfinite, draws)
+    isempty(finite) && return "—"
     fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
     return string(
-        fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
-        fmt(quantile(draws, 0.95)), ")"
+        fmt(median(finite)), " (", fmt(quantile(finite, 0.05)), "–",
+        fmt(quantile(finite, 0.95)), ")"
     )
 end
 
@@ -948,7 +952,8 @@ Per-province isolation beds at the cut-off, from the province occupancy and
 bed splits in [`treatment_flow_model`](@ref): one row per province with
 the modelled bed count, the latent bed demand, the occupied beds (demand
 capped at the beds), the utilisation and the shortfall, each a median with
-a 90% credible interval. Expects a chain from [`bvd_joint`](@ref) with
+a 90% credible interval. Draws that are not finite are left out of each
+cell. Expects a chain from [`bvd_joint`](@ref) with
 more than one patch, which stores these as the vector deterministics
 `province_bed_capacity`, `province_bed_demand`,
 `province_expected_isolation`, `province_bed_utilisation` and
