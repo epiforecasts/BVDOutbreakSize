@@ -15,6 +15,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone reports are binned into vintages by one fixed operator per delay, cutting the zone gradient by about 23% (#991).
 - The health-zone correlation ridge is a scaled identity rather than a dense matrix, cutting the correlation factors' gradient by about 22% (#993).
 - The health-zone renewal rule's forward and adjoint are about 14% faster (#992).
+- Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
   The model does not change.
@@ -25,6 +26,11 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
+- The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
+  They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
+  Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
+- The health-zone case delay includes the onset-to-report step, so it is the delay the joint's province compositions apply to infections (#1085).
+  It ran from infection to receipt without that step, about two and a half days short at the posterior mean.
 - The onset reporting hazard draws its delay deviations in centred form, on the scale $\sigma_{h0}$, so `z_h0` becomes `y_h0` (#1060).
   The triangle pins the hazard between two and eleven days' delay, and the non-centred form tied those deviations to $\sigma_{h0}$, which failed the joint fit's convergence check (R-hat 1.10 and 28 bulk effective samples, reported in #1060).
   On local onsets-only fits at two seeds (two chains of 500 draws each, reported in the pull request) the centred form raises the bulk effective samples of $\sigma_{h0}$ from 106 and 54 to 476 and 396, with the same posterior.
@@ -59,6 +65,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
+- The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
+  On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.
 - The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
   The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#1073).
 - The methods score the confirmed positives as a beta-binomial with its intra-window correlation and prior, as the model does, not as a binomial (#1073).
@@ -77,11 +86,15 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone forecast and evaluation pages show past zone forecasts against what was reported and their scores across releases (#985).
 - The summary dashboard shows the health-zone forecast bullets, the zone maps and the zone forecast figure (#977).
 - The interactive map moves to its own Dashboard page after the summary and gains a province layer and a detail column for the clicked area (#1022).
-- The dashboard map shows confirmed cases or confirmed deaths for its forecast, to-date and weekly views, names the count in every label, and adds a case fatality ratio view with the modelled ratio for provinces and the country (resolves #1053).
+- The dashboard map shows confirmed cases or confirmed deaths for its forecast, to-date and weekly views, names the count in every label, and adds a view of the modelled, delay-adjusted case fatality ratio for provinces and the country (resolves #1053).
 - The dashboard map gains a treatment-centre view by province: patients in isolation, beds and the share of beds in use, each as last reported, as modelled at the cut-off and as forecast a week ahead, with the reported series in the detail column.
   Health zones report no treatment figures, so the view opens the province layer.
   Admissions are not shown, since the observations carry them for the country only.
   Fitted values do not change (#1080).
+- The dashboard map has a box that finds a health zone or province by name and zooms to it, and clicking a table row, or pressing Enter on it, does the same (#1079).
+  This also gives a keyboard route to every area.
+  Show national zooms back out to the whole map.
+- In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
