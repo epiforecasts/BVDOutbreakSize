@@ -100,6 +100,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province positivity test asks that Ituri's positivity exceed Nord-Kivu's by more than binomial sampling noise, not by a factor of two.
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
+- The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
 
 ## v2.2.0
 
