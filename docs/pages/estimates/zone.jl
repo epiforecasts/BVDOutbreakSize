@@ -531,9 +531,29 @@ zone_estimates = DataFrame(
     as_of = fill(string(obs.cutoff), length(zone_map_keys))
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
-## Each zone's daily reproduction number and weekly allocated confirmed
-## cases, for the dashboard map's detail column.
+## Each zone's daily reproduction number, weekly allocated confirmed cases
+## and weekly confirmed deaths, for the dashboard map's detail column. A
+## zone's deaths are its own cumulative series, so each zone is binned on
+## its own vintages.
 _with_series(t, s) = (t[!, :series] .= s; t)
+_zone_weekly_deaths = let h = obs.zone_death_history
+    out = DataFrame(area = String[], date = Date[], count = Int[])
+    for (prov, z, key) in zip(
+            zone_inputs.zone_province, zone_inputs.zone_names, zone_map_keys
+        )
+        haskey(h, prov) && haskey(h[prov], z) &&
+            !isempty(h[prov][z].counts) || continue
+        c = h[prov][z].counts
+        append!(
+            out,
+            weekly_count_table(
+                h[prov][z].days, reshape([c[1]; max.(diff(c), 0)], 1, :),
+                [key]; cutoff = obs.cutoff, n = obs.n
+            )
+        )
+    end
+    out
+end
 CSV.write(
     joinpath(dashboard_dir, "zone_timeseries.csv"),
     vcat(
@@ -548,7 +568,8 @@ CSV.write(
                 zone_inputs.days, zone_inputs.counts, zone_map_keys;
                 cutoff = obs.cutoff, n = zone_inputs.n
             ), "cases"
-        );
+        ),
+        _with_series(_zone_weekly_deaths, "deaths");
         cols = :union
     )
 )

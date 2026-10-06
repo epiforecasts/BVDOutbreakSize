@@ -204,18 +204,52 @@ MarkdownTable(vintage_table) #hide
 #
 # ### Model overview
 #
-# We model a single outbreak seeded by a zoonotic introduction on a daily grid from a seeding date to the cut-off (day $n$).
-# The country is split into four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi.
-# Each patch runs its own discrete renewal equation at its own reproduction number, and the patches are coupled by importation.
-# National infection incidence is the sum over the patches.
-# Every national stream is fitted against that sum.
-# The patch reproduction numbers share one weekly trend and deviate from it, so a province with little data stays near the trend and one with data can separate from it.
-# The situation reports' per-province tables are exact partitions of the national totals, so they enter as composition likelihoods carrying the spatial split alone.
-# Setting the patch count to one collapses the model onto a single well-mixed population.
+# We fit one joint model to every national data stream and the provincial tables, on a daily grid from a seeding date to the cut-off (day $n$).
+# It divides the country into four patches: Ituri, Nord-Kivu, Haut-Uele and a fourth that pools four further provinces.
+# Each patch runs its own renewal equation, with a reproduction number that is a shared weekly trend times a deviation for that patch.
+# Each data stream sees a delayed or thinned view of the same patch infections, as in the renewal models of EpiNow2 [epinow2](@cite), but here all streams are fitted together.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/joint_overview.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_overview.svg" alt="Flow diagram of the joint model. Three parameter boxes sit at the top: the seeding in Ituri, the reproduction number of each patch and the generation interval. The generation interval and the growth rate set the starting reproduction number. All three feed the infections in each patch. Each patch generates new infections from its reproduction number and its past infections weighted by the generation interval. After importation between patches the new infections deplete the patch's susceptible population. Infections pass through the incubation period to symptom onsets, summed over the patches. Below this each data stream is a row. Its expected series is on the left and its observed data and likelihood are on the right. Onsets through the onset-to-report delay give the suspected cases. These are the reporting fraction times the outbreak reports plus a background of suspects who are not outbreak cases. Their rises between reports are negative binomial. The suspected cases feed the treatment centres and the laboratory. Treatment-centre counts are negative binomial with occupancy censored at capacity. Analysed specimens are negative binomial, and confirmed cases are beta-binomial on the analysed count. The laboratory feeds the recovered among confirmed and the confirmed deaths. Onsets through the onset-to-death delay give the suspected deaths. These also feed the confirmed deaths through the death-to-case ratio. Onsets through a reporting hazard give the digitised onset curve. Infections weighted by export propensity give the Uganda exports and export deaths, both Poisson. The seeding sets the outbreak age, scored against the genetic bound as a censored normal."></a>
+#md # <figcaption>The joint model as a generative chain. Grey boxes are parameters, blue boxes are latent quantities and orange boxes are observed data with their likelihoods. Each lower row pairs a stream's expected series with its data. Symbols are defined on the figure or in the sections below.</figcaption>
+#md # </figure>
+#md # ```
+
+# Importation couples the patches by moving a share of each day's new infections from one patch to another.
+# The share follows a gravity kernel on population and distance, scaled by a partially pooled intensity for each origin patch that changes at detection.
+# The outbreak starts from one unobserved seed growing exponentially in Ituri, and the other patches start with no infections.
+# Each receiving patch grows its arrivals at its own reproduction number, so importation rather than a separate seed starts the outbreak in the other patches.
+# The provincial confirmed cases, confirmed deaths and analysed specimens enter only as compositions of the national counts, so they inform the split across patches and not the national size.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_patches.svg" alt="Schematic of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as a weekly national trend times a patch deviation. The deviations sum to zero across patches. Four patch boxes form a square: Ituri seeded with the outbreak, and Nord-Kivu, Haut-Uele and Other provinces starting empty. Double-headed arrows join every pair of patches. Each arrow carries importation in both directions. An origin sends its intensity times the kernel entry times the infections it generates that day. An equation gives each patch's infections after importation. A patch keeps what it does not export and adds the arrivals from every other patch. The patch infections sum to the national infections and onsets. The onsets in each patch feed three province compositions. Patch onsets reach the confirmed cases through the report and receipt delays, weighted by relative case ascertainment. Confirmed deaths pass through the death and receipt delays, weighted by death ascertainment and lethality. Analysed specimens split the national outbreak volume and add a share of the background. All three are scored as beta-binomial splits of each national rise."></a>
+#md # <figcaption>The patch structure of the joint model, drawn as a schematic rather than a map. The grey box is a parameter, blue boxes are latent quantities and the orange box is observed data. The dashed outline groups the coupled patch renewal. The patch labelled Other provinces pools Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi. The provincial counts of patients in isolation and of beds are split the same way but are not drawn.</figcaption>
+#md # </figure>
+#md # ```
+
+# A health-zone model then splits each patch's infections across its zones, taking three kinds of input from the joint fit without feeding back into it.
+# The weekly infections of each patch and the importation intensity of each origin are sampled together from a multivariate normal fitted to the log joint draws.
+# We call this sampling step melding, since the joint posterior becomes the prior for these quantities.
+# The odds that an infection in each patch was imported are fixed at their joint posterior mean, and each sample adjusts them to its own patch infections and origin intensities.
+# Five parameters shared by both levels take priors fitted to the joint draws, among them the drift scale and the composition overdispersions.
+# The generation interval and the delays are fixed at their joint posterior means, so their uncertainty does not reach the zones.
 #
-# We never observe infections directly.
-# Each data stream observes a thinned, delayed or transformed view of the same latent incidence.
-# This is the class of time-varying renewal model used in EpiNow2 [epinow2](@cite), with the streams fitted jointly here rather than in a pipeline.
+# Within each patch every zone runs its own renewal equation, with a transmission deviation that sums to zero over the patch.
+# A gravity kernel first moves some force of infection between the zones of a patch, at an intensity the zone model estimates.
+# The zones then share the infections their patch generated locally in proportion to their force of infection after this movement.
+# The arrivals from other patches are an import fraction of the sampled patch infections, recomputed with the joint model's arrivals formula.
+# They land in the receiving patch's zones in proportion to the force of infection in the sending zones, weighted by a gravity pull.
+# The zone confirmed cases and deaths enter as compositions of the patch counts, so they inform the split within each patch and not its size.
+
+#md # ```@raw html
+#md # <figure class="bvd-diagram">
+#md # <a href="diagrams/zone_model.svg" target="_blank" rel="noopener"><img src="/diagrams/zone_model.svg" alt="Diagram of the health-zone model and how the joint fit enters it. A purple banner at the top gives the sampled quantity. A normal is fitted to the joint draws of log weekly patch infections and log origin intensities. Each sample draws a standard normal vector and multiplies it by the Cholesky factor of that normal. The exponential of the result scales the joint mean patch curves and origin intensities. Below the banner the zone model runs from top to bottom on the left. Purple boxes on the right are inputs from the joint fit. Each sits level with the step it feeds and carries a badge: sampled, mean or prior. The zone model starts with initial shares and zone deviations. The deviations follow a mean-reverting process on weekly knots and sum to zero in each patch. Their correlation falls with distance between zones. Their drift scale and correlation take priors fitted to the joint draws. In the zone renewal each zone's force of infection is its past infections weighted by the mean generation interval and scaled by its deviation. This force sets each zone's share, while the sampled patch infections set the total. Next come the arrivals from other patches. Their number is the sampled patch infections times an import fraction. That fraction uses the joint mean import odds, the arrival shares and the sampled shifts of the patch curves and intensities. The arrivals land in the zones in proportion to the force of infection in other patches' zones, weighted by a gravity pull. The rest of the patch's infections are shared by each zone's force after spread within the patch. The zone infections of a patch therefore sum to the sampled patch infections. They feed back into the renewal on later days. They also pass through the mean delays to expected confirmed cases and deaths. These are weighted by relative ascertainment and lethality within the patch. The ascertainment scale takes a prior fitted to the joint draws. At the bottom the zone tables are scored as Dirichlet-multinomial compositions of each patch's rise. Their intra-class correlations take priors fitted to the joint draws. Nothing returns to the joint fit."></a>
+#md # <figcaption>The health-zone model and how the joint fit enters it. The zone model runs down the left inside the dashed outline. Grey boxes are zone parameters, blue boxes are latent quantities and the orange box is the zone data. Each purple box on the right is an input from the joint fit, level with the step it feeds. Its badge says whether it is sampled with each draw, fixed at the joint posterior mean or used to fit a prior. Symbols are defined on the figure or in the health-zone model section below.</figcaption>
+#md # </figure>
+#md # ```
+
 #
 # The model is assembled from modular Turing [ge2018turing](@cite) submodels, each holding the maths and priors for one part of the generative process.
 # We describe them in generative order, from the infection process through the epidemiological delays to the observation streams.
@@ -224,7 +258,7 @@ MarkdownTable(vintage_table) #hide
 #
 # The table below shows which parameters inform each observation submodel.
 # The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
-# The *confirmed* positives are scored as a Binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
+# The *confirmed* positives are scored as a beta-binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
 # The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
@@ -1444,7 +1478,7 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{42}
 # ```
 #
-# The confirmed positives in each laboratory window $v$ are scored as a Binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
+# The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
 # Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
@@ -1469,10 +1503,12 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{43}
+# C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{43}
 # ```
 #
-# with $c_v$ the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
+# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, which tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
+# We use this prior, with mean about 0.04, so the spread is set by the confirmed positives themselves.
+# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
 # The confirmed vintages before the first and after the last laboratory date carry no observed analysed denominator.
 # They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same composition-linked positivity.
 # This way all the confirmed data are used:
@@ -1766,13 +1802,13 @@ cfr_prior_fig #hide
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
-# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
+# The baseline hazard is a logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0 = \eta_0 + \sigma_{h0}\,Q\,\mathbf{z}_{h0}, \qquad
-# \mathbf{z}_{h0} \sim \mathrm{Normal}(0, I_{D-1}). \tag{50}
+# \mathrm{logit}\,h_0 = \eta_0 + Q\,\mathbf{y}_{h0}, \qquad
+# \mathbf{y}_{h0} \sim \mathrm{Normal}(0,\ \sigma_{h0}^2 I_{D-1}). \tag{50}
 # ```
 #
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
