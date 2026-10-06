@@ -1544,6 +1544,26 @@ end
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
 end
 
+@testitem "province kernel: no gravity exponent should send most of Ituri's exports to Nord-Kivu" begin
+    using BVDOutbreakSize: province_importation_kernel, PROVINCE_NAMES,
+        PROVINCE_POPULATIONS
+
+    ## The reason `PROVINCE_DISTANCE_DECAY` is fixed. A column's split does
+    ## not depend on its total, so raising the populations to `α` gives the
+    ## split under a destination-population exponent.
+    it = findfirst(==("ituri"), PROVINCE_NAMES)
+    nk = findfirst(==("nord_kivu"), PROVINCE_NAMES)
+    function nk_share(α, γ)
+        K = province_importation_kernel(PROVINCE_POPULATIONS .^ α; decay = γ)
+        return K[nk, it] / sum(@view K[:, it])
+    end
+    γs = 0:0.05:20
+    shares = nk_share.(1.0, γs)
+    @test maximum(shares) < 0.5
+    @test 2.0 < γs[argmax(shares)] < 2.5
+    @test maximum(nk_share(α, γ) for α in 0:0.1:4, γ in 0:0.1:8) < 0.85
+end
+
 @testitem "province composition: the severity multiplier should be sum-to-zero" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: sample, Prior

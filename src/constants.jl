@@ -355,11 +355,14 @@ const PROVINCE_CENTRES = [
 """
     PROVINCE_DISTANCE_DECAY
 
-Exponent on the distance term of [`province_importation_kernel`](@ref).
-One is the conventional gravity value. It is fixed rather than sampled
-because the importation intensity it scales is already weakly identified
-against the secondary provinces' seeds, so a second free parameter on the
-same term would not be determined by anything.
+Exponent on the distance term of [`province_importation_kernel`](@ref),
+fixed at the conventional gravity value of one.
+
+It is not sampled because no plausible gravity exponent sends most of
+Ituri's exports to Nord-Kivu. Haut-Uele is nearer to Ituri, so Nord-Kivu's
+share of Ituri's exports peaks at about 0.47, at an exponent of about 2.2. With an exponent on the destination
+population as well, the share reaches 0.82 only at about 4 on population and
+8 on distance. See #1077.
 """
 const PROVINCE_DISTANCE_DECAY = 1.0
 

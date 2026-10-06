@@ -545,6 +545,8 @@ MarkdownTable(vintage_table) #hide
 # \qquad K_{q,q} = 0. \tag{14}
 # ```
 #
+# We fix the exponents on destination population and on distance at one rather than estimate them.
+#
 # The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
 #
 # ```math

@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The province importation kernel keeps both gravity exponents fixed at one, and the methods say so (#1077).
+  No exponent on distance puts more than about 47% of Ituri's exports in Nord-Kivu, because Haut-Uele is nearer to Ituri, and adding a population exponent reaches 82% only at about 4 on population and 8 on distance.
+  Fitted values do not change.
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
