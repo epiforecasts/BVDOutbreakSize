@@ -2315,10 +2315,12 @@ cfr_prior_fig #hide
 # ### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# Chains initialise from the prior and run at a maximum tree depth of 10.
-# Every fit runs two chains.
-# The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
-# The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
+# Each chain starts from the first of a batch of prior draws whose log joint density is at or above the batch median.
+# Every fit runs two chains at a maximum tree depth of 10.
+# The single-stream fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
+# The single-population frozen re-fits take the same draws and adaptation steps at a target acceptance probability of 0.90.
+# The headline meta-population joint, the single-population control, the one-week-back validation re-fit and the sensitivity re-fits take 1000 draws per chain after 500 adaptation steps, at a target acceptance probability of 0.80.
+# The health-zone fits take 800 draws per chain after the same 500 adaptation steps and target acceptance probability.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
 
 # ### No-onward-transmission counterfactual
@@ -2482,7 +2484,7 @@ cfr_prior_fig #hide
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.
 # We then compare that projection against the counts observed by the current cut-off.
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# Each frozen re-fit uses the full headline settings (1000 draws across two chains).
+# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings.
 # The same frozen re-fit is reused to compare against McCabe et al. at the cut-offs they used.
 # The helper below performs one frozen joint re-fit and is reused by the forecast validation and matched-in-time results.
 
