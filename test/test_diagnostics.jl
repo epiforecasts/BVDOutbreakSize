@@ -48,6 +48,7 @@ end
     @test tbl isa DataFrame
     @test nrow(tbl) == 2
     @test sort(string.(propertynames(tbl))) ==
-        sort(["fit", "max_rhat", "min_ess_bulk", "divergences"])
+        sort(["fit", "max_rhat", "min_ess_bulk", "min_ess_tail", "divergences"])
     @test all(tbl.divergences .>= 0)
+    @test all(tbl.min_ess_tail .> 0)
 end

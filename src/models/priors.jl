@@ -1412,9 +1412,13 @@ of the sum-to-zero vector with its `n (n - 1) / 2` free parameters, and
 `σ_drift → 0` is reachable. The Wishart prior is invariant under rotations
 of the basis, so the implied prior is the same for every patch and every
 pair of patches whatever order the patches come in. The level at the first
-knot is `σ_level Q A z_level √((n - 1) / tr(A Aᵀ))`, sharing the drift's
-shape at its own scale. With the draws `z_k` as the columns of `Z`, every
-knot's innovation comes from the one product `c Q A Z`.
+knot is `Q A u_level √((n - 1) / tr(A Aᵀ))` with `u_level ~ N(0, σ_level²
+I_{n-1})`, sharing the drift's shape at its own scale. The level is drawn
+centred on `σ_level` because the province data pin it: drawn as `σ_level`
+times a standard normal, the scale and the draw would trade off along a
+curved ridge that the sampler crosses slowly. With the draws `z_k` as the
+columns of `Z`, every knot's innovation comes from the one product
+`c Q A Z`.
 
 The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
 derived from the loading matrix ([`sum_to_zero_moments`](@ref)). The
@@ -1560,16 +1564,18 @@ and `Rt_matrix` covers the horizon.
     A = bartlett_factor(bartlett_diag, bartlett_lower)
     shape_scale = sqrt(nd / sum(abs2, A))
     F_drift = sum_to_zero_factor(basis, σ_drift * shape_scale, A)
-    F_level = sum_to_zero_factor(basis, σ_level * shape_scale, A)
-    ## Standard-normal draws for the level and for each knot's innovation,
-    ## `n_patches - 1` per knot.
-    z_level ~ product_distribution(fill(region_offset_prior, nd))
+    F_level = sum_to_zero_factor(basis, shape_scale, A)
+    ## The level is drawn on the `n_patches - 1` directions at its own
+    ## scale, centred: the province data pin the first knot, and a
+    ## standard-normal draw times `σ_level` would leave the two on a curved
+    ## ridge. Each later knot's innovation is a standard-normal draw.
+    u_level ~ product_distribution(fill(Normal(0, σ_level), nd))
     z_drift ~ product_distribution(
         fill(region_offset_prior, max(nd * (nb - 1), 1))
     )
     ## One innovation column per knot after the first.
     Z = nb > 1 ? reshape(z_drift, nd, nb - 1) : zeros(eltype(z_drift), nd, 0)
-    δ_knots = sum_to_zero_knots(F_level, F_drift, z_level, Z, φ)
+    δ_knots = sum_to_zero_knots(F_level, F_drift, u_level, Z, φ)
     ## Interpolate each patch's deviation to the daily grid and build Rt.
     ## Past the cut-off the deviations carry on reverting on knots a week
     ## apart, with fresh standard-normal draws `z_drift_future` through the

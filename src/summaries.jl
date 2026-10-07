@@ -337,7 +337,7 @@ end
 """
 `DataFrame` of fit-quality diagnostics with one row per fit. Pass each
 fit as `"label" => chain`. Columns `:fit, :max_rhat, :min_ess_bulk,
-:divergences`.
+:min_ess_tail, :divergences`.
 """
 function diagnostics_table(fits::Pair{String}...)
     rows = map(fits) do (label, chn)
@@ -346,6 +346,7 @@ function diagnostics_table(fits::Pair{String}...)
             fit = label,
             max_rhat = round(d.max_rhat; digits = 3),
             min_ess_bulk = round(d.min_ess_bulk; digits = 0),
+            min_ess_tail = round(d.min_ess_tail; digits = 0),
             divergences = d.n_divergent,
         )
     end

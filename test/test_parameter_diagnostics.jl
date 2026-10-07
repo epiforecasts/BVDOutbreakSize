@@ -157,7 +157,7 @@ end
     using Distributions: Normal, product_distribution
     using Turing: @model
     using BVDOutbreakSize: nuts_sample, parameter_diagnostics,
-        sampler_by_chain_table,
+        sampler_by_chain_table, _ebfmi,
         divergence_location_table,
         plot_divergence_locations
 
@@ -185,6 +185,16 @@ end
     @test chains.chain == [1, 2]
     @test all(chains.draws .== 200)
     @test all(chains.divergences .>= 0)
+    @test all(0 .<= chains.percent_at_max_depth .<= 100)
+    @test all(0 .< chains.mean_acceptance .<= 1)
+    @test all(chains.ebfmi .> 0)
+    ## A cap of one is reached by every tree NUTS builds.
+    @test all(
+        sampler_by_chain_table(chn; max_depth = 1).percent_at_max_depth .== 100
+    )
+    ## E-BFMI from its definition: squared energy steps 4 + 1 over squared
+    ## deviations 1 + 1 + 0.
+    @test _ebfmi([1.0, 3.0, 2.0]) ≈ 2.5
 
     ## A well-behaved target usually has no divergence at all, so the
     ## location table is only required to carry the right columns.

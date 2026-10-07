@@ -130,6 +130,29 @@ Nothing else is fetched.
     font: inherit; color: var(--ink-2); background: var(--panel);
     border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px;
   }
+  /* Settings that refine a metric sit behind one disclosure, opened as a
+     panel over the map so the map does not move. */
+  header { position: relative; z-index: 1100; background: var(--bg); }
+  #more { position: relative; }
+  #more > summary {
+    list-style: none; color: var(--ink-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 10px; cursor: pointer;
+    user-select: none;
+  }
+  #more > summary::-webkit-details-marker { display: none; }
+  #more > summary::after { content: " \25BE"; }
+  #more[open] > summary::after { content: " \25B4"; }
+  #more > summary:focus-visible { outline: 2px solid var(--accent); }
+  #more[open] > summary {
+    border-color: var(--accent); color: var(--ink);
+  }
+  #more .more-body {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 1100;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    padding: 8px; min-width: 200px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
   #stage { position: relative; flex: 1; min-height: 320px; display: flex; }
   #mapwrap { position: relative; flex: 1; min-width: 0; }
   #map { position: absolute; inset: 0; background: var(--map-bg); }
@@ -175,6 +198,24 @@ Nothing else is fetched.
      the header never scrolls away inside it. */
   @media (max-width: 760px) {
     html, body { height: auto; }
+    /* The controls take four short rows: title, links and layer, the
+       metrics as one scrolling strip, then the menus. */
+    header { gap: 6px 8px; padding: 6px 10px; font-size: 13px; }
+    header .title, header .asof { font-size: 13px; }
+    header a.plain, button.plain, select.plain, #more > summary,
+    .switch label { padding: 3px 8px; }
+    .switch label { white-space: nowrap; }
+    .switch.metrics {
+      flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto;
+      scrollbar-width: none; padding: 2px 0;
+    }
+    .switch.metrics::-webkit-scrollbar { display: none; }
+    /* A fade at the right edge shows the strip scrolls. */
+    .switch.metrics {
+      -webkit-mask-image: linear-gradient(to right, #000 85%, transparent);
+      mask-image: linear-gradient(to right, #000 85%, transparent);
+    }
+    #more .more-body { left: auto; right: 0; }
     #stage { flex-direction: column; flex: none; }
     #mapwrap { flex: none; height: clamp(320px, 100vw, 560px); }
     #detail { width: auto; border-left: none; border-top: 1px solid var(--line); }
@@ -258,7 +299,7 @@ Nothing else is fetched.
     <label><input type="radio" name="layer" value="zone" checked><span>Health zones</span></label>
     <label><input type="radio" name="layer" value="province"><span>Provinces</span></label>
   </div>
-  <div class="switch" role="radiogroup" aria-label="Metric">
+  <div class="switch metrics" role="radiogroup" aria-label="Metric">
     <label><input type="radio" name="metric" value="R_T" checked><span>Reproduction number</span></label>
     <label><input type="radio" name="metric" value="forecast"><span>7-day forecast</span></label>
     <label><input type="radio" name="metric" value="cases"><span>To date</span></label>
@@ -292,35 +333,40 @@ Nothing else is fetched.
     <option value="cases" selected>Confirmed cases</option>
     <option value="deaths">Confirmed deaths</option>
   </select>
-  <select class="plain zone-only" id="threshold"
+  <select class="plain" id="threshold" hidden
     aria-label="Case threshold for the chance-of-cases metric">
     <option value="1">K = 1</option>
     <option value="5">K = 5</option>
     <option value="10" selected>K = 10</option>
     <option value="20">K = 20</option>
   </select>
-  <select class="plain" id="summary"
-    aria-label="Posterior summary shown for the reproduction number and forecast metrics"
-    title="Applies only to the reproduction number and forecast metrics; other metrics ignore it">
-    <option value="median" selected>Median</option>
-    <option value="lower">Lower 90%</option>
-    <option value="upper">Upper 90%</option>
-  </select>
-  <select class="plain zone-only" id="filter" aria-label="Zone filter">
-    <option value="all">All zones</option>
-    <option value="with">With cases in past N days</option>
-    <option value="without">Without cases in past N days</option>
-  </select>
-  <select class="plain zone-only" id="window" aria-label="Filter window">
-    <option value="7">7 days</option>
-    <option value="14" selected>14 days</option>
-    <option value="28">28 days</option>
-  </select>
-  <select class="plain zone-only" id="rsource" aria-label="Zones by how their reproduction number is estimated">
-    <option value="all">Every R</option>
-    <option value="modelled">R modelled separately</option>
-    <option value="province">R from its province, not modelled separately</option>
-  </select>
+  <details id="more">
+    <summary class="plain" aria-label="More options">Options</summary>
+    <div class="more-body">
+      <select class="plain" id="summary"
+        aria-label="Posterior summary shown for the reproduction number and forecast metrics"
+        title="Applies only to the reproduction number and forecast metrics; other metrics ignore it">
+        <option value="median" selected>Median</option>
+        <option value="lower">Lower 90%</option>
+        <option value="upper">Upper 90%</option>
+      </select>
+      <select class="plain zone-only" id="filter" aria-label="Zone filter">
+        <option value="all">All zones</option>
+        <option value="with">With cases in past N days</option>
+        <option value="without">Without cases in past N days</option>
+      </select>
+      <select class="plain zone-only" id="window" aria-label="Filter window">
+        <option value="7">7 days</option>
+        <option value="14" selected>14 days</option>
+        <option value="28">28 days</option>
+      </select>
+      <select class="plain zone-only" id="rsource" aria-label="Zones by how their reproduction number is estimated">
+        <option value="all">Every R</option>
+        <option value="modelled">R modelled separately</option>
+        <option value="province">R from its province</option>
+      </select>
+    </div>
+  </details>
   <button class="plain" id="toggle-table" aria-pressed="false">Table</button>
 </header>
 <svg id="hatch-defs" aria-hidden="true" focusable="false">
@@ -804,7 +850,31 @@ Nothing else is fetched.
   function updateSummaryDisabled() {
     document.getElementById("summary").disabled = !summaryApplies();
     document.getElementById("care").hidden = metric !== "care";
+    // K applies only to the chance-of-cases metric, which is zone-only.
+    document.getElementById("threshold").hidden = metric !== "p_ge";
+    updateMoreLabel();
   }
+  // The options disclosure counts the settings moved off their default, so
+  // a filter set by a deep link is not hidden from view.
+  var more = document.getElementById("more");
+  function updateMoreLabel() {
+    var n = [summary !== "median" && summaryApplies(),
+             level === "zone" && filterMode !== "all",
+             level === "zone" && filterMode !== "all" && windowDays !== "14",
+             level === "zone" && rSource !== "all"]
+      .filter(Boolean).length;
+    var t = more.querySelector("summary");
+    t.textContent = n ? "Options (" + n + ")" : "Options";
+    t.setAttribute("aria-label", n ? "More options, " + n + " set" : "More options");
+  }
+  document.addEventListener("click", function (e) {
+    if (more.open && !more.contains(e.target)) { more.open = false; }
+  });
+  more.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && more.open) {
+      more.open = false; more.querySelector("summary").focus();
+    }
+  });
   // Deep links: `?layer=zone|province`, `?area=<zone or province key>`,
   // `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
   // `?summary=median|lower|upper`, `?filter=all|with|without`,
@@ -844,6 +914,7 @@ Nothing else is fetched.
     windowDays = params.get("window");
     document.getElementById("window").value = windowDays;
   }
+  updateMoreLabel();
   // A zone is hidden by the filter (drawn no-data, excluded from bins,
   // legend and the table); zones with no CSV row at all are unaffected
   // here since featureRow() already returns null for them.
@@ -876,7 +947,7 @@ Nothing else is fetched.
     return level === "province" && !!r && r.pooled === 1 && pooledMetric();
   }
   function pooledText(r) {
-    return "Modelled estimates for " + r.patch + " combined";
+    return "Modelled for " + r.patch + " combined";
   }
   var LEVEL_ONLY_TEXT = "R from its province, not modelled separately";
   var WALKING_TEXT = "R modelled separately";
@@ -1189,17 +1260,15 @@ Nothing else is fetched.
     }).join("");
     var d = careDate(r, "isolation"), bd = careDate(r, "beds");
     var notes = [
-      "Reported: the last report" + (d ? ", patients on " + longDate(d) : "") +
-        (bd ? ", beds on " + longDate(bd) : "") + ".",
-      "Modelled and forecast: median and 90% interval" +
-        (r.pooled === 1 ? ", for " + r.patch + " combined." : ".")
-    ];
+      "Last reported" + (d ? " " + longDate(d) : "") +
+        (bd && bd !== d ? ", beds " + longDate(bd) : "") + ".",
+      r.pooled === 1 ? "Modelled for " + r.patch + " combined." : ""
+    ].filter(Boolean);
     return "<h3>Treatment centres</h3><table class=\"care\"><thead><tr>" +
       head.map(function (h) { return "<th class=\"num\">" + esc(h) + "</th>"; }).join("") +
       "</tr></thead><tbody>" + body + "</tbody></table>" +
       notes.map(function (n) { return "<p class=\"cap\">" + esc(n) + "</p>"; }).join("") +
-      "<p class=\"cap\">Patients in isolation (solid) and beds (grey), as reported" +
-      (r.pooled === 1 ? "." : ", with the forecast 7 days on.") + "</p>" +
+      "<p class=\"cap\">Patients in isolation (blue) and beds (grey).</p>" +
       careChart(ts.isolation, ts.beds, r, r.pooled !== 1);
   }
   function renderDetail() {
@@ -1218,27 +1287,25 @@ Nothing else is fetched.
       }
     } else if (national) {
       r = national; lvl = "national"; name = "National";
-      sub = "Click a zone or province for its own detail.";
+      sub = "Click an area for its detail.";
       ts = series.province.National;
     } else {
-      d.innerHTML = "<p class=\"hint\">Click a zone or province for its detail.</p>";
+      d.innerHTML = "<p class=\"hint\">Click an area for its detail.</p>";
       return;
     }
     ts = ts || {};
     var clear = selected ? " <button class=\"plain\" id=\"clear\">Show national</button>" : "";
-    var countWord = lvl === "zone" && stream === "cases" ?
-      "Confirmed cases allocated to the zone" : cap(S().name);
     var fcWord = num(r[S().fc + "_median"]) ?
-      ", and the forecast for the next 7 days with its 90% interval." :
-      ". There is no forecast of " + S().name + " at this level.";
+      "By week, then next week's forecast with its 90% interval." :
+      "By week. No forecast at this level.";
     var careKey = lvl === "national" ? "National" : r.province;
     d.innerHTML = "<h2>" + esc(name) + clear + "</h2><p class=\"sub\">" + esc(sub) +
       "</p>" + (metric === "care" && lvl !== "zone" ?
         careDetail(r, series.province[careKey] || {}) : "") + keyNumbers(r, lvl) +
       "<h3>Reproduction number</h3><p class=\"cap\">Median with 50% and 90% " +
-      "intervals; the dashed line is one.</p>" + rtChart(ts.rt) +
+      "intervals.</p>" + rtChart(ts.rt) +
       "<h3>" + esc(cap(S().name)) + " per week</h3><p class=\"cap\">" +
-      esc(countWord + " in each week to the cut-off" + fcWord) + "</p>" +
+      esc(fcWord) + "</p>" +
       countChart(ts[stream], r);
     var b = document.getElementById("clear");
     if (b) { b.addEventListener("click", function () { select(null); fitAll(); }); }
@@ -1305,20 +1372,16 @@ Nothing else is fetched.
     if (metric === "R_T") {
       notes.push("Paler: the 90% interval spans one.");
     }
-    if (metric === "care") {
-      notes.push("By province only: health zones have no figure." +
-        (care.basis === "reported" ? " A last report can predate the cut-off." : ""));
-    }
     var none = !visibleRows().some(function (r) { return num(m.value(r)); });
     if (metric === "forecast" && none) {
-      notes.push("No forecast of " + S().name + " at this level.");
+      notes.push("No forecast at this level.");
     }
     if (metric === "cfr" && none) {
-      notes.push("No modelled case fatality ratio at this level.");
+      notes.push("No estimate at this level.");
     }
     var pool = rows.filter(function (r) { return r.pooled === 1; })[0];
     if (level === "zone" && !none) {
-      notes.push("Hatched: " + LEVEL_ONLY_TEXT + ".");
+      notes.push("Hatched: R from its province.");
     } else if (pool && pooledMetric()) {
       notes.push("Hatched: " + pooledText(pool) + ".");
     }
@@ -1454,9 +1517,19 @@ Nothing else is fetched.
   }
 
 
+  // On a phone the metrics are one scrolling strip; keep the chosen one in
+  // view.
+  function revealMetric() {
+    var strip = document.querySelector(".switch.metrics");
+    var on = strip.querySelector("input:checked");
+    if (!on || strip.scrollWidth <= strip.clientWidth) { return; }
+    var lab = on.parentNode;
+    strip.scrollLeft = lab.offsetLeft - strip.offsetLeft -
+      (strip.clientWidth - lab.offsetWidth) / 2;
+  }
   document.querySelectorAll("input[name=metric]").forEach(function (el) {
     el.addEventListener("change", function () {
-      metric = el.value; updateSummaryDisabled();
+      metric = el.value; updateSummaryDisabled(); revealMetric();
       // Treatment-centre figures exist by province only.
       if (metric === "care" && level === "zone") { setLevel("province"); return; }
       recolour(); renderDetail();
@@ -1472,16 +1545,16 @@ Nothing else is fetched.
     threshold = this.value; recolour();
   });
   document.getElementById("summary").addEventListener("change", function () {
-    summary = this.value; recolour();
+    summary = this.value; recolour(); updateMoreLabel();
   });
   document.getElementById("filter").addEventListener("change", function () {
-    filterMode = this.value; recolour();
+    filterMode = this.value; recolour(); updateMoreLabel();
   });
   document.getElementById("window").addEventListener("change", function () {
-    windowDays = this.value; recolour();
+    windowDays = this.value; recolour(); updateMoreLabel();
   });
   document.getElementById("rsource").addEventListener("change", function () {
-    rSource = this.value; recolour();
+    rSource = this.value; recolour(); updateMoreLabel();
   });
   function toggleTable() {
     var t = document.getElementById("table");
@@ -1576,6 +1649,7 @@ Nothing else is fetched.
     document.querySelectorAll(".zone-only").forEach(function (el) {
       el.hidden = level === "province";
     });
+    updateMoreLabel();
     if (level === "province" && (metric === "share" || metric === "p_ge") ||
         level === "zone" && metric === "care") {
       metric = "R_T";
@@ -1594,6 +1668,7 @@ Nothing else is fetched.
     selected = null;
     recolour();
     renderDetail();
+    revealMetric();
     if (rows.length) { status.hidden = true; return; }
     say(zone ?
       "This build carries no health-zone estimates, so the map shows " +

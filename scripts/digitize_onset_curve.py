@@ -188,6 +188,12 @@ CONFIG = {
     "134": ("2026-09-25", "2026-09-21"),
     "136": ("2026-09-27", "2026-09-28"),
     "137": ("2026-09-28", "2026-09-28"),
+    # "138" is left out. Its render loses the outline between the 15 and
+    # 16 June bars, so 16 June reads 40 where every other vintage and the
+    # dashboard read 28 to 29, and its 14 May reads 12 against 8 (#1061).
+    "139": ("2026-09-30", "2026-09-28"),
+    "140": ("2026-10-01", "2026-09-28"),
+    "141": ("2026-10-02", "2026-09-28"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -245,6 +251,9 @@ Y_AXIS_STEP = {
     "134": 25,
     "136": 25,
     "137": 25,
+    "139": 25,
+    "140": 25,
+    "141": 25,
 }
 
 
@@ -555,13 +564,15 @@ def calibrate(im, y_step=20):
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = _y_tick_rows(dark, line, base, W)
     ppc = float(np.median(np.diff(yt))) / float(y_step)
-    # x scale from the weekly tick marks 2-6 rows below the baseline. Both
+    # x scale from the weekly tick marks 2-5 rows below the baseline (on
+    # the short September renders the row below that reaches the tops of
+    # the date labels, whose strokes merge into the tick clusters). Both
     # masks are tried at every cut and the tick row whose regular weekly
     # chain from the rightmost tick is longest wins.
     best_n = 0
     xt = []
     for mask in (dark, line):
-        band = mask[base + 2:base + 7, :].sum(axis=0)
+        band = mask[base + 2:base + 6, :].sum(axis=0)
         for cut in (4, 3, 2, 1):
             cand = _cluster([x for x in range(W) if band[x] >= cut])
             if len(cand) < 8:
@@ -690,6 +701,14 @@ def _bar_height(h, hp, nr, cols, cx, ppc):
     return hb, nr[jb], resolved or cols
 
 
+def _two_agree(h, cols):
+    """Whether a column with an outline reads within a pixel of another
+    column."""
+    vals = [int(h[x]) for x in cols]
+    return any(sum(1 for v in vals if abs(v - u) <= 1) >= 2
+               for u in vals if u > 0)
+
+
 def digitize(im, last_tick_date, y_step=20):
     return digitize_windows(im, last_tick_date, y_step)[0]
 
@@ -734,6 +753,7 @@ def digitize_windows(im, last_tick_date, y_step=20):
     # neighbour's height, dropped when anything else is left
     isborder = (h > 4) & ((nd >= np.maximum(0.25 * h, 6)) | (ns < 0.1 * h)
                           | (nb >= 3))
+    outline = (h > 4) & ((nd >= np.maximum(0.25 * h, 6)) | (nb >= 3))
     soft = (h > 4) & (nd >= np.maximum(0.1 * h, 5))
     nz = np.flatnonzero((h > 2) & ~isborder)
     # a column under the dashed line reads its bar from the outline; the
@@ -768,8 +788,11 @@ def digitize_windows(im, last_tick_date, y_step=20):
         # nearest outline on each side instead.
         c = round(cx)
         reach = math.ceil(ppd)
+        # past the last tick the bars are faded into the band and carry no
+        # saturated pixel, so only a dark outline bounds a bar there
+        border = outline if off > 0 else isborder
         near = [x for x in range(max(1, c - reach), min(W, c + reach) + 1)
-                if isborder[x]]
+                if border[x]]
         best = None
         for i in range(len(near) - 1):
             a, b = near[i], near[i + 1]
@@ -781,25 +804,44 @@ def digitize_windows(im, last_tick_date, y_step=20):
         if best is not None and best[0] <= ppd / 2:
             lo, hi = best[1] + 1, best[2] - 1
         else:
-            left = [x for x in range(max(1, c - reach), c) if isborder[x]]
+            left = [x for x in range(max(1, c - reach), c) if border[x]]
             if left:
                 lo = max(lo, left[-1] + 1)
             right = [x for x in range(c + 1, min(W, c + reach) + 1)
-                     if isborder[x]]
+                     if border[x]]
             if right:
                 hi = min(hi, right[0] - 1)
-        cols = [x for x in range(lo, hi + 1)
-                if not soft[x] and not isborder[x]]
-        if not cols:
-            cols = [x for x in range(lo, hi + 1) if not isborder[x]]
+        cols = [x for x in range(lo, hi + 1) if not border[x]]
+        if not cols and best is not None:
+            # the clipped window holds only outline columns (two adjacent
+            # outlines on the day's centre): read the nearest outline pair
+            lo, hi = best[1] + 1, best[2] - 1
+            cols = [x for x in range(lo, hi + 1) if not border[x]]
+        cols = [x for x in cols if not soft[x]] or cols
         if not cols:
             continue
-        # washed fill on a tick column can read as gridline and break each run
-        # at a different row; a day that reads as neither empty nor a bar is
-        # read again without the skip
         bar = _bar_height(hread, hp, nread, cols, cx, ppc)
-        if bar is None:
+        # past the last tick a window can take in a column of the faded bar
+        # before it; when no two columns agree, the column nearest the day's
+        # centre is read (its fill extent when it shows no outline)
+        if (off > 0 and isinstance(bar, tuple) and len(cols) >= 2
+                and not _two_agree(hread, cols)):
+            jn = min(cols, key=lambda x: (abs(x - cx), x))
+            hn = int(hread[jn]) if hread[jn] > 0 else int(hp[jn])
+            bar = (hn, nread[jn], [jn])
+        # washed fill on a tick column can read as gridline and break each run
+        # at a different row; a day that reads as neither empty nor a bar, or
+        # as a bar with no outline above the baseline's anti-alias in any
+        # column, is read again without the skip. That read can climb the
+        # gridline above the bar, so it is capped at the taller of the
+        # outline columns bounding the window
+        if bar is None or (isinstance(bar, tuple)
+                           and max(hread[x] for x in cols) <= 1):
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
+            edge = [int(h[x]) for x in (min(cols) - 1, max(cols) + 1)
+                    if 1 <= x <= W and isborder[x]]
+            if isinstance(bar, tuple) and edge and bar[0] > max(edge):
+                bar = (max(edge), min(bar[1], max(edge)), bar[2])
         if not isinstance(bar, tuple):
             continue
         hb, hr, read_from = bar
