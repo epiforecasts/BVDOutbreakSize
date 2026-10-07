@@ -1633,11 +1633,11 @@ The default is each patch's 2019 INS resident population
 
 ### Importation
 
-The default `importation_kernel` is the gravity kernel of
-[`province_importation_kernel`](@ref), a fixed weighting by destination
-population, so the provinces are coupled and the intensity `ε` is sampled.
-There is no mobility or origin-destination data for this outbreak, so the
-kernel is a structural assumption, and `ε` is weakly identified against the
+The default `importation_kernel` is [`mobility_importation_kernel`](@ref):
+Ituri's and Nord-Kivu's exports split as the May travel of Flowminder's
+outbreak-cluster cohorts does, and the other origins' by the gravity kernel
+of [`province_importation_kernel`](@ref). The provinces are coupled and the
+intensity `ε` is sampled. `ε` is weakly identified against the
 secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
@@ -1698,14 +1698,14 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        importation_kernel::AbstractMatrix = province_importation_kernel(
+        importation_kernel::AbstractMatrix = mobility_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
-        importation_destination_sd_prior = truncated(Normal(0, 1); lower = 0),
-        importation_flow_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_destination_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_flow_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),

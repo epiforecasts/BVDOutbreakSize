@@ -23,6 +23,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Model
 
 - The importation kernel keeps gravity as its centre and gains a log deviation per directed flow: a destination effect correlated with each province's origin deviation, plus a double-centred flow term with a reciprocity correlation, holding each origin's export total (#1030).
+- Ituri's and Nord-Kivu's importation kernel columns follow Flowminder's outbreak-cluster subscriber cohorts in place of gravity, with tighter destination and flow deviation priors (#1027).
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
 - The health-zone distance-decay prior is `LogNormal(0, 1)`, so its 95th percentile of 5.2 covers the 90% interval of 1.7 to 3.7 a 63-zone fit estimated (results comment on #1030), which sat above the `LogNormal(0, 0.5)` prior's 2.3; fitted values change (#1077).
 - The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).

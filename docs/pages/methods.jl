@@ -545,6 +545,18 @@ MarkdownTable(vintage_table) #hide
 # \qquad K_{q,q} = 0. \tag{14}
 # ```
 #
+# Ituri and Nord-Kivu are the only origins with mobility data.
+# Their columns take the split of Flowminder's subscriber cohorts' days away from home over 18 May to 8 June 2026, at the same total:
+#
+# ```math
+# K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr) m_{p,q}, \qquad q \in \{\text{Ituri},\ \text{Nord-Kivu}\},
+# ```
+#
+# with $m_{p,q}$ the share of cohort $q$'s days away from home spent in patch $p$.
+# The cohorts are subscribers present in the outbreak zones in 4 to 17 May: Bunia, Mongbwalu, Nyankunde and Rwampara in Ituri, and Beni, Butembo and Katwa in Nord-Kivu.
+# They describe May travel from those clusters, not travel from the whole province over the outbreak.
+# Days outside the modelled provinces are dropped: 13% of the Ituri cohort's and 5% of the Nord-Kivu cohort's, mostly Kinshasa.
+#
 # The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
 #
 # ```math
@@ -564,7 +576,7 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
-# The gravity kernel is the centre of the flows.
+# The kernel of Equation (14), with the Flowminder columns, is the centre of the flows.
 # A log deviation per directed flow moves where each origin's exports land, with each origin's total held so the outflow and $\varepsilon$ keep their meaning:
 #
 # ```math
@@ -580,7 +592,7 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1}),
 # \qquad
-# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 1).
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 0.5).
 # ```
 #
 # The flow term $u$ has a zero diagonal and zero row and column sums.
@@ -600,7 +612,7 @@ MarkdownTable(vintage_table) #hide
 # Each flow then has standard deviation $\sigma_{\text{flow}}$ and correlation $\rho_{\text{flow}}$ with its reverse.
 #
 # ```math
-# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
 # \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
 # \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
 # ```
@@ -2348,7 +2360,7 @@ cfr_prior_fig #hide
 # We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
 # The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
-# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no zone-level mobility data in the model.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.
 # The zones that take innovations depend on the data and can differ between cut-offs.
 

@@ -261,6 +261,28 @@ const PROVINCE_SOURCE_CENTRES = [
 ]
 
 """
+    PROVINCE_SOURCE_MOBILITY
+
+Average presence days per member of two Flowminder subscriber cohorts,
+from the Ituri and Nord-Kivu outbreak zones in May 2026, summed over the
+zones of each province in [`PROVINCE_SOURCE_NAMES`](@ref) order and keyed
+by the cohort's province. From Flowminder's cohort subscriber-day files as
+mirrored in <https://github.com/INRB-UMIE/BDBV2026-Data> under
+`data/flowminder_short_trips/raw` at commit `f7d3907`, printed by
+`scripts/build_province_mobility.py` (`task province-mobility`).
+"""
+const PROVINCE_SOURCE_MOBILITY = Dict(
+    "ituri" => [
+        4.87709, 0.180106, 0.0115233, 0.0610221, 0.0401109, 0.000426158,
+        2.5839e-5,
+    ],  # 12.9% of away days outside these provinces
+    "nord_kivu" => [
+        0.741645, 3.87504, 0.035287, 0.140952, 0.0831833, 0.0065044,
+        0.000230625,
+    ],  # 5.2% of away days outside these provinces
+)
+
+"""
     PROVINCE_NAMES
 
 The patches of the meta-population model, in patch order. The first entry
@@ -425,12 +447,11 @@ how much of it leaves. Every column's off-diagonal sum stays below one at
 any `ε` in `[0, 1]`, which stops a province exporting more transmission
 than it generates.
 
-There is no origin-destination or mobility data for this outbreak, so the
-kernel is a structural assumption rather than a measurement, and `ε` is
-weakly identified against the secondary-patch seeds, since both can raise
-a secondary province's early incidence. Treat the split between imported
-and locally-seeded infections as poorly determined even though their sum
-is not.
+The models use it for the origins with no mobility data
+([`mobility_importation_kernel`](@ref)). `ε` is weakly identified against
+the secondary-patch seeds, since both can raise a secondary province's
+early incidence. Treat the split between imported and locally-seeded
+infections as poorly determined even though their sum is not.
 """
 function province_importation_kernel(
         pops::AbstractVector = PROVINCE_POPULATIONS;
@@ -488,6 +509,54 @@ function destination_weighted_kernel(K::AbstractMatrix, W::AbstractVecOrMat)
     return KW .* (
         sum(K; dims = 1) ./ ifelse.(weighted .> 0, weighted, one.(weighted))
     )
+end
+
+"""
+    province_mobility_shares(np = length(PROVINCE_NAMES); mobility)
+
+Share of each origin patch's time away that its cohort spends in each of
+the first `np` patches, from [`PROVINCE_SOURCE_MOBILITY`](@ref) summed over
+the provinces each patch pools. Returns a `Dict` from origin patch index to
+a length-`np` vector with a zero at the origin, for the patches whose
+origin province has a cohort. Provinces pooled into a patch outside the
+first `np` are dropped.
+"""
+function province_mobility_shares(
+        np::Integer = length(PROVINCE_NAMES);
+        mobility::AbstractDict = PROVINCE_SOURCE_MOBILITY
+    )
+    shares = Dict{Int, Vector{Float64}}()
+    np >= 2 || return shares
+    idx = _PROVINCE_MEMBER_IDX[1:np]
+    for (origin, days) in mobility
+        q = findfirst(i -> any(==(origin), PROVINCE_SOURCE_NAMES[i]), idx)
+        q === nothing && continue
+        s = [p == q ? 0.0 : float(sum(days[idx[p]])) for p in 1:np]
+        shares[q] = s ./ sum(s)
+    end
+    return shares
+end
+
+"""
+    mobility_importation_kernel(pops = PROVINCE_POPULATIONS; shares, kw...)
+
+Importation kernel centred on mobility where there are data: each origin
+patch in `shares` ([`province_mobility_shares`](@ref)) sends its exports
+in its cohort's split, and every other origin keeps the gravity split of
+[`province_importation_kernel`](@ref), which `kw` is passed to. Each column
+keeps the gravity kernel's total `1 - N_q/N`, so `ε` keeps its meaning.
+See [`PROVINCE_SOURCE_MOBILITY`](@ref) for the source of the shares.
+"""
+function mobility_importation_kernel(
+        pops::AbstractVector = PROVINCE_POPULATIONS;
+        shares::AbstractDict = province_mobility_shares(length(pops)),
+        kw...
+    )
+    K = province_importation_kernel(pops; kw...)
+    for (q, s) in shares
+        K[:, q] = sum(@view K[:, q]) .* s
+    end
+    return K
 end
 
 """

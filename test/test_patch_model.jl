@@ -2191,6 +2191,77 @@ end
     @test flow_draws(importation_flow_basis = sym_only) == 2
 end
 
+@testitem "patch_infection_model: flow scale prior below the destination's" begin
+    using BVDOutbreakSize: patch_infection_model
+    using Random: Xoshiro
+    using Statistics: quantile
+
+    priors = patch_infection_model(60, 4).defaults
+    dest = rand(Xoshiro(1), priors.importation_destination_sd_prior, 20_000)
+    flow = rand(Xoshiro(2), priors.importation_flow_sd_prior, 20_000)
+    ## A pattern shared across origins should read as a destination effect,
+    ## so the flow scale sits below the destination scale in the prior.
+    @test quantile(flow, 0.9) < quantile(dest, 0.9)
+    @test quantile(dest, 0.5) ≈ 0.337 atol = 0.02
+    @test quantile(flow, 0.5) ≈ 0.202 atol = 0.01
+end
+
+@testitem "province_mobility_shares: Flowminder splits over the patches" begin
+    using BVDOutbreakSize: province_mobility_shares
+
+    S = province_mobility_shares()
+    @test sort(collect(keys(S))) == [1, 2]
+    for (q, s) in S
+        @test sum(s) ≈ 1
+        @test s[q] == 0
+    end
+    ## The Ituri and Nord-Kivu cohorts, 18 May to 8 June 2026.
+    @test S[1] ≈ [0.0, 0.614, 0.208, 0.178] atol = 0.002
+    @test S[2] ≈ [0.736, 0.0, 0.14, 0.124] atol = 0.002
+    ## Over two patches each origin has one destination.
+    @test province_mobility_shares(2) ==
+        Dict(1 => [0.0, 1.0], 2 => [1.0, 0.0])
+    @test isempty(province_mobility_shares(1))
+end
+
+@testitem "mobility_importation_kernel: mobility columns, gravity elsewhere" begin
+    using BVDOutbreakSize: mobility_importation_kernel,
+        province_importation_kernel, province_mobility_shares,
+        PROVINCE_POPULATIONS
+
+    pops = PROVINCE_POPULATIONS
+    G = province_importation_kernel(pops)
+    K = mobility_importation_kernel(pops)
+    S = province_mobility_shares()
+    ## Each origin sends the gravity kernel's volume, `1 - N_q / N`.
+    @test vec(sum(K; dims = 1)) ≈ vec(sum(G; dims = 1))
+    for q in 1:2
+        @test K[:, q] ≈ sum(G[:, q]) .* S[q]
+    end
+    ## Origins with no mobility data keep the gravity split.
+    @test K[:, 3:4] == G[:, 3:4]
+    no_data = Dict{Int, Vector{Float64}}()
+    @test mobility_importation_kernel(pops; shares = no_data) == G
+    ## Over fewer patches the shares are taken over the patches kept.
+    G3 = province_importation_kernel(pops[1:3])
+    K3 = mobility_importation_kernel(pops[1:3])
+    @test K3[:, 1] ./ sum(G3[:, 1]) ≈ [0.0, 0.747, 0.253] atol = 0.002
+    @test K3[:, 3] == G3[:, 3]
+end
+
+@testitem "importation kernel: the models default to the mobility kernel" begin
+    using BVDOutbreakSize: patch_infection_model, bvd_joint,
+        mobility_importation_kernel, load_observations
+
+    K = mobility_importation_kernel()
+    @test patch_infection_model(60, 4).defaults.importation_kernel == K
+    obs = load_observations()
+    joint = bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths; n_patches = 4
+    )
+    @test joint.defaults.importation_kernel == K
+end
+
 @testitem "destination_weighted_kernel: finite at extreme weights" begin
     using BVDOutbreakSize: destination_weighted_kernel,
         province_importation_kernel

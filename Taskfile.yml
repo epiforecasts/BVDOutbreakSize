@@ -91,6 +91,14 @@ tasks:
     cmds:
       - python3 scripts/build_province_centres.py {{.CLI_ARGS}}
 
+  province-mobility:
+    desc: >
+      Print the PROVINCE_SOURCE_MOBILITY literal for src/constants.jl from
+      Flowminder's cohort subscriber-day files (pass the directory holding
+      them). Python standard library only.
+    cmds:
+      - python3 scripts/build_province_mobility.py {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for

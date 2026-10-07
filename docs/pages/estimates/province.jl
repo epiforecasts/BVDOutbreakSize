@@ -167,9 +167,10 @@ province_infections_fig = plot_infections_patches(
 
 province_infections_fig #hide
 
-# The provinces are coupled by a gravity kernel weighted by destination population, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
+# The provinces are coupled by an importation kernel that follows Flowminder's subscriber cohorts out of Ituri and Nord-Kivu and a gravity kernel elsewhere, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
 # Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
-# The distances between the patches' population centres are 324 km from Ituri to Nord-Kivu, 216 km from Ituri to Haut-Uele and 390 km from Nord-Kivu to the pooled patch, so most of what leaves Nord-Kivu lands in the pooled patch.
+# Of the days the Nord-Kivu cohort spends away from home in the modelled provinces, 74% are in Ituri, so most of what leaves Nord-Kivu lands there.
+# For the Ituri cohort, 61% of those days are in Nord-Kivu.
 
 #md # ```@raw html
 #md # <details><summary>Importation intensity and imports by province</summary>
