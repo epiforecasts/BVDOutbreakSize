@@ -22,8 +22,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The province importation kernel keeps both gravity exponents fixed at one, and the methods say so (#1077).
-  No exponent on distance puts more than about 47% of Ituri's exports in Nord-Kivu, because Haut-Uele is nearer to Ituri, and adding a population exponent reaches 82% only at about 4 on population and 8 on distance.
+- The province importation kernel keeps its distance exponent and its destination-population exponent fixed at one, and the methods say so (#1077).
+  In a short joint fit with the distance exponent sampled under a log-normal prior centred on one, its 90% interval was 0.58 to 1.02.
+  The national cumulative infections differed by under 1% and the province shares by at most 0.1 percentage points between the draws below and above its median, because importation brings each province only about 9 to 50 of some 16 000 infections.
+  That fit was a single unconverged chain, so it shows that the exponent moves the outputs little over that range rather than measuring it.
   Fitted values do not change.
 - The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.

@@ -358,11 +358,19 @@ const PROVINCE_CENTRES = [
 Exponent on the distance term of [`province_importation_kernel`](@ref),
 fixed at the conventional gravity value of one.
 
-It is not sampled because no plausible gravity exponent sends most of
-Ituri's exports to Nord-Kivu. Haut-Uele is nearer to Ituri, so Nord-Kivu's
-share of Ituri's exports peaks at about 0.47, at an exponent of about 2.2. With an exponent on the destination
-population as well, the share reaches 0.82 only at about 4 on population and
-8 on distance. See #1077.
+Between 0.5 and 2 the exponent mostly moves Ituri's exports between
+Haut-Uele (13% to 28%) and the pooled other provinces (49% to 25%), while
+Nord-Kivu's share stays between 38% and 47%.
+
+It is fixed because sampling it barely changes the outputs. In a short
+joint fit with a `LogNormal(0, 0.5)` prior on it, the 90% interval was 0.58
+to 1.02, which contains one. Between the draws below and above the
+exponent's median, the national cumulative infections differed by under 1%
+and every province's share of them by at most 0.1 percentage points.
+Importation brings each province about 9 to 50 infections out of about
+16 000, and the province's own reproduction number carries its growth after
+that. The fit was unconverged (one chain of 100 draws, bulk ESS of about 10
+for the exponent), so its interval is not a measurement of the exponent.
 """
 const PROVINCE_DISTANCE_DECAY = 1.0
 
