@@ -9,7 +9,7 @@
     withenv(unset...) do
         s = joint_sampler_args()
         @test s.samples == 500
-        @test s.n_adapts == 500
+        @test s.n_adapts == 1000
         @test s.target_accept == 0.8
         @test s.max_depth == 10
         @test s.chains == 4
@@ -77,7 +77,7 @@ end
         @test fit_key("joint") == base["joint"]
     end
     withenv(
-        "BVD_JOINT_SAMPLES" => "500", "BVD_JOINT_WARMUP" => "500",
+        "BVD_JOINT_SAMPLES" => "500", "BVD_JOINT_WARMUP" => "1000",
         "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "10",
         "BVD_JOINT_CHAINS" => "4"
     ) do
