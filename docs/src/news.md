@@ -70,7 +70,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The methods page gives the sampler settings the fits use (#PRNUM).
+- The methods page gives the sampler settings the fits use (#1100).
   It gave 200 adaptation steps and a target acceptance probability of 0.90 for the headline joint, which runs 500 and 0.80 (`joint_sampler_args` in `docs/fits/registry.jl`), and it gave the earlier-cut-off frozen re-fits the headline settings.
   The fits do not change.
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
