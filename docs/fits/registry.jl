@@ -207,8 +207,9 @@ fit_spec(id, model, sample) = (;
 
 ## Sampler settings for the fits in `JOINT_SAMPLER_FITS`.
 ##
-## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
-## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
+## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT`,
+## `BVD_JOINT_MAX_DEPTH` and `BVD_JOINT_CHAINS` override all five without
+## editing this file.
 joint_target_accept() = parse(
     Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
@@ -229,6 +230,14 @@ joint_max_depth() = parse(
     get(ENV, "BVD_JOINT_MAX_DEPTH", "10")
 )
 
+## Four chains, so R-hat can tell a chain that settled in its own region
+## during warm-up from between-run noise, at the same total draws as two
+## chains of 1000.
+joint_chains() = parse(
+    Int,
+    get(ENV, "BVD_JOINT_CHAINS", "4")
+)
+
 ## The tree-depth cap fit `id` samples at, which the diagnostics need to
 ## count how often a tree reached it.
 fit_max_depth(id) = id in JOINT_SAMPLER_FITS ? joint_max_depth() : 10
@@ -243,8 +252,9 @@ const JOINT_SAMPLER_FITS = (
 
 ## The sampler budget every fit in `JOINT_SAMPLER_FITS` splats.
 joint_sampler_args() = (;
-    samples = joint_samples(1000), n_adapts = joint_warmup(500),
+    samples = joint_samples(500), n_adapts = joint_warmup(500),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
+    chains = joint_chains(),
 )
 
 """
@@ -385,10 +395,10 @@ function build_fit_specs(
     function fit_frozen_joint(cutoff_date; patches::Bool = false)
         f = frozen_joint(cutoff_date; patches)
         budget = patches ? joint_sampler_args() :
-            (; samples = samples, target_accept = 0.9)
+            (; samples = samples, target_accept = 0.9, chains = chains)
         chn = nuts_sample(
             f.model;
-            budget..., chains = chains,
+            budget...,
             callback = fit_callback("frozen_$(cutoff_date)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -487,7 +497,7 @@ function build_fit_specs(
                     obs; breakpoint, sensitivity_overrides(obs)[Symbol(id)]...
                 )...
             );
-            joint_sampler_args()..., chains = chains,
+            joint_sampler_args()...,
             callback = fit_callback(id)
         )
     end
@@ -523,7 +533,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                joint_sampler_args()...,
                 callback = fit_callback("joint")
             )
         ),
@@ -549,7 +559,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                joint_sampler_args()...,
                 callback = fit_callback("sens_no_patches")
             )
         ),
