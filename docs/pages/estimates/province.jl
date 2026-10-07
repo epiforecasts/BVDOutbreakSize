@@ -3,7 +3,7 @@
 # This page gives the province estimates from the joint model.
 # The methods for this model are on the [Methods](@ref "Methods") page.
 #
-# The model runs one renewal equation per province and fits the national streams against the summed provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
+# The model runs one national renewal equation and splits its infections across the provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
 # The per-province forecast is on the [province forecasts](@ref "Province forecasts") page and its scoring is in the [forecast by province](@ref "Forecast by province").
 #
 # This page is generated from

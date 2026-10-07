@@ -54,8 +54,7 @@ end
         Dict(
             id => fit_key(id) for id in (
                     "joint", "sens_no_patches", "frozen_validation",
-                    "sens_community_delay", "sens_exp_growth_clock",
-                    "sens_patch_partition", "deaths",
+                    "sens_community_delay", "sens_exp_growth_clock", "deaths",
                 )
         )
     end
@@ -64,7 +63,6 @@ end
         (
             "joint", "sens_no_patches", "frozen_validation",
             "sens_community_delay", "sens_exp_growth_clock",
-            "sens_patch_partition",
         ),
         JOINT_SAMPLER_FITS
     )

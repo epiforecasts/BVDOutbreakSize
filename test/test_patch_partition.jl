@@ -1,8 +1,8 @@
-## The partitioned patch renewal: one national renewal at the national
-## trend, split across the patches by their force of infection.
+## The patch renewal: one national renewal at the national trend, split
+## across the patches by their force of infection.
 
-@testitem "partitioned_patch_renewal: the patches partition the national renewal" begin
-    using BVDOutbreakSize: partitioned_patch_renewal, renewal_infections,
+@testitem "partitioned_infections: the patches partition the national renewal" begin
+    using BVDOutbreakSize: partitioned_infections, renewal_infections,
         province_importation_kernel, PROVINCE_POPULATIONS
 
     g = [0.1, 0.3, 0.3, 0.2, 0.1]
@@ -16,7 +16,7 @@
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     pools = [4.0e6, 7.6e6, 2.0e6]
     for ε in (0.0, 0.01, [0.02 * (1 + t / n) for _ in 1:3, t in 1:n])
-        st = partitioned_patch_renewal(Rt, Rt_national, g, seeds, K, ε, pools)
+        st = partitioned_infections(Rt, Rt_national, g, seeds, K, ε, pools)
         national = renewal_infections(
             Rt_national, g, vec(sum(seeds; dims = 1)), sum(pools)
         )
@@ -28,12 +28,12 @@
         @test st.infections[:, 1:2] == seeds
     end
     ## Uncoupled, the unseeded patches have no route to infections.
-    st = partitioned_patch_renewal(Rt, Rt_national, g, seeds, 0 * K, 0.0, pools)
+    st = partitioned_infections(Rt, Rt_national, g, seeds, 0 * K, 0.0, pools)
     @test all(iszero, st.infections[2:3, :])
 end
 
-@testitem "partitioned_patch_renewal: a common factor sets the size, not the split" begin
-    using BVDOutbreakSize: partitioned_patch_renewal, free_patch_renewal,
+@testitem "partitioned_infections: a common factor sets the size, not the split" begin
+    using BVDOutbreakSize: partitioned_infections, patch_infections,
         province_importation_kernel, PROVINCE_POPULATIONS
 
     g = [0.2, 0.3, 0.3, 0.2]
@@ -43,10 +43,10 @@ end
     seeds = [3.0 4.0; 1.0 1.0; 0.5 0.5]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     pools = fill(1.0e12, 3)
-    st = partitioned_patch_renewal(Rt, Rt_national, g, seeds, K, 0.01, pools)
+    st = partitioned_infections(Rt, Rt_national, g, seeds, K, 0.01, pools)
     ## Scaling every patch's reproduction number by one factor leaves the
     ## shares where they were.
-    st2 = partitioned_patch_renewal(
+    st2 = partitioned_infections(
         2.5 .* Rt, Rt_national, g, seeds, K, 0.01, pools
     )
     @test st2.infections ≈ st.infections
@@ -55,25 +55,26 @@ end
     ratio = st.Rt_matrix ./ Rt
     @test ratio[:, 1:2] == ones(3, 2)
     @test all(t -> all(≈(ratio[1, t]), ratio[:, t]), 1:n)
-    ## With no deviation and pools too large to deplete, the partition is the
-    ## free patch renewal.
+    @test st.scale ≈ ratio[1, :]
+    ## With no deviation and pools too large to deplete, the partition is a
+    ## renewal per patch summed.
     flat = repeat(Rt_national', 3)
-    part = partitioned_patch_renewal(
+    part = partitioned_infections(
         flat, Rt_national, g, seeds, K, 0.01, pools
     )
-    free = free_patch_renewal(flat, Rt_national, g, seeds, K, 0.01, pools)
+    free = patch_infections(flat, g, seeds, K, 0.01, pools)
     @test part.infections ≈ free.infections rtol = 1.0e-8
     @test part.importation ≈ free.importation rtol = 1.0e-8
 end
 
-@testitem "partitioned_patch_infection_model: prior draws sum to the single-patch renewal" begin
-    using BVDOutbreakSize: partitioned_patch_infection_model, infection_model,
+@testitem "patch_infection_model: prior draws sum to the single-patch renewal" begin
+    using BVDOutbreakSize: patch_infection_model, infection_model,
         PROVINCE_POPULATIONS
     using Turing: returned
     using Random: Xoshiro
 
     n, np, rt_start = 80, 3, 10
-    m = partitioned_patch_infection_model(n, np; rt_start)
+    m = patch_infection_model(n, np; rt_start)
     pops = float.(PROVINCE_POPULATIONS[1:np])
     single = infection_model(n; rt_start, population = sum(pops))
     for i in 1:5

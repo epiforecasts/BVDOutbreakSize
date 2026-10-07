@@ -1614,9 +1614,10 @@ function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
 end
 
 """
-Multi-patch latent infection process. Runs a renewal equation per spatial
-patch with a shared generation interval, a shared incubation period, and
-an optional between-patch importation kernel.
+Multi-patch latent infection process. Runs one national renewal at the
+national trend and splits each day's infections across the spatial patches,
+with a shared generation interval, a shared incubation period, and an
+optional between-patch importation kernel.
 
 ### Structure
 
@@ -1665,15 +1666,16 @@ comparable across any patch count.
 
 ### National total
 
-`patch_renewal` sets how the patches make up the national trajectory. The
-default, [`free_patch_renewal`](@ref), runs a renewal per patch and sums
-them, so the national reproduction number is the force-weighted mean of the
-patch ones rather than the trend `μ(t)` they are centred on.
-[`partitioned_patch_renewal`](@ref) runs one national renewal at `μ(t)` and
-splits each day's infections across the patches in proportion to their
-force after importation, so the patch deviations move only the split.
-[`partitioned_patch_infection_model`](@ref) is this model with that
-renewal.
+The national infections come from one renewal at the trend `μ(t)` on the
+summed seeds and the summed population, and each day's infections are split
+across the patches in proportion to their force after importation
+([`partitioned_infections`](@ref)). `μ(t)` is then the national
+reproduction number in a fully susceptible population, and the sum-to-zero
+patch deviations set only each patch's share, not the national size. The
+patches sum to the national renewal and cannot go negative. The returned
+`Rt_matrix` holds the reproduction numbers the patches ran at after the
+rescaling onto the national total, and `partition_scale` the daily common
+factor of that rescaling.
 
 ### Returns
 
@@ -1718,7 +1720,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         populations::AbstractVector{<:Real} = n_patches == 1 ?
             [float(sum(PROVINCE_POPULATIONS))] :
             float.(PROVINCE_POPULATIONS[1:n_patches]),
-        patch_renewal = free_patch_renewal,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Grid length, past the cut-off `n` when forecasting.
@@ -1839,14 +1840,11 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
     end
-    ## 6. Multi-patch renewal. With the default `patch_renewal` each province
-    ##    runs its own renewal at its own reproduction number and the
-    ##    national trajectory is their sum, so `mu(t)` is a central trend the
-    ##    provinces pool toward and the reproduction number the country ran
-    ##    at is read back off the summed infections in step 7.
-    ##    [`partitioned_patch_renewal`](@ref) instead runs the national
-    ##    renewal at `mu(t)` and splits it across the provinces.
-    renewal_state = patch_renewal(
+    ## 6. Multi-patch renewal. One national renewal at `mu(t)` sets the
+    ##    national infections, and each day is split across the provinces by
+    ##    their force after importation, so the deviations move only the
+    ##    split.
+    renewal_state = partitioned_infections(
         Rt_matrix, rt_state.Rt_national, g, seeds_matrix,
         importation_kernel, ε_matrix, populations
     )
@@ -1869,6 +1867,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     return (;
         infections_matrix, onsets_matrix,
         Rt_matrix = renewal_state.Rt_matrix, importation_matrix,
+        partition_scale = renewal_state.scale,
         δ_patch, δ_knots = rt_state.δ_knots,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
@@ -1885,40 +1884,15 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
 end
 
 """
-[`patch_infection_model`](@ref) with the national infections from one
-renewal at the national trend and the patches partitioning them
-([`partitioned_patch_renewal`](@ref)). Takes the same arguments and
-returns the same state, so it drops into [`bvd_joint`](@ref) as
-`patch_infection`.
-
-The national trend `μ(t)` is then the national reproduction number in a
-fully susceptible population, and the sum-to-zero patch deviations set
-only each patch's share of the national infections. The national size no
-longer moves with the deviations, which in the free patch renewal shift
-the force-weighted national reproduction number. The reported patch
-reproduction numbers are those the patches ran at after the rescaling onto
-the national total.
-"""
-function partitioned_patch_infection_model(
-        n::Integer, n_patches::Integer; kwargs...
-    )
-    return patch_infection_model(
-        n, n_patches; patch_renewal = partitioned_patch_renewal, kwargs...
-    )
-end
-
-"""
 National totals and headline quantities of [`patch_infection_model`](@ref),
 read off the per-patch infections.
 
 `infections_total` and `cumulative_total` sum the patches, `C_T_patch` is
 each patch's cumulative at the cut-off and `C_T` the national one. `R_T`
 inverts the renewal equation on the summed infections on the cut-off day
-([`implied_national_Rt_at`](@ref)). With `I_{p,t} = R_{p,t} · force_{p,t}`
-that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
-incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
-the national trajectory. Read off the depleted infections, it is net of
-depletion. `r`, `doubling_time` and `seeding_age` follow from it as in
+([`implied_national_Rt_at`](@ref)). The patches sum to the national
+renewal, so this is the national trend net of depletion. `r`,
+`doubling_time` and `seeding_age` follow from it as in
 [`infection_model`](@ref).
 """
 function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)

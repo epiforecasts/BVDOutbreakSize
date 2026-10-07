@@ -2776,11 +2776,13 @@ deviation interpolated from the weekly knots the chain carries as
 `delta_knots` ([`interpolate_knots`](@ref)). `delta_knots` is the
 `(n_patches × n_knots)` deviation matrix flattened column-major.
 
-Each province runs its own renewal at its own `Rt` and nothing rescales it,
-so `μ(t) · exp(δ_p(t))` is what the model used. Scaled by the province's
-susceptible fraction the day before (the chain's
-`susceptible_fraction_patch`), it is what `R_T_patch` reports. A chain
-without that series is returned unscaled.
+`μ(t) · exp(δ_p(t))` is the reproduction number that sets each province's
+share of the national renewal. Each province ran at that times the day's
+common factor that rescales the provinces onto the national total (the
+chain's `patch_partition_scale`, see [`partitioned_infections`](@ref)),
+and scaled by its susceptible fraction the day before (the chain's
+`susceptible_fraction_patch`) it is what `R_T_patch` reports. A chain
+without either series is returned without that scaling.
 The national reproduction number is not `μ` but the value implied by the
 summed infections, which is why [`plot_rt_patches`](@ref) draws it from the
 chain's own national trajectory rather than from these.
@@ -2830,6 +2832,13 @@ function reconstruct_patch_rt(
                 ismissing(national[i, d]) && continue
                 out[p][i, d] = national[i, d] * exp(δ_daily[d])
             end
+        end
+    end
+    if _has_key(chn, :patch_partition_scale)
+        scales = _draw_vectors(chn, :patch_partition_scale)
+        for i in 1:ndraws, p in 1:n_patches, d in 1:n
+            ismissing(out[p][i, d]) && continue
+            out[p][i, d] *= scales[i][d]
         end
     end
     _has_key(chn, :susceptible_fraction_patch) || return out

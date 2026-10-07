@@ -39,7 +39,6 @@ frozen_R0(c) = r0_walk_draws(frozen_by_cutoff[c].chn)
 if RUN_SENSITIVITY
     chn_joint_community_delay = load_fit("sens_community_delay")
     chn_joint_exp_growth_clock = load_fit("sens_exp_growth_clock")
-    chn_joint_patch_partition = load_fit("sens_patch_partition")
 end
 posterior_C_joint = vec(Array(chn_joint[:C_T]))
 posterior_C_exports = vec(Array(chn_exports[:C_T]))
@@ -1581,44 +1580,6 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
-# ### Patch-structure sensitivity
-#
-# In the headline model each patch runs its own renewal and the national infections are their sum.
-# We re-fit the joint model with one national renewal at the national trend instead, splitting each day's infections across the patches by their force of infection after importation.
-# The patch deviations then set only the split, so they cannot move the national size and no patch can go below zero infections.
-# The methods page sets out both forms.
-# The tables compare the infection count to date and the reproduction number at the cut-off, and the diagnostics below compare how well each fit mixes.
-
-#md # ```@raw html
-#md # <details><summary>Patch-structure tables</summary>
-#md # ```
-
-patch_partition_C_table = RUN_SENSITIVITY ?
-    streams_table(
-        "patch renewals summed (headline)" => posterior_C_joint,
-        "national renewal partitioned" =>
-        vec(Array(chn_joint_patch_partition[:C_T]))
-    ) :
-    Markdown.md"_Patch-structure sensitivity not shown in this build._";
-patch_partition_R_table = RUN_SENSITIVITY ?
-    streams_table(
-        "patch renewals summed (headline)" => vec(Array(chn_joint[:R_T])),
-        "national renewal partitioned" =>
-        vec(Array(chn_joint_patch_partition[:R_T]));
-        digits = 2
-    ) :
-    Markdown.md"_Patch-structure sensitivity not shown in this build._";
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(patch_partition_C_table) #hide
-
-#-
-
-MarkdownTable(patch_partition_R_table) #hide
-
 # ## Fit diagnostics by parameter
 #
 # ### One parameter or the whole model
@@ -1647,7 +1608,6 @@ diagnostic_fits = [
             [
                 "delay sensitivity" => chn_joint_community_delay,
                 "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock,
-                "partitioned patches" => chn_joint_patch_partition,
             ] :
             []
     )...,

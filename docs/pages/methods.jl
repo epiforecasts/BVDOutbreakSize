@@ -206,7 +206,8 @@ MarkdownTable(vintage_table) #hide
 #
 # We fit one joint model to every national data stream and the provincial tables, on a daily grid from a seeding date to the cut-off (day $n$).
 # It divides the country into four patches: Ituri, Nord-Kivu, Haut-Uele and a fourth that pools four further provinces.
-# Each patch runs its own renewal equation, with a reproduction number that is a shared weekly trend times a deviation for that patch.
+# One national renewal equation sets the country's infections, and each day's infections are split across the patches by their force of infection.
+# Each patch has a reproduction number that is a shared weekly trend times a deviation for that patch.
 # Each data stream sees a delayed or thinned view of the same patch infections, as in the renewal models of EpiNow2 [epinow2](@cite), but here all streams are fitted together.
 
 #md # ```@raw html
@@ -299,8 +300,7 @@ MarkdownTable(vintage_table) #hide
 # \sum_p \delta_{p,t} = 0. \tag{1}
 # ```
 #
-# The country's reproduction number is read off the summed infections in the
-# infection process below.
+# The trend is the country's reproduction number in a fully susceptible population, and the deviations set how its infections are shared between the patches (see the infection process below).
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
 # It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
@@ -591,30 +591,35 @@ MarkdownTable(vintage_table) #hide
 #
 # The grid days before the renewal start are filled by the cryptic exponential seeds above.
 # This gives the recursion a full generation interval of history.
-# Each patch then runs its own renewal forward at its own reproduction number, importation relocates a share of each day's new infections, and the result depletes the patch's susceptible pool:
+# One national renewal then runs forward at the trend from the summed seeds, and its daily infections are split across the patches:
 #
 # ```math
 # \begin{aligned}
-# G_{p,t} &= R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+# I_t &= S_{t-1}\Bigl(1 - e^{-R^{\text{trend}}_t \sum_{s \ge 1} I_{t-s}\, g_s / N}\Bigr), \qquad
+# S_t = S_{t-1} - I_t, \\
+# G_{p,t} &= R_{p,t}\, \frac{S_{p,t-1}}{N_p} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
 # Y_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
 #           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \\
-# I_{p,t} &= S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr), \qquad
-# S_{p,t} = S_{p,t-1}\, e^{-Y_{p,t}/N_p} = S_{p,t-1} - I_{p,t}.
+# I_{p,t} &= I_t\, \frac{Y_{p,t}}{\sum_q Y_{q,t}}, \qquad
+# S_{p,t} = \max\bigl(S_{p,t-1} - I_{p,t},\, 0\bigr).
 # \end{aligned} \tag{18}
 # ```
 #
-# This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
-# $R_{p,t}$ is the reproduction number in a fully susceptible population, and every reproduction number we report is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
+# The national renewal uses the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N = \sum_p N_p$ the summed resident population and $S_t$ starting at $N$ less the seeds.
+# $G_{p,t}$ is the force a patch generates at its own reproduction number and susceptible share, with $N_p$ the patch's resident population and $S_{p,t-1}$ starting at $N_p$ less its seeds.
+# $Y_{p,t}$ is that force after importation relocates a share of it between patches, and each patch takes its share of the day's national infections.
+# A factor common to every patch cancels from the split, so the trend sets the national size and the patch deviations set only how it is shared.
+# The patch infections therefore sum to the national infections and cannot fall below zero.
+# $R^{\text{trend}}_t$ and $R_{p,t}$ are reproduction numbers in a fully susceptible population.
+# Every reproduction number we report is net of depletion, and for a patch it is the one the patch ran at after the split, $c_t R_{p,t}\, S_{p,t-1}/N_p$ with $c_t = I_t / \sum_q Y_{q,t}$.
 #
-# National infections are the patch sum, and the national reproduction number is read off that sum by inverting the renewal equation:
+# The national reproduction number is read off the national infections by inverting the renewal equation:
 #
 # ```math
-# I_t = \sum_p I_{p,t}, \qquad
 # R^{\text{nat}}_t = \frac{I_t}{\sum_{s \ge 1} I_{t-s}\, g_s}. \tag{19}
 # ```
 #
-# $R^{\text{nat}}_t$ is what the headline $R_T$ reports.
-# It sits above the trend $R^{\text{trend}}_t$, because the deviations are centred unweighted while the sum weights each patch by its share of the force, and the faster patch keeps gaining share.
+# $R^{\text{nat}}_t$ is what the headline $R_T$ reports, and it is the trend net of depletion.
 #
 # Cumulative infections are the running sum of the daily national series.
 # The cumulative infection count at the cut-off is the headline outbreak size.
@@ -626,20 +631,6 @@ MarkdownTable(vintage_table) #hide
 #
 # The current growth rate is the exponential growth implied by the cut-off reproduction number and the generation interval through forward Euler–Lotka.
 # The current doubling time is $\log 2$ divided by that rate.
-#
-# As a sensitivity analysis we also fit a partitioned form, in which one national renewal sets the national infections and the patches share them out.
-# The national infections follow equation (18) for a single patch at the trend $R^{\text{trend}}_t$, from the summed seeds and the summed population.
-# Each day's national infections are then split across the patches:
-#
-# ```math
-# I_{p,t} = I_t\, \frac{Y_{p,t}}{\sum_q Y_{q,t}}, \qquad
-# S_{p,t} = \max\bigl(S_{p,t-1} - I_{p,t},\, 0\bigr),
-# ```
-#
-# where $Y_{p,t}$ is the transfer of equation (18) with each $G_{p,t}$ multiplied by the patch's susceptible share $S_{p,t-1}/N_p$.
-# A factor common to every patch cancels from the split, so the trend sets the national size and the patch deviations set only how it is shared.
-# The patch infections therefore sum to the national infections and cannot fall below zero.
-# In this form $R^{\text{nat}}_t$ is the trend net of depletion, not the force-weighted mean of the patch reproduction numbers.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: patch_infection_model</summary>
@@ -2587,7 +2578,7 @@ cfr_prior_fig #hide
 #
 # | Component | [mccabe2026](@citet) | This work |
 # |---|---|---|
-# | [Infection process](@ref "Infection process") | Continuous-time closed forms | Discrete-time meta-population renewal on a daily grid, provinces coupled by importation, national incidence their sum |
+# | [Infection process](@ref "Infection process") | Continuous-time closed forms | Discrete-time renewal on a daily grid, with national incidence split across provinces coupled by importation |
 # | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | Flat at $R_0$ to the first WHO report, then a weekly log-scale random walk with a response ramp, plus a mean-reverting per-province deviation |
 # | [Seeding and growth](@ref "Seeding and growth") | Start fixed from a single seed | Two-phase seeding, a cryptic exponential phase floored from below by the [genetic bound](@ref "Genetic bound on outbreak age") |
 # | Parameter treatment | Each fixed, a set of scenarios reported | Priors on the reproduction number, case-fatality ratio, delays, traveller volume and dispersion, all sampled in one posterior |

@@ -234,11 +234,11 @@ joint_max_depth() = parse(
 fit_max_depth(id) = id in JOINT_SAMPLER_FITS ? joint_max_depth() : 10
 
 ## The fits that splat `joint_sampler_args()`: the headline, its spatial
-## control, the one-week-back validation joint and the sensitivity re-fits
-## of the joint.
+## control, the one-week-back validation joint and the two sensitivity
+## re-fits of the joint.
 const JOINT_SAMPLER_FITS = (
     "joint", "sens_no_patches", "frozen_validation",
-    "sens_community_delay", "sens_exp_growth_clock", "sens_patch_partition",
+    "sens_community_delay", "sens_exp_growth_clock",
 )
 
 ## The sampler budget every fit in `JOINT_SAMPLER_FITS` splats.
@@ -287,11 +287,6 @@ function sensitivity_overrides(obs)
         sens_exp_growth_clock = (;
             tmrca_days = obs.tmrca_days - clock_alt_offset,
         ),
-        ## One national renewal split across the provinces, in place of a
-        ## renewal per province summed.
-        sens_patch_partition = (;
-            patch_infection = partitioned_patch_infection_model,
-        ),
     )
 end
 
@@ -325,7 +320,7 @@ Ordered list of the report's fits as `(; id, kind, model, thunk)` named
 tuples. `kind` is `:chain` for the headline joint and single-stream fits or
 `:frozen` for the frozen/validation joints (whose thunk returns
 `(; cutoff, o, chn)`). `model` builds the model the thunk samples, which the
-forecasts run past the cut-off. The re-fits appended only when
+forecasts run past the cut-off. The two re-fits appended only when
 `run_sensitivity` is true are not forecast and carry no `model`.
 
 The health-zone fits `local` and `local_frozen_validation` add a `needs`

@@ -520,34 +520,13 @@ function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
 end
 
 """
-    free_patch_renewal(Rt_matrix, Rt_national, g, seeds_matrix,
-                       importation_kernel, epsilon, N)
+    partitioned_infections(Rt_matrix, Rt_national, g, seeds_matrix,
+                           importation_kernel, epsilon, N)
 
-The default national total of [`patch_infection_model`](@ref): each patch
-runs its own renewal ([`patch_infections`](@ref)) and the national
-trajectory is their sum. `Rt_national` is not read. Returns
-`(; infections, importation, Rt_matrix)`, with `Rt_matrix` passed through.
-"""
-function free_patch_renewal(
-        Rt_matrix::AbstractMatrix, Rt_national::AbstractVector,
-        g::AbstractVector, seeds_matrix::AbstractMatrix,
-        importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
-    )
-    st = patch_infections(
-        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N
-    )
-    return (; st.infections, st.importation, Rt_matrix)
-end
-
-"""
-    partitioned_patch_renewal(Rt_matrix, Rt_national, g, seeds_matrix,
-                              importation_kernel, epsilon, N)
-
-Multi-patch renewal whose national total is a single renewal and whose
-patches partition it. The national infections `I_t` come from
-[`renewal_infections`](@ref) at `Rt_national` on the summed seeds and the
-summed pool `Σ_p N_p`. Each patch's share of a day's infections is its
+The multi-patch renewal of [`patch_infection_model`](@ref): the national
+total is a single renewal and the patches partition it. The national
+infections `I_t` come from [`renewal_infections`](@ref) at `Rt_national`
+on the summed seeds and the summed pool `Σ_p N_p`. Each patch's share of a day's infections is its
 weight after importation, with the generated term, the transfer and the
 kernel as in [`patch_infections`](@ref):
 
@@ -569,11 +548,12 @@ weight is zero the day is split evenly.
 The returned `Rt_matrix` is the reproduction number each patch ran at,
 `c_t R_{p,t}` with `c_t = I_t / Σ_q Y_{q,t}` the common factor that
 rescales the patches onto the national total (one on the seeded days).
-`importation` is the arrivals term on the same scale.
-Returns `(; infections, importation, Rt_matrix)`, each
-`(n_patches × n_days)`.
+`importation` is the arrivals term on the same scale, and `scale` is
+`c_t` itself.
+Returns `(; infections, importation, Rt_matrix, scale)`, the first three
+`(n_patches × n_days)` and `scale` of length `n_days`.
 """
-function partitioned_patch_renewal(
+function partitioned_infections(
         Rt_matrix::AbstractMatrix, Rt_national::AbstractVector,
         g::AbstractVector, seeds_matrix::AbstractMatrix,
         importation_kernel::AbstractMatrix,
@@ -593,6 +573,7 @@ function partitioned_patch_renewal(
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
     Rt_eff = zeros(Tp, np, n)
+    scale = ones(Tp, n)
     outflow = _patch_outflow(Tp, importation_kernel, np)
     pool = zeros(Tp, np)
     @inbounds for p in 1:np
@@ -623,6 +604,7 @@ function partitioned_patch_renewal(
         end
         positive = total > zero(Tp)
         c = positive ? national[t] / total : one(Tp)
+        scale[t] = c
         for p in 1:np
             I[p, t] = positive ? c * y[p] : national[t] / np
             imports[p, t] = c * arrivals[p]
@@ -630,7 +612,9 @@ function partitioned_patch_renewal(
             pool[p] = max(pool[p] - I[p, t], zero(Tp))
         end
     end
-    return (; infections = I, importation = imports, Rt_matrix = Rt_eff)
+    return (;
+        infections = I, importation = imports, Rt_matrix = Rt_eff, scale,
+    )
 end
 
 """

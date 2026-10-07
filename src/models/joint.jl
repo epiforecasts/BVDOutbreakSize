@@ -1088,14 +1088,12 @@ positivities, and the death-pool BVD composition (`death_composition`) and
 death-confirmation positivity (`death_confirmation`).
 
 With `n_patches > 1` the latent process is the meta-population renewal of
-[`patch_infection_model`](@ref), one renewal equation per province coupled
-by importation, with every national stream above fitted against the summed
-provinces. The default `n_patches = 1` collapses it onto the
-single-population model, since the sum-to-zero deviations vanish, there is
-nothing to import between, and no per-province likelihood is scored.
-Passing `patch_infection = partitioned_patch_infection_model`
-([`partitioned_patch_infection_model`](@ref)) runs one national renewal
-instead and splits it across the provinces.
+[`patch_infection_model`](@ref), one national renewal split across the
+provinces by their force of infection after importation, with every
+national stream above fitted against the summed provinces. The default
+`n_patches = 1` collapses it onto the single-population model, since the
+sum-to-zero deviations vanish, there is nothing to import between, and no
+per-province likelihood is scored.
 
 The spatial information enters through two composition terms. The
 per-province confirmed cases and confirmed deaths in the situation
@@ -1617,6 +1615,9 @@ density there, is the fitted model's.
     if _reporting(__varinfo__)
         fr = _patch_fractions(patch_state)
         susceptible_fraction_patch := vec(fr[:, 1:n])
+        ## The common factor that rescales the provinces onto the national
+        ## renewal, which the provincial trajectories are rebuilt with.
+        patch_partition_scale := patch_state.partition_scale[1:n]
         R_T_patch := [
             only(_patch_adjusted_rt(patch_state, fr, p, n:n))
                 for p in 1:n_patches

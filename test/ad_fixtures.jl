@@ -31,7 +31,7 @@ module ADFixtures
 
 using BVDOutbreakSize: BVDOutbreakSize, default_adtype, enzyme_adtype,
     infection_model, onset_incidence_model,
-    patch_infection_model, partitioned_patch_infection_model,
+    patch_infection_model,
     reported_cases_model, confirmed_cases_model,
     deaths_model, exports_model, treatment_flow_model,
     onset_reporting_model, province_composition_model,
@@ -269,18 +269,6 @@ function scenarios(; n::Integer = N, joint::Bool = false)
             ), SEED
         )
     )
-    ## The partitioned variant: one national renewal split across the
-    ## patches, with no hand-written rule for the split.
-    push!(
-        out,
-        Scenario(
-            "partitioned_patch_infection_model (coupled)", "Latent",
-            partitioned_patch_infection_model(
-                60, 3;
-                importation_kernel = PATCH_KERNEL_ON
-            ), SEED
-        )
-    )
 
     ## Observation submodels. `k` is the shared surveillance dispersion and
     ## `p_drc` the pooled ascertainment, both fixed here at plausible values
@@ -452,7 +440,6 @@ function enzyme_broken_scenarios()
             "bvd_joint",
             "patch_infection_model (uncoupled)",
             "patch_infection_model (coupled)",
-            "partitioned_patch_infection_model (coupled)",
         ]
     )
 end
