@@ -4,7 +4,7 @@
     unset = (
         "BVD_JOINT_SAMPLES" => nothing, "BVD_JOINT_WARMUP" => nothing,
         "BVD_JOINT_TARGET_ACCEPT" => nothing, "BVD_JOINT_MAX_DEPTH" => nothing,
-        "BVD_JOINT_CHAINS" => nothing,
+        "BVD_JOINT_CHAINS" => nothing, "BVD_JOINT_METRIC" => nothing,
     )
     withenv(unset...) do
         s = joint_sampler_args()
@@ -13,11 +13,12 @@
         @test s.target_accept == 0.8
         @test s.max_depth == 10
         @test s.chains == 4
+        @test s.metric === :dense
     end
     withenv(
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
         "BVD_JOINT_TARGET_ACCEPT" => "0.85", "BVD_JOINT_MAX_DEPTH" => "11",
-        "BVD_JOINT_CHAINS" => "2"
+        "BVD_JOINT_CHAINS" => "2", "BVD_JOINT_METRIC" => "diag"
     ) do
         s = joint_sampler_args()
         @test s.samples == 1200
@@ -25,6 +26,7 @@
         @test s.target_accept == 0.85
         @test s.max_depth == 11
         @test s.chains == 2
+        @test s.metric === :diag
     end
 end
 
@@ -52,6 +54,7 @@ end
     vars = (
         "BVD_JOINT_SAMPLES", "BVD_JOINT_WARMUP",
         "BVD_JOINT_TARGET_ACCEPT", "BVD_JOINT_MAX_DEPTH", "BVD_JOINT_CHAINS",
+        "BVD_JOINT_METRIC",
     )
     unset = Tuple(v => nothing for v in vars)
     base = withenv(unset...) do
@@ -79,7 +82,7 @@ end
     withenv(
         "BVD_JOINT_SAMPLES" => "500", "BVD_JOINT_WARMUP" => "1000",
         "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "10",
-        "BVD_JOINT_CHAINS" => "4"
+        "BVD_JOINT_CHAINS" => "4", "BVD_JOINT_METRIC" => "dense"
     ) do
         @test fit_key("joint") == base["joint"]
         @test fit_key("sens_no_patches") == base["sens_no_patches"]
@@ -90,7 +93,7 @@ end
     overrides = (
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
         "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "12",
-        "BVD_JOINT_CHAINS" => "2",
+        "BVD_JOINT_CHAINS" => "2", "BVD_JOINT_METRIC" => "diag",
     )
     for ov in overrides
         withenv(unset..., ov) do

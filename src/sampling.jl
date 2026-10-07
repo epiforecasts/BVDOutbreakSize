@@ -354,6 +354,11 @@ divergences are visible live. Those warmup draws are then also retained
 in the returned chain, so the first `n_adapts` draws are adaptation
 steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
+
+`metric` selects the mass matrix NUTS adapts during warmup: `:diag` (the
+default) learns one scale per parameter, and `:dense` learns the full
+covariance, which can absorb correlated directions a diagonal one leaves
+in place, at a cost quadratic in the dimension per leapfrog step.
 """
 function nuts_sample(
         model;
@@ -369,8 +374,10 @@ function nuts_sample(
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
+        metric::Symbol = :diag,
         kwargs...
     )
+    metricT = _nuts_metric(metric)
     rng = MersenneTwister(seed)
     ## Each chain draws and screens its own starting point, so the chains
     ## stay independent and over-dispersed. Any other strategy is shared
@@ -400,7 +407,7 @@ function nuts_sample(
     return sample(
         rng,
         model,
-        NUTS(n_adapts, target_accept; max_depth, adtype),
+        NUTS(n_adapts, target_accept; max_depth, adtype, metricT),
         MCMCThreads(),
         samples, chains;
         initial_params = inits,
@@ -409,6 +416,17 @@ function nuts_sample(
         cb_kwargs...,
         warmup_kwargs...,
         kwargs...
+    )
+end
+
+## The AdvancedHMC metric type for `nuts_sample`'s `metric` option.
+function _nuts_metric(metric::Symbol)
+    metric === :diag && return AHMC.DiagEuclideanMetric
+    metric === :dense && return AHMC.DenseEuclideanMetric
+    throw(
+        ArgumentError(
+            "nuts_sample: `metric` must be :diag or :dense; got :$metric"
+        )
     )
 end
 

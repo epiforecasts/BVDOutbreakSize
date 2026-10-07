@@ -38,3 +38,25 @@
         init = [InitFromPrior()]
     )
 end
+
+@testitem "nuts_sample adapts a dense mass matrix when asked" tags = [
+    :slow,
+] begin
+    using Distributions: MvNormal
+    using Turing: @model
+    using BVDOutbreakSize: nuts_sample
+
+    ## Two strongly correlated parameters: the case a dense metric is for.
+    @model function _correlated_model()
+        x ~ MvNormal([0.0, 0.0], [1.0 0.95; 0.95 1.0])
+    end
+
+    chn = nuts_sample(
+        _correlated_model(); samples = 100, chains = 2, metric = :dense
+    )
+    xs = Array(chn[:x])
+    @test all(isfinite, reduce(vcat, vec(xs)))
+    @test_throws ArgumentError nuts_sample(
+        _correlated_model(); samples = 10, chains = 1, metric = :unit
+    )
+end

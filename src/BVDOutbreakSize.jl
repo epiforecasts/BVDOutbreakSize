@@ -14,6 +14,7 @@ using Mooncake: Mooncake
 using Preferences: @load_preference
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
     to_submodel, predict, returned
+using Turing.Inference: AHMC
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,

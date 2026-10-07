@@ -208,8 +208,8 @@ fit_spec(id, model, sample) = (;
 ## Sampler settings for the fits in `JOINT_SAMPLER_FITS`.
 ##
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT`,
-## `BVD_JOINT_MAX_DEPTH` and `BVD_JOINT_CHAINS` override all five without
-## editing this file.
+## `BVD_JOINT_MAX_DEPTH`, `BVD_JOINT_CHAINS` and `BVD_JOINT_METRIC` override
+## all six without editing this file.
 joint_target_accept() = parse(
     Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80")
@@ -238,6 +238,10 @@ joint_chains() = parse(
     get(ENV, "BVD_JOINT_CHAINS", "4")
 )
 
+## A dense mass matrix, for the correlated directions in the joint
+## posterior that a diagonal one leaves to the tree depth.
+joint_metric() = Symbol(get(ENV, "BVD_JOINT_METRIC", "dense"))
+
 ## The tree-depth cap fit `id` samples at, which the diagnostics need to
 ## count how often a tree reached it.
 fit_max_depth(id) = id in JOINT_SAMPLER_FITS ? joint_max_depth() : 10
@@ -254,7 +258,7 @@ const JOINT_SAMPLER_FITS = (
 joint_sampler_args() = (;
     samples = joint_samples(500), n_adapts = joint_warmup(1000),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
-    chains = joint_chains(),
+    chains = joint_chains(), metric = joint_metric(),
 )
 
 """
