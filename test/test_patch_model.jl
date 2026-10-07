@@ -299,7 +299,7 @@ end
         draw = rand(Xoshiro(np), m)
         has(k) = any(v -> DynamicPPL.getsym(v) == k, keys(draw))
         len(k) = length(draw[DynamicPPL.VarName{k}()])
-        @test len(:z_level) == np - 1
+        @test len(:u_level) == np - 1
         @test len(:z_drift) == (np - 1) * (nb - 1)
         @test len(:σ_drift) == 1
         @test len(:bartlett_diag) == np - 1
@@ -309,9 +309,17 @@ end
             @test len(:bartlett_lower) == (np - 1) * (np - 2) ÷ 2
         end
 
+        ## The level is drawn centred on its scale: `u_level / σ_level` is
+        ## standard normal across prior draws.
+        chn = sample(Xoshiro(1), m, Prior(), 200; progress = false)
+        us = vec(chn[DynamicPPL.VarName{:u_level}()])
+        σs = vec(chn[DynamicPPL.VarName{:σ_level}()])
+        std_level = reduce(vcat, [u ./ σ for (u, σ) in zip(us, σs)])
+        @test abs(mean(std_level)) < 0.25
+        @test 0.75 < mean(abs2, std_level) < 1.3
+
         ## The loading matrix is the one that built the knots: each knot's
         ## innovation, rebuilt from the draw's own `z_drift`, matches.
-        chn = sample(Xoshiro(1), m, Prior(), 200; progress = false)
         rets = vec(returned(m, chn))
         zs = vec(chn[DynamicPPL.VarName{:z_drift}()])
         for (r, z) in zip(rets, zs)
@@ -1362,7 +1370,7 @@ end
     @test !has("σ_drift")
     @test !has("bartlett")                 ## no cross-patch correlation
     @test !has("z_drift")
-    @test !has("z_level")
+    @test !has("u_level")
     @test !has("composition")              ## no per-province likelihood
 end
 

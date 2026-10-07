@@ -123,10 +123,11 @@ SitRep 135 is not digitised for the same reason: its page-4 caption is unchanged
 SitRep 136 returns to the onset-date basis (n = 6 256, last tick 28 September) on a new 735x502 render.
 Its washed fill on the tick columns reads as gridline and dropped two bars, so the reader now reads such a day again without the tick-column skip; 136 reads 6 172 (-1.3%, issue #1018).
 SitRep 137 reprints 136's figure (md5-identical embedded JPEG).
-SitReps 138 to 141 are not digitised (issue #1061).
-Their renders (about 730x400 to 735x434) split a weekly tick in two or lose ticks altogether, which ended the reader's tick chain weeks short of the axis.
-The chain now steps over up to two clusters off the weekly grid and accepts a gap of up to three weeks, which reproduces every earlier block unchanged.
-The vision check still refuses all four: a bar under a tick column on 1 June reads short or as zero, and the last faded bar in the incomplete-data band takes the height of the bar before it.
+SitReps 139, 140 and 141 (n = 6 417, 6 468 and 6 505, last tick 28 September) are digitised on renders of about 730x416 to 731x434, and read 6 408, 6 368 and 6 511 (-0.1%, -1.5% and +0.1%, issue #1061).
+These renders split a weekly tick in two or lose ticks altogether, so the tick chain steps over up to two clusters off the weekly grid and accepts a gap of up to three weeks.
+Their date labels reach into the tick row, washed bars on tick columns read to a grey band, and the faded bars past the last tick have no outline, each fixed in the reader as `scripts/README.md` describes.
+On onset dates to 7 August the three blocks differ from the dashboard's 2 October snapshot by 0.27 to 0.65 cases a day, at most 2 a day except 141's 6 May, which reads 7 against 1 in every other source.
+SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
 SitRep 115's figure draws bars past its last tick inside the "données potentiellement incomplètes" band, so the reader drops rows later than the report date plus one day.

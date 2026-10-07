@@ -3,7 +3,8 @@
 # job summary (the file named by `GITHUB_STEP_SUMMARY`) and to stdout. A fit
 # job then says whether its chain converged without anyone opening the log.
 
-using BVDOutbreakSize: fit_diagnostics, posterior_summary
+using BVDOutbreakSize: fit_diagnostics, posterior_summary,
+    sampler_by_chain_table
 using Statistics: median
 
 include(joinpath(@__DIR__, "shared.jl"))
@@ -25,14 +26,39 @@ function _headline(chn, p::Symbol)
     return (median(draws), s.lo90, s.hi90)
 end
 
+## One row per chain: the adapted step size, the share of draws whose tree
+## reached the depth cap, the mean acceptance statistic and the E-BFMI. Left
+## out for a chain that carries no NUTS statistics.
+function _chain_rows(io, chn, max_depth)
+    t = sampler_by_chain_table(chn; max_depth)
+    all(isnan, t.mean_acceptance) && return nothing
+    println(io)
+    println(
+        io,
+        "| chain | step size | % at max depth $max_depth | mean acceptance | E-BFMI |"
+    )
+    println(io, "| --- | --- | --- | --- | --- |")
+    for r in eachrow(t)
+        println(
+            io, "| ", r.chain, " | ", fmt_value(r.step_size),
+            " | ", fmt_value(r.percent_at_max_depth),
+            " | ", fmt_value(r.mean_acceptance),
+            " | ", fmt_value(r.ebfmi), " |"
+        )
+    end
+    return nothing
+end
+
 """
-    fit_summary_markdown(id, chn) -> String
+    fit_summary_markdown(id, chn; max_depth = 10) -> String
 
 Markdown block for fit `id`: the `fit_diagnostics` R-hat, effective sample
-sizes and divergence count, then the median and 90% credible interval of each
-quantity in `SUMMARY_PARAMETERS` the chain carries.
+sizes and divergence count, the per-chain step size, share of draws at the
+tree-depth cap `max_depth`, mean acceptance and E-BFMI, then the median and
+90% credible interval of each quantity in `SUMMARY_PARAMETERS` the chain
+carries.
 """
-function fit_summary_markdown(id, chn)
+function fit_summary_markdown(id, chn; max_depth::Integer = 10)
     d = fit_diagnostics(chn)
     io = IOBuffer()
     println(io, "### Fit `", id, "`")
@@ -45,6 +71,7 @@ function fit_summary_markdown(id, chn)
         " | ", fmt_count(d.min_ess_tail),
         " | ", d.n_divergent, " |"
     )
+    _chain_rows(io, chn, max_depth)
     rows = Any[]
     for p in SUMMARY_PARAMETERS
         h = _headline(chn, p)
@@ -66,16 +93,16 @@ function fit_summary_markdown(id, chn)
 end
 
 """
-    write_fit_summary(id, result) -> Nothing
+    write_fit_summary(id, result; max_depth = 10) -> Nothing
 
 Print the markdown summary of fit `id` to stdout and append it to the GitHub
 Actions job summary when `GITHUB_STEP_SUMMARY` is set. A reporting failure is
 warned about rather than thrown: the fit is already cached by this point and
 is too expensive to lose to its summary.
 """
-function write_fit_summary(id, result)
+function write_fit_summary(id, result; max_depth::Integer = 10)
     try
-        md = fit_summary_markdown(id, fit_chain(result))
+        md = fit_summary_markdown(id, fit_chain(result); max_depth)
         print(stdout, md)
         path = get(ENV, "GITHUB_STEP_SUMMARY", "")
         isempty(path) || open(io -> print(io, md), path, "a")
@@ -108,21 +135,22 @@ function _write_csv(path, df::DataFrame)
 end
 
 """
-    write_fit_bundle(id, chn, dir) -> String
+    write_fit_bundle(id, chn, dir; max_depth = 10) -> String
 
 Write the diagnostics an agent needs to judge fit `id` without loading a
 chain: `parameters.csv` (one row per scalar parameter element with its R-hat
 and effective sample sizes, [`parameter_diagnostics`](@ref)),
-`sampler_by_chain.csv` (draws, divergences, step size and deepest tree per
-chain, [`sampler_by_chain_table`](@ref)) and `summary.csv` (one row: the
+`sampler_by_chain.csv` (draws, divergences, step size, deepest tree, share
+of draws at the depth cap `max_depth`, mean acceptance and E-BFMI per chain,
+[`sampler_by_chain_table`](@ref)) and `summary.csv` (one row: the
 headline diagnostics of [`fit_diagnostics`](@ref) with the draw, chain and
 parameter counts). Returns `dir`.
 """
-function write_fit_bundle(id, chn, dir)
+function write_fit_bundle(id, chn, dir; max_depth::Integer = 10)
     mkpath(dir)
     params = parameter_diagnostics(chn)
     _write_csv(joinpath(dir, "parameters.csv"), params)
-    _write_csv(joinpath(dir, "sampler_by_chain.csv"), sampler_by_chain_table(chn))
+    _write_csv(joinpath(dir, "sampler_by_chain.csv"), sampler_by_chain_table(chn; max_depth))
     d = fit_diagnostics(chn)
     nd, nc = size(chn)
     _write_csv(
@@ -138,7 +166,7 @@ function write_fit_bundle(id, chn, dir)
 end
 
 """
-    write_fit_extras(id, key, result, cache_dir) -> Nothing
+    write_fit_extras(id, key, result, cache_dir; max_depth = 10) -> Nothing
 
 Write, next to the cached fit `<cache_dir>/<key>.jls`, the diagnostics
 bundle under `<key>_diagnostics/` and, for a chain the zone stage can meld
@@ -146,10 +174,12 @@ from (one carrying `infections_patch`), the parent extract
 `<key>.parent.jls` ([`zone_parent_extract`](@ref)). A failure is warned
 about rather than thrown: the fit is already cached.
 """
-function write_fit_extras(id, key, result, cache_dir)
+function write_fit_extras(id, key, result, cache_dir; max_depth::Integer = 10)
     chn = fit_chain(result)
     try
-        write_fit_bundle(id, chn, joinpath(cache_dir, key * "_diagnostics"))
+        write_fit_bundle(
+            id, chn, joinpath(cache_dir, key * "_diagnostics"); max_depth
+        )
         if BVDOutbreakSize._has_key(chn, :infections_patch)
             serialize(
                 joinpath(cache_dir, key * ".parent.jls"),
