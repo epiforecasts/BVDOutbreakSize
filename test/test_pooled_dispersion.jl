@@ -108,6 +108,7 @@ end
     for key in (
             :k, :k_cases, :k_deaths, :k_confirmed, :k_confirmed_deaths,
             :isolation_dispersion, :recovered_dispersion,
+            :treatment_flow_dispersion,
         )
         v = vec(Array(chn[key]))
         @test length(v) == 30

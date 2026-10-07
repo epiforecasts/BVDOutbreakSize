@@ -1236,9 +1236,10 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
-Partially-pooled negative-binomial dispersions for the `n_streams`
-passive-surveillance count streams in the joint model (suspected cases,
-suspected deaths, confirmed cases and confirmed deaths). Each stream draws
+Partially-pooled negative-binomial dispersions for the `n_streams` count
+streams in the joint model (suspected cases, suspected deaths, confirmed
+cases, confirmed deaths, the treatment-centre stocks, the recovered and the
+treatment-centre daily flows). Each stream draws
 its own dispersion from a shared population, so heterogeneous streams (a
 handful of deaths against hundreds of suspects against a daily laboratory
 volume) do not share one global `k` that the dominant stream pulls around,

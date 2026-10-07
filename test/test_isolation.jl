@@ -408,6 +408,35 @@ end
     @test any(O_susp[i] < st.demand[i] - 1.0e-9 for i in 1:n)
 end
 
+@testitem "treatment flows: scored with the flow dispersion" begin
+    using BVDOutbreakSize: treatment_flow_model
+    using Turing: loglikelihood, @varname
+    using Random: MersenneTwister
+    ## With no occupancy, capacity or census data the likelihood is the four
+    ## flows alone, so it moves with the flow dispersion and not with the
+    ## stock dispersion.
+    n = 40
+    t = 1:n
+    bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    bg_daily = @. 12.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    empty = (; days = Int[], counts = Int[])
+    days = collect(10:2:38)
+    flow(c) = (; days, counts = fill(c, length(days)))
+    m(k, k_flow) = treatment_flow_model(
+        empty, bvd_reports_daily, bg_daily, 0.6, 0.4;
+        admissions_history = flow(9), deaths_history = flow(2),
+        ruleout_history = flow(4), absconded_history = flow(1),
+        k_external = k, k_flow_external = k_flow
+    )
+    θ = rand(MersenneTwister(1), m(10.0, 10.0))
+    @test loglikelihood(m(5.0, 10.0), θ) ≈ loglikelihood(m(500.0, 10.0), θ)
+    @test !(loglikelihood(m(10.0, 5.0), θ) ≈ loglikelihood(m(10.0, 500.0), θ))
+    ## Standalone, the flow dispersion is sampled apart from the stocks'.
+    θs = rand(MersenneTwister(2), m(nothing, nothing))
+    @test haskey(θs, @varname(flow_disp_state.inv_sqrt_k))
+    @test haskey(θs, @varname(disp_state.inv_sqrt_k))
+end
+
 @testitem "admission_headroom: bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a

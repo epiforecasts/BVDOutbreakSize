@@ -564,10 +564,10 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance-data parameters cover the reporting fractions for the DRC and Uganda, the surveillance dispersions, and the laboratory pipeline: the testing fraction and receipt delay, the specimens analysed per suspect sampled, the per-suspected and per-test positivity, the non-BVD background rate, and the death-confirmation probability.
-# The six passive-surveillance count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, isolation occupancy and recovered) each have their own negative-binomial dispersion, partially pooled from a shared population.
+# The seven count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, the treatment-centre stocks, recovered and the treatment-centre daily flows) each have their own negative-binomial dispersion, partially pooled from a shared population.
 # $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
 # The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
-# Their dispersions ($k_{\text{iso}}$, $k_{\text{rec}}$) are drawn from the same pooled population as the length-of-stay delays above.
+# Their dispersions ($k_{\text{iso}}$ for the occupancy, beds and census, $k_{\text{flow}}$ for the daily admissions, in-care deaths, rule-outs and absconds, and $k_{\text{rec}}$) are drawn from the same pooled population.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -583,7 +583,8 @@ surveillance_summary = summary_table(
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
-        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :isolation_admission, :isolation_dispersion,
+        :treatment_flow_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
         :isolation_death_los_mean,

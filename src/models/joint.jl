@@ -102,7 +102,9 @@ capacity walk carries past the cut-off, floored at the last fitted cap
 ([`censoring_cap`](@ref)). Admissions are censored at the free-bed headroom,
 that cap less the previous day's occupancy: the last recorded occupancy on
 the first day, then the drawn one ([`admission_headroom`](@ref)). In-care
-deaths and rule-outs are daily negative binomials. The latent bed demand and
+deaths and rule-outs are daily negative binomials. The occupancy takes the
+stock dispersion `k` and the three flows the state's flow dispersion
+`k_flow`, as on the fitted days. The latent bed demand and
 capacity are tracked alongside. With no recorded capacity or occupancy the
 fitted days are uncensored, and so are the future ones.
 """
@@ -138,13 +140,13 @@ fitted days are uncensored, and so are the future ones.
     end
     admissions = state.admit_daily[fd]
     forecast_admissions ~ to_submodel(
-        censored_occupancy_model(admissions, head, missing, k)
+        censored_occupancy_model(admissions, head, missing, state.k_flow)
     )
     forecast_incare_deaths ~ to_submodel(
-        _forecast_counts(state.deaths_daily, fd, k)
+        _forecast_counts(state.deaths_daily, fd, state.k_flow)
     )
     forecast_ruleouts ~ to_submodel(
-        _forecast_counts(state.ruleout_daily, fd, k)
+        _forecast_counts(state.ruleout_daily, fd, state.k_flow)
     )
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := state.C[fd]
@@ -1280,7 +1282,7 @@ density there, is the fitted model's.
     ## the latent grid runs to.
     ckw = forecast === nothing ? (;) : (; cutoff = n)
 
-    dispersion_state ~ to_submodel(dispersion(6))
+    dispersion_state ~ to_submodel(dispersion(7))
     asc_state ~ to_submodel(ascertainment)
     kv = dispersion_state.k
     k_cases = kv[1]
@@ -1289,6 +1291,7 @@ density there, is the fitted model's.
     k_confirmed_deaths = kv[4]
     k_isolation = kv[5]
     k_recovered = kv[6]
+    k_treatment_flow = kv[7]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
@@ -1440,6 +1443,7 @@ density there, is the fitted model's.
             occupancy_break_days = occupancy_break_days,
             conf_hazard_daily = conf_hazard_daily,
             k_external = k_isolation,
+            k_flow_external = k_treatment_flow,
             defaults = treatment_defaults, ckw...,
             _sim_kw(simulated_data, :treatment_state)...
         )
@@ -1710,6 +1714,7 @@ density there, is the fitted model's.
     isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
     isolation_admission_delay_mean := treatment_state.admission_delay_mean
     isolation_dispersion := treatment_state.k_isolation
+    treatment_flow_dispersion := treatment_state.k_flow
     ## In-care fatality CFR_iso, a modifier on the infection CFR, and the
     ## abscond fraction.
     incare_cfr := treatment_state.CFR_iso
