@@ -22,7 +22,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, pooled with the other per-stream dispersions, rather than the dispersion of the occupancy, beds and in-care census.
+- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, pooled with the other per-stream dispersions, rather than the dispersion of the occupancy, beds and in-care census (#1103).
   At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
   A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
   Fitted values change: the flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
