@@ -1702,6 +1702,8 @@ joint_index_fig #hide
 
 # ### Where the divergent transitions sit
 #
+# Per chain, the first table gives the divergent transitions, the adapted step size, the share of draws whose trajectory reached the tree-depth cap, the mean acceptance and the energy fraction of missing information.
+#
 #md # ```@raw html
 #md # <details><summary>Sampler behaviour by chain</summary>
 #md # ```

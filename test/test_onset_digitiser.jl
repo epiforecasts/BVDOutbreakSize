@@ -377,6 +377,112 @@ end
     end
 end
 
+@testitem "digitize keeps the date labels out of the weekly tick row" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## Faint one-row ticks, as on the short September renders, with a
+    ## date-label stroke three columns left of three of them, six rows
+    ## below the baseline. Read into the tick row, the strokes pull those
+    ## ticks two columns left and the days after them onto their
+    ## neighbours' bars.
+    bars = [(3 + (j * 5) % 11, j % 3) for j in 1:40]
+    R, G, B = _synthetic_chart(bars)
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    for k in 0:19
+        x = 693 - k * 30
+        paint!(302:304, x:x, (255, 255, 255))
+        paint!(302:302, x:x, (150, 150, 150))
+        k in (1, 3, 4) && paint!(306:306, (x - 3):(x - 3), (90, 90, 90))
+    end
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test rows ==
+        [(last_tick - Day(length(bars) - j), bars[j]...) for j in eachindex(bars)]
+end
+
+@testitem "digitize reads a washed tick-column bar to its outlines" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A bar on a weekly tick column between two dark outline columns. Its
+    ## washed interior shows no outline pixel and carries a grey band at
+    ## the same row in every column, so the gridline skip reads the fill
+    ## below the band as the bar (SitReps 140 and 141). A dotted gridline
+    ## runs on above the bar, which a read without the skip would climb.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 663
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(252:299, (x - 1):(x + 1), (200, 225, 235))
+    paint!(232:251, (x - 1):(x + 1), (200, 60, 60))
+    paint!(270:274, (x - 1):(x + 1), (225, 225, 225))
+    paint!(232:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(232:299, (x + 2):(x + 2), (60, 60, 60))
+    for y in 150:2:230
+        paint!(y:y, (x - 1):(x + 1), (160, 160, 160))
+    end
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test length(rows) == 10
+    @test all(r -> (r[2], r[3]) == (12, 5), rows)
+end
+
+@testitem "digitize reads a faded bar past the last tick from its own column" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## Two faded bars with no outline past the last tick. The first, of 10,
+    ## spills its edge into the next day's window, where the second bar of
+    ## 2 tapers off, so no two columns there agree (SitReps 139 to 141).
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    faded = (210, 150, 160)
+    paint!(260:299, 695:700, faded)
+    paint!(276:299, 701:701, faded)
+    paint!(292:299, 702:702, faded)
+    paint!(296:299, 703:703, faded)
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[1] > last_tick]
+    @test rows == [(last_tick + Day(1), 0, 10), (last_tick + Day(2), 0, 2)]
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "tick_chain steps over a split tick and a missing one" begin

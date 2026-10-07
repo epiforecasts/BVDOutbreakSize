@@ -327,14 +327,14 @@ end
         return r, get_raw_values(vi)
     end
 
-    ## Deviation knots from the formulas: level `s Q B z_level`, innovation
+    ## Deviation knots from the formulas: level `s Q B u_level`, innovation
     ## `η_k = c Q B z_k` with `z_k` the `k - 1`-th block of `nd` draws, and
     ## the AR(1) in closed form `δ_k = φ^(k-1) δ_1 + Σ_{j ≤ k} φ^(k-j) η_j`.
-    function reference_knots(Q, B, s, c, z_level, z_drift, φ, nb)
+    function reference_knots(Q, B, s, c, u_level, z_drift, φ, nb)
         n, nd = size(Q)
         QB = matmul(Q, B)
         apply(v) = vec(matmul(QB, reshape(v, :, 1)))
-        level = s .* apply(z_level)
+        level = s .* apply(u_level)
         η(k) = c .* apply(z_drift[((k - 2) * nd + 1):((k - 1) * nd)])
         knots = zeros(n, nb)
         for k in 1:nb
@@ -372,7 +372,6 @@ end
                 ),
             )
             r, vi = prior_draw(model, seed)
-            σ_level = vi[@varname(σ_level)]
             φ = exp2(-7 / vi[@varname(δ_halflife)])
             ## Two patches draw no lower entry.
             d = vi[@varname(bartlett_diag)]
@@ -386,11 +385,11 @@ end
                     B[i, j] = o[m]
                 end
             end
-            s = σ_level * sqrt(nd / sum(abs2, B))
+            s = sqrt(nd / sum(abs2, B))
             c = vi[@varname(σ_drift)] * sqrt(nd / sum(abs2, B))
             nb = size(r.δ_knots, 2)
             ref = reference_knots(
-                basis, B, s, c, vi[@varname(z_level)], vi[@varname(z_drift)],
+                basis, B, s, c, vi[@varname(u_level)], vi[@varname(z_drift)],
                 φ, nb
             )
             @test r.δ_knots ≈ ref rtol = 1.0e-12 atol = 1.0e-14
@@ -448,8 +447,7 @@ end
         nb = length(knot_days(n; start = 10))
         z = vcat(vi[@varname(z_drift)], vi[@varname(z_drift_future)])
         knots = zeros(np, length(days))
-        s_level = vi[@varname(σ_level)] * shape
-        knots[:, 1] = s_level .* apply(vi[@varname(z_level)])
+        knots[:, 1] = shape .* apply(vi[@varname(u_level)])
         for k in 2:length(days)
             η = apply(z[((k - 2) * nd + 1):((k - 1) * nd)])
             knots[:, k] = φ .* knots[:, k - 1] .+
