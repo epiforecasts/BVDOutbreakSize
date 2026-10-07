@@ -112,6 +112,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The formatter environment pins Runic to 1.11.1 again, matching the pre-commit hook, and Dependabot no longer proposes Runic bumps, which have to reformat the tree in the same commit.
 - The national estimates render waits for the health-zone fits, since its fit diagnostics read the `local` meld; it could start before that fit finished and fail on a cache miss.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
