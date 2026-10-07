@@ -169,7 +169,8 @@ province_infections_fig #hide
 
 # The provinces are coupled by an importation kernel that follows Flowminder's subscriber cohorts out of Ituri and Nord-Kivu and a gravity kernel elsewhere, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
 # Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
-# The Nord-Kivu cohort spends 74% of its days away from home in Ituri, so most of what leaves Nord-Kivu lands there, and the Ituri cohort spends 61% of its days away in Nord-Kivu.
+# Of the days the Nord-Kivu cohort spends away from home in the modelled provinces, 74% are in Ituri, so most of what leaves Nord-Kivu lands there.
+# For the Ituri cohort, 61% of those days are in Nord-Kivu.
 
 #md # ```@raw html
 #md # <details><summary>Importation intensity and imports by province</summary>

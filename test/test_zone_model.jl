@@ -1350,6 +1350,47 @@ end
     ).model_data.mixing === nothing
 end
 
+@testitem "zone mixing: the between block follows the mobility kernel" begin
+    using BVDOutbreakSize: _zone_mixing_or_nothing, mobility_importation_kernel,
+        province_importation_kernel, province_mobility_shares,
+        PROVINCE_POPULATIONS
+    ## With three patches each cohort origin has two destinations, so its
+    ## mobility split differs from the gravity split and the zone stage
+    ## must carry the former.
+    np, n = 3, 5
+    patch_of_zone = [1, 1, 2, 2, 3, 3]
+    zone_names = ["a", "b", "c", "d", "e", "f"]
+    zone_province = ["p$(p)" for p in patch_of_zone]
+    zones = [
+        (;
+            province = zone_province[z], zone = zone_names[z],
+            population = 1.0e5 * z, lat = 0.5 * z, lon = 28.0 + 0.3 * z,
+        ) for z in eachindex(zone_names)
+    ]
+    patch_ranges = [1:2, 3:4, 5:6]
+    parent = (;
+        origin_epsilon = ones(np), import_log_odds = zeros(np * n),
+        flow_kernel = zeros(0, 0),
+    )
+    mix = _zone_mixing_or_nothing(
+        zones, zone_province, zone_names, patch_ranges, patch_of_zone,
+        parent, ones(np, n)
+    )
+    @test mix !== nothing
+    K = mobility_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    G = province_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    shares = province_mobility_shares(np)
+    for q in 1:2
+        @test K[:, q] ./ sum(K[:, q]) ≈ shares[q] rtol = 1.0e-12
+        @test !isapprox(K[:, q], G[:, q]; rtol = 0.01)
+    end
+    for z in eachindex(zone_names), p in 1:np
+        p == patch_of_zone[z] && continue
+        zs = findall(==(p), patch_of_zone)
+        @test sum(mix.between[zs, z]) ≈ K[p, patch_of_zone[z]] rtol = 1.0e-12
+    end
+end
+
 @testitem "zone mixing: the sampled decay and destination weights" setup = [
     ZoneSynthetic,
 ] begin

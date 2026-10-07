@@ -263,36 +263,23 @@ const PROVINCE_SOURCE_CENTRES = [
 """
     PROVINCE_SOURCE_MOBILITY
 
-Where two Flowminder subscriber cohorts spent their time, as average
-presence days per cohort member summed over the zones of each province in
-[`PROVINCE_SOURCE_NAMES`](@ref) order, keyed by the cohort's province. The
-cohorts are subscribers present for at least two days during 4-17 May
-2026 in the Ituri outbreak zones (Bunia, Mongbwalu, Nyankunde, Rwampara)
-or the Nord-Kivu ones (Beni, Butembo, Katwa), so they describe travel from
-those clusters in May, not from the whole province over the outbreak.
-Their home zones carry no value, so the within-province entries leave out
-movement inside the cluster. From the follow-up period, 18 May to 8 June
-2026, of Flowminder's cohort subscriber-day files on the Humanitarian Data
-Exchange (`drc-bvd_ituri-cohort_subscriber-days-2026_06_08-v1.0-external.csv`
-and its `nk` counterpart), as mirrored in
-<https://github.com/INRB-UMIE/BDBV2026-Data> under
-`data/flowminder_short_trips/raw` at commit `f7d3907`.
-`scripts/build_province_mobility.py` (`task province-mobility`) prints this
-literal from them.
-
-Days in provinces outside the list are dropped: 12.9% of the Ituri
-cohort's days away from Ituri and 5.2% of the Nord-Kivu cohort's, mostly
-Kinshasa. The data give no split for origins in the other provinces.
+Average presence days per member of two Flowminder subscriber cohorts,
+from the Ituri and Nord-Kivu outbreak zones in May 2026, summed over the
+zones of each province in [`PROVINCE_SOURCE_NAMES`](@ref) order and keyed
+by the cohort's province. From Flowminder's cohort subscriber-day files as
+mirrored in <https://github.com/INRB-UMIE/BDBV2026-Data> under
+`data/flowminder_short_trips/raw` at commit `f7d3907`, printed by
+`scripts/build_province_mobility.py` (`task province-mobility`).
 """
 const PROVINCE_SOURCE_MOBILITY = Dict(
     "ituri" => [
         4.87709, 0.180106, 0.0115233, 0.0610221, 0.0401109, 0.000426158,
         2.5839e-5,
-    ],
+    ],  # 12.9% of away days outside these provinces
     "nord_kivu" => [
         0.741645, 3.87504, 0.035287, 0.140952, 0.0831833, 0.0065044,
         0.000230625,
-    ],
+    ],  # 5.2% of away days outside these provinces
 )
 
 """
@@ -558,10 +545,7 @@ patch in `shares` ([`province_mobility_shares`](@ref)) sends its exports
 in its cohort's split, and every other origin keeps the gravity split of
 [`province_importation_kernel`](@ref), which `kw` is passed to. Each column
 keeps the gravity kernel's total `1 - N_q/N`, so `ε` keeps its meaning.
-The shares are a Flowminder cohort's May travel from the outbreak cluster
-standing in for where the whole province's exports land over the
-outbreak. Build it once at model construction: the `Dict` lookups are not
-differentiable.
+See [`PROVINCE_SOURCE_MOBILITY`](@ref) for the source of the shares.
 """
 function mobility_importation_kernel(
         pops::AbstractVector = PROVINCE_POPULATIONS;
