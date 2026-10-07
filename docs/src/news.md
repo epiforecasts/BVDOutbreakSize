@@ -26,6 +26,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
+- The onset triangle's read SD prior is `LogNormal(log 0.3, 0.5)`, centred on one figure pixel, in place of `LogNormal(log 1, 0.5)` (#PRNUM).
+  Rounding of each read has its own variance term, so the read SD is the error beyond it, and one count spans a median of 3.2 pixels across the digitised figures (`data/onset_curve_figures.csv`).
+  The three published fits results-2720, results-2817 and results-2847 put the read SD between 0.16 and 0.29 counts (90% intervals), below the old prior's 1st percentile and inside the new prior's 90% range of 0.13 to 0.68.
+  Fitted values change.
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
