@@ -40,7 +40,8 @@ event, truncated at `nmax`), as `CensoredDistributions.double_interval_censored`
 defines it. The truncation holds the CDF at one from `nmax` on, so the lag
 `nmax` entry is zero. For a LogNormal or Gamma delay the CDF differentiates
 cleanly under Mooncake, so this is AD-safe. Extreme warmup proposals that
-drive the total to a non-finite or zero value fall back to a uniform PMF, so
+drive the total to a non-finite or zero value, or that push an analytical
+delay's own shape or scale out of its domain, fall back to a uniform PMF, so
 the downstream convolution stays finite (the proposal is still rejected
 through its low log-likelihood). Returns a vector whose element type follows
 the delay parameters.
@@ -52,6 +53,20 @@ end
 ## Delays with a closed-form primary-censored CDF under a uniform primary.
 const _AnalyticalDelay = Union{Gamma, LogNormal, Distributions.Weibull}
 
+## Whether an analytical delay's parameters sit strictly inside the domain
+## its closed-form CDF needs. A NUTS step-size search can push a Gamma
+## scale to exactly zero (dividing a shape-scale reparameterisation by an
+## overflowing mean, for instance), and CensoredDistributions' AD rule for
+## the analytical CDF rebuilds the distribution with argument checking on,
+## so it throws a `DomainError` rather than returning a non-finite value
+## `_pmf_from_cdfs` could fall back on.
+_valid_delay_params(dist::Gamma) =
+    isfinite(dist.α) && dist.α > 0 && isfinite(dist.θ) && dist.θ > 0
+_valid_delay_params(dist::Distributions.Weibull) =
+    isfinite(dist.α) && dist.α > 0 && isfinite(dist.θ) && dist.θ > 0
+_valid_delay_params(dist::LogNormal) =
+    isfinite(dist.μ) && isfinite(dist.σ) && dist.σ > 0
+
 ## Primary-censored CDF `F₊(b)` at the boundaries `b = 1, …, nmax`, with a
 ## `Uniform(0, 1)` primary event.
 ##
@@ -61,8 +76,10 @@ const _AnalyticalDelay = Union{Gamma, LogNormal, Distributions.Weibull}
 ## `H(t) / t`, so each `H` costs one delay-CDF endpoint and each boundary
 ## reuses its neighbour's.
 function _primary_censored_cdfs(dist::_AnalyticalDelay, nmax::Integer)
+    T = float(Distributions.partype(dist))
+    _valid_delay_params(dist) || return fill(T(NaN), nmax)
     solver = AnalyticalSolver()
-    pc = Vector{float(Distributions.partype(dist))}(undef, nmax)
+    pc = Vector{T}(undef, nmax)
     H_prev = zero(eltype(pc))
     for i in 1:nmax
         t = float(i)

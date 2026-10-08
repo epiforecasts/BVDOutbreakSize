@@ -68,6 +68,27 @@ end
     end
 end
 
+@testitem "discretise_censored: an invalid analytical delay falls back to a uniform PMF" begin
+    using Distributions: LogNormal, Gamma, Weibull
+    using BVDOutbreakSize: discretise_censored
+
+    ## A `check_args = false` construction built from an overflowing
+    ## shape-scale reparameterisation can leave a non-positive or
+    ## non-finite parameter. `find_good_stepsize` can propose exactly
+    ## this during warm-up (#1105), and the analytical path must reject
+    ## it as cleanly as the existing zero-total fallback rather than
+    ## throwing.
+    for dist in (
+            Gamma(2.0, 0.0; check_args = false),
+            Gamma(0.0, 1.0; check_args = false),
+            Gamma(2.0, Inf; check_args = false),
+            Weibull(2.0, 0.0; check_args = false),
+            LogNormal(0.0, 0.0; check_args = false),
+        )
+        @test discretise_censored(dist, 10) == fill(1 / 11, 11)
+    end
+end
+
 @testitem "discretise_censored: PMF contract (non-negative, sums to 1)" begin
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
     using Distributions: LogNormal
