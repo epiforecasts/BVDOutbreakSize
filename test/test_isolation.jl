@@ -104,6 +104,7 @@ end
 
 @testitem "bed_capacity_walk: a growth trend that can fall" begin
     using Turing: fix, returned, @varname
+    using Statistics: std
     using Random: Xoshiro
     using BVDOutbreakSize: bed_capacity_walk_model
 
@@ -112,8 +113,17 @@ end
     weekly = [diff(log.(returned(m, rand(Xoshiro(i), m)).C[1:7:end])) for i in 1:200]
     @test any(w -> any(<(0), w), weekly)
     @test any(w -> any(>(0), w), weekly)
-    ## Unit innovations raise the weekly log growth by `σ_growth` each week
-    ## from `growth0`, and the forecast carries on at the last fitted growth.
+    ## The first week's growth keeps the prior of the base growth plus one
+    ## step, `N(0, 0.05)` and a step of scale `N⁺(0, 0.05)`, an SD of
+    ## `√2 · 0.05`.
+    first_week = map(1:4000) do i
+        C = returned(m, rand(Xoshiro(i), m)).C
+        log(C[8] / C[1])
+    end
+    @test std(first_week) ≈ sqrt(2) * 0.05 rtol = 0.05
+    ## `growth0` is the first week's growth on its own, unit innovations
+    ## raise the weekly log growth by `σ_growth` each week after it, and the
+    ## forecast carries on at the last fitted growth.
     mh = bed_capacity_walk_model(54; cutoff = 40)
     θ = rand(Xoshiro(1), mh)
     nz = length(θ[@varname(z)])
@@ -125,8 +135,9 @@ end
         )
     )
     C = returned(fixed, rand(Xoshiro(2), fixed)).C
-    @test log(C[15] / C[8]) ≈ 0.12
-    @test log(C[29] / C[22]) ≈ 0.14
+    @test log(C[8] / C[1]) ≈ 0.1
+    @test log(C[15] / C[8]) ≈ 0.11
+    @test log(C[29] / C[22]) ≈ 0.13
     @test log(C[54] / C[47]) ≈ 0.1 + 0.01 * nz
 end
 
