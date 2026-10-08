@@ -433,23 +433,37 @@ end
     @test !(loglikelihood(m(10.0, 5.0), θ) ≈ loglikelihood(m(10.0, 500.0), θ))
     ## Standalone, the flow dispersion is sampled apart from the stocks'.
     θs = rand(MersenneTwister(2), m(nothing, nothing))
-    @test haskey(θs, @varname(flow_disp_state.inv_sqrt_k))
+    @test haskey(θs, @varname(log_inv_sqrt_k_flow))
     @test haskey(θs, @varname(disp_state.inv_sqrt_k))
 end
 
-@testitem "treatment flows: informative flow dispersion prior" begin
-    using BVDOutbreakSize: treatment_flow_defaults
-    using Distributions: LogNormal, quantile, cdf
-    ## 1/sqrt(k_flow) ~ LogNormal(log(1/sqrt(15)), 0.35). Flows in the tens
-    ## with a Pearson index of 2 to 5 need k_flow of about 3 to 40, and the
-    ## stocks' near-Poisson k ≈ 546 must sit far in the tail.
-    prior = treatment_flow_defaults().flow_dispersion.defaults.inv_sqrt_k_prior
-    @test prior == LogNormal(log(1 / sqrt(15.0)), 0.35)
-    k_at(q) = 1 / quantile(prior, 1 - q)^2
-    @test k_at(0.5) ≈ 15.0
-    @test 4.0 < k_at(0.05) < 6.0
-    @test 40.0 < k_at(0.95) < 50.0
-    @test cdf(prior, 1 / sqrt(546.0)) < 1.0e-5
+@testitem "treatment flows: flow dispersion drawn about the stock dispersion" begin
+    using BVDOutbreakSize: treatment_flow_model, treatment_flow_defaults
+    using Turing: logprior, returned, @varname
+    using Distributions: Normal, logpdf
+    using Random: MersenneTwister
+    ## log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), 1.25): centred on the
+    ## stocks' dispersion k, sampled directly. Only that term of the prior
+    ## depends on k, so the change in log prior between two values of k is
+    ## the change in that Normal's log density.
+    @test treatment_flow_defaults().flow_dispersion_sd == 1.25
+    n = 40
+    t = 1:n
+    bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    bg_daily = @. 12.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    empty = (; days = Int[], counts = Int[])
+    m(k) = treatment_flow_model(
+        empty, bvd_reports_daily, bg_daily, 0.6, 0.4; k_external = k
+    )
+    θ = rand(MersenneTwister(4), m(546.0))
+    x = θ[@varname(log_inv_sqrt_k_flow)]
+    lp(k) = logpdf(Normal(-log(k) / 2, 1.25), x)
+    @test logprior(m(546.0), θ) - logprior(m(14.0), θ) ≈ lp(546.0) - lp(14.0)
+    @test returned(m(546.0), θ).k_flow ≈ exp(-2x)
+    ## A flow k of 3 to 40 from a stock k of 546 is an offset of 1.3 to 2.6
+    ## on that scale, 1 to 2.1 prior SDs.
+    off(k) = (log(546.0) - log(k)) / 2 / 1.25
+    @test 1.0 < off(40.0) < off(3.0) < 2.1
 end
 
 @testitem "admission_headroom: bound above obs, never on the boundary" begin

@@ -568,7 +568,7 @@ obs_delay_pair_fig #hide
 # $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
 # The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
 # Their dispersions ($k_{\text{iso}}$ for the occupancy, beds and census, and $k_{\text{rec}}$) are drawn from the same pooled population.
-# The daily admissions, in-care deaths, rule-outs and absconds share a flow dispersion $k_{\text{flow}}$ with a prior of its own.
+# The daily admissions, in-care deaths, rule-outs and absconds share a flow dispersion $k_{\text{flow}}$, drawn about $k_{\text{iso}}$.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
