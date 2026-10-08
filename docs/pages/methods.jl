@@ -303,14 +303,13 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
-#            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \log R^{\text{trend}}_1 = \log R_0, \qquad
+# \log R^{\text{trend}}_k \sim \mathrm{Normal}\bigl(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}^2\bigr), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
 #
@@ -344,6 +343,9 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
+#
+# We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
+# The shift has unit Jacobian, so the prior is unchanged.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -1759,7 +1761,7 @@ cfr_prior_fig #hide
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
+# It is a weekly-knot non-centred random walk on the logit scale, on the same knots as the reproduction-number walk above and concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math

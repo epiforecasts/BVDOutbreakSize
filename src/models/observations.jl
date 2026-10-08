@@ -3731,8 +3731,8 @@ and drifting over calendar time. Two random effects:
     ```
     with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)).
   - a calendar-time random walk on report date, weekly knots linearly
-    interpolated to the daily grid ([`rt_walk_model`](@ref)'s non-centred
-    cumulative-sum walk, same construction):
+    interpolated to the daily grid ([`rt_walk_model`](@ref)'s weekly knots,
+    here in non-centred cumulative-sum form):
     ```math
     \\sigma_\\gamma \\sim \\text{walk\\_sigma\\_prior}, \\quad
     z_{\\gamma,k} \\sim \\mathcal N(0,1), \\quad
