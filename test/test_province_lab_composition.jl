@@ -26,10 +26,10 @@ end
 
     ## The deviations sum to zero, so there is no reference patch: the first
     ## patch moves off its population share like any other, and the log
-    ## ratios to the centre, less their mean, are the deviations.
-    z = [1.0, -0.5, 0.25]
-    dev = 0.8 .* (sum_to_zero_basis(4) * z)
-    moved = DynamicPPL.fix(m; τ_bg = 0.8, z_bg = z)().w
+    ## ratios to the centre, less their mean, are the deviations `Q y`.
+    y = 0.8 .* [1.0, -0.5, 0.25]
+    dev = sum_to_zero_basis(4) * y
+    moved = DynamicPPL.fix(m; τ_bg = 0.8, y_bg = y)().w
     lr = log.(moved ./ (pops ./ sum(pops)))
     @test lr .- sum(lr) / 4 ≈ dev
     @test !(moved[1] ≈ pops[1] / sum(pops))
@@ -50,7 +50,7 @@ end
     adm[2, 4:end] .= 20.0
     m = patch_capacity_share_model(adm)
     names = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
-    @test names == ["τ_cap", "z_cap"]
+    @test names == ["τ_cap", "y_cap"]
 
     ## A drawn share is a simplex on every day.
     res = m()
@@ -60,7 +60,7 @@ end
 
     ## With no pooling scale the share is the floored cumulative admissions,
     ## normalised each day.
-    flat = DynamicPPL.fix(m; τ_cap = 0.0, z_cap = [1.5, -2.0])().s
+    flat = DynamicPPL.fix(m; τ_cap = 0.0, y_cap = zeros(2))().s
     centre = cumsum(adm; dims = 2) .+ 1.0
     @test flat ≈ centre ./ sum(centre; dims = 1)
     ## The floor keeps a patch with no admissions yet above zero, and the
@@ -72,21 +72,21 @@ end
     ## A larger floor pulls the early days towards an equal split.
     wide = DynamicPPL.fix(
         patch_capacity_share_model(adm; admission_floor = 100.0);
-        τ_cap = 0.0, z_cap = zeros(2)
+        τ_cap = 0.0, y_cap = zeros(2)
     )().s
     @test wide[2, 1] > flat[2, 1]
 
-    ## The deviations are `τ Q z` on the sum-to-zero basis and scale each
+    ## The deviations are `Q y` on the sum-to-zero basis and scale each
     ## patch's centre by `exp(dev)` on every day, the first patch included,
     ## and a wide one cannot overflow the normalisation.
-    z = [0.8, -0.4]
-    dev = 0.5 .* (sum_to_zero_basis(3) * z)
+    y = 0.5 .* [0.8, -0.4]
+    dev = sum_to_zero_basis(3) * y
     @test sum(dev) ≈ 0 atol = 1.0e-12
-    moved = DynamicPPL.fix(m; τ_cap = 0.5, z_cap = z)().s
+    moved = DynamicPPL.fix(m; τ_cap = 0.5, y_cap = y)().s
     target = centre .* exp.(dev)
     @test moved ≈ target ./ sum(target; dims = 1)
     @test !(moved[1, :] ≈ flat[1, :])
-    big = DynamicPPL.fix(m; τ_cap = 400.0, z_cap = [2.0, -2.0])().s
+    big = DynamicPPL.fix(m; τ_cap = 400.0, y_cap = [800.0, -800.0])().s
     @test all(isfinite, big)
     @test vec(sum(big; dims = 1)) ≈ ones(n)
 
@@ -113,6 +113,82 @@ end
         beds ~ Multinomial(sum(beds), cap.s[:, end])
     end
     model = scored(base, [60, 30, 10])
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(1), model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0) == 4
+    @test all(isfinite, grad)
+    @test all(!iszero, grad)
+end
+
+@testitem "background split and capacity shares: centred deviations" begin
+    using BVDOutbreakSize: background_split_model, patch_capacity_share_model,
+        sum_to_zero_basis
+    using Turing: DynamicPPL, Normal, logpdf, truncated
+    using Random: Xoshiro
+
+    ## Each model samples its scale and the basis coordinates `y = τ z`
+    ## drawn at `Normal(0, τ)`. At the mapped point the joint density is the
+    ## non-centred one, `p(τ) ∏ N(z_j; 0, 1)`, times the Jacobian
+    ## `τ^{-k}` of `z ↦ τ z`, and the deviations are `τ Q z`.
+    pops = [4.0, 2.0, 1.0, 1.0]
+    adm = vcat(fill(5.0, 1, 8), hcat(zeros(1, 3), fill(9.0, 1, 5)), ones(1, 8))
+    cases = (
+        (
+            m = background_split_model(4; populations = pops), np = 4,
+            τ = :τ_bg, y = :y_bg, prior = truncated(Normal(0, 1.5); lower = 0),
+            out = r -> r.w,
+            ref = dev -> let w = (pops ./ sum(pops)) .* exp.(dev)
+                w ./ sum(w)
+            end,
+        ),
+        (
+            m = patch_capacity_share_model(adm), np = 3,
+            τ = :τ_cap, y = :y_cap, prior = truncated(Normal(0, 1); lower = 0),
+            out = r -> r.s,
+            ref = dev -> let c = (cumsum(adm; dims = 2) .+ 1.0) .* exp.(dev)
+                c ./ sum(c; dims = 1)
+            end,
+        ),
+    )
+    for c in cases
+        k = c.np - 1
+        Q = sum_to_zero_basis(c.np)
+        ## The sampled names are the scale and the centred coordinates.
+        names = string.(keys(DynamicPPL.VarInfo(Xoshiro(2), c.m)))
+        @test names == [string(c.τ), string(c.y)]
+        for (τ, z) in ((0.3, randn(Xoshiro(5), k)), (1.7, randn(Xoshiro(6), k)))
+            y = τ .* z
+            vals = NamedTuple{(c.τ, c.y)}((τ, y))
+            lp = DynamicPPL.logjoint(c.m, vals)
+            noncentred = logpdf(c.prior, τ) +
+                sum(logpdf.(Normal(0, 1), z)) - k * log(τ)
+            @test lp ≈ noncentred
+            ## The coordinates are drawn at the scale, not as standard
+            ## normals, so the density differs from the non-centred one at
+            ## the same values.
+            @test !(lp ≈ logpdf(c.prior, τ) + sum(logpdf.(Normal(0, 1), y)))
+            out = c.out(DynamicPPL.fix(c.m; vals...)())
+            @test out ≈ c.ref(τ .* (Q * z))
+        end
+    end
+end
+
+@testitem "background_split_model: gradients through the split" tags = [:ad] begin
+    using BVDOutbreakSize: background_split_model, default_adtype
+    using Turing: Turing, DynamicPPL, @model, to_submodel, Multinomial
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: Xoshiro
+
+    @model function scored(counts)
+        bg ~ to_submodel(background_split_model(4))
+        counts ~ Multinomial(sum(counts), bg.w)
+    end
+    model = scored([50, 30, 15, 5])
     vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(1), model), model)
     x0 = collect(vi[:])
     ldf = DynamicPPL.LogDensityFunction(
