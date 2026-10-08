@@ -777,8 +777,8 @@ the patch's modelled cumulative admissions to that day,
 
 ```math
 s_p(t) \\propto \\bigl(A_p(t) + a_0\\bigr) \\exp(\\delta_p),
-\\qquad \\boldsymbol{\\delta} = \\tau_{cap} Q \\mathbf{z},
-\\qquad z_j \\sim \\mathrm{N}(0, 1),
+\\qquad \\boldsymbol{\\delta} = Q \\mathbf{y},
+\\qquad y_j \\sim \\mathrm{N}(0, \\tau_{cap}^2),
 \\qquad \\tau_{cap} \\sim \\mathrm{N}^+(0, 1),
 ```
 
@@ -805,6 +805,14 @@ scale 1 puts a two-fold departure well inside the prior and a seven-fold
 one near its edge. The centre already carries the large gap between beds
 and population, so the deviations left for the pool are modest.
 
+The basis coordinates `y_cap` are drawn centred, on the scale `τ_cap`,
+because the province bed and occupancy counts inform them. The data then
+pin each deviation rather than `τ_cap`, and the non-centred
+`τ_cap Q z` would tie `z` to `τ_cap` along a funnel. On the joint
+posterior `log τ_cap` correlates at −0.96 with the log mean square of the
+`z`. Both forms carry the same prior, so only the sampled coordinates
+differ.
+
 The cumulative admissions differ from the stock that splits the bed demand
 in [`treatment_flow_model`](@ref). The stock counts
 the patients still in a bed and falls as they leave. Cumulative admissions
@@ -818,7 +826,6 @@ columns sum to one.
         admissions::AbstractMatrix{<:Real};
         admission_floor::Real = 1.0,
         pooling_sd_prior = truncated(Normal(0, 1); lower = 0),
-        offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(max(size(admissions, 1), 1))
     )
     np, n = size(admissions)
@@ -830,8 +837,12 @@ columns sum to one.
             "got $(admission_floor)."
     )
     τ_cap ~ pooling_sd_prior
-    z_cap ~ product_distribution(fill(offset_prior, np - 1))
-    dev = sum_to_zero(sum_to_zero_factor(basis, τ_cap), z_cap)
+    ## Each basis coordinate is drawn centred, on the scale `τ_cap`. `eps`
+    ## floors the SD so a `τ_cap ≈ 0` draw stays a proper distribution.
+    y_cap ~ product_distribution(
+        fill(Normal(0, τ_cap + eps(typeof(float(τ_cap)))), np - 1)
+    )
+    dev = basis * y_cap
     s = _admission_centred_shares(admissions, dev, admission_floor)
     return (; s, pooling_sd = τ_cap)
 end
@@ -1978,8 +1989,8 @@ deviation,
 
 ```math
 w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\delta_p),
-\\qquad \\boldsymbol{\\delta} = \\tau_{bg} Q \\mathbf{z},
-\\qquad z_j \\sim \\mathrm{N}(0, 1),
+\\qquad \\boldsymbol{\\delta} = Q \\mathbf{y},
+\\qquad y_j \\sim \\mathrm{N}(0, \\tau_{bg}^2),
 ```
 
 normalised to sum to one. `Q` is the sum-to-zero basis
@@ -1989,6 +2000,13 @@ no reference patch. `τ_bg → 0` recovers the population split. The per-provinc
 analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
 since the background dominates the specimens analysed where positivity is
 low.
+
+The basis coordinates `y_bg` are drawn centred, on the scale `τ_bg`,
+because that composition informs them. The data then pin each deviation
+rather than `τ_bg`, and the non-centred `τ_bg Q z` would tie `z` to `τ_bg`
+along a funnel. On the joint posterior `log τ_bg` correlates at −0.93 with
+the log mean square of the `z`. Both forms carry the same prior, so only
+the sampled coordinates differ.
 
 With one patch the whole background belongs to it and nothing is sampled.
 
@@ -2002,7 +2020,6 @@ Returns `(; w, pooling_sd)`.
             ),
         ],
         pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(max(n_patches, 1))
     )
     if n_patches <= 1
@@ -2013,8 +2030,12 @@ Returns `(; w, pooling_sd)`.
             "$(n_patches) patches."
     )
     τ_bg ~ pooling_sd_prior
-    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
-    dev = sum_to_zero(sum_to_zero_factor(basis, τ_bg), z_bg)
+    ## Each basis coordinate is drawn centred, on the scale `τ_bg`. `eps`
+    ## floors the SD so a `τ_bg ≈ 0` draw stays a proper distribution.
+    y_bg ~ product_distribution(
+        fill(Normal(0, τ_bg + eps(typeof(float(τ_bg)))), n_patches - 1)
+    )
+    dev = basis * y_bg
     total_pop = sum(populations)
     log_w = log.(populations ./ total_pop) .+ dev
     ## Softmax against the largest term, so a wide deviation cannot

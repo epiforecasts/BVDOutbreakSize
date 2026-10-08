@@ -22,6 +22,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap`.
+  The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
+  On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
+  Both scales are among the slowest-mixing parameters of recent CI fits.
+  The two submodels lose their `offset_prior` keyword, which the centred form has no use for.
+  This is an exact reparameterisation with the same prior and likelihood, so fitted values change only by sampling noise.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).

@@ -1299,9 +1299,9 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl(\tau_{\text{cap}} (Q \mathbf{z}^{\text{cap}})_p\bigr),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
 # \qquad
-# \mathbf{z}^{\text{cap}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \mathbf{y}^{\text{cap}} \sim \mathrm{Normal}(0,\ \tau_{\text{cap}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
@@ -1936,9 +1936,9 @@ cfr_prior_fig #hide
 # The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl(\tau_{\text{bg}} (Q \mathbf{z}^{\text{bg}})_p\bigr),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl((Q \mathbf{y}^{\text{bg}})_p\bigr),
 # \qquad
-# \mathbf{z}^{\text{bg}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \mathbf{y}^{\text{bg}} \sim \mathrm{Normal}(0,\ \tau_{\text{bg}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```
