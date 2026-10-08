@@ -708,7 +708,11 @@ function nearest_plateau(h, cols, cx)
     while a > 1 && level(a - 1)
         a -= 1
     end
-    best = nothing
+    # the best run is kept in plain integers rather than a tuple rebuilt in
+    # a short-circuit: Julia 1.10 returned that tuple with its start
+    # overwritten by the loop's later start
+    found = false
+    best_d, best_lo, best_hi = Inf, 0, 0
     x = a
     while x <= last(cols)
         b = x
@@ -717,11 +721,14 @@ function nearest_plateau(h, cols, cx)
         end
         if b > x && b >= first(cols)
             d = abs((x + b) / 2 - cx)
-            (best === nothing || d < best[1]) && (best = (d, x, b))
+            if !found || d < best_d
+                found = true
+                best_d, best_lo, best_hi = d, x, b
+            end
         end
         x = b + 1
     end
-    return best === nothing ? nothing : (best[2], best[3])
+    return found ? (best_lo, best_hi) : nothing
 end
 
 # Columns inside the pink `donnees potentiellement incompletes` band: above
