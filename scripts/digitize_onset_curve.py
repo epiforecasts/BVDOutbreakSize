@@ -44,12 +44,17 @@
 #     tick rows and tick columns (gridlines). The run's top is its highest
 #     pixel darker than an anti-alias, which is the bar's outline. A day
 #     whose columns are mostly page from the baseline up is empty; one whose
-#     columns neither show a bar nor leave it empty is read again without
-#     the tick-column skip, which washed fill on a tick column can break.
+#     columns neither show a bar nor leave it empty, or that reads below the
+#     two equal outline columns around it beside a washed tick column, is
+#     read again without the tick-column skip, which washed fill on a tick
+#     column can break.
 #     The bar height is the height at least two of its interior columns agree on to
 #     within a pixel, or the tallest interior column when none do; with no
 #     outline pixel in any column the fill's own extent is read where two
-#     columns agree on it. Half a pixel of outline is subtracted before
+#     columns agree on it. Inside the pink incomplete-data band, where the
+#     faded bars can lose their outlines, a day whose columns disagree reads
+#     the level run of columns centred nearest it instead. Half a pixel of
+#     outline is subtracted before
 #     dividing by pixels-per-count. The dead segment is the count of
 #     crimson pixels in the chosen column. A column
 #     under the red dashed first-positive-result line (evenly spaced
@@ -715,6 +720,52 @@ def _two_agree(h, cols):
                for u in vals if u > 0)
 
 
+def _nearest_plateau(h, cols, cx):
+    """The level run (two or more consecutive columns, each within a pixel
+    of the one before it) that reaches into `cols` with its centre nearest
+    `cx`, as its first and last 1-based column, or None when no such run
+    does. `h` is 1-based."""
+    W = len(h) - 1
+
+    def level(x):
+        return (h[x] > 0 and h[x + 1] > 0
+                and abs(int(h[x + 1]) - int(h[x])) <= 1)
+
+    a = cols[0]
+    while a > 1 and level(a - 1):
+        a -= 1
+    best = None
+    x = a
+    while x <= cols[-1]:
+        b = x
+        while b < W and level(b):
+            b += 1
+        if b > x and b >= cols[0]:
+            d = abs((x + b) / 2 - cx)
+            if best is None or d < best[0]:
+                best = (d, x, b)
+        x = b + 1
+    return None if best is None else (best[1], best[2])
+
+
+def _band_columns(im, white, hp, y0, ytop):
+    """Columns inside the pink `donnees potentiellement incompletes` band,
+    as a 1-based boolean array: above the column's run, from the top y-axis
+    tick down, the page is at least as often pink as white. `hp` is
+    1-based; `y0` and `ytop` are 0-based rows."""
+    R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    pink = (R >= 238) & (G >= 200) & (B >= 200) & (R - G >= 15)
+    W = im.shape[1]
+    out = np.zeros(W + 1, dtype=bool)
+    for x in range(1, W + 1):
+        top = y0 - int(hp[x]) - 2
+        if top <= ytop:
+            continue
+        np_ = int(pink[ytop:top + 1, x - 1].sum())
+        out[x] = np_ > 0 and np_ >= int(white[ytop:top + 1, x - 1].sum())
+    return out
+
+
 def digitize(im, last_tick_date, y_step=20):
     return digitize_windows(im, last_tick_date, y_step)[0]
 
@@ -778,6 +829,7 @@ def digitize_windows(im, last_tick_date, y_step=20):
         hread[x] = min(hd, h[x])
         nread[x] = min(nd_x, hread[x])
     barmin, barmax = int(nz.min()), int(nz.max())
+    inband = _band_columns(im, white, hp, y0, yt[0])
     rows = []
     windows = {}
     for off in range(7 * ks[0] - 7, 4):
@@ -835,14 +887,36 @@ def digitize_windows(im, last_tick_date, y_step=20):
             jn = min(cols, key=lambda x: (abs(x - cx), x))
             hn = int(hread[jn]) if hread[jn] > 0 else int(hp[jn])
             bar = (hn, nread[jn], [jn])
+        # before the last tick the band's faded bars can lose their outline
+        # too, and a window then straddles two of them; when no two columns
+        # agree, the level run of columns centred nearest the day is read,
+        # from its column nearest the day's centre
+        if (off <= 0 and isinstance(bar, tuple) and len(cols) >= 2
+                and not _two_agree(hread, cols)
+                and all(inband[x] for x in cols)):
+            run = _nearest_plateau(hread, cols, cx)
+            if run is not None:
+                jn = min(range(run[0], run[1] + 1),
+                         key=lambda x: (abs(x - cx), x))
+                bar = (int(hread[jn]), nread[jn], [jn])
         # washed fill on a tick column can read as gridline and break each run
         # at a different row; a day that reads as neither empty nor a bar, or
         # as a bar with no outline above the baseline's anti-alias in any
         # column, is read again without the skip. That read can climb the
         # gridline above the bar, so it is capped at the taller of the
-        # outline columns bounding the window
+        # outline columns bounding the window. A day between two outline
+        # columns of the same height, with a washed column beside the tick
+        # that shows fill but no outline, is read again too when it reads
+        # below them: its fill broke at a gridline row
+        bounds = (min(cols) - 1, max(cols) + 1)
+        paired = (all(1 <= x <= W and isborder[x] for x in bounds)
+                  and abs(int(h[bounds[0]]) - int(h[bounds[1]])) <= 1)
+        washed = any(hread[x] == 0 and hp[x] > 2 * ppc
+                     and any(abs(x - t) <= 1 for t in xs) for x in cols)
         if bar is None or (isinstance(bar, tuple)
-                           and max(hread[x] for x in cols) <= 1):
+                           and max(hread[x] for x in cols) <= 1) or (
+                isinstance(bar, tuple) and paired and washed
+                and bar[0] < h[bounds[0]] - 1):
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
             edge = [int(h[x]) for x in (min(cols) - 1, max(cols) + 1)
                     if 1 <= x <= W and isborder[x]]
