@@ -1282,7 +1282,7 @@ density there, is the fitted model's.
     ## the latent grid runs to.
     ckw = forecast === nothing ? (;) : (; cutoff = n)
 
-    dispersion_state ~ to_submodel(dispersion(7))
+    dispersion_state ~ to_submodel(dispersion(6))
     asc_state ~ to_submodel(ascertainment)
     kv = dispersion_state.k
     k_cases = kv[1]
@@ -1291,7 +1291,6 @@ density there, is the fitted model's.
     k_confirmed_deaths = kv[4]
     k_isolation = kv[5]
     k_recovered = kv[6]
-    k_treatment_flow = kv[7]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
@@ -1443,7 +1442,6 @@ density there, is the fitted model's.
             occupancy_break_days = occupancy_break_days,
             conf_hazard_daily = conf_hazard_daily,
             k_external = k_isolation,
-            k_flow_external = k_treatment_flow,
             defaults = treatment_defaults, ckw...,
             _sim_kw(simulated_data, :treatment_state)...
         )

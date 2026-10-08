@@ -564,10 +564,11 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance-data parameters cover the reporting fractions for the DRC and Uganda, the surveillance dispersions, and the laboratory pipeline: the testing fraction and receipt delay, the specimens analysed per suspect sampled, the per-suspected and per-test positivity, the non-BVD background rate, and the death-confirmation probability.
-# The seven count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, the treatment-centre stocks, recovered and the treatment-centre daily flows) each have their own negative-binomial dispersion, partially pooled from a shared population.
+# The six count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, the treatment-centre stocks and recovered) each have their own negative-binomial dispersion, partially pooled from a shared population.
 # $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
 # The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
-# Their dispersions ($k_{\text{iso}}$ for the occupancy, beds and census, $k_{\text{flow}}$ for the daily admissions, in-care deaths, rule-outs and absconds, and $k_{\text{rec}}$) are drawn from the same pooled population.
+# Their dispersions ($k_{\text{iso}}$ for the occupancy, beds and census, and $k_{\text{rec}}$) are drawn from the same pooled population.
+# The daily admissions, in-care deaths, rule-outs and absconds share a flow dispersion $k_{\text{flow}}$ with a prior of its own.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>

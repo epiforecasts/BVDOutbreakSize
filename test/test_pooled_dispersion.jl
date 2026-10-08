@@ -118,4 +118,16 @@ end
     sd = vec(Array(chn[:dispersion_sd]))
     @test all(isfinite, sd)
     @test all(sd .>= 0)
+
+    ## The pool holds six streams. The treatment flows draw their dispersion
+    ## inside the treatment submodel, outside the pool, and the exposed flow
+    ## dispersion is that draw.
+    using Turing: @varname
+    using Random: Xoshiro
+    θ = rand(Xoshiro(3), m)
+    @test length(θ[@varname(dispersion_state.log_isk)]) == 6
+    @test haskey(θ, @varname(treatment_state.flow_disp_state.inv_sqrt_k))
+    isk = vec(Array(chn[@varname(treatment_state.flow_disp_state.inv_sqrt_k)]))
+    k_flow = vec(Array(chn[:treatment_flow_dispersion]))
+    @test all(isapprox.(k_flow, 1.0 ./ isk .^ 2; rtol = 1.0e-6))
 end

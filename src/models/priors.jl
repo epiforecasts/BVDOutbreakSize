@@ -1238,8 +1238,9 @@ end
 """
 Partially-pooled negative-binomial dispersions for the `n_streams` count
 streams in the joint model (suspected cases, suspected deaths, confirmed
-cases, confirmed deaths, the treatment-centre stocks, the recovered and the
-treatment-centre daily flows). Each stream draws
+cases, confirmed deaths, the treatment-centre stocks and the recovered).
+The treatment-centre daily flows take a dispersion of their own outside the
+pool ([`treatment_flow_defaults`](@ref)). Each stream draws
 its own dispersion from a shared population, so heterogeneous streams (a
 handful of deaths against hundreds of suspects against a daily laboratory
 volume) do not share one global `k` that the dominant stream pulls around,

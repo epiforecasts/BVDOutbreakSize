@@ -437,6 +437,21 @@ end
     @test haskey(θs, @varname(disp_state.inv_sqrt_k))
 end
 
+@testitem "treatment flows: informative flow dispersion prior" begin
+    using BVDOutbreakSize: treatment_flow_defaults
+    using Distributions: LogNormal, quantile, cdf
+    ## 1/sqrt(k_flow) ~ LogNormal(log(1/sqrt(15)), 0.35). Flows in the tens
+    ## with a Pearson index of 2 to 5 need k_flow of about 3 to 40, and the
+    ## stocks' near-Poisson k ≈ 546 must sit far in the tail.
+    prior = treatment_flow_defaults().flow_dispersion.defaults.inv_sqrt_k_prior
+    @test prior == LogNormal(log(1 / sqrt(15.0)), 0.35)
+    k_at(q) = 1 / quantile(prior, 1 - q)^2
+    @test k_at(0.5) ≈ 15.0
+    @test 4.0 < k_at(0.05) < 6.0
+    @test 40.0 < k_at(0.95) < 50.0
+    @test cdf(prior, 1 / sqrt(546.0)) < 1.0e-5
+end
+
 @testitem "admission_headroom: bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a

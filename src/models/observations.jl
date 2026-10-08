@@ -2247,6 +2247,14 @@ function treatment_flow_defaults()
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
         dispersion = surveillance_dispersion_model(),
+        ## Flow dispersion k_flow: 1/sqrt(k_flow) log-normal with median
+        ## 1/sqrt(15) and log-SD 0.35, so k_flow has median 15 and a 90%
+        ## range of about 5 to 47. Flows in the tens that scatter 2 to 5
+        ## times their Poisson variance need k_flow = mean/(index − 1),
+        ## about 3 to 40. The stocks' near-Poisson k ≈ 546 sits five SDs out.
+        flow_dispersion = surveillance_dispersion_model(;
+            inv_sqrt_k_prior = LogNormal(log(1 / sqrt(15.0)), 0.35)
+        ),
         ## In-care fatality modifier prior: β_iso on the infection CFR.
         cfr_modifier_prior = Normal(0.0, 0.5),
         ## Small abscond / loss-to-follow-up fraction of occupancy per day.
@@ -2446,7 +2454,10 @@ the Tableau 6 patient-movement counts, a no-op when their history is
 empty. The flows share a dispersion `k_flow` of their own, apart from the
 stocks' `k`. The stocks are counts in the hundreds that carry over from
 day to day, while the flows are fresh daily counts in the tens, and the
-two scatter differently about their modelled means. The two sub-stocks
+two scatter differently about their modelled means. `k_flow` is not pooled
+with the other dispersions. It takes the informative prior
+`defaults.flow_dispersion`, `1/sqrt(k_flow) ~ LogNormal(log(1/sqrt(15)), 0.35)`
+(median 15, 90% about 5 to 47), even inside the joint. The two sub-stocks
 are scored against the Tableau 6 census
 breakdown (`dont confirmés` / `dont suspects`) where published, in place
 of the total on those days. An opt-in occupancy offset Δ(t) on the
@@ -2502,9 +2513,9 @@ series for forecasting and replication.
         ## Standalone it samples its own.
         k_external::Union{Nothing, Real} = nothing,
         ## Dispersion of the four daily flows (admissions, in-care deaths,
-        ## rule-outs and absconds), injected as `k_flow_external` or sampled
-        ## from `flow_dispersion` standalone.
-        flow_dispersion = defaults.dispersion,
+        ## rule-outs and absconds), sampled from `flow_dispersion` unless
+        ## injected as `k_flow_external`.
+        flow_dispersion = defaults.flow_dispersion,
         k_flow_external::Union{Nothing, Real} = nothing,
         cfr_modifier_prior = defaults.cfr_modifier_prior,
         abscond_prior = defaults.abscond_prior,

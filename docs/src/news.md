@@ -22,9 +22,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, pooled with the other per-stream dispersions, rather than the dispersion of the occupancy, beds and in-care census (#1103).
+- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
   At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
   A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
+  The flow dispersion sits outside the pooled per-stream dispersions, with a prior on one over its square root of LogNormal(log(1/√15), 0.35): median 15, 90% from about 5 to 47.
+  Flows in the tens with an index of 2 to 5 need a dispersion of about 3 to 40, and the stock value of 546 is five prior SDs out.
+  As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
   Fitted values change: the flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
