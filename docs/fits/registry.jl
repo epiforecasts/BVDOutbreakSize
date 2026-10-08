@@ -111,6 +111,8 @@ function fit_key(id; samples::Integer = 500, chains::Integer = 2)
         joint_sampler_args()
     elseif id in ZONE_SAMPLER_FITS
         zone_sampler_args()
+    elseif is_frozen_joint_id(id)
+        frozen_sampler_args()
     else
         (;)
     end
@@ -290,6 +292,14 @@ function sensitivity_overrides(obs)
     )
 end
 
+## The single-population joints frozen at a dated cut-off (`frozen_<date>`).
+## Their posteriors mix slowly on the little data they have, and they take
+## a longer warm-up than the default before their two chains of 500 draws.
+is_frozen_joint_id(id) = occursin(r"^frozen_\d{4}-\d{2}-\d{2}$", id)
+frozen_sampler_args() = (;
+    samples = 500, n_adapts = 1000, target_accept = 0.9,
+)
+
 ## The fits that splat `zone_sampler_args()`.
 const ZONE_SAMPLER_FITS = ("local", "local_frozen_validation")
 
@@ -380,15 +390,14 @@ function build_fit_specs(
         )
         return (; o, model)
     end
-    ## The patched validation joint takes the headline's sampler budget. The
-    ## single-population frozen fits keep the smaller default.
+    ## The patched validation joint takes the headline's sampler budget and
+    ## the single-population frozen fits their own.
     function fit_frozen_joint(cutoff_date; patches::Bool = false)
         f = frozen_joint(cutoff_date; patches)
-        budget = patches ? joint_sampler_args() :
-            (; samples = samples, target_accept = 0.9)
+        budget = patches ? joint_sampler_args() : frozen_sampler_args()
         chn = nuts_sample(
             f.model;
-            budget..., chains = chains,
+            chains = chains, budget...,
             callback = fit_callback("frozen_$(cutoff_date)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)

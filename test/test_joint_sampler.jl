@@ -95,3 +95,20 @@ end
         end
     end
 end
+
+@testitem "the dated frozen joints have their own sampler budget" tags = [
+    :quality,
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    @test is_frozen_joint_id("frozen_2026-05-20")
+    @test !is_frozen_joint_id("frozen_validation")
+    @test !is_frozen_joint_id("frozen_2026-05-20_deaths")
+    b = frozen_sampler_args()
+    @test b.samples == 500
+    @test b.n_adapts == 1000
+    ## The budget is part of the key, so a change to it refits.
+    @test fit_key("frozen_2026-05-20") != string(
+        "frozen_2026-05-20__", fit_content_hash(; samples = 500, chains = 2)
+    )
+end
