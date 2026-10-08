@@ -2,8 +2,12 @@
 #
 #   julia --project=docs scripts/fit_zone.jl \
 #       --parent logs/fit_cache/joint__<hash>.parent.jls \
-#       --out logs/zone_local [--samples 800] [--warmup 500] [--chains 2] \
-#       [--depth 10] [--target-accept 0.8]
+#       --out logs/zone_local [--samples N] [--warmup N] [--chains 2] \
+#       [--depth N] [--target-accept X]
+#
+# The sampler flags default to `joint_sampler_args()` in
+# `docs/fits/registry.jl`, the settings every fit in the report uses, so a
+# run without them matches the docs build's health-zone fit.
 #
 # `--parent` is a parent extract (`<key>.parent.jls`, the `fit-extras-joint`
 # artefact of a CI run) or a full `joint__<hash>.jls` chain. The observations
@@ -17,13 +21,16 @@ Pkg.instantiate()
 using BVDOutbreakSize
 using Serialization: serialize, deserialize
 using Dates: Day
-include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 include(joinpath(@__DIR__, "..", "docs", "fits", "summary.jl"))
 
 function parse_args(args)
+    s = joint_sampler_args()
     opts = Dict{String, String}(
-        "out" => "logs/zone_local", "samples" => "800", "warmup" => "500",
-        "chains" => "2", "depth" => "10", "target-accept" => "0.8"
+        "out" => "logs/zone_local", "samples" => string(s.samples),
+        "warmup" => string(s.n_adapts), "chains" => "2",
+        "depth" => string(s.max_depth),
+        "target-accept" => string(s.target_accept)
     )
     i = 1
     while i <= length(args)

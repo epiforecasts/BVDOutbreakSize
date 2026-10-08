@@ -2317,12 +2317,13 @@ cfr_prior_fig #hide
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
 # Each chain starts from the first of a batch of prior draws whose log joint density is at or above the batch median.
-# Every fit runs two chains at a maximum tree depth of 10.
-# The single-stream fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
-# The single-population frozen re-fits take the same draws and adaptation steps at a target acceptance probability of 0.90.
-# The headline meta-population joint, the single-population control, the one-week-back validation re-fit and the sensitivity re-fits take 1000 draws per chain after 500 adaptation steps, at a target acceptance probability of 0.80.
-# The health-zone fits take 800 draws per chain after the same 500 adaptation steps and target acceptance probability.
-# Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
+
+_sampler = joint_sampler_args(); #hide
+Markdown.parse( #hide
+    "Every fit uses the same sampler settings.\n" * #hide
+        "Each runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n" * #hide
+        "Both halves of the spatial comparison therefore differ only in the spatial structure and not in the sampler." #hide
+) #hide
 
 # ### No-onward-transmission counterfactual
 #

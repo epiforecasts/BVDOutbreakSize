@@ -81,11 +81,8 @@ const FIT_DATA_EXCLUDE = (
 Content hash of the fit-relevant source, data and sampler settings.
 `sampler` is appended to the settings string when it is not empty.
 """
-function fit_content_hash(;
-        samples::Integer = 500, chains::Integer = 2,
-        sampler::NamedTuple = (;)
-    )
-    extra = string(FIT_CACHE_SCHEMA, ":", samples, "x", chains)
+function fit_content_hash(; chains::Integer = 2, sampler::NamedTuple = (;))
+    extra = string(FIT_CACHE_SCHEMA, ":", chains, " chains")
     if !isempty(sampler)
         extra *= string(":", sampler)
     end
@@ -98,23 +95,13 @@ function fit_content_hash(;
 end
 
 """
-Content-addressed cache key for fit `id` at the given sampler settings.
-The fits in `JOINT_SAMPLER_FITS` are also keyed on `joint_sampler_args()`
-and those in `ZONE_SAMPLER_FITS` on `zone_sampler_args()`, so a run with the
-`BVD_JOINT_*` overrides set writes its own cache entry.
-
-The health-zone fits take the joint's warm-up and target acceptance, so an
-override of either moves their key with the joint's.
+Content-addressed cache key for fit `id`. Every fit samples at
+`joint_sampler_args()` and is keyed on it, so a run with the `BVD_JOINT_*`
+overrides set writes its own cache entry for every fit.
 """
-function fit_key(id; samples::Integer = 500, chains::Integer = 2)
-    sampler = if id in JOINT_SAMPLER_FITS
-        joint_sampler_args()
-    elseif id in ZONE_SAMPLER_FITS
-        zone_sampler_args()
-    else
-        (;)
-    end
-    return string(id, "__", fit_content_hash(; samples, chains, sampler))
+function fit_key(id; chains::Integer = 2)
+    sampler = joint_sampler_args()
+    return string(id, "__", fit_content_hash(; chains, sampler))
 end
 
 """
@@ -205,7 +192,11 @@ fit_spec(id, model, sample) = (;
     id, kind = :chain, model, thunk = () -> sample(model()),
 )
 
-## Sampler settings for the fits in `JOINT_SAMPLER_FITS`.
+## Sampler settings for every fit in the registry, and for the scripts that
+## fit outside it (`scripts/fit_zone.jl`, `scripts/zone_fit_report.jl`,
+## `scripts/recovery.jl`). The single-stream, frozen and health-zone fits
+## splat the joint's settings rather than restating them, so a change here
+## moves every fit.
 ##
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
 ## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
@@ -230,18 +221,10 @@ joint_max_depth() = parse(
 )
 
 ## The tree-depth cap fit `id` samples at, which the diagnostics need to
-## count how often a tree reached it.
-fit_max_depth(id) = id in JOINT_SAMPLER_FITS ? joint_max_depth() : 10
+## count how often a tree reached it. Every fit shares the joint's.
+fit_max_depth(id) = joint_max_depth()
 
-## The fits that splat `joint_sampler_args()`: the headline, its spatial
-## control, the one-week-back validation joint and the two sensitivity
-## re-fits of the joint.
-const JOINT_SAMPLER_FITS = (
-    "joint", "sens_no_patches", "frozen_validation",
-    "sens_community_delay", "sens_exp_growth_clock",
-)
-
-## The sampler budget every fit in `JOINT_SAMPLER_FITS` splats.
+## The sampler budget every fit splats.
 joint_sampler_args() = (;
     samples = joint_samples(1000), n_adapts = joint_warmup(500),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
@@ -290,16 +273,6 @@ function sensitivity_overrides(obs)
     )
 end
 
-## The fits that splat `zone_sampler_args()`.
-const ZONE_SAMPLER_FITS = ("local", "local_frozen_validation")
-
-## The sampler budget the health-zone stage splats. It follows the joint's
-## overrides, so it is keyed like the joint's.
-zone_sampler_args() = (;
-    samples = joint_samples(800), joint_sampler_args().n_adapts,
-    joint_sampler_args().target_accept,
-)
-
 ## Looked up when a dependent thunk runs, so the registry builds without
 ## `fit_zone` and tests can inject a double through `zone_fitter`.
 function default_zone_fitter()
@@ -313,7 +286,7 @@ end
 
 """
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 500, chains = 2,
+                    run_sensitivity, chains = 2,
                     zone_fitter = nothing, cache_dir = fit_cache_dir())
 
 Ordered list of the report's fits as `(; id, kind, model, thunk)` named
@@ -329,6 +302,8 @@ strictly: a missing parent is an error, not a refit. They are the dependent
 stage, and carry no `model`. `zone_fitter` fits a zone model from a parent
 chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the thunk
 runs.
+
+Every fit samples at `joint_sampler_args()`.
 """
 function build_fit_specs(
         obs;
@@ -337,7 +312,6 @@ function build_fit_specs(
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 500,
         chains::Integer = 2,
         zone_fitter = nothing,
         cache_dir::AbstractString = fit_cache_dir()
@@ -380,15 +354,11 @@ function build_fit_specs(
         )
         return (; o, model)
     end
-    ## The patched validation joint takes the headline's sampler budget. The
-    ## single-population frozen fits keep the smaller default.
     function fit_frozen_joint(cutoff_date; patches::Bool = false)
         f = frozen_joint(cutoff_date; patches)
-        budget = patches ? joint_sampler_args() :
-            (; samples = samples, target_accept = 0.9)
         chn = nuts_sample(
             f.model;
-            budget..., chains = chains,
+            joint_sampler_args()..., chains = chains,
             callback = fit_callback("frozen_$(cutoff_date)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -469,7 +439,7 @@ function build_fit_specs(
         f = frozen_stream(model_id, cutoff_date)
         chn = nuts_sample(
             f.model;
-            samples = samples, chains = chains,
+            joint_sampler_args()..., chains = chains,
             callback = fit_callback("frozen_$(cutoff_date)_$(model_id)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -537,8 +507,7 @@ function build_fit_specs(
         ## than a source, so with no deviations the two match exactly. What is
         ## left between them is the country running at the force-weighted mean
         ## of the provincial Rts rather than at the trend they are centred on;
-        ## test/test_patch_model.jl pins the size of that. It runs at the headline's draw
-        ## count, not the matrix one, so the comparison is like for like.
+        ## test/test_patch_model.jl pins the size of that.
         fit_spec(
             "sens_no_patches",
             () -> bvd_joint(
@@ -564,7 +533,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 check_model = false, callback = fit_callback("exports")
             )
         ),
@@ -579,7 +548,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("deaths")
             )
         ),
@@ -593,7 +562,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("cases")
             )
         ),
@@ -611,7 +580,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("confirmed")
             )
         ),
@@ -631,7 +600,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("confirmed_deaths")
             )
         ),
@@ -655,7 +624,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("treatment")
             )
         ),
@@ -669,7 +638,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                samples = samples, chains = chains,
+                joint_sampler_args()..., chains = chains,
                 callback = fit_callback("onsets")
             )
         ),
@@ -740,17 +709,16 @@ function build_fit_specs(
             cache_dir = cache_dir, strict = true
         )
     end
-    ## The zone stage takes the joint's warm-up and target acceptance.
     function fit_zone_from(parent_chn, o, name)
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
         return fitter(
             parent_chn, o;
-            zone_sampler_args()..., chains = chains,
+            joint_sampler_args()..., chains = chains,
             callback = fit_callback(name)
         )
     end
     ## A dependent key shares the parent's content hash and moves with the
-    ## joint's sampler overrides (`ZONE_SAMPLER_FITS`), but says nothing
+    ## joint's sampler overrides, but says nothing
     ## about the parent chain's bytes, so a parent refit under an unchanged
     ## key pairs with the zone chain already cached against the old parent.
     push!(

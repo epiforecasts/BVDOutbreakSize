@@ -13,7 +13,9 @@
 #
 # `--parent` is the joint chain the zone model melds from (required).
 # `--chain` is a fitted zone chain for stages c, d and e; when absent those
-# stages fit one at `--samples`/`--warmup` and save it there. `--stages`
+# stages fit one at `--samples`/`--warmup`/`--depth`/`--target-accept` and
+# save it there. These default to `joint_sampler_args()` in
+# `docs/fits/registry.jl`, the settings every fit in the report uses. `--stages`
 # selects which of a, b, c, d, e to run (default all). The observations are
 # frozen to the parent's cut-off. Stage a saves its prior draws next to the
 # chain for stage d to reuse. `--recovery-samples`/`--recovery-warmup` set
@@ -35,15 +37,17 @@ const FlexiChains = BVDOutbreakSize.FlexiChains
 import CairoMakie
 using CairoMakie: Figure, Axis, lines!, band!, scatter!, vlines!, save
 using Base64: base64encode
-include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
 ## --- Arguments ------------------------------------------------------------
 
 function parse_args(args)
+    s = joint_sampler_args()
     opts = Dict{String, String}(
         "out" => "logs/zone_report",
-        "stages" => "a,b,c,d,e", "samples" => "600", "warmup" => "400",
-        "depth" => "10",
+        "stages" => "a,b,c,d,e", "samples" => string(s.samples),
+        "warmup" => string(s.n_adapts), "depth" => string(s.max_depth),
+        "target-accept" => string(s.target_accept),
         "recovery-samples" => "200", "recovery-warmup" => "200",
         "prior-draws" => "200", "top" => "10"
     )
@@ -456,6 +460,7 @@ function load_or_fit_chain()
     chn = fit_zone(
         PARENT, OBS; samples = parse(Int, OPTS["samples"]),
         n_adapts = parse(Int, OPTS["warmup"]), max_depth = MAX_DEPTH,
+        target_accept = parse(Float64, OPTS["target-accept"]),
         callback = progress_callback(; path = joinpath(OUT, "zone_fit.log"))
     )
     minutes = round((time() - t) / 60; digits = 1)
