@@ -650,6 +650,68 @@ function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
 end
 
 """
+Gaussian random walk in centred form, shifted by a known offset: entry `i`
+is the walk's level `i` plus `offset[i]`. The walk starts at `start`, and
+each level is `Normal` about the one before it with SD `σ`. The shifted
+values themselves are the sampled coordinates. `σ` is floored at `eps` so a
+zero draw still gives a proper density. [`rt_walk_model`](@ref) draws its
+weekly log-`R_t` knots from it, with the intervention ramp as the offset.
+"""
+struct RandomWalkVector{
+        S <: Real, T <: Real, V <: AbstractVector{<:Real},
+    } <: Distributions.ContinuousMultivariateDistribution
+    "Level the first step is taken from."
+    start::S
+    "Per-step SD."
+    σ::T
+    "Shift added to each level."
+    offset::V
+end
+
+Base.length(d::RandomWalkVector) = length(d.offset)
+Base.eltype(::Type{<:RandomWalkVector}) = Float64
+
+function Distributions._logpdf(d::RandomWalkVector, x::AbstractVector)
+    T = float(
+        promote_type(
+            typeof(d.start), typeof(d.σ), eltype(d.offset), eltype(x)
+        )
+    )
+    σ = d.σ + eps(typeof(float(d.σ)))
+    c = -log(σ) - T(log(2π) / 2)
+    s = zero(T)
+    prev = d.start
+    @inbounds for i in eachindex(x, d.offset)
+        level = x[i] - d.offset[i]
+        s += c - ((level - prev) / σ)^2 / 2
+        prev = level
+    end
+    return s
+end
+
+function Distributions._rand!(
+        rng::AbstractRNG, d::RandomWalkVector, x::AbstractVector{<:Real}
+    )
+    σ = d.σ + eps(typeof(float(d.σ)))
+    prev = d.start
+    @inbounds for i in eachindex(x, d.offset)
+        prev += σ * randn(rng)
+        x[i] = prev + d.offset[i]
+    end
+    return x
+end
+
+## The values are unconstrained, so a sampled walk links through the
+## identity.
+VectorBijectors.from_linked_vec(::RandomWalkVector) =
+    VectorBijectors.TypedIdentity()
+VectorBijectors.to_linked_vec(::RandomWalkVector) =
+    VectorBijectors.TypedIdentity()
+VectorBijectors.linked_vec_length(d::RandomWalkVector) = length(d)
+VectorBijectors.linked_optic_vec(d::RandomWalkVector) =
+    VectorBijectors.optic_vec(d)
+
+"""
 Outbreak age in days: the elapsed time from the model-implied seeding
 day to the cut-off (day `n`), where the seeding day is the smooth
 crossing at which cumulative infections first reach one. The crossing is
