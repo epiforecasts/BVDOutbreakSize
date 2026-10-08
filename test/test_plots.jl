@@ -1757,6 +1757,19 @@ end
                 for i in 1:nd, d in walk_start:n
         )
     end
+    ## The provinces ran at the day's common factor that rescales them onto
+    ## the national renewal, so the rebuilt trajectory carries it.
+    factors = [collect(range(1.0, 0.8; length = n)) for _ in 1:nd]
+    scaled = FlexiChains.FlexiChain{Symbol}(
+        nd, 1, merge(base, Dict(P(:patch_partition_scale) => col(factors)))
+    )
+    ps = reconstruct_patch_rt(scaled; n_patches = np, args...)
+    for p in 1:np
+        @test all(
+            ps[p][i, d] ≈ pw[p][i, d] * factors[i][d]
+                for i in 1:nd, d in walk_start:n
+        )
+    end
 end
 
 @testitem "plot_rt_patches: one panel per province on a shared axis" setup = [

@@ -1614,9 +1614,10 @@ function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
 end
 
 """
-Multi-patch latent infection process. Runs a renewal equation per spatial
-patch with a shared generation interval, a shared incubation period, and
-an optional between-patch importation kernel.
+Multi-patch latent infection process. Runs one national renewal at the
+national trend and splits each day's infections across the spatial patches,
+with a shared generation interval, a shared incubation period, and an
+optional between-patch importation kernel.
 
 ### Structure
 
@@ -1662,6 +1663,19 @@ so the uncoupled path keeps the sampled fractions (`seed_fraction_prior`, a
 national cryptic seed rather than adding to it, so the growth submodel's
 `C_T` stays the national daily incidence at the renewal start and
 comparable across any patch count.
+
+### National total
+
+The national infections come from one renewal at the trend `μ(t)` on the
+summed seeds and the summed population, and each day's infections are split
+across the patches in proportion to their force after importation
+([`partitioned_infections`](@ref)). `μ(t)` is then the national
+reproduction number in a fully susceptible population, and the sum-to-zero
+patch deviations set only each patch's share, not the national size. The
+patches sum to the national renewal and cannot go negative. The returned
+`Rt_matrix` holds the reproduction numbers the patches ran at after the
+rescaling onto the national total, and `partition_scale` the daily common
+factor of that rescaling.
 
 ### Returns
 
@@ -1826,14 +1840,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
     end
-    ## 6. Multi-patch renewal. Each province runs its own renewal at its own
-    ##    reproduction number and the national trajectory is their sum. There
-    ##    is no separate national process and nothing rescales the patches to
-    ##    match one. `mu(t)` is a central trend the provinces pool toward, and
-    ##    the reproduction number the country actually ran at is read back off
-    ##    the summed infections in step 9.
-    renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
+    ## 6. Multi-patch renewal. One national renewal at `mu(t)` sets the
+    ##    national infections, and each day is split across the provinces by
+    ##    their force after importation, so the deviations move only the
+    ##    split.
+    renewal_state = partitioned_infections(
+        Rt_matrix, rt_state.Rt_national, g, seeds_matrix,
         importation_kernel, ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
@@ -1854,7 +1866,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     T_total = growth_state.T + τ_obs
     return (;
         infections_matrix, onsets_matrix,
-        Rt_matrix, importation_matrix,
+        Rt_matrix = renewal_state.Rt_matrix, importation_matrix,
+        partition_scale = renewal_state.scale,
         δ_patch, δ_knots = rt_state.δ_knots,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
@@ -1877,11 +1890,9 @@ read off the per-patch infections.
 `infections_total` and `cumulative_total` sum the patches, `C_T_patch` is
 each patch's cumulative at the cut-off and `C_T` the national one. `R_T`
 inverts the renewal equation on the summed infections on the cut-off day
-([`implied_national_Rt_at`](@ref)). With `I_{p,t} = R_{p,t} · force_{p,t}`
-that gives `Σ_p R_{p,t} force_{p,t} / Σ_p force_{p,t}`, the
-incidence-weighted mean of the patch `Rt`s and the `Rt` that reproduces
-the national trajectory. Read off the depleted infections, it is net of
-depletion. `r`, `doubling_time` and `seeding_age` follow from it as in
+([`implied_national_Rt_at`](@ref)). The patches sum to the national
+renewal, so this is the national trend net of depletion. `r`,
+`doubling_time` and `seeding_age` follow from it as in
 [`infection_model`](@ref).
 """
 function _patch_headlines(infections_matrix::AbstractMatrix, g, n::Integer)

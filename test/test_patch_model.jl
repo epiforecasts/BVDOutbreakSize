@@ -849,9 +849,10 @@ end
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol = 1.0e-8
     end
 
-    ## The deviations sum to zero and nothing rescales the provinces, so
-    ## before depletion the unweighted geometric mean of the provincial Rt is
-    ## the central trend exactly. Each province is then scaled by its own susceptible fraction.
+    ## The deviations sum to zero, so before depletion and the common
+    ## rescaling onto the national renewal the unweighted geometric mean of
+    ## the provincial Rt is the central trend exactly. Each province is then
+    ## scaled by its own susceptible fraction and the day's common factor.
     nat = BVDOutbreakSize._reconstruct_rt_walk(
         chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
@@ -861,12 +862,16 @@ end
         reshape(collect(v), np, obs.n)
             for v in vec(collect(chn[:susceptible_fraction_patch]))
     ]
+    scale = [collect(v) for v in vec(collect(chn[:patch_partition_scale]))]
     for i in 1:5, d in (obs.n, obs.n - 7)
 
         ## A province whose pool is used up has no Rt left to compare.
         all(>(0), view(frac[i], :, d - 1)) || continue
         gm = exp(
-            sum(log(rt[p][i, d] / frac[i][p, d - 1]) for p in 1:np) / np
+            sum(
+                log(rt[p][i, d] / (frac[i][p, d - 1] * scale[i][d]))
+                    for p in 1:np
+            ) / np
         )
         @test gm ≈ nat[i, d] rtol = 1.0e-8
     end
@@ -913,11 +918,10 @@ end
     ## multiplies the national cumulative total by 2.7 over 80 days and by 63
     ## over 206. This test is what stops that being rediscovered by surprise.
     ##
-    ## Nothing here says the model is wrong. The national streams constrain
-    ## the summed trajectory directly, so the fitted trend moves down to
-    ## compensate. What it does mean is that the molecular-clock prior, which
-    ## sets the walk base, is a prior on the trend and not on the country, and
-    ## the deviation prior reaches the national size through that route.
+    ## This is why `patch_infection_model` does not sum free patches but
+    ## splits one national renewal at the trend across them
+    ## (`partitioned_infections`), so the deviations cannot reach the
+    ## national size.
     g = [0.05, 0.1, 0.15, 0.2, 0.2, 0.15, 0.1, 0.05]
     L, seed0, r = 40, 32.0, 0.06
     fracs = [0.17, 0.04]

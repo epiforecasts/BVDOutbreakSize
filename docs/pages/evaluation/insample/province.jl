@@ -433,12 +433,9 @@ province_pairs_fig #hide
 #
 # Splitting the country into provinces adds no national data, so the national
 # outbreak size should not move far either way.
-# The two are not identical by construction: the provinces run free and the
-# country grows at the force-weighted mean of their reproduction numbers,
-# which sits above the central trend they pool toward. That gap is first
-# order in the deviation scale.
-# A large gap between the two posteriors below would therefore point at the
-# deviation priors rather than at the data.
+# In both the national infections come from one renewal at the national trend, and the provinces only share them out.
+# The two can still differ, because the provincial data enter the same fit and can shift the parameters the provinces share.
+# A large gap between the two posteriors below would therefore point at the provincial data rather than at the national streams.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
