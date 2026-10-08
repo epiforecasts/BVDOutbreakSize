@@ -350,7 +350,7 @@ end
         @test c.parent == fake_joint
         @test c.o === obs
         @test c.samples == 800
-        @test c.n_adapts == 500
+        @test c.n_adapts == 1000
         @test c.target_accept == 0.8
         @test !haskey(c, :max_depth)
         @test c.chains == 2
