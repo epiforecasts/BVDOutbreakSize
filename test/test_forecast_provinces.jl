@@ -200,13 +200,98 @@ end
         pp; horizon = 7, obs_cases = 905, obs_deaths = 18, obs_confirmed = 40
     )
     capacity = _draw_vectors(pp, :forecast_bed_capacity)
+    shortfall = _draw_vectors(pp, :forecast_bed_shortfall)
     @test "isolation_level" in names(fc) && "bed_capacity" in names(fc)
+    @test "admissions_new" in names(fc)
+    national = _draw_vectors(pp, Symbol("forecast_admissions.obs"))
+    province = _draw_vectors(pp, Symbol("forecast_admissions.province.obs"))
     for d in 1:nd
         rows = fc.draw .== d
         ## The provinces' patients in isolation add up to the national
-        ## occupancy forecast on the same day, and their beds to the
-        ## national capacity.
-        @test sum(fc.isolation_level[rows]) == nat.isolation_level[d]
-        @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7] rtol = 1.0e-10
+        ## occupancy forecast on the same day, and their beds, each floored
+        ## at its last recorded beds, to the national beds. No province
+        ## holds more than its beds.
+        @test round(Int, sum(fc.isolation_level[rows])) ==
+            nat.isolation_level[d]
+        @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7]
+        @test all(fc.isolation_level[rows] .<= fc.bed_capacity[rows])
+        ## The provinces' admissions add up to the national admissions on
+        ## every day.
+        @test vec(sum(reshape(province[d], NP, :); dims = 1)) ≈ national[d]
+        @test sum(fc.admissions_new[rows]) ≈ sum(national[d][1:7])
+        ## The national shortfall column is the forecast shortfall that day.
+        @test nat.bed_shortfall[d] == round(shortfall[d][7])
+        @test all(>=(0), shortfall[d])
     end
+end
+
+@testitem "the province forecast stays within each province's beds" begin
+    using BVDOutbreakSize: treatment_forecast_model, cutoff_occupancy
+    using Turing: returned
+    using Random: Xoshiro
+
+    ## Three patches over twelve days, forecast from day 11. At the cut-off
+    ## patch 1 holds 60 of the 100 occupied against 35 beds, so 25 are its
+    ## shortfall and it can admit only as many as leave.
+    n = 12
+    fd = 11:12
+    admit_patch = [fill(40.0, 1, n); fill(5.0, 1, n); fill(1.0, 1, n)]
+    demand_patch = [fill(60.0, 1, n); fill(20.0, 1, n); fill(20.0, 1, n)]
+    capacity_patch = [fill(30.0, 1, n); fill(40.0, 1, n); fill(30.0, 1, n)]
+    floors = [35.0, 40.0, 20.0]
+    cut = cutoff_occupancy(100.0, demand_patch[:, 10], capacity_patch[:, 10], floors)
+    @test cut.beds ≈ [35.0, 40.0, 30.0]
+    @test cut.occupancy ≈ [35.0, 20.0, 20.0]
+    @test cut.shortfall ≈ [25.0, 0.0, 0.0]
+    flow = fill(1.0, n)
+    state = (;
+        occupancy_mean = fill(100.0, n), admit_patch, demand_patch,
+        capacity_patch, deaths_daily = flow, recover_daily = flow,
+        ruleout_daily = flow, abscond_daily = flow, demand = fill(100.0, n),
+        beds_patch_T = cut.beds,
+        occupancy_patch_T = cut.occupancy, shortfall_patch_T = cut.shortfall,
+    )
+    cap = (; days = [5, 10], counts = [100, 100])
+    m = treatment_forecast_model(state, fd, cap, 10.0)
+    for seed in 1:20
+        r = returned(m, rand(Xoshiro(seed), m))
+        ## The mean path never holds more than the beds, and admits no more
+        ## than the free beds.
+        @test all(r.path.occupancy .<= r.beds .+ 1.0e-10)
+        @test all(r.path.admissions .<= max.(r.path.free, 0) .+ 1.0e-10)
+        ## Drawn occupancy and admissions by province respect the same
+        ## bounds and sum to the national counts.
+        for d in (r.occupancy_draws, r.admission_draws)
+            prov = reshape(d.province, 3, :)
+            @test vec(sum(prov; dims = 1)) ≈ d.obs
+            @test all(prov .<= d.ceilings)
+        end
+        @test all(reshape(r.occupancy_draws.province, 3, :) .<= r.beds)
+        ## Patch 1's 60 of the uncapped 100 stand 25 above its 35 beds.
+        @test r.bed_shortfall ≈ [25.0, 25.0]
+    end
+    ## Half the occupancy fits every patch's beds.
+    half = treatment_forecast_model(
+        merge(state, (; occupancy_mean = fill(50.0, n))), fd, cap, 10.0
+    )
+    @test returned(half, rand(Xoshiro(1), half)).bed_shortfall == [0.0, 0.0]
+    ## With no recorded capacity the stock starts from the uncapped 100 and
+    ## admits everything, so patch 1 runs above its 35 beds.
+    nocap = treatment_forecast_model(
+        state, fd, (; days = Int[], counts = Int[]), 10.0
+    )
+    r = returned(nocap, rand(Xoshiro(2), nocap))
+    @test r.path.admissions ≈ admit_patch[:, fd]
+    @test r.path.occupancy[1, 1] > 35.0
+    @test sum(r.path.occupancy[:, 1]) > sum(cut.occupancy)
+    ## Patch 1's capacity falls by a fifth after the cut-off, so its beds fall
+    ## from 35 to 28 and, above them, it admits no one.
+    falling = copy(capacity_patch)
+    falling[1, fd] .= 24.0
+    fall = treatment_forecast_model(
+        merge(state, (; capacity_patch = falling)), fd, cap, 10.0
+    )
+    r = returned(fall, rand(Xoshiro(3), fall))
+    @test r.beds[1, :] ≈ [28.0, 28.0]
+    @test r.path.admissions[1, 2] == 0
 end

@@ -1241,9 +1241,7 @@ cfr_prior_fig #hide
 # Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
-# The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
-# Both censoring bounds are fixed recorded data.
-# This keeps the admissions censor stable, where a bound tied to the modelled, wandering capacity would drift.
+# The censoring bound is fixed recorded data, so it does not drift with the modelled capacity.
 # The occupancy and a flow stream are scored as
 #
 # ```math
@@ -1257,7 +1255,12 @@ cfr_prior_fig #hide
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
-# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy, the cut-off bed demand (the need under unconstrained supply), their difference (the bed shortfall) and the utilisation.
+# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero and capped at the cut-off beds), the cut-off bed demand (the need under unconstrained supply), the demand plus offset above the cut-off beds (the bed shortfall) and the utilisation.
+# The capacity walk is an ingredient of the beds rather than the beds reported.
+# With one patch the cut-off beds are the modelled capacity floored at the last recorded capacity.
+# With several, each province's cut-off beds are its modelled capacity floored at its last recorded effective beds, its occupancy is its demand share of the national demand plus offset capped at those beds, and the rest is its shortfall.
+# The national beds, occupancy and shortfall are the sums over the provinces.
+# Patients do not move between provinces, so the national occupancy $\sum_p \min(\cdot, B_p)$ is below $\min(\sum_p \cdot, \sum_p B_p)$ whenever a province is over its beds.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
@@ -1324,7 +1327,10 @@ cfr_prior_fig #hide
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy is split on the uncapped demand, since a province can print more patients than beds.
+# The recorded province beds are the effective beds: the printed beds, or where more patients are held, the larger of the patients and the beds implied by the printed occupancy rate.
+# Each day's 24h admissions are split the same way on each patch's modelled admissions $A_{p,t} + w_p A_{\text{bg},t}$, with their own $\rho^{\text{adm}}$.
 # The occupancy split is scored weekly and the bed split on the days a count changes, since a stock reprinted daily is not a fresh draw.
+# The admissions are a flow, so every day is scored.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -2372,10 +2378,17 @@ cfr_prior_fig #hide
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The bed occupancy is the censored count the occupancy likelihood scores.
-# Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
-# Admissions are capped at the capacity less the previous day's occupancy, the same headroom rule the fitted days use, so they can fall to near zero when the beds are forecast full.
-# We also report the modelled bed demand and its shortfall against the modelled capacity.
+# The occupied beds are forecast as a stock that admits only into free beds, per province with province care data and nationally otherwise.
+# Each province's beds start from its cut-off beds and move with its modelled capacity, so they fall when it falls.
+# A province left above its beds admits no one until its exits bring it below them.
+# The stock starts from the cut-off occupancy.
+# Each day's in-care deaths, recoveries, rule-outs and absconds are the modelled flows scaled by the occupied beds over the uncapped occupancy the day before, and each province loses them in proportion to its occupancy.
+# Below the beds the stock follows the fitted occupancy and the flows are unscaled.
+# Each province admits its modelled admissions up to its free beds, its beds less its previous day's occupancy plus its exits that day, so a full province admits only as many as leave.
+# The occupancy is drawn by province as a negative binomial censored at its beds, the admissions censored at its free beds, and the in-care deaths and rule-outs are the scaled flows.
+# The national counts are the sums over the provinces.
+# The fit leaves admissions uncensored, so these bounds apply to the forecast only.
+# We also report the modelled bed demand and its shortfall against the beds.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The figure is shown in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") below.
@@ -2440,7 +2453,8 @@ cfr_prior_fig #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
-# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity.
+# The patients in isolation, the beds and the admissions are forecast by province as the stock above, so each adds up to the national forecast.
+# A province over its beds, such as Nord-Kivu, can then admit only as many as leave.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #

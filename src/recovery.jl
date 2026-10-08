@@ -120,6 +120,11 @@ function province_care_args(obs; simulated = nothing)
                 changes_only = true
             )
         ),
+        province_admissions = generated(
+            province_care_observations(
+                obs.province_admissions_history, PROVINCE_NAMES
+            )
+        ),
     )
 end
 
@@ -470,7 +475,7 @@ function recovery_data(sim)
     g = _grouped_observations(sim.data)
     ## The occupancy and bed splits are drawn a position at a time, so
     ## their counts are read whole from the draw's recorded `split_counts`.
-    splits = (:occupancy_split, :capacity_split)
+    splits = (:occupancy_split, :capacity_split, :admissions_split)
     streams = Dict{Symbol, Any}(
         state => NamedTuple(
             name => (
