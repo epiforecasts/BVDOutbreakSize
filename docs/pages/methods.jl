@@ -345,6 +345,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
+# The shift has unit Jacobian, so the prior is unchanged.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -784,13 +785,13 @@ MarkdownTable(vintage_table) #hide
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
 # The companion Bundibugyo virus (BDBV) reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for non-healthcare-worker (non-HCW) confirmed cases.
-# The two estimates differ enough that a single outbreak's ratio is less tightly constrained than either source's own interval implies, so we widen the prior beyond the within-source uncertainty, letting the ratio settle below that range when the data support it:
+# Based on this we use a prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(2.64,\ 5.36), \tag{27}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{27}
 # ```
 #
-# with mean $0.33$ and $95\%$ interval roughly $0.07$-$0.67$.
+# with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
 # The mean matches the CDC $55/169 \approx 33\%$ figure and the corrected central CFR in the 20 May report [mccabe2026update](@cite).
 
 #md # ```@raw html
@@ -809,7 +810,7 @@ MarkdownTable(vintage_table) #hide
 
 # The prior density, with the CDC $0.33$ figure marked.
 
-cfr_prior_fig = plot_cfr_prior(Beta(2.64, 5.36)); #hide
+cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
 cfr_prior_fig #hide
 
 # ### Observation models
@@ -2318,13 +2319,11 @@ cfr_prior_fig #hide
 # ### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# Each chain starts from the first of a batch of prior draws whose log joint density is at or above the batch median.
-
-_sampler = joint_sampler_args(); #hide
-_sampler_same = "Every fit uses the same sampler settings.\n"; #hide
-_sampler_each = "Each runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n"; #hide
-_sampler_both = "Both halves of the spatial comparison therefore differ only in the spatial structure and not in the sampler."; #hide
-Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
+# Chains initialise from the prior and run at a maximum tree depth of 10.
+# Every fit runs two chains.
+# The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
+# The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
+# Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
 
 # ### No-onward-transmission counterfactual
 #
@@ -2487,7 +2486,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.
 # We then compare that projection against the counts observed by the current cut-off.
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings.
+# Each frozen re-fit uses the full headline settings (1000 draws across two chains).
 # The same frozen re-fit is reused to compare against McCabe et al. at the cut-offs they used.
 # The helper below performs one frozen joint re-fit and is reused by the forecast validation and matched-in-time results.
 
