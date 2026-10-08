@@ -216,6 +216,53 @@ MarkdownTable(zone_overview_display) #hide
 #md # </details>
 #md # ```
 
+# ## [Point prevalence](@id zone-prevalence)
+#
+# The zone estimates split the infections in the community at the cut-off in the same way as the [province estimates](@ref province-prevalence).
+# The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
+# The figure and table show the twenty zones with the highest rate in the community per 100,000 residents.
+# Every zone is listed in the fold below the table.
+
+#md # ```@raw html
+#md # <details><summary>Compute point prevalence by zone</summary>
+#md # ```
+
+zone_population = Dict(
+    string(z.province, ".", z.zone) => z.population for z in load_health_zones()
+);
+zone_prevalence_overview = prevalence_overview(
+    zone_prevalence(chn_local, zone_inputs, chn_joint),
+    [zone_population[k] for k in zone_inputs.zone_keys];
+    labels = zone_inputs.zone_labels, patch = zone_patch
+);
+zone_prevalence_fig = plot_prevalence_ranking(
+    zone_prevalence_overview;
+    patch_labels = zone_inputs.patch_labels, max_rows = 20,
+    title = "Point prevalence by health zone"
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+zone_prevalence_fig #hide
+
+#-
+
+MarkdownTable(
+    prevalence_table(zone_prevalence_overview; max_rows = 20, area = "Zone")
+) #hide
+
+#md # ```@raw html
+#md # <details><summary>Point prevalence in every health zone</summary>
+#md # ```
+
+MarkdownTable(prevalence_table(zone_prevalence_overview; area = "Zone")) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ## Composition checks
 #
 # Whether the model reproduces each zone's observed share of its patch's confirmed cases and deaths is on the [in-sample checks](@ref zone-compositions) page.

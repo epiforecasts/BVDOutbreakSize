@@ -70,6 +70,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The province and health-zone estimates report point prevalence at the cut-off: the people incubating and the people with symptoms who have not yet been detected, per 100,000 residents.
+  Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.
+  The model and the fitted values do not change (#1119).
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
   On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.
