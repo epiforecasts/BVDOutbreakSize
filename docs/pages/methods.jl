@@ -2568,6 +2568,29 @@ cfr_prior_fig #hide
 # The earliest releases archived their cut-off totals without the dated vintage record at all, which is the same case with no history to centre on and no step to draw from.
 # Neither is scored, so those forecasts keep their own scores and carry no relative skill.
 
+# ### [Point prevalence](@id methods-prevalence)
+#
+# Point prevalence is the number of people infected and still in the community on a given day.
+# Let $I(t)$ be the modelled daily infections in a province or zone and $w(s)$ the probability that a person infected $s$ days earlier is in a given state.
+# Prevalence in that state on the cut-off day $T$ is
+#
+# ```math
+# P(T) = \sum_{s \ge 0} I(T - s)\, w(s). \tag{76}
+# ```
+#
+# A person is incubating while the incubation period exceeds $s$.
+# After onset, a case is detected as a suspected case with the national suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
+# An undetected case stays in the community until it dies or recovers.
+# It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
+# We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
+# The probability of being symptomatic and undetected $s$ days after infection sums, over each possible incubation period, its probability times the probability of still being in the community for the rest of the $s$ days.
+# The people in the community are those incubating plus those symptomatic and undetected.
+#
+# Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
+# For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
+# The health-zone model does not estimate the treatment-centre stay, the ascertainment or the case-fatality ratio, so zone draw $j$ takes them from joint draw $j$.
+# Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
+#
 # ### Comparison with published estimates
 #
 # This work began as a replication of [mccabe2026](@citet), and the estimates are checked against theirs.
