@@ -1815,7 +1815,8 @@ cfr_prior_fig #hide
 # A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
+# One count spans a median of 3.2 pixels across the digitised figures (2.6 to 8.7), so one pixel is about 0.3 counts.
 #
 # The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #

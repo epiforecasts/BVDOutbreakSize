@@ -3963,9 +3963,11 @@ The observation scale ([`onset_report_scales`](@ref)) is built from
 counting variation, the rounding variance of each integer read and a
 fitted read SD `τ ~ read_sd_prior`, one for every read of a digitised bar:
 a correction cell carries two reads' error and a first-snapshot level cell
-one read's. One count is about 2.9 pixels on the published figures, so a
-read is a rounding plus an outline pixel, of order one count. The prior is
-centred on that scale and the data set the value.
+one read's. The rounding has its own term, so `τ` is the error beyond it,
+of order one pixel. One count spans a median of 3.2 pixels across the
+digitised figures (`pixels_per_count` in `data/onset_curve_figures.csv`,
+2.6 to 8.7), so one pixel is about 0.3 counts. The prior is centred on that
+scale and the data set the value.
 
 The likelihood is Student-t with fixed degrees of freedom `ν` (default 4).
 With only a few hundred cells `ν` is weakly identified, so it is not
@@ -3988,7 +3990,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         anchor::AbstractVector = [0.15],
         detection_day::Real = -Inf,
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        read_sd_prior = LogNormal(log(1.0), 0.5),
+        read_sd_prior = LogNormal(log(0.3), 0.5),
         ν::Real = 4.0
     )
     onset_days = onset_curve_history.onset_days
