@@ -283,3 +283,26 @@ end
     @test occursin("1 of 3 provinces are more likely than not to be growing ($(PROVINCE_LABELS[2]))", md)
     @test occursin("**Beds full at T+7:** $(PROVINCE_LABELS[3]) is", md)
 end
+
+@testitem "province_summary_table gives infections, R and recent cases" setup = [
+    PatchHeadlineDraws,
+] begin
+    using Markdown
+    using BVDOutbreakSize: province_summary_table
+
+    md = province_summary_table(base, np; recent_cases = [12, 3, 0])
+    rows = filter(startswith("| "), split(md, "\n"))
+    @test length(rows) == np + 2
+    @test occursin(
+        "| Province | Infections to date | R at the cut-off | " *
+            "Confirmed cases, latest week |", rows[1]
+    )
+    @test occursin(r"^\| Ituri \| 8\d\d–9\d\d \| 1\.\d+–1\.\d+ \| 12 \|$", rows[3])
+    @test endswith(rows[5], "| 0 |")
+    @test Markdown.parse(md).content[1] isa Markdown.Table
+    ## Without recent cases the column is left out.
+    @test !occursin("latest week", province_summary_table(base, np))
+    @test_throws ArgumentError province_summary_table(
+        base, np; recent_cases = [1, 2]
+    )
+end

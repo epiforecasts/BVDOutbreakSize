@@ -94,15 +94,15 @@ province_headline #hide
 #md # <details><summary>Maps of infections, reproduction number and ascertainment</summary>
 #md # ```
 
+## The infections panel is also drawn alone for the summary page.
+province_infections_panel = (;
+    values = province_map_summary(chn_joint, :C_T_patch, N_PATCHES).values,
+    title = "Infections to date", scale = log10,
+    colorbar_label = "Infections (median)",
+)
 province_map_fig = plot_province_map(
     [
-        (;
-            values = province_map_summary(
-                chn_joint, :C_T_patch, N_PATCHES
-            ).values,
-            title = "Infections to date", scale = log10,
-            colorbar_label = "Infections (median)",
-        ),
+        province_infections_panel,
         (;
             province_map_summary(chn_joint, :R_T_patch, N_PATCHES)...,
             title = "Reproduction number at the cut-off",
@@ -536,9 +536,10 @@ province_diagnostics_table #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison, the reproduction
-# number by province and the weekly cases against the reproduction number,
-# so they are written here rather than on the National page.
+# The summary dashboard shows the province table, the province map, the
+# reproduction number by province and the weekly cases against the
+# reproduction number, so they are written here rather than on the National
+# page.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -549,11 +550,39 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+## The summary's cases against R figure is drawn at the page width with
+## larger labels.
 CairoMakie.save(
-    joinpath(dashboard_dir, "cases_rt_provinces.png"), province_cases_rt_fig
+    joinpath(dashboard_dir, "cases_rt_provinces.png"),
+    plot_cases_rt(province_cases_rt; size = (680, 560), fontsize = 13)
+)
+## The summary's province map: infections to date alone.
+CairoMakie.save(
+    joinpath(dashboard_dir, "province_map.png"),
+    plot_province_map(
+        [province_infections_panel]; ncols = 1, panel_size = (680, 500)
+    )
 )
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, province_headline_md)
+end
+## The summary's compact province table: infections to date, R at the
+## cut-off and the confirmed cases over the latest week of reports, the
+## same week the cases against R figure ends on.
+province_recent_cases = let last_day = min(last(province_cases.days), obs.n)
+    weekly_count_table(
+        province_cases.days, province_cases.increments[1:N_PATCHES, :],
+        PROVINCE_LABELS[1:N_PATCHES];
+        cutoff = obs.cutoff - Day(obs.n - last_day), n = last_day, weeks = 1
+    ).count
+end
+open(joinpath(dashboard_dir, "provinces_summary.md"), "w") do io
+    print(
+        io,
+        province_summary_table(
+            chn_joint, N_PATCHES; recent_cases = province_recent_cases
+        )
+    )
 end
 
 #md # ```@raw html

@@ -291,6 +291,7 @@ MarkdownTable(vintage_table) #hide
 #
 # #### Reproduction number
 #
+# The reproduction number is the average number of further infections caused by each infection, and a value above one means infections are growing.
 # Each patch has its own daily reproduction number.
 # It is a shared trend $R^{\text{trend}}_t$ plus a patch deviation $\delta_{p,t}$, with the deviations summing to zero across patches on every day:
 #
@@ -2321,6 +2322,13 @@ cfr_prior_fig #hide
 # The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
 # The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
+#
+# R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
+# The bulk effective sample size is the number of independent draws the chains are worth, and we report it for the parameter where it is lowest.
+# A divergent transition is a step the sampler could not take accurately.
+#
+# We summarise each quantity by its equal-tailed 30%, 60% and 90% credible intervals, or by the 90% interval alone in the comparison tables.
+# Shares, ranks and probabilities are computed draw by draw, so they carry the correlation between provinces.
 
 # ### No-onward-transmission counterfactual
 #

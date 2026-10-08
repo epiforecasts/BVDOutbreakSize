@@ -158,7 +158,7 @@ MarkdownTable(zone_quiet_display) #hide
 
 # ## Saving zone forecast assets
 #
-# The summary dashboard shows the zone forecast figure and the summary bullets.
+# The summary dashboard shows the summary bullets.
 
 #md # ```@raw html
 #md # <details><summary>Write the zone forecast asset</summary>
@@ -168,10 +168,6 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-CairoMakie.save(
-    joinpath(dashboard_dir, "zone_forecast.png"),
-    zone_forecast_fig
-)
 open(joinpath(dashboard_dir, "zone_forecast.md"), "w") do io
     print(io, zone_forecast_bullets)
 end

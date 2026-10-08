@@ -57,7 +57,7 @@ zone_map_keys = [
 ];
 ## Daily zone reproduction numbers over the zone grid, each zone draw on
 ## its own draw of the patch trajectory so the patch uncertainty is
-## carried, and the cut-off values the map and ranking read. A zone's
+## carried, and the cut-off values the map and table read. A zone's
 ## reproduction number is reported from the day its cumulative infections
 ## reach the floor in the median draw.
 zone_rt_traj = reconstruct_zone_rt(chn_local, zone_inputs);
@@ -144,68 +144,12 @@ zone_cases_rt_fig = plot_cases_rt(
 
 zone_cases_rt_fig #hide
 
-# The panels below trace the reproduction number of the twelve zones with the most infections over the past week as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
-# Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
-# The patch line averages all the patch's zones weighted by their recent infections, so the zones shown tend to move it most.
-
 #md # ```@raw html
-#md # <details><summary>Zone reproduction-number trajectories</summary>
+#md # <details><summary>Zone overview table</summary>
 #md # ```
 
-## Each patch's implied reproduction number from the joint draws with the
-## joint posterior mean generation interval, so the patch line is close to
-## the quantity the zone values average to.
-zone_grid = zone_inputs.t0:obs.n
-_patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
-patch_implied_rt = [
-    let m = Matrix{Float64}(
-            undef,
-            length(_patch_infection_draws), obs.n
-        )
-        for (i, v) in enumerate(_patch_infection_draws)
-            I = reshape(Float64.(v), N_PATCHES, obs.n)
-            m[i, :] .= implied_national_Rt(I[p, :], zone_inputs.g)
-        end
-        m
-    end
-        for p in 1:N_PATCHES
-];
-## Each zone's infections over the past week, the median over draws, which
-## chooses the panels.
-zone_week_infections = [
-    median(vec(sum(m[:, (obs.n - 6):obs.n]; dims = 2)))
-        for m in zone_infections(chn_local, zone_inputs)
-];
-zone_rt_fig = plot_rt_zones(
-    [replace(m[:, zone_grid], NaN => missing) for m in zone_rt_traj],
-    zone_inputs.zone_labels, zone_patch;
-    patch_labels = zone_inputs.patch_labels,
-    dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
-    ranking = zone_week_infections,
-    ranking_label = "infections over the past week", top = 12,
-    modelled = zone_inputs.walking,
-    patch_rt = [m[:, zone_grid] for m in patch_implied_rt]
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-zone_rt_fig #hide
-
-# The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
-# A zone whose reproduction number is from its province, not modelled separately, is drawn hollow in grey.
-
-#md # ```@raw html
-#md # <details><summary>Zone ranking</summary>
-#md # ```
-
-zone_ranking_fig = plot_zone_ranking(
-    zone_overview;
-    patch_labels = zone_inputs.patch_labels
-);
 ## The overview as displayed: the interval strings, without the numeric
-## columns the figure reads.
+## columns.
 zone_overview_display = let d = zone_overview[
         :,
         [:zone, :patch, :cases, :share, :R_T, :p_R_above_1, :delta_T],
@@ -220,9 +164,8 @@ end;
 #md # </details>
 #md # ```
 
-zone_ranking_fig #hide
-
-# The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether its reproduction number is modelled separately.
+# The table orders the zones by the posterior probability that their reproduction number exceeds one, with the zones whose reproduction number is modelled separately first.
+# It gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether its reproduction number is modelled separately.
 # A zone whose reproduction number is not modelled separately takes it from its province.
 # The share, the reproduction number and the deviation are each a median with a 90% interval.
 # Every zone is listed in the fold below it.
@@ -351,6 +294,24 @@ MarkdownTable(zone_diagnostics) #hide
 #md # <details><summary>Reproduction number from the zone stage and the joint fit</summary>
 #md # ```
 
+## Each patch's implied reproduction number from the joint draws with the
+## joint posterior mean generation interval, so the patch line is close to
+## the quantity the zone values average to.
+zone_grid = zone_inputs.t0:obs.n
+_patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
+patch_implied_rt = [
+    let m = Matrix{Float64}(
+            undef,
+            length(_patch_infection_draws), obs.n
+        )
+        for (i, v) in enumerate(_patch_infection_draws)
+            I = reshape(Float64.(v), N_PATCHES, obs.n)
+            m[i, :] .= implied_national_Rt(I[p, :], zone_inputs.g)
+        end
+        m
+    end
+        for p in 1:N_PATCHES
+];
 ## The implied reproduction number of each row of `draws` (draws × days).
 function _implied_rt_matrix(draws::AbstractMatrix)
     m = similar(draws, Float64)
@@ -360,8 +321,7 @@ function _implied_rt_matrix(draws::AbstractMatrix)
     return m
 end
 ## The zone stage's deformed patch trajectories on one side and the joint's
-## draws on the other, nationally then per patch. The joint's per-patch
-## values are the grey references of the trajectory panels above.
+## draws on the other, nationally then per patch.
 zone_stage_rt = let I = zone_patch_infections(chn_local, zone_inputs)
     vcat([_implied_rt_matrix(sum(I))], _implied_rt_matrix.(I))
 end;
@@ -508,15 +468,20 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-## The health-zone maps, the weekly cases against R and the one-week zone forecast for the summary
+## The weekly cases against R and the one-week zone forecast for the summary
 ## dashboard, and the per-zone estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number and the chance it exceeds one, the one-week forecast and the
 ## share of the patch's infections, whether the zone's reproduction number
 ## is modelled separately (`walking`) and the data cut-off. A zone below the
 ## reporting floor carries no reproduction number.
-CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
-CairoMakie.save(joinpath(dashboard_dir, "cases_rt_zones.png"), zone_cases_rt_fig)
+CairoMakie.save(
+    joinpath(dashboard_dir, "cases_rt_zones.png"),
+    plot_cases_rt(
+        zone_cases_rt; patch_labels = zone_inputs.patch_labels, top = 12,
+        unit = "health zone", size = (680, 560), fontsize = 12
+    )
+)
 _zone_deaths = [
     let h = obs.zone_death_history
         haskey(h, prov) && haskey(h[prov], z) &&

@@ -3892,6 +3892,28 @@ function plot_province_forecast_detail(
     return fig
 end
 
+## Label heights for points at `x` (on the axis scale) and `y`, nudged
+## upwards so that no two labels within `xgap` of each other horizontally sit
+## closer than `ygap` vertically. Labels keep their order in `y`, and an
+## isolated label stays at its point.
+function _spread_labels(
+        x::AbstractVector{<:Real}, y::AbstractVector{<:Real};
+        xgap::Real, ygap::Real
+    )
+    out = float.(collect(y))
+    placed = Int[]
+    for i in sortperm(out)
+        ## Placed labels in rising height, so a label bumped past one
+        ## neighbour is still checked against the next one up.
+        for j in sort(placed; by = j -> out[j])
+            abs(x[i] - x[j]) < xgap && abs(out[i] - out[j]) < ygap &&
+                (out[i] = out[j] + ygap)
+        end
+        push!(placed, i)
+    end
+    return out
+end
+
 ## The 90% credible interval of row `i` of a `cases_rt_table` frame as
 ## crossed bars: one spanning the reproduction number and, where the weekly
 ## cases are uncertain, one spanning the cases. A wide interval draws a long,
@@ -3922,7 +3944,10 @@ joined by a dashed line. Colours follow `patch`, named by `patch_labels`.
 
 `top`, when given, keeps the `top` areas with the most confirmed cases over
 the two weeks. Dashed lines mark a reproduction number of one and the
-median of the shown areas' most recent weekly counts.
+median of the shown areas' most recent weekly counts. Labels of nearby
+points are nudged apart, with a thin leader back to a moved label's point,
+and a label near the right edge sits to the left of its point.
+`size` and `fontsize` set the figure size and the label size.
 """
 function plot_cases_rt(
         tbl::DataFrame;
@@ -3931,9 +3956,10 @@ function plot_cases_rt(
         top::Union{Nothing, Integer} = nothing,
         unit::AbstractString = "province",
         title::AbstractString = "Confirmed cases and reproduction number by " *
-            unit
+            unit,
+        size = (760, 620), fontsize::Real = 11
     )
-    fig = Figure(; size = (760, 620))
+    fig = Figure(; size)
     CairoMakie.Label(
         fig[0, 1], title; fontsize = 16, font = :bold, tellwidth = false
     )
@@ -3971,7 +3997,17 @@ function plot_cases_rt(
     hlines!(ax, [1.0]; color = :grey40, linestyle = :dash, linewidth = 1)
     vlines!(ax, [ref]; color = :grey60, linestyle = :dash, linewidth = 1)
     colour(p) = patch_colours[mod1(p, length(patch_colours))]
-    for a in areas
+    ## Room below zero cases and around the intervals, with R = 1 always in
+    ## view.
+    ylo = min(0.9 * minimum(tbl.rt_lower[shown]), 0.9)
+    yhi = max(1.05 * maximum(tbl.rt_upper[shown]), 1.1)
+    ## Labels of nearby points are nudged apart so they do not overprint.
+    latest_x = scale.(tbl.cases[latest])
+    label_y = _spread_labels(
+        latest_x, tbl.rt_median[latest];
+        xgap = 0.25 * (scale(xhi) - scale(-0.5)), ygap = 0.05 * (yhi - ylo)
+    )
+    for (ia, a) in enumerate(areas)
         idx = rows_of(a, "observed")
         k = last(idx)
         c = colour(tbl.patch[k])
@@ -4006,18 +4042,23 @@ function plot_cases_rt(
             ax, [tbl.cases[k]], [tbl.rt_median[k]];
             color = c, strokecolor = :white, strokewidth = 1, markersize = 8
         )
+        ly = label_y[ia]
+        ly == tbl.rt_median[k] || lines!(
+            ax, [tbl.cases[k], tbl.cases[k]], [tbl.rt_median[k], ly];
+            color = (:grey40, 0.5), linewidth = 0.8
+        )
+        ## A label near the right edge sits to the left of its point, so
+        ## the axis does not clip it.
+        left = latest_x[ia] > scale(-0.5) + 0.75 * (scale(xhi) - scale(-0.5))
         CairoMakie.text!(
-            ax, tbl.cases[k], tbl.rt_median[k];
-            text = a, color = :grey15, fontsize = 11, offset = (7, 0),
-            align = (:left, :center)
+            ax, tbl.cases[k], ly;
+            text = a, color = :grey15, fontsize,
+            offset = (left ? -7 : 7, 0),
+            align = (left ? :right : :left, :center)
         )
     end
-    ## Room below zero cases and around the intervals, with R = 1 always in
-    ## view.
     CairoMakie.xlims!(ax, -0.5, xhi)
-    ylo = minimum(tbl.rt_lower[shown])
-    yhi = maximum(tbl.rt_upper[shown])
-    CairoMakie.ylims!(ax, min(0.9 * ylo, 0.9), max(1.05 * yhi, 1.1))
+    CairoMakie.ylims!(ax, ylo, yhi)
     has_forecast = any(a -> !isempty(rows_of(a, "forecast")), areas)
     key = Any[
         (

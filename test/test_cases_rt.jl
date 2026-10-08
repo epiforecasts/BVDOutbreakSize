@@ -157,3 +157,29 @@ end
     empty_fig = plot_cases_rt(obs_only[1:0, :]; patch_labels = labels)
     @test !any(x -> x isa Mk.Axis, empty_fig.content)
 end
+
+@testitem "plot_cases_rt nudges overlapping labels apart" setup = [CasesRt] begin
+    using CairoMakie
+    using CairoMakie: Makie as Mk
+    using BVDOutbreakSize: cases_rt_table, plot_cases_rt
+    using BVDOutbreakSize: _spread_labels
+    ## Close points are pushed upwards in order, and a far one stays put.
+    @test _spread_labels([0.0, 0.1, 5.0], [1.0, 1.0, 1.0]; xgap = 1, ygap = 0.2) ≈
+        [1.0, 1.2, 1.0]
+    @test _spread_labels([0.0, 0.0, 0.0], [1.3, 1.0, 1.1]; xgap = 1, ygap = 0.2) ≈
+        [1.4, 1.0, 1.2]
+    @test _spread_labels([0.0, 0.0], [1.0, 2.0]; xgap = 1, ygap = 0.2) ==
+        [1.0, 2.0]
+    ## Two areas at the same point get separate label heights and a leader.
+    CairoMakie.activate!(type = "png")
+    t = cases_rt_table(
+        [a, copy(a)], days, [increments[1:1, :]; increments[1:1, :]];
+        cutoff, n, areas = ["A", "B"]
+    )
+    fig = plot_cases_rt(t; patch_labels = ["A", "B"], size = (500, 400))
+    @test fig.scene.viewport[].widths == [500, 400]
+    ax = only(x for x in fig.content if x isa Mk.Axis)
+    texts = [p for p in ax.scene.plots if p isa Mk.Text]
+    ys = [only(p[1][])[2] for p in texts]
+    @test length(unique(ys)) == 2
+end
