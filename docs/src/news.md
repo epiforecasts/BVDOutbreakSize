@@ -22,6 +22,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
+  At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
+  A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
+  The flow dispersion is centred on the stock dispersion: log(1/√k_flow) is Normal about log(1/√k_iso) with SD 1.25, drawn directly.
+  Flows in the tens with an index of 2 to 5 need a dispersion of about 3 to 40, an offset of 1.3 to 2.6 on that scale from a stock value of 546, or 1 to 2.1 prior SDs.
+  As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
+  Fitted values change: the flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).

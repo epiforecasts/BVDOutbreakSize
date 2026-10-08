@@ -2247,6 +2247,14 @@ function treatment_flow_defaults()
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
         dispersion = surveillance_dispersion_model(),
+        ## SD of the flow dispersion about the stocks' on the log(1/sqrt(k))
+        ## scale: log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), 1.25). One SD
+        ## moves k by a factor e^2.5 ≈ 12, and the central 90% spans a factor
+        ## of about 61 either side of the stocks' k. Flows in the tens that
+        ## scatter 2 to 5 times their Poisson variance need k_flow =
+        ## mean/(index − 1), about 3 to 40. From a stock k of 546 that is an
+        ## offset of 1.3 to 2.6, between 1 and 2.1 SDs.
+        flow_dispersion_sd = 1.25,
         ## In-care fatality modifier prior: β_iso on the infection CFR.
         cfr_modifier_prior = Normal(0.0, 0.5),
         ## Small abscond / loss-to-follow-up fraction of occupancy per day.
@@ -2443,7 +2451,16 @@ is a returned diagnostic.
 The daily in-care outcome flows (deaths, rule-outs, admissions,
 absconds) are each an optional NegativeBinomial stream scored against
 the Tableau 6 patient-movement counts, a no-op when their history is
-empty. The two sub-stocks are scored against the Tableau 6 census
+empty. The flows share a dispersion `k_flow` of their own, apart from the
+stocks' `k`. The stocks are counts in the hundreds that carry over from
+day to day, while the flows are fresh daily counts in the tens, and the
+two scatter differently about their modelled means. `k_flow` is pooled
+about the stocks' `k` on the `log(1/sqrt(k))` scale, drawn centred as
+`log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), flow_dispersion_sd)` with
+`flow_dispersion_sd = 1.25` by default. The flows' own counts inform
+`k_flow` directly, so the centred draw keeps it from tracking every move
+of `k`. The two sub-stocks
+are scored against the Tableau 6 census
 breakdown (`dont confirmés` / `dont suspects`) where published, in place
 of the total on those days. An opt-in occupancy offset Δ(t) on the
 supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
@@ -2493,9 +2510,15 @@ series for forecasting and replication.
         severity = defaults.severity,
         capacity = bed_capacity_walk_model,
         dispersion = defaults.dispersion,
-        ## Occupancy / flow dispersion can be injected from the joint composer's
-        ## pooled set (`k_external`). Standalone it samples its own.
+        ## Dispersion of the stocks (occupancy, beds and the in-care census),
+        ## injected from the joint composer's pooled set (`k_external`).
+        ## Standalone it samples its own.
         k_external::Union{Nothing, Real} = nothing,
+        ## Dispersion of the four daily flows (admissions, in-care deaths,
+        ## rule-outs and absconds), drawn about `k` with SD
+        ## `flow_dispersion_sd` unless injected as `k_flow_external`.
+        flow_dispersion_sd::Real = defaults.flow_dispersion_sd,
+        k_flow_external::Union{Nothing, Real} = nothing,
         cfr_modifier_prior = defaults.cfr_modifier_prior,
         abscond_prior = defaults.abscond_prior,
         incare_confirm_log_prior = defaults.incare_confirm_log_prior,
@@ -2545,6 +2568,12 @@ series for forecasting and replication.
         k = disp_state.k
     else
         k = k_external
+    end
+    if k_flow_external === nothing
+        log_inv_sqrt_k_flow ~ Normal(-log(k) / 2, flow_dispersion_sd)
+        k_flow = exp(-2 * log_inv_sqrt_k_flow)
+    else
+        k_flow = k_flow_external
     end
     n = length(bvd_reports_daily)
     nc = something(cutoff, n)
@@ -2852,7 +2881,7 @@ series for forecasting and replication.
     incare_deaths ~ to_submodel(
         vintage_increments_model(
             [deaths_daily[clamp(Int(d), 1, n)] for d in dth_days],
-            _sim_obs(simulated, :incare_deaths, dth_obs), k
+            _sim_obs(simulated, :incare_deaths, dth_obs), k_flow
         )
     )
     ro_days = ruleout_history.days
@@ -2861,7 +2890,7 @@ series for forecasting and replication.
     ruleouts ~ to_submodel(
         vintage_increments_model(
             [ruleout_daily[clamp(Int(d), 1, n)] for d in ro_days],
-            _sim_obs(simulated, :ruleouts, ro_obs), k
+            _sim_obs(simulated, :ruleouts, ro_obs), k_flow
         )
     )
     adm_h_days = admissions_history.days
@@ -2875,7 +2904,7 @@ series for forecasting and replication.
     admissions ~ to_submodel(
         censored_occupancy_model(
             adm_means, adm_ceil,
-            _sim_obs(simulated, :admissions, adm_h_obs), k
+            _sim_obs(simulated, :admissions, adm_h_obs), k_flow
         )
     )
     ab_days = absconded_history.days
@@ -2884,7 +2913,7 @@ series for forecasting and replication.
     absconded ~ to_submodel(
         vintage_increments_model(
             [abscond_daily[clamp(Int(d), 1, n)] for d in ab_days],
-            _sim_obs(simulated, :absconded, ab_obs), k
+            _sim_obs(simulated, :absconded, ab_obs), k_flow
         )
     )
 
@@ -2947,7 +2976,7 @@ series for forecasting and replication.
         recovery_los_mean = recovery_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
         admission_delay_mean = adm_delay_state.mean,
-        overall_los, abscond_frac, k_isolation = k,
+        overall_los, abscond_frac, k_isolation = k, k_flow,
         demand, occupancy = min.(demand, C), isolation, C,
         occupancy_mean = occ_obs_total,
         demand_patch, capacity_patch = C_patch, capacity_series = C,
