@@ -121,7 +121,8 @@ zone_map_fig = plot_zone_map_panels(
 
 zone_map_fig #hide
 
-# Each bubble is one of the twelve zones with the most confirmed cases over the past two weeks, set against its reproduction number, with the week before.
+# Each point is one of the twelve zones with the most confirmed cases over the past two weeks, set against its reproduction number, with the week before.
+# Faint bars span the 90% credible interval of the reproduction number, so a long bar marks an uncertain estimate.
 
 #md # ```@raw html
 #md # <details><summary>Compute the weekly cases and reproduction number by zone</summary>

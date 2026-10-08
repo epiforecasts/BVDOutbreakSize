@@ -33,7 +33,9 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
-# Each bubble is a province's confirmed cases over the most recent week against its reproduction number, with the week before and the [forecast](@ref "Province forecast") week ahead.
+# Each point is a province's confirmed cases over the most recent week against its reproduction number, with the week before and the [forecast](@ref "Province forecast") week ahead.
+# Faint bars span the 90% credible interval of the reproduction number, so a long bar marks an uncertain estimate.
+# The forecast also carries a bar across its 90% interval for cases, whilst an observed weekly count has none.
 
 #md # ```@raw html
 #md # <details><summary>Compute the weekly cases and reproduction number by province</summary>

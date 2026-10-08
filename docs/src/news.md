@@ -70,8 +70,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- A bubble plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
-  Bubble size shows the uncertainty in the reproduction number, a faded triangle the week before and, for provinces, a hollow bubble the forecast week ahead.
+- A plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
+  Faint bars span the 90% credible interval of the reproduction number, and of the cases for the forecast, so an uncertain estimate draws a long bar rather than a precise dot.
+  A faded triangle marks the week before and, for provinces, a hollow point the forecast week ahead.
   Fitted values do not change.
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).

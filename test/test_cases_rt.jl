@@ -79,12 +79,12 @@ end
     )
 end
 
-@testitem "plot_cases_rt draws bubbles, the week before and forecasts" setup = [
+@testitem "plot_cases_rt draws intervals, the week before and forecasts" setup = [
     CasesRt,
 ] begin
     using CairoMakie
     using CairoMakie: Makie as Mk
-    using BVDOutbreakSize: cases_rt_table, plot_cases_rt, _rt_bubble_size
+    using BVDOutbreakSize: cases_rt_table, plot_cases_rt
     CairoMakie.activate!(type = "png")
     ## Makie converts a marker or line style symbol before it reaches the
     ## plot, so the plots are matched against the converted values.
@@ -103,27 +103,44 @@ end
     ## One line at R = 1 and one at the median of the latest weekly counts.
     @test only(p for p in plots if p isa Mk.HLines)[1][] == [1.0]
     @test only(p for p in plots if p isa Mk.VLines)[1][] == [4.0]
-    ## A faded triangle for the week before, joined to the bubble, and a
+    ## A faded triangle for the week before, joined to the point, and a
     ## dashed link to the forecast, for each area.
     @test count(p -> p isa Mk.Scatter && p.marker[] == triangle, plots) == 2
     lines = [p for p in plots if p isa Mk.Lines]
     @test count(p -> p.linestyle[] == dash, lines) == 2
     @test length(lines) == 4
-    ## No error bars: the bubble size carries the uncertainty, and a wider
-    ## interval draws a larger bubble.
-    @test !any(p -> p isa Mk.Rangebars, plots)
-    bubbles = [
+    ## Each point carries crossed bars spanning its 90% intervals: the
+    ## reproduction number for every row drawn, and the cases only for the
+    ## forecast, since an observed count has no interval.
+    bars = [p for p in plots if p isa Mk.Rangebars]
+    vertical = [p for p in bars if p.direction[] == :y]
+    horizontal = [p for p in bars if p.direction[] == :x]
+    @test length(vertical) == 6
+    @test length(horizontal) == 2
+    latest = t[(t.kind .== "observed") .& (t.date .== cutoff), :]
+    fc = t[t.kind .== "forecast", :]
+    ## Makie stores each bar as a (position, low, high) triple.
+    span(p) = (only(p[1][])[2], only(p[1][])[3])
+    spans = sort(span.(vertical))
+    for r in eachrow(vcat(latest, fc))
+        @test any(s -> s[1] ≈ r.rt_lower && s[2] ≈ r.rt_upper, spans)
+    end
+    @test sort(span.(horizontal)) ==
+        sort(collect(zip(fc.cases_lower, fc.cases_upper)))
+    ## Point size is fixed, so it encodes nothing.
+    points = [
         p for p in plots
             if p isa Mk.Scatter && p.marker[] != triangle &&
             p.strokecolor[] == Mk.to_color(:white)
     ]
-    @test length(bubbles) == 2
-    @test _rt_bubble_size(2.0) > _rt_bubble_size(0.5)
+    @test length(points) == 2
+    @test allequal(p.markersize[] for p in points)
     @test sort([only(p.text[]) for p in plots if p isa Mk.Text]) == labels
     leg = only(x for x in fig.content if x isa Mk.Legend)
     entries = [e.label[] for e in leg.entrygroups[][1][2]]
     @test "Week ahead (forecast)" in entries
     @test "Week before" in entries
+    @test "90% credible interval" in entries
     ## Without a forecast its entry is gone; `top` keeps the areas with the
     ## most cases over the weeks shown.
     obs_only = t[t.kind .== "observed", :]

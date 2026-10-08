@@ -3892,19 +3892,33 @@ function plot_province_forecast_detail(
     return fig
 end
 
-## Bubble size of a reproduction-number interval of width `w`: the marker
-## area grows with the width, capped at a width of four.
-_rt_bubble_size(w) = 8 + 14 * sqrt(clamp(w, 0, 4))
+## The 90% credible interval of row `i` of a `cases_rt_table` frame as
+## crossed bars: one spanning the reproduction number and, where the weekly
+## cases are uncertain, one spanning the cases. A wide interval draws a long,
+## faint bar rather than a precise dot.
+function _cases_rt_interval!(ax, tbl, i, colour; linewidth)
+    CairoMakie.rangebars!(
+        ax, [tbl.cases[i]], [tbl.rt_lower[i]], [tbl.rt_upper[i]];
+        color = colour, linewidth, whiskerwidth = 0
+    )
+    tbl.cases_upper[i] > tbl.cases_lower[i] && CairoMakie.rangebars!(
+        ax, [tbl.rt_median[i]], [tbl.cases_lower[i]], [tbl.cases_upper[i]];
+        direction = :x, color = colour, linewidth, whiskerwidth = 0
+    )
+    return nothing
+end
 
 """
 $(TYPEDSIGNATURES)
 
 Confirmed cases in the most recent week against the reproduction number at
-its end, one bubble per area, from a [`cases_rt_table`](@ref) frame. The
-bubble's size grows with the width of the 90% credible interval for the
-reproduction number. The week before is a faded triangle joined to the
-bubble, and a `forecast` row is a hollow bubble one week ahead joined by a
-dashed line. Colours follow `patch`, named by `patch_labels`.
+its end, one point per area, from a [`cases_rt_table`](@ref) frame. Each
+point sits at the week's count and the median reproduction number, with a
+faint bar spanning the 90% credible interval of the reproduction number and,
+for a forecast, a second bar spanning the 90% interval of its cases. An
+observed count carries no interval. The week before is a faded triangle
+joined to the point, and a `forecast` row is a hollow point one week ahead
+joined by a dashed line. Colours follow `patch`, named by `patch_labels`.
 
 `top`, when given, keeps the `top` areas with the most confirmed cases over
 the two weeks. Dashed lines mark a reproduction number of one and the
@@ -3946,7 +3960,7 @@ function plot_cases_rt(
     shown = reduce(
         vcat, [rows_of(a, k) for a in areas, k in ("observed", "forecast")]
     )
-    xhi = max(2.0, 2 * maximum(tbl.cases[shown]), 1.2 * ref)
+    xhi = max(2.0, 1.5 * maximum(tbl.cases_upper[shown]), 1.2 * ref)
     scale = CairoMakie.Makie.pseudolog10
     ax = Axis(
         fig[1, 1]; xscale = scale, xticks = _zone_cbar_ticks((0, xhi), scale),
@@ -3957,7 +3971,6 @@ function plot_cases_rt(
     hlines!(ax, [1.0]; color = :grey40, linestyle = :dash, linewidth = 1)
     vlines!(ax, [ref]; color = :grey60, linestyle = :dash, linewidth = 1)
     colour(p) = patch_colours[mod1(p, length(patch_colours))]
-    width(i) = tbl.rt_upper[i] - tbl.rt_lower[i]
     for a in areas
         idx = rows_of(a, "observed")
         k = last(idx)
@@ -3968,9 +3981,10 @@ function plot_cases_rt(
                 ax, tbl.cases[[j, k]], tbl.rt_median[[j, k]];
                 color = (c, 0.3), linewidth = 1.2
             )
+            _cases_rt_interval!(ax, tbl, j, (c, 0.15); linewidth = 2)
             scatter!(
                 ax, [tbl.cases[j]], [tbl.rt_median[j]];
-                marker = :utriangle, color = (c, 0.35), markersize = 11
+                marker = :utriangle, color = (c, 0.35), markersize = 9
             )
         end
         f = rows_of(a, "forecast")
@@ -3980,35 +3994,42 @@ function plot_cases_rt(
                 ax, tbl.cases[[k, f]], tbl.rt_median[[k, f]];
                 color = (c, 0.6), linestyle = :dash, linewidth = 1.5
             )
+            _cases_rt_interval!(ax, tbl, f, (c, 0.25); linewidth = 4)
             scatter!(
                 ax, [tbl.cases[f]], [tbl.rt_median[f]];
-                color = :transparent, strokecolor = c, strokewidth = 2,
-                markersize = _rt_bubble_size(width(f))
+                color = :white, strokecolor = c, strokewidth = 1.5,
+                markersize = 8
             )
         end
+        _cases_rt_interval!(ax, tbl, k, (c, 0.3); linewidth = 8)
         scatter!(
             ax, [tbl.cases[k]], [tbl.rt_median[k]];
-            color = (c, 0.75), strokecolor = :white, strokewidth = 1.5,
-            markersize = _rt_bubble_size(width(k))
+            color = c, strokecolor = :white, strokewidth = 1, markersize = 8
         )
         CairoMakie.text!(
             ax, tbl.cases[k], tbl.rt_median[k];
-            text = a, color = :grey15, fontsize = 11,
-            offset = (0, _rt_bubble_size(width(k)) / 2 + 2),
-            align = (:center, :bottom)
+            text = a, color = :grey15, fontsize = 11, offset = (7, 0),
+            align = (:left, :center)
         )
     end
-    ## Room below zero cases and around the medians for the bubbles, with
-    ## R = 1 always in view.
+    ## Room below zero cases and around the intervals, with R = 1 always in
+    ## view.
     CairoMakie.xlims!(ax, -0.5, xhi)
-    ylo, yhi = extrema(tbl.rt_median[shown])
-    CairoMakie.ylims!(ax, min(0.8 * ylo, 0.9), max(1.12 * yhi, 1.1))
+    ylo = minimum(tbl.rt_lower[shown])
+    yhi = maximum(tbl.rt_upper[shown])
+    CairoMakie.ylims!(ax, min(0.9 * ylo, 0.9), max(1.05 * yhi, 1.1))
     has_forecast = any(a -> !isempty(rows_of(a, "forecast")), areas)
     key = Any[
         (
+            CairoMakie.LineElement(;
+                color = (:grey30, 0.3), linewidth = 8
+            ),
+            "90% credible interval",
+        ),
+        (
             CairoMakie.MarkerElement(;
                 marker = :utriangle, color = (:grey30, 0.35),
-                markersize = 11
+                markersize = 9
             ),
             "Week before",
         ),
@@ -4016,30 +4037,21 @@ function plot_cases_rt(
     has_forecast && push!(
         key, (
             CairoMakie.MarkerElement(;
-                marker = :circle, color = :transparent,
-                strokecolor = :grey30, strokewidth = 2, markersize = 18
+                marker = :circle, color = :white,
+                strokecolor = :grey30, strokewidth = 1.5, markersize = 8
             ),
             "Week ahead (forecast)",
         )
     )
-    for (w, label) in ((0.3, "More certain R"), (2.0, "Less certain R"))
-        push!(
-            key, (
-                CairoMakie.MarkerElement(;
-                    marker = :circle, color = (:grey30, 0.6),
-                    markersize = _rt_bubble_size(w)
-                ),
-                label,
-            )
-        )
-    end
     _patch_legend!(
         fig, (2, 1), tbl.patch[latest], patch_labels, patch_colours;
         extra = key
     )
     CairoMakie.Label(
-        fig[3, 1], "Bubbles show the most recent week. Dashed lines mark " *
-            "R = 1 and the median weekly count across the $(unit)s shown.";
+        fig[3, 1], "Points show the most recent week's confirmed cases " *
+            "and median R. Bars span the 90% credible interval, and an " *
+            "observed count has none. Dashed lines mark R = 1 and the " *
+            "median weekly count across the $(unit)s shown.";
         fontsize = 12, word_wrap = true, tellwidth = false,
         padding = (0, 0, 0, 6)
     )
