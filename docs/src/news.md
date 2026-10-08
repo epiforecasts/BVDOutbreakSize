@@ -22,7 +22,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots`.
+- The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
   It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
   In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
   On draws from the main-model posterior the largest eigenvalue of the diagonally scaled Hessian falls from 2.6–5.3e5 to 0.4–1.4e5, and fixed-step NUTS probes stay stable at a step of 0.0045 against 0.002 (figures in the pull request).
