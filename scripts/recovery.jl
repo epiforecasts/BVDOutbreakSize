@@ -10,7 +10,7 @@
 #   julia --project=docs scripts/recovery.jl <seed> [out_dir]
 #
 # Settings, from the environment:
-#   BVD_RECOVERY_SAMPLES (1000), BVD_RECOVERY_WARMUP (500),
+#   BVD_RECOVERY_SAMPLES (1000), BVD_RECOVERY_WARMUP (1000),
 #   BVD_RECOVERY_MAX_DEPTH (10), BVD_RECOVERY_CHAINS (2): the headline
 #   joint's own settings, since a shorter run does not converge on this model
 #   and would test the sampler rather than the model,
@@ -26,7 +26,7 @@ seed = parse(Int, get(ARGS, 1, "1"))
 out_dir = get(ARGS, 2, joinpath("output", "recovery"))
 env_int(k, d) = parse(Int, get(ENV, k, string(d)))
 samples = env_int("BVD_RECOVERY_SAMPLES", 1000)
-warmup = env_int("BVD_RECOVERY_WARMUP", 500)
+warmup = env_int("BVD_RECOVERY_WARMUP", 1000)
 chains = env_int("BVD_RECOVERY_CHAINS", 2)
 max_depth = env_int("BVD_RECOVERY_MAX_DEPTH", 10)
 horizon = env_int("BVD_RECOVERY_HORIZON", 14)

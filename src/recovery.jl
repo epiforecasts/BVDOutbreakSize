@@ -540,12 +540,12 @@ Fit the headline joint to a [`simulate_recovery`](@ref) dataset with NUTS:
 [`recovery_density_check`](@ref). Returns `(; model, chain)`;
 [`forecast_draws`](@ref) runs the model past its cut-off. The sampler
 settings default to the headline joint's (two chains of 1000 draws after
-500 warmup steps, tree depth at most 10): a shorter run does not converge
+1000 warmup steps, tree depth at most 10): a shorter run does not converge
 on this model, so its recovery would test the sampler rather than the
 model. Other keywords pass to [`nuts_sample`](@ref).
 """
 function recovery_fit(
-        model::Model; samples::Integer = 1000, n_adapts::Integer = 500,
+        model::Model; samples::Integer = 1000, n_adapts::Integer = 1000,
         chains::Integer = 2, max_depth::Integer = 10,
         seed::Integer = 20260518, kwargs...
     )

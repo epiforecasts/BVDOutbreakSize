@@ -144,7 +144,7 @@ Day-grid drift from an integer tick spacing: `best shift` leaves 0 on pairs whos
 
 #### Dashboard cross-check
 
-`data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's national and province onset curves, one block per dashboard build, read from the inline SVG charts by `extract_dashboard_onsets.py` (see `data/README.md` for the columns and the clone it reads from).
+`data/onset_dashboard_history.csv` holds the INRB-UMIE dashboard's national and province onset curves, one block per dashboard build, read from its onset charts (inline SVG up to 24 September, the page's embedded counts after) by `extract_dashboard_onsets.py` (see `data/README.md` for the columns and the clone it reads from).
 It is the one independent series on the same basis.
 For a new vintage, take the dashboard block whose `snapshot_date` is nearest the report date, join the national `observed` column on onset date to the scan block, and check the correlation and the mean absolute difference per day against the values recorded in `data/README.md` (r above 0.96, mean absolute difference under 4 cases a day).
 A vintage that agrees with the printed `n` but not with the dashboard has its days shifted or its scale wrong, and the vision check says which.
