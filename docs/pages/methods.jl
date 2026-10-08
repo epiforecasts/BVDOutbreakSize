@@ -303,14 +303,13 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
-#            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \log R^{\text{trend}}_1 = \log R_0, \qquad
+# \log R^{\text{trend}}_k \sim \mathrm{Normal}\bigl(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}^2\bigr), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
 #
@@ -344,6 +343,9 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
+#
+# We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
+# The shift has unit Jacobian, so the prior is unchanged.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -783,13 +785,13 @@ MarkdownTable(vintage_table) #hide
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
 # The companion Bundibugyo virus (BDBV) reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for non-healthcare-worker (non-HCW) confirmed cases.
-# The two estimates differ enough that a single outbreak's ratio is less tightly constrained than either source's own interval implies, so we widen the prior beyond the within-source uncertainty, letting the ratio settle below that range when the data support it:
+# Based on this we use a prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(2.64,\ 5.36), \tag{27}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{27}
 # ```
 #
-# with mean $0.33$ and $95\%$ interval roughly $0.07$-$0.67$.
+# with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
 # The mean matches the CDC $55/169 \approx 33\%$ figure and the corrected central CFR in the 20 May report [mccabe2026update](@cite).
 
 #md # ```@raw html
@@ -808,7 +810,7 @@ MarkdownTable(vintage_table) #hide
 
 # The prior density, with the CDC $0.33$ figure marked.
 
-cfr_prior_fig = plot_cfr_prior(Beta(2.64, 5.36)); #hide
+cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
 cfr_prior_fig #hide
 
 # ### Observation models
@@ -1759,7 +1761,7 @@ cfr_prior_fig #hide
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
+# It is a weekly-knot non-centred random walk on the logit scale, on the same knots as the reproduction-number walk above and concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
