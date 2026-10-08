@@ -127,6 +127,8 @@ SitReps 139, 140 and 141 (n = 6 417, 6 468 and 6 505, last tick 28 September) ar
 These renders split a weekly tick in two or lose ticks altogether, so the tick chain steps over up to two clusters off the weekly grid and accepts a gap of up to three weeks.
 Their date labels reach into the tick row, washed bars on tick columns read to a grey band, and the faded bars past the last tick have no outline, each fixed in the reader as `scripts/README.md` describes.
 On onset dates to 7 August the three blocks differ from the dashboard's 2 October snapshot by 0.27 to 0.65 cases a day, at most 2 a day except 141's 6 May, which reads 7 against 1 in every other source.
+SitRep 143 (n = 6 621, last tick 05 October) is not digitised: its washed 14 September bar on a tick column reads 24 against 62 by eye, and the faded bars of the band, which starts before the last tick now that the tick is a day past the report date, read 31 and 15 against 23 and 7 on 30 September and 1 October (issue #1106).
+SitReps 144 and 145 reprint the 143 figure byte for byte (the same image md5 and n = 6 621), so they stay out for the same reason.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -192,7 +194,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 141 (2 October).
+The series run to SitRep 145 (6 October); SitRep 142 (3 October) is not published on insp.cd.
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
 The province blocks carry 1 July from the same mirror zones and 26 July (SitRep 073, whose Tableau 1 contradicts itself) from the committed Tableau 2 zone column.
@@ -222,8 +224,8 @@ SitRep 080 prints the table with the Létalité column displaced one row down an
 SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 4347 case cells and 4349 death cells the two transcriptions share, 4333 and 4339 agree.
-The mirror does not yet carry 1 and 2 October (SitReps 140 and 141).
+Of the 4602 case cells and 4604 death cells the two transcriptions share, 4588 and 4594 agree.
+The mirror does not yet carry 6 October (SitRep 145), nor 3 October, which INSP has not published.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
 On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).

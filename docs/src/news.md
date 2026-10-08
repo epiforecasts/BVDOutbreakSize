@@ -22,6 +22,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
+  The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
+  With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).
+  The model is the same with one dimension fewer, so fitted values change only by sampling noise.
 - The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
@@ -57,7 +61,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 141, 2 October.
+- The model cut-off advances to SitRep 145, 6 October.
+  SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
+  The onset curve does not add SitRep 143, whose washed 14 September bar and faded bars before the last tick fail the vision check (#1106), nor SitReps 144 and 145, which reprint its figure.
+  SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
@@ -72,17 +79,17 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 141 (2 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 145 (6 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
 
 - Every fit uses the headline joint's sampler settings, and the methods page states them (#1100).
-  These are two chains of 1000 draws after 500 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
+  These are two chains of 1000 draws after 1000 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
   The single-stream fits, the health-zone fits, the frozen re-fits and the scripts that fit outside the docs build take them from `joint_sampler_args()` in `docs/fits/registry.jl`, so a change there moves every fit.
   The single-stream fits ran 500 draws after 200 warm-up steps at 0.85, the single-population frozen re-fits the same at 0.90, and the health-zone fits 800 draws.
   Every fit cache key changes, so every fit refits.
-  The single-stream and single-population frozen fits now take twice the draws and 2.5 times the warm-up, and the health-zone fits a quarter more draws, so each runs longer.
+  The single-stream and single-population frozen fits now take twice the draws and 5 times the warm-up, and the health-zone fits a quarter more draws, so each runs longer.
   The frozen re-fits also drop their target acceptance from 0.90 to 0.80, which takes larger steps and may give more divergences.
   The parameter-recovery fits drop their target acceptance from 0.85 to 0.80, and `scripts/zone_fit_report.jl` fits at these settings rather than 600 draws after 400 warm-up steps.
   `BVD_RECOVERY_SAMPLES`, `BVD_RECOVERY_WARMUP` and `BVD_RECOVERY_MAX_DEPTH` are removed, since the `BVD_JOINT_*` overrides now set the recovery fits too.
@@ -142,6 +149,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The cached CI headline joint fit `joint__71835cdb61145210` (SitRep 136) reaches the cap of 10 on every draw of both chains, at a step size of 0.0015, with mean acceptance 0.95 against its target of 0.80 and E-BFMI 0.84 and 0.81.
   Fitted values do not change.
 - The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
+- The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
+  In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
+  `frozen_validation` still reached R-hat 1.09.
 
 ### Fixed
 

@@ -226,7 +226,7 @@ fit_max_depth(id) = joint_max_depth()
 
 ## The sampler budget every fit splats.
 joint_sampler_args() = (;
-    samples = joint_samples(1000), n_adapts = joint_warmup(500),
+    samples = joint_samples(1000), n_adapts = joint_warmup(1000),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
