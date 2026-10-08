@@ -550,7 +550,7 @@ $(TYPEDSIGNATURES)
 
 Markdown table of the `top` health zones with the most confirmed cases over
 the past two weeks, for the summary dashboard, followed by a sentence giving
-how many zones had a case over those two weeks.
+how many were chosen from how many.
 
 `estimates` is the frame the health-zone page writes to
 `zone_estimates.csv`. Zones with no case over the two weeks are left out and
@@ -594,9 +594,10 @@ function zone_headline(estimates::DataFrame; top::Integer)
         ),
         "R modelled separately" => [w == 1 ? "yes" : "no" for w in rows.walking]
     )
+    shown = nrow(df) == 1 ? "The zone" : "The $(nrow(df)) zones"
     return markdown_table(df) * "\n" *
-        "$(length(active)) of $(nz) zones had a confirmed case over the " *
-        "past two weeks.\n"
+        "$(shown) with the most confirmed cases over the past two weeks, " *
+        "of the $(length(active)) of $(nz) with a case in that time.\n"
 end
 
 """

@@ -23,7 +23,7 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the scores below.
+# The overall bullets come first, then a block per province, from the scores further down this page.
 # The log score of the split is higher when the model allocates the week's cases better than the persistence rules.
 
 #md # ```@eval
@@ -34,12 +34,14 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Forecast by health zone
 #
-# The one-week-ahead zone forecast comes from the [health-zone model](@ref "Health-zone model") melded from the frozen fit, run a week past the frozen cut-off.
+# The one-week-ahead forecast split by health zone, scored against what each zone went on to report.
+# Each zone's forecast is drawn from the [health-zone model](@ref "Health-zone model") melded from the frozen fit, run a week past the frozen cut-off.
 # The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the vintage a week later, clamped at zero.
 # The week is scored only when the zone tables carry a vintage on its last day.
 # The split of each patch's weekly total is scored by its multinomial log score at the forecast shares.
 # It is set against share persistence, the cumulative zone shares at the cut-off, and naive persistence, the zone split of the last seven days, each with a pseudo-count of 0.5 per zone.
-# The patch total is scored against a naive persistence total with negative-binomial noise, as in the [forecast scoring](@ref "Forecast scoring against a persistence baseline") Methods section.
+# The patch total is scored against a naive persistence total with negative-binomial noise, as in the [forecast scoring](@ref "Forecast scoring against a persistence baseline") of the analysis methods.
+# The figure shows the fifteen zones with the largest forecast medians and the fold below the scores holds every zone.
 
 #md # ```@raw html
 #md # <details><summary>Zone forecast against observed</summary>
@@ -111,32 +113,15 @@ zone_validation_table_display = isempty(zone_validation_table) ?
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 zone_validation_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The fifteen zones with the largest forecast medians against what each went on to report, with every zone in the fold below the scores.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 #-
-
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
 
 MarkdownTable(zone_validation_scores_table) #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Scores of each province's split and total for the model and the persistence rules.
-#md # Share persistence forecasts the split alone, so its total columns are blank.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Zone forecast against observed, every zone</summary>
 #md # ```
 
@@ -148,8 +133,8 @@ MarkdownTable(zone_validation_table_display) #hide
 
 # ## Forecast by health zone across releases
 #
-# The archived zone forecast of each release is scored against what each zone went on to report.
-# The scores are those of the [province forecast evaluation](@ref "Province forecast evaluation"), with each zone scored as its own stream against a persistence baseline built from its own history.
+# The archived zone forecast of each release, scored against what each zone went on to report.
+# The scores are those of the [province forecast evaluation](@ref "Province forecast evaluation"), with each zone scored as its own stream against a persistence baseline built from the zone's own history.
 # A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
 # The figures show the ten zones with the most observed cases over the scored weeks, and the folds hold every zone.
 
@@ -241,7 +226,7 @@ zone_release_note = Markdown.parse(
 
 zone_release_note #hide
 
-#-
+# What the error is made of, one panel per zone: the mean CRPS split into its width, its overprediction and its underprediction.
 
 zone_release_crps_fig = plot_forecast_crps_by_horizon(
     zone_release_by_horizon;
@@ -249,18 +234,9 @@ zone_release_crps_fig = plot_forecast_crps_by_horizon(
     empty_message = _zone_release_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 zone_release_crps_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The mean CRPS split into its width, overprediction and underprediction, one panel per zone.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The relative skill against the baseline release by release, on a log-scaled skill axis with the reference line at one.
 
 zone_release_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     zone_release_by_release;
@@ -268,36 +244,20 @@ zone_release_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     empty_message = _zone_release_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 zone_release_by_cutoff_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline release by release, on a log scale with the reference line at one.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# Each release's zone forecasts against what each zone went on to report.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the observed count.
 
 zone_release_overlay_fig = plot_forecast_overlay(
     _zone_release(zone_release_overlay_df, zone_release_top);
     empty_message = _zone_release_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 zone_release_overlay_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Each release's zone forecasts against what each zone went on to report, by the cut-off each was made from.
-#md # Each forecast shows its median and 90% predictive interval beside the persistence baseline and the observed count.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Zone scores across releases, every zone</summary>
 #md # ```
 

@@ -23,10 +23,15 @@ posterior_C_joint = vec(Array(chn_joint[:C_T]));
 
 # ## Comparison with McCabe et al.
 #
-# McCabe et al. published their estimates as scenarios at fixed situation-report cut-offs, each with a 95% confidence interval.
-# Their back-calculation-from-deaths scenarios differ between reports, since the 18 May report used 88 reported deaths and the 20 May update 131 with corrected case-fatality ratios.
-# Their scenarios estimate cumulative cases at the report dates, though the report does not say whether these are symptomatic cases or all infections.
-# We take the like-for-like quantity to be our cumulative symptom onsets on the same dates, rather than the latent infections or our total at the current cut-off.
+# McCabe et al. published their estimates as scenarios at fixed situation-report cut-offs, each scenario carrying a 95% confidence interval.
+# We show all three, the 18 May report, the 20 May update and the 27 May Lancet publication, as one panel each, with their intervals kept.
+# Within a panel each method and scenario family is a single line, carrying its sweep over the nuisance assumptions: the case-fatality ratio, the geographic window and the doubling time.
+# The geographic-spread scenarios come from exported cases and travel volume.
+# Their back-calculation-from-deaths scenarios differ between the reports, since the 18 May report used 88 reported deaths and the 20 May update 131.
+# The 20 May update also corrected the case-fatality ratios.
+# McCabe's scenarios estimate cumulative cases at their report dates, though their report is not fully explicit about whether this is symptomatic cases or all infections.
+# We take the like-for-like quantity to be our cumulative symptom onsets on the same dates, not the latent infections (which include the not-yet-symptomatic) or our current cut-off total.
+# We read our value off the joint fit's cumulative-onset trajectory at the grid day for each report date, and show it with its credible interval.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -81,18 +86,13 @@ matched_comparison_fig = plot_scenario_comparison(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 matched_comparison_fig #hide
 
+# Their 95% confidence intervals come from exact negative-binomial counts for the geographic-spread method and a Poisson likelihood profile for the back-calculation from deaths.
+
 #md # ```@raw html
-#md # <figcaption>
-#md # McCabe et al.'s scenarios from the 18 May report, the 20 May update and the 27 May Lancet publication, one panel each, against our cumulative symptom onsets on each report date with their credible interval.
-#md # Each method and scenario family is one line sweeping the case-fatality ratio, the geographic window and the doubling time.
-#md # Their 95% confidence intervals come from exact negative-binomial counts for geographic spread, which uses exported cases and travel volume, and from a Poisson likelihood profile for back-calculation from deaths.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Frozen-fit C_T intervals (kept for the CSV export, not shown)</summary>
 #md # ```
 
@@ -113,12 +113,16 @@ frozen_streams_table = streams_table(
 # ## Comparison with Chamla et al.
 #
 # A second group, [chamla2026](@citet) at the World Health Organization Regional Office for Africa, published a stochastic compartmental model of the same outbreak on 25 June 2026.
-# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead ensemble, recalibrated by simulation filtering to the laboratory-confirmed cases and anchored on the 598 confirmed cases reported by 8 June.
-# It projects the confirmed-case trajectory under a low, central and high transmissibility scenario.
+# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead ensemble, recalibrated by simulation filtering to the laboratory-confirmed case series and anchored on the 598 confirmed cases reported by 8 June.
+# It is then run forward to project the confirmed-case trajectory under a low, central and high transmissibility scenario.
 #
-# Their published quantity is the cumulative confirmed-case count with the reporting fraction held at one, so it excludes the unconfirmed and unascertained cases that this analysis and McCabe et al. estimate.
-# The like-for-like comparison is therefore against our own confirmed-case projection.
-# We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the one-week-ahead forecast, rather than refitting to their assumptions.
+# Their published quantity is the cumulative confirmed-case count, with the reporting fraction held at one, so it does not adjust for the cases that are infected but never laboratory-confirmed.
+# This is a different quantity from the cumulative cases this analysis and McCabe et al. estimate, which include the unconfirmed and unascertained.
+# The like-for-like comparison is therefore against our own confirmed-case projection, not against our cumulative infection count.
+#
+# We compare forward projections rather than refitting to their assumptions.
+# We take our fit frozen at 8 June, the exact date of their confirmed-case calibration anchor.
+# We roll its confirmed-case stream forward to the dates Chamla report, using the same machinery as the one-week-ahead forecast.
 
 #md # ```@raw html
 #md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>
@@ -194,17 +198,11 @@ chamla_projection_fig = plot_projection_comparison(;
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 chamla_projection_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Chamla et al.'s central confirmed-case projection and ours from the fit frozen at 8 June, against the observed confirmed cases from mid-May.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# By 24 June their central scenario projected just under a thousand confirmed cases, and their low and high scenarios ranged from roughly 870 to 1360.
 
 #md # ```@raw html
 #md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
@@ -238,17 +236,11 @@ chamla_w12_fig = plot_estimate_comparison(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 chamla_w12_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Chamla et al.'s scenario spread at 24 June against our projection and the observed count.
-#md # Their central scenario projected just under a thousand confirmed cases, and their low and high scenarios roughly 870 to 1360.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
 #md # ```
 
@@ -275,23 +267,18 @@ chamla_comparison_table = let
     )
 end;
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 MarkdownTable(chamla_comparison_table) #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Our projection and Chamla et al.'s scenarios on the matched dates of 10 and 24 June.
-#md # </figcaption>
-#md # </figure>
 #md # </details>
 #md # ```
 
 # Beyond the comparison window their central scenario continues to roughly 8200 confirmed cases by mid-September, with the high scenario far higher.
 
 # ## Reproduction number behind the projection
+#
+# The forward projection above is carried by the reproduction-number trajectory our 8 June fit estimated, a quantity we report in its own right rather than as a comparison.
+# It declines over the weeks leading to the cut-off, and that decline is what bends the projected trajectory away from sustained early growth.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number as estimated by the 8 June fit</summary>
@@ -320,18 +307,9 @@ chamla_rt_fig = plot_rt(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 chamla_rt_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The reproduction number estimated by the fit frozen at 8 June, which carries the forward projection above.
-#md # Its decline over the weeks to the cut-off bends the projection away from sustained early growth.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ## Saving comparison outputs
 #

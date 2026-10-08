@@ -88,10 +88,8 @@ const NAMES = Dict(
     "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi"
 )
 
-## A batch of samples goes by several names. "echantillons" is misspelt
-## now and then ("echentillons" at SitRep 146, "echantiollos" at 149), so
-## its stem is matched loosely.
-const SAMPLES = "(?:ech[ae]nt[a-z]*|swabs?|prelevements?)"
+## A batch of samples goes by several names.
+const SAMPLES = "(?:echantillons?|swabs?|prelevements?)"
 
 ## The phrasings a positive count comes in, specific readings first.
 const POSITIVES = Regex.(
@@ -121,10 +119,7 @@ const SPLIT_LABS = Regex(
 const ANALYSED = Regex.(
     [
         "dont (\\d+) (?:[a-z]+ ){0,2}?(?:ont ete |sont )?(?:analys|test)",
-        "sur (?:les )?(\\d+) (?:nouveaux? )?(?:ech[ae]nt[a-z]*|swabs?)",
-        ## SitRep 147's Bas-Uele bullet drops the noun: "sur 33 recus et
-        ## analyses".
-        "sur (?:les )?(\\d+) recus et (?:analys|test)",
+        "sur (?:les )?(\\d+) (?:nouveaux? )?(?:echantillons?|swabs?)",
         "et (\\d+) (?:ont ete )?(?:analyses?|testes?)",
         "(\\d+) ont ete (?:analyses?|testes?)",
         "(\\d+) (?:nouveaux? )?" * SAMPLES *

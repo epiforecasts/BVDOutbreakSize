@@ -25,7 +25,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 
 # ## Summary
 #
-# The overall bullets come first, then each stream's own scores, from the sections below.
+# The overall bullets come first, then each stream's own scores, from the sections further down this page.
 # Relative skill is the model's CRPS over the persistence baseline's, so a value below one beats the baseline.
 # Coverage is the fraction of forecasts whose observed value falls inside the 90% predictive interval, nominally 0.9.
 
@@ -37,10 +37,15 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 
 # ## Forecast validation
 #
-# How last week's forecast held up against the data since observed, from the frozen refit in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
-# Only the streams the situation reports still update are validated, since a stopped stream repeats its last total and leaves nothing to score.
-# The projected bed occupancy is scored against the beds held a week later, but this check is weak at a one-week-back freeze.
+# How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
+# Only the streams the situation reports are still updating are validated here.
+# A stream that has stopped being reported carries a cumulative total that repeats its last reported value, so there is no observation for the past week to score against.
+# The frozen fit also conditions on the isolation beds, so the projected bed occupancy is scored against the beds held a week later.
+# The bed validation is weak at a one-week-back freeze.
 # The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
+# Like the scores further down, the confirmed new-count rows here take out any retrospective harmonisation step the week contained.
+# Such a step reattaches records notified earlier, so it is not something the forecast was predicting.
+# The cumulative rows are scored against the published total, harmonisation included.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -169,21 +174,15 @@ validation_table = forecast_vs_truth(
 ## rather than a fixed-width block of printed output. See its docstring #src
 ## for the mechanism. The same treatment is applied to every DataFrame #src
 ## display in the report pages. #src
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 MarkdownTable(validation_table) #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Last week's frozen forecast against the data since observed, for the streams still reported.
-#md # As in the scores below, the confirmed new-count rows take out any retrospective harmonisation step in the week, since it reattaches records notified earlier.
-#md # The cumulative rows are scored against the published total, harmonisation included.
-#md # </figcaption>
-#md # </figure>
 #md # </details>
 #md # ```
+
+# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each still-reported count stream the forecast carries.
+# The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
+# Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted step outline on the joint's own histogram bins.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -199,18 +198,11 @@ validation_fig = plot_forecast_vs_truth(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 validation_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The one-week-ahead forecast from the frozen fit for each still-reported count stream, cumulative and new, with the 90% predictive interval shaded and the count observed by the cut-off as a dashed black rule.
-#md # A stream with its own single-stream fit carries that fit's forecast from the same cut-off as a dotted step outline.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The bed panel scores last week's projected occupancy against the beds occupied now (the dashed rule), with the individual (treatment-only) fit's own projection overlaid as a dotted step outline on the joint's own histogram bins.
 
 #md # ```@raw html
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
@@ -223,17 +215,11 @@ validation_beds_fig = plot_forecast_beds_vs_truth(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 validation_beds_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Last week's projected bed occupancy against the beds occupied now (dashed), with the treatment-only fit's projection as a dotted step outline.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The latent quantities are not observed, so they are scored distribution against distribution: what the frozen fit forecast for the past week's new infections, onsets and deaths against what the current fit now estimates for the same window.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-now latent plot</summary>
@@ -258,20 +244,14 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 validation_latent_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The frozen fit's forecast of the past week's new infections, onsets and deaths against the current fit's estimate for the same window.
-#md # These quantities are not observed, so they are scored distribution against distribution.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 # ### Streams no longer reported
+#
+# The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
+# The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
 
 #md # ```@raw html
 #md # <details><summary>Forecast for the streams no longer reported</summary>
@@ -306,61 +286,41 @@ validation_stopped_fig = plot_forecast(
 
 ## See the comment above `validation_table`'s display for why this wraps #src
 ## the table in `MarkdownTable` instead of showing it directly. #src
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 MarkdownTable(validation_stopped_streams) #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The streams the situation reports no longer update, with the date each was last reported.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 #-
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 validation_stopped_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The frozen fit's projection for these streams over the same week, with no observed rule, since their counts have not moved since they stopped.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ## Forecast scoring across releases
 #
-# Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit.
+# Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
 # The tables in this section are the joint model's, one row per stream.
-# Recovered has no individual fit of its own, so it is compared with the baseline only.
-# Reported cases and suspected deaths stopped being updated partway through the outbreak, and the exports detection series is anchored to an earlier cut-off.
-# Exports therefore has no scored forecast, and reported cases and suspected deaths each rest on a single matched forecast.
+# See [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built.
+# Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
+# Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off.
+# Exports therefore contributes no scored forecast, and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
-# Only a minority of the daily releases examined contribute a row, each a reconstruction of an earlier model version rather than the current fit.
-# Only the newest few releases carry the current model's individual-stream forecasts.
-# Each row shows the number of matched forecasts it rests on, from one to a handful.
+# Only a minority of the daily releases examined contribute a row to the table below, each a reconstruction of an earlier model version rather than the current fit.
+# Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
+# Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 #
-# Four things are excluded from the scores, each for a stated reason rather than for scoring badly:
+# Four things are excluded from the scores here and in the frozen section below, each for a stated reason rather than for scoring badly, and the second of them applies to the frozen section alone.
 #
-# - One whole reconstruction (`results-v1.6.0`), whose chain forecasts a near-zero median at every horizon and stream with an occasional five- or six-digit upper tail, the signature of a chain that failed to sample.
-# - In the frozen section only, the confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026.
-#   Their forecaster floored that stream at zero, giving a one-week median of zero against an observed 250 to 370.
+# - One whole reconstruction (`results-v1.6.0`): its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample rather than a forecast.
+# - Frozen section only: the confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026, whose forecaster could not project that stream from its own trajectory and floored it at zero, so each carries a one-week median of exactly zero against an observed 250 to 370. Reconstructions cut after that window project the stream normally.
 # - An onset window containing a vintage whose reread total falls, since its increment is not what the situation reports added.
 # - A stream that carries no persistence baseline, which is what makes a window scoreable at all.
 #
-# Nothing is dropped from the archive itself, and the score and overlay files in the data directory record everything that was scored.
+# Nothing is dropped from the archive itself; `data/forecast_scores*.csv` and `data/forecast_overlay*.csv` record everything that was scored.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds, because every vintage rereads the whole figure.
-# Its printed total therefore moves with the scan error as well as with late reporting, and on fourteen vintages the reread total falls.
-# A window containing a falling vintage is left unscored, as the [province scores](@ref "Forecast by province across releases") do for a window holding a harmonisation-break day.
-# This bites hardest at the longer horizons: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
-# Read the onset row's skill against the baseline rather than its coverage, and as resting on a handful of windows.
+# The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
+# Its printed total therefore moves with the scan error as well as with late reporting.
+# On fourteen vintages the reread total falls, which a cumulative onset curve cannot do, and on many others it repeats unchanged.
+# The scored truth cannot absorb that, since it is the increment between the vintages at the two ends of a window.
+# A window containing a falling vintage is therefore left unscored, the rule the [province scores](@ref "Forecast by province across releases") already apply to a window holding a harmonisation-break day.
+# It bites hardest at the longer horizons, a four-week window being more likely to contain a reread than a one-week one: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
+# Read the onset row's skill against the baseline rather than its coverage, and read it as resting on a handful of windows.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -430,51 +390,30 @@ joint_score_by_release_table = select_fit_role(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
+
+# The headline pools every horizon and release into one row per stream for the joint model: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline, on both the natural and the log scale.
+# Each row also carries relative skill against the stream's own individual fit where one exists.
 
 MarkdownTable(joint_score_overview_table) #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Scores pooled over every horizon and release, one row per stream: the mean CRPS and its decomposition, coverage, bias, and relative skill against the persistence baseline on the natural and log scales.
-#md # Each row also carries relative skill against the stream's own individual fit where one exists.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
 
 forecast_relative_skill_fig = plot_forecast_relative_skill(
     forecast_score_by_horizon_table
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 forecast_relative_skill_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline by horizon, one panel per stream and one series per fit role, on a log scale with the reference line at one.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# What that error is made of, by horizon: the mean CRPS split into its width, its overprediction and its underprediction, one stacked bar per horizon and fit role.
 
 forecast_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
     forecast_score_by_horizon_table
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 forecast_crps_by_horizon_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # The mean CRPS by horizon split into its width, overprediction and underprediction, one stacked bar per horizon and fit role.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
@@ -484,22 +423,16 @@ MarkdownTable(joint_score_by_horizon_table) #hide
 #md # </details>
 #md # ```
 
+# The same relative skill against the baseline, release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
+
 forecast_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     forecast_score_by_release_table;
     title = "Relative skill against the baseline, by release"
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 forecast_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
@@ -508,6 +441,12 @@ MarkdownTable(joint_score_by_release_table) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# Forecasts made at each release against the value observed since, one panel per stream and horizon, the observed value in black.
+# The median and 90% interval are coloured by fit role: the persistence baseline, the stream's individual fit and the joint.
+# The x-axis is the date each forecast was made, so an incident stream's observed window pairs unambiguously with the forecast that made it.
+# Each panel's axis is cropped to a small multiple of what that stream actually reached, so one very wide interval cannot squash every other series flat.
+# An interval or median too wide for the panel is clamped at the top and marked with an open triangle rather than silently cut off.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
@@ -519,26 +458,18 @@ forecast_overlay_fig = plot_forecast_overlay(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_overlay_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Forecasts made at each release against the value observed since (black), one panel per stream and horizon by the date each forecast was made, with the median and 90% interval coloured by fit role.
-#md # Each panel's axis is cropped to a small multiple of what the stream reached, and an interval or median past it is clamped and marked with an open triangle.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 # ## Frozen-fit forecast evaluation
 #
-# The current model, frozen at earlier data cut-offs (see [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored as the cross-release forecasts above, against the same baseline.
+# The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
-# Each stream's own frozen fit is scored only at the one-week-back cut-off for still-reported streams, and appears in the skill figures rather than the tables.
-# The May cut-offs predate the first reported bed occupancy and recoveries, so those windows are left unscored.
-# The baseline snapshot was taken weeks after the frozen cut-off, so it can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
+# Each stream's own frozen fit is also scored where one exists, at the one-week-back cut-off and for still-reported streams only, and is carried by the skill figures rather than by the tables.
+# Every other cut-off carries the joint alone.
+# The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
+# The baseline carries a weaker data-vintage guarantee than the cross-release one, since its snapshot was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
@@ -624,41 +555,24 @@ frozen_score_by_vintage_display = _frozen_joint_only(
 
 MarkdownTable(frozen_score_overview_display) #hide
 
-#-
+# The same relative skill against the baseline, by horizon, for the frozen cut-offs.
 
 frozen_relative_skill_fig = plot_forecast_relative_skill(
     frozen_score_by_horizon_table
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 frozen_relative_skill_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline by horizon for the frozen cut-offs.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# What that error is made of, by horizon, as in the cross-release section above.
 
 frozen_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
     frozen_score_by_horizon_table;
     title = "CRPS decomposition by horizon, frozen cut-offs"
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 frozen_crps_by_horizon_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # The mean CRPS by horizon for the frozen cut-offs, split as in the cross-release section above.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
@@ -668,23 +582,17 @@ MarkdownTable(frozen_score_by_horizon_display) #hide
 #md # </details>
 #md # ```
 
+# The same relative skill against the baseline, cut-off by cut-off, pooled over the horizons each cut-off forecast.
+
 frozen_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     frozen_score_by_release_table;
     xlabel = "Frozen cut-off",
     title = "Relative skill against the baseline, by frozen cut-off"
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 frozen_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline cut-off by cut-off, pooled over the horizons each cut-off forecast.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Scores by frozen cut-off</summary>
 #md # ```
 
@@ -695,6 +603,9 @@ MarkdownTable(frozen_score_by_release_display) #hide
 #md # ```
 
 # ### Frozen skill by release
+#
+# Skill at each cut-off more than one release forecast, one point per release rather than pooled across releases.
+# Releases run in the order they were cut, evenly spaced rather than to calendar scale.
 
 #md # ```@raw html
 #md # <details><summary>Frozen skill per release</summary>
@@ -706,17 +617,11 @@ frozen_skill_by_vintage_fig = plot_forecast_skill_by_vintage(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 frozen_skill_by_vintage_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Skill at each cut-off that more than one release forecast, one point per release rather than pooled.
-#md # Releases run in the order they were cut, evenly spaced rather than to calendar scale.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Frozen scores by release</summary>
 #md # ```
 
@@ -725,6 +630,9 @@ MarkdownTable(frozen_score_by_vintage_display) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
+# Each panel carries the frozen forecast and the persistence baseline, coloured as in the cross-release overlay above, and the x-axis is the cut-off each forecast was made from.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
@@ -747,21 +655,12 @@ frozen_overlay_fig = plot_forecast_overlay(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 frozen_overlay_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The frozen forecasts made at each cut-off against the value observed since (black), one panel per stream and horizon by the cut-off each was made from.
-#md # Each panel carries the frozen forecast and the persistence baseline, coloured as in the cross-release overlay above.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 # The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings given in the methods.
+# Each uses the full headline settings: 1000 draws across two chains.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
@@ -775,7 +674,7 @@ frozen_overlay_fig #hide
 
 # ## Individual fits against the baseline
 #
-# This section scores each stream's own individual fit across releases, as [forecast scoring across releases](@ref "Forecast scoring across releases") does the joint, against the same persistence baseline.
+# This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
 
 #md # ```@raw html
 #md # <details><summary>Individual-fit rows of the cross-release scores</summary>
@@ -802,7 +701,7 @@ individual_score_by_release_table = drop_individual_fit_columns(
 
 MarkdownTable(individual_score_overview_table) #hide
 
-#-
+# The same relative skill against the baseline, by horizon, one panel per stream (dataset), for each stream's own individual fit.
 
 individual_relative_skill_fig = plot_forecast_relative_skill(
     individual_score_by_horizon_table;
@@ -811,17 +710,9 @@ individual_relative_skill_fig = plot_forecast_relative_skill(
         "forecast. Not a missing forecast."
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 individual_relative_skill_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline by horizon for each stream's own individual fit, one panel per stream.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
@@ -843,7 +734,7 @@ MarkdownTable(individual_score_by_release_table) #hide
 
 # ## Saving forecast outputs
 #
-# The one-week-back validation forecast is written in the release forecast's archive format, so it is recorded as a release asset alongside the forecast it is scored against.
+# The one-week-back validation forecast, in the same archive format as the release forecast, so the frozen "last week versus now" forecast is recorded as a release asset alongside the forecast it is scored against.
 
 #md # ```@raw html
 #md # <details><summary>Write forecast outputs</summary>
