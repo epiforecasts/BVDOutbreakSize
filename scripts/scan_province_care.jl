@@ -162,15 +162,8 @@ function care_lines(lines::Vector{String})
         f = fold(l)
         m = match(head, l)
         if m !== nothing && plausible_heading_number(m[1])
-            ## From SitRep 146 the section is numbered as a sibling of its
-            ## own subsections ("2.4.3. Prise en charge holistique", then
-            ## "2.4.4. Principales actions"), so that subheading continues
-            ## the section whatever its number.
-            t = fold(m[2])
-            (
-                (startswith(m[1], num) && !occursin("defis", t)) ||
-                    startswith(t, "principales actions")
-            ) || break
+            (startswith(m[1], num) && !occursin("defis", fold(m[2]))) ||
+                break
         end
         push!(out, String(l))
     end

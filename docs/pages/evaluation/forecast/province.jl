@@ -23,7 +23,8 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The overall bullets come first, then a short block per province, from the scores below.
+# The overall bullets come first, then a short block per province, from the scores further down this page.
+# Relative skill is the model's CRPS over the persistence baseline's, so a value below one beats the baseline.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -33,6 +34,7 @@ chn_joint = load_fit("joint");
 
 # ## Forecast by province
 #
+# The frozen fit's one-week-ahead forecast of each province's confirmed cases and deaths, scored against what each province went on to report.
 # The forecast is defined in the [province forecast](@ref "Province forecast") Methods section.
 # Every release's archived province forecast is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
 
@@ -84,17 +86,12 @@ province_validation_table = province_forecast_vs_truth(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(province_validation_table) #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The frozen fit's one-week-ahead forecast of each province's confirmed cases and deaths, against what each province went on to report.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The same forecast against what each province went on to report, one panel per target.
+# A cross marks the observed count over the week for the cases and deaths, the patients in isolation on the target day where the province printed them, and the current fit's reproduction number at the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Build the forecast-versus-observed figures</summary>
@@ -141,18 +138,9 @@ province_vs_observed_detail(p) = plot_province_forecast_detail(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 province_vs_observed_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The same forecast against what each province went on to report, one panel per target.
-#md # A cross marks the observed count over the week for cases and deaths, the patients in isolation on the target day where the province printed them, and the current fit's reproduction number at the cut-off.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # Each province's forecast, with the dashed rule at what it went on to report.
 
@@ -198,8 +186,8 @@ province_vs_observed_detail(4) #hide
 
 # ## Forecast by province across releases
 #
-# The archived province forecast of each release is scored against what each province went on to report.
-# A window holding a harmonisation-break day is left unscored, because that day's backfill is published for the country and not by province.
+# The archived province forecast of each release, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+# Only [province forecast](@ref "Province forecast") projections are scored.
 # The scores fill in as releases carrying them become old enough for their targets to have been observed.
 # The joint patch model is the only model that forecasts the provinces, so every table here is the joint model's, one row per stream and province.
 
@@ -265,24 +253,15 @@ province_scores_note #hide
 
 MarkdownTable(province_score_overview_display) #hide
 
-#-
+# The relative skill against the baseline by horizon, one panel per stream and province, on a log-scaled skill axis with the reference line at one.
 
 province_relative_skill_fig = plot_forecast_relative_skill(
     province_score_by_horizon_table; empty_message = _province_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 province_relative_skill_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline by horizon, one panel per stream and province, on a log scale with the reference line at one.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# What that error is made of, by horizon: the mean CRPS split into its width, its overprediction and its underprediction.
 
 province_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
     province_score_by_horizon_table;
@@ -290,17 +269,9 @@ province_crps_by_horizon_fig = plot_forecast_crps_by_horizon(
     empty_message = _province_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 province_crps_by_horizon_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # The mean CRPS by horizon split into its width, overprediction and underprediction.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Province scores by horizon</summary>
 #md # ```
 
@@ -310,23 +281,17 @@ MarkdownTable(province_score_by_horizon_display) #hide
 #md # </details>
 #md # ```
 
+# The same relative skill release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
+
 province_skill_by_cutoff_fig = plot_forecast_skill_by_cutoff(
     province_score_by_release_table;
     title = "Relative skill against the baseline by release, by province",
     empty_message = _province_empty
 );
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 province_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
-#md # </figcaption>
-#md # </figure>
 #md # <details><summary>Province scores by release</summary>
 #md # ```
 
@@ -335,6 +300,10 @@ MarkdownTable(province_score_by_release_display) #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# Each release's province forecasts against what each province went on to report, one panel per province stream and horizon.
+# The x-axis is the cut-off each forecast was made from.
+# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the observed count.
 
 #md # ```@raw html
 #md # <details><summary>Load the archived province forecasts and their outcomes</summary>
@@ -359,18 +328,9 @@ evaluation_province_overlay_fig = plot_forecast_overlay(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 evaluation_province_overlay_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Each release's province forecasts against what each province went on to report, one panel per stream and horizon, by the cut-off each was made from.
-#md # Each forecast shows its median and 90% predictive interval beside the persistence baseline and the observed count.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ## Saving province forecast outputs
 
