@@ -125,6 +125,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The cached CI headline joint fit `joint__71835cdb61145210` (SitRep 136) reaches the cap of 10 on every draw of both chains, at a step size of 0.0015, with mean acceptance 0.95 against its target of 0.80 and E-BFMI 0.84 and 0.81.
   Fitted values do not change.
 - The `patch_infection_model` docstring points at `patch_infections` for the same-day importation transfer (#1038).
+- The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
+  In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
+  `frozen_validation` still reached R-hat 1.09.
 
 ### Fixed
 
