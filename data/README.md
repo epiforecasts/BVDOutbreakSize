@@ -127,8 +127,11 @@ SitReps 139, 140 and 141 (n = 6 417, 6 468 and 6 505, last tick 28 September) ar
 These renders split a weekly tick in two or lose ticks altogether, so the tick chain steps over up to two clusters off the weekly grid and accepts a gap of up to three weeks.
 Their date labels reach into the tick row, washed bars on tick columns read to a grey band, and the faded bars past the last tick have no outline, each fixed in the reader as `scripts/README.md` describes.
 On onset dates to 7 August the three blocks differ from the dashboard's 2 October snapshot by 0.27 to 0.65 cases a day, at most 2 a day except 141's 6 May, which reads 7 against 1 in every other source.
-SitRep 143 (n = 6 621, last tick 05 October) is not digitised: its washed 14 September bar on a tick column reads 24 against 62 by eye, and the faded bars of the band, which starts before the last tick now that the tick is a day past the report date, read 31 and 15 against 23 and 7 on 30 September and 1 October (issue #1106).
-SitReps 144 and 145 reprint the 143 figure byte for byte (the same image md5 and n = 6 621), so they stay out for the same reason.
+SitRep 143 (n = 6 621, last tick 05 October) is digitised on a 725x424 render and reads 6 609 (-0.2%, issue #1106).
+Its washed 14 September bar on a tick column breaks at a grey band below its outlines, so a day between two outline columns of the same height that reads below them, beside a washed column with fill but no outline, is read again without the tick-column skip.
+Its faded bars inside the incomplete-data band have no outline before the last tick either, so a day there whose columns disagree reads the level run of columns centred nearest it.
+On onset dates more than 56 days before the report the block differs from the dashboard's 2 October snapshot by 0.38 cases a day, at most 5.
+SitReps 144 and 145 reprint the 143 figure byte for byte (the same image md5 and n = 6 621).
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
