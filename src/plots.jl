@@ -3892,6 +3892,172 @@ function plot_province_forecast_detail(
     return fig
 end
 
+## The 90% credible interval of row `i` of a `cases_rt_table` frame as
+## crossed bars: one spanning the reproduction number and, where the weekly
+## cases are uncertain, one spanning the cases. A wide interval draws a long,
+## faint bar rather than a precise dot.
+function _cases_rt_interval!(ax, tbl, i, colour; linewidth)
+    CairoMakie.rangebars!(
+        ax, [tbl.cases[i]], [tbl.rt_lower[i]], [tbl.rt_upper[i]];
+        color = colour, linewidth, whiskerwidth = 0
+    )
+    tbl.cases_upper[i] > tbl.cases_lower[i] && CairoMakie.rangebars!(
+        ax, [tbl.rt_median[i]], [tbl.cases_lower[i]], [tbl.cases_upper[i]];
+        direction = :x, color = colour, linewidth, whiskerwidth = 0
+    )
+    return nothing
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Confirmed cases in the most recent week against the reproduction number at
+its end, one point per area, from a [`cases_rt_table`](@ref) frame. Each
+point sits at the week's count and the median reproduction number, with a
+faint bar spanning the 90% credible interval of the reproduction number and,
+for a forecast, a second bar spanning the 90% interval of its cases. An
+observed count carries no interval. The week before is a faded triangle
+joined to the point, and a `forecast` row is a hollow point one week ahead
+joined by a dashed line. Colours follow `patch`, named by `patch_labels`.
+
+`top`, when given, keeps the `top` areas with the most confirmed cases over
+the two weeks. Dashed lines mark a reproduction number of one and the
+median of the shown areas' most recent weekly counts.
+"""
+function plot_cases_rt(
+        tbl::DataFrame;
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        patch_colours = _ZONE_PATCH_COLOURS,
+        top::Union{Nothing, Integer} = nothing,
+        unit::AbstractString = "province",
+        title::AbstractString = "Confirmed cases and reproduction number by " *
+            unit
+    )
+    fig = Figure(; size = (760, 620))
+    CairoMakie.Label(
+        fig[0, 1], title; fontsize = 16, font = :bold, tellwidth = false
+    )
+    observed = findall(==("observed"), tbl.kind)
+    if isempty(observed)
+        CairoMakie.Label(
+            fig[1, 1], "No $(unit) reports a week of confirmed cases.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    rows_of(a, kind) = let idx = findall(
+            i -> tbl.area[i] == a && tbl.kind[i] == kind, 1:nrow(tbl)
+        )
+        idx[sortperm(tbl.date[idx])]
+    end
+    areas = unique(tbl.area[observed])
+    if top !== nothing && length(areas) > top
+        total = [sum(tbl.cases[rows_of(a, "observed")]) for a in areas]
+        areas = areas[sort(partialsortperm(total, 1:top; rev = true))]
+    end
+    latest = [last(rows_of(a, "observed")) for a in areas]
+    ref = median(tbl.cases[latest])
+    shown = reduce(
+        vcat, [rows_of(a, k) for a in areas, k in ("observed", "forecast")]
+    )
+    xhi = max(2.0, 1.5 * maximum(tbl.cases_upper[shown]), 1.2 * ref)
+    scale = CairoMakie.Makie.pseudolog10
+    ax = Axis(
+        fig[1, 1]; xscale = scale, xticks = _zone_cbar_ticks((0, xhi), scale),
+        xlabel = "Confirmed cases in the week",
+        ylabel = "Reproduction number at the end of the week",
+        xgridcolor = (:black, 0.06), ygridcolor = (:black, 0.06)
+    )
+    hlines!(ax, [1.0]; color = :grey40, linestyle = :dash, linewidth = 1)
+    vlines!(ax, [ref]; color = :grey60, linestyle = :dash, linewidth = 1)
+    colour(p) = patch_colours[mod1(p, length(patch_colours))]
+    for a in areas
+        idx = rows_of(a, "observed")
+        k = last(idx)
+        c = colour(tbl.patch[k])
+        if length(idx) > 1
+            j = idx[end - 1]
+            lines!(
+                ax, tbl.cases[[j, k]], tbl.rt_median[[j, k]];
+                color = (c, 0.3), linewidth = 1.2
+            )
+            _cases_rt_interval!(ax, tbl, j, (c, 0.15); linewidth = 2)
+            scatter!(
+                ax, [tbl.cases[j]], [tbl.rt_median[j]];
+                marker = :utriangle, color = (c, 0.35), markersize = 9
+            )
+        end
+        f = rows_of(a, "forecast")
+        if !isempty(f)
+            f = only(f)
+            lines!(
+                ax, tbl.cases[[k, f]], tbl.rt_median[[k, f]];
+                color = (c, 0.6), linestyle = :dash, linewidth = 1.5
+            )
+            _cases_rt_interval!(ax, tbl, f, (c, 0.25); linewidth = 4)
+            scatter!(
+                ax, [tbl.cases[f]], [tbl.rt_median[f]];
+                color = :white, strokecolor = c, strokewidth = 1.5,
+                markersize = 8
+            )
+        end
+        _cases_rt_interval!(ax, tbl, k, (c, 0.3); linewidth = 8)
+        scatter!(
+            ax, [tbl.cases[k]], [tbl.rt_median[k]];
+            color = c, strokecolor = :white, strokewidth = 1, markersize = 8
+        )
+        CairoMakie.text!(
+            ax, tbl.cases[k], tbl.rt_median[k];
+            text = a, color = :grey15, fontsize = 11, offset = (7, 0),
+            align = (:left, :center)
+        )
+    end
+    ## Room below zero cases and around the intervals, with R = 1 always in
+    ## view.
+    CairoMakie.xlims!(ax, -0.5, xhi)
+    ylo = minimum(tbl.rt_lower[shown])
+    yhi = maximum(tbl.rt_upper[shown])
+    CairoMakie.ylims!(ax, min(0.9 * ylo, 0.9), max(1.05 * yhi, 1.1))
+    has_forecast = any(a -> !isempty(rows_of(a, "forecast")), areas)
+    key = Any[
+        (
+            CairoMakie.LineElement(;
+                color = (:grey30, 0.3), linewidth = 8
+            ),
+            "90% credible interval",
+        ),
+        (
+            CairoMakie.MarkerElement(;
+                marker = :utriangle, color = (:grey30, 0.35),
+                markersize = 9
+            ),
+            "Week before",
+        ),
+    ]
+    has_forecast && push!(
+        key, (
+            CairoMakie.MarkerElement(;
+                marker = :circle, color = :white,
+                strokecolor = :grey30, strokewidth = 1.5, markersize = 8
+            ),
+            "Week ahead (forecast)",
+        )
+    )
+    _patch_legend!(
+        fig, (2, 1), tbl.patch[latest], patch_labels, patch_colours;
+        extra = key
+    )
+    CairoMakie.Label(
+        fig[3, 1], "Points show the most recent week's confirmed cases " *
+            "and median R. Bars span the 90% credible interval, and an " *
+            "observed count has none. Dashed lines mark R = 1 and the " *
+            "median weekly count across the $(unit)s shown.";
+        fontsize = 12, word_wrap = true, tellwidth = false,
+        padding = (0, 0, 0, 6)
+    )
+    return fig
+end
+
 ## Panel colours of the per-province forecast targets.
 const _PROVINCE_PANEL_COLOURS = (
     confirmed_new = :goldenrod, confirmed_deaths_new = :darkorange3,

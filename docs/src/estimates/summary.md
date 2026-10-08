@@ -55,6 +55,8 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 ```
 
+![Confirmed cases and reproduction number by province](../summary_assets/cases_rt_provinces.png)
+
 ### By health zone
 
 The table gives the health zones with the most confirmed cases over the past two weeks.
@@ -67,6 +69,8 @@ using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "zone_headline.md"), String))
 ```
+
+![Confirmed cases and reproduction number by health zone](../summary_assets/cases_rt_zones.png)
 
 ### Fit diagnostics
 

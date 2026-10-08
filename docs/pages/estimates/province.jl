@@ -33,6 +33,40 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
+# Each point is a province's confirmed cases over the most recent week against its reproduction number, with the week before and the [forecast](@ref "Province forecast") week ahead.
+# Faint bars span the 90% credible interval of the reproduction number, so a long bar marks an uncertain estimate.
+# The forecast also carries a bar across its 90% interval for cases, whilst an observed weekly count has none.
+
+#md # ```@raw html
+#md # <details><summary>Compute the weekly cases and reproduction number by province</summary>
+#md # ```
+
+## The provincial Rt trajectories, rebuilt on the same grid as the
+## reproduction number by province figure further down.
+province_summary_rt = reconstruct_patch_rt(
+    chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT, n_patches = N_PATCHES,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    ramp = RT_INTERVENTION_RAMP
+);
+## The week-ahead province forecast, read from the same draws as the
+## province forecasts page.
+province_summary_forecast = forecast_provinces(
+    fit_forecast("joint"); horizon = 7, n_patches = N_PATCHES
+);
+province_cases_rt = cases_rt_table(
+    province_summary_rt, province_cases.days, province_cases.increments;
+    cutoff = obs.cutoff, n = obs.n, forecast = province_summary_forecast
+);
+province_cases_rt_fig = plot_cases_rt(province_cases_rt);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cases_rt_fig #hide
+
 # The table below compares the provinces, from the joint posterior.
 # Each range is an equal-tailed 90% credible interval, and the shares and probabilities are computed draw by draw.
 # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
@@ -502,9 +536,9 @@ province_diagnostics_table #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison and the reproduction
-# number by province, so they are written here rather than on the National
-# page.
+# The summary dashboard shows the province comparison, the reproduction
+# number by province and the weekly cases against the reproduction number,
+# so they are written here rather than on the National page.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -515,6 +549,9 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+CairoMakie.save(
+    joinpath(dashboard_dir, "cases_rt_provinces.png"), province_cases_rt_fig
+)
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, province_headline_md)
 end
