@@ -1659,10 +1659,15 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
-A log deviation per directed flow, a correlated destination effect plus a
-double-centred flow term ([`flow_pair_deviation`](@ref)), moves where each
-origin's exports land with its total held
-([`destination_weighted_kernel`](@ref)).
+Gravity is the prior mean of the flows. The log flows `log K + W` have a
+multivariate normal prior with mean `log K` and covariance
+`σ_dest² C_dest + σ_flow² R(ρ_flow)`, a destination effect correlated
+`ρ_od` with each province's origin deviation plus a double-centred flow
+term with reciprocity correlation `ρ_flow`
+([`importation_flow_factor`](@ref)). The deviation `W` is drawn
+non-centred and is the data's departure from gravity. Each origin's column
+is rescaled to its gravity total ([`destination_weighted_kernel`](@ref)),
+so `W` moves where an origin's exports land and not how many it sends.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1855,16 +1860,22 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
-        ## Per-destination weights on the kernel, sum-to-zero on the same
-        ## basis and correlated `ρ_od` with each province's origin deviation.
+        ## The log flows `log K + W` have a multivariate normal prior whose
+        ## mean is the log gravity kernel, so gravity is the prior and `W` is
+        ## the data's departure from it. `W = L ζ` is non-centred on the
+        ## factor `L` of [`importation_flow_factor`](@ref), with `Σ = L Lᵀ`
+        ## the sum of a destination effect and a flow term.
+        ##
+        ## The destination draws correlate `ρ_od` with each province's origin
+        ## deviation and stay standard normal.
         σ_dest ~ importation_destination_sd_prior
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         ρ_od_unit ~ importation_correlation_prior
         ρ_od = _unit_to_correlation(ρ_od_unit)
         z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
-        ## Per-flow deviations with the origin and destination effects taken
-        ## out, each flow correlated `ρ_flow` with its reverse.
+        ## The flow term's correlation matrix gives each flow correlation
+        ## `ρ_flow` with its reverse.
         n_sym = size(flow_basis.symmetric, 2)
         n_flow = n_sym + size(flow_basis.antisymmetric, 2)
         if n_flow > 0
@@ -1876,13 +1887,19 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             else
                 ρ_flow = -one(Tp)
             end
-            flow_dev = flow_pair_deviation(flow_basis, σ_flow, ρ_flow, z_flow)
+            flow_sd = σ_flow
+            ζ = vcat(z_od, z_flow)
             importation_flow_sd := σ_flow
             importation_reciprocity := ρ_flow
         else
-            flow_dev = zeros(Tp, n_patches, n_patches)
+            flow_sd = zero(Tp)
+            ρ_flow = -one(Tp)
+            ζ = z_od
         end
-        log_weight = dest_dev .+ flow_dev
+        L_flow = importation_flow_factor(
+            basis, flow_basis, σ_dest, flow_sd, ρ_flow
+        )
+        log_weight = reshape(L_flow * ζ, n_patches, n_patches)
         weighted = destination_weighted_kernel(importation_kernel, log_weight)
         importation_destination_sd := σ_dest
         importation_destination_effect := dest_dev

@@ -2074,36 +2074,78 @@ end
     end
 end
 
-@testitem "flow_pair_deviation: marginal scale and reciprocity" begin
-    using BVDOutbreakSize: flow_pair_basis, flow_pair_deviation
-    using Random: Xoshiro
-    using Statistics: std, cor
+@testitem "importation_flow_factor: MvNormal covariance of the log flows" begin
+    using BVDOutbreakSize: flow_pair_basis, importation_flow_factor,
+        sum_to_zero_basis
+    using LinearAlgebra: nullspace, rank
 
-    n = 4
-    B = flow_pair_basis(n)
-    d = size(B.symmetric, 2) + size(B.antisymmetric, 2)
-    @test flow_pair_deviation(B, 0.0, 0.4, randn(Xoshiro(1), d)) == zeros(n, n)
-    σ, ρ = 0.3, 0.6
-    rng = Xoshiro(2)
-    draws = [flow_pair_deviation(B, σ, ρ, randn(rng, d)) for _ in 1:40_000]
-    U = first(draws)
-    @test all(iszero, [U[p, p] for p in 1:n])
-    @test maximum(abs, sum(U; dims = 1)) < 1.0e-12
-    @test maximum(abs, sum(U; dims = 2)) < 1.0e-12
-    ## Every directed flow has scale `σ`, and each flow correlates `ρ`
-    ## with its reverse.
-    for (p, q) in ((2, 1), (4, 3), (1, 3))
-        x = [u[p, q] for u in draws]
-        y = [u[q, p] for u in draws]
-        @test std(x) ≈ σ rtol = 0.03
-        @test cor(x, y) ≈ ρ atol = 0.02
+    ## The covariance written from its formula: a destination effect with
+    ## entries `δ_pp' - 1/n` and a flow correlation matrix built from
+    ## projectors onto the symmetric and antisymmetric double-centred flows.
+    ## The projectors come from `nullspace`, not the package's Gram-Schmidt.
+    function reference(n, σ_dest, σ_flow, ρ)
+        idx(p, q) = (q - 1) * n + p
+        off = [p != q for p in 1:n, q in 1:n]
+        C = zeros(n^2, n^2)
+        for q in 1:n, p in 1:n, q2 in 1:n, p2 in 1:n
+            off[p, q] && off[p2, q2] || continue
+            C[idx(p, q), idx(p2, q2)] = (p == p2) - 1 / n
+        end
+        function projector(sgn)
+            rows = Vector{Float64}[]
+            e(ks...) = (v = zeros(n^2); foreach(k -> v[k] += 1, ks); v)
+            for p in 1:n
+                push!(rows, e(idx(p, p)))
+                push!(rows, e((idx(p, q) for q in 1:n)...))
+                push!(rows, e((idx(q, p) for q in 1:n)...))
+            end
+            for q in 1:n, p in 1:(q - 1)
+                push!(rows, e(idx(p, q)) .- sgn .* e(idx(q, p)))
+            end
+            N = nullspace(permutedims(reduce(hcat, rows)))
+            return N * N', size(N, 2)
+        end
+        Ps, ds = projector(1)
+        Pa, da = projector(-1)
+        M = n * (n - 1) ÷ 2
+        R = (ds > 0 ? (1 + ρ) * M / ds .* Ps : zeros(n^2, n^2)) .+
+            (da > 0 ? (1 - ρ) * M / da .* Pa : zeros(n^2, n^2))
+        return σ_dest^2 .* C .+ σ_flow^2 .* R, R
     end
-    @test_throws DimensionMismatch flow_pair_deviation(B, σ, ρ, zeros(d + 1))
+
+    for n in (3, 4, 5)
+        Q, B = sum_to_zero_basis(n), flow_pair_basis(n)
+        σ_dest, σ_flow = 0.7, 0.3
+        ρ = n == 3 ? -1.0 : 0.6
+        L = importation_flow_factor(Q, B, σ_dest, σ_flow, ρ)
+        @test size(L) == (n^2, n * (n - 2))
+        Σ, R = reference(n, σ_dest, σ_flow, ρ)
+        @test L * L' ≈ Σ atol = 1.0e-10
+        ## `R` is a correlation matrix on the flows: unit variance, and `ρ`
+        ## between each flow and its reverse.
+        for q in 1:n, p in 1:n
+            p == q && continue
+            i, j = (q - 1) * n + p, (p - 1) * n + q
+            @test R[i, i] ≈ 1
+            @test R[i, j] ≈ ρ
+        end
+        ## The diagonal flows carry nothing, and only the shift shared within
+        ## an origin's column is left out.
+        @test all(iszero, L[[(p - 1) * n + p for p in 1:n], :])
+        @test rank(L * L') == n * (n - 2)
+    end
+    @test importation_flow_factor(
+        sum_to_zero_basis(4), flow_pair_basis(4), 0.0, 0.0, 0.2
+    ) == zeros(16, 8)
+    @test_throws DimensionMismatch importation_flow_factor(
+        sum_to_zero_basis(4), flow_pair_basis(3), 0.5, 0.5, 0.2
+    )
 end
 
 @testitem "patch_infection_model: per-flow importation deviations" begin
     using BVDOutbreakSize: patch_infection_model, sum_to_zero_basis,
-        sum_to_zero, sum_to_zero_factor
+        sum_to_zero, sum_to_zero_factor, flow_pair_basis,
+        importation_flow_factor
     using Turing: DynamicPPL, returned, sample, Prior
     using Random: Xoshiro
 
@@ -2130,7 +2172,7 @@ end
     chn2 = sample(Xoshiro(1), two, Prior(), 1; progress = false)
     η2 = first(vec(collect(chn2[:importation_destination_effect])))
     W2 = first(vec(collect(chn2[:importation_flow_effect])))
-    @test W2 ≈ vec(repeat(η2, 1, 2))
+    @test W2 ≈ vec(repeat(η2, 1, 2) .* [0 1; 1 0])
 
     fixed = (;
         σ_ε = 0.6, z_ε = [0.8, -1.1, 0.4], σ_dest = 0.6,
@@ -2149,10 +2191,16 @@ end
     @test only_draw(:importation_origin_destination_correlation) ≈ 1
     @test only_draw(:importation_reciprocity) ≈ 0.4
 
-    ## The flow effect is the destination effect plus a double-centred flow
-    ## term.
+    ## The log flows are `log K + W` with `W = L ζ`, non-centred on the
+    ## factor of their MvNormal prior, so `W` is the destination effect plus
+    ## a double-centred flow term off the diagonal and zero on it.
     W = reshape(only_draw(:importation_flow_effect), np, np)
-    U = W .- η1
+    L = importation_flow_factor(
+        sum_to_zero_basis(np), flow_pair_basis(np), 0.6, 0.4, 0.4
+    )
+    @test vec(W) ≈ L * vcat(fixed.z_ε, fixed.z_flow)
+    @test all(iszero, [W[p, p] for p in 1:np])
+    U = (W .- η1) .* [p != q for p in 1:np, q in 1:np]
     @test maximum(abs, sum(U; dims = 1)) < 1.0e-10
     @test maximum(abs, sum(U; dims = 2)) < 1.0e-10
 
@@ -2168,6 +2216,14 @@ end
     flat = arrivals()
     @test flat ≈ arrivals(z_dest = [2.0, -1.0, 0.3], z_flow = fill(1.5, 5))
     @test !(flat ≈ arrivals(σ_flow = 0.5))
+    ## The prior mean of the log flows is the log gravity kernel: at the
+    ## mean of the standard-normal draws the flows are gravity's whatever
+    ## the scales and correlations.
+    at_mean = arrivals(
+        σ_dest = 0.9, σ_flow = 0.5, ρ_flow_unit = 0.2, ρ_od_unit = 0.8,
+        z_ε = zeros(3), z_dest = zeros(3), z_flow = zeros(5)
+    )
+    @test at_mean ≈ arrivals(z_ε = zeros(3))
 end
 
 @testitem "bvd_joint: passes its flow basis to the patch model" begin
