@@ -243,7 +243,7 @@ const JOINT_SAMPLER_FITS = (
 
 ## The sampler budget every fit in `JOINT_SAMPLER_FITS` splats.
 joint_sampler_args() = (;
-    samples = joint_samples(1000), n_adapts = joint_warmup(1000),
+    samples = joint_samples(2000), n_adapts = joint_warmup(1000),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
