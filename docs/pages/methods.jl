@@ -564,6 +564,61 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
+# Gravity is the prior mean of the flows between provinces, and the data move each flow away from it.
+# We collect the log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, into one vector and give it a multivariate normal prior centred on the log gravity kernel:
+#
+# ```math
+# \operatorname{vec}(\ell) \sim \mathrm{MvNormal}\bigl(\operatorname{vec}(\log K),\ \Sigma\bigr),
+# \qquad
+# \Sigma = \sigma_{\text{dest}}^2\, C_{\text{dest}} + \sigma_{\text{flow}}^2\, R(\rho_{\text{flow}}).
+# ```
+#
+# The deviation $W$ is the departure from gravity that the data support.
+# The renewal uses the flows with each origin's column rescaled to its gravity total, so the outflow and $\varepsilon$ keep their meaning:
+#
+# ```math
+# K'_{p,q} = e^{\ell_{p,q}} \frac{\sum_{r} K_{r,q}}{\sum_{r \ne q} e^{\ell_{r,q}}},
+# \qquad K'_{q,q} = 0.
+# ```
+#
+# A shift shared within an origin's column cancels in $K'$, and $\Sigma$ leaves it out.
+#
+# The first term of $\Sigma$ is a destination effect $\eta_p$ shared by every flow into province $p$.
+# It sums to zero, so $C_{\text{dest}}$ has entry $\delta_{pp'} - 1/P$ between a flow into $p$ and a flow into $p'$.
+# The second term is a flow term $u$ with a zero diagonal and zero row and column sums, with $R(\rho)$ its correlation matrix.
+# With $B_s$ and $B_a$ orthonormal bases of the $d_s = P(P-3)/2$ symmetric and $d_a = (P-1)(P-2)/2$ antisymmetric matrices of this form, and $M = P(P-1)/2$ the number of province pairs,
+#
+# ```math
+# R(\rho) = \frac{(1 + \rho) M}{d_s}\, B_s B_s^\top + \frac{(1 - \rho) M}{d_a}\, B_a B_a^\top.
+# ```
+#
+# Each flow then has unit variance under $R$ and correlation $\rho_{\text{flow}}$ with its reverse.
+# The symmetric part moves $q \to p$ and $p \to q$ together, and the antisymmetric part moves them apart.
+#
+# We draw the deviation in non-centred form, $\operatorname{vec}(W) = L \boldsymbol\zeta$ with $\boldsymbol\zeta \sim \mathrm{Normal}(0, I)$ and $L L^\top = \Sigma$:
+#
+# ```math
+# L = \Bigl[\ \sigma_{\text{dest}} (\mathbf{1}_P \otimes Q),\ \
+#     \sigma_{\text{flow}} \sqrt{\tfrac{(1 + \rho_{\text{flow}}) M}{d_s}}\, B_s,\ \
+#     \sigma_{\text{flow}} \sqrt{\tfrac{(1 - \rho_{\text{flow}}) M}{d_a}}\, B_a\ \Bigr],
+# ```
+#
+# with the rows of the flows $q \to q$ set to zero.
+# $\Sigma$ has rank $P(P-2)$, one direction per share of each origin's exports, so it has no Cholesky factor and $L$ is a rectangular square root of it.
+# The destination block of $\boldsymbol\zeta$ is $\rho_{\text{od}}\, \mathbf{z}^{\varepsilon} + \sqrt{1 - \rho_{\text{od}}^2}\, \mathbf{z}^{\text{dest}}$, with $\mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1})$.
+# It is standard normal, and each province's destination effect has correlation $\rho_{\text{od}}$ with its origin deviation in Equation (15).
+#
+# We use priors of
+#
+# ```math
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
+# \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
+# ```
+#
+# The flow scale's prior is tighter than the destination scale's, so a pattern shared across origins is read as a destination effect.
+#
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_importation_kernel</summary>
@@ -2163,16 +2218,28 @@ cfr_prior_fig #hide
 # #### Movement between zones
 #
 # Movement between patches is the joint model's own, and only movement within a patch is estimated here.
-# With $p(z)$ the patch of zone $z$, $N_z$ its population and $d_{zq}$ the distance between zone centroids, a gravity kernel of the form of Equation (14) splits into
+# With $p(z)$ the patch of zone $z$, $N_z$ its population and $d_{zq}$ the distance between zone centroids, both blocks normalise one gravity pull over all zones.
+# This is the form of Equation (14) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
 #
 # ```math
-# K^{\text{w}}_{zq} = \frac{N_z\, d_{zq}^{-1}}
-#     {\sum_{z' \in p(q)} N_{z'}\, d_{z'q}^{-1}}, \qquad
+# \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 1), \qquad
+# \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
+# \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
+# ```
+#
+# with $Q_p$ the sum-to-zero basis over patch $p$'s zones and $\mathbf{z}^\omega_p \sim \mathrm{Normal}(0, I)$.
+# The blocks are
+#
+# ```math
+# K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
+#     {\sum_{z' \in p(q)} \mathrm{pull}_{z'q}}, \qquad
 # K^{\text{b}}_{zq} = K_{p(z)p(q)}\,
-#   \frac{N_z\, d_{zq}^{-1}}{\sum_{z' \in p(z)} N_{z'}\, d_{z'q}^{-1}}, \tag{58}
+#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{58}
 # ```
 #
 # the first within a patch and the second between patches, with $K$ the province kernel.
+# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$ and $\omega$, so they move only where a flow lands among the patch's zones.
 #
 # Patch $p$ receives $M_{p,t} = f_{p,t} I_{p,t}$ imported infections on day $t$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the sampled curves and intensities:
@@ -2294,7 +2361,7 @@ cfr_prior_fig #hide
 # We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
 # The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
-# We assume the gravity form describes movement between zones as it does between provinces, with no mobility data to check it against.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.
 # The zones that take innovations depend on the data and can differ between cut-offs.
 

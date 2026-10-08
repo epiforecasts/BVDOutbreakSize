@@ -243,6 +243,11 @@ spatial_labels = Dict(
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
     :province_ascertainment_sd => "Ascertainment spread",
     :importation_epsilon => "Importation intensity",
+    :importation_destination_sd => "Importation destination spread",
+    :importation_origin_destination_correlation =>
+        "Origin-destination correlation",
+    :importation_flow_sd => "Importation flow spread",
+    :importation_reciprocity => "Importation reciprocity",
     :province_cfr_sd => "Lethality spread",
     :province_death_ascertainment_sd => "Death-confirmation spread"
 )
@@ -319,7 +324,7 @@ prior_patch_chn = patch_prior_draws(obs);
 #md # </details>
 #md # ```
 
-# The first pair plot covers the spatial hyperparameters: the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, and the spreads of lethality and death confirmation.
+# The first pair plot covers the spatial hyperparameters: the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>
@@ -329,7 +334,10 @@ spatial_pair_fig = plot_pair(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :importation_epsilon, :province_cfr_sd,
+        :province_ascertainment_sd, :importation_epsilon,
+        :importation_destination_sd,
+        :importation_origin_destination_correlation, :importation_flow_sd,
+        :importation_reciprocity, :province_cfr_sd,
         :province_death_ascertainment_sd,
     ];
     prior = prior_patch_chn, labels = spatial_labels

@@ -1630,6 +1630,10 @@ function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
     return δ
 end
 
+## A correlation from a draw on `(0, 1)`, so a Beta prior on `(ρ + 1) / 2`
+## is a prior on `ρ ∈ (−1, 1)`.
+_unit_to_correlation(x) = 2 * x - 1
+
 """
 Multi-patch latent infection process. Runs a renewal equation per spatial
 patch with a shared generation interval, a shared incubation period, and
@@ -1654,6 +1658,16 @@ kernel is a structural assumption, and `ε` is weakly identified against the
 secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
+
+Gravity is the prior mean of the flows. The log flows `log K + W` have a
+multivariate normal prior with mean `log K` and covariance
+`σ_dest² C_dest + σ_flow² R(ρ_flow)`, a destination effect correlated
+`ρ_od` with each province's origin deviation plus a double-centred flow
+term with reciprocity correlation `ρ_flow`
+([`importation_flow_factor`](@ref)). The deviation `W` is drawn
+non-centred and is the data's departure from gravity. Each origin's column
+is rescaled to its gravity total ([`destination_weighted_kernel`](@ref)),
+so `W` moves where an origin's exports land and not how many it sends.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1712,8 +1726,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
+        importation_destination_sd_prior = truncated(Normal(0, 1); lower = 0),
+        importation_flow_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
+        flow_basis = flow_pair_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1842,6 +1860,51 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        ## The log flows `log K + W` have a multivariate normal prior whose
+        ## mean is the log gravity kernel, so gravity is the prior and `W` is
+        ## the data's departure from it. `W = L ζ` is non-centred on the
+        ## factor `L` of [`importation_flow_factor`](@ref), with `Σ = L Lᵀ`
+        ## the sum of a destination effect and a flow term.
+        ##
+        ## The destination draws correlate `ρ_od` with each province's origin
+        ## deviation and stay standard normal.
+        σ_dest ~ importation_destination_sd_prior
+        z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
+        ρ_od_unit ~ importation_correlation_prior
+        ρ_od = _unit_to_correlation(ρ_od_unit)
+        z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
+        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
+        ## The flow term's correlation matrix gives each flow correlation
+        ## `ρ_flow` with its reverse.
+        n_sym = size(flow_basis.symmetric, 2)
+        n_flow = n_sym + size(flow_basis.antisymmetric, 2)
+        if n_flow > 0
+            σ_flow ~ importation_flow_sd_prior
+            z_flow ~ product_distribution(fill(Normal(0, 1), n_flow))
+            if n_sym > 0
+                ρ_flow_unit ~ importation_correlation_prior
+                ρ_flow = _unit_to_correlation(ρ_flow_unit)
+            else
+                ρ_flow = -one(Tp)
+            end
+            flow_sd = σ_flow
+            ζ = vcat(z_od, z_flow)
+            importation_flow_sd := σ_flow
+            importation_reciprocity := ρ_flow
+        else
+            flow_sd = zero(Tp)
+            ρ_flow = -one(Tp)
+            ζ = z_od
+        end
+        L_flow = importation_flow_factor(
+            basis, flow_basis, σ_dest, flow_sd, ρ_flow
+        )
+        log_weight = reshape(L_flow * ζ, n_patches, n_patches)
+        weighted = destination_weighted_kernel(importation_kernel, log_weight)
+        importation_destination_sd := σ_dest
+        importation_destination_effect := dest_dev
+        importation_origin_destination_correlation := ρ_od
+        importation_flow_effect := vec(log_weight)
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
@@ -1850,8 +1913,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix, populations
+        Rt_matrix, g, seeds_matrix, coupled ? weighted : importation_kernel,
+        ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation

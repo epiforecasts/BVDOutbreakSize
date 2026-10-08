@@ -161,6 +161,137 @@ function sum_to_zero_moments(F::AbstractMatrix)
 end
 
 """
+    flow_pair_basis(n)
+
+Orthonormal bases, to rounding, of the double-centred flows between `n`
+patches, as `(; symmetric, antisymmetric)` matrices of size `n² × d` whose
+columns reshape to `n × n` flow matrices.
+
+A double-centred flow matrix has a zero diagonal and zero row and column
+sums. The symmetric part moves `q → p` and `p → q` together and has
+`n (n - 3) / 2` directions. The antisymmetric part moves them in opposite
+directions (circulations) and has `(n - 1)(n - 2) / 2`.
+"""
+function flow_pair_basis(n::Integer)
+    n >= 1 || throw(ArgumentError("flow_pair_basis: n = $n < 1"))
+    idx(p, q) = (q - 1) * n + p
+    unit(ks...) = (v = zeros(n^2); foreach(k -> v[k] += 1, ks); v)
+    centred = Vector{Float64}[]
+    for p in 1:n
+        push!(centred, unit(idx(p, p)))
+        push!(centred, unit((idx(p, q) for q in 1:n)...))
+        push!(centred, unit((idx(q, p) for q in 1:n)...))
+    end
+    ## `x_pq = x_qp` for the symmetric part, `x_pq = -x_qp` for the other.
+    swapped(sgn) = [
+        unit(idx(p, q)) .+ sgn .* unit(idx(q, p)) for q in 1:n for p in 1:(q - 1)
+    ]
+    symmetric = _orthonormal_complement(vcat(centred, swapped(-1)), n^2)
+    antisymmetric = _orthonormal_complement(vcat(centred, swapped(1)), n^2)
+    ## The diagonal is zero up to rounding; set it exactly.
+    for p in 1:n
+        symmetric[idx(p, p), :] .= 0
+        antisymmetric[idx(p, p), :] .= 0
+    end
+    return (; symmetric, antisymmetric)
+end
+
+## Orthonormal basis (`m × d`) of the complement of `constraints` in `R^m`,
+## by Gram-Schmidt in plain loops, since Mooncake has no rule for an SVD.
+function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
+    span = Vector{Float64}[]
+    function project_out!(v)
+        for b in span
+            v .-= dot(b, v) .* b
+        end
+        nv = sqrt(dot(v, v))
+        nv > tol || return false
+        push!(span, v ./ nv)
+        return true
+    end
+    foreach(c -> project_out!(copy(c)), constraints)
+    n_constraints = length(span)
+    for k in 1:m
+        v = zeros(m)
+        v[k] = 1
+        project_out!(v)
+    end
+    d = length(span) - n_constraints
+    basis = zeros(m, d)
+    for j in 1:d
+        basis[:, j] = span[n_constraints + j]
+    end
+    return basis
+end
+
+"""
+    importation_flow_factor(Q, B, σ_dest, σ_flow, ρ_flow)
+
+Non-centred factor `L` (`n² × (n - 1 + d)`) of the multivariate normal
+prior on the log importation flows `ℓ = log K + W`. Gravity is the prior
+mean of the flows, and the deviation `W = L ζ`, with `ζ ~ N(0, I)`, is their
+data-driven departure from it:
+
+```math
+\\operatorname{vec}(\\ell) \\sim
+    \\mathrm{MvNormal}(\\operatorname{vec}(\\log K),\\ \\Sigma),
+\\qquad
+\\Sigma = L L^\\top = \\sigma_{\\text{dest}}^2 C_{\\text{dest}}
+    + \\sigma_{\\text{flow}}^2 R(\\rho_{\\text{flow}}),
+```
+
+before each origin's column is rescaled to its gravity total
+([`destination_weighted_kernel`](@ref)). Row `(q - 1) n + p` is the flow
+`q → p`, and the diagonal rows are zero.
+
+The first `n - 1` columns are the destination effect, `σ_dest` times the
+sum-to-zero basis `Q` ([`sum_to_zero_basis`](@ref)) repeated over the
+origins, so `C_dest` has entries `δ_{pp'} - 1/n` between flows into `p`
+and `p'`. The other `d` columns span the double-centred flows of `B`
+([`flow_pair_basis`](@ref)), the symmetric directions first, scaled so
+`R(ρ)` has unit diagonal on the flows and `ρ` between each flow and its
+reverse: a correlation matrix. `Σ` is singular, since it leaves out the
+shift shared within an origin's column that the rescale cancels, so it has
+no Cholesky factor and `L` is a rectangular square root.
+"""
+function importation_flow_factor(
+        Q::AbstractMatrix, B::NamedTuple, σ_dest, σ_flow, ρ_flow
+    )
+    S, A = B.symmetric, B.antisymmetric
+    n, k = size(Q)
+    ds, da = size(S, 2), size(A, 2)
+    size(S, 1) == size(A, 1) == n^2 || throw(
+        DimensionMismatch(
+            "importation_flow_factor: a $n-patch basis and flow bases " *
+                "with $(size(S, 1)) and $(size(A, 1)) rows"
+        )
+    )
+    pairs = n * (n - 1) ÷ 2
+    T = promote_type(
+        eltype(Q), eltype(S), typeof(σ_dest), typeof(σ_flow), typeof(ρ_flow)
+    )
+    ## `M / d` of each part, so the two scales give each flow variance
+    ## `σ_flow²` and correlation `ρ_flow` with its reverse.
+    s_sym = ds > 0 ? σ_flow * sqrt((1 + ρ_flow) * pairs / ds) : zero(T)
+    s_anti = da > 0 ? σ_flow * sqrt((1 - ρ_flow) * pairs / da) : zero(T)
+    L = zeros(T, n^2, k + ds + da)
+    @inbounds for q in 1:n, p in 1:n
+        p == q && continue
+        i = (q - 1) * n + p
+        for j in 1:k
+            L[i, j] = σ_dest * Q[p, j]
+        end
+        for j in 1:ds
+            L[i, k + j] = s_sym * S[i, j]
+        end
+        for j in 1:da
+            L[i, k + ds + j] = s_anti * A[i, j]
+        end
+    end
+    return L
+end
+
+"""
 Mean-reverting AR(1) knots of a sum-to-zero vector, one column per knot,
 `size(Z, 2) + 1` in all,
 
