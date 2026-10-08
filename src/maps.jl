@@ -489,7 +489,7 @@ end
 
 export province_map_summary, province_zone_values, plot_province_map,
     province_map_estimates, rt_quantile_table, weekly_count_table,
-    reported_level_table
+    cases_rt_table, reported_level_table
 
 """
 $(TYPEDSIGNATURES)
@@ -748,6 +748,101 @@ function weekly_count_table(
         push!(rows, (; area = String(area), date = cutoff - Day(n - hi), count = c))
     end
     return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Weekly confirmed cases against the reproduction number for each area, the
+table [`plot_cases_rt`](@ref) draws. One `observed` row per area and week,
+for the `weeks` seven-day windows ending at the last vintage in `days` (or
+at `n` if that is earlier): the window's confirmed cases from
+[`weekly_count_table`](@ref) and the median and 90% interval of the
+reproduction number on its last day from [`rt_quantile_table`](@ref). A week
+with no reproduction-number draws is left out.
+
+`rt` holds one `(ndraws × n)` matrix per area, named by `areas`, and
+`increments` the `(areas × vintages)` new counts at each vintage in `days`.
+`patch[i]` is the patch area `i` belongs to, which sets its colour.
+`forecast` optionally adds one `forecast` row per patch from a
+[`forecast_provinces`](@ref) frame, for a table whose areas are the patches:
+the median and 90% interval of its new confirmed cases and of its
+reproduction number, dated `horizon` days after `cutoff`.
+
+Returns columns `area`, `patch`, `date`, `kind`, `cases`, `cases_lower`,
+`cases_upper`, `rt_median`, `rt_lower` and `rt_upper`, sorted by area order
+and date. An observed row's case bounds equal its count.
+"""
+function cases_rt_table(
+        rt::AbstractVector{<:AbstractMatrix},
+        days::AbstractVector{<:Integer}, increments::AbstractMatrix;
+        cutoff::Date, n::Integer, weeks::Integer = 2,
+        areas::AbstractVector = PROVINCE_LABELS,
+        patch::AbstractVector{<:Integer} = 1:length(rt),
+        forecast::Union{Nothing, DataFrame} = nothing, horizon::Integer = 7
+    )
+    na = min(length(rt), length(areas))
+    names = String.(areas[1:na])
+    out = DataFrame(
+        area = String[], patch = Int[], date = Date[], kind = String[],
+        cases = Float64[], cases_lower = Float64[], cases_upper = Float64[],
+        rt_median = Float64[], rt_lower = Float64[], rt_upper = Float64[]
+    )
+    order = Dict(a => i for (i, a) in enumerate(names))
+    if !isempty(days)
+        size(increments, 1) >= na || throw(
+            ArgumentError(
+                "cases_rt_table: `increments` has " *
+                    "$(size(increments, 1)) rows but `rt` has $na areas."
+            )
+        )
+        last_day = min(last(days), n)
+        counts = weekly_count_table(
+            days, increments[1:na, :], names;
+            cutoff = cutoff - Day(n - last_day), n = last_day, weeks
+        )
+        rts = rt_quantile_table(
+            rt[1:na], names; cutoff, n, from = last_day - 7 * (weeks - 1)
+        )
+        at = Dict((r.area, r.date) => r for r in eachrow(rts))
+        for r in eachrow(counts)
+            q = get(at, (r.area, r.date), nothing)
+            q === nothing && continue
+            c = float(r.count)
+            push!(
+                out, (
+                    r.area, patch[order[r.area]], r.date, "observed",
+                    c, c, c, q.median, q.lower_90, q.upper_90,
+                )
+            )
+        end
+    end
+    if forecast !== nothing
+        for col in (:confirmed_new, :rt_forecast)
+            col in propertynames(forecast) || throw(
+                ArgumentError(
+                    "cases_rt_table: the forecast frame carries no " *
+                        "`$(col)` column."
+                )
+            )
+        end
+        for i in 1:na
+            rows = forecast.patch .== patch[i]
+            any(rows) || continue
+            c = float.(forecast[rows, :confirmed_new])
+            R = float.(forecast[rows, :rt_forecast])
+            push!(
+                out, (
+                    names[i], patch[i], cutoff + Day(horizon), "forecast",
+                    quantile(c, 0.5), quantile(c, 0.05), quantile(c, 0.95),
+                    quantile(R, 0.5), quantile(R, 0.05), quantile(R, 0.95),
+                )
+            )
+        end
+    end
+    out.order = [order[a] for a in out.area]
+    sort!(out, [:order, :date])
+    return select(out, Not(:order))
 end
 
 """
