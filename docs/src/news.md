@@ -22,11 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The province importation kernel keeps its distance exponent and its destination-population exponent fixed at one, and the methods say so (#1077).
-  In a short joint fit with the distance exponent sampled under a log-normal prior centred on one, its 90% interval was 0.58 to 1.02.
-  The national cumulative infections differed by under 1% and the province shares by at most 0.1 percentage points between the draws below and above its median, because importation brings each province only about 9 to 50 of some 16 000 infections.
-  That fit was a single unconverged chain, so it shows that the exponent moves the outputs little over that range rather than measuring it.
-  Fitted values do not change.
+- The province importation kernel samples its distance exponent rather than fixing it at one, under a `LogNormal(log(1.8), 0.4)` prior set from published gravity-model fits to movement and Ebola spread in sub-Saharan Africa (#1091).
+  The health-zone stage builds its between-patch kernel at the joint posterior's exponent.
+  Fitted values change.
 - The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).

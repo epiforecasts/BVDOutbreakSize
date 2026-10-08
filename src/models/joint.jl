@@ -776,9 +776,7 @@ end
         breakpoint, patch_infection;
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
-        importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]
-        ),
+        importation_kernel::Union{Nothing, AbstractMatrix} = nothing,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     fkw = forecast === nothing ? (;) : (; forecast)
@@ -1161,9 +1159,7 @@ density there, is the fitted model's.
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
         n_patches::Integer = 1,
-        importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]
-        ),
+        importation_kernel::Union{Nothing, AbstractMatrix} = nothing,
         confirmed_deaths::Union{Missing, Integer} = missing,
         recovered_cases::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),

@@ -78,3 +78,35 @@ end
     @test all(isfinite, grad)
     @test any(!iszero, grad)
 end
+
+@testitem "AD gradient: patch_infection_model with a sampled distance exponent (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL, @model, to_submodel
+    using Distributions: Normal
+    using LogDensityProblems: logdensity, logdensity_and_gradient
+    using Random: Xoshiro
+    using BVDOutbreakSize: patch_infection_model, default_adtype
+
+    ## The default kernel is rebuilt from the sampled exponent on every
+    ## evaluation. A likelihood on one province's arrivals puts the kernel on
+    ## the tape, so the gradient has to reach the exponent through it.
+    @model function arrivals_model(y)
+        st ~ to_submodel(patch_infection_model(60, 4; rt_start = 30), false)
+        y ~ Normal(log1p(st.importation_matrix[3, 50]), 0.5)
+    end
+    model = arrivals_model(2.0)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(1), model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test all(isfinite, grad)
+    ## The gradient along a random direction matches a central finite
+    ## difference.
+    v = randn(Xoshiro(2), length(x0))
+    h = 1.0e-6
+    fd = (logdensity(ldf, x0 .+ h .* v) - logdensity(ldf, x0 .- h .* v)) /
+        (2h)
+    @test sum(grad .* v) ≈ fd rtol = 1.0e-4
+end

@@ -355,24 +355,44 @@ const PROVINCE_CENTRES = [
 """
     PROVINCE_DISTANCE_DECAY
 
-Exponent on the distance term of [`province_importation_kernel`](@ref),
-fixed at the conventional gravity value of one.
-
-Between 0.5 and 2 the exponent mostly moves Ituri's exports between
-Haut-Uele (13% to 28%) and the pooled other provinces (49% to 25%), while
-Nord-Kivu's share stays between 38% and 47%.
-
-It is fixed because sampling it barely changes the outputs. In a short
-joint fit with a `LogNormal(0, 0.5)` prior on it, the 90% interval was 0.58
-to 1.02, which contains one. Between the draws below and above the
-exponent's median, the national cumulative infections differed by under 1%
-and every province's share of them by at most 0.1 percentage points.
-Importation brings each province about 9 to 50 infections out of about
-16 000, and the province's own reproduction number carries its growth after
-that. The fit was unconverged (one chain of 100 draws, bulk ESS of about 10
-for the exponent), so its interval is not a measurement of the exponent.
+Exponent on the distance term of [`gravity_pull`](@ref) and
+[`province_importation_kernel`](@ref) when they are called without one,
+the plain inverse-distance value of one. The joint model does not use it.
+It samples the province exponent under
+[`PROVINCE_DISTANCE_DECAY_PRIOR`](@ref), and the health-zone stage builds
+its parent kernel at the joint posterior's exponent.
 """
 const PROVINCE_DISTANCE_DECAY = 1.0
+
+"""
+    PROVINCE_DISTANCE_DECAY_PRIOR
+
+Prior on the distance exponent `γ` of the province importation kernel,
+`LogNormal(log(1.8), 0.4)`: median 1.8, 90% interval 0.93 to 3.5 and 95%
+interval 0.82 to 3.9.
+
+It is set from published fits of power-law gravity models to movement in
+sub-Saharan Africa and to Ebola spread in West Africa, not from this
+outbreak's data:
+
+- Mobile-phone records from Kenya, district to district, give an exponent
+  of 2.05 for all trips, falling from 1.73 for trips of one to two weeks to
+  1.11 for trips of four months or more (Wesolowski et al. 2015, PLoS
+  Comput Biol 11:e1004267, Table 1).
+- Travel surveys in Mali, Burkina Faso, Zambia and Tanzania give 2.00,
+  1.27, 1.70 and 3.62, and 1.91 (95% CrI 1.78 to 2.06) pooled, as the
+  power of a `(1 + d/ρ)^{-α}` kernel (Marshall et al. 2018, Sci Rep
+  8:7713, Table 1).
+- Fitted to the district-level spread of Ebola in 2014, the within-country
+  exponent is 1.89 (1.49 to 2.36) in Guinea, 2.36 (1.68 to 3.13) in Sierra
+  Leone and 1.29 (0.73 to 1.91) in Liberia (Backer and Wallinga 2016, PLoS
+  Comput Biol 12:e1005210, S1 Text Table C).
+
+The median sits in the middle of those estimates and the 95% interval
+covers every one of them except the Tanzanian survey's upper tail. None of
+them is from the Democratic Republic of the Congo.
+"""
+const PROVINCE_DISTANCE_DECAY_PRIOR = LogNormal(log(1.8), 0.4)
 
 """
     haversine_km(a, b)
@@ -425,9 +445,11 @@ population centres,
 K_{p,q} \\propto \\frac{N_p}{d_{p,q}^{\\gamma}},
 ```
 
-with `γ` fixed at [`PROVINCE_DISTANCE_DECAY`](@ref) and `d` from
-[`province_distance_matrix`](@ref). Pass `distances` as a zero matrix to
-recover the population-only kernel.
+with `γ` the `decay` argument and `d` from
+[`province_distance_matrix`](@ref). The joint model samples `γ` under
+[`PROVINCE_DISTANCE_DECAY_PRIOR`](@ref) and rebuilds the kernel per draw;
+called without `decay` it takes [`PROVINCE_DISTANCE_DECAY`](@ref). Pass
+`distances` as a zero matrix to recover the population-only kernel.
 
 Each column is scaled so that its off-diagonal entries sum to `1 - N_q/N`,
 the share of the country that is not `q` itself. The distance term then
@@ -457,7 +479,7 @@ function province_importation_kernel(
     )
     tot = sum(pops)
     pull = gravity_pull(pops; distances, decay)
-    K = zeros(Float64, np, np)
+    K = zeros(eltype(pull), np, np)
     @inbounds for q in 1:np
         s = sum(@view pull[:, q])
         s > 0 || continue
@@ -497,12 +519,15 @@ function gravity_pull(
         "gravity_pull: `distances` is $(size(distances)) but there are " *
             "$np locations."
     )
-    pull = zeros(Float64, np, np)
+    Tp = promote_type(
+        float(eltype(pops)), float(eltype(distances)), typeof(float(decay))
+    )
+    pull = zeros(Tp, np, np)
     @inbounds for q in 1:np, p in 1:np
 
         p == q && continue
         d = distances[p, q]
-        pull[p, q] = d > 0 ? pops[p] / d^decay : Float64(pops[p])
+        pull[p, q] = d > 0 ? pops[p] / d^decay : Tp(pops[p])
     end
     return pull
 end
