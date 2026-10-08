@@ -22,6 +22,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The province deviation level at the first knot is drawn centred on its scale `σ_level` rather than as `σ_level` times a standard normal (#1083).
+  The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
+  With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
+  The model is the same, so fitted values change only by sampling noise.
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
@@ -53,6 +57,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
+- The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
+  It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
+  On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
 - The onset curve adds SitReps 139, 140 and 141 (30 September to 2 October), after three reader fixes (#1061).
   The weekly tick row leaves out the date labels' tops, which moved single ticks on these renders and shifted runs of days onto their neighbours.
   A washed bar on a tick column is read again without the gridline skip, capped at its outline columns.
@@ -106,6 +113,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The formatter environment pins Runic to 1.11.1 again, matching the pre-commit hook, and Dependabot no longer proposes Runic bumps, which have to reformat the tree in the same commit.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
