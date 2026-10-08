@@ -31,7 +31,6 @@ chn_confirmed = load_fit("confirmed")
 chn_confirmed_deaths = load_fit("confirmed_deaths")
 chn_treatment = load_fit("treatment")
 chn_onsets = load_fit("onsets")
-chn_local = load_fit("local")
 frozen_lastweek = load_fit("frozen_validation")
 frozen_lastweek_streams = frozen_validation_stream_fits()
 frozen_by_cutoff = frozen_fits_by_cutoff()
@@ -152,9 +151,10 @@ summary_ranges #hide
 
 # #### [Fit diagnostics](@id national-fit-diagnostics)
 #
-# Fit diagnostics for the joint fit, the health-zone model melded from it and each individual fit.
+# Fit diagnostics for the joint fit and each individual fit.
 # These indicate how reliable the results are from the perspective of the inference algorithm.
-# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues with the joint fit, and the [health-zone fit diagnostics](@ref "Health-zone fit diagnostics") with the health-zone model.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues with the joint fit.
+# The health-zone model has its own [fit diagnostics](@ref "Health-zone fit diagnostics").
 
 #md # ```@raw html
 #md # <details><summary>Build the fit diagnostics table</summary>
@@ -179,21 +179,6 @@ fit_diagnostics_table = diagnostics_table(
             ] :
             []
     )...
-);
-## The health-zone model melded from the joint fit. Its own cut-off
-## reproduction number needs `zone_sampler_diagnostics`'s split rather than
-## `diagnostics_table`'s generic pool; the per-zone breakdown is on the
-## health-zone estimates page.
-zone_diag = zone_sampler_diagnostics(chn_local)
-fit_diagnostics_table = vcat(
-    fit_diagnostics_table,
-    DataFrame(
-        fit = "health zones (local)",
-        max_rhat = round(zone_diag.max_rhat; digits = 3),
-        min_ess_bulk = round(zone_diag.min_ess_bulk; digits = 0),
-        min_ess_tail = round(zone_diag.min_ess_tail; digits = 0),
-        divergences = zone_diag.n_divergent,
-    )
 );
 
 ## Only the joint fit is held to the convergence thresholds.
