@@ -53,9 +53,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 143, 4 October.
+- The model cut-off advances to SitRep 145, 6 October.
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
-  The onset curve does not add SitRep 143, whose washed 14 September bar and faded bars before the last tick fail the vision check (#1106).
+  The onset curve does not add SitRep 143, whose washed 14 September bar and faded bars before the last tick fail the vision check (#1106), nor SitReps 144 and 145, which reprint its figure.
+  SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
@@ -67,7 +68,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 143 (4 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 145 (6 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
