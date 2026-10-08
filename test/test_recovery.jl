@@ -44,6 +44,13 @@ end
     )
 end
 
+@testitem "recovery_fit passes the sampler settings to nuts_sample" setup = [RecoveryToy] begin
+    model = toy([0.1, 0.2, 0.3])
+    fit = recovery_fit(model; samples = 20, n_adapts = 10, chains = 1)
+    @test fit.model === model
+    @test size(fit.chain) == (20, 1)
+end
+
 @testitem "simulated observations group by stream" begin
     using BVDOutbreakSize
     g = BVDOutbreakSize._grouped_observations(

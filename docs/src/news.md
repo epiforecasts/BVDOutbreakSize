@@ -84,6 +84,15 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- Every fit uses the headline joint's sampler settings, and the methods page states them (#1100).
+  These are two chains of 1000 draws after 1000 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
+  The single-stream fits, the health-zone fits, the frozen re-fits and the scripts that fit outside the docs build take them from `joint_sampler_args()` in `docs/fits/registry.jl`, so a change there moves every fit.
+  The single-stream fits ran 500 draws after 200 warm-up steps at 0.85, the single-population frozen re-fits the same at 0.90, and the health-zone fits 800 draws.
+  Every fit cache key changes, so every fit refits.
+  The single-stream and single-population frozen fits now take twice the draws and 5 times the warm-up, and the health-zone fits a quarter more draws, so each runs longer.
+  The frozen re-fits also drop their target acceptance from 0.90 to 0.80, which takes larger steps and may give more divergences.
+  The parameter-recovery fits drop their target acceptance from 0.85 to 0.80, and `scripts/zone_fit_report.jl` fits at these settings rather than 600 draws after 400 warm-up steps.
+  `BVD_RECOVERY_SAMPLES`, `BVD_RECOVERY_WARMUP` and `BVD_RECOVERY_MAX_DEPTH` are removed, since the `BVD_JOINT_*` overrides now set the recovery fits too.
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
   On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.

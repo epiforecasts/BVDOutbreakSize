@@ -26,7 +26,6 @@
         ids = fit_ids(obs)
         for id in string.(keys(overrides))
             @test id in ids
-            @test id in JOINT_SAMPLER_FITS
         end
     end
 end

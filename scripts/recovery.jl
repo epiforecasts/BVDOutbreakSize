@@ -9,11 +9,13 @@
 # Usage:
 #   julia --project=docs scripts/recovery.jl <seed> [out_dir]
 #
+# The fit takes `joint_sampler_args()` from `docs/fits/registry.jl`, the
+# settings every fit in the report uses, so the `BVD_JOINT_*` overrides
+# apply here too. A shorter run does not converge on this model and would
+# test the sampler rather than the model.
+#
 # Settings, from the environment:
-#   BVD_RECOVERY_SAMPLES (1000), BVD_RECOVERY_WARMUP (1000),
-#   BVD_RECOVERY_MAX_DEPTH (10), BVD_RECOVERY_CHAINS (2): the headline
-#   joint's own settings, since a shorter run does not converge on this model
-#   and would test the sampler rather than the model,
+#   BVD_RECOVERY_CHAINS (2),
 #   BVD_RECOVERY_HORIZON (14)
 #   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
 #   fit
@@ -21,14 +23,12 @@
 using BVDOutbreakSize, CSV, DataFrames, Turing
 using Random: Xoshiro
 using BVDOutbreakSize: _draws, _draw_vectors
+include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
 seed = parse(Int, get(ARGS, 1, "1"))
 out_dir = get(ARGS, 2, joinpath("output", "recovery"))
 env_int(k, d) = parse(Int, get(ENV, k, string(d)))
-samples = env_int("BVD_RECOVERY_SAMPLES", 1000)
-warmup = env_int("BVD_RECOVERY_WARMUP", 1000)
 chains = env_int("BVD_RECOVERY_CHAINS", 2)
-max_depth = env_int("BVD_RECOVERY_MAX_DEPTH", 10)
 horizon = env_int("BVD_RECOVERY_HORIZON", 14)
 mkpath(out_dir)
 
@@ -100,7 +100,7 @@ println(
 flush(stdout)
 get(ENV, "BVD_RECOVERY_DRY_RUN", "false") == "true" && exit(0)
 fit = recovery_fit(
-    model; samples, n_adapts = warmup, chains, max_depth, seed = seed + 1
+    model; joint_sampler_args()..., chains, seed = seed + 1
 )
 fit_minutes = round((time() - t0) / 60; digits = 1)
 
