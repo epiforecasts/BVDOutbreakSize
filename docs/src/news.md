@@ -57,6 +57,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
+- The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
+  It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
+  On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
 - The onset curve adds SitReps 139, 140 and 141 (30 September to 2 October), after three reader fixes (#1061).
   The weekly tick row leaves out the date labels' tops, which moved single ticks on these renders and shifted runs of days onto their neighbours.
   A washed bar on a tick column is read again without the gridline skip, capped at its outline columns.
