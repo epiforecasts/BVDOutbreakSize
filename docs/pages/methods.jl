@@ -1246,6 +1246,7 @@ cfr_prior_fig #hide
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
 # The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
+# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
@@ -1823,7 +1824,8 @@ cfr_prior_fig #hide
 # A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
+# One count spans a median of 3.2 pixels across the digitised figures (2.6 to 8.7), so one pixel is about 0.3 counts.
 #
 # The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #

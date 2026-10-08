@@ -705,6 +705,16 @@ The walk is non-centred. The priors are `g_0 ~ N(0, 0.05)`,
 implied-capacity series the isolation submodel fits pins `C(t)` on the
 days a rate is published.
 
+The capacity first moves over the first week, at `g_1 = g_0 + σ_growth z_1`,
+and `g_0` never acts on its own. The likelihood therefore sees `g_0` and
+`z_1` only through their sum, and sampling both leaves a direction no data
+inform, which the sampler meets as a ridge. The sampled `growth0` is that
+first week's growth `g_1`, drawn from its exact prior
+`N(μ, √(s² + σ_growth²))` given the `N(μ, s)` `growth_prior`, and `z`
+carries the steps after it. The model is the same and has one dimension
+fewer. `growth_prior` must therefore be a `Normal`. With a single knot
+there is no first week and `growth0` keeps `growth_prior`.
+
 Knots run only from `start`, the first day with occupancy or capacity data,
 and capacity is flat at `C0` before it. Off-window capacity carries no
 likelihood, so walking it there would add unidentified innovations. Pass
@@ -723,12 +733,11 @@ from the last fitted value.
         n::Integer; start::Integer = 1,
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
-        growth_prior = Normal(0.0, 0.05),
+        growth_prior::Normal = Normal(0.0, 0.05),
         growth_sd_prior = truncated(Normal(0.0, 0.05); lower = 0),
         cutoff::Union{Nothing, Integer} = nothing
     )
     C0 ~ baseline_prior
-    growth0 ~ growth_prior
     σ_growth ~ growth_sd_prior
     ## The fitted knots end at the cut-off. A grid running past it continues
     ## the trend on future knots a week apart with innovations `z_future`.
@@ -736,8 +745,16 @@ from the last fitted value.
     s = clamp(Int(start), 1, nc)
     days = knot_days(nc; week = week, start = s)
     nb = length(days)
-    z ~ filldist(Normal(0, 1), max(nb - 1, 1))
-    growth = growth0 .+ σ_growth .* cumsum(z[1:max(nb - 1, 0)])
+    ## `growth0` is the first week's growth, the base growth plus the first
+    ## step. The likelihood sees only that sum, so it is drawn from the sum's
+    ## exact prior and the step is not sampled on its own.
+    growth0 ~ nb > 1 ?
+        Normal(growth_prior.μ, sqrt(growth_prior.σ^2 + σ_growth^2)) :
+        growth_prior
+    z ~ filldist(Normal(0, 1), max(nb - 2, 1))
+    later = σ_growth .* cumsum(z[1:max(nb - 2, 0)])
+    growth = nb > 1 ? growth0 .+ vcat(zero(eltype(later)), later) :
+        growth0 .+ later
     log_knots = vcat(zero(growth0), cumsum(growth))
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)

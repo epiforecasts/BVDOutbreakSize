@@ -2,7 +2,7 @@
 #
 #   julia --project=docs scripts/fit_zone.jl \
 #       --parent logs/fit_cache/joint__<hash>.parent.jls \
-#       --out logs/zone_local [--samples 800] [--warmup 500] [--chains 2] \
+#       --out logs/zone_local [--samples 800] [--warmup 1000] [--chains 2] \
 #       [--depth 10] [--target-accept 0.8]
 #
 # `--parent` is a parent extract (`<key>.parent.jls`, the `fit-extras-joint`
@@ -22,7 +22,7 @@ include(joinpath(@__DIR__, "..", "docs", "fits", "summary.jl"))
 
 function parse_args(args)
     opts = Dict{String, String}(
-        "out" => "logs/zone_local", "samples" => "800", "warmup" => "500",
+        "out" => "logs/zone_local", "samples" => "800", "warmup" => "1000",
         "chains" => "2", "depth" => "10", "target-accept" => "0.8"
     )
     i = 1
