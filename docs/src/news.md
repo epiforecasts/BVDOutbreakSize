@@ -26,6 +26,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province data pin the level, so the scale and the standard-normal draw traded off along a curved ridge.
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
+- The onset triangle's read SD prior is `LogNormal(log 0.3, 0.5)`, centred on one figure pixel, in place of `LogNormal(log 1, 0.5)` (#1099).
+  Rounding of each read has its own variance term, so the read SD is the error beyond it, and one count spans a median of 3.2 pixels across the digitised figures (`data/onset_curve_figures.csv`).
+  The three published fits results-2720, results-2817 and results-2847 put the read SD between 0.16 and 0.29 counts (90% intervals), below the old prior's 1st percentile and inside the new prior's 90% range of 0.13 to 0.68.
+  Fitted values change.
 - The health-zone model samples the joint's generation-interval and delay parameters with its weekly patch infections from the melded normal, and each draw rebuilds its generation interval and delays from them (#1085).
   They were fixed at their joint posterior means, so the zone results carried none of their uncertainty.
   Fitted zone values change slightly: the zone reproduction-number intervals widen a little, and the zone death composition can shorten the onset-to-death delay the zones read.
@@ -57,6 +61,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
+- The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
+  It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
+  On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
 - The onset curve adds SitReps 139, 140 and 141 (30 September to 2 October), after three reader fixes (#1061).
   The weekly tick row leaves out the date labels' tops, which moved single ticks on these renders and shifted runs of days onto their neighbours.
   A washed bar on a tick column is read again without the gridline skip, capped at its outline columns.
