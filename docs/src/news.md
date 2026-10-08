@@ -160,6 +160,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
+- A delay's double-interval-censored discretisation falls back to a uniform PMF rather than throwing a `DomainError`, when a NUTS step-size search pushes an analytical Gamma, LogNormal or Weibull delay's own shape or scale out of domain (resolves #1105).
+  The rejected proposal already carried a negligible log-likelihood, so fitted values do not change.
 
 ## v2.2.0
 
