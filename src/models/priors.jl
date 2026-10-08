@@ -524,11 +524,19 @@ end
 ## --- Shared nuisance priors ---------------------------------------------
 
 """
-Case-fatality ratio prior. Default `Beta(6.6, 13.4)` has mean ≈ 0.33,
-matching the CDC summary for past BVD outbreaks. Used by the deaths and
-deaths-among-exports streams.
+Case-fatality ratio prior. Default `Beta(2.64, 5.36)` has mean ≈ 0.33,
+matching the CDC summary for past BVD outbreaks, with a 95% interval of
+roughly 0.07–0.67. A tighter `Beta(6.6, 13.4)` (same mean, 95% interval
+0.15–0.54) pulled a simulated low case-fatality ratio toward the mean:
+parameter recovery on a seed with a true national ratio of 0.14 put the
+posterior's 99% interval entirely above it. The two historical point
+estimates the mean rests on (the CDC figure and a reanalysis at 0.47)
+differ enough that the ratio for one outbreak is not pinned as tightly as
+either source's own interval suggests, so the wider prior lets a single
+outbreak's ratio settle below that range when its data support it. Used by
+the deaths and deaths-among-exports streams.
 """
-@model function cfr_model(; cfr_prior = Beta(6.6, 13.4))
+@model function cfr_model(; cfr_prior = Beta(2.64, 5.36))
     CFR ~ cfr_prior
     return (; CFR)
 end
@@ -588,7 +596,7 @@ a free rate of their own removes the degeneracy that keeps a free
 positivity link, so scaling it by `cfr_bg` gives the death background a
 level and time profile without a second free rate competing with outbreak
 size. The default `Beta(2, 18)` (mean ≈ 0.10, 90% ≈ 0.02–0.23) is weakly
-informative and sits well below the BVD CFR (`Beta(6.6, 13.4)`, mean
+informative and sits well below the BVD CFR (`Beta(2.64, 5.36)`, mean
 ≈ 0.33), since non-BVD suspect illness is less lethal. Pass `cfr_prior`
 to override. Returns `(; cfr_bg)`.
 """

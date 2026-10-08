@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The case-fatality ratio prior is `Beta(2.64, 5.36)` (mean 0.33, 95% interval 0.07-0.67), wider than the previous `Beta(6.6, 13.4)` (same mean, 95% interval 0.15-0.54).
+  Parameter recovery on a simulated outbreak with a true national ratio of 0.14 put the posterior's 99% interval entirely above it under the old prior; the two historical estimates behind the mean (a CDC summary at 0.33 and a reanalysis at 0.47) differ enough that a single outbreak's ratio is not pinned as tightly as either source's own interval, so the wider prior lets it settle below that range when the data support it.
+  Fitted values change.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).

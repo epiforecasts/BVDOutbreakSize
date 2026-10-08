@@ -783,13 +783,13 @@ MarkdownTable(vintage_table) #hide
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
 # The companion Bundibugyo virus (BDBV) reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for non-healthcare-worker (non-HCW) confirmed cases.
-# Based on this we use a prior of
+# The two estimates differ enough that one outbreak's ratio is not pinned as tightly as either source's own interval suggests, so we widen the prior beyond the within-source uncertainty to let an outbreak's ratio settle below that range when its data support it:
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{27}
+# \mathrm{CFR} \sim \mathrm{Beta}(2.64,\ 5.36), \tag{27}
 # ```
 #
-# with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
+# with mean $0.33$ and $95\%$ interval roughly $0.07$-$0.67$.
 # The mean matches the CDC $55/169 \approx 33\%$ figure and the corrected central CFR in the 20 May report [mccabe2026update](@cite).
 
 #md # ```@raw html
@@ -808,7 +808,7 @@ MarkdownTable(vintage_table) #hide
 
 # The prior density, with the CDC $0.33$ figure marked.
 
-cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
+cfr_prior_fig = plot_cfr_prior(Beta(2.64, 5.36)); #hide
 cfr_prior_fig #hide
 
 # ### Observation models
