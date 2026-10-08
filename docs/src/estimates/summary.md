@@ -5,12 +5,18 @@ using Markdown, BVDOutbreakSize, Dates
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "front_matter.jl"))
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 cutoff = Date(strip(read(joinpath(dir, "cutoff.md"), String)))
-Markdown.parse(report_dates(cutoff))
+Markdown.parse(report_dates(cutoff) * "\n\n" * readme_abstract())
 ```
 
-See [Methods](../methods.md) for the model and the definition of each quantity.
+This page summarises the headline results.
+See the [in-sample checks](../evaluation/insample/national.md) for how the model fits the data and how its estimates moved across past releases.
+See the [forecast evaluation](../evaluation/forecast/national.md) for how past forecasts scored.
+Each has a province and a health-zone page alongside.
+See [Methods](../methods.md) for the model, [Limitations](../limitations.md) for its caveats and [Comparisons](../comparisons.md) for the comparisons with published estimates.
 
 ## Headline estimates
+
+The detail is on the [National estimates](national.md) and [National forecasts](../forecasts/national.md) pages.
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -18,10 +24,7 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "headline.md"), String))
 ```
 
-```@raw html
-<figure class="bvd-figure">
-<figcaption>Outbreak size and timing, with 30%, 60% and 90% credible intervals.</figcaption>
-```
+### Outbreak size and timing
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -29,11 +32,7 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "headline_counts.md"), String))
 ```
 
-```@raw html
-</figure>
-<figure class="bvd-figure">
-<figcaption>Growth and severity, with 30%, 60% and 90% credible intervals.</figcaption>
-```
+### Growth and severity
 
 ```@eval
 using Markdown, BVDOutbreakSize
@@ -41,80 +40,32 @@ dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "headline_rates.md"), String))
 ```
 
-```@raw html
-</figure>
-```
+All intervals are equal-tailed 30%, 60% and 90% credible intervals from the joint posterior.
 
 ### By province
 
-```@raw html
-<figure class="bvd-figure">
-<figcaption>Province estimates with 90% credible intervals.</figcaption>
-```
+The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the provinces.
+Each range is an equal-tailed 90% credible interval.
+The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
+The detail is on the [Provinces estimates](province.md) and [Province forecasts](../forecasts/province.md) pages.
 
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse(read(joinpath(dir, "provinces_summary.md"), String))
+Markdown.parse(read(joinpath(dir, "provinces.md"), String))
 ```
-
-```@raw html
-</figure>
-<figure class="bvd-figure">
-```
-
-![Map of modelled infections to date by province](../summary_assets/province_map.png)
-
-```@raw html
-<figcaption>Modelled infections to date, shaded by the posterior median on a log scale.</figcaption>
-</figure>
-```
-
-![Confirmed cases and reproduction number by province](../summary_assets/cases_rt_provinces.png)
 
 ### By health zone
 
-```@raw html
-<figure class="bvd-figure">
-```
-
-![Health zones at the cut-off](../summary_assets/zone_rt_map.png)
-
-```@raw html
-<figcaption>Each zone's reproduction number at the cut-off, its confirmed cases over the coming week (90% predictive interval) and its confirmed cases to date.
-A reproduction number whose 90% interval spans one is washed towards white.</figcaption>
-</figure>
-```
-
-```@raw html
-<figure class="bvd-figure">
-<figcaption>Zones with the most confirmed cases over the past two weeks, with 90% credible and predictive intervals.</figcaption>
-```
+The table gives the health zones with the most confirmed cases over the past two weeks.
+Each range is an equal-tailed 90% credible interval, and the share is of the zone's province.
+A zone whose reproduction number is not modelled separately takes it from its province.
+The detail is on the [Health zones](zone.md) and [health-zone forecasts](../forecasts/zone.md) pages.
 
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 Markdown.parse(read(joinpath(dir, "zone_headline.md"), String))
-```
-
-```@raw html
-</figure>
-<figure class="bvd-figure">
-```
-
-![Confirmed cases and reproduction number by health zone](../summary_assets/cases_rt_zones.png)
-
-```@raw html
-<figcaption>The twelve zones with the most confirmed cases over the past two weeks.</figcaption>
-</figure>
-```
-
-### Health-zone forecast
-
-```@eval
-using Markdown, BVDOutbreakSize
-dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
-Markdown.parse(read(joinpath(dir, "zone_forecast.md"), String))
 ```
 
 ### Fit diagnostics
@@ -129,6 +80,11 @@ Markdown.parse(read(joinpath(dir, "diagnostics_summary.md"), String))
 <details><summary>Expand: how the fits behind these numbers sampled</summary>
 ```
 
+R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
+The bulk effective sample size is the number of independent draws the chains are worth, counted for the parameter where that count is lowest.
+A divergent transition is a step the sampler could not take accurately.
+The [in-sample checks](../evaluation/insample/national.md) break these numbers down by parameter.
+
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
@@ -139,30 +95,49 @@ Markdown.parse(read(joinpath(dir, "diagnostics.md"), String))
 </details>
 ```
 
-## Reproduction number trajectory
+## Estimated reproduction number
 
-```@raw html
-<figure class="bvd-figure">
-```
+The time-varying reproduction number R(t), the average number of further infections caused by each infection.
+A value above one means the outbreak is growing.
+The detail is on the [National estimates](national.md) and [Provinces estimates](province.md) pages.
 
 ![Estimated reproduction number over time](../summary_assets/rt.png)
 
-```@raw html
-<figcaption>National daily reproduction number with 30%, 60% and 90% credible ribbons.</figcaption>
-</figure>
-```
+The same trajectory by province, with the national one in grey behind each panel.
+A panel tracking grey says that province moves with the national trend.
 
 ![Estimated reproduction number over time by province](../summary_assets/rt_provinces.png)
 
 ## Infections over time
 
-```@raw html
-<figure class="bvd-figure">
-```
+Modelled cumulative infections, symptom onsets and deaths.
+These are the underlying outbreak, upstream of the testing and reporting that produce the observed counts, so they are larger than the reported cases.
+The detail is on the [National estimates](national.md) page.
 
 ![Estimated cumulative infections, onsets and deaths over time](../summary_assets/infections.png)
 
-```@raw html
-<figcaption>Modelled cumulative infections, onsets and deaths with 30%, 60% and 90% credible ribbons.</figcaption>
-</figure>
+## Health zones
+
+The split of each patch's infections across its health zones, with the zone maps, is on the [Health zones](zone.md) page, and the interactive map is on the [Dashboard](../dashboard.md).
+The zone split of the week-ahead forecast is on the [health-zone forecasts](../forecasts/zone.md) page and its scores on the [health-zone forecast evaluation](../evaluation/forecast/zone.md) page.
+
+The week-ahead forecast by health zone:
+
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "zone_forecast.md"), String))
 ```
+
+The map panels give each zone's reproduction number at the cut-off, the 90% interval on its confirmed cases over the coming week and its confirmed cases to date.
+A reproduction number whose 90% interval spans one is washed towards white.
+
+![Health zones at the cut-off](../summary_assets/zone_rt_map.png)
+
+The fifteen zones with the largest forecast confirmed cases over the coming week.
+
+![One-week-ahead confirmed-case forecast by health zone](../summary_assets/zone_forecast.png)
+
+---
+
+For the full results, methods and code see the [National](national.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.

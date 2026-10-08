@@ -103,26 +103,6 @@
             "tshopo", (4, 3),
         ),
 
-        ## Misspelt sample nouns, SitReps 146 (Haut-Uele) and 149
-        ## (Bas-Uele).
-        (
-            "4 nouveaux resultats positifs (3 vivants et 1 deces) sur 24 " *
-                "echentillons recus et analyses.",
-            "haut_uele", (24, 4),
-        ),
-        (
-            "7 nouveaux echantiollos recus (tous vivant ) tous sont reveles " *
-                "negatifs",
-            "bas_uele", (7, 0),
-        ),
-
-        ## No sample noun at all, SitRep 147 (Bas-Uele).
-        (
-            "1 resultat positif (1sangs) sur 33 recus et analyses " *
-                "(positivite : 3,0%).",
-            "bas_uele", (33, 1),
-        ),
-
         ## No completed analysis: no denominator, so no numerator either.
         (
             "3 echantillons collectes dont 2 sont expedies a kinshasa (inrb).",

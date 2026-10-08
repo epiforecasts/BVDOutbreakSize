@@ -1,6 +1,7 @@
 # # Province in-sample checks
 #
-# This page checks whether the joint model reproduces the per-province data it was fitted to, and refits it as a single population to check the spatial structure.
+# Whether the fitted joint model reproduces the per-province data it was fitted to.
+# It also re-fits the joint as a single population to check the spatial structure.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
 
 #md # ```@raw html
@@ -26,8 +27,8 @@ posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
 
 # ## Summary
 #
-# Whether each province's cases and deaths are reproduced, from the checks below.
-# Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with coverage of the 90% predictive interval.
+# Whether each province's cases and deaths are reproduced, from the checks further down this page.
+# Bias runs from −1 to 1 and is negative when the model under-predicts, and coverage is the fraction of vintages inside the 90% predictive interval.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -162,6 +163,9 @@ province_case_ppc_fig #hide
 province_death_ppc_fig #hide
 
 # The three province terms for the isolation and laboratory data are checked the same way.
+# The laboratory panel is the split of each calendar week's analysed specimens, which identifies the background split.
+# The occupancy panel is the split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, over the per-patch bed demand.
+# The bed panel is the split of the beds among the provinces printed that day, on the days a count changed, over each patch's modelled share of the national capacity.
 # A gap in a panel is a day on which that province printed nothing.
 
 #md # ```@raw html
@@ -197,47 +201,17 @@ province_beds_ppc_fig = plot_province_split_ppc(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 province_lab_ppc_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The split of each calendar week's analysed specimens among the provinces, which identifies the background split.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 #-
-
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
 
 province_occupancy_ppc_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The split of the patients in isolation among the provinces printed that day, on the weekly days the fit scores, against the per-patch bed demand.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 #-
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 province_beds_ppc_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The split of the beds among the provinces printed that day, on the days a count changed, against each patch's modelled share of the national capacity.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ## Province stream calibration
 #
@@ -452,10 +426,19 @@ province_pairs_fig #hide
 #
 # ### Spatial structure sensitivity
 #
-# We refit the joint model with its four patches reduced to one well-mixed population.
-# Splitting the country into provinces adds no national data, so the national outbreak size should not move far either way.
-# The two still differ, because the country grows at the force-weighted mean of the provinces' reproduction numbers, which sits above the central trend they pool toward.
-# That gap is first order in the deviation scale, so a large gap between the two posteriors would point at the deviation priors rather than at the data.
+# The headline runs the model over four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling the other affected provinces.
+# Reducing it to a single patch collapses it onto one well-mixed
+# population, which is the model the earlier releases used.
+# The model overview on the methods page describes what the provinces add.
+#
+# Splitting the country into provinces adds no national data, so the national
+# outbreak size should not move far either way.
+# The two are not identical by construction: the provinces run free and the
+# country grows at the force-weighted mean of their reproduction numbers,
+# which sits above the central trend they pool toward. That gap is first
+# order in the deviation scale.
+# A large gap between the two posteriors below would therefore point at the
+# deviation priors rather than at the data.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
@@ -475,19 +458,15 @@ spatial_sensitivity_fig = plot_density_overlay(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 spatial_sensitivity_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Posterior densities of the cumulative infections under the four-patch headline and the single-population fit.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
-# The spatial structure could also move other national quantities that both fits estimate, so their posteriors should sit on top of each other.
+# The size is the gate, but it is not the only quantity the spatial structure could move.
+# The three figures below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
+# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other.
+# In the trajectory figure they do, closely enough that the grey reference is hidden behind the coloured band for most of the window.
+# The table after them gives the same quantities as numbers, which is where the agreement is read rather than eyeballed.
 
 #md # ```@raw html
 #md # <details><summary>National quantities under both structures</summary>
@@ -533,47 +512,19 @@ spatial_rt_density_fig = plot_density_overlay(
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 spatial_rt_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The national reproduction number from the single-population fit (coloured) against the four-patch headline (grey), which is hidden where the two agree.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 #-
-
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
 
 spatial_cfr_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Posterior densities of the case-fatality ratio under both structures.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 #-
-
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
 
 spatial_rt_density_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Posterior densities of the reproduction number at the cut-off under both structures.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The table gathers the same three quantities as credible intervals, alongside the outbreak start date the two fits imply.
 
 #md # ```@raw html
 #md # <details><summary>National quantities under both structures, as a table</summary>
@@ -615,22 +566,15 @@ end;
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 spatial_quantities_table #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # The same three quantities as credible intervals under both structures, with the outbreak start date each fit implies.
-#md # This is where the agreement is read rather than from the figures.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 # ## Province parameter recovery
 #
 # Whether the model recovers each province's values when fitted to data it simulated itself, from the same runs as the national [parameter recovery](@ref "Parameter recovery").
+# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value.
+# Below, each quantity by province is on its own scale with the prior in grey, each seed's posterior in its colour and its true value as a dashed line.
 
 #md # ```@raw html
 #md # <details><summary>Recovery figure</summary>
@@ -663,18 +607,11 @@ province_recovery_fig = isempty(province_recovery_results.params) ? nothing :
 
 #md # ```@raw html
 #md # </details>
-#md # <figure class="bvd-figure">
 #md # ```
 
 isempty(province_recovery_results.params) ? Markdown.parse("No parameter-recovery run is available for this build.") : province_recovery_fig #hide
 
-#md # ```@raw html
-#md # <figcaption>
-#md # Each seed's posterior median with its 50% and 90% intervals divided by its true value (top).
-#md # Below, each quantity by province is on its own scale, with the prior in grey, each seed's posterior in its colour and its true value dashed.
-#md # </figcaption>
-#md # </figure>
-#md # ```
+# The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
 
 #md # ```@raw html
 #md # <details><summary>Summary table across seeds</summary>
@@ -688,17 +625,9 @@ province_recovery_summary_display = isempty(province_recovery_summary) ?
     Markdown.parse("No parameter-recovery run is available for this build.") :
     MarkdownTable(province_recovery_summary);
 
-#md # ```@raw html
-#md # <figure class="bvd-figure">
-#md # ```
-
 province_recovery_summary_display #hide
 
 #md # ```@raw html
-#md # <figcaption>
-#md # The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
-#md # </figcaption>
-#md # </figure>
 #md # </details>
 #md # ```
 
