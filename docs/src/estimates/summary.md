@@ -94,7 +94,7 @@ Markdown.parse(read(joinpath(dir, "diagnostics.md"), String))
 </details>
 ```
 
-## Reproduction number
+## Reproduction number trajectory
 
 ![Estimated reproduction number over time](../summary_assets/rt.png)
 
