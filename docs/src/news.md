@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The province importation kernel samples its distance exponent rather than fixing it at one, under a `LogNormal(log(1.8), 0.4)` prior set from published gravity-model fits to movement and Ebola spread in sub-Saharan Africa (#1091).
+  The health-zone stage builds its between-patch kernel at the joint posterior's exponent.
+  Fitted values change.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).

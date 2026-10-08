@@ -534,16 +534,24 @@ MarkdownTable(vintage_table) #hide
 
 # #### Mixing and importation
 #
-# We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial population centres.
+# We model connectivity between provinces as a gravity kernel, proportional to destination population and falling as a power $\varphi$ of the distance $d_{pq}$ between provincial population centres.
 # Each centre sits where the province's people live rather than at its capital.
 # A pooled province takes the population-weighted mean of its members' centres.
 # Each origin column is scaled so that the share of its transmission that leaves is the population share of the rest of the country, $1 - N_q / N$:
 #
 # ```math
 # K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr)
-#           \frac{N_p\, d_{pq}^{-1}}{\sum_{r \ne q} N_r\, d_{rq}^{-1}},
-# \qquad K_{q,q} = 0. \tag{14}
+#           \frac{N_p\, d_{pq}^{-\varphi}}{\sum_{r \ne q} N_r\, d_{rq}^{-\varphi}},
+# \qquad K_{q,q} = 0, \qquad
+# \varphi \sim \mathrm{LogNormal}(\log 1.8,\ 0.4). \tag{14}
 # ```
+#
+# We fix the exponent on destination population at one.
+# We use a prior on the distance exponent with a median of 1.8 and a 95% interval of 0.82 to 3.9, set from published power-law gravity fits in sub-Saharan Africa.
+# Kenyan mobile-phone records give exponents of 1.1 to 2.1 depending on trip duration [wesolowski2015](@cite).
+# Travel surveys in Mali, Burkina Faso, Zambia and Tanzania give 1.3 to 3.6, and 1.9 pooled over the four [marshall2018](@cite).
+# Fits to the district-level spread of Ebola in 2014 give within-country exponents of 1.3 in Liberia to 2.4 in Sierra Leone [backer2016](@cite).
+# None of these estimates is from the Democratic Republic of the Congo.
 #
 # The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
 #
@@ -2172,7 +2180,7 @@ cfr_prior_fig #hide
 #   \frac{N_z\, d_{zq}^{-1}}{\sum_{z' \in p(z)} N_{z'}\, d_{z'q}^{-1}}, \tag{58}
 # ```
 #
-# the first within a patch and the second between patches, with $K$ the province kernel.
+# the first within a patch and the second between patches, with $K$ the province kernel at the geometric mean of the joint posterior of $\varphi$.
 #
 # Patch $p$ receives $M_{p,t} = f_{p,t} I_{p,t}$ imported infections on day $t$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the sampled curves and intensities:

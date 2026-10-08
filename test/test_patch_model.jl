@@ -1552,6 +1552,57 @@ end
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
 end
 
+@testitem "patch_infection_model: the province distance exponent should be sampled under the literature prior" begin
+    using BVDOutbreakSize: patch_infection_model, province_importation_kernel,
+        PROVINCE_DISTANCE_DECAY_PRIOR, PROVINCE_POPULATIONS
+    using Distributions: LogNormal, median, quantile
+    using Turing: DynamicPPL, returned, sample, Prior
+    using Random: Xoshiro
+
+    ## The prior the `PROVINCE_DISTANCE_DECAY_PRIOR` docstring and the
+    ## methods quote: median 1.8 and 95% interval 0.82 to 3.9, from the
+    ## published gravity fits rather than from any fit of this model.
+    prior = PROVINCE_DISTANCE_DECAY_PRIOR
+    @test prior == LogNormal(log(1.8), 0.4)
+    @test median(prior) ≈ 1.8
+    @test round(quantile(prior, 0.025); digits = 2) == 0.82
+    @test round(quantile(prior, 0.975); digits = 1) == 3.9
+
+    ## The default kernel samples the exponent under that prior and rebuilds
+    ## the gravity kernel at the draw.
+    n, np, rt_start = 60, 4, 30
+    base = patch_infection_model(n, np; rt_start)
+    @test base.defaults.importation_decay_prior == prior
+    chn = sample(Xoshiro(1), base, Prior(), 20; progress = false)
+    γs = vec(collect(chn[:importation_distance_decay]))
+    @test all(>(0), γs)
+    @test length(unique(γs)) == length(γs)
+
+    ## At a fixed exponent the default model's arrivals are those of the
+    ## matching fixed kernel, and a different exponent moves them.
+    function arrivals(m; kw...)
+        mf = DynamicPPL.fix(m; ε_bar = 0.02, σ_ε = 0.0, β_ε = 0.0, kw...)
+        return returned(mf, rand(Xoshiro(7), mf)).importation_matrix
+    end
+    K2 = province_importation_kernel(
+        PROVINCE_POPULATIONS[1:np]; decay = 2.0
+    )
+    fixed2 = patch_infection_model(n, np; rt_start, importation_kernel = K2)
+    @test arrivals(base; importation_distance_decay = 2.0) ≈ arrivals(fixed2)
+    @test !(
+        arrivals(base; importation_distance_decay = 0.5) ≈
+            arrivals(base; importation_distance_decay = 2.0)
+    )
+
+    ## A fixed kernel samples no exponent.
+    has_decay(m) = any(
+        k -> string(k) == "importation_distance_decay",
+        keys(DynamicPPL.VarInfo(Xoshiro(1), m))
+    )
+    @test has_decay(base)
+    @test !has_decay(fixed2)
+end
+
 @testitem "province composition: the severity multiplier should be sum-to-zero" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: sample, Prior
