@@ -736,9 +736,10 @@ end
     ndraws = 120
     n = 95
     nz = length(knot_days(n; week = 7)) - 1
-    ## Vector-valued `rt_state.z`: one innovation vector per draw, stored as
-    ## a draws×chains matrix of vectors (as the predictive chain returns it).
-    zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
+    ## Vector-valued `rt_state.log_Rt_knots`: one knot vector per draw,
+    ## stored as a draws×chains matrix of vectors (as the predictive chain
+    ## returns it).
+    kcol = reshape([0.2 .* randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
     chn = FlexiChains.FlexiChain{Symbol}(
         ndraws, 1,
         Dict(
@@ -750,7 +751,7 @@ end
             ),
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
                 reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
-            FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
+            FlexiChains.Parameter(Symbol("rt_state.log_Rt_knots")) => kcol,
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)
         )
@@ -775,11 +776,11 @@ end
     n = 95
     ## Build one chain reconstructable by `reconstruct_rt`, parameterised by
     ## the walk start so the joint (walk from the breakpoint lead) and the
-    ## per-stream fits (walk from day 1) each get an innovation vector of the
-    ## right length.
+    ## per-stream fits (walk from day 1) each get a knot vector of the right
+    ## length.
     function make_chain(walk_start)
         nz = length(knot_days(n; week = 7, start = walk_start)) - 1
-        zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
+        kcol = reshape([0.2 .* randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
         FlexiChains.FlexiChain{Symbol}(
             ndraws, 1,
             Dict(
@@ -794,7 +795,7 @@ end
                 ) => reshape(
                     -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1
                 ),
-                FlexiChains.Parameter(Symbol("rt_state.z")) => zcol
+                FlexiChains.Parameter(Symbol("rt_state.log_Rt_knots")) => kcol
             )
         )
     end
@@ -1647,8 +1648,8 @@ end
         P(Symbol("rt_state.intervention_effect")) => reshape(
             fill(-0.3, nd), nd, 1
         ),
-        P(Symbol("rt_state.z")) => reshape(
-            [randn(rng, nb - 1) for _ in 1:nd], nd, 1
+        P(Symbol("rt_state.log_Rt_knots")) => reshape(
+            [0.2 .* randn(rng, nb - 1) for _ in 1:nd], nd, 1
         )
     )
     chain(knots) = FlexiChains.FlexiChain{Symbol}(
@@ -1718,7 +1719,8 @@ end
         P(Symbol("rt_state.log_R0")) => col(fill(log(1.5), nd)),
         P(Symbol("rt_state.intervention_effect")) => col(fill(-0.3, nd)),
         P(Symbol("rt_state.sigma_rw")) => col(fill(0.05, nd)),
-        P(Symbol("rt_state.z")) => col([randn(rng, nb - 1) for _ in 1:nd]),
+        P(Symbol("rt_state.log_Rt_knots")) =>
+            col([0.2 .* randn(rng, nb - 1) for _ in 1:nd]),
         P(:delta_knots) => col([0.1 .* randn(rng, np * nb) for _ in 1:nd]),
     )
     ## Falling fractions that differ by patch, so a misplaced day or patch
@@ -1784,8 +1786,8 @@ end
             P(Symbol("rt_state.intervention_effect")) => reshape(
                 fill(-0.3, nd), nd, 1
             ),
-            P(Symbol("rt_state.z")) => reshape(
-                [randn(rng, nb - 1) for _ in 1:nd], nd, 1
+            P(Symbol("rt_state.log_Rt_knots")) => reshape(
+                [0.2 .* randn(rng, nb - 1) for _ in 1:nd], nd, 1
             ),
             P(:delta_knots) => reshape(knots, nd, 1)
         )
