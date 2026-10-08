@@ -531,10 +531,10 @@ roughly 0.07–0.67. A tighter `Beta(6.6, 13.4)` (same mean, 95% interval
 parameter recovery on a seed with a true national ratio of 0.14 put the
 posterior's 99% interval entirely above it. The two historical point
 estimates the mean rests on (the CDC figure and a reanalysis at 0.47)
-differ enough that the ratio for one outbreak is not pinned as tightly as
-either source's own interval suggests, so the wider prior lets a single
-outbreak's ratio settle below that range when its data support it. Used by
-the deaths and deaths-among-exports streams.
+differ enough that a single outbreak's ratio is less tightly constrained
+than either source's own interval implies, so the wider prior lets it
+settle below that range when the data support it. Used by the deaths and
+deaths-among-exports streams.
 """
 @model function cfr_model(; cfr_prior = Beta(2.64, 5.36))
     CFR ~ cfr_prior

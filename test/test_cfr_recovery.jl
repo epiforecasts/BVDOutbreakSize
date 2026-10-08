@@ -2,8 +2,7 @@
 ## of past outbreaks. An over-concentrated prior pulls such a truth toward
 ## its mean: the death series is built deterministically from a fixed CFR
 ## truth (no sampling noise), so a biased recovery can only come from the
-## prior or the delay/ascertainment trade-off, not from chance in the
-## simulated counts.
+## prior or the delay/ascertainment trade-off.
 
 @testitem "deaths_model recovers a low case-fatality ratio" tags = [:slow] begin
     using BVDOutbreakSize: deaths_model, nuts_sample, bin_increments

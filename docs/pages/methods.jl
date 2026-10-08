@@ -783,7 +783,7 @@ MarkdownTable(vintage_table) #hide
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
 # The companion Bundibugyo virus (BDBV) reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for non-healthcare-worker (non-HCW) confirmed cases.
-# The two estimates differ enough that one outbreak's ratio is not pinned as tightly as either source's own interval suggests, so we widen the prior beyond the within-source uncertainty to let an outbreak's ratio settle below that range when its data support it:
+# The two estimates differ enough that a single outbreak's ratio is less tightly constrained than either source's own interval implies, so we widen the prior beyond the within-source uncertainty, letting the ratio settle below that range when the data support it:
 #
 # ```math
 # \mathrm{CFR} \sim \mathrm{Beta}(2.64,\ 5.36), \tag{27}
