@@ -660,7 +660,7 @@ frozen_overlay_fig = plot_forecast_overlay(
 frozen_overlay_fig #hide
 
 # The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# Each uses the full headline settings: 1000 draws across two chains.
+# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings given in the methods.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
