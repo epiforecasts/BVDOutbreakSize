@@ -29,6 +29,11 @@ A major version: the report gains a health-zone level below the provinces, with 
   Flows in the tens with an index of 2 to 5 need a dispersion of about 3 to 40, an offset of 1.3 to 2.6 on that scale from a stock value of 546, or 1 to 2.1 prior SDs.
   As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
   Fitted values change: the flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
+- The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
+  It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
+  In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
+  On draws from the main-model posterior the largest eigenvalue of the diagonally scaled Hessian falls from 2.6–5.3e5 to 0.4–1.4e5, and fixed-step NUTS probes stay stable at a step of 0.0045 against 0.002 (figures in the pull request).
+  Fitted values change only by sampling noise.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).
