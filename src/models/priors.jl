@@ -195,16 +195,21 @@ end
 """
 Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
-([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
-cumulative-sum form, with standard-normal innovations scaled by `sigma_rw`
-and accumulated, avoiding the funnel geometry of the centred recursion.
-Daily log-`R_t` is the linear interpolation between knots
+([`knot_days`](@ref)) and follow a Gaussian random walk with step SD
+`sigma_rw`. Daily log-`R_t` is the linear interpolation between knots
 ([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
 first WHO situation report) adds a sampled effect `intervention_effect`
 shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp` (default
 21 days, roughly the time a response takes to bite), so transmission
 changes gradually rather than instantly. `breakpoint = missing` drops the
 term. `Rt = exp.(log_Rt)`.
+
+The knots after the first are sampled as `log_Rt_knots`, the total
+log-`R_t` on each knot day with the ramp included. The walk is centred on
+those knots net of the ramp ([`RandomWalkVector`](@ref)), so the prior is
+the same random walk plus ramp. The data pin the total level, and in these
+coordinates the effect moves it only through the ramp's shape between
+knots.
 
 The walk base `log_R0` is not sampled here. It is passed in, derived
 forward from the sampled growth rate `r` and the generation interval
@@ -233,7 +238,8 @@ knots a week apart ([`future_knot_days`](@ref)), with standard-normal
 innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
 on. `Rt` then covers the horizon too.
 
-Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
+Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
+with `log_R` the walk's knots net of the ramp, `log_R0` first.
 """
 @model function rt_walk_model(
         n::Integer, log_R0_base::Real;
@@ -252,14 +258,18 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
     ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
-    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
-    steps = sigma_rw .* z[1:(nb - 1)]
-    log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
+    ng = n + horizon_days(forecast)
+    ramp_shape = sigmoid_ramp(ng, breakpoint; ramp)
+    ## The total log-Rt on the knot days after the first, ramp included. A
+    ## single knot still draws one value so the chain key exists; it is
+    ## unused.
+    shift = intervention_effect .* ramp_shape[days[min(2, nb):nb]]
+    log_Rt_knots ~ RandomWalkVector(log_R0, sigma_rw, shift)
+    log_R = vcat(log_R0, log_Rt_knots[1:(nb - 1)] .- shift[1:(nb - 1)])
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
     ## variable, so the fitted knots and their density are untouched.
-    ng = n + horizon_days(forecast)
     if forecast !== nothing
         fdays = future_knot_days(n, horizon_days(forecast); week)
         z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
@@ -267,7 +277,7 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
         days = vcat(days, fdays)
     end
     log_Rt = interpolate_knots(log_R, days, ng)
-    log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(ng, breakpoint; ramp)
+    log_Rt = log_Rt .+ intervention_effect .* ramp_shape
     Rt = exp.(log_Rt)
     return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
 end
@@ -929,14 +939,14 @@ end
 
 """
 Non-BVD background rate as a smooth weekly lognormal random walk over the
-surveillance window. The log-rate follows a
-non-centred random walk on weekly knots and is linearly interpolated to
-the daily grid, the same parameterisation as the reproduction-number walk
-([`rt_walk_model`](@ref)). The background is a slow drift, so a knot per
-`week` carries the time variation with far fewer innovations than a daily
-walk. The series is gated to zero before the surveillance `onset`, since
-the non-BVD background does not exist before surveillance began, and ramps
-in over the first `onset_ramp` days of the window. With knot values
+surveillance window. The log-rate follows a random walk on weekly knots
+and is linearly interpolated to the daily grid, with the knot spacing of
+the reproduction-number walk ([`rt_walk_model`](@ref)). The background is
+a slow drift, so a knot per `week` carries the time variation with far
+fewer innovations than a daily walk. The series is gated to zero before
+the surveillance `onset`, since the non-BVD background does not exist
+before surveillance began, and ramps in over the first `onset_ramp` days
+of the window. With knot values
 `\\log\\lambda` and knot days `d`,
 
 ```math
@@ -1494,7 +1504,7 @@ and `Rt_matrix` covers the horizon.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
-    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
+    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.log_Rt_knots` and
     ## `rt_state.intervention_effect`, the names the analysis and sensitivity
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
