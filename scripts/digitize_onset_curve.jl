@@ -36,15 +36,20 @@
 #     bridging up to three page pixels when bar colour resumes (JPEG ringing
 #     between the stacked segments) and skipping neutral pixels on the tick
 #     rows and tick columns (gridlines); a day whose columns then neither
-#     show a bar nor leave it empty is read again without the tick-column
-#     skip, which washed fill on a tick column can break. The run's top is
+#     show a bar nor leave it empty, or that reads below the two equal
+#     outline columns around it beside a washed tick column, is read again
+#     without the tick-column skip, which washed fill on a tick column can
+#     break. The run's top is
 #     its highest pixel darker than an anti-alias, which is the bar's
 #     outline; chroma-washed
 #     fill inside the run is crossed on the way up. The bar height is the
 #     height at least two of its interior columns agree on to within a
 #     pixel, or the tallest
 #     interior column when none do (a 3-4 px bar has one saturated column
-#     and one or two washed ones that read low). Half a pixel of
+#     and one or two washed ones that read low). Inside the pink
+#     incomplete-data band, where the faded bars can lose their outlines,
+#     a day whose columns disagree reads the level run of columns centred
+#     nearest it instead. Half a pixel of
 #     outline is subtracted before dividing by pixels-per-count. The dead
 #     segment is the count of crimson pixels in the chosen column. A column
 #     under the red dashed first-positive-result line (evenly spaced
@@ -209,12 +214,11 @@ const CONFIG = [
     ("139", Date(2026, 9, 30), Date(2026, 9, 28)),
     ("140", Date(2026, 10, 1), Date(2026, 9, 28)),
     ("141", Date(2026, 10, 2), Date(2026, 9, 28)),
-    # "143" is left out. Its washed 14 September bar on a tick column reads
-    # 24 against 62 and the faded bars of the band, which now starts before
-    # the last tick, take a taller neighbour on 30 September and 1 October
-    # (#1106).
-    # "144" and "145" reprint 143's figure byte for byte (same image md5),
-    # so they are left out for the same reason.
+    # SitRep 142 is not published. 144 and 145 reprint 143's figure byte
+    # for byte (same image md5).
+    ("143", Date(2026, 10, 4), Date(2026, 10, 5)),
+    ("144", Date(2026, 10, 5), Date(2026, 10, 5)),
+    ("145", Date(2026, 10, 6), Date(2026, 10, 5)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -278,7 +282,10 @@ const Y_AXIS_STEP = Dict(
     "137" => 25,
     "139" => 25,
     "140" => 25,
-    "141" => 25
+    "141" => 25,
+    "143" => 25,
+    "144" => 25,
+    "145" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -689,6 +696,57 @@ function two_agree(h, cols)
     )
 end
 
+# The level run (two or more consecutive columns, each within a pixel of the
+# one before it) that reaches into `cols` with its centre nearest `cx`, as
+# its first and last column, or `nothing` when no such run does. A faded bar
+# with no outline reads as one such run; the smear between two faded bars
+# is a single column.
+function nearest_plateau(h, cols, cx)
+    W = length(h)
+    level(x) = h[x] > 0 && h[x + 1] > 0 && abs(h[x + 1] - h[x]) <= 1
+    a = first(cols)
+    while a > 1 && level(a - 1)
+        a -= 1
+    end
+    # the best run is kept in plain integers rather than a tuple rebuilt in
+    # a short-circuit: Julia 1.10 returned that tuple with its start
+    # overwritten by the loop's later start
+    found = false
+    best_d, best_lo, best_hi = Inf, 0, 0
+    x = a
+    while x <= last(cols)
+        b = x
+        while b < W && level(b)
+            b += 1
+        end
+        if b > x && b >= first(cols)
+            d = abs((x + b) / 2 - cx)
+            if !found || d < best_d
+                found = true
+                best_d, best_lo, best_hi = d, x, b
+            end
+        end
+        x = b + 1
+    end
+    return found ? (best_lo, best_hi) : nothing
+end
+
+# Columns inside the pink `donnees potentiellement incompletes` band: above
+# the column's run, from the top y-axis tick down, the page is at least as
+# often pink as white.
+function band_columns(R, G, B, white, hp, y0, ytop)
+    pink = (R .>= 238) .& (G .>= 200) .& (B .>= 200) .& (R .- G .>= 15)
+    W = size(R, 2)
+    out = falses(W)
+    for x in 1:W
+        top = y0 - hp[x] - 2
+        top > ytop || continue
+        np = count(@view pink[ytop:top, x])
+        out[x] = np > 0 && np >= count(@view white[ytop:top, x])
+    end
+    return out
+end
+
 function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
@@ -764,6 +822,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
         nread[x] = min(nd_x, hread[x])
     end
     barmin, barmax = minimum(nz), maximum(nz)
+    inband = band_columns(R, G, B, white, hp, y0, yt[1])
     rows = Tuple{Date, Int, Int}[]
     for off in (7 * ks[1] - 7):3
         # anchor on the nearest chain tick at or before the day
@@ -819,13 +878,36 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
             hn = hread[jn] > 0 ? hread[jn] : hp[jn]
             bar = (hn, nread[jn])
         end
+        # before the last tick the band's faded bars can lose their outline
+        # too, and a window then straddles two of them; when no two columns
+        # agree, the level run of columns centred nearest the day is read,
+        # from its column nearest the day's centre
+        if off <= 0 && bar isa Tuple && length(cols) >= 2 &&
+                !two_agree(hread, cols) && all(x -> inband[x], cols)
+            run = nearest_plateau(hread, cols, cx)
+            if run !== nothing
+                jn = argmin(x -> (abs(x - cx), x), run[1]:run[2])
+                bar = (hread[jn], nread[jn])
+            end
+        end
         # washed fill on a tick column can read as gridline and break each run
         # at a different row; a day that reads as neither empty nor a bar, or
         # as a bar with no outline above the baseline's anti-alias in any
         # column, is read again without the skip. That read can climb the
         # gridline above the bar, so it is capped at the taller of the
-        # outline columns bounding the window
-        if bar === nothing || (bar isa Tuple && maximum(hread[cols]) <= 1)
+        # outline columns bounding the window. A day between two outline
+        # columns of the same height, with a washed column beside the tick
+        # that shows fill but no outline, is read again too when it reads
+        # below them: its fill broke at a gridline row
+        bounds = (first(cols) - 1, last(cols) + 1)
+        paired = all(x -> 1 <= x <= W && isborder[x], bounds) &&
+            abs(h[bounds[1]] - h[bounds[2]]) <= 1
+        washed = any(
+            x -> hread[x] == 0 && hp[x] > 2 * ppc &&
+                any(t -> abs(x - t) <= 1, xs), cols
+        )
+        if bar === nothing || (bar isa Tuple && maximum(hread[cols]) <= 1) ||
+                (bar isa Tuple && paired && washed && bar[1] < h[bounds[1]] - 1)
             bar = bar_height(h1, hp1, nr1, cols, cx, ppc)
             edge = [
                 h[x] for x in (first(cols) - 1, last(cols) + 1)
