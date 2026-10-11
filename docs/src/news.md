@@ -83,7 +83,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values do not change.
 - The summary page keeps to the headline numbers, tables and figures, with one line pointing to the methods.
   It drops the abstract, which stays on the home page, and the method notes move to the methods page.
-  Interval conventions sit under the tables and figures they describe.
+  Each table and figure that needs one has a caption giving what it shows and its interval, in place of the prose under it (#1118).
+  The health-zone table ends with the number of zones that had a confirmed case over the past two weeks.
 - The summary page has a province map of modelled infections to date and a compact province table of infections to date, the reproduction number at the cut-off and the latest week's confirmed cases.
 - The summary page keeps one health-zone figure, the confirmed cases against the reproduction number, in place of the zone maps and the zone forecast figure.
 - The cases against reproduction number plot nudges apart the labels of nearby points and is drawn at the page width on the summary page.
