@@ -345,7 +345,6 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
-# The shift has unit Jacobian, so the prior is unchanged.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
