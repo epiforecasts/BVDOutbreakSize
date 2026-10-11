@@ -216,15 +216,15 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     zone_composition_calibration, plot_zone_composition_ppc,
     zone_diagnostics_table, zone_sampler_diagnostics
 
-## Observation distributions a submodel writes on the right of `~`.
-## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
-## there and Julia 1.10 still loads the package.
+## Distributions a submodel writes on the right of `~`. Public, not
+## exported. `public` is Julia 1.11 syntax, so it is parsed only there and
+## Julia 1.10 still loads the package.
 @static if VERSION >= v"1.11.0-DEV.469"
     eval(
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
                 "StudentTVector, BetaBinomialVector, SplitCountVector, " *
-                "SafePoisson, SafeNegBinomial"
+                "SafePoisson, SafeNegBinomial, RandomWalkVector"
         )
     )
 end

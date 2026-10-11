@@ -209,6 +209,12 @@ const CONFIG = [
     ("139", Date(2026, 9, 30), Date(2026, 9, 28)),
     ("140", Date(2026, 10, 1), Date(2026, 9, 28)),
     ("141", Date(2026, 10, 2), Date(2026, 9, 28)),
+    # "143" is left out. Its washed 14 September bar on a tick column reads
+    # 24 against 62 and the faded bars of the band, which now starts before
+    # the last tick, take a taller neighbour on 30 September and 1 October
+    # (#1106).
+    # "144" and "145" reprint 143's figure byte for byte (same image md5),
+    # so they are left out for the same reason.
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,

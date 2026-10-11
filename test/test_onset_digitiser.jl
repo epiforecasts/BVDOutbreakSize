@@ -610,9 +610,10 @@ end
     using BVDOutbreakSize: BVDOutbreakSize
 
     ## compare_onset_sources.py gates a non-zero exit and
-    ## extract_dashboard_onsets.py parses the dashboard SVGs; each carries
-    ## a `--self-test` over its pure functions on synthetic inputs. They
-    ## need `uv` for their PEP 723 metadata.
+    ## extract_dashboard_onsets.py parses the dashboard SVGs and embedded
+    ## counts; each carries a `--self-test` over its pure functions on
+    ## synthetic inputs, and the extractor's also reads the trimmed page in
+    ## test/fixtures. They need `uv` for their PEP 723 metadata.
     root = pkgdir(BVDOutbreakSize)
     if Sys.which("uv") === nothing
         @info "Python self-tests skipped: uv not on PATH"

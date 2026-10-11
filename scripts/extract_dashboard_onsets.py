@@ -6,14 +6,20 @@
 """Extract the INRB-UMIE dashboard's symptom-onset curves from its git history.
 
 The Trends page of https://inrb-umie.github.io/BDBV2026-Epidemic_Dashboard/
-inlines one svglite bar chart of confirmed cases by symptom-onset date for
-the country, each province and each health zone (stacked observed plus
-imputed onset).  The page is rebuilt by CI and committed to the repository,
-so every commit of ``trends.html`` is one vintage of those charts.
+charts confirmed cases by symptom-onset date for the country, each province
+and each health zone (stacked observed plus imputed onset).  The page is
+rebuilt by CI and committed to the repository, so every commit of
+``trends.html`` is one vintage of those charts.
 
-Bar heights are read back into counts with the chart's own axis: the
-numeric y tick labels give cases per point, the major vertical gridlines
-under the date labels give the day positions.
+Builds up to 24 September 2026 inline one svglite bar chart per unit.  Bar
+heights are read back into counts with the chart's own axis: the numeric y
+tick labels give cases per point, the major vertical gridlines under the date
+labels give the day positions.
+
+Builds from 25 September draw the charts in the browser (``assets/trends.js``)
+from daily counts embedded in the page payload (``trends.cases``), which are
+read directly.  On the 23 September data, built both ways, the two readings
+agree on every row.
 
 Usage::
 
@@ -256,12 +262,50 @@ def snapshot_date_of(entry: dict) -> dt.date:
     return dt.date.fromisoformat(m.group(1))
 
 
+def extract_payload_counts(
+    cases: dict, asof: str, levels: tuple[str, ...]
+) -> tuple[dt.date, list[tuple]]:
+    """Rows from the daily counts the browser-drawn charts are built from.
+
+    Each unit is ``{"start": ISO date, "obs": [...], "imp": [...]}``, one
+    entry per day from ``start``.
+    """
+    groups = []
+    if "national" in levels and cases.get("national"):
+        groups.append(("national", {"National": cases["national"]}))
+    if "province" in levels:
+        groups.append(("province", cases.get("provinces") or {}))
+    if "zone" in levels:
+        groups.append(("zone", cases.get("health_zones") or {}))
+    rows = []
+    for level, units in groups:
+        for unit, entry in units.items():
+            obs, imp = entry.get("obs") or [], entry.get("imp") or []
+            if len(obs) != len(imp):
+                raise ChartError(
+                    f"{level} {unit}: {len(obs)} observed against {len(imp)} imputed days"
+                )
+            start = dt.date.fromisoformat(entry["start"])
+            rows += [
+                (level, unit, (start + dt.timedelta(days=k)).isoformat(), int(o), int(i))
+                for k, (o, i) in enumerate(zip(obs, imp))
+            ]
+    if not rows:
+        raise ChartError("no onset counts on the page")
+    return dt.date.fromisoformat(asof), rows
+
+
 def extract_page(html: str, levels: tuple[str, ...]) -> tuple[dt.date, list[tuple]]:
     """Rows (level, unit, onset_date, observed, imputed) for one page, plus its data date."""
     m = PAYLOAD_RE.search(html)
     if not m:
         raise ChartError("no payload script")
-    trends = json.loads(m.group(1)).get("onset_trends") or {}
+    payload = json.loads(m.group(1))
+    counts = payload.get("trends") or {}
+    if counts.get("cases"):
+        # builds from 25 September 2026: the browser draws the charts from these counts
+        return extract_payload_counts(counts["cases"], counts["asof"], levels)
+    trends = payload.get("onset_trends") or {}
     units: list[tuple[str, str, dict]] = []
     if "national" in levels and trends.get("national", {}).get("svg"):
         units.append(("national", "National", trends["national"]))
@@ -298,10 +342,12 @@ def extract_page(html: str, levels: tuple[str, ...]) -> tuple[dt.date, list[tupl
 def tag_repeats(snapshots):
     """Yield each (sha, commit_date, snapshot, rows) with a flag saying its
     rows equal the previous snapshot's, so consecutive rebuilds of the
-    same data are kept once, under the first."""
+    same data are kept once, under the first.  Rows are compared as a sorted
+    list, so a build that reads the same data in another order (the
+    25 September 2026 switch from SVG charts to embedded counts) is a repeat."""
     previous = None
     for item in snapshots:
-        digest = hashlib.sha1(repr(item[3]).encode()).hexdigest()
+        digest = hashlib.sha1(repr(sorted(item[3])).encode()).hexdigest()
         yield item, digest == previous
         previous = digest
 
@@ -349,6 +395,16 @@ SELF_TEST_SVG = """
 """
 
 
+SELF_TEST_PAYLOAD_PAGE = """
+<script id="payload" type="application/json">{"trends": {"asof": "2026-10-02",
+"cases": {"national": {"start": "2026-09-30", "obs": [4, 0], "imp": [1, 2]},
+"provinces": {"Ituri": {"start": "2026-10-01", "obs": [3], "imp": [0]}},
+"health_zones": {"Bunia": {"start": "2026-10-01", "obs": [3], "imp": [0]}}}}}</script>
+"""
+FIXTURE = Path("test/fixtures/dashboard_trends_2026-10-05.html")
+FIXTURE_TOTALS = (6460, 1238)
+
+
 def self_test() -> int:
     """Parse a hand-written chart through the tick-label calibration and
     the bar reading, and check the repeat tagging; non-zero on failure."""
@@ -376,6 +432,29 @@ def self_test() -> int:
              ("s4", "d4", None, a)]
     flags = [repeat for _, repeat in tag_repeats(items)]
     assert flags == [False, True, False, False], flags
+    c = [("national", "National", "2026-08-02", 1, 0)]
+    items = [("s1", "d1", None, a + c), ("s2", "d2", None, c + a)]
+    flags = [repeat for _, repeat in tag_repeats(items)]
+    assert flags == [False, True], flags
+    # a page whose charts are drawn in the browser: read the embedded counts
+    snapshot, rows = extract_page(SELF_TEST_PAYLOAD_PAGE, LEVELS)
+    assert snapshot == dt.date(2026, 10, 2), snapshot
+    assert rows == [
+        ("national", "National", "2026-09-30", 4, 1),
+        ("national", "National", "2026-10-01", 0, 2),
+        ("province", "Ituri", "2026-10-01", 3, 0),
+        ("zone", "Bunia", "2026-10-01", 3, 0),
+    ], rows
+    # the saved trimmed copy of the 5 October 2026 build, when present
+    fixture = Path(__file__).resolve().parent.parent / FIXTURE
+    if fixture.exists():
+        snapshot, rows = extract_page(fixture.read_text(), LEVELS)
+        nat = [r for r in rows if r[0] == "national"]
+        assert snapshot == dt.date(2026, 10, 2), snapshot
+        assert (nat[0][2], nat[-1][2], len(nat)) == ("2026-04-20", "2026-10-01", 165), nat[-1]
+        assert (sum(r[3] for r in nat), sum(r[4] for r in nat)) == FIXTURE_TOTALS
+        for col in (3, 4):
+            assert sum(r[col] for r in rows if r[0] == "province") == sum(r[col] for r in nat)
     print("self-test passed")
     return 0
 

@@ -303,14 +303,13 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
-#            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \log R^{\text{trend}}_1 = \log R_0, \qquad
+# \log R^{\text{trend}}_k \sim \mathrm{Normal}\bigl(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}^2\bigr), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
 #
@@ -344,6 +343,8 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
+#
+# We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -1238,6 +1239,7 @@ cfr_prior_fig #hide
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
 # The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
+# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
@@ -1758,7 +1760,7 @@ cfr_prior_fig #hide
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
+# It is a weekly-knot non-centred random walk on the logit scale, on the same knots as the reproduction-number walk above and concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
@@ -1815,7 +1817,8 @@ cfr_prior_fig #hide
 # A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
+# One count spans a median of 3.2 pixels across the digitised figures (2.6 to 8.7), so one pixel is about 0.3 counts.
 #
 # The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #
