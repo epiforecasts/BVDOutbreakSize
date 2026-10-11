@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The case-fatality ratio prior is `Beta(2.64, 5.36)` (mean 0.33, 95% interval 0.07-0.67), wider than the previous `Beta(6.6, 13.4)` (same mean, 95% interval 0.15-0.54) (#1126).
+  Parameter recovery on a simulated outbreak with a true national ratio of 0.093 put the posterior's 99% interval entirely above it under the old prior; the two historical estimates behind the mean (a CDC summary at 0.33 and a reanalysis at 0.47) differ enough that a single outbreak's ratio is less tightly constrained than either source's own interval implies, so the wider prior lets it settle below that range when the data support it.
+  Fitted values change.
 - The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
   It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
   In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
