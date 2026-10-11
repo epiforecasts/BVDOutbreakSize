@@ -28,6 +28,11 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values change.
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
 - The health-zone distance-decay prior is `LogNormal(0, 1)`, so its 95th percentile of 5.2 covers the 90% interval of 1.7 to 3.7 a 63-zone fit estimated (results comment on #1030), which sat above the `LogNormal(0, 0.5)` prior's 2.3; fitted values change (#1077).
+- The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
+  It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
+  In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
+  On draws from the main-model posterior the largest eigenvalue of the diagonally scaled Hessian falls from 2.6–5.3e5 to 0.4–1.4e5, and fixed-step NUTS probes stay stable at a step of 0.0045 against 0.002 (figures in the pull request).
+  Fitted values change only by sampling noise.
 - The bed capacity walk samples the first week's growth directly, from the exact prior of the base growth plus the first step, so the first step is no longer a separate draw (#1102).
   The capacity only first moves over the first week, so the data saw the base growth and the first step only through their sum, and that pair formed one of the capacity ridges reported in #1084.
   With every other parameter of the treatment-only fit held at a posterior draw, the capacity block needs 1.8 to 2.6 times fewer gradients per effective draw of its slowest parameter, the step scale $\sigma_{\text{growth}}$, and has no divergences against 7 and 1 (two draws, figures in the pull request).
