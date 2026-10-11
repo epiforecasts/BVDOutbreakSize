@@ -76,6 +76,18 @@ Markdown.parse(read(joinpath(dir, "provinces_summary.md"), String))
 
 ```@raw html
 <figure class="bvd-figure">
+```
+
+![Health zones at the cut-off](../summary_assets/zone_rt_map.png)
+
+```@raw html
+<figcaption>Each zone's reproduction number at the cut-off, its confirmed cases over the coming week (90% predictive interval) and its confirmed cases to date.
+A reproduction number whose 90% interval spans one is washed towards white.</figcaption>
+</figure>
+```
+
+```@raw html
+<figure class="bvd-figure">
 <figcaption>Zones with the most confirmed cases over the past two weeks, with 90% credible and predictive intervals.</figcaption>
 ```
 

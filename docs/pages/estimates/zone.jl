@@ -468,13 +468,14 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
 )
 mkpath(dashboard_dir)
-## The weekly cases against R and the one-week zone forecast for the summary
+## The health-zone maps, the weekly cases against R and the one-week zone forecast for the summary
 ## dashboard, and the per-zone estimates the interactive map reads: one row per zone keyed as the
 ## geojson keys it, with the cases and deaths to date, the reproduction
 ## number and the chance it exceeds one, the one-week forecast and the
 ## share of the patch's infections, whether the zone's reproduction number
 ## is modelled separately (`walking`) and the data cut-off. A zone below the
 ## reporting floor carries no reproduction number.
+CairoMakie.save(joinpath(dashboard_dir, "zone_rt_map.png"), zone_map_fig)
 CairoMakie.save(
     joinpath(dashboard_dir, "cases_rt_zones.png"),
     plot_cases_rt(
