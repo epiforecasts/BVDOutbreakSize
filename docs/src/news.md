@@ -104,6 +104,20 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- A plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
+  Faint bars span the 90% credible interval of the reproduction number, and of the cases for the forecast, so an uncertain estimate draws a long bar rather than a precise dot.
+  A faded triangle marks the week before and, for provinces, a hollow point the forecast week ahead.
+  Fitted values do not change.
+- The summary page keeps to the headline numbers, tables and figures, with one line pointing to the methods.
+  It drops the abstract, which stays on the home page, and the method notes move to the methods page.
+  Each table and figure that needs one has a caption giving what it shows and its interval, in place of the prose under it (#1118).
+  The health-zone table ends with the number of zones that had a confirmed case over the past two weeks.
+- The summary page has a province map of modelled infections to date and a compact province table of infections to date, the reproduction number at the cut-off and the latest week's confirmed cases.
+- The summary page keeps the zone maps and the confirmed cases against the reproduction number by zone, and drops the zone forecast figure.
+- The cases against reproduction number plot nudges apart the labels of nearby points and is drawn at the page width on the summary page.
+- The health-zone estimates page drops the zone reproduction-number trajectories and the zone ranking figure.
+  The table gives each zone's reproduction number in the ranking order, and the in-sample zone page keeps the zone trajectories against the frozen fit.
+- The methods define the reproduction number in words and state the credible-interval convention and the sampler diagnostics.
 - Every fit uses the headline joint's sampler settings, and the methods page states them (#1100).
   These are two chains of 1000 draws after 1000 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
   The single-stream fits, the health-zone fits, the frozen re-fits and the scripts that fit outside the docs build take them from `joint_sampler_args()` in `docs/fits/registry.jl`, so a change there moves every fit.
