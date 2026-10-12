@@ -160,7 +160,7 @@ Edge differences measure reporting lag between the two line lists; they are expe
 | Script | What it does |
 | --- | --- |
 | `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. The national, province and health-zone forecasts are scored into their own tables, the zone ones under `data/zone/`. |
-| `archive_dashboard.jl` | Downloads the dashboard map's five tables from the newest results release of each data cut-off, for the last 28 cut-offs, into `logs/dashboard_archive/<as_of>/` with an `index.json` listing them newest first. The docs build stages them under `zone_map/archive/`. Releases that predate the tables are skipped. Needs the `gh` CLI. |
+| `archive_dashboard.jl` | Downloads the dashboard map's five tables from the newest results release of each data cut-off, for the last 14 cut-offs, into `logs/dashboard_archive/<as_of>/` with an `index.json` listing them newest first. The docs build stages them under `zone_map/archive/` on deploys from `main`. Releases that predate the tables are skipped. Needs the `gh` CLI. |
 
 It also runs under `--project=.`.
 CI uses `--project=docs` because that environment is already instantiated at that point in the build.

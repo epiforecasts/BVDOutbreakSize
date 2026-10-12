@@ -57,6 +57,12 @@ Runtime inputs, fetched by relative URL from this directory:
   health_zones.geojson copied from src/assets/health_zones.geojson by
                         docs/make.jl; the province shapes are its zones
                         dissolved by province
+  archive/index.json   optional, staged by docs/make.jl on deploys from
+                        main: [{"as_of": ISO date, "tag": release}, ...]
+                        newest first, each with the five CSVs above as of
+                        that cut-off under archive/<as_of>/. When present,
+                        the "Compare" menu draws one beside the current
+                        estimates in the detail column and tooltips
 
 Leaflet, and Turf for the province shapes, come from cdnjs with
 subresource-integrity hashes computed from the served files (the allowlist
@@ -189,6 +195,15 @@ Nothing else is fetched.
   .chart .beds { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
   .chart .bedfc { stroke: var(--ink-2); stroke-width: 2; }
   .chart .bedfcpt { fill: var(--ink-2); }
+  /* An earlier cut-off, drawn beside the current estimates. */
+  .chart .pb90 { fill: var(--ink-2); opacity: 0.12; }
+  .chart .pmed, .key .pmed {
+    fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 3;
+  }
+  .chart .pfc { stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 3 2; }
+  .chart .pfcpt { fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.5; }
+  #detail .key svg { vertical-align: middle; }
+  #detail .was { display: block; color: var(--ink-2); font-size: 11px; }
   #detail table.care { margin: 4px 0 6px; font-size: 12px; }
   #detail table.care th { font-weight: 600; color: var(--ink-2); }
   #detail table.care th[scope=row] { text-align: left; }
@@ -216,6 +231,8 @@ Nothing else is fetched.
       mask-image: linear-gradient(to right, #000 85%, transparent);
     }
     #more .more-body { left: auto; right: 0; }
+    /* The comparison menu joins the menus row rather than adding one. */
+    #vs { order: 1; }
     #stage { flex-direction: column; flex: none; }
     #mapwrap { flex: none; height: clamp(320px, 100vw, 560px); }
     #detail { width: auto; border-left: none; border-top: 1px solid var(--line); }
@@ -290,6 +307,8 @@ Nothing else is fetched.
 <header>
   <span class="title" id="title">Health-zone estimates</span>
   <span class="asof" id="asof"></span>
+  <select class="plain" id="vs" hidden
+    aria-label="Earlier data cut-off to compare with"></select>
   <span class="links">
     <a class="plain" id="csv" href="zone_estimates.csv" download>Download CSV</a>
     <a class="plain" id="methods" href="../methods#Health-zone-model"
@@ -879,8 +898,9 @@ Nothing else is fetched.
   // `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
   // `?summary=median|lower|upper`, `?filter=all|with|without`,
   // `?window=7|14|28`, `?r=all|modelled|province`, `?stream=cases|deaths`,
-  // `?care=<basis>:<figure>` (the treatment-centre menu's values) and
-  // `?table=1`. The treatment-centre metric opens the province layer.
+  // `?care=<basis>:<figure>` (the treatment-centre menu's values),
+  // `?table=1` and `?vs=<ISO date>` (an archived cut-off, applied once the
+  // archive index has loaded; see loadArchive). The treatment-centre metric opens the province layer.
   if (METRICS[params.get("metric")]) {
     metric = params.get("metric");
     document.querySelector("input[name=metric][value=" + metric + "]")
@@ -1047,26 +1067,29 @@ Nothing else is fetched.
   // selected.
   var selected = null, series = { zone: {}, province: {} }, national = null;
   function interval(lo, hi, f) { return f(lo) + " to " + f(hi); }
-  function keyNumbers(r, lvl) {
+  // `p` is the area's row at the compared cut-off, if any; each figure it
+  // carries is shown under the current one.
+  function keyNumbers(r, lvl, p) {
     var out = [
       ["Reproduction number", fmt2(r.R_T_median) + " (" +
-        interval(r.R_T_lower, r.R_T_upper, fmt2) + ")"],
-      ["Chance R > 1", fmtPct(r.p_rt_above_one)]
+        interval(r.R_T_lower, r.R_T_upper, fmt2) + ")", was(p, "R_T_median", fmt2)],
+      ["Chance R > 1", fmtPct(r.p_rt_above_one), was(p, "p_rt_above_one", fmtPct)]
     ];
     // A forecast row for each stream the level carries.
     Object.keys(STREAMS).forEach(function (k) {
       var f = STREAMS[k].fc;
       if (!num(r[f + "_median"])) { return; }
       out.push([cap(STREAMS[k].name) + " next 7 days", fmtN(r[f + "_median"]) +
-        " (" + interval(r[f + "_lower"], r[f + "_upper"], fmtN) + ")"]);
+        " (" + interval(r[f + "_lower"], r[f + "_upper"], fmtN) + ")",
+        was(p, f + "_median", fmtN)]);
     });
     out.push(
-      ["Confirmed cases to date", fmt0(r.cases)],
-      ["Confirmed deaths to date", fmt0(r.deaths)]
+      ["Confirmed cases to date", fmt0(r.cases), was(p, "cases", fmt0)],
+      ["Confirmed deaths to date", fmt0(r.deaths), was(p, "deaths", fmt0)]
     );
     if (num(r.cfr_median)) {
       out.push(["Modelled case fatality ratio", fmtPct(r.cfr_median) + " (" +
-        interval(r.cfr_lower, r.cfr_upper, fmtPct) + ")"]);
+        interval(r.cfr_lower, r.cfr_upper, fmtPct) + ")", was(p, "cfr_median", fmtPct)]);
     }
     if (lvl === "zone") {
       out.push(
@@ -1078,7 +1101,8 @@ Nothing else is fetched.
           return fmtPct(r["p_ge_" + k]);
         }).join(", ")],
         ["Share of patch", fmtPct(r.share_median) + " (" +
-          interval(r.share_lower, r.share_upper, fmtPct) + ")"],
+          interval(r.share_lower, r.share_upper, fmtPct) + ")",
+          was(p, "share_median", fmtPct)],
         ["R modelled separately", levelOnly(r) ? "no" : "yes"]
       );
     }
@@ -1088,7 +1112,8 @@ Nothing else is fetched.
           interval(r.ascertainment_lower, r.ascertainment_upper, fmt2) + ")"]);
     }
     return "<dl>" + out.map(function (x) {
-      return "<dt>" + esc(x[0]) + "</dt><dd>" + esc(x[1]) + "</dd>";
+      return "<dt>" + esc(x[0]) + "</dt><dd>" + esc(x[1]) +
+        (x[2] ? "<span class=\"was\">" + esc(x[2]) + "</span>" : "") + "</dd>";
     }).join("") + "</dl>";
   }
   function svgEl(w, h, label, body) {
@@ -1101,28 +1126,39 @@ Nothing else is fetched.
       { day: "numeric", month: "short", timeZone: "UTC" });
   }
   // Daily reproduction number: 90% and 50% bands, the median, and one.
-  function rtChart(pts) {
+  // `prev`, the compared cut-off's series, adds its 90% band and median
+  // dashed.
+  function rtChart(pts, prev) {
     if (!pts || !pts.length) {
       return "<p class=\"cap\">No reproduction number over time.</p>";
     }
+    prev = (prev || []).filter(function (p) { return num(p.median); });
     var W = 340, H = 150, L0 = 30, R0 = 6, T0 = 6, B0 = 20;
-    var x0 = dayOf(pts[0].date), x1 = dayOf(pts[pts.length - 1].date);
+    var days = pts.concat(prev).map(function (p) { return dayOf(p.date); });
+    var x0 = Math.min.apply(null, days), x1 = Math.max.apply(null, days);
     var top = Math.max(2, Math.ceil(Math.min(5, Math.max.apply(null,
-      pts.map(function (p) { return p.upper_90; }))) * 2) / 2);
+      pts.concat(prev).map(function (p) { return p.upper_90; }).filter(num))) * 2) / 2);
     function X(d) { return L0 + (W - L0 - R0) * (x1 > x0 ? (d - x0) / (x1 - x0) : 0.5); }
     function Y(v) {
       return T0 + (H - T0 - B0) * (1 - Math.max(0, Math.min(v, top)) / top);
     }
-    function band(lo, hi, cls) {
-      var up = pts.map(function (p) { return X(dayOf(p.date)).toFixed(1) + "," + Y(p[hi]).toFixed(1); });
-      var dn = pts.slice().reverse().map(function (p) {
+    function band(ps, lo, hi, cls) {
+      ps = ps.filter(function (p) { return num(p[lo]) && num(p[hi]); });
+      if (!ps.length) { return ""; }
+      var up = ps.map(function (p) { return X(dayOf(p.date)).toFixed(1) + "," + Y(p[hi]).toFixed(1); });
+      var dn = ps.slice().reverse().map(function (p) {
         return X(dayOf(p.date)).toFixed(1) + "," + Y(p[lo]).toFixed(1);
       });
       return "<polygon class=\"" + cls + "\" points=\"" + up.concat(dn).join(" ") + "\"/>";
     }
-    var med = pts.map(function (p) {
-      return X(dayOf(p.date)).toFixed(1) + "," + Y(p.median).toFixed(1);
-    }).join(" ");
+    function line(ps) {
+      return ps.map(function (p) {
+        return X(dayOf(p.date)).toFixed(1) + "," + Y(p.median).toFixed(1);
+      }).join(" ");
+    }
+    var med = line(pts);
+    var then = prev.length ? band(prev, "lower_90", "upper_90", "pb90") +
+      "<polyline class=\"pmed\" points=\"" + line(prev) + "\"/>" : "";
     var ticks = "";
     for (var v = 0; v <= top; v += top > 3 ? 1 : 0.5) {
       ticks += "<text x=\"" + (L0 - 4) + "\" y=\"" + (Y(v) + 4) +
@@ -1137,14 +1173,16 @@ Nothing else is fetched.
         shortDate(x1) + ", " + fmt2(last.median) + " at the end",
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + L0 + "\" y1=\"" + T0 +
         "\" y2=\"" + (H - B0) + "\"/>" +
-      band("lower_90", "upper_90", "b90") + band("lower_50", "upper_50", "b50") +
-      "<polyline class=\"med\" points=\"" + med + "\"/>" +
+      band(pts, "lower_90", "upper_90", "b90") + band(pts, "lower_50", "upper_50", "b50") +
+      then + "<polyline class=\"med\" points=\"" + med + "\"/>" +
       "<line class=\"ref\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
-        Y(1) + "\" y2=\"" + Y(1) + "\"/>" + ticks + xt);
+        Y(1) + "\" y2=\"" + Y(1) + "\"/>" + ticks + xt) +
+      (then ? pastKey("median and 90% interval") : "");
   }
   // The stream's weekly counts as bars, then next week's forecast as a
-  // point with its 90% interval.
-  function countChart(weeks, r) {
+  // point with its 90% interval. `p`, the area's row at the compared
+  // cut-off, adds that cut-off's forecast, dashed, over the week it covered.
+  function countChart(weeks, r, p) {
     var f = S().fc;
     var fc = r ? { median: r[f + "_median"], lower: r[f + "_lower"],
                    upper: r[f + "_upper"] } : {};
@@ -1155,9 +1193,15 @@ Nothing else is fetched.
     weeks = weeks || [];
     var W = 340, H = 150, L0 = 30, R0 = 6, T0 = 6, B0 = 20;
     var nb = weeks.length + (hasFc ? 1 : 0);
+    // The compared forecast's slot: weeks from the first bar's end to the
+    // end of the week after that cut-off.
+    var pfc = p && weeks.length && num(p[f + "_median"]) ?
+      { median: p[f + "_median"], lower: p[f + "_lower"], upper: p[f + "_upper"],
+        slot: (dayOf(pastDate) + 7 - dayOf(weeks[0].date)) / 7 } : null;
+    if (pfc && !(pfc.slot >= 0 && pfc.slot <= nb - 1)) { pfc = null; }
     var top = Math.max(1, Math.max.apply(null, weeks.map(function (w) {
       return w.count;
-    }).concat(hasFc ? [fc.upper] : [0])));
+    }).concat(hasFc ? [fc.upper] : [0], pfc ? [pfc.upper] : []).filter(num)));
     var step = Math.pow(10, Math.floor(Math.log10(top * 1.05)) - 1);
     top = Math.ceil(top * 1.05 / step) * step;
     var bw = (W - L0 - R0) / nb;
@@ -1180,6 +1224,15 @@ Nothing else is fetched.
         ")") + "</title></circle>" +
         "<text x=\"" + cx + "\" y=\"" + (H - 4) + "\" text-anchor=\"middle\">next</text>";
     }
+    if (pfc) {
+      var px = L0 + (pfc.slot + 0.5) * bw;
+      fcEl += (num(pfc.lower) && num(pfc.upper) ? "<line class=\"pfc\" x1=\"" + px +
+        "\" x2=\"" + px + "\" y1=\"" + Y(pfc.lower) + "\" y2=\"" + Y(pfc.upper) +
+        "\"/>" : "") + "<circle class=\"pfcpt\" cx=\"" + px + "\" cy=\"" +
+        Y(pfc.median) + "\" r=\"3.5\"><title>" + esc("Forecast as of " + vsLabel() +
+        ": " + fmtN(pfc.median) + (num(pfc.lower) ? " (90% interval " +
+        interval(pfc.lower, pfc.upper, fmtN) + ")" : "")) + "</title></circle>";
+    }
     var xt = weeks.length ?
       "<text x=\"" + L0 + "\" y=\"" + (H - 4) + "\" text-anchor=\"start\">" +
         shortDate(dayOf(weeks[0].date)) + "</text>" : "";
@@ -1190,7 +1243,8 @@ Nothing else is fetched.
     return svgEl(W, H, cap(S().name) + " per week" +
         (hasFc ? " and next week's forecast" : ""),
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
-        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fcEl + yt + xt);
+        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fcEl + yt + xt) +
+      (pfc ? pastKey("forecast for the week after") : "");
   }
   // Reported patients in isolation and beds by day, then the forecast 7
   // days on as points with their 90% intervals.
@@ -1294,6 +1348,7 @@ Nothing else is fetched.
       return;
     }
     ts = ts || {};
+    var pr = pastRow(lvl, r), pts = pastSeries(lvl, r);
     var clear = selected ? " <button class=\"plain\" id=\"clear\">Show national</button>" : "";
     var fcWord = num(r[S().fc + "_median"]) ?
       "By week, then next week's forecast with its 90% interval." :
@@ -1301,12 +1356,12 @@ Nothing else is fetched.
     var careKey = lvl === "national" ? "National" : r.province;
     d.innerHTML = "<h2>" + esc(name) + clear + "</h2><p class=\"sub\">" + esc(sub) +
       "</p>" + (metric === "care" && lvl !== "zone" ?
-        careDetail(r, series.province[careKey] || {}) : "") + keyNumbers(r, lvl) +
+        careDetail(r, series.province[careKey] || {}) : "") + keyNumbers(r, lvl, pr) +
       "<h3>Reproduction number</h3><p class=\"cap\">Median with 50% and 90% " +
-      "intervals.</p>" + rtChart(ts.rt) +
+      "intervals.</p>" + rtChart(ts.rt, pts.rt) +
       "<h3>" + esc(cap(S().name)) + " per week</h3><p class=\"cap\">" +
       esc(fcWord) + "</p>" +
-      countChart(ts[stream], r);
+      countChart(ts[stream], r, pr);
     var b = document.getElementById("clear");
     if (b) { b.addEventListener("click", function () { select(null); fitAll(); }); }
   }
@@ -1620,7 +1675,7 @@ Nothing else is fetched.
       onEachFeature: function (f, l) {
         var k = keyAt(lvl, f);
         if (k) { (shapes[k] = shapes[k] || []).push(l); }
-        l.bindTooltip(function () { return tipHTML(f); },
+        l.bindTooltip(function () { return tipHTML(f) + pastTip(f); },
           { sticky: true, className: "zone-tip", opacity: 1 });
         l.on("click", function () { select(featureKey(f)); });
         l.on({
@@ -1744,22 +1799,94 @@ Nothing else is fetched.
   function fetchRows(url) {
     return fetchText(url).then(parseCSV).catch(function () { return []; });
   }
+  // The five tables of one cut-off under `prefix`: the per-layer rows keyed
+  // by zone or province, the national row and the time series by area. A
+  // missing table is empty.
+  function loadTables(prefix) {
+    return Promise.all([
+      "zone_estimates", "province_estimates", "national_estimates",
+      "zone_timeseries", "province_timeseries"
+    ].map(function (n) { return fetchRows(prefix + n + ".csv"); })).then(function (res) {
+      var t = { zone: { rows: res[0], byKey: {} }, province: { rows: res[1], byKey: {} },
+                national: res[2][0] || null,
+                series: { zone: groupSeries(res[3]), province: groupSeries(res[4]) } };
+      ["zone", "province"].forEach(function (l) {
+        t[l].rows.forEach(function (r) { t[l].byKey[r[l]] = r; });
+      });
+      return t;
+    });
+  }
+
+  // An earlier cut-off from the archive, shown beside the current
+  // estimates: its figures under the current ones in the detail column,
+  // its series dashed in the charts and its value in the tooltips. The map
+  // keeps the current colouring. Without an archive the menu stays hidden.
+  var vs = document.getElementById("vs"), past = null, pastDate = null;
+  function vsLabel() { return shortDate(dayOf(pastDate)); }
+  function was(p, key, f) {
+    return p && num(p[key]) ? "was " + f(p[key]) + " on " + vsLabel() : "";
+  }
+  function pastRow(lvl, r) {
+    if (!past) { return null; }
+    if (lvl === "national") { return past.national; }
+    return past[lvl].byKey[r[lvl]] || null;
+  }
+  function pastSeries(lvl, r) {
+    if (!past) { return {}; }
+    if (lvl === "zone") { return past.series.zone[r.zone] || {}; }
+    return past.series.province[lvl === "national" ? "National" : r.patch] || {};
+  }
+  function pastKey(what) {
+    return "<p class=\"cap key\"><svg width=\"20\" height=\"8\" aria-hidden=\"true\">" +
+      "<line class=\"pmed\" x1=\"1\" x2=\"19\" y1=\"4\" y2=\"4\"/></svg> As of " +
+      esc(vsLabel()) + ", " + esc(what) + ".</p>";
+  }
+  function pastTip(f) {
+    var p = past && past[level].byKey[featureKey(f)], m = METRICS[metric];
+    var v = p ? m.value(p) : null;
+    return num(v) ? "<div class=\"tip-s\">" + esc("Was " + m.fmt(v) + " on " +
+      vsLabel()) + ".</div>" : "";
+  }
+  function compareWith(d) {
+    if (!d) { past = null; pastDate = null; renderDetail(); return; }
+    loadTables("archive/" + d + "/").then(function (t) {
+      if (vs.value !== d) { return; }
+      past = t; pastDate = d; renderDetail();
+    });
+  }
+  // The archive's cut-offs, newest first, less the current one.
+  function loadArchive() {
+    var now = (data.zone.rows[0] || data.province.rows[0] || national || {}).as_of;
+    fetchText("archive/index.json").then(JSON.parse).then(function (list) {
+      var dates = (Array.isArray(list) ? list : []).map(function (v) {
+        return v && v.as_of;
+      }).filter(function (d) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(d) && d !== now;
+      });
+      if (!dates.length) { return; }
+      vs.innerHTML = "<option value=\"\">Compare</option>" +
+        dates.map(function (d) {
+          return "<option value=\"" + d + "\">vs " + shortDate(dayOf(d)) + "</option>";
+        }).join("");
+      vs.hidden = false;
+      if (dates.indexOf(params.get("vs")) !== -1) {
+        vs.value = params.get("vs");
+        compareWith(vs.value);
+      }
+    }).catch(function () {});
+  }
+  vs.addEventListener("change", function () { compareWith(vs.value); });
+
   Promise.all([
     fetchText("health_zones.geojson").then(JSON.parse),
-    fetchRows("zone_estimates.csv"),
-    fetchRows("province_estimates.csv"),
-    fetchRows("national_estimates.csv"),
-    fetchRows("zone_timeseries.csv"),
-    fetchRows("province_timeseries.csv")
+    loadTables("")
   ]).then(function (res) {
-    [["zone", res[1]], ["province", res[2]]].forEach(function (x) {
-      data[x[0]].rows = x[1];
-      x[1].forEach(function (r) { data[x[0]].byKey[r[x[0]]] = r; });
-    });
-    national = res[3][0] || null;
-    series.zone = groupSeries(res[4]);
-    series.province = groupSeries(res[5]);
+    data.zone = res[1].zone;
+    data.province = res[1].province;
+    national = res[1].national;
+    series = res[1].series;
     draw(res[0]);
+    loadArchive();
   }).catch(function (e) {
     say("The map could not be drawn: " + e.message);
   });
