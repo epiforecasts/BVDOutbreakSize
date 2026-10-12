@@ -241,7 +241,9 @@ Nothing else is fetched.
     z-index: 600; padding: 8px 12px;
   }
   #table[hidden] { display: none; }
-  .zone-only[hidden], #care[hidden] { display: none; }
+  .zone-only[hidden], #care[hidden], #summary[hidden], #more[hidden] {
+    display: none;
+  }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -345,7 +347,7 @@ Nothing else is fetched.
     <div class="more-body">
       <select class="plain" id="summary"
         aria-label="Posterior summary shown for the reproduction number and forecast metrics"
-        title="Applies only to the reproduction number and forecast metrics; other metrics ignore it">
+        title="Shown for the metrics that carry a 90% interval">
         <option value="median" selected>Median</option>
         <option value="lower">Lower 90%</option>
         <option value="upper">Upper 90%</option>
@@ -832,7 +834,7 @@ Nothing else is fetched.
   // The table's sort column (null sorts by the metric) and direction.
   var sortKey = null, sortDesc = true;
   // The posterior-summary selector only has meaning for the metrics that
-  // carry an interval; other metrics ignore it.
+  // carry an interval, so it is hidden for the others.
   function summaryApplies() {
     return metric === "R_T" || metric === "forecast" || metric === "cfr" ||
       metric === "care" && care.basis !== "reported";
@@ -847,17 +849,20 @@ Nothing else is fetched.
     if (summary === "upper") { return ", upper 90%"; }
     return "";
   }
-  function updateSummaryDisabled() {
-    document.getElementById("summary").disabled = !summaryApplies();
+  function updateMetricMenus() {
+    document.getElementById("summary").hidden = !summaryApplies();
     document.getElementById("care").hidden = metric !== "care";
     // K applies only to the chance-of-cases metric, which is zone-only.
     document.getElementById("threshold").hidden = metric !== "p_ge";
     updateMoreLabel();
   }
   // The options disclosure counts the settings moved off their default, so
-  // a filter set by a deep link is not hidden from view.
+  // a filter set by a deep link is not hidden from view. With nothing to
+  // hold (a province metric without an interval) it is hidden.
   var more = document.getElementById("more");
   function updateMoreLabel() {
+    more.hidden = level === "province" && !summaryApplies();
+    if (more.hidden) { more.open = false; }
     var n = [summary !== "median" && summaryApplies(),
              level === "zone" && filterMode !== "all",
              level === "zone" && filterMode !== "all" && windowDays !== "14",
@@ -901,7 +906,7 @@ Nothing else is fetched.
     summary = params.get("summary");
     document.getElementById("summary").value = summary;
   }
-  updateSummaryDisabled();
+  updateMetricMenus();
   if (["all", "with", "without"].indexOf(params.get("filter")) !== -1) {
     filterMode = params.get("filter");
     document.getElementById("filter").value = filterMode;
@@ -1529,14 +1534,14 @@ Nothing else is fetched.
   }
   document.querySelectorAll("input[name=metric]").forEach(function (el) {
     el.addEventListener("change", function () {
-      metric = el.value; updateSummaryDisabled(); revealMetric();
+      metric = el.value; updateMetricMenus(); revealMetric();
       // Treatment-centre figures exist by province only.
       if (metric === "care" && level === "zone") { setLevel("province"); return; }
       recolour(); renderDetail();
     });
   });
   document.getElementById("care").addEventListener("change", function () {
-    careSet(this.value); updateSummaryDisabled(); recolour(); renderDetail();
+    careSet(this.value); updateMetricMenus(); recolour(); renderDetail();
   });
   document.getElementById("stream").addEventListener("change", function () {
     stream = this.value; recolour(); renderDetail();
@@ -1654,7 +1659,7 @@ Nothing else is fetched.
         level === "zone" && metric === "care") {
       metric = "R_T";
       document.querySelector("input[name=metric][value=R_T]").checked = true;
-      updateSummaryDisabled();
+      updateMetricMenus();
     }
     var zone = level === "zone";
     document.getElementById("title").textContent = zone ?
