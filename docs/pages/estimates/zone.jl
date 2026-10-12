@@ -1,10 +1,7 @@
 # # Health-zone estimates
 #
-# Each patch of the headline joint fit split across its health zones: the
-# reproduction number, the share of the patch, the one-week forecast and the
-# probability of at least a few cases, zone by zone.
-# The [health-zone model](@ref "Health-zone model") on the methods page gives the maths.
-# This page carries its results and the checks of the fit, and the interactive map is on the [dashboard](@ref "Dashboard").
+# This page splits each patch of the joint fit across its health zones, giving each zone's reproduction number, share of the patch, one-week forecast and probability of at least a few cases.
+# The [health-zone model](@ref "Health-zone model") on the methods page gives the maths, and the interactive map is on the [dashboard](@ref "Dashboard").
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
 #md # ```@raw html
@@ -38,13 +35,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Estimates by zone
 #
-# The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the bounds of the 90% interval on the forecast confirmed cases over the coming week, and the confirmed cases to date, zone by zone.
-# The forecast is mapped as its two bounds rather than a single number, so a zone's colour reads as a range.
-# On the reproduction-number map a zone whose 90% interval straddles one is washed towards white.
-# Zones with no confirmed case, or too few infections for a reproduction number, are grey.
-# The four maps share the zone boundaries.
-# A zone's forecast can be read against its reproduction number and its cases to date.
-# The interactive map on the [dashboard](@ref "Dashboard") adds the probability of at least $K$ cases at a chosen $K$ and a filter for zones with or without a case over the past one, two or four weeks.
+# The interactive map on the [dashboard](@ref "Dashboard") adds the probability of at least $K$ cases at a chosen $K$ and a filter by recent cases.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -117,13 +108,18 @@ zone_map_fig = plot_zone_map_panels(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_map_fig #hide
 
-# The panels below trace the reproduction number of the twelve zones with the most infections over the past week as coloured bands, each against its whole patch's implied reproduction number as a dark line with a grey band.
-# Where a zone's bands depart from the patch line, the gap is the zone's fitted deviation from its patch.
-# The patch line averages all the patch's zones weighted by their recent infections, so the zones shown tend to move it most.
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number at the cut-off, the bounds of the 90% interval on next week's confirmed cases, and the confirmed cases to date, by health zone.
+#md # A zone whose reproduction number interval straddles one is washed towards white, and zones with no confirmed case or too few infections for a reproduction number are grey.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
@@ -166,12 +162,17 @@ zone_rt_fig = plot_rt_zones(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_rt_fig #hide
 
-# The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
-# A zone whose reproduction number is from its province, not modelled separately, is drawn hollow in grey.
+#md # ```@raw html
+#md # <figcaption>
+#md # The gap between a zone's bands and its patch line is the zone's fitted deviation from its patch.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Zone ranking</summary>
@@ -195,16 +196,29 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_ranking_fig #hide
 
-# The table gives the twenty highest-ranked zones: the confirmed cases to date, the zone's share of its patch's infections at the cut-off in percent, its reproduction number, the probability that it exceeds one, its log-transmission deviation at the cut-off and whether its reproduction number is modelled separately.
-# A zone whose reproduction number is not modelled separately takes it from its province.
-# The share, the reproduction number and the deviation are each a median with a 90% interval.
-# Every zone is listed in the fold below it.
+#md # ```@raw html
+#md # <figcaption>
+#md # Health zones ordered by the posterior probability that their reproduction number exceeds one.
+#md # </figcaption>
+#md # </figure>
+#md # <figure class="bvd-figure">
+#md # ```
 
 MarkdownTable(first(zone_overview_display, 20)) #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The twenty highest-ranked zones, with every zone in the fold below.
+#md # The share is of the patch's infections at the cut-off, in percent, and the share, reproduction number and deviation are medians with 90% intervals.
+#md # A zone whose reproduction number is not modelled separately takes it from its province.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>All health zones</summary>
@@ -223,7 +237,7 @@ MarkdownTable(zone_overview_display) #hide
 # ## [Data currency](@id zone-data-currency)
 #
 # The zone blocks are the per-zone confirmed-case and confirmed-death tables of the situation reports.
-# Each is read here against the cut-off, so a block that stops being picked up shows as a date before it rather than as a flat series.
+# A block that stops being picked up shows its last date before the cut-off rather than a flat series.
 
 #md # ```@raw html
 #md # <details><summary>Zone block currency</summary>
@@ -261,12 +275,6 @@ end;
 zone_currency #hide
 
 # ## Health-zone fit diagnostics
-#
-# The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity but the zone reproduction number, and the divergences.
-# Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
-# The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
-# The rows whose reproduction number is modelled separately are the ones to read.
-
 #md # ```@raw html
 #md # <details><summary>Zone fit diagnostics</summary>
 #md # ```
@@ -306,23 +314,32 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(zone_sampler_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Sampler diagnostics of the two zone fits.
+#md # The worst R-hat and smallest effective sample sizes cover every stored quantity except the zone reproduction number.
+#md # Per chain, the table also gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Per-zone R-hat and effective sample sizes</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(zone_diagnostics) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation.
+#md # The rows whose reproduction number is modelled separately are the ones to read.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
-
-# The figure below sets the reproduction number implied by the zone stage's own patch trajectories against the one implied by the headline joint fit, nationally and for each patch.
-# Both are computed from infections with the joint posterior mean generation interval.
-# Agreement says the melding stage has kept the joint's patch trajectories rather than moved them to fit the zone data.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number from the zone stage and the joint fit</summary>
@@ -364,17 +381,20 @@ zone_meld_rt_fig = plot_rt_zones(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_meld_rt_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number implied by the zone stage's patch trajectories against that implied by the joint fit, nationally and for each patch, both using the joint posterior mean generation interval.
+#md # Agreement means the melding has kept the joint's patch trajectories rather than moved them to fit the zone data.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Health-zone parameters against their priors
-#
-# The table sets the posterior of each zone hyperparameter against its prior, with the ratio of their standard deviations.
-# A ratio near one says the zone data add little to the prior.
-# A ratio above one says the posterior is wider than the prior, which happens when the data move a parameter into the prior's wider tail.
-# The drift scale is one per patch.
-# The pair plot overlays the prior on the posterior of the scalar hyperparameters.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the zone model's prior</summary>
@@ -454,17 +474,28 @@ zone_hyper_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(zone_prior_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Posterior against prior for each zone hyperparameter, with the ratio of their standard deviations, and the drift scale given per patch.
+#md # A ratio near one means the zone data add little to the prior, and a ratio above one means the data move the parameter into the prior's wider tail.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Zone hyperparameter pair plot (prior overlaid)</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_hyper_pair_fig #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the scalar zone hyperparameters, with the prior overlaid.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -475,7 +506,7 @@ zone_hyper_pair_fig #hide
 # ## Saving zone assets
 #
 # The [dashboard](@ref "Dashboard") map reads the per-zone estimates and time series written here, and the summary dashboard's health-zone table is built from them.
-# The zone forecast figure is written by the [health-zone forecasts](@ref "Health-zone forecasts") page and the frozen zone forecast and its scores by the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") page.
+# The zone forecast assets are written by the [health-zone forecasts](@ref "Health-zone forecasts") and [health-zone forecast evaluation](@ref "Health-zone forecast evaluation") pages.
 
 #md # ```@raw html
 #md # <details><summary>Write the zone dashboard and release assets</summary>
@@ -590,6 +621,4 @@ CSV.write(joinpath(output_dir, "zone_estimates.csv"), zone_estimates)
 
 # ---
 #
-# The full analysis code, data and model definitions are in the
-# [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize)
-# repository.
+# The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
