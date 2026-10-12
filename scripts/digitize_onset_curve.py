@@ -204,6 +204,11 @@ CONFIG = {
     "143": ("2026-10-04", "2026-10-05"),
     "144": ("2026-10-05", "2026-10-05"),
     "145": ("2026-10-06", "2026-10-05"),
+    "146": ("2026-10-07", "2026-10-05"),
+    # "147" is left out, and "148", which reprints its figure byte for
+    # byte, with it. Inside the incomplete-data band its 6 October reads 11,
+    # the edge of the 13 bar before it, where the bar stands at about 4.
+    "149": ("2026-10-10", "2026-10-05"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -267,6 +272,8 @@ Y_AXIS_STEP = {
     "143": 25,
     "144": 25,
     "145": 25,
+    "146": 25,
+    "149": 25,
 }
 
 

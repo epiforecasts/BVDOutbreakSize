@@ -219,6 +219,11 @@ const CONFIG = [
     ("143", Date(2026, 10, 4), Date(2026, 10, 5)),
     ("144", Date(2026, 10, 5), Date(2026, 10, 5)),
     ("145", Date(2026, 10, 6), Date(2026, 10, 5)),
+    ("146", Date(2026, 10, 7), Date(2026, 10, 5)),
+    # "147" is left out, and "148", which reprints its figure byte for
+    # byte, with it. Inside the incomplete-data band its 6 October reads 11,
+    # the edge of the 13 bar before it, where the bar stands at about 4.
+    ("149", Date(2026, 10, 10), Date(2026, 10, 5)),
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -285,7 +290,9 @@ const Y_AXIS_STEP = Dict(
     "141" => 25,
     "143" => 25,
     "144" => 25,
-    "145" => 25
+    "145" => 25,
+    "146" => 25,
+    "149" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------

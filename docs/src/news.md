@@ -28,6 +28,12 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values change.
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
 - The health-zone distance-decay prior is `LogNormal(0, 1)`, so its 95th percentile of 5.2 covers the 90% interval of 1.7 to 3.7 a 63-zone fit estimated (results comment on #1030), which sat above the `LogNormal(0, 0.5)` prior's 2.3; fitted values change (#1077).
+- The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
+  The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
+  On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
+  Both scales are among the slowest-mixing parameters of recent CI fits.
+  The two submodels lose their `offset_prior` keyword, which the centred form has no use for.
+  This is an exact reparameterisation with the same prior and likelihood, so fitted values change only by sampling noise.
 - The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
   It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
   In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
@@ -72,9 +78,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 145, 6 October.
+- The model cut-off advances to SitRep 149, 10 October (#1128).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
   SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
+  SitReps 147 and 149 print no Ituri alerts, so their suspect totals are partial and the suspected stream leaves out 8 and 10 October.
+  The care scanner reads the care section where SitRep 146 renumbers it under PCI/EDS, and the laboratory scanner reads two misspellings of `échantillons` and a bullet with no sample noun.
+  The onset curve adds SitReps 146 and 149; SitRep 147 stays out, and 148 with it as a reprint, because the reader takes the edge of a taller neighbour for its faded 6 October bar.
+  Fitted values change with the new data.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
   The reader's weekly tick chain now steps over split and missing ticks, which leaves every earlier block unchanged.
@@ -94,11 +104,26 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 145 (6 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 149 (10 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+  Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
 ### Report
 
+- A plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
+  Faint bars span the 90% credible interval of the reproduction number, and of the cases for the forecast, so an uncertain estimate draws a long bar rather than a precise dot.
+  A faded triangle marks the week before and, for provinces, a hollow point the forecast week ahead.
+  Fitted values do not change.
+- The summary page keeps to the headline numbers, tables and figures, with one line pointing to the methods.
+  It drops the abstract, which stays on the home page, and the method notes move to the methods page.
+  Each table and figure that needs one has a caption giving what it shows and its interval, in place of the prose under it (#1118).
+  The health-zone table ends with the number of zones that had a confirmed case over the past two weeks.
+- The summary page has a province map of modelled infections to date and a compact province table of infections to date, the reproduction number at the cut-off and the latest week's confirmed cases.
+- The summary page keeps the zone maps and the confirmed cases against the reproduction number by zone, and drops the zone forecast figure.
+- The cases against reproduction number plot nudges apart the labels of nearby points and is drawn at the page width on the summary page.
+- The health-zone estimates page drops the zone reproduction-number trajectories and the zone ranking figure.
+  The table gives each zone's reproduction number in the ranking order, and the in-sample zone page keeps the zone trajectories against the frozen fit.
+- The methods define the reproduction number in words and state the credible-interval convention and the sampler diagnostics.
 - Every fit uses the headline joint's sampler settings, and the methods page states them (#1100).
   These are two chains of 1000 draws after 1000 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
   The single-stream fits, the health-zone fits, the frozen re-fits and the scripts that fit outside the docs build take them from `joint_sampler_args()` in `docs/fits/registry.jl`, so a change there moves every fit.
@@ -145,6 +170,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The Province estimates page gains a table of the joint fit's province-level parameters (#1051).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
   Fitted values do not change (resolves #1055).
+- The report pages describe each figure and table in a caption beneath it rather than in the prose above it, and drop prose that repeats the methods, the limitations or another page (#1127).
+  Fitted values do not change.
 
 ### Infrastructure
 
