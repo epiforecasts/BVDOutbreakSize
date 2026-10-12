@@ -303,6 +303,7 @@ MarkdownTable(vintage_table) #hide
 #
 # #### Reproduction number
 #
+# The reproduction number is the average number of further infections caused by each infection, and a value above one means infections are growing.
 # Each patch has its own daily reproduction number.
 # It is a shared trend $R^{\text{trend}}_t$ plus a patch deviation $\delta_{p,t}$, with the deviations summing to zero across patches on every day:
 #
@@ -2346,6 +2347,13 @@ _sampler_same = "Every fit uses the same sampler settings.\n"; #hide
 _sampler_each = "Each runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n"; #hide
 _sampler_both = "Both halves of the spatial comparison therefore differ only in the spatial structure and not in the sampler."; #hide
 Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
+
+# R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
+# The bulk effective sample size is the number of independent draws the chains are worth, and we report it for the parameter where it is lowest.
+# A divergent transition is a step the sampler could not take accurately.
+#
+# We summarise each quantity by its equal-tailed 30%, 60% and 90% credible intervals, or by the 90% interval alone in the comparison tables.
+# Shares, ranks and probabilities are computed draw by draw, so they carry the correlation between provinces.
 
 # ### No-onward-transmission counterfactual
 #
