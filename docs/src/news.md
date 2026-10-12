@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The case-fatality ratio prior is `Beta(2.64, 5.36)` (mean 0.33, 95% interval 0.07-0.67), wider than the previous `Beta(6.6, 13.4)` (same mean, 95% interval 0.15-0.54) (#1126).
+  Parameter recovery on a simulated outbreak with a true national ratio of 0.093 put the posterior's 99% interval entirely above it under the old prior; the two historical estimates behind the mean (a CDC summary at 0.33 and a reanalysis at 0.47) differ enough that a single outbreak's ratio is less tightly constrained than either source's own interval implies, so the wider prior lets it settle below that range when the data support it.
+  Fitted values change.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
