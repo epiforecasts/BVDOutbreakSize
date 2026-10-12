@@ -92,7 +92,10 @@ the reported posterior uncertainty. Returns
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
     θ ~ theta_prior
-    dist = Gamma(α, θ)
+    ## Unchecked, so a proposal that underflows `α` or `θ` to zero (as the
+    ## step-size search at the start of warm-up can) reaches
+    ## `discretise_censored`'s own domain guard instead of throwing here.
+    dist = Gamma(α, θ; check_args = false)
     return (;
         pmf = discretise_censored(dist, nmax), dist,
         mean = α * θ, sd = sqrt(α) * θ, alpha = α, theta = θ,
