@@ -539,7 +539,7 @@ matching the CDC summary for past BVD outbreaks, with a 95% interval of
 roughly 0.07–0.67. A tighter `Beta(6.6, 13.4)` (same mean, 95% interval
 0.15–0.54) pulled a simulated low case-fatality ratio toward the mean:
 parameter recovery on a seed with a true national ratio of 0.093 put the
-posterior's 99% interval entirely above it. The two historical point
+posterior median 15–24% above it. The two historical point
 estimates the mean rests on (the CDC figure and a reanalysis at 0.47)
 differ enough that a single outbreak's ratio is less tightly constrained
 than either source's own interval implies, so the wider prior lets it
