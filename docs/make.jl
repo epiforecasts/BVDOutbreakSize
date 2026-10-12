@@ -123,6 +123,13 @@ end
 ## geojson is `src/assets/health_zones.geojson`. A missing input is a
 ## warning, not an error, so a build without the zone or province results
 ## still deploys and the page shows its no-data message.
+##
+## When `scripts/archive_dashboard.jl` has written the past releases' tables
+## to `logs/dashboard_archive/` (the CI build does, before this stage), they
+## are copied to `zone_map/archive/` with their `index.json`. Without it the
+## page shows the current build alone.
+const DASHBOARD_ARCHIVE = joinpath(REPO_ROOT, "logs", "dashboard_archive")
+
 function stage_zone_map()
     dest = joinpath(LITERATE_OUT, "public", "zone_map")
     mkpath(dest)
@@ -140,6 +147,11 @@ function stage_zone_map()
         else
             @warn "Map input missing; the map will show no estimates" src
         end
+    end
+    archive = joinpath(dest, "archive")
+    rm(archive; force = true, recursive = true)
+    if isfile(joinpath(DASHBOARD_ARCHIVE, "index.json"))
+        cp(DASHBOARD_ARCHIVE, archive)
     end
     return
 end
