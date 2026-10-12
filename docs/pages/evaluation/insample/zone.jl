@@ -1,8 +1,8 @@
 # # Health-zone in-sample checks
 #
-# Whether the fitted health-zone model reproduces the per-zone data it was fitted to.
+# This page checks whether the health-zone model reproduces the per-zone data it was fitted to.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page and the provincial ones on the [province in-sample checks](@ref "Province in-sample checks") page.
-# The per-zone confirmed cases and deaths enter the model as compositions of their patch's totals, so the checks here are on each zone's share of its patch.
+# The zone data enter the model as compositions of their patch's totals, so the checks are on each zone's share of its patch.
 # The last section sets each zone's reproduction number from the current fit against the same fit a week earlier.
 
 #md # ```@raw html
@@ -27,9 +27,8 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the calibration further down this page.
-# Bias runs from −1 to 1 and is zero when the observed counts sit at the predictive median, negative when the model under-predicts.
-# Coverage is nominally 0.9.
+# The overall bullets come first, then a block per province, from the calibration below.
+# Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with a nominal coverage of 0.9.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -39,9 +38,8 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## [Zone compositions](@id zone-compositions)
 #
-# The per-zone confirmed cases and deaths are fitted as two compositions conditional on their patch's total, one level below the [province compositions](@ref province-compositions).
+# The zone compositions sit one level below the [province compositions](@ref province-compositions).
 # The cases run on the infection-to-report delay and the deaths on the infection-to-confirmed-death delay, each with its own overdispersion, so the two are checked separately.
-# What the model predicts is each zone's share of its patch rather than its count.
 
 #md # ```@raw html
 #md # <details><summary>Load the zone fit's inputs and prior</summary>
@@ -58,12 +56,6 @@ prior_chn_zone = zone_prior_draws(zone_inputs);
 #md # ```
 
 # ### Confirmed cases
-#
-# The panels show, for the zones with the largest observed shares, the modelled share of the patch's confirmed cases at each vintage against the observed one.
-# Each panel carries three bands: the tan prior predictive share, the grey posterior predictive interval on the observed share, and the coloured ribbon of the expected share inside it.
-# The observed points should fall inside the grey band.
-# A zone with a handful of cases per vintage has an observed share that jumps between zero and one, and its band spans the same range.
-# The second figure is the same check on the cumulative allocation, each zone's share of its patch's cumulative allocated cases at every vintage.
 
 #md # ```@raw html
 #md # <details><summary>Zone case composition predictive checks</summary>
@@ -100,18 +92,35 @@ zone_ppc_cum_fig = plot_zone_shares(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_ppc_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The modelled share of the patch's confirmed cases at each vintage against the observed share, for the zones with the largest observed shares.
+#md # A zone with a handful of cases per vintage has an observed share that jumps between zero and one, and its band spans the same range.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 #-
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 
 zone_ppc_cum_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The same check on each zone's share of its patch's cumulative allocated cases at every vintage.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Confirmed deaths
-#
-# The same check on the death composition, over the zones with the largest observed death shares.
-# Most per-vintage death cells are empty, so the check is read on the cumulative allocation, each zone's share of its patch's cumulative allocated deaths at every vintage.
 
 #md # ```@raw html
 #md # <details><summary>Zone death composition predictive check</summary>
@@ -138,14 +147,22 @@ zone_death_ppc_cum_fig = plot_zone_shares(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_death_ppc_cum_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Each zone's share of its patch's cumulative allocated deaths at every vintage, for the zones with the largest observed death shares.
+#md # Most per-vintage death cells are empty, so the check uses the cumulative allocation.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Zone composition calibration
 #
-# The calibration table scores both compositions the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch: the mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
-# A cell with no case or death is covered by any interval that includes zero, so the coverage is read with the share of empty cells in mind.
+# Both compositions are scored the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition calibration</summary>
@@ -173,13 +190,25 @@ zone_calibration_fig #hide
 
 #-
 
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 MarkdownTable(zone_calibration_table) #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
+#md # A cell with no case or death is covered by any interval that includes zero, so the coverage is read with the share of empty cells in mind.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## [Change over the past week](@id zone-change-past-week)
 #
-# The [health-zone model](@ref "Health-zone model") is melded onto the headline fit's patch infections one way, so the zone data do not update the national and province estimates.
-# The comparison below reads the reproduction number of every zone walking in both fits at the frozen and live cut-offs, matched by key.
-# The dot plot shows the fifteen zones the frozen fit ranks highest, the trajectories the twelve with most confirmed cases, and the table the ten with most confirmed cases.
+# The comparison reads each zone's reproduction number on the frozen cut-off day from the frozen and live fits, alongside the live estimate at the current cut-off.
+# The two fits condition on different weeks of data and on different parent fits.
+# A zone carries its own walk only once it has reported 30 confirmed cases, so the comparison is restricted to zones walking in both fits.
 
 #md # ```@raw html
 #md # <details><summary>Zone cut-off summaries shared by the comparisons</summary>
@@ -236,12 +265,6 @@ end
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-#
-# The frozen zone fit and the live one condition on different weeks of data and on different parent fits.
-# The comparison reads each zone's reproduction number on the frozen cut-off day from both fits, alongside the live estimate at the current cut-off.
-# A zone carries its own walk only once it has reported 30 confirmed cases, and the comparison is restricted to zones walking in both fits.
-# The trajectory panels draw the frozen fit behind the live one for the twelve such zones with most confirmed cases.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction numbers from the frozen and live fits</summary>
@@ -316,17 +339,47 @@ end
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(zone_week_table) #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number from the frozen and live fits for the ten zones with most confirmed cases.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 #-
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 
 zone_week_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The fifteen zones the frozen fit ranks highest.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 #-
 
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 zone_week_rt_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Reproduction number trajectories for the twelve zones with most confirmed cases, with the frozen fit drawn behind the live one.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Saving zone in-sample outputs
 

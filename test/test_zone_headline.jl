@@ -35,15 +35,14 @@
     @test startswith(rows[5], "| Mambasa | Ituri | 2 | 3 |")
     @test occursin("| - | - | 0–3 | no |", rows[5])
     @test !occursin("Aru", md)
-    @test occursin("The 3 zones with the most", md)
-    @test occursin("of the 3 of 4 with a case", md)
+    @test occursin("3 of 4 zones had a confirmed case", md)
     content = Markdown.parse(md).content
     @test content[1] isa Markdown.Table
     @test content[2] isa Markdown.Paragraph
 
     one = zone_headline(est; top = 1)
     @test length(filter(startswith("| "), split(one, "\n"))) == 3
-    @test occursin("The zone with the most", one)
+    @test occursin("3 of 4 zones had a confirmed case", one)
 
     quiet = zone_headline(
         DataFrame(est[est.label .== "Aru", :]); top = 10

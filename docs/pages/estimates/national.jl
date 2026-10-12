@@ -1,7 +1,6 @@
 # # National estimates
 #
-# This page gives the national estimates from the joint model.
-# The methods for this model are on the [Methods](@ref "Methods") page.
+# This page gives the national estimates from the joint model, whose methods are on the [Methods](@ref "Methods") page.
 #
 # This page is generated from
 # [`docs/pages/estimates/national.jl`](https://github.com/epiforecasts/BVDOutbreakSize/blob/main/docs/pages/estimates/national.jl).
@@ -53,8 +52,7 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 #
 # ### Summary
 #
-# The numbers below are our estimate of the underlying infections to date, reported and unreported, from the joint posterior.
-# Each is given as equal-tailed 30%, 60% and 90% credible intervals.
+# The estimates below come from the joint posterior, as equal-tailed 30%, 60% and 90% credible intervals.
 # The estimates for each province are on the [province estimates](@ref "Province estimates") page.
 
 #md # ```@raw html
@@ -151,10 +149,8 @@ summary_ranges #hide
 
 # #### [Fit diagnostics](@id national-fit-diagnostics)
 #
-# Fit diagnostics for the joint fit and each individual fit.
-# These indicate how reliable the results are from the perspective of the inference algorithm.
-# The [breakdown by parameter](@ref "Fit diagnostics by parameter") can be used to further diagnose any issues with the joint fit.
-# The health-zone model has its own [fit diagnostics](@ref "Health-zone fit diagnostics").
+# The sampler diagnostics show how far the inference can be trusted, for the joint fit and each individual fit.
+# The [breakdown by parameter](@ref "Fit diagnostics by parameter") locates any problem in the joint fit, and the health-zone model has its own [fit diagnostics](@ref "Health-zone fit diagnostics").
 
 #md # ```@raw html
 #md # <details><summary>Build the fit diagnostics table</summary>
@@ -295,9 +291,6 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
-# The figure below shows the cumulative trajectories and current-cut-off densities for three latent quantities: infections, symptom onsets and deaths.
-# The infection density is the headline outbreak size, a count of infections rather than reported cases.
-
 #md # ```@raw html
 #md # <details><summary>Cumulative infections, onsets and deaths figure</summary>
 #md # ```
@@ -309,16 +302,22 @@ cumulative_traj_fig = plot_cumulative_trajectories(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 cumulative_traj_fig #hide
 
-# The national count above is the sum of the four patches' renewal equations.
+#md # ```@raw html
+#md # <figcaption>
+#md # Cumulative infections, symptom onsets and deaths over time, with their densities at the cut-off.
+#md # The infection density is the headline outbreak size, counted in infections rather than reported cases.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # The per-province sizes, the modelled infections behind them and the importation between provinces are on the [province estimates](@ref "Province estimates") page.
 
 # The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
-# The left panel below shows the posterior for the outbreak start date.
-# The right panel shows the joint posterior of the outbreak age and the early doubling time.
 
 #md # ```@raw html
 #md # <details><summary>Outbreak start date and seeding-time posterior</summary>
@@ -331,12 +330,17 @@ start_date_fig = plot_start_date_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 start_date_fig #hide
 
-# The table below reports credible intervals on the infection-process parameters: the growth rate and doubling time, the reproduction number, the outbreak age, the case-fatality ratio and the cumulative infection count.
-# The pair plot beside it shows their joint posterior, with the prior overlaid so the data's contribution to each marginal is visible.
+#md # ```@raw html
+#md # <figcaption>
+#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the early doubling time (right).
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Infection-parameter summary table</summary>
@@ -349,9 +353,17 @@ infection_summary = summary_table(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 infection_summary #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Credible intervals for the growth rate, doubling time, reproduction number, outbreak age, case-fatality ratio and cumulative infection count.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Infection-parameter pair plot (prior overlaid)</summary>
@@ -368,12 +380,17 @@ infection_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 infection_pair_fig #hide
 
-# The infection model carries two delays: the generation interval and the incubation period.
-# The table and pair plot below report their posterior means and standard deviations.
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the infection-process parameters, with the prior overlaid to show what the data add to each marginal.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Infection-delay summary table</summary>
@@ -394,11 +411,16 @@ infection_delay_summary = summary_table(
 
 #md # ```@raw html
 #md # <details><summary>Show infection-delay summary table</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 infection_delay_summary #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Means and standard deviations of the generation interval and the incubation period.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -417,16 +439,19 @@ infection_delay_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 infection_delay_pair_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the generation interval and incubation period parameters, with the prior overlaid.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Reproduction number over time
-#
-# The figure below shows the daily reproduction number over the established outbreak, from the genetic bound to the cut-off.
-# The 30%, 60% and 90% credible ribbons are shown with about a hundred sampled trajectories, and the no-growth threshold at one as a grey dashed line.
-# The first situation report on 18 May 2026 marks the start of the response scale-up (red dashed).
-# The end of the three-week scale-up is the red dotted line, and the data cut-off is grey dashed.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction-number trajectory</summary>
@@ -448,13 +473,21 @@ rt_fig = plot_rt(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 rt_fig #hide
 
-# The same trajectory split by province, the per-province summary and the spatial hyperparameters are on the [province estimates](@ref "Reproduction number by province") page.
+#md # ```@raw html
+#md # <figcaption>
+#md # Daily reproduction number from the genetic bound to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
+#md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
+#md # Grey dashed lines mark a reproduction number of one and the cut-off.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
-# The table reports the posterior of the response effect on the reproduction number as a multiplier, where a value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
+# The same trajectory split by province, the per-province summary and the spatial hyperparameters are on the [province estimates](@ref "Reproduction number by province") page.
 
 #md # ```@raw html
 #md # <details><summary>Intervention-effect summary table</summary>
@@ -472,17 +505,22 @@ intervention_table = streams_table(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 intervention_table #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The response effect on the reproduction number as a multiplier.
+#md # A value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Observation delays
 #
-# The delays carry latent infections through to each observed event: reporting, death, hospitalisation abroad and laboratory receipt.
-# The onset-to-report and onset-to-hospitalisation delays are the same line-list onset-to-admission delay, sampled on its natural Gamma shape and scale.
-# The onset-to-death delay is the convolution of two atomic Gamma delays, onset-to-admission and admission-to-death, each with its own shape and scale.
-# The report-to-receipt delay is sampled by its mean and standard deviation.
-# The length-of-stay delays are also shown: the isolation-bed BVD treatment stay (prior: the line-list admission-to-death delay), the non-BVD rule-out stay (prior: the report-to-receipt turnaround), and the confirmation-to-recovery delay.
+# The delays carry latent infections through to each observed event, and the [epidemiological process models](@ref "Epidemiological process models") give their parametrisation and priors.
 
 #md # ```@raw html
 #md # <details><summary>Observation-delay summary table</summary>
@@ -514,11 +552,17 @@ obs_delay_summary = summary_table(
 
 #md # ```@raw html
 #md # <details><summary>Show observation-delay summary table</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 obs_delay_summary #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The delays from onset to report, death and hospitalisation abroad, the report-to-receipt delay and the mean lengths of stay.
+#md # The lengths of stay are the isolation stay of a BVD patient, the rule-out stay of a non-BVD patient and the delay from confirmation to recovery.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -542,18 +586,23 @@ obs_delay_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 obs_delay_pair_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the main observation-delay parameters, with the prior overlaid.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Surveillance parameters
 #
-# The surveillance-data parameters cover the reporting fractions for the DRC and Uganda, the surveillance dispersions, and the laboratory pipeline: the testing fraction and receipt delay, the specimens analysed per suspect sampled, the per-suspected and per-test positivity, the non-BVD background rate, and the death-confirmation probability.
-# The six count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, the treatment-centre stocks and recovered) each have their own negative-binomial dispersion, partially pooled from a shared population.
-# $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
-# The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
-# Their dispersions ($k_{\text{iso}}$ for the occupancy, beds and census, and $k_{\text{rec}}$) are drawn from the same pooled population.
-# The daily admissions, in-care deaths, rule-outs and absconds share a flow dispersion $k_{\text{flow}}$, drawn about $k_{\text{iso}}$.
+# The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
+# The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
+# The four daily treatment-centre flows share a separate flow dispersion $k_{\text{flow}}$, centred on the treatment-centre stock dispersion $k_{\text{iso}}$.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -586,11 +635,16 @@ surveillance_summary = summary_table(
 
 #md # ```@raw html
 #md # <details><summary>Show surveillance-parameter summary table</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 surveillance_summary #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Reporting fractions for the DRC and Uganda, stream dispersions, laboratory, isolation and recovery parameters, and the expected counts at the cut-off.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -609,9 +663,17 @@ surveillance_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 surveillance_pair_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the main surveillance parameters, with the prior overlaid.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ### Model against observed
 #
@@ -619,11 +681,7 @@ surveillance_pair_fig #hide
 
 # ### Symptom-onset reporting delay and ascertainment
 #
-# The table reports the onset-report hazard's hyperparameters and two derived quantities.
-# These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
-# The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
-# The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-# The read SD row is the error the fit attributes to one digitised bar, in cases, on top of the rounding every integer read carries.
+# The [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section defines the quantities below.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -732,11 +790,18 @@ onset_summary = vcat(
 
 #md # ```@raw html
 #md # <details><summary>Show symptom-onset reporting-delay summary table</summary>
+#md # <figure class="bvd-figure">
 #md # ```
 
 onset_summary #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The onset-report hazard parameters, the share of a median onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment.
+#md # The share comes from the delay hazard and the ascertainment from its own level, so they are separate estimates.
+#md # The read SD is the error attributed to one digitised bar, in cases, beyond integer rounding.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -757,15 +822,24 @@ onset_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 onset_pair_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the onset-report hazard and ascertainment parameters, with the prior overlaid.
+#md # The ascertainment offset is the onset curve's departure from the confirmed pipeline's ascertainment, with a prior centred on no departure.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # The nowcast of each digitised snapshot and the check of the latest figure by onset date are on the [in-sample checks](@ref "Onset snapshot nowcasts") page.
 
 # ### Counterfactual: lower bound under no further transmission
 #
-# $\Delta D$ is the committed future deaths if transmission stopped at the report date, defined in the [no-onward-transmission counterfactual](@ref "No-onward-transmission counterfactual") Methods section.
+# The [no-onward-transmission counterfactual](@ref "No-onward-transmission counterfactual") projects the deaths still to come if transmission stopped at the report date.
 
 #md # ```@raw html
 #md # <details><summary>Project no-onward deaths and summarise</summary>
@@ -786,9 +860,6 @@ no_onward_table = streams_table(
 
 no_onward_table #hide
 
-# The left panel shows the *still expected* deaths $\Delta D$: future deaths in cases already infected by $T$, net of those already observed.
-# The right panel shows the *projected total* $D(T) + \Delta D$, whose axis starts at the observed death count.
-
 #md # ```@raw html
 #md # <details><summary>No-onward projected-deaths plot</summary>
 #md # ```
@@ -799,15 +870,22 @@ no_onward_fig = plot_no_onward_deaths(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 no_onward_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Deaths still expected among people infected by the cut-off, net of those already observed (left), and the projected total deaths (right).
+#md # The right axis starts at the observed death count.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Confirmed case-fatality ratio
 #
-# The delay-corrected confirmed CFR, defined in the [delay-corrected confirmed CFR](@ref "Delay-corrected confirmed case-fatality ratio") Methods section, is set against the structural (infection-based) CFR and the naive confirmed ratio.
-# The corrected ratio debiases the naive confirmed ratio for the real-time delay between a case being confirmed and a death being confirmed.
-# The structural CFR is the onset-level estimate the joint model fits.
+# The [delay-corrected confirmed CFR](@ref "Delay-corrected confirmed case-fatality ratio") is set against the naive confirmed ratio and the structural CFR the joint model fits.
 
 #md # ```@raw html
 #md # <details><summary>Compute the confirmed-CFR comparison</summary>
@@ -851,11 +929,6 @@ confirmed_cfr_line #hide
 
 confirmed_cfr_summary #hide
 
-# The figure below shows the posterior densities of the delay-corrected confirmed CFR and the structural CFR.
-# The naive observed confirmed ratio is drawn as a solid vertical rule, and the median uncorrected modelled confirmed ratio as a dashed rule.
-# The gap from the naive rule to the corrected density is the real-time delay debiasing.
-# The gap to the structural density is the residual case/death ascertainment difference.
-
 #md # ```@raw html
 #md # <details><summary>Confirmed-CFR density plot</summary>
 #md # ```
@@ -864,9 +937,18 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 confirmed_cfr_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Posterior densities of the delay-corrected confirmed CFR and the structural CFR, with the naive confirmed ratio (solid) and the median uncorrected modelled ratio (dashed).
+#md # The gap from the naive ratio to the corrected density is the delay correction, and the gap to the structural density is the remaining difference in case and death ascertainment.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # The same ratios by province are in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
 
@@ -876,9 +958,8 @@ confirmed_cfr_fig #hide
 
 # ## Saving results
 #
-# The tables above are written to an output directory at the repo root so they can be archived and shared.
-# On every push to the main branch a GitHub Actions workflow regenerates these files and publishes them as a GitHub Release, downloadable from the repository's releases page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
-# The release bundles the summary tables, a thinned set of posterior draws, the latent symptom-onset ("symptomatic cases") trajectory over time, the one- to four-week-ahead forecasts of the observed streams, and a copy of the input data manifest.
+# The tables above are written to an output directory, which each push to the main branch publishes as a [GitHub Release](https://github.com/epiforecasts/BVDOutbreakSize/releases).
+# The release holds the summary tables, thinned posterior draws, the latent symptom-onset trajectory, the one- to four-week-ahead forecasts and the input data manifest.
 
 #md # ```@raw html
 #md # <details><summary>Write outputs to output/</summary>
@@ -1260,9 +1341,8 @@ CSV.write(
 
 # ### Summary-page assets
 #
-# The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the figures it shows (the national reproduction number and infections over time) into `docs/src/summary_assets/`.
-# The static dashboard page embeds them after this build step has run.
+# The one-page [Summary dashboard](@ref) reuses the results above rather than refitting.
+# This step saves its headline text, tables and figures for the dashboard page to embed.
 
 #md # ```@raw html
 #md # <details><summary>Write the dashboard assets</summary>
