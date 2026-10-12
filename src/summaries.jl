@@ -868,6 +868,40 @@ function patch_headline(
 end
 
 """
+Compact markdown table of the headline quantities by province, one row per
+province: the infections to date and the reproduction number at the
+cut-off, each as an equal-tailed 90% credible interval, and, when
+`recent_cases` is given, the confirmed cases over the most recent week of
+reports. `recent_cases` holds one observed count per province in
+`patch_labels` order. [`patch_headline`](@ref) gives the fuller comparison.
+"""
+function province_summary_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        recent_cases::Union{Nothing, AbstractVector{<:Real}} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    df = DataFrame(
+        "Province" => patch_labels[1:np],
+        "Infections to date" =>
+            [_interval90_text(d.C_T[p]; digits = 0) for p in 1:np],
+        "R at the cut-off" => [_interval90_text(d.R_T[p]) for p in 1:np]
+    )
+    if recent_cases !== nothing
+        length(recent_cases) >= np || throw(
+            ArgumentError(
+                "province_summary_table: $(length(recent_cases)) recent " *
+                    "counts for $np provinces."
+            )
+        )
+        df[!, "Confirmed cases, latest week"] =
+            [string(round(Int, recent_cases[p])) for p in 1:np]
+    end
+    return markdown_table(df)
+end
+
+"""
 Markdown table comparing the provinces' one-week-ahead forecast, one row per
 province and each target as an equal-tailed 90% predictive interval, followed
 by bullets that compare the provinces. Every comparison is computed draw by
