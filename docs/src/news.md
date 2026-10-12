@@ -188,6 +188,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
   In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
   `frozen_validation` still reached R-hat 1.09.
+- Four slow test items that each built their own live-data `bvd_joint` sample `production_joint` instead, which the suite compiles anyway, and the two-phase seeding test checks its identities on prior draws rather than a NUTS fit of a model with no data (#1005).
+  In the `coverage` job of run 38192361183 the five items took 486 s of the 70-minute run, 169 s of it the seeding fit.
+  Run together locally with the province case-fatality item, which now reuses the same compiled model, the six take 306 s rather than 729 s.
 
 ### Fixed
 

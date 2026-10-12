@@ -124,9 +124,10 @@ end
 
 @testitem "infection_model: two-phase renewal-start seeding" tags = [:slow] begin
     using Statistics: mean, std
-    using Turing: @model, to_submodel
+    using Turing: @model, to_submodel, sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: infection_model, nuts_sample
+    using Random: Xoshiro
+    using BVDOutbreakSize: infection_model
 
     n = 101
     renewal_start = 38   # genetic-TMRCA day + renewal-start lead
@@ -143,7 +144,12 @@ end
         return st
     end
 
-    chn = nuts_sample(_wrap(); samples = 200, chains = 2, progress = false)
+    ## Nothing is observed, so the posterior is the prior and independent
+    ## prior draws check the same identities a NUTS fit would.
+    chn = sample(
+        Xoshiro(1), _wrap(), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     T = vec(Array(chn[:T]))
     C_T = vec(Array(chn[:C_T]))
     sa = vec(Array(chn[:sa]))
