@@ -98,6 +98,15 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- Every fit uses the headline joint's sampler settings, and the methods page states them (#1100).
+  These are two chains of 1000 draws after 1000 warm-up steps, at a target acceptance of 0.80 and a tree depth of at most 10.
+  The single-stream fits, the health-zone fits, the frozen re-fits and the scripts that fit outside the docs build take them from `joint_sampler_args()` in `docs/fits/registry.jl`, so a change there moves every fit.
+  The single-stream fits ran 500 draws after 200 warm-up steps at 0.85, the single-population frozen re-fits the same at 0.90, and the health-zone fits 800 draws.
+  Every fit cache key changes, so every fit refits.
+  The single-stream and single-population frozen fits now take twice the draws and 5 times the warm-up, and the health-zone fits a quarter more draws, so each runs longer.
+  The frozen re-fits also drop their target acceptance from 0.90 to 0.80, which takes larger steps and may give more divergences.
+  The parameter-recovery fits drop their target acceptance from 0.85 to 0.80, and `scripts/zone_fit_report.jl` fits at these settings rather than 600 draws after 400 warm-up steps.
+  `BVD_RECOVERY_SAMPLES`, `BVD_RECOVERY_WARMUP` and `BVD_RECOVERY_MAX_DEPTH` are removed, since the `BVD_JOINT_*` overrides now set the recovery fits too.
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
   On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.
@@ -130,7 +139,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
-- The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the health-zone model and the tail effective sample size (#1051).
+- The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the tail effective sample size (#1051).
+  The health-zone model's diagnostics stay on the Health-zone estimates page, so the national page no longer needs the health-zone fit.
 - The Province estimates page gains a table of the joint fit's province-level parameters (#1051).
 - Two in-sample checks move from the estimates pages to the in-sample pages: the zone reproduction numbers against the fit a week earlier, and the latest onset figure against its posterior predictive by onset date.
   Fitted values do not change (resolves #1055).
@@ -138,7 +148,6 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Infrastructure
 
 - The formatter environment pins Runic to 1.11.1 again, matching the pre-commit hook, and Dependabot no longer proposes Runic bumps, which have to reformat the tree in the same commit.
-- The national estimates render waits for the health-zone fits, since its fit diagnostics read the `local` meld; it could start before that fit finished and fail on a cache miss.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
