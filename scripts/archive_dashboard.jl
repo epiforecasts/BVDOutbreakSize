@@ -42,8 +42,8 @@ const DASHBOARD_CSVS = (
     "province_timeseries.csv",
 )
 
-## Four weeks of daily cut-offs, at about 370 KB each.
-const MAX_VINTAGES = 28
+## About a month of cut-offs at one SitRep each, at about 370 KB each.
+const MAX_VINTAGES = 14
 
 ## Every published results release as `(tag, created, assets)`, drafts
 ## left out. Pages are requested by number rather than through

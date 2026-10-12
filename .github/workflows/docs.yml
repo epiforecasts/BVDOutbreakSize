@@ -550,15 +550,18 @@ jobs:
           # the page at all.
           julia --project=docs scripts/score_releases.jl
       # The dashboard map's tables from past releases, one per data cut-off,
-      # for the combine job to stage under zone_map/archive/. Best-effort: on
-      # any failure the map shows the current build alone.
+      # for the combine job to stage under zone_map/archive/. Only for the
+      # deploy from `main`, so pull request previews stay small. Best-effort:
+      # on any failure the map shows the current build alone.
       - name: Archive past dashboard tables
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           julia --project=docs scripts/archive_dashboard.jl logs/dashboard_archive ||
             echo "dashboard archive failed; the map shows the current build only"
-      - uses: actions/upload-artifact@v7
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
         with:
           name: dashboard-archive
           path: logs/dashboard_archive
@@ -1117,9 +1120,10 @@ jobs:
           merge-multiple: true
           path: .
       # Written by the `overlays` job, which `combine` follows through the
-      # renders. Absent when that step failed, which leaves the map without
-      # its past vintages.
+      # renders, on a push to `main` only. Absent when that step failed,
+      # which leaves the map without its past vintages.
       - name: Collect the dashboard archive
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -1237,6 +1241,9 @@ jobs:
           rm -rf "$stage"
           mkdir -p "$stage/BVDOutbreakSize/$(dirname "$base")"
           cp -r docs/build/1 "$stage/BVDOutbreakSize/$base"
+          # The dashboard archive is the past releases' own tables, which
+          # each of those releases already carries.
+          rm -rf "$stage/BVDOutbreakSize/$base/zone_map/archive"
           printf '%s\n' \
             "Run \`python3 -m http.server\` in this folder and open" \
             "http://localhost:8000/BVDOutbreakSize/$base/" \
