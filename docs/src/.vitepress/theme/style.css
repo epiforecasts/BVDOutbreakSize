@@ -221,6 +221,16 @@ mjx-container > svg {
   height: auto;
   margin: 0 auto;
 }
+/* Report figures and tables, captioned with a figcaption. */
+.vp-doc .bvd-figure {
+  margin: 1.5rem 0;
+}
+.vp-doc .bvd-figure figcaption {
+  margin: 0.5rem 0;
+  color: var(--vp-c-text-2);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
 .vp-doc .bvd-diagram figcaption {
   margin-top: 0.75rem;
   color: #3c3c43;
