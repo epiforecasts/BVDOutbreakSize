@@ -76,7 +76,7 @@ jobs:
           # scanners or the backfill driver used to rebuild the whole report
           # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|archive_dashboard)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
   # Resolve and precompile the single shared environment once, list the fit
   # ids by group, and pin the manifest. On main and tag builds the two
@@ -549,6 +549,21 @@ jobs:
           # re-running the job; a silent substitution is not detectable from
           # the page at all.
           julia --project=docs scripts/score_releases.jl
+      # The dashboard map's tables from past releases, one per data cut-off,
+      # for the combine job to stage under zone_map/archive/. Best-effort: on
+      # any failure the map shows the current build alone.
+      - name: Archive past dashboard tables
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          julia --project=docs scripts/archive_dashboard.jl logs/dashboard_archive ||
+            echo "dashboard archive failed; the map shows the current build only"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-archive
+          path: logs/dashboard_archive
+          if-no-files-found: ignore
+          retention-days: 3
       # Every CSV under data/, not just the ones this step rewrites: a new
       # output would otherwise be left behind silently. The render restores
       # them over its own checkout, so an untouched file is replaced by an
@@ -1101,6 +1116,15 @@ jobs:
           pattern: render-*
           merge-multiple: true
           path: .
+      # Written by the `overlays` job, which `combine` follows through the
+      # renders. Absent when that step failed, which leaves the map without
+      # its past vintages.
+      - name: Collect the dashboard archive
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: dashboard-archive
+          path: logs/dashboard_archive
       # The preprint is served at /paper/: files under docs/src/public/ are
       # copied as they are, so it is in neither the nav, the sidebar nor the
       # local search. The README and the About page link to it.
