@@ -1603,6 +1603,35 @@ end
     @test !has_decay(fixed2)
 end
 
+@testitem "patch_infection_model: an extreme distance exponent should keep the parameter set" begin
+    using BVDOutbreakSize: patch_infection_model, province_importation_kernel,
+        PROVINCE_POPULATIONS
+    using Turing: DynamicPPL, @varname
+    using LogDensityProblems: logdensity
+    using Random: Xoshiro
+
+    ## Past about γ = 130 every `d^γ` overflows and the sampled kernel is
+    ## numerically zero. A leapfrog step can reach that during NUTS. The
+    ## model must still evaluate on the vector the sampler was built for,
+    ## rather than switching on `seed_fraction` and failing with a
+    ## `KeyError` (the joint fit on #1091 failed this way).
+    n, np = 60, 4
+    @test all(
+        iszero,
+        province_importation_kernel(PROVINCE_POPULATIONS[1:np]; decay = 1.0e3)
+    )
+    m = patch_infection_model(n, np; rt_start = 30)
+    vi = DynamicPPL.VarInfo(Xoshiro(1), m)
+    @test !any(k -> string(k) == "seed_fraction", keys(vi))
+    ldf = DynamicPPL.LogDensityFunction(m, DynamicPPL.getlogjoint, vi)
+    x0 = collect(vi[:])
+    γ0 = rand(Xoshiro(1), m)[@varname(importation_distance_decay)]
+    x = copy(x0)
+    x[only(findall(==(γ0), x0))] = 1.0e3
+    @test isfinite(logdensity(ldf, x0))
+    @test !isnan(logdensity(ldf, x))
+end
+
 @testitem "province composition: the severity multiplier should be sum-to-zero" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: sample, Prior

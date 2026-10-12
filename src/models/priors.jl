@@ -1791,7 +1791,13 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ## The default kernel is the gravity kernel at a sampled distance
     ## exponent, rebuilt per draw. With one patch it has no off-diagonal, so
     ## the exponent would be a prior-only dimension and is not sampled.
-    if importation_kernel === nothing && n_patches > 1
+    ## A sampled kernel couples the provinces by construction, so the
+    ## coupling is read from the model and never from the draw. At an
+    ## exponent past about 130 every `d^γ` overflows and the kernel is
+    ## numerically zero. Reading the coupling off that matrix would add
+    ## `seed_fraction` mid-chain, a parameter the sampler was not built for.
+    sampled_kernel = importation_kernel === nothing && n_patches > 1
+    if sampled_kernel
         importation_distance_decay ~ importation_decay_prior
         importation_kernel = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)];
@@ -1800,7 +1806,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     elseif importation_kernel === nothing
         importation_kernel = zeros(Float64, n_patches, n_patches)
     end
-    coupled = any(!iszero, importation_kernel)
+    coupled = sampled_kernel || any(!iszero, importation_kernel)
     if n_patches > 1 && !coupled
         seed_fraction ~ product_distribution(
             fill(seed_fraction_prior, n_patches - 1)
