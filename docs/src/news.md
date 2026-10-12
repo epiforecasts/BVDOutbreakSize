@@ -22,6 +22,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
+  The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
+  On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
+  Both scales are among the slowest-mixing parameters of recent CI fits.
+  The two submodels lose their `offset_prior` keyword, which the centred form has no use for.
+  This is an exact reparameterisation with the same prior and likelihood, so fitted values change only by sampling noise.
 - The national reproduction-number walk samples each knot after the first as the total log $R_t$ on its knot day, intervention ramp included, and centres the walk on those knots net of the ramp, so `rt_state.z` becomes `rt_state.log_Rt_knots` (#1124).
   It is a reparameterisation and the model is unchanged: the prior, the effect bound and every density are the same, and the log density agrees at mapped points.
   In the old coordinates the intervention effect, the growth rate and the early knots traded off along one stiff direction, the national $R_t$ level, which set the joint's step size.
