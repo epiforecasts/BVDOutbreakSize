@@ -42,9 +42,11 @@ defines it. The truncation holds the CDF at one from `nmax` on, so the lag
 cleanly under Mooncake, so this is AD-safe. Extreme warmup proposals that
 drive the total to a non-finite or zero value, or that push an analytical
 delay's own shape or scale out of its domain, fall back to a uniform PMF, so
-the downstream convolution stays finite (the proposal is still rejected
-through its low log-likelihood). Returns a vector whose element type follows
-the delay parameters.
+the downstream convolution stays finite rather than throwing (a uniform PMF
+this far from the sampled delay scores badly enough in practice that the
+step-size search still moves past it, though nothing forces that outcome
+explicitly). Returns a vector whose element type follows the delay
+parameters.
 """
 function discretise_censored(dist, nmax::Integer)
     return _pmf_from_cdfs(_primary_censored_cdfs(dist, nmax), dist, nmax)
