@@ -542,9 +542,9 @@ parameter recovery on a seed with a true national ratio of 0.093 put the
 posterior median 15–24% above it. The two historical point
 estimates the mean rests on (the CDC figure and a reanalysis at 0.47)
 differ enough that a single outbreak's ratio is less tightly constrained
-than either source's own interval implies, so the wider prior lets it
-settle below that range when the data support it. Used by the deaths and
-deaths-among-exports streams.
+than either source's own interval implies. The wider prior spans both
+sources with room below them. Used by the deaths and deaths-among-exports
+streams.
 """
 @model function cfr_model(; cfr_prior = Beta(2.64, 5.36))
     CFR ~ cfr_prior
