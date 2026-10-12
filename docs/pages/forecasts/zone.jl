@@ -1,7 +1,6 @@
 # # Health-zone forecasts
 #
-# This page splits the one-week-ahead confirmed-case forecast across the health zones.
-# The split is defined in the [health-zone model](@ref "Health-zone model") Methods section.
+# This page splits the one-week-ahead confirmed-case forecast across the health zones, as defined in the [health-zone model](@ref "Health-zone model") Methods section.
 # The national forecast is on the [forecasts](@ref "Forecasts") page and the split by province on the [province forecasts](@ref "Province forecasts") page.
 # How these forecasts have scored against what each zone went on to report is in the [forecast by health zone](@ref "Forecast by health zone") evaluation.
 # The zone estimates behind the split are on the [health-zone estimates](@ref "Health-zone estimates") page.
@@ -24,8 +23,7 @@ chn_local = load_fit("local");
 
 # ## Summary
 #
-# The overall bullets rank the zones.
-# The table and figure below give each zone's own projection.
+# The bullets rank the zones, and the figure and table below give each zone's projection.
 
 #md # ```@raw html
 #md # <details><summary>Split the one-week-ahead forecast across the zones</summary>
@@ -95,10 +93,7 @@ Markdown.parse(zone_forecast_bullets) #hide
 
 # ## One-week-ahead forecast by health zone
 #
-# The figure and table below give the fifteen zones with the largest forecasts.
 # The patch totals in the table are the projections on the [province forecasts](@ref "Province forecasts") page.
-# Each zone's count is drawn from the zone model run a week past the cut-off, splitting a draw of its province's forecast total over the province's zones.
-# The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week (Equation (71)).
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead zone forecast</summary>
@@ -117,18 +112,30 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_forecast_fig #hide
 
-#-
+#md # ```@raw html
+#md # <figcaption>
+#md # The fifteen zones with the largest forecasts of confirmed cases over the week after the cut-off.
+#md # </figcaption>
+#md # </figure>
+#md # <figure class="bvd-figure">
+#md # ```
 
 MarkdownTable(zone_forecast_display) #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The fifteen zones with the largest forecasts, then each patch total.
+#md # The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Zones quiet for two weeks
-#
-# The table lists the zones with no allocated case over the past two weeks, ranked by the probability that they report at least one.
-# It also gives the cases over the past four weeks and the date of the last case.
 
 #md # ```@raw html
 #md # <details><summary>Quiet zones ranked by the chance of a case</summary>
@@ -152,9 +159,17 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(zone_quiet_display) #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Zones with no allocated case over the past two weeks, ranked by the probability that they report at least one, with their cases over the past four weeks and the date of their last case.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Saving zone forecast assets
 #
@@ -178,12 +193,7 @@ end
 
 # ## Past zone forecasts against what was observed
 #
-# Each release archives its zone forecast, and later releases score it against what each zone went on to report.
-# The figure shows the ten zones with the largest forecasts in this build, one panel per zone.
-# The x-axis is the cut-off each forecast was made from.
-# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the zone went on to report.
-# A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
-# The scores are in the [forecast by health zone across releases](@ref "Forecast by health zone across releases") evaluation.
+# Each release archives its zone forecast, and later releases score it in the [forecast by health zone across releases](@ref "Forecast by health zone across releases") evaluation.
 
 #md # ```@raw html
 #md # <details><summary>Load the archived zone forecasts and their outcomes</summary>
@@ -215,13 +225,23 @@ zone_past_fig = plot_forecast_overlay(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 zone_past_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Past forecasts for the ten zones with the largest forecasts in this build, by the cut-off each was made from.
+#md # Each shows its median and 90% predictive interval beside the persistence baseline and the count the zone went on to report.
+#md # A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Archiving the zone forecast
 #
-# Each release carries the zone forecast draws in `zone_forecast.csv`, for scoring once the week has been reported.
+# Each release carries the zone forecast draws, for scoring once the week has been reported.
 
 #md # ```@raw html
 #md # <details><summary>Write the zone forecast archive</summary>
@@ -245,6 +265,4 @@ CSV.write(
 
 # ---
 #
-# The full analysis code, data and model definitions are in the
-# [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize)
-# repository.
+# The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.

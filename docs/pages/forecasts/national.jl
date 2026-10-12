@@ -1,9 +1,7 @@
 # # Forecasts
 #
-# Every release forecasts each DRC stream a week ahead from the joint posterior.
-# The forecast is drawn from the fitted model run past the cut-off, as the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section describes.
-# How these forecasts have scored against the data that arrived afterwards is
-# on the [evaluation](@ref "Forecast evaluation") page.
+# Every release forecasts each DRC stream a week ahead from the joint posterior, as the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section describes.
+# How these forecasts have scored against the data that arrived afterwards is on the [evaluation](@ref "Forecast evaluation") page.
 # The split by province is on the [province forecasts](@ref "Province forecasts") page and the split by health zone on the [health-zone forecasts](@ref "Health-zone forecasts") page.
 
 #md # ```@raw html
@@ -24,7 +22,7 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The expected counts for the week after the cut-off, from the forecast below.
+# These are the expected counts for the week after the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -56,11 +54,6 @@ national_forecast_bullets = join(
 Markdown.parse(national_forecast_bullets) #hide
 
 # ## One-week-ahead forecast results
-#
-# The table and figures below give the cumulative and new expected counts by $T + 7$ from the forecast defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
-# The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
-# The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
-# The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
 
 #md # ```@raw html
 #md # <details><summary>Summarise the one-week-ahead forecast</summary>
@@ -70,11 +63,17 @@ forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_summary #hide
 
-# The latent figure shows the new infections, symptom onsets and deaths over the horizon, with the reproduction number left to keep evolving across it.
+#md # ```@raw html
+#md # <figcaption>
+#md # Cumulative and new expected counts a week after the cut-off for confirmed cases and deaths, the recovered total, and the isolation-bed levels and daily flows.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead latent forecast plot</summary>
@@ -84,11 +83,17 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_latent_fig #hide
 
-# The observed figure shows the new count each observed stream adds over the horizon: suspected cases, suspected deaths, laboratory-confirmed cases, confirmed deaths and recovered, one panel per stream the forecast carries.
+#md # ```@raw html
+#md # <figcaption>
+#md # New infections, symptom onsets and deaths over the week after the cut-off, with the reproduction number left to evolve across it.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
@@ -98,16 +103,22 @@ forecast_fig = plot_forecast(forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_fig #hide
 
-# The bed figure shows the projected isolation/treatment-bed demand (the need a week ahead, under unconstrained supply) against the supply-limited occupancy the beds can actually meet.
-# The gap between the two is the projected bed shortfall, shown in the right panel.
-# The reported "Patients en isolement" count is the occupied-bed count (the report computes the "Taux d'occupation" as that count over the bed capacity), so isolation is bed usage, gated by supply.
-# The demand is its unobserved counterpart, the number who need a bed.
-# The model carries a single national bed capacity, so it cannot represent local saturation, and the national shortfall understates local unmet need.
-# On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%; beds free in one province cannot serve patients in another.
+#md # ```@raw html
+#md # <figcaption>
+#md # The new count each observed stream adds over the week after the cut-off.
+#md # The situation reports no longer update suspected cases and deaths, so their projections cannot be checked and the forecast evaluation leaves them out.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# The reported count of patients in isolation is the occupied-bed count, so it measures bed use limited by supply, and bed demand is the unobserved number who need a bed.
+# The model carries one national bed capacity, so the national shortfall understates local unmet need (see [limitations](@ref "Limitations")).
+# On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
@@ -117,11 +128,18 @@ forecast_beds_fig = plot_forecast_beds(forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_beds_fig #hide
 
-# The flow figure projects the daily isolation/treatment flows a week ahead: new admissions, in-care deaths and rule-outs, each drawn from the model run past the cut-off through the isolation dispersion.
+#md # ```@raw html
+#md # <figcaption>
+#md # Projected isolation bed demand, the need under unconstrained supply, against the occupancy the beds can meet.
+#md # The gap between them is the projected bed shortfall (right).
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead treatment-flow forecast plot</summary>
@@ -131,19 +149,21 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 forecast_flows_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Daily isolation flows over the week after the cut-off: new admissions, in-care deaths and rule-outs.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Symptom-onset nowcast and forecast results
 #
-# The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
-# The two halves must not be added together: the first three rows are the state of the outbreak at the cut-off, the next three the coming week.
-#
-# "Onsets not yet reported at T" is not a backlog that will all arrive, because ascertainment does not reach one.
-# The row holds two things together: the reporting backlog, and the cases surveillance will never confirm.
-# The "reports this week of onsets before T" row is the part of it the coming week should actually clear.
-# It is the smaller number.
+# The [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section describes how the onset projection is built.
 
 #md # ```@raw html
 #md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
@@ -158,16 +178,22 @@ onset_forecast_summary = onset_forecast_table(onset_forecast);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 onset_forecast_summary #hide
 
-# The left panel splits the coming week's new onset reports into reports of onsets that had already happened by the cut-off and reports of onsets still to come, and shows their sum.
-# The fourth bar is the same sum after it has been through the observation model, which is what the next vintage will actually print.
-# It is wider than the sum it replicates by the two reads' error and the counting variation of the new reports.
-# Only the fourth bar is comparable to a digitised figure, and only it is scored.
-#
-# The right panel puts the nowcast itself on the same axes, the onsets that have happened against the share of them the triangle has printed.
+#md # ```@raw html
+#md # <figcaption>
+#md # The symptom-onset nowcast and forecast.
+#md # The first three rows are the outbreak at the cut-off and the next three the coming week, so the two halves must not be added.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# "Onsets not yet reported at T" is not a backlog that will all arrive, because ascertainment does not reach one.
+# It holds both the reporting backlog and the cases surveillance will never confirm.
+# The smaller "reports this week of onsets before T" row is the part the coming week should clear.
 
 #md # ```@raw html
 #md # <details><summary>Symptom-onset nowcast and forecast plot</summary>
@@ -261,6 +287,16 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 onset_forecast_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The coming week's new onset reports, split into onsets before and after the cut-off, with their sum and that sum after the observation model (left).
+#md # Only the fourth bar is comparable to a digitised figure and only it is scored, and it is wider by the read error and the counting variation of new reports.
+#md # The nowcast sets the onsets that have happened against the share the triangle has printed (right).
+#md # </figcaption>
+#md # </figure>
+#md # ```
