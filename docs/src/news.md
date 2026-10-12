@@ -161,7 +161,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
 - A delay's double-interval-censored discretisation falls back to a uniform PMF rather than throwing a `DomainError`, when a NUTS step-size search pushes an analytical Gamma, LogNormal or Weibull delay's own shape or scale out of domain (resolves #1105).
-  A uniform PMF this far from the sampled delay scores badly enough in practice that the step-size search still moves past it, though nothing forces that outcome explicitly; fitted values have not changed in testing.
+  A uniform PMF this far from the sampled delay scores badly enough in practice that the step-size search still moves past it, though that is empirical rather than guaranteed; fitted values have not changed in testing.
 
 ## v2.2.0
 
