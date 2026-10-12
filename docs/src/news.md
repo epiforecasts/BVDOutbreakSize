@@ -66,7 +66,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 149, 10 October (#PR).
+- The model cut-off advances to SitRep 149, 10 October (#1128).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
   SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitReps 147 and 149 print no Ituri alerts, so their suspect totals are partial and the suspected stream leaves out 8 and 10 October.
