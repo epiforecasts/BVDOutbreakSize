@@ -138,12 +138,8 @@ observations_table = DataFrame(
 ## its docstring for the mechanism. #src
 MarkdownTable(observations_table) #hide
 
-# The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
-# Each stream's source is recorded alongside the observation data itself.
-# Two columns are the exception.
-# The new-suspect column is a per-day count, not a cumulative total, fitted directly as a daily incidence.
-# It picks up where the cumulative suspected-case column freezes on 26 May.
-# The isolated-patients column is a daily count of patients in an isolation/treatment bed, fitted as the suspect inflow carried through a length-of-stay survival.
+# The new-suspect column is a daily count rather than a cumulative total, fitted directly as daily incidence from 26 May, where the cumulative suspected-case column freezes.
+# The isolated-patients column is a daily count of patients in an isolation bed, fitted as the suspect inflow carried through a length-of-stay survival.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>
@@ -194,9 +190,18 @@ end;
 ## `@raw html` block that Literate would otherwise emit, which for this #src
 ## table (growing by one row per situation report) would keep exceeding #src
 ## Documenter's raw-block line-relocation regex limit as SitReps accumulate. #src
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 MarkdownTable(vintage_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
+#md # Each stream's source is recorded alongside the observation data itself.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -255,11 +260,10 @@ MarkdownTable(vintage_table) #hide
 # We describe them in generative order, from the infection process through the epidemiological delays to the observation streams.
 # The implementation uses Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation, CensoredDistributions for delay discretisation, FlexiChains for chain handling, and PairPlots [pairplots_jl](@cite) with AlgebraOfGraphics [danisch2021makie](@cite) for the figures.
 # Each submodel's source is shown in the collapsible block beneath its prose.
-#
-# The table below shows which parameters inform each observation submodel.
-# The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
-# The *confirmed* positives are scored as a beta-binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
-# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -282,6 +286,14 @@ MarkdownTable(vintage_table) #hide
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● |  | ● |
 # | Traveller volume | ● |  |  |  |  |  | ● |
+#
+#md # ```@raw html
+#md # <figcaption>
+#md # The parameters that inform each observation submodel.
+#md # The analysed column is the analysed-specimen volume, the single laboratory stream fitted as a count, and the laboratory pipeline and confirmed deaths sections give how the confirmed columns are scored.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@setup main
 #md # using BVDOutbreakSize, CodeTracking, Revise
@@ -807,10 +819,19 @@ MarkdownTable(vintage_table) #hide
 #md # </details>
 #md # ```
 
-# The prior density, with the CDC $0.33$ figure marked.
-
 cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 cfr_prior_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The case-fatality ratio prior density, with the CDC figure of 0.33 marked.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ### Observation models
 #
@@ -2331,7 +2352,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # To bound the deaths already committed at the cut-off, we project the deaths that would still occur if all transmission stopped on the report date.
 # Every infection present by the cut-off still dies with probability CFR.
 # The committed future deaths are therefore the CFR-weighted cumulative infection count net of the deaths already expected, $\Delta D = \mathrm{CFR}\cdot I_T - \mathbb{E}[D_T]$, where $I_T$ is the cumulative infection count to the cut-off.
-# The figure is shown in the counterfactual results below.
+# The results are on the [national estimates](@ref "National estimates") page.
 #
 # ### Delay-corrected confirmed case-fatality ratio
 #
@@ -2381,7 +2402,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
-# The figure is shown in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") below.
+# The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
 #
 # #### Symptom-onset nowcast and forecast
 #
