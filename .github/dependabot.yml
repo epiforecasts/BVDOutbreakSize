@@ -40,6 +40,11 @@ updates:
       # unsatisfiable. Skip StatsFuns >= 2 until Turing supports it.
       - dependency-name: "StatsFuns"
         versions: [">=2"]
+      # Runic is pinned to one exact version in `test/formatter/Project.toml`
+      # and again in `.pre-commit-config.yaml`, and a bump has to reformat
+      # the tree in the same commit. Dependabot only widens the first, which
+      # breaks the "Runic pins agree" check. Bump it by hand instead.
+      - dependency-name: "Runic"
       # Julia standard libraries ship with Julia itself, so the Julia release
       # fixes their version, not the registry. Dependabot finds no usable
       # version and writes bounds such as "< 0.0.1" that match nothing and

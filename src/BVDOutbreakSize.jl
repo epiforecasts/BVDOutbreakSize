@@ -56,11 +56,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     summary_table, posterior_summary, median_interval_text,
     markdown_table, MarkdownTable,
     patch_summary_table, patch_overview_table, province_bed_table,
-    patch_headline, province_forecast_headline,
+    patch_headline, province_summary_table, province_forecast_headline,
     province_cfr_table, province_forecast_table,
     province_forecast_vs_truth, plot_province_forecast,
     forecast_provinces, province_share_draws, PROVINCE_FORECAST_METHOD,
-    plot_province_forecast_detail,
+    plot_province_forecast_detail, plot_cases_rt,
     fit_diagnostics, diagnostics_table,
     parameter_diagnostics, worst_parameters_table,
     family_diagnostics_table, diagnostic_spread_table,
@@ -219,15 +219,15 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     zone_composition_calibration, plot_zone_composition_ppc,
     zone_diagnostics_table, zone_sampler_diagnostics
 
-## Observation distributions a submodel writes on the right of `~`.
-## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
-## there and Julia 1.10 still loads the package.
+## Distributions a submodel writes on the right of `~`. Public, not
+## exported. `public` is Julia 1.11 syntax, so it is parsed only there and
+## Julia 1.10 still loads the package.
 @static if VERSION >= v"1.11.0-DEV.469"
     eval(
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
                 "StudentTVector, BetaBinomialVector, SplitCountVector, " *
-                "SafePoisson, SafeNegBinomial"
+                "SafePoisson, SafeNegBinomial, RandomWalkVector"
         )
     )
 end

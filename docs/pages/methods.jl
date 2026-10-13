@@ -138,12 +138,8 @@ observations_table = DataFrame(
 ## its docstring for the mechanism. #src
 MarkdownTable(observations_table) #hide
 
-# The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
-# Each stream's source is recorded alongside the observation data itself.
-# Two columns are the exception.
-# The new-suspect column is a per-day count, not a cumulative total, fitted directly as a daily incidence.
-# It picks up where the cumulative suspected-case column freezes on 26 May.
-# The isolated-patients column is a daily count of patients in an isolation/treatment bed, fitted as the suspect inflow carried through a length-of-stay survival.
+# The new-suspect column is a daily count rather than a cumulative total, fitted directly as daily incidence from 26 May, where the cumulative suspected-case column freezes.
+# The isolated-patients column is a daily count of patients in an isolation bed, fitted as the suspect inflow carried through a length-of-stay survival.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>
@@ -194,9 +190,18 @@ end;
 ## `@raw html` block that Literate would otherwise emit, which for this #src
 ## table (growing by one row per situation report) would keep exceeding #src
 ## Documenter's raw-block line-relocation regex limit as SitReps accumulate. #src
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 MarkdownTable(vintage_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
+#md # Each stream's source is recorded alongside the observation data itself.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -255,11 +260,10 @@ MarkdownTable(vintage_table) #hide
 # We describe them in generative order, from the infection process through the epidemiological delays to the observation streams.
 # The implementation uses Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation, CensoredDistributions for delay discretisation, FlexiChains for chain handling, and PairPlots [pairplots_jl](@cite) with AlgebraOfGraphics [danisch2021makie](@cite) for the figures.
 # Each submodel's source is shown in the collapsible block beneath its prose.
-#
-# The table below shows which parameters inform each observation submodel.
-# The *analysed* column is the analysed-specimen volume, the single laboratory stream fitted as a count.
-# The *confirmed* positives are scored as a beta-binomial of the observed analysed denominator with a positivity linked to the composition of the suspected pool, so the laboratory data help identify the non-BVD background.
-# The *conf. deaths* column mirrors the laboratory pipeline on the death side, with a death testing intensity and a death-pool composition positivity built from the same assay:
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -282,6 +286,14 @@ MarkdownTable(vintage_table) #hide
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● |  | ● |
 # | Traveller volume | ● |  |  |  |  |  | ● |
+#
+#md # ```@raw html
+#md # <figcaption>
+#md # The parameters that inform each observation submodel.
+#md # The analysed column is the analysed-specimen volume, the single laboratory stream fitted as a count, and the laboratory pipeline and confirmed deaths sections give how the confirmed columns are scored.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@setup main
 #md # using BVDOutbreakSize, CodeTracking, Revise
@@ -291,6 +303,7 @@ MarkdownTable(vintage_table) #hide
 #
 # #### Reproduction number
 #
+# The reproduction number is the average number of further infections caused by each infection, and a value above one means infections are growing.
 # Each patch has its own daily reproduction number.
 # It is a shared trend $R^{\text{trend}}_t$ plus a patch deviation $\delta_{p,t}$, with the deviations summing to zero across patches on every day:
 #
@@ -303,14 +316,13 @@ MarkdownTable(vintage_table) #hide
 # infection process below.
 #
 # The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It then follows a Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
-#            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \log R^{\text{trend}}_1 = \log R_0, \qquad
+# \log R^{\text{trend}}_k \sim \mathrm{Normal}\bigl(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}^2\bigr), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
 #
@@ -344,6 +356,8 @@ MarkdownTable(vintage_table) #hide
 # \qquad
 # \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
+#
+# We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -806,10 +820,19 @@ MarkdownTable(vintage_table) #hide
 #md # </details>
 #md # ```
 
-# The prior density, with the CDC $0.33$ figure marked.
-
 cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 cfr_prior_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The case-fatality ratio prior density, with the CDC figure of 0.33 marked.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ### Observation models
 #
@@ -1238,6 +1261,7 @@ cfr_prior_fig #hide
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
 # The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
+# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
 # The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
@@ -1298,9 +1322,9 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl(\tau_{\text{cap}} (Q \mathbf{z}^{\text{cap}})_p\bigr),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
 # \qquad
-# \mathbf{z}^{\text{cap}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \mathbf{y}^{\text{cap}} \sim \mathrm{Normal}(0,\ \tau_{\text{cap}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
@@ -1758,7 +1782,7 @@ cfr_prior_fig #hide
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
+# It is a weekly-knot non-centred random walk on the logit scale, on the same knots as the reproduction-number walk above and concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
 # A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
@@ -1815,7 +1839,8 @@ cfr_prior_fig #hide
 # A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
-# $\tau \sim \mathrm{LogNormal}(\log 1,\ 0.5)$ is centred on the scale of one count, since one count is about 2.9 pixels on the published figures and a read is a rounding plus an outline pixel.
+# We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
+# One count spans a median of 3.2 pixels across the digitised figures (2.6 to 8.7), so one pixel is about 0.3 counts.
 #
 # The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #
@@ -1934,9 +1959,9 @@ cfr_prior_fig #hide
 # The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
 #
 # ```math
-# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl(\tau_{\text{bg}} (Q \mathbf{z}^{\text{bg}})_p\bigr),
+# w_p \propto \frac{N_p}{\sum_q N_q} \exp\bigl((Q \mathbf{y}^{\text{bg}})_p\bigr),
 # \qquad
-# \mathbf{z}^{\text{bg}} \sim \mathrm{Normal}(0, I_{P-1}),
+# \mathbf{y}^{\text{bg}} \sim \mathrm{Normal}(0,\ \tau_{\text{bg}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1.5).
 # ```
@@ -2315,18 +2340,27 @@ cfr_prior_fig #hide
 # ### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# Chains initialise from the prior and run at a maximum tree depth of 10.
-# Every fit runs two chains.
-# The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
-# The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
-# Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
+# Each chain starts from the first of a batch of prior draws whose log joint density is at or above the batch median.
+
+_sampler = joint_sampler_args(); #hide
+_sampler_same = "Every fit uses the same sampler settings.\n"; #hide
+_sampler_each = "Each runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n"; #hide
+_sampler_both = "Both halves of the spatial comparison therefore differ only in the spatial structure and not in the sampler."; #hide
+Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
+
+# R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
+# The bulk effective sample size is the number of independent draws the chains are worth, and we report it for the parameter where it is lowest.
+# A divergent transition is a step the sampler could not take accurately.
+#
+# We summarise each quantity by its equal-tailed 30%, 60% and 90% credible intervals, or by the 90% interval alone in the comparison tables.
+# Shares, ranks and probabilities are computed draw by draw, so they carry the correlation between provinces.
 
 # ### No-onward-transmission counterfactual
 #
 # To bound the deaths already committed at the cut-off, we project the deaths that would still occur if all transmission stopped on the report date.
 # Every infection present by the cut-off still dies with probability CFR.
 # The committed future deaths are therefore the CFR-weighted cumulative infection count net of the deaths already expected, $\Delta D = \mathrm{CFR}\cdot I_T - \mathbb{E}[D_T]$, where $I_T$ is the cumulative infection count to the cut-off.
-# The figure is shown in the counterfactual results below.
+# The results are on the [national estimates](@ref "National estimates") page.
 #
 # ### Delay-corrected confirmed case-fatality ratio
 #
@@ -2376,7 +2410,7 @@ cfr_prior_fig #hide
 # We also report the modelled bed demand and its shortfall against the modelled capacity.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
-# The figure is shown in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results") below.
+# The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
 #
 # #### Symptom-onset nowcast and forecast
 #
@@ -2482,7 +2516,7 @@ cfr_prior_fig #hide
 # We assess the forecast against data observed since by freezing the data to roughly one week before the current cut-off, re-fitting, and forecasting one week ahead from the frozen model in the same way.
 # We then compare that projection against the counts observed by the current cut-off.
 # The frozen re-fit cuts the data to an earlier cut-off and re-fits the joint model, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# Each frozen re-fit uses the full headline settings (1000 draws across two chains).
+# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings.
 # The same frozen re-fit is reused to compare against McCabe et al. at the cut-offs they used.
 # The helper below performs one frozen joint re-fit and is reused by the forecast validation and matched-in-time results.
 
