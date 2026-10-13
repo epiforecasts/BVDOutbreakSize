@@ -67,9 +67,13 @@ end
     θ = [Float64.(eachindex(_ZONE_DELAY_KEYS)) .+ j for j in 1:3]
     sev = [[0.5, 2.0, 1.0], [1.0, 1.0, 3.0], [2.0, 1.0, 1.0]]
     asc = [[1.0, 2.0, 0.5], [2.5, 1.0, 1.0], [1.0, 1.0, 1.0]]
-    params = _zone_prevalence_parameters(joint, θ, asc, sev, [1, 1, 2])
-    @test params[1].ascertainment ≈ [0.4, 0.8, 0.3]
-    @test params[2].ascertainment ≈ [1.0, 0.5, 0.7]
+    w = [[1.0, 1.0, 5.0], [3.0, 1.0, 1.0], [1.0, 2.0, 1.0]]
+    params = _zone_prevalence_parameters(joint, θ, asc, sev, w, [1, 1, 2])
+    ## Within each province the zones, weighted by their infections, keep
+    ## the province's ascertainment, in proportion to their contrasts; a
+    ## province's only zone takes its rate.
+    @test params[1].ascertainment ≈ [0.4 / 1.5, 0.8 / 1.5, 0.6]
+    @test params[2].ascertainment ≈ [0.5 * 2.5 * 4 / 8.5, 0.5 * 4 / 8.5, 0.7]
     @test params[3].ascertainment ≈ [0.4, 0.4, 0.6]
     @test params[1].cfr ≈ [0.15, 0.6, 0.5]
     ## The product is capped at one.

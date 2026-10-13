@@ -186,9 +186,13 @@ end
 
 # Per-draw parameters for the zones: zone draw `j` takes the joint's draw
 # `j` (cycling), its own delays from `θ[j]`, and one ascertainment and one
-# case-fatality ratio per zone, the province's times the zone's relative
-# ascertainment `asc[j]` and relative fatality `sev[j]`, capped at one.
-function _zone_prevalence_parameters(joint, θ, asc, sev, patch_of)
+# case-fatality ratio per zone. The ascertainment is the province's times the
+# zone's relative ascertainment `asc[j]`, rescaled within the province by the
+# zones' cut-off-day infections `w[j]` as [`_patch_ascertainment`](@ref)
+# rescales the provinces. The case-fatality ratio is the province's times the
+# zone's relative fatality `sev[j]`, as the joint builds its province ratios.
+# Both are capped at one.
+function _zone_prevalence_parameters(joint, θ, asc, sev, w, patch_of)
     at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
     own = (
         :inc_mean, :inc_sd, :report_alpha, :report_theta, :admission_alpha,
@@ -196,14 +200,18 @@ function _zone_prevalence_parameters(joint, θ, asc, sev, patch_of)
     )
     return map(eachindex(θ)) do j
         p = joint[mod1(j, length(joint))]
-        zone(v, rel) = [
-            min(v[min(patch_of[a], end)] * rel[j][a], 1.0)
+        ascertainment = zeros(length(patch_of))
+        for pr in unique(patch_of)
+            zs = findall(==(pr), patch_of)
+            ascertainment[zs] = _patch_ascertainment(
+                p.ascertainment[min(pr, end)], asc[j][zs], w[j][zs]
+            )
+        end
+        cfr = [
+            min(p.cfr[min(patch_of[a], end)] * sev[j][a], 1.0)
                 for a in eachindex(patch_of)
         ]
-        merge(
-            p, NamedTuple{own}(map(k -> θ[j][at(k)], own)),
-            (; ascertainment = zone(p.ascertainment, asc), cfr = zone(p.cfr, sev))
-        )
+        merge(p, NamedTuple{own}(map(k -> θ[j][at(k)], own)), (; ascertainment, cfr))
     end
 end
 
@@ -216,10 +224,12 @@ zone stage does not estimate the recovery stay, so zone draw `j` takes it
 from draw `j` of `joint_chn`, the joint the zone stage was fitted from,
 cycling when the zone chain is longer. It estimates ascertainment and
 fatality only relative to the zone's province
-(`zone_ascertainment_relative`, `zone_severity_relative`), so a zone's
-suspected-case ascertainment and case-fatality ratio are its province's from
-that joint draw times the zone's own contrasts, capped at one. The
-ascertainment contrast is fitted to confirmed cases, so this assumes
+(`zone_ascertainment_relative`, `zone_severity_relative`). A zone's
+case-fatality ratio is its province's from that joint draw times the zone's
+contrast. Its suspected-case ascertainment is the province's times the
+zone's contrast, rescaled so that the province's zones, weighted by their
+infections on the cut-off day, keep the province's rate. Both are capped at
+one. The ascertainment contrast is fitted to confirmed cases, so this assumes
 suspected-case detection varies between the zones of a province as
 confirmed-case detection does. Returns the states of
 [`patch_prevalence`](@ref).
@@ -234,6 +244,7 @@ function zone_prevalence(
         _draw_vectors(zone_chn, :delay_parameters_zone),
         _draw_vectors(zone_chn, :zone_ascertainment_relative),
         _draw_vectors(zone_chn, :zone_severity_relative),
+        [[x[j, end] for x in series] for j in axes(first(series), 1)],
         inputs.patch_of_zone
     )
     return _prevalence_draws(
