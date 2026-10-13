@@ -72,7 +72,9 @@ end
 end
 
 @testitem "prevalence_overview rates, sorting and table" begin
-    using BVDOutbreakSize: prevalence_overview, prevalence_table
+    using BVDOutbreakSize: prevalence_overview, prevalence_table,
+        plot_prevalence_ranking
+    import CairoMakie
     using DataFrames: nrow
     ## Two areas, two draws each; the second area has the higher rate.
     states = (:incubating, :symptomatic, :community)
@@ -92,9 +94,14 @@ end
     @test nrow(tab) == 1
     @test tab[1, "Zone"] == "b"
     @test tab[1, "People in the community"] == "20 (11–29)"
+    @test plot_prevalence_ranking(
+        ov; patch_labels = ["A", "B"], max_rows = 1
+    ) isa CairoMakie.Makie.Figure
 end
 
-@testitem "patch_prevalence on a four-patch prior chain" tags = [:slow] begin
+@testitem "patch and zone prevalence on prior chains" tags = [:slow] setup = [
+    ZoneSynthetic,
+] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     using Random: Xoshiro
@@ -123,5 +130,22 @@ end
     for p in 1:np
         @test all(>=(0), prev.symptomatic[p])
         @test prev.community[p] ≈ prev.incubating[p] .+ prev.symptomatic[p]
+    end
+
+    ## The zone stage of the synthetic two-patch setup, with this chain as
+    ## the joint its zone draws take their stay, ascertainment and CFR from.
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    zchn = sample(
+        Xoshiro(20261013), bvd_zone(inputs.model_data), Prior(), 8;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    zprev = zone_prevalence(zchn, inputs, chn)
+    nz = length(inputs.zone_keys)
+    @test length(zprev.community) == nz
+    @test all(length(v) == 8 for v in zprev.community)
+    for a in 1:nz
+        @test all(>=(0), zprev.symptomatic[a])
+        @test zprev.community[a] ≈ zprev.incubating[a] .+ zprev.symptomatic[a]
     end
 end
