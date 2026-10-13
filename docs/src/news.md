@@ -22,6 +22,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The national reproduction-number walk's step SD $\sigma_{\text{rw}}$ has a `LogNormal(log 0.07, 0.6)` prior in place of `N⁺(0, 0.1)`.
+  The two share a median of about 0.07 and a 95th percentile of about 0.19, so the prior still makes a weekly change in $R_t$ above about 20% unlikely.
+  The lognormal puts 0.06% of its mass below 0.01 against 8% for the half-normal.
+  We assume transmission net of the response ramp does not stay flat over the outbreak, and a step SD of 0.01 holds the walk to a typical 5% change across its 25 weekly knots.
+  The knots are sampled centred, so as $\sigma_{\text{rw}}$ shrinks the weakly informed knots must collapse onto one level.
+  That funnel neck is where the sampler loses its step size, and the step SD is the slowest-mixing parameter of recent CI joint fits.
+  On 4,000 draws from the joint prior the implied $R_t$ at the cut-off is unchanged within sampling noise (5%, 50% and 95% quantiles 0.62, 1.61 and 4.00 before and 0.64, 1.57 and 3.88 after).
+  Fitted values change.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.

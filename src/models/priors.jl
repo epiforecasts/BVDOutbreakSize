@@ -221,11 +221,19 @@ cryptic exponential phase. The grid days before the renewal start are
 filled by the analytic cryptic exponential and are unused by the walk,
 which clamps to `R0` before its first knot.
 
-The random-walk step SD prior is a half-normal SD 0.1, so the weekly
-log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
-one week to the next. The walk starts at `rt_start`, so every knot sits in
-the observed window rather than drifting over the unobserved pre-report
-stretch.
+The random-walk step SD prior is `LogNormal(log(0.07), 0.6)`, with median
+0.07 and 95th percentile 0.19, so the weekly log-`R_t` is unlikely to change
+by more than about 20% from one week to the next. Its median and 95th
+percentile are close to those of a half-normal of SD 0.1 (0.067 and
+0.196). Unlike the half-normal it
+puts little weight near zero (5th percentile 0.026, `P(sigma_rw < 0.01)`
+under 0.001 against 0.08). We assume transmission net of the response ramp
+is not flat over the outbreak, and a step SD of 0.01 would hold the walk
+alone to a typical 5% change across 25 weekly knots. Away from zero the
+centred knots cannot collapse onto a single level as `sigma_rw` shrinks,
+which is where a centred walk with a sampled scale funnels. The walk
+starts at `rt_start`, so every knot sits in the observed window rather
+than drifting over the unobserved pre-report stretch.
 
 The intervention effect is constrained non-positive
 (`truncated(Normal(0, 0.4); upper = 0)`). A declared WHO response (case
@@ -247,7 +255,7 @@ with `log_R` the walk's knots net of the ramp, `log_R0` first.
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         ramp::Real = RT_INTERVENTION_RAMP,
-        sigma_prior = truncated(Normal(0, 0.1); lower = 0),
+        sigma_prior = LogNormal(log(0.07), 0.6),
         effect_prior = truncated(Normal(0, 0.4); upper = 0),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )

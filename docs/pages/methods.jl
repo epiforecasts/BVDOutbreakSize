@@ -323,7 +323,7 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # \log R^{\text{trend}}_1 = \log R_0, \qquad
 # \log R^{\text{trend}}_k \sim \mathrm{Normal}\bigl(\log R^{\text{trend}}_{k-1},\ \sigma_{\text{rw}}^2\bigr), \qquad
-# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
+# \sigma_{\text{rw}} \sim \mathrm{LogNormal}(\log 0.07,\ 0.6). \tag{2}
 # ```
 #
 # We do not place a prior on $R_0$ directly.
@@ -333,7 +333,8 @@ MarkdownTable(vintage_table) #hide
 # R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
 # ```
 #
-# We set the half-normal on $\sigma_{\text{rw}}$ so that the trend is unlikely to change by more than about 20% from one week to the next: two standard deviations of the weekly log-step is around $0.20$.
+# We use a prior on $\sigma_{\text{rw}}$ with median $0.07$ and 95th percentile $0.19$, so that the trend is unlikely to change by more than about 20% from one week to the next.
+# We assume transmission net of the response does not stay flat over the outbreak, so the prior puts little weight on steps near zero (5th percentile $0.026$).
 #
 # Daily $\log R^{\text{trend}}_t$ is the linear interpolation between the weekly knots.
 # Before the first knot it is held flat at $R_0$ (the interpolation clamps below the first knot rather than extrapolating):

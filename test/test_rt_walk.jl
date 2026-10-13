@@ -9,7 +9,8 @@
         RT_INTERVENTION_RAMP
     using Turing: @model, to_submodel, returned, logjoint, @varname,
         DynamicPPL
-    using Distributions: Normal, Poisson, product_distribution, truncated
+    using Distributions: LogNormal, Normal, Poisson, product_distribution,
+        truncated
     using Random: Xoshiro
 
     ## Cut-off day 60, the walk from day 12 and the ramp centred on day 30,
@@ -29,7 +30,7 @@
         days = knot_days(n; week, start = rt_start)
         nb = length(days)
         log_R0 := log_R0_base
-        sigma_rw ~ truncated(Normal(0, 0.1); lower = 0)
+        sigma_rw ~ LogNormal(log(0.07), 0.6)
         z ~ product_distribution(fill(Normal(0, 1), nb - 1))
         intervention_effect ~ truncated(Normal(0, 0.4); upper = 0)
         log_R = log_R0 .+ vcat(zero(log_R0), cumsum(sigma_rw .* z))
