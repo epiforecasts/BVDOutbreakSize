@@ -2611,7 +2611,8 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # ```
 #
 # A person is incubating while the incubation period exceeds $s$.
-# After onset, a case is detected as a suspected case with the national suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
+# After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
+# The province ascertainment is the national one times the province's relative ascertainment, rescaled so that the provinces, weighted by their infections on the cut-off day, keep the national rate, as in the joint model.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
@@ -2620,8 +2621,9 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 #
 # Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
-# The health-zone model does not estimate the treatment-centre stay or the suspected-case ascertainment, so zone draw $j$ takes them from joint draw $j$.
-# It estimates each zone's fatality relative to its province, so a zone's case-fatality ratio is its province's from joint draw $j$ times that contrast.
+# The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
+# It estimates each zone's ascertainment and fatality relative to its province, so a zone's ascertainment and case-fatality ratio are its province's from joint draw $j$ times those contrasts.
+# The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province as confirmed-case detection does.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
 #
 # ### Comparison with published estimates

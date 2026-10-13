@@ -67,11 +67,37 @@ end
 
 const PREVALENCE_STATES = (:incubating, :symptomatic, :community)
 
+# Suspected-case ascertainment by patch: the national `p_drc` times the
+# relative ascertainment `rel`, rescaled so that the patches weighted by
+# `w` keep the national rate, as the joint splits the national suspect
+# volume by ascertainment-weighted incidence. Capped at one.
+function _patch_ascertainment(p_drc::Real, rel::AbstractVector, w::AbstractVector)
+    weighted = sum(rel .* w)
+    scale = weighted > 0 ? sum(w) / weighted : 1.0
+    return [min(p_drc * r * scale, 1.0) for r in rel]
+end
+
 # Per-draw delay parameters and probabilities from a joint chain, one named
-# tuple per draw.
+# tuple per draw. The ascertainment is one value per patch, weighted by the
+# patch infections on the cut-off day, or the national value alone when the
+# chain has no province ascertainment.
 function _prevalence_parameters(chn)
     d(vn) = Float64.(vec(collect(chn[vn])))
-    asc = d(:p_drc)
+    p_drc = d(:p_drc)
+    asc = if _has_key(chn, :province_ascertainment) &&
+            _has_key(chn, :infections_patch)
+        rel = _draw_vectors(chn, :province_ascertainment)
+        inf = _draw_vectors(chn, :infections_patch)
+        ## `infections_patch` is day-major, so its last `np` entries are the
+        ## cut-off day's.
+        [
+            _patch_ascertainment(
+                p_drc[i], rel[i], inf[i][(end - length(rel[i]) + 1):end]
+            ) for i in eachindex(p_drc)
+        ]
+    else
+        [[a] for a in p_drc]
+    end
     ## A chain without the province death split holds only the national CFR.
     cfr = _has_key(chn, :CFR_patch) ? _draw_vectors(chn, :CFR_patch) :
         [[c] for c in d(:CFR)]
@@ -126,7 +152,7 @@ function _prevalence_draws(series, params, patch_of, horizon)
         p, dl = params[j], delays[j]
         w = infection_state_weights(
             dl.incubation, dl.detection, dl.death, dl.recovery;
-            ascertainment = p.ascertainment,
+            ascertainment = p.ascertainment[min(patch_of[a], end)],
             cfr = p.cfr[min(patch_of[a], end)], horizon
         )
         x = view(series[a], j, :)
@@ -142,9 +168,9 @@ Point prevalence at the cut-off by province, draw by draw, from a joint
 chain of [`bvd_joint`](@ref) with `n_patches` patches. Each state is one
 vector of draws per patch: `incubating`, `symptomatic` (past onset and
 undetected) and `community` (incubating or symptomatic and undetected), as in
-[`infection_state_weights`](@ref). Detection is the national suspected-case
-ascertainment and the case-fatality ratio is the patch's own, or the
-national one when the chain has no province death split.
+[`infection_state_weights`](@ref). The suspected-case ascertainment and the
+case-fatality ratio are the patch's own, or the national ones when the
+chain has no province composition or death split.
 """
 function patch_prevalence(
         chn, n_patches::Integer = length(PROVINCE_NAMES);
@@ -159,9 +185,10 @@ function patch_prevalence(
 end
 
 # Per-draw parameters for the zones: zone draw `j` takes the joint's draw
-# `j` (cycling), its own delays from `θ[j]`, and one case-fatality ratio per
-# zone, the province's times the zone's relative fatality `sev[j]`.
-function _zone_prevalence_parameters(joint, θ, sev, patch_of)
+# `j` (cycling), its own delays from `θ[j]`, and one ascertainment and one
+# case-fatality ratio per zone, the province's times the zone's relative
+# ascertainment `asc[j]` and relative fatality `sev[j]`, capped at one.
+function _zone_prevalence_parameters(joint, θ, asc, sev, patch_of)
     at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
     own = (
         :inc_mean, :inc_sd, :report_alpha, :report_theta, :admission_alpha,
@@ -169,11 +196,14 @@ function _zone_prevalence_parameters(joint, θ, sev, patch_of)
     )
     return map(eachindex(θ)) do j
         p = joint[mod1(j, length(joint))]
-        cfr = [
-            min(p.cfr[min(patch_of[a], end)] * sev[j][a], 1.0)
+        zone(v, rel) = [
+            min(v[min(patch_of[a], end)] * rel[j][a], 1.0)
                 for a in eachindex(patch_of)
         ]
-        merge(p, NamedTuple{own}(map(k -> θ[j][at(k)], own)), (; cfr))
+        merge(
+            p, NamedTuple{own}(map(k -> θ[j][at(k)], own)),
+            (; ascertainment = zone(p.ascertainment, asc), cfr = zone(p.cfr, sev))
+        )
     end
 end
 
@@ -182,13 +212,17 @@ Point prevalence at the cut-off by health zone, draw by draw, on the daily
 zone infections of [`zone_infections`](@ref), in the order of
 `inputs.zone_keys`. Each zone draw takes its incubation, detection,
 admission and death delays from its own draw of the joint's delays. The
-zone stage does not estimate the recovery stay or the detection
-probability, so zone draw `j` takes them from draw `j` of `joint_chn`, the
-joint the zone stage was fitted from, cycling when the zone chain is
-longer. It estimates fatality only relative to the zone's province
-(`zone_severity_relative`), so a zone's case-fatality ratio is its
-province's from that joint draw times the zone's own contrast, capped at
-one. Returns the states of [`patch_prevalence`](@ref).
+zone stage does not estimate the recovery stay, so zone draw `j` takes it
+from draw `j` of `joint_chn`, the joint the zone stage was fitted from,
+cycling when the zone chain is longer. It estimates ascertainment and
+fatality only relative to the zone's province
+(`zone_ascertainment_relative`, `zone_severity_relative`), so a zone's
+suspected-case ascertainment and case-fatality ratio are its province's from
+that joint draw times the zone's own contrasts, capped at one. The
+ascertainment contrast is fitted to confirmed cases, so this assumes
+suspected-case detection varies between the zones of a province as
+confirmed-case detection does. Returns the states of
+[`patch_prevalence`](@ref).
 """
 function zone_prevalence(
         zone_chn, inputs, joint_chn;
@@ -198,6 +232,7 @@ function zone_prevalence(
     params = _zone_prevalence_parameters(
         _prevalence_parameters(joint_chn),
         _draw_vectors(zone_chn, :delay_parameters_zone),
+        _draw_vectors(zone_chn, :zone_ascertainment_relative),
         _draw_vectors(zone_chn, :zone_severity_relative),
         inputs.patch_of_zone
     )

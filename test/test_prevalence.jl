@@ -54,13 +54,23 @@ end
 @testitem "zone prevalence parameters scale the province CFR by the zone's" begin
     using BVDOutbreakSize: _zone_prevalence_parameters, _ZONE_DELAY_KEYS
     joint = [
-        (; inc_mean = 9.0, recovery_mean = 20.0, cfr = [0.3, 0.5]),
-        (; inc_mean = 9.5, recovery_mean = 21.0, cfr = [0.4, 0.6]),
+        (;
+            inc_mean = 9.0, recovery_mean = 20.0,
+            ascertainment = [0.4, 0.6], cfr = [0.3, 0.5],
+        ),
+        (;
+            inc_mean = 9.5, recovery_mean = 21.0,
+            ascertainment = [0.5, 0.7], cfr = [0.4, 0.6],
+        ),
     ]
     ## Three zone draws, so the third cycles back to the first joint draw.
     θ = [Float64.(eachindex(_ZONE_DELAY_KEYS)) .+ j for j in 1:3]
     sev = [[0.5, 2.0, 1.0], [1.0, 1.0, 3.0], [2.0, 1.0, 1.0]]
-    params = _zone_prevalence_parameters(joint, θ, sev, [1, 1, 2])
+    asc = [[1.0, 2.0, 0.5], [2.5, 1.0, 1.0], [1.0, 1.0, 1.0]]
+    params = _zone_prevalence_parameters(joint, θ, asc, sev, [1, 1, 2])
+    @test params[1].ascertainment ≈ [0.4, 0.8, 0.3]
+    @test params[2].ascertainment ≈ [1.0, 0.5, 0.7]
+    @test params[3].ascertainment ≈ [0.4, 0.4, 0.6]
     @test params[1].cfr ≈ [0.15, 0.6, 0.5]
     ## The product is capped at one.
     @test params[2].cfr ≈ [0.4, 0.4, 1.0]
@@ -69,6 +79,20 @@ end
     inc = findfirst(==(:inc_mean), _ZONE_DELAY_KEYS)
     @test [p.inc_mean for p in params] == [θ[j][inc] for j in 1:3]
     @test [p.recovery_mean for p in params] == [20.0, 21.0, 20.0]
+end
+
+@testitem "patch ascertainment keeps the national rate" begin
+    using BVDOutbreakSize: _patch_ascertainment
+    rel = [0.5, 1.0, 2.0]
+    w = [100.0, 50.0, 10.0]
+    asc = _patch_ascertainment(0.3, rel, w)
+    ## Weighted by the infections, the patches detect at the national rate,
+    ## in proportion to their relative ascertainment.
+    @test sum(asc .* w) / sum(w) ≈ 0.3
+    @test asc ./ asc[2] ≈ rel
+    ## The cap at one, and no infections to weight by.
+    @test _patch_ascertainment(0.9, [1.0, 3.0], [10.0, 10.0]) ≈ [0.45, 1.0]
+    @test _patch_ascertainment(0.3, rel, zeros(3)) ≈ 0.3 .* rel
 end
 
 @testitem "prevalence_overview rates, sorting and table" begin
