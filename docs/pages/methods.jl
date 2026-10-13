@@ -2620,7 +2620,8 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 #
 # Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
-# The health-zone model does not estimate the treatment-centre stay, the ascertainment or the case-fatality ratio, so zone draw $j$ takes them from joint draw $j$.
+# The health-zone model does not estimate the treatment-centre stay or the suspected-case ascertainment, so zone draw $j$ takes them from joint draw $j$.
+# It estimates each zone's fatality relative to its province, so a zone's case-fatality ratio is its province's from joint draw $j$ times that contrast.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
 #
 # ### Comparison with published estimates

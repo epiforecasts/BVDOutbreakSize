@@ -51,6 +51,26 @@ end
     @test point_prevalence([5.0, 1.0], [1.0]) ≈ 1.0
 end
 
+@testitem "zone prevalence parameters scale the province CFR by the zone's" begin
+    using BVDOutbreakSize: _zone_prevalence_parameters, _ZONE_DELAY_KEYS
+    joint = [
+        (; inc_mean = 9.0, recovery_mean = 20.0, cfr = [0.3, 0.5]),
+        (; inc_mean = 9.5, recovery_mean = 21.0, cfr = [0.4, 0.6]),
+    ]
+    ## Three zone draws, so the third cycles back to the first joint draw.
+    θ = [Float64.(eachindex(_ZONE_DELAY_KEYS)) .+ j for j in 1:3]
+    sev = [[0.5, 2.0, 1.0], [1.0, 1.0, 3.0], [2.0, 1.0, 1.0]]
+    params = _zone_prevalence_parameters(joint, θ, sev, [1, 1, 2])
+    @test params[1].cfr ≈ [0.15, 0.6, 0.5]
+    ## The product is capped at one.
+    @test params[2].cfr ≈ [0.4, 0.4, 1.0]
+    @test params[3].cfr ≈ [0.6, 0.3, 0.5]
+    ## The zone's own delays replace the joint's; the stay is the joint's.
+    inc = findfirst(==(:inc_mean), _ZONE_DELAY_KEYS)
+    @test [p.inc_mean for p in params] == [θ[j][inc] for j in 1:3]
+    @test [p.recovery_mean for p in params] == [20.0, 21.0, 20.0]
+end
+
 @testitem "prevalence_overview rates, sorting and table" begin
     using BVDOutbreakSize: prevalence_overview, prevalence_table
     using DataFrames: nrow

@@ -158,36 +158,51 @@ function patch_prevalence(
     )
 end
 
+# Per-draw parameters for the zones: zone draw `j` takes the joint's draw
+# `j` (cycling), its own delays from `θ[j]`, and one case-fatality ratio per
+# zone, the province's times the zone's relative fatality `sev[j]`.
+function _zone_prevalence_parameters(joint, θ, sev, patch_of)
+    at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
+    own = (
+        :inc_mean, :inc_sd, :report_alpha, :report_theta, :admission_alpha,
+        :admission_theta, :death_alpha, :death_theta,
+    )
+    return map(eachindex(θ)) do j
+        p = joint[mod1(j, length(joint))]
+        cfr = [
+            min(p.cfr[min(patch_of[a], end)] * sev[j][a], 1.0)
+                for a in eachindex(patch_of)
+        ]
+        merge(p, NamedTuple{own}(map(k -> θ[j][at(k)], own)), (; cfr))
+    end
+end
+
 """
 Point prevalence at the cut-off by health zone, draw by draw, on the daily
 zone infections of [`zone_infections`](@ref), in the order of
 `inputs.zone_keys`. Each zone draw takes its incubation, detection,
 admission and death delays from its own draw of the joint's delays. The
-zone stage does not estimate the recovery stay, the detection probability
-or the case-fatality ratio, so zone draw `j` takes them from draw `j` of
-`joint_chn`, the joint the zone stage was fitted from, cycling when the zone
-chain is longer. Returns the states of [`patch_prevalence`](@ref).
+zone stage does not estimate the recovery stay or the detection
+probability, so zone draw `j` takes them from draw `j` of `joint_chn`, the
+joint the zone stage was fitted from, cycling when the zone chain is
+longer. It estimates fatality only relative to the zone's province
+(`zone_severity_relative`), so a zone's case-fatality ratio is its
+province's from that joint draw times the zone's own contrast, capped at
+one. Returns the states of [`patch_prevalence`](@ref).
 """
 function zone_prevalence(
         zone_chn, inputs, joint_chn;
         horizon::Integer = 120
     )
     series = zone_infections(zone_chn, inputs)
-    joint = _prevalence_parameters(joint_chn)
-    θ = _draw_vectors(zone_chn, :delay_parameters_zone)
-    at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
-    own = (
-        :inc_mean, :inc_sd, :report_alpha, :report_theta, :admission_alpha,
-        :admission_theta, :death_alpha, :death_theta,
+    params = _zone_prevalence_parameters(
+        _prevalence_parameters(joint_chn),
+        _draw_vectors(zone_chn, :delay_parameters_zone),
+        _draw_vectors(zone_chn, :zone_severity_relative),
+        inputs.patch_of_zone
     )
-    params = [
-        merge(
-            joint[mod1(j, length(joint))],
-            NamedTuple{own}(map(k -> θ[j][at(k)], own))
-        ) for j in eachindex(θ)
-    ]
     return _prevalence_draws(
-        series, params, inputs.patch_of_zone, horizon
+        series, params, eachindex(inputs.patch_of_zone), horizon
     )
 end
 
