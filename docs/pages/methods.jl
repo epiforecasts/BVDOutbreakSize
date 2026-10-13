@@ -2612,7 +2612,8 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 #
 # A person is incubating while the incubation period exceeds $s$.
 # After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
-# The province ascertainment is the national one times the province's relative ascertainment, rescaled so that the provinces, weighted by their infections on the cut-off day, keep the national rate, as in the joint model.
+# The province ascertainment is the national one times the province's relative ascertainment.
+# We rescale it so that the provinces keep the national rate when weighted by their infections on the cut-off day.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
