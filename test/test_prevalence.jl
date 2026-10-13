@@ -99,6 +99,16 @@ end
     @test _patch_ascertainment(0.3, rel, zeros(3)) ≈ 0.3 .* rel
 end
 
+@testitem "ascertainment weights lag the infections by the confirmation delay" begin
+    using BVDOutbreakSize: _cutoff_confirmations
+    ## Confirmation two days after infection: an area whose infections
+    ## stopped two days before the cut-off still weighs, one infected only
+    ## on the cut-off day does not yet.
+    f = [0.0, 0.0, 1.0]
+    w = _cutoff_confirmations([[5.0, 0.0, 0.0], [0.0, 0.0, 5.0]], f)
+    @test w == [5.0, 0.0]
+end
+
 @testitem "prevalence_overview rates, sorting and table" begin
     using BVDOutbreakSize: prevalence_overview, prevalence_table,
         plot_prevalence_ranking
