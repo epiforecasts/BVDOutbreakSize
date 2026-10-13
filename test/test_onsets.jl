@@ -871,6 +871,31 @@ end
         sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
 end
 
+@testitem "onset_reporting_model centres the read SD on one figure pixel" begin
+    ## The rounding of each read has its own variance, so `τ` is the read
+    ## error beyond it, about one outline pixel. Its prior median sits within
+    ## a factor of two of one pixel at the median figure scale.
+    using BVDOutbreakSize
+    using BVDOutbreakSize: onset_reporting_model
+    using Statistics: median
+    using Random: seed!
+
+    figures = joinpath(pkgdir(BVDOutbreakSize), "data", "onset_curve_figures.csv")
+    lines = readlines(figures)
+    col = findfirst(==("pixels_per_count"), split(lines[1], ','))
+    ppc = [parse(Float64, split(l, ',')[col]) for l in lines[2:end]]
+    pixel = 1 / median(ppc)
+
+    oc = (;
+        onset_days = [10, 11], report_days = [15, 15],
+        prev_report_days = [0, 0], increments = [2, 3],
+    )
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    seed!(20261006)
+    τs = [model().τ for _ in 1:2000]
+    @test pixel / 2 < median(τs) < 2 * pixel
+end
+
 @testitem "safe_studentt stays valid under extreme scale/df" begin
     using BVDOutbreakSize: safe_studentt
     using Distributions: mean, std, logpdf

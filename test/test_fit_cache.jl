@@ -340,7 +340,7 @@ end
         @test isempty(calls)
 
         ## A fake headline under the joint's own key reaches the zone fitter
-        ## with the current observations and the zone sampler settings.
+        ## with the current observations and the joint's sampler settings.
         fake_joint = (; payload = "joint chain")
         fit_or_load(fit_key("joint"), () -> fake_joint; cache_dir = dir)
         r = spec("local").thunk()
@@ -349,10 +349,8 @@ end
         c = calls[1]
         @test c.parent == fake_joint
         @test c.o === obs
-        @test c.samples == 800
-        @test c.n_adapts == 500
-        @test c.target_accept == 0.8
-        @test !haskey(c, :max_depth)
+        @test (; c.samples, c.n_adapts, c.target_accept, c.max_depth) ==
+            joint_sampler_args()
         @test c.chains == 2
         @test c.callback === nothing
 
