@@ -195,16 +195,21 @@ end
 """
 Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
-([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
-cumulative-sum form, with standard-normal innovations scaled by `sigma_rw`
-and accumulated, avoiding the funnel geometry of the centred recursion.
-Daily log-`R_t` is the linear interpolation between knots
+([`knot_days`](@ref)) and follow a Gaussian random walk with step SD
+`sigma_rw`. Daily log-`R_t` is the linear interpolation between knots
 ([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
 first WHO situation report) adds a sampled effect `intervention_effect`
 shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp` (default
 21 days, roughly the time a response takes to bite), so transmission
 changes gradually rather than instantly. `breakpoint = missing` drops the
 term. `Rt = exp.(log_Rt)`.
+
+The knots after the first are sampled as `log_Rt_knots`, the total
+log-`R_t` on each knot day with the ramp included. The walk is centred on
+those knots net of the ramp ([`RandomWalkVector`](@ref)), so the prior is
+the same random walk plus ramp. The data pin the total level, and in these
+coordinates the effect moves it only through the ramp's shape between
+knots.
 
 The walk base `log_R0` is not sampled here. It is passed in, derived
 forward from the sampled growth rate `r` and the generation interval
@@ -233,7 +238,8 @@ knots a week apart ([`future_knot_days`](@ref)), with standard-normal
 innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
 on. `Rt` then covers the horizon too.
 
-Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
+Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
+with `log_R` the walk's knots net of the ramp, `log_R0` first.
 """
 @model function rt_walk_model(
         n::Integer, log_R0_base::Real;
@@ -252,14 +258,18 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
     ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
-    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
-    steps = sigma_rw .* z[1:(nb - 1)]
-    log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
+    ng = n + horizon_days(forecast)
+    ramp_shape = sigmoid_ramp(ng, breakpoint; ramp)
+    ## The total log-Rt on the knot days after the first, ramp included. A
+    ## single knot still draws one value so the chain key exists; it is
+    ## unused.
+    shift = intervention_effect .* ramp_shape[days[min(2, nb):nb]]
+    log_Rt_knots ~ RandomWalkVector(log_R0, sigma_rw, shift)
+    log_R = vcat(log_R0, log_Rt_knots[1:(nb - 1)] .- shift[1:(nb - 1)])
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
     ## variable, so the fitted knots and their density are untouched.
-    ng = n + horizon_days(forecast)
     if forecast !== nothing
         fdays = future_knot_days(n, horizon_days(forecast); week)
         z_future ~ product_distribution(fill(Normal(0, 1), length(fdays)))
@@ -267,7 +277,7 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
         days = vcat(days, fdays)
     end
     log_Rt = interpolate_knots(log_R, days, ng)
-    log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(ng, breakpoint; ramp)
+    log_Rt = log_Rt .+ intervention_effect .* ramp_shape
     Rt = exp.(log_Rt)
     return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
 end
@@ -705,6 +715,16 @@ The walk is non-centred. The priors are `g_0 ~ N(0, 0.05)`,
 implied-capacity series the isolation submodel fits pins `C(t)` on the
 days a rate is published.
 
+The capacity first moves over the first week, at `g_1 = g_0 + σ_growth z_1`,
+and `g_0` never acts on its own. The likelihood therefore sees `g_0` and
+`z_1` only through their sum, and sampling both leaves a direction no data
+inform, which the sampler meets as a ridge. The sampled `growth0` is that
+first week's growth `g_1`, drawn from its exact prior
+`N(μ, √(s² + σ_growth²))` given the `N(μ, s)` `growth_prior`, and `z`
+carries the steps after it. The model is the same and has one dimension
+fewer. `growth_prior` must therefore be a `Normal`. With a single knot
+there is no first week and `growth0` keeps `growth_prior`.
+
 Knots run only from `start`, the first day with occupancy or capacity data,
 and capacity is flat at `C0` before it. Off-window capacity carries no
 likelihood, so walking it there would add unidentified innovations. Pass
@@ -723,12 +743,11 @@ from the last fitted value.
         n::Integer; start::Integer = 1,
         week::Integer = 7,
         baseline_prior = LogNormal(log(450.0), 0.42),
-        growth_prior = Normal(0.0, 0.05),
+        growth_prior::Normal = Normal(0.0, 0.05),
         growth_sd_prior = truncated(Normal(0.0, 0.05); lower = 0),
         cutoff::Union{Nothing, Integer} = nothing
     )
     C0 ~ baseline_prior
-    growth0 ~ growth_prior
     σ_growth ~ growth_sd_prior
     ## The fitted knots end at the cut-off. A grid running past it continues
     ## the trend on future knots a week apart with innovations `z_future`.
@@ -736,8 +755,16 @@ from the last fitted value.
     s = clamp(Int(start), 1, nc)
     days = knot_days(nc; week = week, start = s)
     nb = length(days)
-    z ~ filldist(Normal(0, 1), max(nb - 1, 1))
-    growth = growth0 .+ σ_growth .* cumsum(z[1:max(nb - 1, 0)])
+    ## `growth0` is the first week's growth, the base growth plus the first
+    ## step. The likelihood sees only that sum, so it is drawn from the sum's
+    ## exact prior and the step is not sampled on its own.
+    growth0 ~ nb > 1 ?
+        Normal(growth_prior.μ, sqrt(growth_prior.σ^2 + σ_growth^2)) :
+        growth_prior
+    z ~ filldist(Normal(0, 1), max(nb - 2, 1))
+    later = σ_growth .* cumsum(z[1:max(nb - 2, 0)])
+    growth = nb > 1 ? growth0 .+ vcat(zero(eltype(later)), later) :
+        growth0 .+ later
     log_knots = vcat(zero(growth0), cumsum(growth))
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)
@@ -760,8 +787,8 @@ the patch's modelled cumulative admissions to that day,
 
 ```math
 s_p(t) \\propto \\bigl(A_p(t) + a_0\\bigr) \\exp(\\delta_p),
-\\qquad \\boldsymbol{\\delta} = \\tau_{cap} Q \\mathbf{z},
-\\qquad z_j \\sim \\mathrm{N}(0, 1),
+\\qquad \\boldsymbol{\\delta} = Q \\mathbf{y},
+\\qquad y_j \\sim \\mathrm{N}(0, \\tau_{cap}^2),
 \\qquad \\tau_{cap} \\sim \\mathrm{N}^+(0, 1),
 ```
 
@@ -788,6 +815,14 @@ scale 1 puts a two-fold departure well inside the prior and a seven-fold
 one near its edge. The centre already carries the large gap between beds
 and population, so the deviations left for the pool are modest.
 
+The basis coordinates `y_cap` are drawn centred, on the scale `τ_cap`,
+because the province bed and occupancy counts inform them. The data then
+pin each deviation rather than `τ_cap`, and the non-centred
+`τ_cap Q z` would tie `z` to `τ_cap` along a funnel. On the joint
+posterior `log τ_cap` correlates at −0.96 with the log mean square of the
+`z`. Both forms carry the same prior, so only the sampled coordinates
+differ.
+
 The cumulative admissions differ from the stock that splits the bed demand
 in [`treatment_flow_model`](@ref). The stock counts
 the patients still in a bed and falls as they leave. Cumulative admissions
@@ -801,7 +836,6 @@ columns sum to one.
         admissions::AbstractMatrix{<:Real};
         admission_floor::Real = 1.0,
         pooling_sd_prior = truncated(Normal(0, 1); lower = 0),
-        offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(max(size(admissions, 1), 1))
     )
     np, n = size(admissions)
@@ -813,8 +847,12 @@ columns sum to one.
             "got $(admission_floor)."
     )
     τ_cap ~ pooling_sd_prior
-    z_cap ~ product_distribution(fill(offset_prior, np - 1))
-    dev = sum_to_zero(sum_to_zero_factor(basis, τ_cap), z_cap)
+    ## Each basis coordinate is drawn centred, on the scale `τ_cap`. `eps`
+    ## floors the SD so a `τ_cap ≈ 0` draw stays a proper distribution.
+    y_cap ~ product_distribution(
+        fill(Normal(0, τ_cap + eps(typeof(float(τ_cap)))), np - 1)
+    )
+    dev = basis * y_cap
     s = _admission_centred_shares(admissions, dev, admission_floor)
     return (; s, pooling_sd = τ_cap)
 end
@@ -912,14 +950,14 @@ end
 
 """
 Non-BVD background rate as a smooth weekly lognormal random walk over the
-surveillance window. The log-rate follows a
-non-centred random walk on weekly knots and is linearly interpolated to
-the daily grid, the same parameterisation as the reproduction-number walk
-([`rt_walk_model`](@ref)). The background is a slow drift, so a knot per
-`week` carries the time variation with far fewer innovations than a daily
-walk. The series is gated to zero before the surveillance `onset`, since
-the non-BVD background does not exist before surveillance began, and ramps
-in over the first `onset_ramp` days of the window. With knot values
+surveillance window. The log-rate follows a random walk on weekly knots
+and is linearly interpolated to the daily grid, with the knot spacing of
+the reproduction-number walk ([`rt_walk_model`](@ref)). The background is
+a slow drift, so a knot per `week` carries the time variation with far
+fewer innovations than a daily walk. The series is gated to zero before
+the surveillance `onset`, since the non-BVD background does not exist
+before surveillance began, and ramps in over the first `onset_ramp` days
+of the window. With knot values
 `\\log\\lambda` and knot days `d`,
 
 ```math
@@ -1477,7 +1515,7 @@ and `Rt_matrix` covers the horizon.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
-    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
+    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.log_Rt_knots` and
     ## `rt_state.intervention_effect`, the names the analysis and sensitivity
     ## pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
@@ -1642,10 +1680,15 @@ secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
-A log deviation per directed flow, a correlated destination effect plus a
-double-centred flow term ([`flow_pair_deviation`](@ref)), moves where each
-origin's exports land with its total held
-([`destination_weighted_kernel`](@ref)).
+Gravity is the prior mean of the flows. The log flows `log K + W` have a
+multivariate normal prior with mean `log K` and covariance
+`σ_dest² C_dest + σ_flow² R(ρ_flow)`, a destination effect correlated
+`ρ_od` with each province's origin deviation plus a double-centred flow
+term with reciprocity correlation `ρ_flow`
+([`importation_flow_factor`](@ref)). The deviation `W` is drawn
+non-centred and is the data's departure from gravity. Each origin's column
+is rescaled to its gravity total ([`destination_weighted_kernel`](@ref)),
+so `W` moves where an origin's exports land and not how many it sends.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1838,16 +1881,22 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
-        ## Per-destination weights on the kernel, sum-to-zero on the same
-        ## basis and correlated `ρ_od` with each province's origin deviation.
+        ## The log flows `log K + W` have a multivariate normal prior whose
+        ## mean is the log gravity kernel, so gravity is the prior and `W` is
+        ## the data's departure from it. `W = L ζ` is non-centred on the
+        ## factor `L` of [`importation_flow_factor`](@ref), with `Σ = L Lᵀ`
+        ## the sum of a destination effect and a flow term.
+        ##
+        ## The destination draws correlate `ρ_od` with each province's origin
+        ## deviation and stay standard normal.
         σ_dest ~ importation_destination_sd_prior
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         ρ_od_unit ~ importation_correlation_prior
         ρ_od = _unit_to_correlation(ρ_od_unit)
         z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
-        ## Per-flow deviations with the origin and destination effects taken
-        ## out, each flow correlated `ρ_flow` with its reverse.
+        ## The flow term's correlation matrix gives each flow correlation
+        ## `ρ_flow` with its reverse.
         n_sym = size(flow_basis.symmetric, 2)
         n_flow = n_sym + size(flow_basis.antisymmetric, 2)
         if n_flow > 0
@@ -1859,13 +1908,19 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             else
                 ρ_flow = -one(Tp)
             end
-            flow_dev = flow_pair_deviation(flow_basis, σ_flow, ρ_flow, z_flow)
+            flow_sd = σ_flow
+            ζ = vcat(z_od, z_flow)
             importation_flow_sd := σ_flow
             importation_reciprocity := ρ_flow
         else
-            flow_dev = zeros(Tp, n_patches, n_patches)
+            flow_sd = zero(Tp)
+            ρ_flow = -one(Tp)
+            ζ = z_od
         end
-        log_weight = dest_dev .+ flow_dev
+        L_flow = importation_flow_factor(
+            basis, flow_basis, σ_dest, flow_sd, ρ_flow
+        )
+        log_weight = reshape(L_flow * ζ, n_patches, n_patches)
         weighted = destination_weighted_kernel(importation_kernel, log_weight)
         importation_destination_sd := σ_dest
         importation_destination_effect := dest_dev
@@ -2007,8 +2062,8 @@ deviation,
 
 ```math
 w_p \\propto \\frac{N_p}{\\sum_q N_q} \\exp(\\delta_p),
-\\qquad \\boldsymbol{\\delta} = \\tau_{bg} Q \\mathbf{z},
-\\qquad z_j \\sim \\mathrm{N}(0, 1),
+\\qquad \\boldsymbol{\\delta} = Q \\mathbf{y},
+\\qquad y_j \\sim \\mathrm{N}(0, \\tau_{bg}^2),
 ```
 
 normalised to sum to one. `Q` is the sum-to-zero basis
@@ -2018,6 +2073,13 @@ no reference patch. `τ_bg → 0` recovers the population split. The per-provinc
 analysed-specimen composition in [`bvd_joint`](@ref) identifies the shares,
 since the background dominates the specimens analysed where positivity is
 low.
+
+The basis coordinates `y_bg` are drawn centred, on the scale `τ_bg`,
+because that composition informs them. The data then pin each deviation
+rather than `τ_bg`, and the non-centred `τ_bg Q z` would tie `z` to `τ_bg`
+along a funnel. On the joint posterior `log τ_bg` correlates at −0.93 with
+the log mean square of the `z`. Both forms carry the same prior, so only
+the sampled coordinates differ.
 
 With one patch the whole background belongs to it and nothing is sampled.
 
@@ -2031,7 +2093,6 @@ Returns `(; w, pooling_sd)`.
             ),
         ],
         pooling_sd_prior = truncated(Normal(0, 1.5); lower = 0),
-        offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(max(n_patches, 1))
     )
     if n_patches <= 1
@@ -2042,8 +2103,12 @@ Returns `(; w, pooling_sd)`.
             "$(n_patches) patches."
     )
     τ_bg ~ pooling_sd_prior
-    z_bg ~ product_distribution(fill(offset_prior, n_patches - 1))
-    dev = sum_to_zero(sum_to_zero_factor(basis, τ_bg), z_bg)
+    ## Each basis coordinate is drawn centred, on the scale `τ_bg`. `eps`
+    ## floors the SD so a `τ_bg ≈ 0` draw stays a proper distribution.
+    y_bg ~ product_distribution(
+        fill(Normal(0, τ_bg + eps(typeof(float(τ_bg)))), n_patches - 1)
+    )
+    dev = basis * y_bg
     total_pop = sum(populations)
     log_w = log.(populations ./ total_pop) .+ dev
     ## Softmax against the largest term, so a wide deviation cannot

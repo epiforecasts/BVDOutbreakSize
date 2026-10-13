@@ -1,9 +1,7 @@
 # # Province estimates
 #
-# This page gives the province estimates from the joint model.
-# The methods for this model are on the [Methods](@ref "Methods") page.
-#
-# The model runs one renewal equation per province and fits the national streams against the summed provinces, so the [national estimates](@ref "National estimates") are the sum of the provinces here.
+# This page gives the province estimates from the joint model, whose methods are on the [Methods](@ref "Methods") page.
+# The [national estimates](@ref "National estimates") are the sum of the provinces here.
 # The per-province forecast is on the [province forecasts](@ref "Province forecasts") page and its scoring is in the [forecast by province](@ref "Forecast by province").
 #
 # This page is generated from
@@ -33,9 +31,44 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 
 # ## Summary
 #
-# The table below compares the provinces, from the joint posterior.
-# Each range is an equal-tailed 90% credible interval, and the shares and probabilities are computed draw by draw.
-# The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
+#md # ```@raw html
+#md # <details><summary>Compute the weekly cases and reproduction number by province</summary>
+#md # ```
+
+## The provincial Rt trajectories, rebuilt on the same grid as the
+## reproduction number by province figure further down.
+province_summary_rt = reconstruct_patch_rt(
+    chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT, n_patches = N_PATCHES,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    ramp = RT_INTERVENTION_RAMP
+);
+## The week-ahead province forecast, read from the same draws as the
+## province forecasts page.
+province_summary_forecast = forecast_provinces(
+    fit_forecast("joint"); horizon = 7, n_patches = N_PATCHES
+);
+province_cases_rt = cases_rt_table(
+    province_summary_rt, province_cases.days, province_cases.increments;
+    cutoff = obs.cutoff, n = obs.n, forecast = province_summary_forecast
+);
+province_cases_rt_fig = plot_cases_rt(province_cases_rt);
+
+#md # ```@raw html
+#md # </details>
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_cases_rt_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's confirmed cases over the most recent week against its reproduction number, with the week before and the forecast week ahead.
+#md # Faint bars span the 90% credible interval of the reproduction number, and the forecast also carries a bar across its 90% interval for cases.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Compute the province comparison</summary>
@@ -46,29 +79,34 @@ province_headline = Markdown.parse(province_headline_md);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_headline #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The provinces compared from the joint posterior, as equal-tailed 90% credible intervals, with shares and probabilities computed draw by draw.
+#md # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Maps
-#
-# The maps shade each province by its patch's posterior median, so the pooled patch shades all its provinces alike.
-# The reproduction number at the cut-off and the relative case ascertainment are centred on one, and a province whose 90% credible interval spans one is washed out.
-# The [Methods](@ref "Methods") page defines each quantity.
 
 #md # ```@raw html
 #md # <details><summary>Maps of infections, reproduction number and ascertainment</summary>
 #md # ```
 
+## The infections panel is also drawn alone for the summary page.
+province_infections_panel = (;
+    values = province_map_summary(chn_joint, :C_T_patch, N_PATCHES).values,
+    title = "Infections to date", scale = log10,
+    colorbar_label = "Infections (median)",
+)
 province_map_fig = plot_province_map(
     [
-        (;
-            values = province_map_summary(
-                chn_joint, :C_T_patch, N_PATCHES
-            ).values,
-            title = "Infections to date", scale = log10,
-            colorbar_label = "Infections (median)",
-        ),
+        province_infections_panel,
         (;
             province_map_summary(chn_joint, :R_T_patch, N_PATCHES)...,
             title = "Reproduction number at the cut-off",
@@ -84,16 +122,24 @@ province_map_fig = plot_province_map(
     ]
 );
 
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 province_map_fig #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Each province is shaded by its patch's posterior median, so the pooled patch shades all its provinces alike.
+#md # The reproduction number at the cut-off and the relative case ascertainment are centred on one, and a province whose 90% credible interval spans one is washed out.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
 # ### Detail by province
 #
-# Each province's own estimates are below, as equal-tailed 30%, 60% and 90% credible intervals, with its case-fatality ratio in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
-# The log-Rt deviation is from the national trend, the drift is the deviation's walk scale and the contrast is against Ituri.
+# Each province's case-fatality ratio is in the [case-fatality ratio by province](@ref "Case-fatality ratio by province").
 
 #md # ```@raw html
 #md # <details><summary>Compute the per-province tables and figure</summary>
@@ -110,9 +156,18 @@ province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_detail_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's estimates as medians with 30%, 60% and 90% credible intervals, repeated in the tables below.
+#md # The log-Rt deviation is from the national trend, the drift is the deviation's walk scale and the contrast is against Ituri.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # #### Ituri
 
@@ -131,9 +186,6 @@ province_detail_tables[3] #hide
 province_detail_tables[4] #hide
 
 # #### Isolation beds
-#
-# Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the per-province occupancy and bed figures the situation reports print.
-# Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
 
 #md # ```@raw html
 #md # <details><summary>Province bed table</summary>
@@ -143,14 +195,20 @@ province_bed_overview = province_bed_table(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_bed_overview #hide
 
-# ## Size and infections
+#md # ```@raw html
+#md # <figcaption>
+#md # Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the occupancy and bed counts in the situation reports.
+#md # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
-# The national outbreak size in the [joint model estimates](@ref "Joint model estimates") is the sum of the four patches' renewal equations.
-# The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
+# ## Size and infections
 
 #md # ```@raw html
 #md # <details><summary>Modelled infections by province</summary>
@@ -163,12 +221,19 @@ province_infections_fig = plot_infections_patches(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_infections_fig #hide
 
-# The provinces are coupled by an importation kernel that follows Flowminder's subscriber cohorts out of Ituri and Nord-Kivu and a gravity kernel elsewhere, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
-# Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
+#md # ```@raw html
+#md # <figcaption>
+#md # Modelled infections by province, daily (top) and cumulative (bottom).
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# The provinces are coupled by the importation kernel in the [mixing and importation](@ref "Mixing and importation") Methods section, which follows Flowminder's subscriber cohorts out of Ituri and Nord-Kivu and gravity elsewhere.
 # Of the days the Nord-Kivu cohort spends away from home in the modelled provinces, 74% are in Ituri, so most of what leaves Nord-Kivu lands there.
 # For the Ituri cohort, 61% of those days are in Nord-Kivu.
 
@@ -193,17 +258,23 @@ province_imports_fig = plot_imports_patches(
 
 importation_table #hide
 
-#-
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 
 province_imports_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Imported infections by province.
+#md # Every arrival is debited from its origin on the same day, so the figure shows where infection occurred rather than extra infection.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Reproduction number by province
 
 # The national reproduction number is in [reproduction number over time](@ref "Reproduction number over time").
-# Below it is split by province, one panel per province with the national trajectory in grey behind it.
-# The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
-# A panel tracking grey says that province moves with the national trajectory.
-# The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number by province</summary>
@@ -222,15 +293,23 @@ province_rt_fig = plot_rt_patches(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_rt_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number of each province, with the national trajectory in grey.
+#md # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
+#md # The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
-# The prior admits real divergence, with a 26% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
-# With four patches and the pooled one carrying almost no signal the cross-province correlation is not identified, and it tracks its prior.
-# It is the correlation of the provinces' deviation innovations, which sum to zero, so it leans negative.
-# With equal spreads each province's correlations with the other three average −1/3.
+# Its prior gives a 26% probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
+# With four patches and the pooled one carrying almost no signal, the cross-province correlation is not identified and tracks its prior.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
@@ -263,13 +342,22 @@ spatial_hyper_table = summary_table(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 spatial_hyper_table #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The spatial hyperparameters of the province deviations.
+#md # The correlation is between deviation innovations that sum to zero, so it leans negative, and with equal spreads each province's correlations with the other three average −1/3.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Case-fatality ratio by province
 #
-# Whether the case-fatality ratio varies by province, set against the national ratios in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
+# The case-fatality ratio of each province is set against the national ratios in the [confirmed case-fatality ratio](@ref "Confirmed case-fatality ratio").
 # Only the product of a province's lethality and death confirmation is identified, and the [province compositions](@ref methods-province-compositions) Methods section says how the priors split it.
 
 #md # ```@raw html
@@ -312,8 +400,7 @@ province_cfr #hide
 
 # ## Province parameters against their priors
 #
-# The pair plots below set the posterior of the province parameters against their prior.
-# The prior is the four-patch model's, as the shared prior draws carry no province parameters.
+# The pair plots below set the province parameters against their prior, drawn from the four-patch model.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
@@ -324,8 +411,6 @@ prior_patch_chn = patch_prior_draws(obs);
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-# The first pair plot covers the spatial hyperparameters: the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>
@@ -346,13 +431,21 @@ spatial_pair_fig = plot_pair(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 spatial_pair_fig #hide
 
-# The pair plots below take one province at a time.
-# Each sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the province's importation intensity against its export weight relative to Ituri.
-# Each pair is identified only as a product, so a ridge between the two is expected and its position along the ridge is set by the prior.
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
+#md # These are the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# Each province's pair plot sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the importation intensity against the export weight relative to Ituri.
+# Each pair is identified only as a product, so a ridge between the two is expected and the prior sets the position along it.
 
 #md # ```@raw html
 #md # <details><summary>Compute the per-province pair plots</summary>
@@ -432,8 +525,8 @@ province_pair_figs[4] #hide
 
 # ## Data currency
 #
-# The province blocks are the situation reports' provincial tables: confirmed cases, confirmed deaths and the 24h laboratory volumes.
-# Each is read here against the cut-off, so a block that stops updating shows as a date before it rather than as a flat series.
+# The province blocks are the provincial tables of the situation reports: confirmed cases, confirmed deaths and the 24-hour laboratory volumes.
+# A block that stops updating shows its last date before the cut-off rather than a flat series.
 
 #md # ```@raw html
 #md # <details><summary>Province block currency</summary>
@@ -473,8 +566,7 @@ province_currency #hide
 
 # ## Province fit diagnostics
 #
-# The joint fit's province-level parameters: the reproduction number, infections to date, case-fatality ratio, the two case- and death-ascertainment ratios, and the importation intensity and export weight that set each province's share of imported infections.
-# The national [fit diagnostics](@ref national-fit-diagnostics) summarise the same joint fit as a whole, and its [breakdown by parameter](@ref "Fit diagnostics by parameter") covers every parameter rather than only these.
+# The national [fit diagnostics](@ref national-fit-diagnostics) summarise the same joint fit as a whole, and its [breakdown by parameter](@ref "Fit diagnostics by parameter") covers every parameter.
 
 #md # ```@raw html
 #md # <details><summary>Province-level parameter diagnostics</summary>
@@ -505,15 +597,21 @@ province_diagnostics_table = MarkdownTable(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_diagnostics_table #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # Sampler diagnostics for the province-level parameters of the joint fit: the reproduction number, infections to date, case-fatality ratio, case and death ascertainment ratios, importation intensity and export weight.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison and the reproduction
-# number by province, so they are written here rather than on the National
-# page.
+# The summary dashboard shows the province comparison, the province map, the reproduction number by province and the weekly cases against the reproduction number, so they are written here.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -524,8 +622,39 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+## The summary's cases against R figure is drawn at the page width with
+## larger labels.
+CairoMakie.save(
+    joinpath(dashboard_dir, "cases_rt_provinces.png"),
+    plot_cases_rt(province_cases_rt; size = (680, 560), fontsize = 13)
+)
+## The summary's province map: infections to date alone.
+CairoMakie.save(
+    joinpath(dashboard_dir, "province_map.png"),
+    plot_province_map(
+        [province_infections_panel]; ncols = 1, panel_size = (680, 500)
+    )
+)
 open(joinpath(dashboard_dir, "provinces.md"), "w") do io
     print(io, province_headline_md)
+end
+## The summary's compact province table: infections to date, R at the
+## cut-off and the confirmed cases over the latest week of reports, the
+## same week the cases against R figure ends on.
+province_recent_cases = let last_day = min(last(province_cases.days), obs.n)
+    weekly_count_table(
+        province_cases.days, province_cases.increments[1:N_PATCHES, :],
+        PROVINCE_LABELS[1:N_PATCHES];
+        cutoff = obs.cutoff - Day(obs.n - last_day), n = last_day, weeks = 1
+    ).count
+end
+open(joinpath(dashboard_dir, "provinces_summary.md"), "w") do io
+    print(
+        io,
+        province_summary_table(
+            chn_joint, N_PATCHES; recent_cases = province_recent_cases
+        )
+    )
 end
 
 #md # ```@raw html
@@ -534,6 +663,4 @@ end
 
 # ---
 #
-# The full analysis code, data and model definitions are in the
-# [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize)
-# repository.
+# The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.

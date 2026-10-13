@@ -225,29 +225,70 @@ function _orthonormal_complement(constraints, m::Integer; tol = 1.0e-9)
 end
 
 """
-    flow_pair_deviation(B, σ, ρ, z)
+    importation_flow_factor(Q, B, σ_dest, σ_flow, ρ_flow)
 
-Double-centred flow deviation `U` (`n × n`) from the bases `B` of
-[`flow_pair_basis`](@ref) and standard-normal draws `z` (the symmetric
-directions first), scaled so each directed flow has standard deviation `σ`
-and correlation `ρ` with its reverse.
+Non-centred factor `L` (`n² × (n - 1 + d)`) of the multivariate normal
+prior on the log importation flows `ℓ = log K + W`. Gravity is the prior
+mean of the flows, and the deviation `W = L ζ`, with `ζ ~ N(0, I)`, is their
+data-driven departure from it:
+
+```math
+\\operatorname{vec}(\\ell) \\sim
+    \\mathrm{MvNormal}(\\operatorname{vec}(\\log K),\\ \\Sigma),
+\\qquad
+\\Sigma = L L^\\top = \\sigma_{\\text{dest}}^2 C_{\\text{dest}}
+    + \\sigma_{\\text{flow}}^2 R(\\rho_{\\text{flow}}),
+```
+
+before each origin's column is rescaled to its gravity total
+([`destination_weighted_kernel`](@ref)). Row `(q - 1) n + p` is the flow
+`q → p`, and the diagonal rows are zero.
+
+The first `n - 1` columns are the destination effect, `σ_dest` times the
+sum-to-zero basis `Q` ([`sum_to_zero_basis`](@ref)) repeated over the
+origins, so `C_dest` has entries `δ_{pp'} - 1/n` between flows into `p`
+and `p'`. The other `d` columns span the double-centred flows of `B`
+([`flow_pair_basis`](@ref)), the symmetric directions first, scaled so
+`R(ρ)` has unit diagonal on the flows and `ρ` between each flow and its
+reverse: a correlation matrix. `Σ` is singular, since it leaves out the
+shift shared within an origin's column that the rescale cancels, so it has
+no Cholesky factor and `L` is a rectangular square root.
 """
-function flow_pair_deviation(B::NamedTuple, σ, ρ, z::AbstractVector)
+function importation_flow_factor(
+        Q::AbstractMatrix, B::NamedTuple, σ_dest, σ_flow, ρ_flow
+    )
     S, A = B.symmetric, B.antisymmetric
+    n, k = size(Q)
     ds, da = size(S, 2), size(A, 2)
-    length(z) == ds + da || throw(
+    size(S, 1) == size(A, 1) == n^2 || throw(
         DimensionMismatch(
-            "flow_pair_deviation: $(length(z)) draws for $(ds + da) directions"
+            "importation_flow_factor: a $n-patch basis and flow bases " *
+                "with $(size(S, 1)) and $(size(A, 1)) rows"
         )
     )
-    n = isqrt(size(S, 1))
     pairs = n * (n - 1) ÷ 2
-    T = promote_type(typeof(σ), typeof(ρ), eltype(z), eltype(S))
-    ## `M / d` of each part, so the two scales give each flow variance `σ²`.
-    s_sym = ds > 0 ? σ * sqrt((1 + ρ) * pairs / ds) : zero(T)
-    s_anti = da > 0 ? σ * sqrt((1 - ρ) * pairs / da) : zero(T)
-    u = s_sym .* (S * z[1:ds]) .+ s_anti .* (A * z[(ds + 1):end])
-    return reshape(u, n, n)
+    T = promote_type(
+        eltype(Q), eltype(S), typeof(σ_dest), typeof(σ_flow), typeof(ρ_flow)
+    )
+    ## `M / d` of each part, so the two scales give each flow variance
+    ## `σ_flow²` and correlation `ρ_flow` with its reverse.
+    s_sym = ds > 0 ? σ_flow * sqrt((1 + ρ_flow) * pairs / ds) : zero(T)
+    s_anti = da > 0 ? σ_flow * sqrt((1 - ρ_flow) * pairs / da) : zero(T)
+    L = zeros(T, n^2, k + ds + da)
+    @inbounds for q in 1:n, p in 1:n
+        p == q && continue
+        i = (q - 1) * n + p
+        for j in 1:k
+            L[i, j] = σ_dest * Q[p, j]
+        end
+        for j in 1:ds
+            L[i, k + j] = s_sym * S[i, j]
+        end
+        for j in 1:da
+            L[i, k + ds + j] = s_anti * A[i, j]
+        end
+    end
+    return L
 end
 
 """
