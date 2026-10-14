@@ -283,19 +283,29 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
     end
 
     ## --- patients isolated / normed structures / beds --------------------
+    ## From SitRep 151 the count is followed by its split before the verb,
+    ## "382 patients (127 confirmés et 255 suspects) sont hospitalisés", and
+    ## SitRep 150 prints the same with an unopened bracket, "471 patients
+    ## dont 67 enfants de moins de 5 ans) sont hospitalisés". `P` takes
+    ## either aside between the noun and the verb.
+    P = "patients?(?: \\([^)]*\\)| dont [^;)]*\\))?"
     PAIR = Regex.(
         [
-            "(\\d+)\\)? ?patients? (?:sont )?(?:hospitalis[ei]s?|" *
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *
                 "pris en charge en hospitalisation)[^;]*?" *
                 "dont (\\d+) dans les structures normees[^;]*?" *
                 "capacite d.accueil\\s*\\d{0,2}\\s*de (\\d+) lits",
-            "(\\d+)\\)? ?patients? (?:sont )?(?:hospitalis[ei]s?|" *
+            ## SitRep 150: "471 patients ... sont hospitalisés : 330 dans
+            ## les CTE/CT pour 374 lits, soit un taux d'occupation de 88,2 %".
+            "(\\d+)\\)? ?$P (?:sont )?hospitalis[ei]s? : " *
+                "(\\d+) dans les cte/ct pour (\\d+) lits",
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *
                 "pris en charge en hospitalisation)[^;]*?pour (\\d+) lits",
             "atteint (\\d+) patients pour (\\d+) lits",
             "atteint (\\d+) lits sur (\\d+)",
             "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                 "(?:hospitalis[ei]s?|en isolement)[^;]*?(?:sur|pour) (\\d+) lits",
-            "(\\d+)\\)? ?patients? (?:sont )?en isolement[^;]*?" *
+            "(\\d+)\\)? ?$P (?:sont )?en isolement[^;]*?" *
                 "(?:sur|pour) (\\d+) lits",
             "(\\d+)\\)? ?cas suspects? (?:restent |sont |demeurent )?en isolement" *
                 "[^;]*?(?:sur|pour) (\\d+) lits",
@@ -317,11 +327,14 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
     if !haskey(fields, :patients_isolated)
         SOLO = Regex.(
             [
-                "(\\d+)\\)? ?patients? (?:sont )?" *
+                "(\\d+)\\)? ?$P (?:sont )?" *
                     "(?:hospitalis[ei]s?|pris en charge en hospitalisation)",
                 "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                     "(?:hospitalis[ei]s?|en isolement|en hospitalisation)",
-                "(\\d+)\\)? ?patients? (?:sont |restent |demeurent )?en isolement",
+                "(\\d+)\\)? ?$P (?:sont |restent |demeurent )?en isolement",
+                ## SitRep 150 drops the verb: "Ainsi, 337 patients, soit un
+                ## taux d'occupation de 33,2 %".
+                "ainsi, (\\d+) patients?, soit un taux d.occupation",
                 "(\\d+)\\)? ?cas (?:suspects?|confirmes?) (?:restent |sont |demeurent |" *
                     "est )?(?:en isolement|hospitalis[ei]s?|suivis)",
                 "(\\d+)\\)? ?patient (?:confirme )?est en (?:cours de soins|" *

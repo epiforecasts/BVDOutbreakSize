@@ -67,3 +67,65 @@
     @test any(l -> occursin("En Ituri, 45", l), got)
     @test !any(l -> occursin("vaccinées", l), got)
 end
+
+@testitem "care parser reads the count before its split" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_care.jl"
+        )
+    )
+
+    ## Folded text of SitRep 150 and 151 paragraphs, shortened.
+    ## SitRep 150, Ituri: no verb after the count.
+    f = parse_prose_entry(
+        "76 nouvelles admissions ont ete enregistrees contre 71 sorties, " *
+            "dont 16 guerisons. ainsi, 337 patients, soit un taux " *
+            "d'occupation de 33,2 %, dont 41 malades critiques",
+        "ituri"
+    )
+    @test f[:patients_isolated] == 337
+    @test !haskey(f, :beds)
+
+    ## SitRep 150, Nord-Kivu: an unopened bracket before the verb, then
+    ## the normed-structure count and its beds.
+    f = parse_prose_entry(
+        "79 nouvelles admissions ont ete enregistrees contre 109 sorties, " *
+            "dont 10 guerisons. ainsi, 471 patients dont 67 enfants de " *
+            "moins de 5 ans) sont hospitalises : 330 dans les cte/ct pour " *
+            "374 lits, soit un taux d'occupation de 88,2 %",
+        "nord_kivu"
+    )
+    @test f[:patients_isolated] == 471
+    @test f[:patients_isolated_normed] == 330
+    @test f[:beds] == 374
+
+    ## SitRep 151: the split in brackets before the verb.
+    f = parse_prose_entry(
+        "6 nouvelles admissions ont ete enregistrees. ainsi, 45 patients " *
+            "(17 confirmes et 28 suspects) sont hospitalises pour 169 lits " *
+            "montes, soit un taux d'occupation de 26,6 %",
+        "haut_uele"
+    )
+    @test f[:patients_isolated] == 45
+    @test f[:beds] == 169
+
+    f = parse_prose_entry(
+        "11 nouveaux suspects ont ete admis contre 3 sorties de non-cas. " *
+            "ainsi, 14 patients (3 confirmes et 11 suspects) restent en " *
+            "isolement",
+        "bas_uele"
+    )
+    @test f[:patients_isolated] == 14
+
+    ## The wording every vintage from 109 prints still reads as before.
+    f = parse_prose_entry(
+        "89 nouvelles admissions contre 107 sorties dont 18 gueries. " *
+            "ainsi, 442 patients sont hospitalises pour 1015 lits, soit un " *
+            "taux d'occupation de 43,5 %",
+        "ituri"
+    )
+    @test f[:patients_isolated] == 442
+    @test f[:beds] == 1015
+end
