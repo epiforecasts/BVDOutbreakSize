@@ -18,6 +18,19 @@ The joint is a component too, off by default so a local run of the components st
 `BVD_BENCH_JOINT=true` adds it; expect the compile cost above.
 The benchmark workflow sets it, because this comparison is the only place the joint's gradient is exercised: the test suite asserts the components differentiate and leaves the joint to this and to the fits the docs build runs.
 
+## Health-zone model
+
+`BVD_BENCH_ZONE=true` adds the health-zone model `bvd_zone` as a component, and a `Zone kernels` group that times its inner kernels on the same inputs.
+The workflow does not set it, so a CI run is unchanged.
+
+The real zone inputs need a parent joint chain, which is not in the repository.
+The component instead runs on the synthetic zone dataset from `test/zone_fixtures.jl`, the one the zone tests use, at about the size of the real fit: 60 zones over 4 patches, 150 days and 95 daily vintages.
+The zone metadata is given, so the between-zone mixing and the zone correlation are both on.
+
+The kernels are timed at one prior draw.
+They are the share renewal (forward, and its Mooncake gradient through the hand-written rule), the Dirichlet-multinomial composition for the cases and the deaths, the deviation knots with the correlation factors, and the binned increments for both delays.
+The patch quantities are the province model's posterior mean rather than a draw from it, which changes their values but not their cost.
+
 ## Why both revisions on one machine
 
 A comparison is only as good as the machine underneath it.
@@ -92,6 +105,7 @@ task benchmark                        # results.json in the working directory
 task benchmark -- out.json            # somewhere else
 BVD_BENCH_JOINT=true task benchmark   # plus the full joint
 BVD_BENCH_ENZYME=true task benchmark  # plus the Enzyme backend
+BVD_BENCH_ZONE=true task benchmark    # plus the health-zone model and kernels
 
 # Reproduce the CI comparison: two revisions, one process, plus the comment
 task benchmark-pair                   # main vs HEAD
@@ -129,8 +143,15 @@ Log density/
               treatment_flow, onset_reporting, province_composition
   Composer/   exports_only, deaths_only, cases_only, confirmed_only,
               treatment_only, onsets_only
+  Joint/      bvd_joint (BVD_BENCH_JOINT=true)
+  Zone/       bvd_zone (BVD_BENCH_ZONE=true)
 AD gradients/
   <same groups>/<component>/<backend>
+Zone kernels/ (BVD_BENCH_ZONE=true)
+  share renewal/       forward, Mooncake gradient
+  composition logpdf/  cases, deaths
+  deviation knots
+  binned increments/   cases, deaths
 ```
 
 Backends are Mooncake, the package default, and Enzyme, the opt-in backend from the package's Enzyme extension.
@@ -154,6 +175,7 @@ Because a pair is registered only when its smoke test passes, a pair that disapp
 The component list lives in `test/ad_fixtures.jl`, not here, and this suite includes that file.
 `test/test_ad_gradients.jl` asserts every component differentiates under Mooncake from the same list, so the benchmarked surface and the tested surface cannot drift apart.
 Add a model there and it is both timed and asserted.
+The opt-in zone component is asserted by its own item in the same file.
 
 ## Relationship to `scripts/bench_*.jl`
 
@@ -169,6 +191,7 @@ They also measure pure helpers below the component level this suite reports.
 | `benchmarks.jl` | Builds `SUITE` from the shared fixtures |
 | `src/log_density.jl` | One evaluation per component |
 | `src/ad_gradients.jl` | One gradient per component per backend |
+| `src/zone_kernels.jl` | The health-zone kernels, with `BVD_BENCH_ZONE=true` |
 | `run.jl` | Times one revision once, for local profiling |
 | `ci/run_pair.jl` | Times two worktrees in one process under AirspeedVelocity |
 | `ci/comment.jl` | Turns the two results files into the PR comment |

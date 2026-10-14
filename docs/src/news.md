@@ -188,6 +188,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
   In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
   `frozen_validation` still reached R-hat 1.09.
+- `BVD_BENCH_ZONE=true` adds the health-zone model and its kernels to the benchmark suite, on a synthetic zone dataset of 60 zones, 4 patches, 150 days and 95 vintages (#996).
+  It is off by default, so the benchmark workflow's run is unchanged.
+  The zone tests and the benchmark build that dataset from one shared fixture.
 
 ### Fixed
 
