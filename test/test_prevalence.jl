@@ -131,7 +131,7 @@ end
     tab = prevalence_table(ov; max_rows = 1, area = "Zone")
     @test nrow(tab) == 1
     @test tab[1, "Zone"] == "b"
-    @test tab[1, "People in the community"] == "20 (11–29)"
+    @test tab[1, "Number in the community"] == "20 (11–29)"
     @test plot_prevalence_ranking(
         ov; patch_labels = ["A", "B"], max_rows = 1
     ) isa CairoMakie.Makie.Figure

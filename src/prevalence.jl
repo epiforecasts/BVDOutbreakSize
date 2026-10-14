@@ -334,10 +334,10 @@ function prevalence_table(
     )
     df = DataFrame(
         area => String[], "Population" => String[],
-        "Incubating" => String[],
-        "Symptomatic, undetected" => String[],
-        "In the community" => String[],
-        "People in the community" => String[]
+        "Incubating per 100,000" => String[],
+        "Symptomatic, undetected per 100,000" => String[],
+        "In the community per 100,000" => String[],
+        "Number in the community" => String[]
     )
     for r in eachrow(overview[1:rows, :])
         push!(
