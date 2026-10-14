@@ -2142,6 +2142,29 @@ end
     )
 end
 
+@testitem "pair_flow_deviations: the flow term's covariance on the pairs" begin
+    using BVDOutbreakSize: pair_flow_deviations
+
+    ## The deviations are linear in the draws, so their covariance is
+    ## `F Fᵀ` with `F` the deviations of the unit draws. Written from its
+    ## formula it has variance `σ²` on every flow, `σ² ρ` between a flow and
+    ## its reverse and zero elsewhere.
+    for (m, σ, ρ) in ((1, 0.5, 0.3), (4, 0.7, -0.6), (6, 1.2, 1.0))
+        unit(j) = Float64.(1:(2m) .== j)
+        F = reduce(hcat, [pair_flow_deviations(σ, ρ, unit(j)) for j in 1:(2m)])
+        Σ = zeros(2m, 2m)
+        for e in 1:m
+            Σ[e, e] = Σ[m + e, m + e] = σ^2
+            Σ[e, m + e] = Σ[m + e, e] = σ^2 * ρ
+        end
+        @test F * F' ≈ Σ atol = 1.0e-12
+    end
+    ## A zero scale is no deviation, and the draws come in pairs.
+    @test pair_flow_deviations(0.0, 0.4, randn(6)) == zeros(6)
+    @test isempty(pair_flow_deviations(0.5, 0.4, Float64[]))
+    @test_throws DimensionMismatch pair_flow_deviations(0.5, 0.4, zeros(3))
+end
+
 @testitem "patch_infection_model: per-flow importation deviations" begin
     using BVDOutbreakSize: patch_infection_model, sum_to_zero_basis,
         sum_to_zero, sum_to_zero_factor, flow_pair_basis,

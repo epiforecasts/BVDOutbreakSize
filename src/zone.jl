@@ -30,6 +30,8 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         _draws(chn, :mixing_decay_zone) : nothing
     dest = _has_key(chn, :mixing_destination_zone) ?
         _draw_vectors(chn, :mixing_destination_zone) : nothing
+    flow = _has_key(chn, :mixing_flow_zone) ?
+        _draw_vectors(chn, :mixing_flow_zone) : nothing
     (decay === nothing) == (dest === nothing) || error(
         "_zone_states: the chain carries only one of `mixing_decay_zone` " *
             "and `mixing_destination_zone`."
@@ -58,7 +60,8 @@ function _zone_states(chn, inputs; week::Integer = inputs.week)
         nothing
     blocks(i) = decay === nothing || zd.mixing === nothing ? nothing :
         zone_gravity_blocks(
-            zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i])
+            zd.mixing.gravity, Float64(decay[i]), Float64.(dest[i]),
+            flow === nothing ? nothing : Float64.(flow[i])
         )
     delays(i) = shared(i) && size(zd.meld_delay_rows, 1) > 0 ?
         zone_delay_terms(
