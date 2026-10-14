@@ -1687,7 +1687,7 @@ times the zone's own),
 and, with mixing, `mixing_epsilon_zone`, `mixing_decay_zone` (`γ`),
 `mixing_destination_sd_zone` (`σ_ω`), `mixing_destination_zone` (the log
 weights `ω`, one per zone), `mixing_origin_destination_correlation_zone`
-(`ρ_od`), and with neighbouring pairs `mixing_flow_sd_zone` (`σ_f`),
+(`ρ_od`), `mixing_flow_sd_zone` (`σ_f`),
 `mixing_reciprocity_zone` (`ρ_f`) and `mixing_flow_zone` (the log flow
 deviations, one way along each pair and then back). Daily trajectories are
 rebuilt from these by [`zone_forward`](@ref).
@@ -1795,17 +1795,14 @@ quantity is computed on the fitted days as without a forecast.
         )
         ω_destination = σ_destination .* (gz.destination_basis * z_od)
         ## The flows both ways between neighbouring zones, correlated `ρ_f`.
-        n_pair = length(gz.flow_pairs)
-        if n_pair > 0
-            σ_flow ~ mixing_flow_prior
-            ρ_flow_unit ~ mixing_correlation_prior
-            z_flow ~ product_distribution(fill(offset_prior, 2 * n_pair))
-            flow = pair_flow_deviations(
-                σ_flow, _unit_to_correlation(ρ_flow_unit), z_flow
-            )
-        else
-            flow = nothing
-        end
+        σ_flow ~ mixing_flow_prior
+        ρ_flow_unit ~ mixing_correlation_prior
+        z_flow ~ product_distribution(
+            fill(offset_prior, 2 * length(gz.flow_pairs))
+        )
+        flow = pair_flow_deviations(
+            σ_flow, _unit_to_correlation(ρ_flow_unit), z_flow
+        )
         blocks = zone_gravity_blocks(gz, γ_zone, ω_destination, flow)
     else
         ε_mix = nothing
@@ -1959,11 +1956,9 @@ quantity is computed on the fitted days as without a forecast.
         mixing_destination_sd_zone := σ_destination
         mixing_destination_zone := ω_destination
         mixing_origin_destination_correlation_zone := ρ_od
-        if n_pair > 0
-            mixing_flow_sd_zone := σ_flow
-            mixing_reciprocity_zone := _unit_to_correlation(ρ_flow_unit)
-            mixing_flow_zone := flow
-        end
+        mixing_flow_sd_zone := σ_flow
+        mixing_reciprocity_zone := _unit_to_correlation(ρ_flow_unit)
+        mixing_flow_zone := flow
         import_share_T_zone := [
             fw.imports[nd, z] / max(fw.infections[nd, z], eps(Float64))
                 for z in 1:nz
@@ -2216,7 +2211,9 @@ sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the destination weights
 and the neighbouring pairs `(z, q)`, `z < q`, that carry a flow deviation.
 
 A pair neighbours when either zone is among the other's `flow_neighbours`
-nearest by centroid distance, in or across patches.
+nearest by centroid distance, in or across patches. `flow_neighbours` must
+be at least one and the zones must give at least one pair, so the flow term
+is never empty.
 """
 function zone_gravity_inputs(
         pops::AbstractVector, coords::AbstractVector,
@@ -2258,7 +2255,7 @@ end
 ## The pairs `(z, q)`, `z < q`, in which either zone is among the other's
 ## `k` nearest by distance `d`, in a fixed order.
 function _zone_neighbour_pairs(d::AbstractMatrix, k::Integer)
-    k >= 0 || throw(ArgumentError("flow_neighbours = $k < 0"))
+    k >= 1 || throw(ArgumentError("flow_neighbours = $k < 1"))
     nz = size(d, 1)
     pairs = Set{Tuple{Int, Int}}()
     for q in 1:nz
@@ -2267,6 +2264,9 @@ function _zone_neighbour_pairs(d::AbstractMatrix, k::Integer)
             push!(pairs, minmax(z, q))
         end
     end
+    isempty(pairs) && throw(
+        ArgumentError("flow_neighbours: $nz zones have no neighbouring pair.")
+    )
     return sort!(collect(pairs))
 end
 

@@ -1481,10 +1481,12 @@ end
         foreach(z -> push!(near, minmax(z, q)), others[1:2])
     end
     @test g.flow_pairs == sort(collect(near))
-    @test isempty(
-        zone_gravity_inputs(
-            pops, coords, poz, K; flow_neighbours = 0
-        ).flow_pairs
+    ## Every zone has a neighbour, so the flow term is never empty.
+    @test_throws ArgumentError zone_gravity_inputs(
+        pops, coords, poz, K; flow_neighbours = 0
+    )
+    @test_throws ArgumentError zone_gravity_inputs(
+        pops[1:1], coords[1:1], poz[1:1], K
     )
     m = length(g.flow_pairs)
     γ = 1.8
