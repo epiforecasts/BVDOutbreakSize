@@ -188,6 +188,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
   In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
   `frozen_validation` still reached R-hat 1.09.
+- Each parameter-recovery seed uploads its per-parameter diagnostics ranked by R-hat and its per-chain sampler table, and the recovery report's per-seed table gives each chain's step size and the three parameters with the highest R-hat (#1088).
+  An unconverged seed can then be traced to a parameter and to a stuck chain from the artifact.
+  Fitted values do not change.
 
 ### Fixed
 
