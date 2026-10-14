@@ -27,7 +27,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
   Fitted values change.
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
-- The health-zone importation kernel takes the province kernel's prior on its log flows, with gravity at the sampled decay as the prior mean (#@placeholder, part of #1077).
+- The health-zone importation kernel takes the province kernel's prior on its log flows, with gravity at the sampled decay as the prior mean (#1133, part of #1077).
   The destination weights correlate with each zone's within-patch origin deviation, and a flow term on the pairs of neighbouring zones ties each flow to its reverse.
   The flow term covers each zone's two nearest neighbours rather than every pair, which would add about 4,000 dimensions at 64 zones.
   Both scales have half-normal priors at zero, where the kernel is the previous zone kernel, and fitted values change.
