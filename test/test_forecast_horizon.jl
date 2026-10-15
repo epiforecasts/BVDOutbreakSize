@@ -254,7 +254,12 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    @test fm.isolation == rh.treatment_state.occupancy_mean[fd]
+    ## The occupancy is a live stock, and the beds start from the cut-off
+    ## beds.
+    st = rh.treatment_state
+    @test all(fm.isolation .> 0)
+    @test fm.beds[:, 1] ≈ st.beds_patch_T .* st.capacity_patch[:, N + 1] ./
+        st.capacity_patch[:, N]
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [
@@ -438,4 +443,79 @@ end
         @test logjoint(fix(mh, Dict(k => θh[k] for k in fut)), θ0) ≈
             logjoint(m0, θ0)
     end
+end
+
+@testitem "the forecast stock admits up to its free beds" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## Two patches over three days. Patch 1 starts full, so it admits only
+    ## as many as leave; patch 2 has room for all its admissions.
+    beds = [100.0 100.0 100.0; 50.0 50.0 50.0]
+    admit = [30.0 30.0 30.0; 5.0 5.0 5.0]
+    ## An uncapped occupancy of 200 the day before each day, and ten of each
+    ## of the four exit flows each day.
+    flows = fill(10.0, 3, 4)
+    path = capped_stock_forecast(
+        [100.0, 20.0], beds, admit, fill(200.0, 3), flows
+    )
+    ## The flows are scaled to the occupied beds over the uncapped
+    ## occupancy, 120/200, and shared by occupancy: patch 1 loses 20 of the
+    ## 24 exits.
+    @test path.scale[1] ≈ 0.6
+    @test path.admissions[:, 1] ≈ [20.0, 5.0]
+    @test path.occupancy[:, 1] ≈ [100.0, 21.0]
+    @test all(path.occupancy .<= beds .+ 1.0e-10)
+    @test all(path.admissions .<= max.(path.free, 0) .+ 1.0e-10)
+    ## An empty stock loses nothing and admits everything that fits.
+    empty = capped_stock_forecast(
+        [0.0], [10.0;;], [4.0;;], [0.0], fill(1.0, 1, 4)
+    )
+    @test empty.occupancy[1] ≈ 4.0
+end
+
+@testitem "the forecast stock follows the uncapped occupancy below its beds" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## Beds that never bind. The uncapped occupancy gains the admissions
+    ## less the exits each day, 12 - 8, and the stock starts on it.
+    beds = fill(1000.0, 2, 3)
+    admit = [8.0 8.0 8.0; 4.0 4.0 4.0]
+    flows = fill(2.0, 3, 4)
+    uncapped = [100.0, 104.0, 108.0]
+    path = capped_stock_forecast([60.0, 40.0], beds, admit, uncapped, flows)
+    @test path.scale ≈ ones(3)
+    @test vec(sum(path.occupancy; dims = 1)) ≈ uncapped .+ 4.0
+    @test path.admissions ≈ admit
+end
+
+@testitem "the forecast exit scale is at most one" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    beds = fill(1000.0, 1, 2)
+    admit = fill(5.0, 1, 2)
+    flows = fill(1.0, 2, 4)
+    ## A stock above the uncapped occupancy loses no more than the flows.
+    above = capped_stock_forecast([120.0], beds, admit, [100.0, 100.0], flows)
+    @test above.scale ≈ ones(2)
+    @test above.occupancy[1] ≈ 121.0
+    ## A non-positive uncapped occupancy leaves the flows unscaled.
+    neg = capped_stock_forecast([10.0], beds, admit, [-5.0, 0.0], flows)
+    @test neg.scale == ones(2)
+    @test neg.occupancy[1] ≈ 11.0
+end
+
+
+@testitem "the forecast stock drains when its beds fall" begin
+    using BVDOutbreakSize: capped_stock_forecast
+    ## One patch holding 100 whose beds fall to 80 and then to 70.
+    beds = [100.0 80.0 70.0]
+    admit = fill(10.0, 1, 3)
+    flows = fill(2.0, 3, 4)
+    path = capped_stock_forecast([100.0], beds, admit, [100.0, 100.0, 92.0], flows)
+    ## Full on day 1, it admits only the 8 that leave.
+    @test path.admissions[1] ≈ 8.0
+    @test path.occupancy[1] ≈ 100.0
+    ## Above its beds it admits no one and loses only its exits.
+    @test path.free[2] < 0 && path.admissions[2] == 0
+    @test path.occupancy[2:3] ≈ [92.0, 84.0]
+    ## Never above its beds or its previous occupancy, whichever is larger.
+    prev = [100.0; path.occupancy[1:2]]
+    @test all(vec(path.occupancy) .<= max.(vec(beds), prev) .+ 1.0e-10)
 end

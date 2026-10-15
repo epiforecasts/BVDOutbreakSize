@@ -202,8 +202,10 @@ province_bed_overview #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the occupancy and bed counts in the situation reports.
-#md # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
+#md # Beds, bed demand, occupied beds, utilisation and demand above the beds by province at the cut-off, from the occupancy and bed counts in the situation reports.
+#md # Each province's beds are its modelled capacity floored at its last recorded effective beds, which cover the patients each report counts.
+#md # Its occupied beds are its demand share of the national modelled occupancy, capped at its beds, and the rest is the demand above the beds.
+#md # The provinces sum to the national figures, and no province's utilisation exceeds 100%.
 #md # </figcaption>
 #md # </figure>
 #md # ```

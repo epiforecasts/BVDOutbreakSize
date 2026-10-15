@@ -67,10 +67,13 @@ Mooncake.@is_primitive(
 ## histories, with no sampled quantity among their arguments. They pass no
 ## derivative, so the backend need not tape them.
 Mooncake.@zero_derivative(
-    Mooncake.MinimalCtx, Tuple{typeof(admission_headroom), Vararg}
+    Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
 )
 Mooncake.@zero_derivative(
-    Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
+    Mooncake.MinimalCtx, Tuple{typeof(_province_bed_floors), Vararg}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(_national_bed_floor), Vararg}
 )
 ## Work that reaches only reported quantities (see `_detached`).
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})

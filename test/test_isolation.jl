@@ -419,31 +419,6 @@ end
     @test any(O_susp[i] < st.demand[i] - 1.0e-9 for i in 1:n)
 end
 
-@testitem "admission_headroom: bound above obs, never on the boundary" begin
-    using BVDOutbreakSize: admission_headroom
-    ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a
-    ## slack admission count is censored at the headroom, a saturated count is
-    ## kept strictly inside the support (obs + 0.5), so it never sits on the
-    ## non-differentiable NegBin-CDF boundary.
-    capacity_history = (; days = [9, 10], counts = [400, 410])
-    isolation_history = (; days = [9, 10], counts = [260, 262])
-    adm_days = [10, 11]
-    adm_obs = [50, 300]
-    head = admission_headroom(
-        adm_days, adm_obs, capacity_history,
-        isolation_history
-    )
-    @test head[1] ≈ 410 - 260         # day 10: capacity 410 less prev occ 260
-    @test head[2] > adm_obs[2]        # day 11: saturated, strictly above obs
-    @test all(head .> adm_obs .- 1.0e-9)
-    ## No capacity record gives a large no-op headroom.
-    nocap = admission_headroom(
-        [10], [50], (; days = Int[], counts = Int[]),
-        isolation_history
-    )
-    @test only(nocap) > 1.0e5
-end
-
 @testitem "occupancy split: sub-stock parameters sampled, stays positive" tags = [
     :slow,
 ] begin
@@ -819,10 +794,17 @@ end
     @test all(C_T .> 0)
     @test all(isfinite, iso)
     @test all(iso .> 0)
-    ## Occupancy is `min(demand, C)`, so it never exceeds the latent demand,
-    ## and the supply-limited occupancy never exceeds the bed capacity.
-    @test all(iso .<= dem .+ 1.0e-6)
+    ## Occupancy is on the reported scale, the demand plus the
+    ## reclassification offset capped at the bed capacity, and the shortfall
+    ## is the same quantity above it.
+    brk_key = only(
+        filter(k -> occursin("occupancy_break", string(k)), collect(keys(chn)))
+    )
+    brk = vec(Array(chn[brk_key]))
+    short = vec(Array(chn[:bed_shortfall_T]))
+    @test all(isapprox.(iso .+ short, max.(dem .+ brk, 0.0); atol = 1.0e-6))
     @test all(iso .<= cap .+ 1.0e-6)
+    @test all(short .>= 0)
     ## The severity skew is non-negative and admits BVD suspects at least as
     ## readily as the base (non-BVD rule-out) rate.
     skew = vec(Array(chn[:isolation_severity]))
