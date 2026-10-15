@@ -1834,12 +1834,15 @@ end
         importation_kernel = K
     )
     ## Everything but the intensity is held at one draw, so the trajectories
-    ## differ only through what the intensity does.
+    ## differ only through what the intensity does. `z_ε` also enters the
+    ## destination effect, so the kernel spreads are zero.
     function run(;
             ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
             β_ε = 0.0
         )
-        m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
+        m = DynamicPPL.fix(
+            base; ε_bar, σ_ε, z_ε, β_ε, σ_dest = 0.0, σ_flow = 0.0
+        )
         return returned(m, rand(Xoshiro(7), m))
     end
 
@@ -2001,4 +2004,267 @@ end
     @test all(>=(0), fr)
     @test fr[2, end] == 0
     @test fr[1, :] ≈ 1 .- cumsum(I[1, :]) ./ 1000
+end
+
+@testitem "destination_weighted_kernel: moves the split, not the volume" begin
+    using BVDOutbreakSize: destination_weighted_kernel,
+        province_importation_kernel
+
+    K = province_importation_kernel()
+    np = size(K, 1)
+    ## No weighting is the kernel itself.
+    @test destination_weighted_kernel(K, zeros(np)) ≈ K
+    η = [0.4, 0.9, -0.3, -1.0]
+    Kw = destination_weighted_kernel(K, η)
+    ## Each origin sends the same total, so the outflow and `ε` keep their
+    ## meaning, and no province imports from itself.
+    @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
+    @test all(iszero, [Kw[q, q] for q in 1:np])
+    ## A shift shared by every destination cancels.
+    @test destination_weighted_kernel(K, η .+ 2.5) ≈ Kw
+    ## Raising one destination's weight raises its share from every origin.
+    up = copy(η)
+    up[2] += 0.5
+    Ku = destination_weighted_kernel(K, up)
+    for q in 1:np
+        q == 2 && continue
+        @test Ku[2, q] > Kw[2, q]
+    end
+    @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3))
+    ## A matrix whose columns all equal `η` is the destination weighting,
+    ## and a matrix moves each origin's split on its own.
+    @test destination_weighted_kernel(K, repeat(η, 1, np)) ≈ Kw
+    W = [
+        0.3 -0.2 0.5 0.1; 0.8 0.0 -0.4 1.2
+        -0.6 0.2 0.3 -0.9; 0.1 0.7 -1.1 0.4
+    ]
+    KW = destination_weighted_kernel(K, W)
+    @test vec(sum(KW; dims = 1)) ≈ vec(sum(K; dims = 1))
+    shifted = copy(W)
+    shifted[:, 2] .+= 1.7
+    @test destination_weighted_kernel(K, shifted) ≈ KW
+    @test !(KW ≈ destination_weighted_kernel(K, vec(sum(W; dims = 2)) ./ np))
+    @test_throws DimensionMismatch destination_weighted_kernel(K, zeros(3, 3))
+    ## An origin that exports nothing stays at zero, not NaN.
+    K0 = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
+    Kw0 = destination_weighted_kernel(K0, [0.3, -0.1, -0.2])
+    @test Kw0[:, 2:3] == zeros(3, 2)
+    @test sum(Kw0[:, 1]) ≈ sum(K0[:, 1])
+end
+
+@testitem "flow_pair_basis: double-centred flows, symmetric and not" begin
+    using BVDOutbreakSize: flow_pair_basis
+    using LinearAlgebra: I
+
+    for (n, ds, da) in ((2, 0, 0), (3, 0, 1), (4, 2, 3), (5, 5, 6))
+        B = flow_pair_basis(n)
+        @test size(B.symmetric) == (n^2, ds)
+        @test size(B.antisymmetric) == (n^2, da)
+        both = hcat(B.symmetric, B.antisymmetric)
+        @test both' * both ≈ I(ds + da)
+        for (cols, sgn) in ((B.symmetric, 1), (B.antisymmetric, -1))
+            for j in axes(cols, 2)
+                U = reshape(cols[:, j], n, n)
+                @test all(abs.([U[p, p] for p in 1:n]) .< 1.0e-12)
+                @test maximum(abs, sum(U; dims = 1)) < 1.0e-12
+                @test maximum(abs, sum(U; dims = 2)) < 1.0e-12
+                @test U' ≈ sgn .* U
+            end
+        end
+    end
+end
+
+@testitem "importation_flow_factor: MvNormal covariance of the log flows" begin
+    using BVDOutbreakSize: flow_pair_basis, importation_flow_factor,
+        sum_to_zero_basis
+    using LinearAlgebra: nullspace, rank
+
+    ## The covariance written from its formula: a destination effect with
+    ## entries `δ_pp' - 1/n` and a flow correlation matrix built from
+    ## projectors onto the symmetric and antisymmetric double-centred flows.
+    ## The projectors come from `nullspace`, not the package's Gram-Schmidt.
+    function reference(n, σ_dest, σ_flow, ρ)
+        idx(p, q) = (q - 1) * n + p
+        off = [p != q for p in 1:n, q in 1:n]
+        C = zeros(n^2, n^2)
+        for q in 1:n, p in 1:n, q2 in 1:n, p2 in 1:n
+            off[p, q] && off[p2, q2] || continue
+            C[idx(p, q), idx(p2, q2)] = (p == p2) - 1 / n
+        end
+        function projector(sgn)
+            rows = Vector{Float64}[]
+            e(ks...) = (v = zeros(n^2); foreach(k -> v[k] += 1, ks); v)
+            for p in 1:n
+                push!(rows, e(idx(p, p)))
+                push!(rows, e((idx(p, q) for q in 1:n)...))
+                push!(rows, e((idx(q, p) for q in 1:n)...))
+            end
+            for q in 1:n, p in 1:(q - 1)
+                push!(rows, e(idx(p, q)) .- sgn .* e(idx(q, p)))
+            end
+            N = nullspace(permutedims(reduce(hcat, rows)))
+            return N * N', size(N, 2)
+        end
+        Ps, ds = projector(1)
+        Pa, da = projector(-1)
+        M = n * (n - 1) ÷ 2
+        R = (ds > 0 ? (1 + ρ) * M / ds .* Ps : zeros(n^2, n^2)) .+
+            (da > 0 ? (1 - ρ) * M / da .* Pa : zeros(n^2, n^2))
+        return σ_dest^2 .* C .+ σ_flow^2 .* R, R
+    end
+
+    for n in (3, 4, 5)
+        Q, B = sum_to_zero_basis(n), flow_pair_basis(n)
+        σ_dest, σ_flow = 0.7, 0.3
+        ρ = n == 3 ? -1.0 : 0.6
+        L = importation_flow_factor(Q, B, σ_dest, σ_flow, ρ)
+        @test size(L) == (n^2, n * (n - 2))
+        Σ, R = reference(n, σ_dest, σ_flow, ρ)
+        @test L * L' ≈ Σ atol = 1.0e-10
+        ## `R` is a correlation matrix on the flows: unit variance, and `ρ`
+        ## between each flow and its reverse.
+        for q in 1:n, p in 1:n
+            p == q && continue
+            i, j = (q - 1) * n + p, (p - 1) * n + q
+            @test R[i, i] ≈ 1
+            @test R[i, j] ≈ ρ
+        end
+        ## The diagonal flows carry nothing, and only the shift shared within
+        ## an origin's column is left out.
+        @test all(iszero, L[[(p - 1) * n + p for p in 1:n], :])
+        @test rank(L * L') == n * (n - 2)
+    end
+    @test importation_flow_factor(
+        sum_to_zero_basis(4), flow_pair_basis(4), 0.0, 0.0, 0.2
+    ) == zeros(16, 8)
+    @test_throws DimensionMismatch importation_flow_factor(
+        sum_to_zero_basis(4), flow_pair_basis(3), 0.5, 0.5, 0.2
+    )
+end
+
+@testitem "patch_infection_model: per-flow importation deviations" begin
+    using BVDOutbreakSize: patch_infection_model, sum_to_zero_basis,
+        sum_to_zero, sum_to_zero_factor, flow_pair_basis,
+        importation_flow_factor
+    using Turing: DynamicPPL, returned, sample, Prior
+    using Random: Xoshiro
+
+    n, np, rt_start, bp = 60, 4, 30, 10
+    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
+    for v in ("σ_dest", "z_dest", "σ_flow", "z_flow", "ρ_flow_unit", "ρ_od_unit")
+        @test v in vnames(coupled)
+    end
+    uncoupled = patch_infection_model(
+        n, np; breakpoint = bp, rt_start,
+        importation_kernel = zeros(np, np)
+    )
+    @test !("σ_dest" in vnames(uncoupled))
+    @test !("σ_flow" in vnames(uncoupled))
+    ## With three patches the one double-centred flow is a circulation, so
+    ## its reciprocity is -1 and not sampled.
+    three = patch_infection_model(n, 3; breakpoint = bp, rt_start)
+    @test "z_flow" in vnames(three)
+    @test !("ρ_flow_unit" in vnames(three))
+    ## With two patches every weighting cancels and there is no flow term.
+    two = patch_infection_model(n, 2; breakpoint = bp, rt_start)
+    @test !("σ_flow" in vnames(two))
+    chn2 = sample(Xoshiro(1), two, Prior(), 1; progress = false)
+    η2 = first(vec(collect(chn2[:importation_destination_effect])))
+    W2 = first(vec(collect(chn2[:importation_flow_effect])))
+    @test W2 ≈ vec(repeat(η2, 1, 2) .* [0 1; 1 0])
+
+    fixed = (;
+        σ_ε = 0.6, z_ε = [0.8, -1.1, 0.4], σ_dest = 0.6,
+        z_dest = [-0.3, 1.5, 0.2], σ_flow = 0.4, ρ_flow_unit = 0.7,
+        z_flow = [0.5, -0.9, 1.3, 0.2, -0.6],
+    )
+    ## At a perfect origin-destination correlation and equal scales, each
+    ## province's destination effect is its origin deviation.
+    m1 = DynamicPPL.fix(coupled; fixed..., ρ_od_unit = 1.0)
+    chn1 = sample(Xoshiro(1), m1, Prior(), 1; progress = false)
+    only_draw(key) = first(vec(collect(chn1[key])))
+    η1 = only_draw(:importation_destination_effect)
+    a = sum_to_zero(sum_to_zero_factor(sum_to_zero_basis(np), 0.6), fixed.z_ε)
+    @test η1 ≈ a
+    @test sum(η1) ≈ 0 atol = 1.0e-12
+    @test only_draw(:importation_origin_destination_correlation) ≈ 1
+    @test only_draw(:importation_reciprocity) ≈ 0.4
+
+    ## The log flows are `log K + W` with `W = L ζ`, non-centred on the
+    ## factor of their MvNormal prior, so `W` is the destination effect plus
+    ## a double-centred flow term off the diagonal and zero on it.
+    W = reshape(only_draw(:importation_flow_effect), np, np)
+    L = importation_flow_factor(
+        sum_to_zero_basis(np), flow_pair_basis(np), 0.6, 0.4, 0.4
+    )
+    @test vec(W) ≈ L * vcat(fixed.z_ε, fixed.z_flow)
+    @test all(iszero, [W[p, p] for p in 1:np])
+    U = (W .- η1) .* [p != q for p in 1:np, q in 1:np]
+    @test maximum(abs, sum(U; dims = 1)) < 1.0e-10
+    @test maximum(abs, sum(U; dims = 2)) < 1.0e-10
+
+    ## With no destination or flow spread the arrivals are the gravity
+    ## kernel's whatever the standard-normal draws.
+    function arrivals(; kw...)
+        m = DynamicPPL.fix(
+            coupled; fixed..., ρ_od_unit = 0.5, σ_dest = 0.0, σ_flow = 0.0,
+            kw...
+        )
+        return returned(m, rand(Xoshiro(7), m)).importation_matrix
+    end
+    flat = arrivals()
+    @test flat ≈ arrivals(z_dest = [2.0, -1.0, 0.3], z_flow = fill(1.5, 5))
+    @test !(flat ≈ arrivals(σ_flow = 0.5))
+    ## The prior mean of the log flows is the log gravity kernel: at the
+    ## mean of the standard-normal draws the flows are gravity's whatever
+    ## the scales and correlations.
+    at_mean = arrivals(
+        σ_dest = 0.9, σ_flow = 0.5, ρ_flow_unit = 0.2, ρ_od_unit = 0.8,
+        z_ε = zeros(3), z_dest = zeros(3), z_flow = zeros(5)
+    )
+    @test at_mean ≈ arrivals(z_ε = zeros(3))
+end
+
+@testitem "bvd_joint: passes its flow basis to the patch model" begin
+    using BVDOutbreakSize: bvd_joint, load_observations, flow_pair_basis
+    using Turing: sample, Prior
+    using Random: Xoshiro
+
+    obs = load_observations()
+    function flow_draws(; kw...)
+        m = bvd_joint(
+            obs.n, obs.exported_cases, obs.total_deaths;
+            n_patches = 4, kw...
+        )
+        chn = sample(Xoshiro(1), m, Prior(), 1; progress = false)
+        return length(first(vec(collect(chn[:z_flow]))))
+    end
+    @test flow_draws() == 5
+    ## A basis with only the symmetric part leaves two flow draws.
+    B = flow_pair_basis(4)
+    sym_only = (; B.symmetric, antisymmetric = zeros(16, 0))
+    @test flow_draws(importation_flow_basis = sym_only) == 2
+end
+
+@testitem "destination_weighted_kernel: finite at extreme weights" begin
+    using BVDOutbreakSize: destination_weighted_kernel,
+        province_importation_kernel
+
+    K = province_importation_kernel()
+    np = size(K, 1)
+    for scale in (50.0, 800.0)
+        W = scale .* [0.0 -1.0 0.5 1.0; 1.0 0.0 -0.5 0.2; -0.3 0.8 0.0 -1.0; 0.4 -0.2 1.0 0.0]
+        Kw = destination_weighted_kernel(K, W)
+        @test all(isfinite, Kw)
+        @test vec(sum(Kw; dims = 1)) ≈ vec(sum(K; dims = 1))
+        η = scale .* [1.0, -1.0, 0.5, -0.5]
+        Kη = destination_weighted_kernel(K, η)
+        @test all(isfinite, Kη)
+        @test vec(sum(Kη; dims = 1)) ≈ vec(sum(K; dims = 1))
+    end
+    ## A large weight on a destination an origin never reaches is ignored.
+    η = [900.0, 0.0, 0.1, -0.1]
+    @test destination_weighted_kernel(K, η)[:, 1] ≈
+        destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
 end

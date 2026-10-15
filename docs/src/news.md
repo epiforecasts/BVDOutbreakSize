@@ -22,6 +22,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The importation kernel's log flows have a multivariate normal prior whose mean is the log gravity kernel, so gravity is the prior and each flow's log deviation is the data's departure from it (#1030).
+  The covariance is a destination effect correlated with each province's origin deviation plus a double-centred flow term whose correlation matrix ties each flow to its reverse, and each origin's export total is held.
+  The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
+  Fitted values change.
+- The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
+- The health-zone distance-decay prior is `LogNormal(0, 1)`, so its 95th percentile of 5.2 covers the 90% interval of 1.7 to 3.7 a 63-zone fit estimated (results comment on #1030), which sat above the `LogNormal(0, 0.5)` prior's 2.3; fitted values change (#1077).
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
