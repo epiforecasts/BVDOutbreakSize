@@ -176,6 +176,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
+  Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).
 - The formatter environment pins Runic to 1.11.1 again, matching the pre-commit hook, and Dependabot no longer proposes Runic bumps, which have to reformat the tree in the same commit.
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
