@@ -1216,6 +1216,7 @@ end
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
+    using Random: Xoshiro
 
     ## The patch model is the headline joint, not a side analysis. So a patch
     ## chain must carry every quantity a single-patch chain does: the report
@@ -1227,47 +1228,9 @@ end
     ## deterministics off the chain; if any is absent the one-week-ahead
     ## forecast cannot be produced from a patch fit at all.
     obs = load_observations()
-    prov = province_increment_matrix(
-        obs.province_confirmed_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-    provd = province_increment_matrix(
-        obs.province_death_history,
-        PROVINCE_NAMES, length(PROVINCE_NAMES)
-    )
-
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        recovered_cases = obs.recovered_cases,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        recovered_history = obs.recovered_history,
-        treatment_admissions_history = obs.treatment_admissions_history,
-        treatment_deaths_history = obs.treatment_deaths_history,
-        treatment_ruleout_history = obs.treatment_ruleout_history,
-        treatment_absconded_history = obs.treatment_absconded_history,
-        occupancy_break_days = obs.occupancy_break_days,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = obs.who_first_sitrep_days,
-        n_patches = length(PROVINCE_NAMES),
-        province_increments = prov.increments, province_days = prov.days,
-        province_death_increments = provd.increments,
-        province_death_days = provd.days,
-        tmrca_days = obs.tmrca_days
-    )
-
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(
-        m, Prior(), 40; chain_type = FlexiChains.VNChain,
+        Xoshiro(1), m, Prior(), 40; chain_type = FlexiChains.VNChain,
         progress = false
     )
 
