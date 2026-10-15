@@ -266,14 +266,12 @@ function importation_flow_factor(
                 "with $(size(S, 1)) and $(size(A, 1)) rows"
         )
     )
-    pairs = n * (n - 1) ÷ 2
     T = promote_type(
         eltype(Q), eltype(S), typeof(σ_dest), typeof(σ_flow), typeof(ρ_flow)
     )
-    ## `M / d` of each part, so the two scales give each flow variance
-    ## `σ_flow²` and correlation `ρ_flow` with its reverse.
-    s_sym = ds > 0 ? σ_flow * sqrt((1 + ρ_flow) * pairs / ds) : zero(T)
-    s_anti = da > 0 ? σ_flow * sqrt((1 - ρ_flow) * pairs / da) : zero(T)
+    s_sym, s_anti = reciprocal_flow_scales(
+        σ_flow, ρ_flow, n * (n - 1) ÷ 2, ds, da
+    )
     L = zeros(T, n^2, k + ds + da)
     @inbounds for q in 1:n, p in 1:n
         p == q && continue
@@ -289,6 +287,44 @@ function importation_flow_factor(
         end
     end
     return L
+end
+
+"""
+Scales `(s_sym, s_anti)` of `ds` symmetric and `da` antisymmetric
+orthonormal flow directions spanning the flows of `pairs` patch pairs. They
+give each flow variance `σ_flow²` and correlation `ρ_flow` with its reverse,
+each part's squared scale being `σ_flow² (1 ± ρ_flow) M / d` for `M = pairs`
+and `d` its directions. A part with no directions has scale zero.
+"""
+function reciprocal_flow_scales(σ_flow, ρ_flow, pairs::Integer, ds, da)
+    z = zero(σ_flow * ρ_flow)
+    s_sym = ds > 0 ? σ_flow * sqrt((1 + ρ_flow) * pairs / ds) : z
+    s_anti = da > 0 ? σ_flow * sqrt((1 - ρ_flow) * pairs / da) : z
+    return s_sym, s_anti
+end
+
+"""
+Log deviations of the flows both ways between `m` patch pairs, from the
+`2m` standard normal draws `z`: the first `m` move a pair's two flows
+together and the last `m` move them apart. Entry `e` of the result is the
+flow one way along pair `e` and entry `m + e` the flow back. Each has
+variance `σ_flow²` and correlation `ρ_flow` with its reverse, the flow term
+of [`importation_flow_factor`](@ref) on the pairs alone, without the
+double-centring.
+"""
+function pair_flow_deviations(σ_flow, ρ_flow, z::AbstractVector)
+    m = length(z) ÷ 2
+    2m == length(z) || throw(
+        DimensionMismatch(
+            "pair_flow_deviations: $(length(z)) draws for flow pairs."
+        )
+    )
+    ## Each pair's symmetric and antisymmetric directions are
+    ## `(e_out ± e_back) / √2`, one of each per pair.
+    s_sym, s_anti = reciprocal_flow_scales(σ_flow, ρ_flow, m, m, m) ./ sqrt(2)
+    a = view(z, 1:m)
+    b = view(z, (m + 1):(2m))
+    return vcat(s_sym .* a .+ s_anti .* b, s_sym .* a .- s_anti .* b)
 end
 
 """

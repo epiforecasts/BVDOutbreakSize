@@ -1655,6 +1655,10 @@ end
 ## is a prior on `ρ ∈ (−1, 1)`.
 _unit_to_correlation(x) = 2 * x - 1
 
+## Standard normal draws with correlation `ρ` to the standard normal `x`,
+## from independent standard normal `y`.
+_correlated_draws(ρ, x, y) = ρ .* x .+ sqrt(1 - ρ^2) .* y
+
 """
 Multi-patch latent infection process. Runs a renewal equation per spatial
 patch with a shared generation interval, a shared incubation period, and
@@ -1893,7 +1897,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         ρ_od_unit ~ importation_correlation_prior
         ρ_od = _unit_to_correlation(ρ_od_unit)
-        z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
+        z_od = _correlated_draws(ρ_od, z_ε, z_dest)
         dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
         ## The flow term's correlation matrix gives each flow correlation
         ## `ρ_flow` with its reverse.

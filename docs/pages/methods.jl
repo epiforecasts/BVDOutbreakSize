@@ -2242,16 +2242,14 @@ cfr_prior_fig #hide
 #
 # Movement between patches is the joint model's own, and only movement within a patch is estimated here.
 # With $p(z)$ the patch of zone $z$, $N_z$ its population and $d_{zq}$ the distance between zone centroids, both blocks normalise one gravity pull over all zones.
-# This is the form of Equation (14) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
+# This is the form of Equation (14) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$, a destination effect $\omega_z$ and a flow deviation $u_{zq}$ on the log scale:
 #
 # ```math
-# \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
-# \gamma \sim \mathrm{LogNormal}(0,\ 1), \qquad
-# \boldsymbol\omega_p = \sigma_\omega Q_p \mathbf{z}^\omega_p, \qquad
-# \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5),
+# \mathrm{pull}_{zq} = N_z\, d_{zq}^{-\gamma}\, e^{\omega_z + u_{zq}}, \qquad
+# \gamma \sim \mathrm{LogNormal}(0,\ 1).
 # ```
 #
-# with $Q_p$ the sum-to-zero basis over patch $p$'s zones and $\mathbf{z}^\omega_p \sim \mathrm{Normal}(0, I)$.
+# Gravity at decay $\gamma$ is the prior mean of the log pull, and $\omega$ and $u$ are the departures from it, with priors given after Equation (62).
 # The blocks are
 #
 # ```math
@@ -2262,7 +2260,7 @@ cfr_prior_fig #hide
 # ```
 #
 # the first within a patch and the second between patches, with $K$ the province kernel.
-# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$ and $\omega$, so they move only where a flow lands among the patch's zones.
+# Summed over a destination patch's zones, $K^{\text{b}}$ is exactly $K_{p(z)p(q)}$ at any $\gamma$, $\omega$ and $u$, so they move only where a flow lands among the patch's zones.
 #
 # Patch $p$ receives $M_{p,t} = f_{p,t} I_{p,t}$ imported infections on day $t$.
 # The import fraction $f_{p,t}$ is the joint model's arrivals formula on the sampled curves and intensities:
@@ -2304,6 +2302,36 @@ cfr_prior_fig #hide
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # z^\varepsilon_z \sim \mathrm{Normal}(0, 1). \tag{62}
 # ```
+#
+# The destination effect follows the province one, with the zones of each patch as its units.
+# It sums to zero within each patch and has correlation $\rho_{\text{od}}$ with each zone's origin deviation in Equation (62):
+#
+# ```math
+# \boldsymbol\omega_p = \sigma_\omega Q_p \bigl(\rho_{\text{od}}\, Q_p^\top \mathbf{z}^\varepsilon_p
+#   + \sqrt{1 - \rho_{\text{od}}^2}\, \mathbf{z}^\omega_p\bigr),
+# ```
+#
+# with $Q_p$ the sum-to-zero basis over patch $p$'s zones, $\mathbf{z}^\varepsilon_p$ their origin deviations and $\mathbf{z}^\omega_p \sim \mathrm{Normal}(0, I)$.
+# The flow deviation is non-zero only between neighbouring zones, the pairs in which either zone is one of the other's two nearest by centroid distance.
+# On each such pair it is the province flow term on that pair alone, with $a_{zq} = a_{qz}$ and $b_{zq} = b_{qz}$ standard normal draws per pair:
+#
+# ```math
+# u_{zq} = \sigma_u \Bigl(\sqrt{\tfrac{1 + \rho_u}{2}}\, a_{zq} + \sqrt{\tfrac{1 - \rho_u}{2}}\, b_{zq}\Bigr), \qquad
+# u_{qz} = \sigma_u \Bigl(\sqrt{\tfrac{1 + \rho_u}{2}}\, a_{zq} - \sqrt{\tfrac{1 - \rho_u}{2}}\, b_{zq}\Bigr).
+# ```
+#
+# Each flow then has variance $\sigma_u^2$ and correlation $\rho_u$ with its reverse.
+# Unlike the province flow term it is not double-centred, so it shares directions with the destination effect.
+# We use priors of
+#
+# ```math
+# \sigma_\omega \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \sigma_u \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
+# \tfrac{1}{2}(\rho_u + 1) \sim \mathrm{Beta}(2,\ 2).
+# ```
+#
+# With $\sigma_\omega = \sigma_u = 0$ the pull is gravity at decay $\gamma$.
 #
 # #### Zone deviations
 #
@@ -2384,7 +2412,8 @@ cfr_prior_fig #hide
 # We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
 # The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
-# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
+# We assume the gravity form, with its decay, destination effect and neighbouring flows fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
+# Flows between zones that are not neighbours depart from gravity only through the destination effect.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.
 # The zones that take innovations depend on the data and can differ between cut-offs.
 

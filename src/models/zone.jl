@@ -1653,12 +1653,19 @@ zones and the same movement is not counted at both levels. Within
 a patch the spill is the zone stage's own mechanism and carries its own
 intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation
 `τ (z − z̄)` on the logit scale. Both blocks are rebuilt per draw at a
-sampled distance decay `γ ~ LogNormal(0, 1)` and weighted by destination
-zone with log weights centred within each patch, `σ_ω ~ Normal⁺(0, 0.5)`
-([`zone_gravity_blocks`](@ref)); every origin's total into each patch is
-held, so they move only the split over a patch's zones. Mixing is off
-when the health-zone metadata does not cover every zone or the parent
-chain carries no between-patch movement (`zd.mixing === nothing`).
+sampled distance decay `γ ~ LogNormal(0, 1)` ([`zone_gravity_blocks`](@ref)).
+The log flows have gravity at that decay as their prior mean and two
+deviations from it, as the province model's do. A destination effect `ω`,
+centred within each patch at scale `σ_ω ~ Normal⁺(0, 0.5)`, correlates
+`ρ_od` with each zone's within-patch origin deviation `z`. A flow term on
+the pairs of neighbouring zones ([`zone_gravity_inputs`](@ref)) gives each
+flow scale `σ_f ~ Normal⁺(0, 0.5)` and correlation `ρ_f` with its reverse
+([`pair_flow_deviations`](@ref)), and `(ρ + 1) / 2 ~ Beta(2, 2)` for both
+correlations. Every origin's total into each patch is held, so the
+deviations move only the split over a patch's zones, and `σ_ω = σ_f = 0`
+is gravity at decay `γ`. Mixing is off when the health-zone metadata does
+not cover every zone or the parent chain carries no between-patch movement
+(`zd.mixing === nothing`).
 
 ### Deterministics
 
@@ -1678,9 +1685,12 @@ times the zone's own),
 (`ℓ`), `parent_eta_zone` (the whitened shared draw `η`),
 `parent_patch_T_zone` (the sampled patch infections on the last grid day)
 and, with mixing, `mixing_epsilon_zone`, `mixing_decay_zone` (`γ`),
-`mixing_destination_sd_zone` (`σ_ω`) and `mixing_destination_zone` (the log
-weights `ω`, one per zone). Daily trajectories are rebuilt
-from these by [`zone_forward`](@ref).
+`mixing_destination_sd_zone` (`σ_ω`), `mixing_destination_zone` (the log
+weights `ω`, one per zone), `mixing_origin_destination_correlation_zone`
+(`ρ_od`), `mixing_flow_sd_zone` (`σ_f`),
+`mixing_reciprocity_zone` (`ρ_f`) and `mixing_flow_zone` (the log flow
+deviations, one way along each pair and then back). Daily trajectories are
+rebuilt from these by [`zone_forward`](@ref).
 
 ### Forecast
 
@@ -1706,6 +1716,8 @@ quantity is computed on the fitted days as without a forecast.
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
         mixing_decay_prior = LogNormal(0, 1),
         mixing_destination_prior = truncated(Normal(0, 0.5); lower = 0),
+        mixing_flow_prior = truncated(Normal(0, 0.5); lower = 0),
+        mixing_correlation_prior = Beta(2, 2),
         offset_prior = Normal(0, 1),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
@@ -1768,14 +1780,30 @@ quantity is computed on the fitted days as without a forecast.
         ε_mix = logistic.(
             logit(ε_within) .+ τ_mix .* (z_mix .- sum(z_mix) / nz)
         )
-        ## The gravity decay, and log weights centred within each patch, so
-        ## both move only the split over a patch's zones.
+        ## The log flows are gravity at decay `γ` plus two deviations, which
+        ## move only the split over a patch's zones. The destination log
+        ## weights are centred within each patch and correlate `ρ_od` with
+        ## each zone's within-patch origin deviation, `Qᵀ z_mix`.
+        gz = zd.mixing.gravity
         γ_zone ~ mixing_decay_prior
         σ_destination ~ mixing_destination_prior
         z_destination ~ product_distribution(fill(offset_prior, n_contrast))
-        ω_destination = σ_destination .*
-            (zd.mixing.gravity.destination_basis * z_destination)
-        blocks = zone_gravity_blocks(zd.mixing.gravity, γ_zone, ω_destination)
+        ρ_od_unit ~ mixing_correlation_prior
+        ρ_od = _unit_to_correlation(ρ_od_unit)
+        z_od = _correlated_draws(
+            ρ_od, gz.destination_basis' * z_mix, z_destination
+        )
+        ω_destination = σ_destination .* (gz.destination_basis * z_od)
+        ## The flows both ways between neighbouring zones, correlated `ρ_f`.
+        σ_flow ~ mixing_flow_prior
+        ρ_flow_unit ~ mixing_correlation_prior
+        z_flow ~ product_distribution(
+            fill(offset_prior, 2 * length(gz.flow_pairs))
+        )
+        flow = pair_flow_deviations(
+            σ_flow, _unit_to_correlation(ρ_flow_unit), z_flow
+        )
+        blocks = zone_gravity_blocks(gz, γ_zone, ω_destination, flow)
     else
         ε_mix = nothing
         blocks = nothing
@@ -1927,6 +1955,10 @@ quantity is computed on the fitted days as without a forecast.
         mixing_decay_zone := γ_zone
         mixing_destination_sd_zone := σ_destination
         mixing_destination_zone := ω_destination
+        mixing_origin_destination_correlation_zone := ρ_od
+        mixing_flow_sd_zone := σ_flow
+        mixing_reciprocity_zone := _unit_to_correlation(ρ_flow_unit)
+        mixing_flow_zone := flow
         import_share_T_zone := [
             fw.imports[nd, z] / max(fw.infections[nd, z], eps(Float64))
                 for z in 1:nz
@@ -2174,13 +2206,20 @@ The fixed inputs of [`zone_gravity_blocks`](@ref), built once per fit: the
 log populations, the log distances between centroids (zero where two
 coincide, so the pull is the population alone), the off-diagonal and
 same-patch masks, the parent kernel entry of every zone pair in different
-patches, the patch indicator `(n_patches × n_zones)` and the block-diagonal
-sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the destination weights.
+patches, the patch indicator `(n_patches × n_zones)`, the block-diagonal
+sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the destination weights
+and the neighbouring pairs `(z, q)`, `z < q`, that carry a flow deviation.
+
+A pair neighbours when either zone is among the other's `flow_neighbours`
+nearest by centroid distance, in or across patches. `flow_neighbours` must
+be at least one and the zones must give at least one pair, so the flow term
+is never empty.
 """
 function zone_gravity_inputs(
         pops::AbstractVector, coords::AbstractVector,
         patch_of_zone::AbstractVector{<:Integer},
-        parent_kernel::AbstractMatrix
+        parent_kernel::AbstractMatrix;
+        flow_neighbours::Integer = 2
     )
     nz = length(pops)
     np = size(parent_kernel, 1)
@@ -2208,8 +2247,27 @@ function zone_gravity_inputs(
         ],
         indicator = [Float64(poz[z] == p) for p in 1:np, z in 1:nz],
         destination_basis = _zone_destination_basis(poz, np),
+        flow_pairs = _zone_neighbour_pairs(d, flow_neighbours),
         patch_of_zone = poz,
     )
+end
+
+## The pairs `(z, q)`, `z < q`, in which either zone is among the other's
+## `k` nearest by distance `d`, in a fixed order.
+function _zone_neighbour_pairs(d::AbstractMatrix, k::Integer)
+    k >= 1 || throw(ArgumentError("flow_neighbours = $k < 1"))
+    nz = size(d, 1)
+    pairs = Set{Tuple{Int, Int}}()
+    for q in 1:nz
+        near = sort(setdiff(1:nz, q); by = z -> (d[z, q], z))
+        for z in near[1:min(k, end)]
+            push!(pairs, minmax(z, q))
+        end
+    end
+    isempty(pairs) && throw(
+        ArgumentError("flow_neighbours: $nz zones have no neighbouring pair.")
+    )
+    return sort!(collect(pairs))
 end
 
 ## The sum-to-zero basis of each patch's zones on the diagonal, so
@@ -2232,10 +2290,35 @@ end
 $(TYPEDSIGNATURES)
 
 The blocks ([`zone_pattern_blocks`](@ref)) of the log gravity pull at decay
-`γ` plus the log destination weights `ω`.
+`γ` plus the log destination weights `ω` and, unless `flow` is `nothing`,
+the log flow deviations of the neighbouring pairs `g.flow_pairs`: entry `e`
+the flow `q → z` of pair `(z, q)` and entry `m + e` the flow `z → q`, for
+`m` pairs ([`pair_flow_deviations`](@ref)).
 """
-function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)
-    return zone_pattern_blocks(g, zone_log_gravity(g, γ) .+ ω)
+function zone_gravity_blocks(g, γ::Real, ω::AbstractVector, flow = nothing)
+    L = zone_log_gravity(g, γ) .+ ω
+    return zone_pattern_blocks(
+        g, flow === nothing ? L :
+            L .+ _zone_flow_matrix(g.flow_pairs, flow, size(L, 1))
+    )
+end
+
+## The `n_zones × n_zones` matrix of the pair flows, zero off the pairs.
+function _zone_flow_matrix(pairs, flow::AbstractVector, nz::Integer)
+    m = length(pairs)
+    length(flow) == 2m || throw(
+        DimensionMismatch(
+            "zone_gravity_blocks: $(length(flow)) flow deviations for $m " *
+                "neighbouring pairs."
+        )
+    )
+    U = zeros(eltype(flow), nz, nz)
+    @inbounds for e in 1:m
+        z, q = pairs[e]
+        U[z, q] = flow[e]
+        U[q, z] = flow[m + e]
+    end
+    return U
 end
 
 "The log gravity pull `log N_z − γ log d_zq`, the centre of the zone kernel."

@@ -1445,11 +1445,122 @@ end
     for v in ωs, zs in inputs.patch_ranges
         @test abs(sum(v[zs])) < 1.0e-10
     end
+    fs = [collect(v) for v in vec(collect(chn[:mixing_flow_zone]))]
     states = _zone_states(chn, inputs)
     for (i, st) in enumerate(states)
-        b = blocks(γs[i], ωs[i])
+        b = zone_gravity_blocks(mix.gravity, γs[i], ωs[i], fs[i])
         @test st.def.mixing.within ≈ b.within
         @test st.def.mixing.between ≈ b.between
+        @test !(b.within ≈ blocks(γs[i], ωs[i]).within)
+    end
+end
+
+@testitem "zone mixing: the flow prior is centred on gravity" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_gravity_blocks, zone_gravity_inputs,
+        gravity_pull, province_distance_matrix, _zone_states
+    using Turing: DynamicPPL, sample, Prior
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn; zones = zone_metadata(syn))
+    zd = inputs.model_data
+    g = zd.mixing.gravity
+    poz = inputs.patch_of_zone
+    nz = syn.nz
+    meta = zone_metadata(syn)
+    pops = Float64[r.population for r in meta]
+    coords = [(r.lat, r.lon) for r in meta]
+    d = province_distance_matrix(coords)
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:2])
+    ## The neighbouring pairs are each zone with its two nearest, both ways.
+    near = Set{Tuple{Int, Int}}()
+    for q in 1:nz
+        others = sort(setdiff(1:nz, q); by = z -> (d[z, q], z))
+        foreach(z -> push!(near, minmax(z, q)), others[1:2])
+    end
+    @test g.flow_pairs == sort(collect(near))
+    ## Every zone has a neighbour, so the flow term is never empty.
+    @test_throws ArgumentError zone_gravity_inputs(
+        pops, coords, poz, K; flow_neighbours = 0
+    )
+    @test_throws ArgumentError zone_gravity_inputs(
+        pops[1:1], coords[1:1], poz[1:1], K
+    )
+    m = length(g.flow_pairs)
+    γ = 1.8
+    ω = [0.6, -0.2, 0.1, -0.9, 0.4, 0.3, -0.5, 0.2]
+    f = [0.3 * (-1)^e * e / m for e in 1:(2m)]
+    ## Zero deviations are the blocks without a flow term.
+    plain = zone_gravity_blocks(g, γ, ω)
+    @test zone_gravity_blocks(g, γ, ω, zeros(2m)).within ≈ plain.within
+    @test zone_gravity_blocks(g, γ, ω, zeros(2m)).between ≈ plain.between
+    @test_throws DimensionMismatch zone_gravity_blocks(g, γ, ω, zeros(3))
+    ## Within each origin's split over a destination patch, two zones'
+    ## shares differ by their gravity pull, destination weight and flow
+    ## deviation, and every origin's total into each patch is held.
+    U = zeros(nz, nz)
+    for (e, (z, q)) in enumerate(g.flow_pairs)
+        U[z, q] = f[e]
+        U[q, z] = f[m + e]
+    end
+    pull = gravity_pull(pops; distances = d, decay = γ)
+    b = zone_gravity_blocks(g, γ, ω, f)
+    share = b.within .+ b.between
+    @test !(b.within ≈ plain.within)
+    for q in 1:nz, p in 1:2
+
+        zs = setdiff(findall(==(p), poz), q)
+        total = p == poz[q] ? 1 : K[p, poz[q]]
+        @test sum(share[zs, q]) ≈ total rtol = 1.0e-12
+        for z in zs, z2 in zs
+
+            @test log(share[z, q] / share[z2, q]) ≈
+                log(pull[z, q] / pull[z2, q]) + ω[z] - ω[z2] +
+                U[z, q] - U[z2, q] atol = 1.0e-10
+        end
+    end
+    ## Zero scales recover gravity at the sampled decay, whatever the
+    ## standard-normal draws and correlations: the model without the
+    ## deviations is nested at the origin of both scales.
+    model = bvd_zone(zd)
+    prior(m) = sample(
+        m, Prior(), 3; chain_type = FlexiChains.VNChain, progress = false
+    )
+    draws(chn, key) = [collect(v) for v in vec(collect(chn[key]))]
+    flat = prior(
+        DynamicPPL.fix(
+            model; γ_zone = γ, σ_destination = 0.0, σ_flow = 0.0
+        )
+    )
+    @test all(v -> all(iszero, v), draws(flat, :mixing_destination_zone))
+    @test all(v -> all(iszero, v), draws(flat, :mixing_flow_zone))
+    gravity = zone_gravity_blocks(g, γ, zeros(nz))
+    for st in _zone_states(flat, inputs)
+        @test st.def.mixing.within ≈ gravity.within
+        @test st.def.mixing.between ≈ gravity.between
+    end
+    ## At a perfect origin-destination correlation each zone's destination
+    ## weight is its origin deviation centred within its patch.
+    od = prior(DynamicPPL.fix(model; σ_destination = 0.8, ρ_od_unit = 1.0))
+    for (ωi, zi) in zip(
+            draws(od, :mixing_destination_zone), draws(od, :z_mix)
+        )
+        for zs in inputs.patch_ranges
+            @test ωi[zs] ≈ 0.8 .* (zi[zs] .- sum(zi[zs]) / length(zs))
+        end
+    end
+    ρ_od = vec(collect(od[:mixing_origin_destination_correlation_zone]))
+    @test all(≈(1), ρ_od)
+    ## Full reciprocity moves a pair's two flows together and none moves
+    ## them apart.
+    for (u, sgn) in ((1.0, 1), (0.0, -1))
+        chn = prior(DynamicPPL.fix(model; σ_flow = 0.4, ρ_flow_unit = u))
+        @test all(≈(2u - 1), vec(collect(chn[:mixing_reciprocity_zone])))
+        for v in draws(chn, :mixing_flow_zone)
+            @test v[(m + 1):end] ≈ sgn .* v[1:m]
+        end
     end
 end
 
@@ -1550,13 +1661,17 @@ end
     dim = syn.nz + 3 * nc + nd * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
-    ## offset per zone, the zone decay, the destination weight scale and its
-    ## contrasts within each patch, where the inputs carry the kernel, and one
-    ## origin intensity per patch to the shared draw. The same metadata gives
-    ## the zones centroids, so the correlation block switches on too and adds
-    ## its reference correlation.
+    ## offset per zone, the zone decay, the destination weight scale, its
+    ## contrasts within each patch and its correlation with the origin, the
+    ## flow scale, its reciprocity and two draws per neighbouring pair, where
+    ## the inputs carry the kernel, and one origin intensity per patch to the
+    ## shared draw. The same metadata gives the zones centroids, so the
+    ## correlation block switches on too and adds its reference correlation.
     zdm = zone_inputs(syn; zones = zone_metadata(syn)).model_data
-    @test dimension(bvd_zone(zdm)) == dim + 5 + syn.nz + nc + np
+    n_pair = length(zdm.mixing.gravity.flow_pairs)
+    @test n_pair > 0
+    @test dimension(bvd_zone(zdm)) ==
+        dim + 8 + syn.nz + nc + np + 2 * n_pair
     ## With no kept meld cell the shared draw is absent.
     zdc = merge(
         zd, (;
