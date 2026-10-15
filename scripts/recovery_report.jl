@@ -29,10 +29,10 @@ listed = parse.(Int, split(get(ENV, "BVD_RECOVERY_SEEDS", "")))
 isempty(params) && isempty(listed) &&
     error("no recovery results in $dir and no seeds listed")
 missing_row(s) =
-    "| $s | no result (timed out or failed) | – | – | – | – | – | – |"
+    "| $s | no result (timed out or failed) |" * " – |"^8
 seed_header = """
-| Seed | Verdict | 90% coverage | Outside 99% | Fit (min) | Max R-hat | Min bulk ESS | Divergences |
-|---|---|---|---|---|---|---|---|"""
+| Seed | Verdict | 90% coverage | Outside 99% | Fit (min) | Max R-hat | Min bulk ESS | Divergences | Step size by chain | Worst parameters (R-hat) |
+|---|---|---|---|---|---|---|---|---|---|"""
 
 if isempty(params)
     status = recovery_overall(fill(:unconverged, length(listed)))
@@ -105,11 +105,32 @@ skill = isempty(forecasts) ? "No forecast was scored." :
     "Forecasts: $(nrow(forecasts)) scored, median CRPS relative to " *
     "persistence $(fmt(median(forecasts.relative_crps))) (below one beats it)."
 
+## Each chain's step size, and the three parameters with the highest R-hat
+## (a quantity the model names twice counted once), from the per-seed files
+## `scripts/recovery.jl` writes. A seed run before those files existed shows
+## a dash.
+function seed_file(name, seed)
+    path = joinpath(dir, "$(name)_$(seed).csv")
+    return isfile(path) ? CSV.read(path, DataFrame) : nothing
+end
+function step_sizes(seed)
+    t = seed_file("recovery_sampler", seed)
+    t === nothing && return "–"
+    return join((@sprintf("%.3g", x) for x in t.step_size), ", ")
+end
+function worst_parameters(seed; n = 3)
+    t = seed_file("recovery_parameters", seed)
+    t === nothing && return "–"
+    t = first(unique(t, [:rhat, :ess_bulk, :ess_tail]), n)
+    cell(r) = "`$(r.parameter)` ($(@sprintf("%.2f", r.rhat)))"
+    return join(cell.(eachrow(t)), ", ")
+end
 seed_rows = [
     "| $(r.seed) | $(r.status) | $(fmt(r.coverage_90)) | " *
         "$(isempty(r.outside) ? "none" : r.outside) | $(r.fit_minutes) | " *
         "$(@sprintf("%.3f", r.max_rhat)) | $(round(Int, r.min_ess_bulk)) | " *
-        "$(r.divergences) |"
+        "$(r.divergences) | $(step_sizes(r.seed)) | " *
+        "$(worst_parameters(r.seed)) |"
         for r in eachrow(seeds)
 ]
 append!(seed_rows, missing_row.(missing_seeds))
