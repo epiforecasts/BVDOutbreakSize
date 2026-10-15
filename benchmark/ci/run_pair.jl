@@ -17,6 +17,14 @@
 using AirspeedVelocity: benchmark
 using Pkg: PackageSpec
 
+## Pkg 1.13.2 auto-precompiles, by name, every dependent of a package that an
+## `add` changes, and fails with "Unknown package" on any that is not a direct
+## dependency. AirspeedVelocity's `add` of JSON3 downgrades Parsers, which
+## reaches indirect packages such as ColorBrewer. AirspeedVelocity calls
+## `Pkg.precompile()` on the whole environment straight afterwards, so turning
+## the automatic pass off loses nothing.
+ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
+
 const PACKAGE = "BVDOutbreakSize"
 
 ## AirspeedVelocity names the results file after the revision, and both arms
