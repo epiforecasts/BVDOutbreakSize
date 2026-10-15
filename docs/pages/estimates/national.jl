@@ -602,6 +602,7 @@ obs_delay_pair_fig #hide
 #
 # The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
 # The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
+# The four daily treatment-centre flows share a separate flow dispersion $k_{\text{flow}}$, centred on the treatment-centre stock dispersion $k_{\text{iso}}$.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -617,7 +618,8 @@ surveillance_summary = summary_table(
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
-        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :isolation_admission, :isolation_dispersion,
+        :treatment_flow_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
         :isolation_death_los_mean,
