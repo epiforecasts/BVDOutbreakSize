@@ -399,6 +399,19 @@ CSV.write(
         cols = :union
     )
 );
+## The same three tables into the release outputs, so each results release
+## carries the dashboard map's province and national inputs at its cut-off.
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+for f in (
+        "province_estimates.csv", "national_estimates.csv",
+        "province_timeseries.csv",
+    )
+    cp(joinpath(province_map_dir, f), joinpath(output_dir, f); force = true)
+end
 
 #md # ```@raw html
 #md # </details>

@@ -594,13 +594,16 @@ CSV.write(
 open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
     print(io, zone_headline(zone_estimates; top = 10))
 end
-## The same frame into the release outputs.
+## The zone estimates and time series into the release outputs, so each
+## results release carries the dashboard map's zone inputs at its cut-off.
 output_dir = get(
     ENV, "BVD_OUTPUT_DIR",
     joinpath(pkgdir(BVDOutbreakSize), "output")
 )
 mkpath(output_dir)
-CSV.write(joinpath(output_dir, "zone_estimates.csv"), zone_estimates)
+for f in ("zone_estimates.csv", "zone_timeseries.csv")
+    cp(joinpath(dashboard_dir, f), joinpath(output_dir, f); force = true)
+end
 
 #md # ```@raw html
 #md # </details>

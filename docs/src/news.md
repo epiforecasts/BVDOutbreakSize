@@ -157,6 +157,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   This also gives a keyboard route to every area.
   Show national zooms back out to the whole map.
 - In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
+- The dashboard map has a compare menu beside its data date that sets an earlier cut-off's estimates beside the current ones: under each figure in the detail column, dashed in its reproduction number and weekly charts, and in the tooltips (#1114).
+  The map keeps the current shading, and the menu shows only when the build carries an archive of earlier cut-offs.
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the tail effective sample size (#1051).
@@ -175,6 +177,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
+- Each release carries all five tables the dashboard map reads, adding the zone time series and the province and national estimates and time series to the zone estimates it already carried (#1114).
+  `scripts/archive_dashboard.jl` collects them from the newest release of each of the last 14 data cut-offs, and the deploy from `main` stages them under `zone_map/archive/` with an index, leaving them out of pull request previews and `site.zip`.
+  Releases from before this change do not carry the tables and are left out.
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
