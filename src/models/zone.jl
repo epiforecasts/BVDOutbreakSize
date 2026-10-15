@@ -45,6 +45,7 @@ const _ZONE_PARENT_KEYS = (
     infections = :infections_patch,
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
+    distance_decay = :importation_distance_decay,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
     province_ascertainment = :province_ascertainment,
@@ -1997,9 +1998,12 @@ row per draw. The parent's uncertainty about the patch trajectory, the
 intensity and the delays does not enter here: it enters the fit through
 the shared quantity of [`zone_meld_block`](@ref), which deforms the
 centres and draws the delays.
+`distance_decay` is the geometric mean of the province kernel's sampled
+distance exponent, or [`PROVINCE_DISTANCE_DECAY`](@ref) when the parent
+fixed its kernel.
 Returns `(; log_infections, g, f, death_pmf, delay_log_draws,
-origin_epsilon, import_log_odds, priors, province_ascertainment,
-province_severity)`.
+origin_epsilon, import_log_odds, distance_decay, priors,
+province_ascertainment, province_severity)`.
 """
 function zone_parent_inputs(chn)
     chn = _zone_parent_chain(chn)
@@ -2024,6 +2028,12 @@ function zone_parent_inputs(chn)
     ## the between-patch flows the zone stage applies are the province
     ## model's rather than a second estimate of them.
     origin_epsilon = _geomean_parent_vector(chn, keys_.importation_epsilon)
+    ## The province kernel's distance exponent, at its geometric mean over
+    ## the draws, so the zone stage's between-patch flows use the kernel the
+    ## province model fitted. A parent with the kernel fixed carries none.
+    distance_decay = _has_key(chn, keys_.distance_decay) ?
+        exp(mean(log.(_zone_draw_values(chn, keys_.distance_decay)))) :
+        PROVINCE_DISTANCE_DECAY
     ## The province model's own relative ascertainment and fatality, at its
     ## posterior mean. A factor common to a patch cancels in a within-patch
     ## composition, so these never reach the likelihood; they carry the
@@ -2051,7 +2061,7 @@ function zone_parent_inputs(chn)
     )
     return (;
         log_infections = logI, g, f, death_pmf, delay_log_draws,
-        origin_epsilon, import_log_odds, priors,
+        origin_epsilon, import_log_odds, distance_decay, priors,
         province_ascertainment, province_severity,
     )
 end
@@ -2628,7 +2638,8 @@ function _zone_mixing_or_nothing(
     pops = Float64[r.population for r in rows]
     coords = [(r.lat, r.lon) for r in rows]
     kernel = province_importation_kernel(
-        PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
+        PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))];
+        decay = get(parent, :distance_decay, PROVINCE_DISTANCE_DECAY)
     )
     blocks = zone_importation_blocks(pops, coords, patch_of_zone, kernel)
     ## The intensity is a relative weight across origin patches inside a

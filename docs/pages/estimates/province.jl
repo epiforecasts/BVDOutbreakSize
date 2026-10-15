@@ -233,17 +233,20 @@ province_infections_fig #hide
 #md # </figure>
 #md # ```
 
-# The provinces are coupled by the gravity kernel in the [mixing and importation](@ref "Mixing and importation") Methods section.
+# The provinces are coupled by the gravity kernel in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity and distance exponent estimated.
 # The distances between the patches' population centres are 324 km from Ituri to Nord-Kivu, 216 km from Ituri to Haut-Uele and 390 km from Nord-Kivu to the pooled patch, so most of what leaves Nord-Kivu lands in the pooled patch.
 
 #md # ```@raw html
-#md # <details><summary>Importation intensity and imports by province</summary>
+#md # <details><summary>Importation intensity, distance exponent and imports by province</summary>
 #md # ```
 
 importation_table = summary_table(
-    chn_joint, [:importation_epsilon];
+    chn_joint, [:importation_epsilon, :importation_distance_decay];
     digits = 4,
-    labels = Dict(:importation_epsilon => "Importation intensity")
+    labels = Dict(
+        :importation_epsilon => "Importation intensity",
+        :importation_distance_decay => "Importation distance exponent"
+    )
 );
 
 province_imports_fig = plot_imports_patches(
@@ -253,9 +256,17 @@ province_imports_fig = plot_imports_patches(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 importation_table #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Importation intensity and distance exponent of the province gravity kernel.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <figure class="bvd-figure">

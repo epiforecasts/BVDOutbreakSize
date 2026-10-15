@@ -1667,9 +1667,13 @@ The default is each patch's 2019 INS resident population
 
 ### Importation
 
-The default `importation_kernel` is the gravity kernel of
-[`province_importation_kernel`](@ref), a fixed weighting by destination
-population, so the provinces are coupled and the intensity `ε` is sampled.
+The default `importation_kernel = nothing` is the gravity kernel of
+[`province_importation_kernel`](@ref) over the first `n_patches`
+provinces, weighted by destination population and by distance to the power
+`γ`. `γ` is sampled as `importation_distance_decay` under
+`importation_decay_prior` ([`PROVINCE_DISTANCE_DECAY_PRIOR`](@ref)) and the
+kernel is rebuilt per draw, so the provinces are coupled and the intensity
+`ε` is sampled. Passing a matrix fixes the kernel and samples no `γ`.
 There is no mobility or origin-destination data for this outbreak, so the
 kernel is a structural assumption, and `ε` is weakly identified against the
 secondary-patch seeds, since both raise a secondary province's early
@@ -1727,9 +1731,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        importation_kernel::AbstractMatrix = province_importation_kernel(
-            PROVINCE_POPULATIONS[1:min(n_patches, end)]
-        ),
+        importation_kernel::Union{Nothing, AbstractMatrix} = nothing,
+        importation_decay_prior = PROVINCE_DISTANCE_DECAY_PRIOR,
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
@@ -1785,7 +1788,25 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ## all, so the uncoupled path keeps the sampled fractions. With one patch
     ## there is nothing to seed and the fraction would be a prior-only
     ## dimension either way.
-    coupled = any(!iszero, importation_kernel)
+    ## The default kernel is the gravity kernel at a sampled distance
+    ## exponent, rebuilt per draw. With one patch it has no off-diagonal, so
+    ## the exponent would be a prior-only dimension and is not sampled.
+    ## A sampled kernel couples the provinces by construction, so the
+    ## coupling is read from the model and never from the draw. At an
+    ## exponent past about 130 every `d^γ` overflows and the kernel is
+    ## numerically zero. Reading the coupling off that matrix would add
+    ## `seed_fraction` mid-chain, a parameter the sampler was not built for.
+    sampled_kernel = importation_kernel === nothing && n_patches > 1
+    if sampled_kernel
+        importation_distance_decay ~ importation_decay_prior
+        importation_kernel = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)];
+            decay = importation_distance_decay
+        )
+    elseif importation_kernel === nothing
+        importation_kernel = zeros(Float64, n_patches, n_patches)
+    end
+    coupled = sampled_kernel || any(!iszero, importation_kernel)
     if n_patches > 1 && !coupled
         seed_fraction ~ product_distribution(
             fill(seed_fraction_prior, n_patches - 1)

@@ -22,6 +22,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The province importation kernel samples its distance exponent rather than fixing it at one, under a `LogNormal(log(1.8), 0.4)` prior set from published gravity-model fits to movement and Ebola spread in sub-Saharan Africa (#1091).
+  The health-zone stage builds its between-patch kernel at the joint posterior's exponent.
+  Fitted values change.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
