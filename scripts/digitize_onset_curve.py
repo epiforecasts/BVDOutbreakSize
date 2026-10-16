@@ -215,6 +215,8 @@ CONFIG = {
     # SitRep 151's last bar, 11 October, ends a pixel short of the 12
     # October tick, and the reader takes that edge for a 12 October bar of
     # 3 where the figure draws none.
+    # "152" reprints SitRep 151's figure byte for byte and is left out
+    # with it.
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
