@@ -72,7 +72,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 151, 12 October (#1128, #1137).
+- The model cut-off advances to SitRep 152, 13 October (#1128, #1137).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
   SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitReps 147 and 149 print no Ituri alerts, so their suspect totals are partial and the suspected stream leaves out 8 and 10 October.
@@ -81,6 +81,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 150 prints a Tableau 1 total of 9 065 against 9 066 in its own Tableau 2 and prose, so the confirmed and province series take the Tableau 2 figures, and its header misprints the report date as 12 October.
   The care scanner reads a patient count printed before its split or with no verb, and the laboratory scanner reads a count run into its noun.
   The onset curve does not add SitReps 150 and 151: the reader misreads a tick-column bar and a dead segment in 150 and takes the edge of 151's last bar for a 12 October bar the figure does not draw.
+  SitRep 152 reprints SitRep 151's onset figure, so it stays out with it.
   `data/onset_dashboard_history.csv` adds the dashboard snapshots of 7, 8, 9 and 12 October.
   Fitted values change with the new data.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
@@ -102,7 +103,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 151 (12 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 152 (13 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
