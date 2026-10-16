@@ -334,7 +334,7 @@ function prevalence_table(
     )
     df = DataFrame(
         area => String[], "Population" => String[],
-        "Incubating per 100,000" => String[],
+        "Infected but not yet symptomatic per 100,000" => String[],
         "Symptomatic, undetected per 100,000" => String[],
         "In the community per 100,000" => String[],
         "Number in the community" => String[]
@@ -357,11 +357,10 @@ _fmt_prevalence(x, digits) = digits <= 0 ? string(round(Int, x)) :
     string(round(x; digits))
 
 """
-Dot plot of point prevalence per 100,000 by area, from a
-[`prevalence_overview`](@ref): the left panel is the rate incubating, the
-right the rate in the community, each a median with its 90% credible
-interval, one row per area coloured by patch and sorted by the community
-rate. `max_rows` keeps the highest.
+Dot plot of the rate in the community per 100,000 by area, from a
+[`prevalence_overview`](@ref): each a median with its 90% credible interval,
+one row per area coloured by patch and sorted by the rate. `max_rows` keeps
+the highest.
 """
 function plot_prevalence_ranking(
         overview::DataFrame;
@@ -373,37 +372,32 @@ function plot_prevalence_ranking(
         min(max_rows, nrow(overview))
     ov = overview[1:rows, :]
     ys = Float64.(rows:-1:1)
-    fig = Figure(; size = (760, max(26 * rows, 180) + 170))
-    ax1 = Axis(
-        fig[1, 1]; xlabel = "Incubating per 100,000",
+    fig = Figure(; size = (680, max(26 * rows, 180) + 170))
+    ax = Axis(
+        fig[1, 1]; xlabel = "In the community per 100,000",
         yticks = (ys, String.(ov.label))
     )
-    ax2 = Axis(fig[1, 2]; xlabel = "In the community per 100,000")
-    CairoMakie.linkyaxes!(ax1, ax2)
-    CairoMakie.hideydecorations!(ax2; grid = false)
-    for (ax, s) in ((ax1, "incubating_rate"), (ax2, "community_rate"))
-        for k in 1:rows
-            c = patch_colours[mod1(ov.patch[k], length(patch_colours))]
-            lines!(
-                ax, [ov[k, "$(s)_lo90"], ov[k, "$(s)_hi90"]], [ys[k], ys[k]];
-                color = (c, 0.6), linewidth = 2
-            )
-            scatter!(
-                ax, [ov[k, "$(s)_median"]], [ys[k]];
-                color = c, markersize = 9
-            )
-        end
-        CairoMakie.xlims!(ax, 0, nothing)
+    for k in 1:rows
+        c = patch_colours[mod1(ov.patch[k], length(patch_colours))]
+        lines!(
+            ax, [ov[k, "community_rate_lo90"], ov[k, "community_rate_hi90"]],
+            [ys[k], ys[k]]; color = (c, 0.6), linewidth = 2
+        )
+        scatter!(
+            ax, [ov[k, "community_rate_median"]], [ys[k]];
+            color = c, markersize = 9
+        )
     end
-    CairoMakie.ylims!(ax1, 0.4, rows + 0.6)
-    _patch_legend!(fig, (2, 1:2), ov.patch, patch_labels, patch_colours)
+    CairoMakie.xlims!(ax, 0, nothing)
+    CairoMakie.ylims!(ax, 0.4, rows + 0.6)
+    _patch_legend!(fig, (2, 1), ov.patch, patch_labels, patch_colours)
     CairoMakie.Label(
-        fig[3, 1:2],
-        "Median and 90% credible interval per 100,000 residents. " *
-            "Incubating: infected, before symptom onset. In the community: " *
-            "incubating, or symptomatic and not yet detected.";
+        fig[3, 1],
+        "Median and 90% credible interval per 100,000 residents. In the " *
+            "community: infected but not yet symptomatic, or symptomatic and " *
+            "not yet detected.";
         fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6)
     )
-    CairoMakie.Label(fig[0, 1:2], title; fontsize = 16, font = :bold)
+    CairoMakie.Label(fig[0, 1], title; fontsize = 16, font = :bold)
     return fig
 end

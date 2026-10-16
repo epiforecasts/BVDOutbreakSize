@@ -274,7 +274,7 @@ province_imports_fig #hide
 # ## [Point prevalence](@id province-prevalence)
 #
 # Point prevalence is the number of people infected at the cut-off who have not yet died, recovered or been detected as a suspected case.
-# We split it into people still incubating and people with symptoms who have not yet been detected.
+# We split it into people infected but not yet symptomatic and people with symptoms who have not yet been detected.
 # Together they are the infections in the community.
 # The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
 # The table gives each rate per 100,000 residents and the number of people in the community, as medians with 90% credible intervals.

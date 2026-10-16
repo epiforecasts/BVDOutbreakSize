@@ -104,7 +104,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The province and health-zone estimates report point prevalence at the cut-off: the people incubating and the people with symptoms who have not yet been detected, per 100,000 residents.
+- The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
+  A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.
   The model and the fitted values do not change (#1119).
 - A plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
