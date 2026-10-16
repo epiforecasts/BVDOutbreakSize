@@ -2610,7 +2610,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # P(T) = \sum_{s \ge 0} I(T - s)\, w(s). \tag{76}
 # ```
 #
-# A person is incubating while the incubation period exceeds $s$.
+# A person is infected but not yet symptomatic while the incubation period exceeds $s$.
 # After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
 # The province ascertainment is the national one times the province's relative ascertainment.
 # We rescale it so that the provinces keep the national rate when weighted by their expected confirmed cases on the cut-off day, the weights the joint model uses to split the national suspected cases.
@@ -2618,7 +2618,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
 # The probability of being symptomatic and undetected $s$ days after infection sums, over each possible incubation period, its probability times the probability of still being in the community for the rest of the $s$ days.
-# The people in the community are those incubating plus those symptomatic and undetected.
+# The people in the community are those infected but not yet symptomatic plus those symptomatic and undetected.
 #
 # Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
