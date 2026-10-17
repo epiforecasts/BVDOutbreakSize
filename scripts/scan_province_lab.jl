@@ -121,7 +121,9 @@ const SPLIT_LABS = Regex(
 const ANALYSED = Regex.(
     [
         "dont (\\d+) (?:[a-z]+ ){0,2}?(?:ont ete |sont )?(?:analys|test)",
-        "sur (?:les )?(\\d+) (?:nouveaux? )?(?:ech[ae]nt[a-z]*|swabs?)",
+        ## SitRep 150's Nord-Kivu bullet runs the count into the noun:
+        ## "sur 132échantillons reçus et analysés".
+        "sur (?:les )?(\\d+) ?(?:nouveaux? )?(?:ech[ae]nt[a-z]*|swabs?)",
         ## SitRep 147's Bas-Uele bullet drops the noun: "sur 33 recus et
         ## analyses".
         "sur (?:les )?(\\d+) recus et (?:analys|test)",

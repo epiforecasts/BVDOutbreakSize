@@ -116,6 +116,13 @@
             "bas_uele", (7, 0),
         ),
 
+        ## The count run into its noun, SitRep 150 (Nord-Kivu).
+        (
+            "28 nouveaux resultats positifs (13 vivants et 15 deces) sur " *
+                "132echantillons recus et analyses (positivite : 21,2%).",
+            "nord_kivu", (132, 28),
+        ),
+
         ## No sample noun at all, SitRep 147 (Bas-Uele).
         (
             "1 resultat positif (1sangs) sur 33 recus et analyses " *

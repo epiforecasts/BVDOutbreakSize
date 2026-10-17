@@ -134,7 +134,10 @@ On onset dates more than 56 days before the report the block differs from the da
 SitReps 144 and 145 reprint the 143 figure byte for byte (the same image md5 and n = 6 621).
 SitReps 146 and 149 (n = 6 823 and 7 136, last tick 05 October) are digitised on 724x418 and 718x411 renders and read 6 830 and 7 132 (+0.1% and -0.1%).
 SitRep 147 (n = 7 054) is not digitised, nor 148, which reprints it byte for byte: inside the incomplete-data band its 6 October reads 11, the edge of the 13 bar before it, where the bar stands at about 4 by eye.
-No dashboard snapshot falls within two days of 146 or 149, the latest being 2 October.
+On onset dates more than 56 days before the report, 146 differs from the dashboard's 7 October snapshot by 0.28 cases a day and 149 from its 9 October snapshot by 1.00.
+SitReps 150 and 151 (n = 7 262 and 7 284, last tick 12 October) are not digitised.
+On its 716x399 render SitRep 150 reads 7 184 (-1.1%), inside the gap band, but its 14 September bar on a tick column reads 23 against 69 in SitRep 149 and 69 in the dashboard's 12 October snapshot, and its 29 July reads 69 against 51 in every other vintage, the dead segment doubled.
+On its 836x493 render SitRep 151's 11 October bar ends a pixel short of the 12 October tick, and the reader takes that edge for a 12 October bar of 3 where the figure draws none.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -200,7 +203,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 149 (10 October); SitRep 142 (3 October) is not published on insp.cd.
+The series run to SitRep 152 (13 October); SitRep 142 (3 October) is not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
@@ -231,8 +234,9 @@ SitRep 080 prints the table with the Létalité column displaced one row down an
 SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 4666 case cells and 4668 death cells the two transcriptions share, 4652 and 4658 agree.
-The mirror does not yet carry 7 to 10 October (SitReps 146 to 149), nor 3 October, which INSP has not published.
+Of the 4858 case cells and 4860 death cells the two transcriptions share, 4844 and 4850 agree.
+The mirror does not yet carry 7, 8, 12 and 13 October (SitReps 146, 147, 151 and 152).
+It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
 On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).
@@ -304,7 +308,7 @@ Against the scanned SitRep curve the observed series agrees in every vintage (Pe
 
 The page is rebuilt by CI and committed to <https://github.com/INRB-UMIE/BDBV2026-Epidemic_Dashboard>, so the git history of `trends.html` is the vintage archive.
 `scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the SVG bars back through each chart's own axis labels or takes the embedded counts, and keeps one snapshot per distinct data version.
-The history holds 25 distinct snapshots from 2026-07-29 to 2026-10-02 out of 132 page builds.
+The history holds 29 distinct snapshots from 2026-07-29 to 2026-10-12 out of 143 page builds.
 On the 23 September data, built both ways, the two readings agree on every row (issue #1062).
 The snapshot cadence is irregular, 1 to 8 days between builds, so a SitRep block is compared with the nearest snapshot within two days of its report date (`task onset-cross-check`).
 At the reporting edge the dashboard's line list lagged the SitRep extract by up to 5 cases per day in early August and led it in September.
@@ -521,6 +525,19 @@ No script tracks mirror-sourced values, so this check is manual.
   The patient count enters the province isolation block and the denominator the bed block, as printed.
   SitRep 147's Bas-Uélé paragraph prints 2 patients after 10 the day before and 18 admissions with no discharge, and 26 would close the paragraphs to the national tile of 950; it is kept as printed.
   SitRep 148 repeats 147's Ituri, Nord-Kivu and Haut-Uélé counts (316, 523 and 71) with changed rates and flows, and its paragraphs sum to 951 against a tile of 946.
+- **Report date misprinted, SitRep 150 (11 October)**: the header reads `Date du rapport : 12 octobre 2026`, but the report number (`N°150 /MVE-BDBV/11/10/2026`), Tableaux 1 to 4 and the prose all date the data to 11 October, and SitRep 151 also prints 12 October.
+  SitRep 150 is keyed to 11 October.
+- **Tableau 1 against Tableau 2, SitRep 150 (11 October)**: Tableau 1 prints Haut-Uélé 382 cases and a Total of 9 065, and the page-1 tile repeats 9065.
+  Tableau 2 prints Haut-Uélé 383 (its zones sum to 383) and a Total of 9066, the prose gives 9066, and 379 + 4 and 8 978 + 88 both give the larger figures.
+  The auditable 9 066 enters `confirmed_case_history` and the province blocks take the Tableau 2 province rows, as for SitRep 073.
+  `scripts/scan_province_tableau1.jl` reports a table whose rows match its own Total but miss the national totals and leaves it out, as it does a table that contradicts itself.
+- **One-case reattribution, SitRep 151 (12 October)**: Adja (Ituri) falls from 12 to 11 cases with no 24h entry, so Ituri steps +39 against its printed 40 and the national total +78 against 79.
+  There is no asterisk or note, and deaths step by exactly the printed 29.
+- **Care paragraphs, SitReps 150 and 151**: from SitRep 150 the paragraphs give the count before its split or with no verb (`Ainsi, 337 patients, soit un taux d'occupation de 33,2 %`; `382 patients (127 confirmés et 255 suspects) sont hospitalisés`), which `scripts/scan_province_care.jl` reads from this update on.
+  The same change reads six earlier counts the scan had missed (132 and 134 Tshopo, 134 and 135 Bas-Uélé, 135 Nord-Kivu, 144 Haut-Uélé), each equal to the blind read, so the blocks do not change.
+  SitRep 150's Bas-Uélé paragraph prints 12 admissions and no discharge but no patient count, and the other paragraphs sum to 868 against a tile of 895; the tile exceeds the sum, as at SitRep 147, and is kept.
+  SitRep 151's Haut-Uélé paragraph gives `169 lits montés` against 153 at SitRep 149, with no reason printed, and the paragraphs sum to the tile of 899.
+- **Partial alert table, SitRep 151 (12 October)**: Tableau 3 prints ND for Sud Ubangi alone, which validated no suspect on SitRep 150, so its 522 is kept, as at SitRep 148.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 
 ## Other signals to scan for and flag (not yet fitted)
