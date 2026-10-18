@@ -4359,10 +4359,18 @@ totals are conditioned on, never scored, so nothing is counted twice.
 
 The composition is scored by stick-breaking over the patches
 ([`stick_breaking_loglik`](@ref)) with the overdispersed Binomial
-[`safe_betabinomial`](@ref), the sequential form of
-a Dirichlet-multinomial. For each vintage the observed count in patch `p`
-is drawn from the cases not yet allocated to patches `1 … p−1`, at the
-conditional share implied by the modelled per-patch confirmed increments:
+[`safe_betabinomial`](@ref), at a shared `ρ` for every step. This is the
+sequential form of a Dirichlet-multinomial only at two patches, where the
+one free split's BetaBinomial already is the Dirichlet-multinomial margin.
+From three patches on, as fitted here, it is a different distribution: the
+closed form would shrink each later step's concentration by its remaining
+tail rather than hold it fixed, as `scripts/bench_province_composition.jl`
+checks. That script also times both forms' Mooncake compile and gradient:
+with the split already scored as one vectorised term per patch rather than
+one per cell, neither form's compile is the hour a per-cell `~` used to
+cost. For each vintage the observed count in patch `p` is drawn from the
+cases not yet allocated to patches `1 … p−1`, at the conditional share
+implied by the modelled per-patch confirmed increments:
 
 ```math
 y_{p} \\sim \\mathrm{BetaBinomial}\\Bigl(
