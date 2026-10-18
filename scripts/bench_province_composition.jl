@@ -12,11 +12,11 @@
 # Dirichlet-multinomial margin. At `np ≥ 3`, as the fitted model has (Ituri,
 # Nord-Kivu, Sud-Kivu), they diverge: the exact Dirichlet-multinomial
 # decomposition would shrink each later step's concentration by its
-# remaining tail, while the current form keeps `ρ` fixed at every step. So
-# the closed form is not a drop-in at the province model's patch count;
-# swapping it in would change what the likelihood says about a province's
-# overdispersion, not just how it is computed, and would need a refit, not
-# a parameter translation.
+# remaining tail, while the current form keeps `ρ` fixed at every step. The
+# closed form is therefore not a drop-in at the province model's patch
+# count; swapping it in would change what the likelihood says about a
+# province's overdispersion, not just how it is computed, and would need a
+# refit rather than a parameter translation.
 #
 # This checks that divergence, then times both forms' Mooncake compile and
 # steady-state gradient at `np = 3`. Each form's compile runs in its own
