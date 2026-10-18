@@ -90,7 +90,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The tick-column re-read above now also fires when the two bounding outlines differ in height.
   A day on a tick is read again, without the gridline skip, when every column's skipped run falls more than two counts short of its own unskipped run and that unskipped run reaches either outline (#1138).
   SitReps 150 and 151 still stay out of the onset curve.
-  SitRep 150's 29 July reads 69 against 51 from day-grid drift rather than a tick-column break, and SitRep 151's larger render reads a phantom bar of 3 on 12 October, a day the figure draws no bar on.
+  SitRep 150's 29 July reads 69 against 51 from day-grid drift rather than a tick-column break, and SitRep 151's larger render reads a phantom bar of 3 on 12 October, a day on which the figure draws no bar.
 - The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
   It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
   On the 23 September data, built both ways, the counts and the old chart reading agree on every row.

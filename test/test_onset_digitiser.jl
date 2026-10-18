@@ -537,10 +537,10 @@ end
     ## The same break as above, but the bar beside the tick is shorter than
     ## the one on its other side, so the two outline columns bounding the
     ## window do not pair up and the tick-column re-read above does not fire
-    ## (SitRep 150's 14 September, between a 69 and a 51). The day still
-    ## sits on the tick, its skipped run still stops well short of its
-    ## unskipped run, and the unskipped run still reaches the taller of the
-    ## two outlines, so it is read again regardless of the shorter one.
+    ## (SitRep 150's 14 September, between a 69 and a 51). The day sits on
+    ## the tick, its skipped run stops well short of its unskipped run, and
+    ## the unskipped run reaches the taller of the two outlines, so it is
+    ## read again regardless of the shorter one.
     R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
     function paint!(rows, cols, c)
         R[rows, cols] .= c[1]
