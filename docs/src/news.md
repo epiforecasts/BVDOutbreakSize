@@ -42,8 +42,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   With every other parameter held at a posterior draw, the centred level samples `σ_level` with 18 to 34 times fewer gradients per effective draw (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
 - The non-BVD background walk's log-deviation is pinned to zero on the last fitted knot, the cut-off, rather than the first (#1084).
-  The first knot falls in the onset ramp, where the daily new-suspect series says little, so the baseline `λ_mu` and the walk's early steps traded off against each other to fix the value the later, informed knots pin.
-  On a block test that pins a synthetic walk's late knots and leaves its early ones free, the same trade-off the issue describes, anchoring at the cut-off cuts the leapfrog steps per effective draw of `λ_mu` by a factor of 27 to 31 (two draws, figures in the pull request).
+  The first knot falls in the onset ramp, where the daily new-suspect series says little, so the baseline `λ_mu` and the walk's early steps traded off against each other, with only their product fixed by the later, informed knots.
+  A block test that pins a synthetic walk's late knots and leaves its early ones free reproduces that trade-off: anchoring at the cut-off cuts the leapfrog steps per effective draw of `λ_mu` by a factor of 27 to 31 (two draws, figures in the pull request).
   The model is the same, so fitted values change only by sampling noise.
 - The onset triangle's read SD prior is `LogNormal(log 0.3, 0.5)`, centred on one figure pixel, in place of `LogNormal(log 1, 0.5)` (#1099).
   Rounding of each read has its own variance term, so the read SD is the error beyond it, and one count spans a median of 3.2 pixels across the digitised figures (`data/onset_curve_figures.csv`).
