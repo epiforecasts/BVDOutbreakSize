@@ -523,6 +523,47 @@ end
     @test (last_tick - Day(7), 12, 5) in rows
 end
 
+@testitem "digitize re-reads a tick-column bar that breaks below unequal outlines" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## The same break as above, but the bar beside the tick is shorter than
+    ## the one on its other side, so the two outline columns bounding the
+    ## window do not pair up and the tick-column re-read above does not fire
+    ## (SitRep 150's 14 September, between a 69 and a 51). The day still
+    ## sits on the tick, its skipped run still stops well short of its
+    ## unskipped run, and the unskipped run still reaches the taller of the
+    ## two outlines, so it is read again regardless of the shorter one.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 663
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(232:251, (x - 1):(x + 1), (200, 60, 60))
+    paint!(252:299, (x - 1):(x + 1), (200, 225, 235))
+    paint!(252:299, x:x, (100, 180, 230))
+    paint!(268:272, x:x, (220, 220, 220))
+    paint!(280:284, (x - 1):(x - 1), (220, 220, 220))
+    paint!(280:284, (x + 1):(x + 1), (220, 220, 220))
+    paint!(232:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(260:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test length(rows) == 10
+    @test (last_tick - Day(7), 12, 5) in rows
+end
+
 @testitem "digitize reads faded bars before the last tick from their own columns" begin
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
