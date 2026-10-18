@@ -12,8 +12,8 @@ using Dates: Date, Day, date2epochdays, epochdays2date, now
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
-    to_submodel, predict, returned
+using Turing: @model, @addlogprob!, @varname, MCMCThreads, NUTS, Prior,
+    sample, to_submodel, predict, returned
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
@@ -117,6 +117,9 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
     plot_forecast_beds_vs_truth,
     delay_corrected_cfr, delay_corrected_confirmed_cfr,
+    infection_state_weights, point_prevalence, patch_prevalence,
+    zone_prevalence, prevalence_overview, prevalence_table,
+    plot_prevalence_ranking,
     confirmed_cfr_table, plot_confirmed_cfr,
     # renewal helpers
     renewal_infections, convolve_delay, convolve_pmf,
@@ -252,6 +255,7 @@ include("models/fit_args.jl")
 include("recovery.jl")
 include("models/zone.jl")
 include("zone.jl")
+include("prevalence.jl")
 
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:
