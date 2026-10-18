@@ -957,11 +957,13 @@ a slow drift, so a knot per `week` carries the time variation with far
 fewer innovations than a daily walk. The series is gated to zero before
 the surveillance `onset`, since the non-BVD background does not exist
 before surveillance began, and ramps in over the first `onset_ramp` days
-of the window. With knot values
-`\\log\\lambda` and knot days `d`,
+of the window. With knot values `\\log\\lambda` and knot days `d`, the last
+one `D` the cut-off,
 
 ```math
-\\log \\lambda_d = \\log \\lambda_0 + \\sum_{s < d} \\epsilon_s,
+\\log \\lambda_D = \\log \\lambda_0, \\qquad
+\\log \\lambda_d = \\log \\lambda_D - \\sum_{d \\le s < D} \\epsilon_s
+\\ \\text{for}\\ d < D,
 \\qquad \\epsilon_s \\sim \\mathcal N(0, \\sigma_{rw}),
 \\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
 ```
@@ -1000,18 +1002,24 @@ of innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
 
 `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk
 multiplies, not the level over the window. The log-deviation is pinned to
-zero on the first knot, so `λ_mu` anchors the window's start and the
-innovations carry the series from there. The half-normal shrinks that
-anchor toward zero, which stops the background out-explaining the outbreak
-signal, and the scale is wide enough not to truncate the anchor the
-suspected-case data support. Pass `baseline_prior` to override.
+zero on the last fitted knot (the cut-off), so `λ_mu` anchors there and the
+innovations carry the series backwards to the window's start. Anchoring at
+the window's start instead left `λ_mu` sitting where the daily
+new-suspect series says little, the onset ramp, with the data fixing only
+`λ_mu · exp(Σ steps)` at the later, informed knots; `λ_mu` and those early
+steps then traded off along a ridge the diagonal mass matrix could not
+scale for. Anchoring at the cut-off puts `λ_mu` where the data pin it
+directly. The half-normal shrinks that anchor toward zero, which stops the
+background out-explaining the outbreak signal, and the scale is wide
+enough not to truncate the anchor the suspected-case data support. Pass
+`baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
 
-With a `cutoff` before the grid end the fitted knots end at `cutoff` and
-the walk continues past it on knots a week apart, with future steps drawn
-at the same scale.
+With a `cutoff` before the grid end the fitted knots end at `cutoff`,
+`λ_mu` anchors there, and the walk continues past it on knots a week
+apart, with future steps drawn at the same scale.
 """
 @model function background_walk_model(
         n::Integer, σ_rw::Real;
@@ -1046,9 +1054,12 @@ at the same scale.
         walk_steps = σ_rw .* z[1:max(nb - 1, 0)]
     end
     ## Smooth multiplicative deviation, a cumulative log-deviation from the
-    ## baseline, anchored there on the first knot. Interpolated to daily so a
-    ## death background scaled from it is smooth.
-    log_knots = vcat(zero(σ_rw), cumsum(walk_steps))
+    ## baseline, anchored there on the last fitted knot (the cut-off) rather
+    ## than the first: the suspected-case data pin the series near the
+    ## cut-off, while the first knot falls in the onset ramp, where they say
+    ## little. Earlier knots walk backwards from the anchor. Interpolated to
+    ## daily so a death background scaled from it is smooth.
+    log_knots = vcat(.-reverse(cumsum(reverse(walk_steps))), zero(σ_rw))
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)
         nf = length(fdays)
@@ -1061,7 +1072,9 @@ at the same scale.
             z_future ~ product_distribution(fill(Normal(0, 1), nf))
             future_steps = σ_rw .* z_future
         end
-        log_knots = vcat(log_knots, log_knots[end] .+ cumsum(future_steps))
+        ## The anchor sits at the last fitted knot (now zero), so the future
+        ## walk continues from it rather than from an accumulated value.
+        log_knots = vcat(log_knots, cumsum(future_steps))
         days = vcat(days, fdays)
     end
     walk = interpolate_knots(log_knots, days, n)[t0:n]

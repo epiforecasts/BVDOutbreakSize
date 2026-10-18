@@ -105,18 +105,20 @@ end
     using Statistics: mean, std
 
     n, σ_rw, onset = 60, 0.2, 10
-    ## Accumulated log deviation from the window anchor on the last day. Both
-    ## forms carry the same prior over it, a cumulative sum of
-    ## `Normal(0, σ_rw)` steps, so its mean and spread must agree.
+    ## Accumulated log deviation from the window anchor (the last knot, the
+    ## cut-off) on the window's first day, with a hard onset so no ramp
+    ## factor confounds it. Both forms carry the same prior over it, a
+    ## cumulative sum of `Normal(0, σ_rw)` steps, so its mean and spread
+    ## must agree.
     function drift(centred)
         mdl = background_walk_model(
-            n, σ_rw; onset = onset,
+            n, σ_rw; onset = onset, onset_ramp = 1,
             centred = centred
         )
         rng = MersenneTwister(20260917)
         return [
             let s = returned(mdl, rand(rng, mdl))
-                log(s.λ[end] / s.λ_mu)
+                log(s.λ[onset] / s.λ_mu)
             end
                 for _ in 1:8_000
         ]
@@ -127,6 +129,32 @@ end
     @test isapprox(std(c), std(nc); rtol = 0.1)
     ## A walk, not noise: the drift accumulates well beyond one step.
     @test std(c) > σ_rw
+end
+
+@testitem "background_walk_model anchors λ_mu at the cut-off, not the window start" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## With no `cutoff` the last day is the last fitted knot, so it holds
+    ## exactly at `λ_mu` whatever the innovations draw, while the window's
+    ## first day (the old anchor) is free to differ from it. A hard onset
+    ## removes the ramp as a confound.
+    n, σ_rw, onset = 40, 0.3, 5
+    mdl = background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1)
+    s = returned(mdl, rand(MersenneTwister(7), mdl))
+    @test s.λ[n] ≈ s.λ_mu
+    @test !(s.λ[onset] ≈ s.λ_mu)
+
+    ## With a `cutoff` short of the grid end, the anchor moves to the
+    ## cut-off day, and the forecast walks forward from it rather than from
+    ## an accumulated value.
+    cutoff = 25
+    fmdl = background_walk_model(
+        n, σ_rw; onset = onset, onset_ramp = 1, cutoff = cutoff
+    )
+    fs = returned(fmdl, rand(MersenneTwister(7), fmdl))
+    @test fs.λ[cutoff] ≈ fs.λ_mu
 end
 
 @testitem "background_walk_model edge cases (ungated, single day)" begin
