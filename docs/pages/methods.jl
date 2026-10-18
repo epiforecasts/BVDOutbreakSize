@@ -1091,9 +1091,11 @@ cfr_prior_fig #hide
 #
 # ```math
 # \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(w_t\bigr), \qquad
-# w_t = \mathrm{interp}\Bigl(\sigma_{\text{rw}} \sum_{s < k} z_s\Bigr),
+# w_t = \mathrm{interp}\Bigl(-\sigma_{\text{rw}} \sum_{k \le s < K} z_s\Bigr),
 # \qquad z_s \sim \mathcal N(0, 1),
 # ```
+#
+# with knot $K$ the cut-off, so $\lambda_\mu$ is the rate there rather than at the window's start, where the daily new-suspect series says little.
 #
 # This rate is gated to zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report, since the background does not exist before surveillance began.
 # It is shared, with one tight innovation SD $\sigma_{\text{rw}}$, between the suspected-case and suspected-death streams.
