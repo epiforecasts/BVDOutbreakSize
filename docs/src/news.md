@@ -104,6 +104,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
+  A figure ranks the areas by the rate in the community.
+  Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.
+  The model and the fitted values do not change (#1119).
 - A plot of each province's and health zone's confirmed cases over the past week against its reproduction number leads the province estimates, sits under the zone maps and is on the summary page (#1072, resolves #1054).
   Faint bars span the 90% credible interval of the reproduction number, and of the cases for the forecast, so an uncertain estimate draws a long bar rather than a precise dot.
   A faded triangle marks the week before and, for provinces, a hollow point the forecast week ahead.
@@ -170,6 +174,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
 - The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
   Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).
 - The formatter environment pins Runic to 1.11.1 again, matching the pre-commit hook, and Dependabot no longer proposes Runic bumps, which have to reformat the tree in the same commit.
