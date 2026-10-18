@@ -47,7 +47,11 @@
 #     columns neither show a bar nor leave it empty, or that reads below the
 #     two equal outline columns around it beside a washed tick column, is
 #     read again without the tick-column skip, which washed fill on a tick
-#     column can break.
+#     column can break; so is a day on a tick whose every column's skipped
+#     run falls more than two counts short of its unskipped run, when the
+#     unskipped run reaches one of the two bounding outlines (which, unlike
+#     the equal pair above, can differ, since they belong to whichever bars
+#     stand either side).
 #     The bar height is the height at least two of its interior columns agree on to
 #     within a pixel, or the tallest interior column when none do; with no
 #     outline pixel in any column the fill's own extent is read where two
@@ -922,10 +926,21 @@ def digitize_windows(im, last_tick_date, y_step=20):
                   and abs(int(h[bounds[0]]) - int(h[bounds[1]])) <= 1)
         washed = any(hread[x] == 0 and hp[x] > 2 * ppc
                      and any(abs(x - t) <= 1 for t in xs) for x in cols)
+        # a day on a tick whose skipped run falls more than two counts short
+        # of its unskipped run in every column, where the unskipped run
+        # reaches one of the bounding outlines, broke on a gridline row too;
+        # its outlines need not match, unlike the paired case above, because
+        # the neighbouring bar they belong to can be any height
+        edges = [int(h[x]) for x in bounds if 1 <= x <= W and isborder[x]]
+        broken = (isinstance(bar, tuple) and edges
+                  and all(any(abs(x - t) <= 1 for t in xs)
+                          and h1[x] - hread[x] > 2 * ppc for x in cols)
+                  and any(abs(e - max(h1[x] for x in cols)) <= 1
+                          for e in edges))
         if bar is None or (isinstance(bar, tuple)
                            and max(hread[x] for x in cols) <= 1) or (
                 isinstance(bar, tuple) and paired and washed
-                and bar[0] < h[bounds[0]] - 1):
+                and bar[0] < h[bounds[0]] - 1) or broken:
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
             edge = [int(h[x]) for x in (min(cols) - 1, max(cols) + 1)
                     if 1 <= x <= W and isborder[x]]
