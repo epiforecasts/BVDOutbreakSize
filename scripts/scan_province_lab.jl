@@ -98,6 +98,12 @@ const POSITIVES = Regex.(
     [
         "n ?= ?(\\d+)",
         "(\\d+) ?nouveaux? resultats? positifs?",
+        ## SitReps 153 and 154's Tshopo bullets count the positives as
+        ## cases: "7 nouveau cas confirme (6 vivants et 1 deces) sur 16
+        ## echantillons recus et analyses". Only directly against a sample
+        ## count: the 079-081 Ituri bullets name new cases and then add
+        ## the day's positive re-samplings, so their positives are larger.
+        "(\\d+) ?nouveaux? cas confirmes? (?:\\([^)]*\\) )?sur \\d+",
         "dont (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
         "parmi lesquels (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
         "soit (\\d+) ?positifs?",

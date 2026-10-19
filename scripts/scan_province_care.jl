@@ -196,7 +196,10 @@ function province_entries(lines::Vector{String})
                 got[name] = f[(m.offset + ncodeunits(m.match)):end]
                 push!(order, name)
             end
-        elseif occursin(r"^\s*[^0-9a-z\s]", f)
+        elseif occursin(r"^\s*[^0-9a-z\s(]", f)
+            ## A bullet ends the entry. A wrapped line can open on a bracket,
+            ## as SitRep 153's Haut-Uele paragraph does with "(Isiro, Boma
+            ## Mangbetu et Rungu). Ainsi, 43 patients", so a bracket does not.
             current = nothing
         elseif current !== nothing
             got[current] = got[current] * " " * f
@@ -718,7 +721,9 @@ end
 
 function trimmed_quote(s::AbstractString, n::Int = 300)
     q = replace(strip(s), r"\s+" => " ")
-    return length(q) > n ? q[1:n] : q
+    ## Cut at byte n, widened to the end of the character it falls in:
+    ## SitRep 153 puts a curly apostrophe across byte 300.
+    return length(q) > n ? q[1:thisind(q, n)] : q
 end
 
 """
