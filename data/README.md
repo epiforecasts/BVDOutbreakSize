@@ -138,6 +138,8 @@ On onset dates more than 56 days before the report, 146 differs from the dashboa
 SitReps 150 and 151 (n = 7 262 and 7 284, last tick 12 October) are not digitised.
 On its 716x399 render SitRep 150 reads 7 184 (-1.1%), inside the gap band, but its 14 September bar on a tick column reads 23 against 69 in SitRep 149 and 69 in the dashboard's 12 October snapshot, and its 29 July reads 69 against 51 in every other vintage, the dead segment doubled.
 On its 836x493 render SitRep 151's 11 October bar ends a pixel short of the 12 October tick, and the reader takes that edge for a 12 October bar of 3 where the figure draws none.
+SitReps 153 and 154 (n = 7 388 and 7 438, last tick 12 October, y step 25) are not digitised either.
+On their 817x459 and 812x447 renders they read 7 331 and 7 381 (-0.8% each) at best shift 0, but SitRep 153 has no reading for 13 and 14 May (17 and 8 in SitRep 149 and the dashboard), and SitRep 154 reads 13 and 14 May as 17 and 17 and has no reading for 5 June (20 in SitRep 153).
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -203,7 +205,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 152 (13 October); SitRep 142 (3 October) is not published on insp.cd.
+The series run to SitRep 154 (15 October); SitRep 142 (3 October) is not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
@@ -235,7 +237,7 @@ SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
 Of the 4858 case cells and 4860 death cells the two transcriptions share, 4844 and 4850 agree.
-The mirror does not yet carry 7, 8, 12 and 13 October (SitReps 146, 147, 151 and 152).
+The mirror does not yet carry 7, 8 and 12 to 15 October (SitReps 146, 147 and 151 to 154).
 It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
@@ -538,6 +540,12 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 150's Bas-Uélé paragraph prints 12 admissions and no discharge but no patient count, and the other paragraphs sum to 868 against a tile of 895; the tile exceeds the sum, as at SitRep 147, and is kept.
   SitRep 151's Haut-Uélé paragraph gives `169 lits montés` against 153 at SitRep 149, with no reason printed, and the paragraphs sum to the tile of 899.
 - **Partial alert table, SitRep 151 (12 October)**: Tableau 3 prints ND for Sud Ubangi alone, which validated no suspect on SitRep 150, so its 522 is kept, as at SitRep 148.
+- **Care paragraphs, SitReps 153 and 154 (14 and 15 October)**: SitRep 153's Bas-Uélé paragraph reads `Six suspects restent isolés (Dakwa 1, Viadana 2 et Ganga 3) avec 2 confirmés (Dakwa et Ganga)`, which is read as 8, and with it the paragraphs sum to the tile of 924.
+  Nord-Kivu prints 392 lits from SitRep 153 against 374 on SitReps 150 to 152, with no reason given.
+  SitRep 154's paragraphs sum to the tile of 916.
+- **New province, SitRep 155 (16 October)**: Nord Ubangi enters as an eighth province with ZS de Wapinda, 2 cases and 1 death, and the zone denominator moves from 167 to 178.
+  Checked against the whole local archive: neither name appears before SitRep 155.
+  The province and health-zone blocks have no key for it, so SitRep 155 is not added until the province has a manifest key, a population and a map row.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 
 ## Other signals to scan for and flag (not yet fitted)
