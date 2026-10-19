@@ -129,3 +129,32 @@ end
     @test f[:patients_isolated] == 442
     @test f[:beds] == 1015
 end
+
+@testitem "care entries continue across a line opening on a bracket" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_care.jl"
+        )
+    )
+
+    ## SitRep 153's Haut-Uele paragraph wraps onto a line that opens on a
+    ## bracket, and the count and beds sit after it.
+    lines = [
+        "    •    Au Haut-Uélé, 16 nouvelles admissions (7 confirmés, dont 5 à Wamba, et 9 suspects, dont 1 PPL) ont",
+        "         été enregistrées contre 18 sorties : 5 guérisons (4 à Wamba et 1 à Isiro), 10 non-cas et 3 décès de confirmés",
+        "         (Isiro, Boma Mangbetu et Rungu). Ainsi, 43 patients (16 confirmés et 27 suspects, dont 5 enfants de moins",
+        "         de 5 ans) sont hospitalisés pour 169 lits montés, soit un taux d’occupation de 25,4 %",
+        "    •    À la Tshopo, 4 nouvelles admissions ont été enregistrées.",
+    ]
+    got, order = province_entries(lines)
+    @test order == ["haut_uele", "tshopo"]
+    f = parse_prose_entry(got["haut_uele"], "haut_uele")
+    @test f[:patients_isolated] == 43
+    @test f[:beds] == 169
+
+    ## A quote cut at 300 bytes keeps a character that straddles the cut.
+    q = repeat("a", 298) * "’" * "occupation"
+    @test trimmed_quote(q) == repeat("a", 298) * "’"
+end

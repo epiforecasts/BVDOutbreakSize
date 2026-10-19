@@ -130,6 +130,19 @@
             "bas_uele", (33, 1),
         ),
 
+        ## The positives counted as new confirmed cases, SitReps 153 and
+        ## 154 (Tshopo).
+        (
+            "1 nouveau cas confirme (vivant) sur 8 echantillons recus et " *
+                "analyses (positivite : 12,5%).",
+            "tshopo", (8, 1),
+        ),
+        (
+            "7 nouveau cas confirme (6 vivants et 1 deces) sur 16 " *
+                "echantillons recus et analyses (positivite : 43,8%).",
+            "tshopo", (16, 7),
+        ),
+
         ## No completed analysis: no denominator, so no numerator either.
         (
             "3 echantillons collectes dont 2 sont expedies a kinshasa (inrb).",
