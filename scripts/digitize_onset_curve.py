@@ -221,7 +221,7 @@ CONFIG = {
     # their 817x459 and 812x447 renders the reader loses 13 and 14 May
     # from SitRep 153 (17 and 8 in SitRep 149 and the dashboard), reads
     # 13 and 14 May as 17 and 17 in SitRep 154 and drops its 5 June (20 in
-    # SitRep 153).
+    # SitRep 153); see #1148.
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.

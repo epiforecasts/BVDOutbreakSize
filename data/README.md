@@ -139,7 +139,7 @@ SitReps 150 and 151 (n = 7 262 and 7 284, last tick 12 October) are not digitise
 On its 716x399 render SitRep 150 reads 7 184 (-1.1%), inside the gap band, but its 14 September bar on a tick column reads 23 against 69 in SitRep 149 and 69 in the dashboard's 12 October snapshot, and its 29 July reads 69 against 51 in every other vintage, the dead segment doubled.
 On its 836x493 render SitRep 151's 11 October bar ends a pixel short of the 12 October tick, and the reader takes that edge for a 12 October bar of 3 where the figure draws none.
 SitReps 153 and 154 (n = 7 388 and 7 438, last tick 12 October, y step 25) are not digitised either.
-On their 817x459 and 812x447 renders they read 7 331 and 7 381 (-0.8% each) at best shift 0, but SitRep 153 has no reading for 13 and 14 May (17 and 8 in SitRep 149 and the dashboard), and SitRep 154 reads 13 and 14 May as 17 and 17 and has no reading for 5 June (20 in SitRep 153).
+On their 817x459 and 812x447 renders they read 7 331 and 7 381 (-0.8% each) at best shift 0, but SitRep 153 has no reading for 13 and 14 May (17 and 8 in SitRep 149 and the dashboard), and SitRep 154 reads 13 and 14 May as 17 and 17 and has no reading for 5 June (20 in SitRep 153, #1148).
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -545,7 +545,7 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 154's paragraphs sum to the tile of 916.
 - **New province, SitRep 155 (16 October)**: Nord Ubangi enters as an eighth province with ZS de Wapinda, 2 cases and 1 death, and the zone denominator moves from 167 to 178.
   Checked against the whole local archive: neither name appears before SitRep 155.
-  The province and health-zone blocks have no key for it, so SitRep 155 is not added until the province has a manifest key, a population and a map row.
+  The province and health-zone blocks have no key for it, so SitRep 155 is not added until the province has a manifest key, a population and a map row (#1147).
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 
 ## Other signals to scan for and flag (not yet fitted)
