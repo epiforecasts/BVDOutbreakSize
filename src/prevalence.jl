@@ -80,6 +80,14 @@ function _patch_ascertainment(p_drc::Real, rel::AbstractVector, w::AbstractVecto
     return [min(p_drc * r * scale, 1.0) for r in rel]
 end
 
+# Case-fatality ratio by patch, the joint's `CFR_patch`: the national ratio
+# times the province's relative fatality. The joint uses that contrast only
+# to split the national deaths between the provinces, so nothing in it keeps
+# the product below one, and a province with a large contrast can exceed it
+# in some draws. Capped at one, as the zones' ratios are
+# ([`_zone_prevalence_parameters`](@ref)).
+_patch_cfr(cfr::AbstractVector) = [min(c, 1.0) for c in cfr]
+
 # Each area's expected confirmations on the last day: the infections
 # `x[a]` through the infection-to-confirmation PMF `f`
 # (incubation, onset to report and report to receipt), the onset-to-
@@ -107,8 +115,8 @@ function _prevalence_parameters(chn, horizon::Integer = 120)
     d(vn) = Float64.(vec(collect(chn[vn])))
     p_drc = d(:p_drc)
     ## A chain without the province death split holds only the national CFR.
-    cfr = _has_key(chn, :CFR_patch) ? _draw_vectors(chn, :CFR_patch) :
-        [[c] for c in d(:CFR)]
+    cfr = _has_key(chn, :CFR_patch) ?
+        _patch_cfr.(_draw_vectors(chn, :CFR_patch)) : [[c] for c in d(:CFR)]
     cols = (;
         inc_mean = d(@varname(inc_state.delay_mean)),
         inc_sd = d(@varname(inc_state.delay_sd)),
@@ -197,8 +205,8 @@ chain of [`bvd_joint`](@ref) with `n_patches` patches. Each state is one
 vector of draws per patch: `incubating`, `symptomatic` (past onset and
 undetected) and `community` (incubating or symptomatic and undetected), as in
 [`infection_state_weights`](@ref). The suspected-case ascertainment and the
-case-fatality ratio are the patch's own, or the national ones when the
-chain has no province composition or death split.
+case-fatality ratio are the patch's own, each capped at one, or the
+national ones when the chain has no province composition or death split.
 """
 function patch_prevalence(
         chn, n_patches::Integer = length(PROVINCE_NAMES);

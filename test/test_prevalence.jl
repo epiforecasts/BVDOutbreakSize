@@ -99,6 +99,49 @@ end
     @test _patch_ascertainment(0.3, rel, zeros(3)) ≈ 0.3 .* rel
 end
 
+@testitem "patch CFR above one is capped, not rejected" begin
+    using BVDOutbreakSize: _prevalence_parameters, _prevalence_delays,
+        infection_state_weights
+    using Turing: @varname
+    using Turing.DynamicPPL: VarName
+    import FlexiChains
+    ## The joint's province ratio is the national one times an unbounded
+    ## relative fatality, so a draw can exceed one. The second draw does.
+    nd = 2
+    col(v) = reshape(Float64.(v), nd, 1)
+    vecs(vs) = reshape(vs, nd, 1)
+    par(vn) = FlexiChains.Parameter(vn)
+    chn = FlexiChains.FlexiChain{VarName}(
+        nd, 1,
+        Dict(
+            par(@varname(p_drc)) => col([0.5, 0.6]),
+            par(@varname(CFR)) => col([0.5, 0.55]),
+            par(@varname(CFR_patch)) => vecs([[0.4, 0.6], [0.5, 1.06]]),
+            par(@varname(inc_state.delay_mean)) => col([9.0, 9.5]),
+            par(@varname(inc_state.delay_sd)) => col([5.0, 5.0]),
+            par(@varname(cases_state.report_state.α)) => col([2.0, 2.0]),
+            par(@varname(cases_state.report_state.θ)) => col([2.0, 2.0]),
+            par(@varname(deaths_state.od_state.oa.α)) => col([2.0, 2.0]),
+            par(@varname(deaths_state.od_state.oa.θ)) => col([2.0, 2.0]),
+            par(@varname(deaths_state.od_state.ad.α)) => col([2.0, 2.0]),
+            par(@varname(deaths_state.od_state.ad.θ)) => col([3.0, 3.0]),
+            par(@varname(treatment_state.recovery_los_state.delay_mean)) =>
+                col([15.0, 15.0]),
+            par(@varname(treatment_state.recovery_los_state.delay_sd)) =>
+                col([6.0, 6.0]),
+        )
+    )
+    params = _prevalence_parameters(chn, 60)
+    @test params[1].cfr ≈ [0.4, 0.6]
+    @test params[2].cfr ≈ [0.5, 1.0]
+    p, dl = params[2], _prevalence_delays(params[2], 60)
+    w = infection_state_weights(
+        dl.incubation, dl.detection, dl.death, dl.recovery;
+        ascertainment = p.ascertainment[1], cfr = p.cfr[2], horizon = 60
+    )
+    @test all(>=(0), w.symptomatic)
+end
+
 @testitem "ascertainment weights lag the infections by the confirmation delay" begin
     using BVDOutbreakSize: _cutoff_confirmations
     ## Confirmation two days after infection: an area whose infections
