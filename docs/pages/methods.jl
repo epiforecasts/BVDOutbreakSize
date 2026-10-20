@@ -2615,6 +2615,9 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # We rescale it so that the provinces keep the national rate when weighted by their expected confirmed cases on the cut-off day, the weights the joint model uses to split the national suspected cases.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
+# The province case-fatality ratio is the national one times the province's relative fatality.
+# The joint model uses both province contrasts only to split national counts between the provinces, so nothing bounds either product at one.
+# We cap the province and zone values of both at one.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
 # The probability of being symptomatic and undetected $s$ days after infection sums, over each possible incubation period, its probability times the probability of still being in the community for the rest of the $s$ days.
 # The people in the community are those infected but not yet symptomatic plus those symptomatic and undetected.

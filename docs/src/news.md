@@ -230,6 +230,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
+- The province point prevalence caps each province's case-fatality ratio at one, as it already capped the ascertainment and the zone ratios (#1149).
+  The ratio is the national one times the province's relative fatality, which the joint model leaves unbounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
+  The prevalence calculation rejected that draw and failed the province page.
 
 ## v2.2.0
 
