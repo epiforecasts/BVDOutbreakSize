@@ -113,6 +113,28 @@ end
     end
 end
 
+@testitem "patch_infections: importation is each day's arrivals" begin
+    using BVDOutbreakSize: patch_infections
+
+    ## The importation output is `Σ_{q ≠ p} ε[q, t] K[p, q] G[q, t]`, what
+    ## patch `p` receives before its pool is drawn, with `G[q, t]` what
+    ## origin `q` generates. The seed days have none.
+    g = [0.2, 0.5, 0.3]
+    np, n, L = 3, 30, 4
+    Rt = 1.0 .+ 0.5 .* abs.(sin.((1:np) .+ (1:n)'))
+    seeds = [2.0 2.0 3.0 3.0; 1.0 1.0 1.0 2.0; 0.0 0.0 0.5 0.5]
+    K = [0.0 0.2 0.1; 0.3 0.0 0.2; 0.1 0.4 0.0]
+    ε = 0.05 .+ 0.02 .* cos.((1:np) .* (1:n)')
+    st = patch_infections(Rt, g, seeds, K, ε, [400.0, 300.0, 200.0])
+    I = st.infections
+    G(q, t) = Rt[q, t] *
+        sum(I[q, t - s] * g[s] for s in 1:min(t - 1, length(g)))
+    arrivals(p, t) = sum(ε[q, t] * K[p, q] * G(q, t) for q in 1:np if q != p)
+    @test all(iszero, st.importation[:, 1:L])
+    @test st.importation[:, (L + 1):n] ≈
+        [arrivals(p, t) for p in 1:np, t in (L + 1):n]
+end
+
 @testitem "patch Rt: the national value should be the weighted mean" begin
     using BVDOutbreakSize: patch_infections, implied_national_Rt
 
