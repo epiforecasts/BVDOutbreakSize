@@ -2111,6 +2111,39 @@ end
     end
 end
 
+@testitem "zone compositions: a patch with nothing to score has no row" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_composition_calibration,
+        plot_stream_calibration
+    using Turing: sample, Prior
+    using DataFrames: nrow
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    zd = inputs.model_data
+    chn = sample(
+        bvd_zone(zd), Prior(), 6; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
+    ## The second patch has reported no zone deaths at any vintage, as a
+    ## newly added patch can. Its death composition has no cell to score.
+    zs = inputs.patch_ranges[2]
+    zd.death_counts[zs, :] .= 0
+    cases = zone_composition_calibration(chn, inputs; stream = :cases)
+    deaths = zone_composition_calibration(chn, inputs; stream = :deaths)
+    @test nrow(cases) == 3
+    @test deaths.Stream == [inputs.patch_labels[1], "All zones"]
+    @test all(>(0), deaths.Vintages)
+    for col in ("Bias", "50% coverage", "90% coverage")
+        @test all(isfinite, deaths[!, col])
+    end
+    @test deaths[end, "Vintages"] == deaths[1, "Vintages"]
+    ## The tables plot together, as the in-sample zone page draws them.
+    @test plot_stream_calibration(vcat(cases, deaths)) !== nothing
+end
+
 @testitem "the forecast inputs carry the mixing to the horizon" setup = [
     ZoneSynthetic,
 ] begin
