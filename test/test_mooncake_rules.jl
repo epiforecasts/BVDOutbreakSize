@@ -7,8 +7,7 @@
 ## lists every rule with the argument types its call sites pass and the
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves
-## the rule fires for that signature. The ComposableRecurrences kernels are
-## listed the same way and checked as derived. The speed item times one
+## the rule fires for that signature. The speed item times one
 ## production-sized case per rule against a process that loads the package
 ## with the `mooncake_rules` preference off, and the joint item compares
 ## the production joint's gradient with that process.
@@ -168,17 +167,12 @@
         return (base..., mix, 0.05 .+ 0.3 .* rand(rng, nz))
     end
 
-    ## The kernels ComposableRecurrences builds, whose rules come from the
-    ## package rather than from `src/mooncake_rules.jl`. Their cases are
-    ## derived rather than primitive, and the speed item leaves them out.
-    const PACKAGE_KERNELS = (
-        convolve_delay, renewal_infections, patch_infections,
-    )
-
     ## Every native rule with the argument types its call sites pass: float
     ## arrays, matrix-row views, integer observations and scalar κ, cfr, k,
-    ## ρ and ν, and the package kernels on the same footing. `perf` marks
-    ## the one production-sized case per rule the speed item times.
+    ## ρ and ν. `perf` marks the one production-sized case per rule the
+    ## speed item times. `convolve_delay` is a ComposableRecurrences
+    ## operator, whose rule comes from the package: its cases are derived
+    ## rather than primitive, and the speed item leaves them out.
     function rule_cases(rng)
         cases = NamedTuple[]
         ## A distribution's rule is named after the distribution.
@@ -188,7 +182,7 @@
             cases,
             (;
                 name = "$(label(f, args)): $note", f, args, perf, rtol,
-                primitive = f ∉ PACKAGE_KERNELS,
+                primitive = f !== convolve_delay,
             )
         )
 
@@ -758,8 +752,38 @@ end
     :ad,
 ] setup = [ADRuleCases] begin
     using Mooncake: Mooncake, NoRData, tangent, zero_fcodual
+    using BVDOutbreakSize: renewal_infections, patch_infections
 
+    ## The renewal pullbacks walk the recursion backwards through a working
+    ## copy of the output tangent rather than consuming it in place.
     rng = Xoshiro(20260923)
+    out, pb = Mooncake.rrule!!(
+        zero_fcodual(renewal_infections),
+        map(
+            zero_fcodual,
+            (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7), 300.0)
+        )...
+    )
+    Ī = randn(rng, 40)
+    tangent(out) .= Ī
+    pb(NoRData())
+    @test tangent(out) == Ī
+
+    np, n = 3, 40
+    K = rand(rng, np, np) .* 0.2
+    K[[1, 5, 9]] .= 0
+    args = (
+        rand(rng, np, n) .+ 1, rand(rng, 12), rand(rng, np, 7) .+ 1, K,
+        rand(rng, np, n) .* 0.5, fill(300.0, np),
+    )
+    out, pb = Mooncake.rrule!!(
+        zero_fcodual(patch_infections), map(zero_fcodual, args)...
+    )
+    Ī = randn(rng, np, n)
+    tangent(out).infections .= Ī
+    pb(NoRData())
+    @test tangent(out).infections == Ī
+
     ## The zone pullback walks its days backwards through a copy of the
     ## infection tangent and reads the other three outputs.
     args = zone_args(rng, [3, 2])

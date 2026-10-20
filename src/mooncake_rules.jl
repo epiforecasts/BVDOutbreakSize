@@ -2,9 +2,8 @@
 # observation kernels in `models/observations.jl`. Each is a loop over a
 # daily grid or an observation vector, so left to the backend every
 # iteration's intermediates go on the tape; these replace that with a
-# closed-form adjoint of the same shape as the forward loop. The renewal,
-# the patch renewal and the delay convolution are ComposableRecurrences
-# operators, which bring their own rules.
+# closed-form adjoint of the same shape as the forward loop. The delay
+# convolution is a ComposableRecurrences operator, which brings its own rule.
 #
 # Differentiable arguments are restricted to `Array{<:IEEEFloat}` and
 # `IEEEFloat` scalars, plus a view of one into such an array where a call
@@ -43,6 +42,24 @@ Mooncake.@is_primitive(
         typeof(interpolate_knots), _FloatVec, Array{<:Integer}, Integer,
     },
 )
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
+        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
+        Mooncake.IEEEFloat,
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat},
+    },
+)
+
 ## Data-only helpers: lookups over the observation grid and the recorded
 ## histories, with no sampled quantity among their arguments. They pass no
 ## derivative, so the backend need not tape them.
@@ -111,6 +128,68 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(out, ō), interpolate_knots_pullback!!
+end
+
+## Per day, with `S⁻` the pool before it and `x = R f / N`,
+##
+##     I = S⁻ (1 − e^{−x}),    S = S⁻ e^{−x},
+##
+## so walking back `x̄ = e^{−x} S⁻ (Ī − S̄)` and the pool before the day
+## collects `S̄⁻ = Ī (1 − e^{−x}) + S̄ e^{−x}`. The pool after the seed is
+## `N − Σ seed`, which hands its adjoint to `N` and, negated, to each seed.
+## The scalar `N` has no fdata, so its cotangent goes back as rdata.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(renewal_infections)},
+        Rt::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        g::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        seed::CoDual{<:Array{<:Mooncake.IEEEFloat}},
+        N::CoDual{<:Mooncake.IEEEFloat}
+    )
+    Rtp = primal(Rt)
+    gp = primal(g)
+    seedp = primal(seed)
+    Np = primal(N)
+    R̄ = tangent(Rt)
+    ḡ = tangent(g)
+    s̄ = tangent(seed)
+    n = length(Rtp)
+    L = length(seedp)
+    ## The forward pass is the model's own, which also hands back the
+    ## per-day force and pool the pullback needs, so the recursion is
+    ## defined once.
+    st = renewal_infections_with_state(Rtp, gp, seedp, Np)
+    I, force, S = st.infections, st.force, st.susceptible
+    Ī = zero(I)
+    function renewal_infections_pullback!!(::NoRData)
+        ## Sequential recursion, so the walk runs backwards: each day's
+        ## adjoint must land on the lagged infections before those days
+        ## are read. `Ī` is Mooncake's buffer, so accumulate into a copy.
+        acc = copy(Ī)
+        S̄ = zero(Np)
+        N̄ = zero(Np)
+        @inbounds for t in n:-1:(L + 1)
+            x = Rtp[t] * force[t] / Np
+            e = exp(-x)
+            x̄ = e * S[t - 1] * (acc[t] - S̄)
+            S̄ = -acc[t] * expm1(-x) + S̄ * e
+            R̄[t] += x̄ * force[t] / Np
+            N̄ -= x̄ * x / Np
+            f̄ = x̄ * Rtp[t] / Np
+            kmax = min(t - 1, length(gp))
+            for s in 1:kmax
+                acc[t - s] += f̄ * gp[s]
+                ḡ[s] += f̄ * I[t - s]
+            end
+        end
+        m = min(L, n)
+        live = Np - sum(view(seedp, 1:m)) > zero(Np)
+        live && (N̄ += S̄)
+        @inbounds for j in 1:m
+            s̄[j] += acc[j] - (live ? S̄ : zero(Np))
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), N̄
+    end
+    return CoDual(I, Ī), renewal_infections_pullback!!
 end
 
 Mooncake.@is_primitive(
@@ -777,6 +856,109 @@ function Mooncake.rrule!!(
     return out, onset_report_moments_pullback!!
 end
 
+function Mooncake.rrule!!(
+        ::CoDual{typeof(patch_infections)},
+        Rt::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        g::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        seeds::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        K::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        N::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
+    )
+    Rp = primal(Rt)
+    gp = primal(g)
+    Kp = primal(K)
+    εp = primal(ε)
+    Np = primal(N)
+    seedsp = primal(seeds)
+    R̄ = tangent(Rt)
+    ḡ = tangent(g)
+    s̄ = tangent(seeds)
+    K̄ = tangent(K)
+    ε̄ = tangent(ε)
+    N̄ = tangent(N)
+    np, n = size(Rp)
+    L = size(seedsp, 2)
+    st = patch_infections_with_state(Rp, gp, seedsp, Kp, εp, Np)
+    y = (; st.infections, st.importation)
+    out = Mooncake.zero_fcodual(y)
+    Ī = tangent(out).infections
+    Ā = tangent(out).importation
+    I, S, rate = st.infections, st.susceptible, st.rate
+    function patch_infections_pullback!!(::NoRData)
+        Tf = eltype(I)
+        outflow = _patch_outflow(Tf, Kp, np)
+        ## Each day's force and generated infections are rebuilt from the
+        ## forward infections rather than stored. The walk runs backwards so
+        ## a day's adjoint is complete before it is pushed onto earlier days,
+        ## and it accumulates into a copy since `Ī` is Mooncake's buffer.
+        acc = copy(Ī)
+        force = zeros(Tf, np)
+        gen = zeros(Tf, np)
+        ḡen = zeros(Tf, np)
+        ōut = zeros(Tf, np)
+        ȳ = zeros(Tf, np)
+        S̄ = zeros(Tf, np)
+        @inbounds for t in n:-1:(L + 1)
+            kmax = min(t - 1, length(gp))
+            for p in 1:np
+                f = _patch_force(I, gp, p, t)
+                force[p] = f
+                gen[p] = Rp[p, t] * f
+                ḡen[p] = zero(Tf)
+            end
+            ## Depletion, as in the single-patch rule, on the rate
+            ## `x = y / N[p]` with `y` the force after the transfer.
+            for p in 1:np
+                x = rate[p, t]
+                e = exp(-x)
+                x̄ = e * S[p, t - 1] * (acc[p, t] - S̄[p])
+                S̄[p] = -acc[p, t] * expm1(-x) + S̄[p] * e
+                ȳ[p] = x̄ / Np[p]
+                N̄[p] -= x̄ * x / Np[p]
+            end
+            ## y[p] = (1 - ε[p, t] outflow[p]) gen[p] + arrivals[p], and
+            ## the importation output is arrivals[p] alone.
+            for p in 1:np
+                a = ȳ[p]
+                ā = a + Ā[p, t]
+                ḡen[p] += a * (one(Tf) - εp[p, t] * outflow[p])
+                ε̄[p, t] -= a * outflow[p] * gen[p]
+                ōut[p] -= a * εp[p, t] * gen[p]
+                for q in 1:np
+                    q == p && continue
+                    ε̄[q, t] += ā * Kp[p, q] * gen[q]
+                    K̄[p, q] += ā * εp[q, t] * gen[q]
+                    ḡen[q] += ā * εp[q, t] * Kp[p, q]
+                end
+            end
+            for p in 1:np
+                R̄[p, t] += ḡen[p] * force[p]
+                f̄ = ḡen[p] * Rp[p, t]
+                for s in 1:kmax
+                    acc[p, t - s] += f̄ * gp[s]
+                    ḡ[s] += f̄ * I[p, t - s]
+                end
+            end
+        end
+        @inbounds for q in 1:np, r in 1:np
+            r == q && continue
+            K̄[r, q] += ōut[q]
+        end
+        ## Each pool after the seed is `N[p] − Σ seeds[p, :]`.
+        m = min(L, n)
+        @inbounds for p in 1:np
+            live = Np[p] - sum(view(seedsp, p, 1:m)) > zero(Tf)
+            live && (N̄[p] += S̄[p])
+            for j in 1:m
+                s̄[p, j] += acc[p, j] - (live ? S̄[p] : zero(Tf))
+            end
+        end
+        return ntuple(_ -> NoRData(), 7)
+    end
+    return out, patch_infections_pullback!!
+end
+
 # Log densities of the vector observation distributions in
 # `models/observation_distributions.jl`. Each rule takes the distribution
 # itself: the tangent of an array field is read from the distribution's
@@ -1071,8 +1253,7 @@ end
 
 ## The health-zone renewal is a coupled loop: every zone's own force first,
 ## then a mixing step that reads the zones of the other patches on the same
-## day. It does not go through `renewal_infections`, so it carries its own
-## rule.
+## day. It cannot call `renewal_infections`, so it carries its own rule.
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
