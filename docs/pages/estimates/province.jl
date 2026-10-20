@@ -448,7 +448,7 @@ province_cfr #hide
 
 # ## Province parameters against their priors
 #
-# The pair plots below set the province parameters against their prior, drawn from the four-patch model.
+# The pair plots below set the province parameters against their prior, drawn from the province model.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
