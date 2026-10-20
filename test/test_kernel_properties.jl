@@ -31,7 +31,8 @@ end
     @test convolve_delay(view(M, 2, :), w) ≈ convolve_delay(M[2, :], w)
     ## A lag whose weight is exactly zero should carry nothing, so an `Inf`
     ## on day 2 reaches only day 2 (lag 0) and day 4 (lag 2). The package's
-    ## direct convolution adds `0 · Inf` on that lag and gives `NaN` on day 3.
+    ## direct convolution adds `0 · Inf` on that lag and gives `NaN` on day 3
+    ## (EpiAware/ComposableRecurrences.jl#297).
     @test_broken isequal(
         convolve_delay([1.0, Inf, 2.0, 3.0], [0.5, 0.0, 0.5]),
         [0.5, Inf, 1.5, Inf]
