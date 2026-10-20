@@ -173,6 +173,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The delay convolution is the `Convolution` operator of [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl), which brings its own Mooncake rule, so the hand-written rule for it is removed (#1152).
+  It matches the hand-written loop to round-off, so fitted values change only by round-off.
+  The renewal and the patch renewal keep their hand-written loops and rules, which differentiate faster under Mooncake than the package's `Recurrence` with `Depletion` (timings in #1152).
+  ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
+- The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
 - The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
   Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).
