@@ -18,8 +18,8 @@ const ZONE_MAP_PROVINCES = [
     "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
 ]
 
-## Fill colours by patch index, one per patch: the patch figures' three, then
-## one for each further province.
+## Colours by patch index, one per patch, shared by the patch and zone
+## figures so a province keeps its colour across them.
 const _ZONE_PATCH_COLOURS = [
     :firebrick, :steelblue, :seagreen, :darkorange,
     :mediumpurple, :teal, :goldenrod, :saddlebrown,

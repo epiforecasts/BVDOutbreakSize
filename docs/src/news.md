@@ -30,6 +30,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   The gravity kernel now sends each small province's exports to its own neighbours: most of Nord-Kivu's go to Sud-Kivu, and Nord-Ubangi sends the largest share of its exports to Sud-Ubangi.
   The parameter count grows with the patch count, so fitted values change and the fits need rerunning.
   Archived release forecasts for the `other` patch are still scored against its four provinces.
+  The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
 
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.

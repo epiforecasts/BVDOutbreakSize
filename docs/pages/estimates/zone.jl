@@ -398,7 +398,7 @@ zone_meld_rt_fig = plot_rt_zones(
     vcat(["National"], zone_inputs.patch_labels),
     vcat([N_PATCHES + 1], 1:N_PATCHES);
     patch_labels = vcat(zone_inputs.patch_labels, ["National"]),
-    patch_colours = [:firebrick, :steelblue, :seagreen, :darkorange, :black],
+    patch_colours = vcat(BVDOutbreakSize._ZONE_PATCH_COLOURS, [:black]),
     dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
     top = N_PATCHES + 1, ncols = 3, unit = "patch",
     reference_rt = [m[:, zone_grid] for m in joint_stage_rt],
