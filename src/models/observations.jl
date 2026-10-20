@@ -2437,16 +2437,16 @@ absorbs a between-report measurement-basis discontinuity in the
 isolation series. Empty (the default) is a no-op.
 
 With per-patch reports (`bvd_reports_matrix`) and the province rows
-`province_isolation`, `province_capacity` and `province_admissions`, the
-province occupancy, bed and 24h admission counts are each scored as a split
-of the printed sum of the provinces present that day
-([`province_split_model`](@ref)). The occupancy split is on the uncapped
-per-patch demand, the national demand shared out by each patch's stock of
-admissions through the stays. The bed split is on each patch's daily share
-of the national walk, centred on its cumulative admissions
-([`patch_capacity_share_model`](@ref)). The admission split is on each
-patch's modelled admissions. The national likelihoods are kept, so the
-splits add only the spatial signal.
+`province_isolation` and `province_capacity`, the province occupancy and
+bed counts are each scored as a split of the printed sum of the provinces
+present that day ([`province_split_model`](@ref)). The occupancy split is
+on the uncapped per-patch demand, the national demand shared out by each
+patch's stock of admissions through the stays. The bed split is on each
+patch's daily share of the national walk, centred on its cumulative
+admissions ([`patch_capacity_share_model`](@ref)). The national likelihoods
+are kept, so the splits add only the spatial signal. Each patch's modelled
+admissions are returned as `admit_patch` for the province forecast; the
+province 24h admissions are not scored.
 
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
 BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
@@ -2510,13 +2510,11 @@ series for forecasting and replication.
         patch_ascertainment::AbstractVector{<:Real} = ones(
             length(background_split)
         ),
-        ## Province occupancy, bed and 24h admission rows,
-        ## `(; days, patches, counts)` from `province_care_observations`, or
-        ## `nothing`. Scored as splits of the printed sum of the provinces
-        ## present each day.
+        ## Province occupancy and bed rows, `(; days, patches, counts)` from
+        ## `province_care_observations`, or `nothing`. Scored as splits of
+        ## the printed sum of the provinces present each day.
         province_isolation = nothing,
         province_capacity = nothing,
-        province_admissions = nothing,
         patch_capacity = patch_capacity_share_model,
         province_split_rho_prior = truncated(
             Normal(0, 0.1); lower = 0, upper = 1
@@ -2564,9 +2562,7 @@ series for forecasting and replication.
         !isempty(province_isolation.days)
     split_cap = np > 1 && province_capacity !== nothing &&
         !isempty(province_capacity.days)
-    split_adm = np > 1 && province_admissions !== nothing &&
-        !isempty(province_admissions.days)
-    by_patch = split_occ || split_cap || split_adm
+    by_patch = split_occ || split_cap
     cap_state ~ to_submodel(
         cutoff === nothing ? capacity(n; start = cap_start) :
             capacity(n; start = cap_start, cutoff)
@@ -2816,25 +2812,6 @@ series for forecasting and replication.
             )
         )
     end
-    ## Admissions are a flow, so every day is scored.
-    admissions_split_rho = 0.0
-    if split_adm
-        admissions_split_rho ~ province_split_rho_prior
-        admissions_split ~ to_submodel(
-            province_split_model(
-                merge(
-                    province_admissions,
-                    (;
-                        counts = _sim_obs(
-                            simulated, :admissions_split,
-                            province_admissions.counts
-                        ),
-                    )
-                ),
-                admit_patch, admissions_split_rho
-            )
-        )
-    end
 
     ## Split likelihoods, guarded by `split_active` so they no-op when the
     ## hazard is structurally zero.
@@ -2972,7 +2949,7 @@ series for forecasting and replication.
         demand_patch, admit_patch, capacity_patch = C_patch,
         capacity_series = C,
         capacity_shares = cap_shares, capacity_pooling_sd = cap_pooling_sd,
-        occupancy_split_rho, capacity_split_rho, admissions_split_rho,
+        occupancy_split_rho, capacity_split_rho,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,

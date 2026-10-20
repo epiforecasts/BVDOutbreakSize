@@ -1351,9 +1351,11 @@ cfr_prior_fig #hide
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy is split on the uncapped demand, since a province can print more patients than beds.
 # The recorded province beds are the effective beds: the printed beds, or where more patients are held, the larger of the patients and the beds implied by the printed occupancy rate.
-# Each day's 24h admissions are split the same way on each patch's modelled admissions $A_{p,t} + w_p A_{\text{bg},t}$, with their own $\rho^{\text{adm}}$.
 # The occupancy split is scored weekly and the bed split on the days a count changes, since a stock reprinted daily is not a fresh draw.
-# The admissions are a flow, so every day is scored.
+# Each patch's modelled admissions are $A_{p,t} + w_p A_{\text{bg},t}$, its BVD admissions plus its share of the background admissions.
+# Their shares move with the province deviations and also with the national ratio of BVD to background admissions, which the national reproduction number drives.
+# Only the national admissions enter the fit, and the printed province 24h admissions are not scored.
+# The modelled province admissions feed the province forecast below, and the printed ones are checked against their shares.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>

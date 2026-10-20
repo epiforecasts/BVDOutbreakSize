@@ -1275,7 +1275,6 @@ cut-off, and the density there, is the fitted model's.
         background_split = background_split_model,
         province_isolation = nothing,
         province_capacity = nothing,
-        province_admissions = nothing,
         province_death_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1318,8 +1317,7 @@ cut-off, and the density there, is the fitted model's.
             !isempty(province_days) || !isempty(province_death_days) ||
                 !isempty(province_lab_days) ||
                 _has_province_rows(province_isolation) ||
-                _has_province_rows(province_capacity) ||
-                _has_province_rows(province_admissions)
+                _has_province_rows(province_capacity)
         )
         error(
             "per-province data was supplied but n_patches = 1. The " *
@@ -1495,7 +1493,7 @@ cut-off, and the density there, is the fitted model's.
             bvd_reports_matrix,
             background_split = bg_split_state.w,
             patch_ascertainment = patch_asc,
-            province_isolation, province_capacity, province_admissions,
+            province_isolation, province_capacity,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
             deaths_history = treatment_deaths_history,
@@ -1663,12 +1661,11 @@ cut-off, and the density there, is the fitted model's.
         province_occupancy_share := treatment_state.demand_patch ./
             sum(treatment_state.demand_patch; dims = 1)
         province_occupancy_split_rho := treatment_state.occupancy_split_rho
-        ## Daily share of the national admissions by patch, the modelled
-        ## centre of the admissions split.
+        ## Daily share of the national admissions by patch. It is not
+        ## scored, and the province 24h admissions are checked against it.
         province_admissions_share := treatment_state.admit_patch ./
             sum(treatment_state.admit_patch; dims = 1)
         province_capacity_split_rho := treatment_state.capacity_split_rho
-        province_admissions_split_rho := treatment_state.admissions_split_rho
     end
     C_T_patch := patch_state.C_T_patch
     ## Each province's reproduction number net of its own depletion, built

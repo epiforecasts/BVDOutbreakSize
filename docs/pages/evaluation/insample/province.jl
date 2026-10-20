@@ -161,7 +161,8 @@ province_case_ppc_fig #hide
 
 province_death_ppc_fig #hide
 
-# The four province terms for the isolation and laboratory data are checked the same way.
+# The three province terms for the isolation and laboratory data are checked the same way.
+# The province 24h admissions are not fitted, so their panel is an out-of-sample check of the modelled admission share, with no predictive band.
 # A gap in a panel is a day on which that province printed nothing.
 
 #md # ```@raw html
@@ -256,7 +257,7 @@ province_admissions_ppc_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The split of each day's 24h admissions among the provinces printed that day, against each patch's modelled admissions.
+#md # The split of each day's 24h admissions among the provinces printed that day, against each patch's modelled share of the national admissions, which the fit does not score.
 #md # </figcaption>
 #md # </figure>
 #md # ```

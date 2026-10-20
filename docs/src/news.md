@@ -70,7 +70,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
 - Each province's occupancy is capped at its beds at the cut-off and in the forecast, where it admits up to its free beds; the national figures are the province sums (#958).
-- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
+- The provinces' 24h admissions are not fitted: only the national admissions enter the likelihood, and the province admissions are checked against the modelled admission shares (#958).
+  Fitting them as a daily split, with an overdispersion of their own, made the national $R_t$ walk scale mix poorly (#969).
 
 ### Data
 
