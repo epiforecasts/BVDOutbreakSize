@@ -47,6 +47,9 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 3. `julia --project=scripts scripts/province_care_manifest.jl > /tmp/care_blocks.txt` stops on any cell the two reads disagree on; settle it against the PDF and record the decision in the CSV before rerunning.
 4. Replace the `[province_isolation_history]` and `[province_bed_capacity_history]` blocks (all their sub-tables) in `observations.toml` with the printed ones, keeping the file LF-terminated with one final newline.
 5. Run the province loader tests (`test/test_province_care.jl`) and `pre-commit run --files` on the three files.
+A province paragraph that repeats an earlier report's word for word is a stale carry-forward.
+List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
+The list holds SitRep 152 Haut-Uélé (see the notes below).
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]` and `[province_bed_capacity_history]` carry the occupancy and bed series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
@@ -540,6 +543,10 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 150's Bas-Uélé paragraph prints 12 admissions and no discharge but no patient count, and the other paragraphs sum to 868 against a tile of 895; the tile exceeds the sum, as at SitRep 147, and is kept.
   SitRep 151's Haut-Uélé paragraph gives `169 lits montés` against 153 at SitRep 149, with no reason printed, and the paragraphs sum to the tile of 899.
 - **Partial alert table, SitRep 151 (12 October)**: Tableau 3 prints ND for Sud Ubangi alone, which validated no suspect on SitRep 150, so its 522 is kept, as at SitRep 148.
+- **Stale care paragraph, SitRep 152 (13 October)**: Haut-Uélé's paragraph repeats SitRep 151's word for word (6 admissions, the deaths at Pawa and Wamba, 45 patients for 169 lits at 26,6 %), while SitRep 152's Tableau 2 records Haut-Uélé's two deaths as community deaths.
+  It is a carried-forward reporting gap, so Haut-Uélé has no entry on 13 October in either province care block, through the `STALE` list in `scripts/province_care_manifest.jl`; both CSVs keep the printed values.
+  The national `bed_capacity_history` follows the sum rule above and takes 410 (Nord-Kivu 374 + Tshopo 36) rather than 579, and the loader drops the day from the national capacity likelihood because Haut-Uélé holds more than 5% of the beds.
+  The page-1 isolation tile of 903 is not a repeat (899 the day before) and is kept.
 - **Care paragraphs, SitReps 153 and 154 (14 and 15 October)**: SitRep 153's Bas-Uélé paragraph reads `Six suspects restent isolés (Dakwa 1, Viadana 2 et Ganga 3) avec 2 confirmés (Dakwa et Ganga)`, which is read as 8, and with it the paragraphs sum to the tile of 924.
   Nord-Kivu prints 392 lits from SitRep 153 against 374 on SitReps 150 to 152, with no reason given.
   SitRep 154's paragraphs sum to the tile of 916.
