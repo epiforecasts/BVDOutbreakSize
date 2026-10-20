@@ -219,6 +219,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Admissions are uncensored in the fit and capped at the free beds only in the forecast (#918).
 - The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
 - Province beds cover the patients each report counts, so Nord-Kivu shows no spurious shortfall (#920).
+- The province point prevalence caps each province's case-fatality ratio at one, as it already capped the ascertainment and the zone ratios (#1149).
+  The ratio is the national one times the province's relative fatality, which the joint model leaves unbounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
+  The prevalence calculation rejected that draw and failed the province page.
 
 ## v2.2.0
 
