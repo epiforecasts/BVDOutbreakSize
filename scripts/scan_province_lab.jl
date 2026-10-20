@@ -62,20 +62,20 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 ## A bullet names its province then a colon. The names are matched on the
 ## folded text, so the hyphen/space and accent variants all collapse here.
 const ENTRY = Regex(
     "^[^0-9a-z]*(ituri|nord[ -]?kivu|sud[ -]?kivu|" *
         "haut[ -]?uele|tshopo|bas[ -]?uele|" *
-        "sud[ -]?ubangi)\\s*:+"
+        "sud[ -]?ubangi|nord[ -]?ubangi)\\s*:+"
 )
 const KEYS = Dict(
     "ituri" => "ituri", "nordkivu" => "nord_kivu",
     "sudkivu" => "sud_kivu", "hautuele" => "haut_uele",
     "tshopo" => "tshopo", "basuele" => "bas_uele",
-    "sudubangi" => "sud_ubangi"
+    "sudubangi" => "sud_ubangi", "nordubangi" => "nord_ubangi"
 )
 ## Folded spellings of each province, to spot a sentence that has moved on
 ## to another province.
@@ -85,7 +85,8 @@ const NAMES = Dict(
     "sud kivu" => "sud_kivu", "haut-uele" => "haut_uele",
     "haut uele" => "haut_uele", "tshopo" => "tshopo",
     "bas-uele" => "bas_uele", "bas uele" => "bas_uele",
-    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi"
+    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi",
+    "nord-ubangi" => "nord_ubangi", "nord ubangi" => "nord_ubangi"
 )
 
 ## A batch of samples goes by several names. "echantillons" is misspelt

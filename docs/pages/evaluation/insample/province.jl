@@ -452,7 +452,7 @@ province_pairs_fig #hide
 #
 # ### Spatial structure sensitivity
 #
-# We refit the joint model with its four patches reduced to one well-mixed population.
+# We refit the joint model with its eight patches reduced to one well-mixed population.
 # Splitting the country into provinces adds no national data, so the national outbreak size should not move far either way.
 # The two still differ, because the country grows at the force-weighted mean of the provinces' reproduction numbers, which sits above the central trend they pool toward.
 # That gap is first order in the deviation scale, so a large gap between the two posteriors would point at the deviation priors rather than at the data.
