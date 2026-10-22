@@ -1280,12 +1280,12 @@ cfr_prior_fig #hide
 # The four flows share a flow dispersion $k_{\text{flow}}$, centred on the stock dispersion:
 #
 # ```math
-# \log\bigl(1/\sqrt{k_{\text{flow}}}\bigr) \sim \mathrm{Normal}\bigl(\log(1/\sqrt{k_{\text{iso}}}),\ \tfrac{1}{2}\log 10\bigr).
+# \log\bigl(1/\sqrt{k_{\text{flow}}}\bigr) \sim \mathrm{Normal}\bigl(\log(1/\sqrt{k_{\text{iso}}}),\ \tfrac{1}{2}\log 3\bigr).
 # ```
 #
 # Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds to a count beyond Poisson, so the prior is on the log ratio of the flows' extra coefficient of variation to the stocks'.
 # A ratio of one gives the flows the stock dispersion.
-# We assume the ratio lies within a factor of ten either way with 95% prior probability, and treat a hundredfold ratio as implausible.
+# We assume the ratio lies within a factor of three either way with 95% prior probability.
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.

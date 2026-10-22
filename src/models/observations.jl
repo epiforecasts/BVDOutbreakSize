@@ -2248,10 +2248,10 @@ function treatment_flow_defaults()
         severity = isolation_severity_model(),
         dispersion = surveillance_dispersion_model(),
         ## SD of the flow dispersion about the stocks' on the log(1/sqrt(k))
-        ## scale, the log ratio of the two overdispersion CVs. log(10)/2 puts
-        ## a tenfold CV ratio at two SDs (95% within a factor of 10 either
-        ## way) and a hundredfold one at four. See `treatment_flow_model`.
-        flow_dispersion_sd = log(10) / 2,
+        ## scale, the log ratio of the two overdispersion CVs. log(3)/2 puts
+        ## a threefold CV ratio at two SDs (95% within a factor of 3 either
+        ## way). See `treatment_flow_model`.
+        flow_dispersion_sd = log(3) / 2,
         ## In-care fatality modifier prior: β_iso on the infection CFR.
         cfr_modifier_prior = Normal(0.0, 0.5),
         ## Small abscond / loss-to-follow-up fraction of occupancy per day.
@@ -2454,7 +2454,7 @@ day to day, while the flows are fresh daily counts in the tens, and the
 two scatter differently about their modelled means. `k_flow` is pooled
 about the stocks' `k` on the `log(1/sqrt(k))` scale, drawn centred as
 `log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), flow_dispersion_sd)` with
-`flow_dispersion_sd = log(10)/2 ≈ 1.15` by default. The flows' own counts
+`flow_dispersion_sd = log(3)/2 ≈ 0.55` by default. The flows' own counts
 inform `k_flow` directly, so the centred draw keeps it from tracking every
 move of `k`.
 
@@ -2471,13 +2471,15 @@ day's flow by the whole batch. The same slip moves a stock in the
 hundreds by a small fraction and is absorbed the next day. The stocks
 carry errors of their own (census basis changes, revised bed counts,
 centres missing from a report), so the direction is left open and the
-prior is symmetric. We take a CV ratio up to an order of magnitude either
-way as plausible and a hundredfold one as implausible. A Normal with SD
-`log(10)/2` puts a tenfold ratio at two SDs (about 5% of the mass beyond
-it) and a hundredfold one at four (under 1 in 10,000). This is a
-LogNormal ratio `k_flow / k` with log-scale SD `log(10)`, 95% within a
-factor of 100. The Normal's light tails carry that judgement, where a
-Student-t or Cauchy would keep a hundredfold ratio plausible. The two sub-stocks are scored against the Tableau 6 census
+prior is symmetric. We assume the CV ratio lies within a factor of three
+either way with 95% prior probability. A Normal with SD `log(3)/2` puts a
+threefold ratio at two SDs and a ninefold one at four (under 1 in
+10,000). This is a LogNormal ratio `k_flow / k` with log-scale SD
+`log(3)`, 95% within a factor of 9. The Normal's light tails carry that
+judgement, where a Student-t or Cauchy would keep a far larger ratio
+plausible.
+
+The two sub-stocks are scored against the Tableau 6 census
 breakdown (`dont confirmés` / `dont suspects`) where published, in place
 of the total on those days. An opt-in occupancy offset Δ(t) on the
 supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
