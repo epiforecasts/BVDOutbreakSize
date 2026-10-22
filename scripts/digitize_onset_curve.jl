@@ -1006,12 +1006,8 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
                 (bar isa Tuple && paired && washed && bar[1] < h[bounds[1]] - 1) ||
                 broken
             bar = bar_height(h1, hp1, nr1, cols, cx, ppc)
-            edge = [
-                h[x] for x in (first(cols) - 1, last(cols) + 1)
-                    if 1 <= x <= W && isborder[x]
-            ]
-            if bar isa Tuple && !isempty(edge) && bar[1] > maximum(edge)
-                bar = (maximum(edge), min(bar[2], maximum(edge)))
+            if bar isa Tuple && !isempty(edges) && bar[1] > maximum(edges)
+                bar = (maximum(edges), min(bar[2], maximum(edges)))
             end
         end
         bar isa Tuple || continue

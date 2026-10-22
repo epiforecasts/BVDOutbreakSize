@@ -1015,10 +1015,8 @@ def digitize_windows(im, last_tick_date, y_step=20):
                 isinstance(bar, tuple) and paired and washed
                 and bar[0] < h[bounds[0]] - 1) or broken:
             bar = _bar_height(h1, hp1, nr1, cols, cx, ppc)
-            edge = [int(h[x]) for x in (min(cols) - 1, max(cols) + 1)
-                    if 1 <= x <= W and isborder[x]]
-            if isinstance(bar, tuple) and edge and bar[0] > max(edge):
-                bar = (max(edge), min(bar[1], max(edge)), bar[2])
+            if isinstance(bar, tuple) and edges and bar[0] > max(edges):
+                bar = (max(edges), min(bar[1], max(edges)), bar[2])
         if not isinstance(bar, tuple):
             continue
         hb, hr, read_from = bar
