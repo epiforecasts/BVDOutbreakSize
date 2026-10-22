@@ -5,9 +5,9 @@ They sit outside `data/` because every file under `data/` is hashed into the fit
 
 ## `health_zones.geojson`
 
-Simplified boundaries of every health zone in the seven affected provinces (Ituri, Nord-Kivu, Sud-Kivu, Haut-Uele, Tshopo, Bas-Uele and Sud-Ubangi), 167 zones.
+Simplified boundaries of every health zone in the eight affected provinces (Ituri, Nord-Kivu, Sud-Kivu, Haut-Uele, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi), 178 zones.
 Read by `load_health_zones_geojson()` and drawn by `plot_zone_map`, `plot_zone_map_panels` and `plot_province_map`.
-Its properties are `zone` (the manifest zone key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
+Its properties are `zone` (the manifest zone key, empty for a zone the manifest zone blocks do not carry), `label`, `province` and `zscode`.
 
 It is built by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson` in <https://github.com/INRB-UMIE/BDBV2026-Data>, build of 21 September 2026, commit `f489a92`).
 That build uses the Ministry of Health `DRC_Health_zones` shapefile (Zones de santé, DSNIS) from the Humanitarian Data Exchange, <https://data.humdata.org/dataset/drc-health-data>.

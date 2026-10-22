@@ -83,13 +83,13 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 ## Provinces in patch order, matching PROVINCE_SOURCE_NAMES.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 const NAMES = Dict(
     "ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas uele" => "bas_uele",
-    "sud ubangi" => "sud_ubangi"
+    "sud ubangi" => "sud_ubangi", "nord ubangi" => "nord_ubangi"
 )
 
 ## Spelling variants of a zone name, keyed on the canonical (folded) form

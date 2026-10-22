@@ -22,6 +22,17 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
+  SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
+  Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
+  The new patches take the existing per-patch priors, so no prior is added or changed.
+  Their reproduction-number deviations, ascertainment and lethality are informed mostly by the priors those parameters share across patches.
+  The gravity kernel now sends each small province's exports to its own neighbours: most of Nord-Kivu's go to Sud-Kivu, and Nord-Ubangi sends the largest share of its exports to Sud-Ubangi.
+  The parameter count grows with the patch count, so fitted values change and the fits need rerunning.
+  Archived release forecasts for the `other` patch are still scored against its four provinces.
+  The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
+  The zone composition calibration leaves out a patch with no zone counts to score for a stream, rather than giving it an empty row that broke the calibration plot.
+
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
@@ -71,6 +82,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
 
 ### Data
+
+- Nord-Ubangi is the eighth source province (#1147).
+  Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
+  Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
+  The province, laboratory and zone blocks carry zero `nord_ubangi` series to SitRep 154, since no report before SitRep 155 names the province, and the zone blocks carry Wapinda at zero.
+  `data/health_zones.csv` gains Wapinda and the zone map gains Nord-Ubangi's 11 zones, 178 in all.
+  The scanners and `scripts/build_health_zones.py` recognise the province, so the SitRep 155 onward values can be added in a data run.
 
 - The model cut-off advances to SitRep 154, 15 October (#1128, #1137, #1141).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.

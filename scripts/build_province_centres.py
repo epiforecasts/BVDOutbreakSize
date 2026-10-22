@@ -29,6 +29,7 @@ PROVINCES = [
     ("tshopo", "Tshopo"),
     ("bas_uele", "Bas-Uele"),
     ("sud_ubangi", "Sud-Ubangi"),
+    ("nord_ubangi", "Nord-Ubangi"),
 ]
 
 

@@ -13,7 +13,7 @@ The nightly data-update routine follows `DAILY_UPDATE.md` in this directory, whi
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
 | `province_care_scanned.csv` | Per-province isolation occupancy, beds and 24h patient flows read from the occupation tables and the care-continuity prose, one row per (SitRep, province) with the source text quoted. Feeds the `province_isolation_history` and `province_bed_capacity_history` blocks. |
 | `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
-| `health_zones.csv` | One row per health zone that has reported a confirmed case: manifest key, label, province, WorldPop population, polygon centroid and DHIS2 code. Read by `load_health_zones()`. See the health-zone section below. |
+| `health_zones.csv` | One row per health zone in the manifest zone blocks: manifest key, label, province, WorldPop population, polygon centroid and DHIS2 code. Read by `load_health_zones()`. See the health-zone section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `onset_dashboard_history.csv` | Confirmed cases by symptom-onset date read from the INRB-UMIE dashboard's onset charts, one block per dashboard build, national and province levels. `onset_dashboard_history_zones.csv.gz` holds the health-zone charts. Not fitted. See below. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
@@ -273,10 +273,11 @@ A zone new to the table needs `task health-zones` re-run against a fresh `build/
 
 `health_zones.csv` and `src/assets/health_zones.geojson` are written by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson`, as served on 5 October 2026, whose geometry is unchanged from the build of 21 September, commit `f489a92`).
 That build joins the Ministry of Health `DRC_Health_zones` shapefile from the Humanitarian Data Exchange (<https://data.humdata.org/dataset/drc-health-data>) with WorldPop population counts aggregated per zone (WorldPop 2025, University of Southampton, <https://www.worldpop.org>, CC BY 4.0).
-The 64 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
+The 65 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
 Population is the WorldPop count rounded to a whole person and the centroid is the area-weighted centroid of the zone's largest ring.
 The centroid is what the zone model's distance kernel and its gravity pull read; nothing else in the model uses the geometry.
-The GeoJSON keeps the seven affected provinces' 167 zones with coordinates rounded to four decimals and rings simplified independently by Douglas-Peucker at 0.005 degrees (less for a small ring, capped at 5% of the square root of its area), so a shared boundary can show a hairline gap; its properties are `zone` (the manifest key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
+The GeoJSON keeps the eight affected provinces' 178 zones with coordinates rounded to four decimals and rings simplified independently by Douglas-Peucker at 0.005 degrees (less for a small ring, capped at 5% of the square root of its area), so a shared boundary can show a hairline gap; its properties are `zone` (the manifest key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
+Wapinda (Nord-Ubangi) is in the blocks at zero before its first confirmed case in SitRep 155, so its patch has a zone (issue #1147).
 Reuse of both files carries the shapefile's and WorldPop's attribution; the INRB-UMIE repository asks that its own epidemiological data be cited through its README, which these files do not use.
 
 ### Fetching a SitRep from INSP directly

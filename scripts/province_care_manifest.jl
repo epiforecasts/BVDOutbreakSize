@@ -52,6 +52,7 @@ const KEYS = Dict(
     "Haut-Uele" => "haut_uele", "Haut-Uélé" => "haut_uele", "Tshopo" => "tshopo",
     "Bas-Uele" => "bas_uele", "Bas-Uélé" => "bas_uele",
     "Sud Ubangi" => "sud_ubangi", "Sud-Ubangi" => "sud_ubangi",
+    "Nord Ubangi" => "nord_ubangi", "Nord-Ubangi" => "nord_ubangi",
 )
 ## Care paragraphs that repeat an earlier report word for word, left out of
 ## both blocks as stale carry-forwards. Each entry needs its reason and a
@@ -64,7 +65,7 @@ const STALE = Dict(
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
-    "sud_ubangi",
+    "sud_ubangi", "nord_ubangi",
 ]
 
 ## SitRep numbers that have a report date in the hand-scanned headline CSV.

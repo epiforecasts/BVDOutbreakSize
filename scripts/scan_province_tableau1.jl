@@ -17,7 +17,7 @@
 #    Sud Ubangi                   0                1       1    100,0%    1/16
 #    Total                       87            7 200   3 475     48,3%  62/167
 #
-# The table grew from three provinces in four columns to seven provinces in
+# The table grew from three provinces in four columns to eight provinces in
 # six, and the column order has changed at least once (the new-cases column
 # moved from last to first). So the parse is layout-independent: on a
 # province row it finds the first field after the province name holding a
@@ -86,7 +86,7 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 ## Keyed on the folded name with every separator collapsed to one space, so
 ## "Bas Uélé", "Bas-Uélé" and "BAS UELE" all land on the same province.
@@ -94,7 +94,7 @@ const NAMES = Dict(
     "ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas uele" => "bas_uele",
-    "sud ubangi" => "sud_ubangi"
+    "sud ubangi" => "sud_ubangi", "nord ubangi" => "nord_ubangi"
 )
 
 fold(s) = lowercase(Base.Unicode.normalize(String(s); stripmark = true))
