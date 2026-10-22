@@ -158,3 +158,53 @@ end
     q = repeat("a", 298) * "’" * "occupation"
     @test trimmed_quote(q) == repeat("a", 298) * "’"
 end
+
+@testitem "care parser reads beds from the CTE/CT rate fraction" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_care.jl"
+        )
+    )
+
+    ## Folded text of SitRep 156 to 159 paragraphs, shortened.
+    ## SitRep 156, Nord-Kivu: the beds are the denominator of the CTE/CT
+    ## rate, with no "lits", and the space before "de" is missing.
+    f = parse_prose_entry(
+        "50 nouvelles admissions ont ete enregistrees contre 62 sorties : " *
+            "1 guerison (masereka). ainsi, 471 patients sont hospitalises, " *
+            "dont 2 malades critiques, pour un taux d'occupation des " *
+            "cte/ctde 85,1 % : (349/410), de 92,7 % pour les suspects " *
+            "(178/192) et de 78,4 % pour les confirmes (171/218)",
+        "nord_kivu"
+    )
+    @test f[:patients_isolated] == 471
+    @test f[:patients_isolated_normed] == 349
+    @test f[:beds] == 410
+
+    ## SitRep 159, Nord-Kivu: "global", a curly apostrophe and an aside.
+    f = parse_prose_entry(
+        "87 nouvelles admissions ont ete enregistrees contre 106 sorties, " *
+            "dont 6 gueris. ainsi, 488 patients sont hospitalises parmi " *
+            "eux 59 enfants de moins de 5 ans et 3 malades critiques au " *
+            "cte kitatumba et 148 hors cte/ct, pour un taux d’occupation " *
+            "global des cte/ct de 82,9 % (340/410)",
+        "nord_kivu"
+    )
+    @test f[:patients_isolated] == 488
+    @test f[:patients_isolated_normed] == 340
+    @test f[:beds] == 410
+
+    ## SitRep 159, Bas-Uele: the count follows "portant a", and the three
+    ## confirmed beds are not read as the province's beds.
+    f = parse_prose_entry(
+        "14 nouvelles admissions de suspects ont ete enregistrees et " *
+            "isolees dans les ess contre 1 sortie (non-cas a buta), " *
+            "portant a 60 le nombre de patients en isolement ; les 3 lits " *
+            "pour confirmes sont occupes (100,0 %)",
+        "bas_uele"
+    )
+    @test f[:patients_isolated] == 60
+    @test !haskey(f, :beds)
+end
