@@ -28,7 +28,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   The flow dispersion is centred on the stock dispersion: log(1/√k_flow) is Normal about log(1/√k_iso) with SD 1.25, drawn directly.
   Flows in the tens with an index of 2 to 5 need a dispersion of about 3 to 40, an offset of 1.3 to 2.6 on that scale from a stock value of 546, or 1 to 2.1 prior SDs.
   As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
-  Fitted values change: the flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
+  Fitted values change.
+  The flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.

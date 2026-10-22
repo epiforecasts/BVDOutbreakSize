@@ -2459,8 +2459,7 @@ about the stocks' `k` on the `log(1/sqrt(k))` scale, drawn centred as
 `log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), flow_dispersion_sd)` with
 `flow_dispersion_sd = 1.25` by default. The flows' own counts inform
 `k_flow` directly, so the centred draw keeps it from tracking every move
-of `k`. The two sub-stocks
-are scored against the Tableau 6 census
+of `k`. The two sub-stocks are scored against the Tableau 6 census
 breakdown (`dont confirmés` / `dont suspects`) where published, in place
 of the total on those days. An opt-in occupancy offset Δ(t) on the
 supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
