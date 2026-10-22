@@ -73,20 +73,13 @@ const PREVALENCE_STATES = (:incubating, :symptomatic, :community)
 # volume by ascertainment-weighted incidence. The weights are the patches'
 # expected confirmations on the cut-off day
 # ([`_cutoff_confirmations`](@ref)), the incidence the joint splits on that
-# day. Capped at one.
+# day. The joint uses the relative ascertainment only to split national
+# counts, so nothing in it bounds the product, and it is capped at one.
 function _patch_ascertainment(p_drc::Real, rel::AbstractVector, w::AbstractVector)
     weighted = sum(rel .* w)
     scale = weighted > 0 ? sum(w) / weighted : 1.0
     return [min(p_drc * r * scale, 1.0) for r in rel]
 end
-
-# Case-fatality ratio by patch, the joint's `CFR_patch`: the national ratio
-# times the province's relative fatality. The joint uses that contrast only
-# to split the national deaths between the provinces, so nothing in it keeps
-# the product below one, and a province with a large contrast can exceed it
-# in some draws. Capped at one, as the zones' ratios are
-# ([`_zone_prevalence_parameters`](@ref)).
-_patch_cfr(cfr::AbstractVector) = [min(c, 1.0) for c in cfr]
 
 # Each area's expected confirmations on the last day: the infections
 # `x[a]` through the infection-to-confirmation PMF `f`
@@ -115,8 +108,9 @@ function _prevalence_parameters(chn, horizon::Integer = 120)
     d(vn) = Float64.(vec(collect(chn[vn])))
     p_drc = d(:p_drc)
     ## A chain without the province death split holds only the national CFR.
-    cfr = _has_key(chn, :CFR_patch) ?
-        _patch_cfr.(_draw_vectors(chn, :CFR_patch)) : [[c] for c in d(:CFR)]
+    ## The joint builds `CFR_patch` on the logit scale, so it lies in (0, 1).
+    cfr = _has_key(chn, :CFR_patch) ? _draw_vectors(chn, :CFR_patch) :
+        [[c] for c in d(:CFR)]
     cols = (;
         inc_mean = d(@varname(inc_state.delay_mean)),
         inc_sd = d(@varname(inc_state.delay_sd)),
@@ -205,8 +199,9 @@ chain of [`bvd_joint`](@ref) with `n_patches` patches. Each state is one
 vector of draws per patch: `incubating`, `symptomatic` (past onset and
 undetected) and `community` (incubating or symptomatic and undetected), as in
 [`infection_state_weights`](@ref). The suspected-case ascertainment and the
-case-fatality ratio are the patch's own, each capped at one, or the
-national ones when the chain has no province composition or death split.
+case-fatality ratio are the patch's own, or the national ones when the
+chain has no province composition or death split. The ascertainment is
+capped at one.
 """
 function patch_prevalence(
         chn, n_patches::Integer = length(PROVINCE_NAMES);
@@ -225,9 +220,11 @@ end
 # case-fatality ratio per zone. The ascertainment is the province's times the
 # zone's relative ascertainment `asc[j]`, rescaled within the province by the
 # weights `w[j]`, the zones' expected confirmations on the cut-off day,
-# as [`_patch_ascertainment`](@ref) rescales the provinces. The case-fatality ratio is the province's times the
-# zone's relative fatality `sev[j]`, as the joint builds its province ratios.
-# Both are capped at one.
+# as [`_patch_ascertainment`](@ref) rescales the provinces. The case-fatality
+# ratio is the province's times the zone's relative fatality `sev[j]`, the
+# multiplier the zone stage fits the within-province deaths with. That
+# multiplier is not bounded, so the zone ratio is capped at one, as the
+# ascertainment is.
 function _zone_prevalence_parameters(joint, θ, asc, sev, w, patch_of)
     at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
     own = (

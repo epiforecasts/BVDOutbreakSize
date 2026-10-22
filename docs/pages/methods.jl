@@ -1900,16 +1900,19 @@ cfr_prior_fig #hide
 # The modelled per-patch confirmed increments carry each patch's onsets through the same onset-to-confirmation delay as the national confirmed stream — the onset-to-report delay $f_{\text{rep}}$ convolved with the report-to-receipt delay $f_{\text{rec}}$ — and the assay sensitivity $s$, binned to the vintage days.
 # The death increments use the onset-to-death delay convolved with the same receipt delay.
 # Write those modelled increments $\lambda_{p,i}$ for patch $p$ at vintage $i$.
-# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$:
+# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$, the patch case-fatality ratio $\mathrm{CFR}_p$ over the national one:
 #
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
 # \log a_p = \tau_a (Q \mathbf{z}^{a})_p, \qquad
-# \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
+# \kappa_p = \frac{\mathrm{CFR}_p}{\mathrm{CFR}}, \qquad
+# \mathrm{logit}\, \mathrm{CFR}_p = \mathrm{logit}\, \mathrm{CFR} + \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6), so both log multipliers sum to zero across patches.
+# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6).
+# The log ascertainment multipliers and the logit case-fatality contrasts each sum to zero across patches.
+# Each patch case-fatality ratio therefore lies between zero and one, and $\tau_\kappa = 0$ gives every patch the national ratio.
 #
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
@@ -1927,12 +1930,13 @@ cfr_prior_fig #hide
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
-# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.1),
+# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.15),
 # ```
 #
 # where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
 # The case composition carries no severity term.
-# At $\tau_\kappa = 0.1$ a typical province sits within about ten percent of the national case-fatality ratio.
+# A logit shift of $\tau_\kappa$ moves the log case-fatality ratio by about $(1 - \mathrm{CFR})\, \tau_\kappa$.
+# At the prior mean ratio of $0.33$ and $\tau_\kappa = 0.15$ a typical province therefore sits within about ten percent of the national case-fatality ratio, the spread we give the death ascertainment.
 #
 # The two compositions identify different things.
 # A patch's confirmed case share is the product of its incidence and its case-finding, and a composition sees only the product.
@@ -2281,7 +2285,7 @@ cfr_prior_fig #hide
 # \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{65}
 # ```
 #
-# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built as in the [province compositions](@ref methods-province-compositions):
+# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, both log multipliers on sum-to-zero bases as for the ascertainment in the [province compositions](@ref methods-province-compositions):
 #
 # ```math
 # a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
@@ -2614,11 +2618,9 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
 # The province ascertainment is the national one times the province's relative ascertainment.
 # We rescale it so that the provinces keep the national rate when weighted by their expected confirmed cases on the cut-off day, the weights the joint model uses to split the national suspected cases.
+# The joint model uses the relative ascertainment only to split national counts, so nothing bounds the product at one, and we cap it at one.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
-# The province case-fatality ratio is the national one times the province's relative fatality.
-# The joint model uses both province contrasts only to split national counts between the provinces, so nothing bounds either product at one.
-# We cap the province and zone values of both at one.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
 # The probability of being symptomatic and undetected $s$ days after infection sums, over each possible incubation period, its probability times the probability of still being in the community for the rest of the $s$ days.
 # The people in the community are those infected but not yet symptomatic plus those symptomatic and undetected.
@@ -2627,7 +2629,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
 # It estimates each zone's ascertainment and fatality relative to its province.
-# A zone's case-fatality ratio is its province's from joint draw $j$ times the zone's contrast.
+# A zone's case-fatality ratio is its province's from joint draw $j$ times the zone's contrast, capped at one.
 # A zone's ascertainment is its province's times the zone's contrast, rescaled as for the provinces so that the province's zones keep the province's rate.
 # The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province as confirmed-case detection does.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.

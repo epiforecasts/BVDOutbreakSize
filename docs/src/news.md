@@ -69,6 +69,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
+- Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
+  It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
+  The province point prevalence rejected that draw and failed the province page.
+  The death composition's severity multiplier is now the province ratio over the national one, and a zero contrast still gives every province the national ratio.
+  The contrast's half-normal scale is 0.15 on the logit scale, which at the prior mean ratio of 0.33 is about the previous 0.1 on the log scale.
+  Fitted values change and the fits need refitting.
 
 ### Data
 
@@ -212,9 +218,6 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
-- The province point prevalence caps each province's case-fatality ratio at one, as it already capped the ascertainment and the zone ratios (#1149).
-  The ratio is the national one times the province's relative fatality, which the joint model leaves unbounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
-  The prevalence calculation rejected that draw and failed the province page.
 
 ## v2.2.0
 
