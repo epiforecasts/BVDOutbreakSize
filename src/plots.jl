@@ -2870,7 +2870,7 @@ function plot_rt_patches(
         display_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 3,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         national_colour = :grey25
     )
     np = min(n_patches, length(patch_labels))
@@ -3008,7 +3008,7 @@ function plot_infections_patches(
         chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen]
+        colours = _ZONE_PATCH_COLOURS
     )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -3071,7 +3071,7 @@ function plot_imports_patches(
         chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen]
+        colours = _ZONE_PATCH_COLOURS
     )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -3152,7 +3152,7 @@ between them.
 function plot_patch_summary(
         chn, n_patches::Integer = length(PROVINCE_NAMES);
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         ncols::Integer = 4,
         title::AbstractString = "Per-province posterior summary"
     )
@@ -3379,7 +3379,7 @@ function plot_province_composition_ppc(
         seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         rho_key::Union{Nothing, Symbol} = nothing,
         title::AbstractString = "Province share, modelled against observed"
     )
@@ -3508,7 +3508,7 @@ function plot_province_split_ppc(
         chn; share_key::Symbol, rows, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen, :darkorange],
+        colours = _ZONE_PATCH_COLOURS,
         rho_key::Union{Nothing, Symbol} = nothing,
         title::AbstractString = "Province share, modelled against observed"
     )
@@ -3794,7 +3794,7 @@ function plot_province_forecast(
         pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen, :darkorange3],
+        colours = _ZONE_PATCH_COLOURS,
         observed::NamedTuple = (;),
         title::AbstractString = "One-week-ahead forecast by province"
     )

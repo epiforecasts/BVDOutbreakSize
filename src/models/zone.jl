@@ -1,5 +1,5 @@
 # Health-zone composition model, the second stage of a two-stage Markov
-# melding. Stage one is the four-patch joint fit. Stage two takes its
+# melding. Stage one is the joint province model. Stage two takes its
 # posterior as the prior on the quantity the two stages share and fits the
 # per-zone confirmed-case and death tables as a within-patch composition,
 # with no feedback to stage one.

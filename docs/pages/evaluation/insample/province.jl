@@ -37,10 +37,10 @@ posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
 
 # ## Province prior predictive check
 #
-# Whether the four-patch prior, before any data are fitted, brackets each province's observed share of the confirmed cases and deaths.
+# Whether the province model's prior, before any data are fitted, brackets each province's observed share of the confirmed cases and deaths.
 
 #md # ```@raw html
-#md # <details><summary>Draw from the four-patch prior</summary>
+#md # <details><summary>Draw from the province model's prior</summary>
 #md # ```
 
 prior_patch_chn = patch_prior_draws(obs);
@@ -474,7 +474,7 @@ province_pairs_fig #hide
 #
 # ### Spatial structure sensitivity
 #
-# We refit the joint model with its four patches reduced to one well-mixed population.
+# We refit the joint model with its eight patches reduced to one well-mixed population.
 # Splitting the country into provinces adds no national data, so the national outbreak size should not move far either way.
 # The two still differ, because the country grows at the force-weighted mean of the provinces' reproduction numbers, which sits above the central trend they pool toward.
 # That gap is first order in the deviation scale, so a large gap between the two posteriors would point at the deviation priors rather than at the data.
@@ -504,7 +504,7 @@ spatial_sensitivity_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Posterior densities of the cumulative infections under the four-patch headline and the single-population fit.
+#md # Posterior densities of the cumulative infections under the headline province model and the single-population fit.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -562,7 +562,7 @@ spatial_rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The national reproduction number from the single-population fit (coloured) against the four-patch headline (grey), which is hidden where the two agree.
+#md # The national reproduction number from the single-population fit (coloured) against the headline province model (grey), which is hidden where the two agree.
 #md # </figcaption>
 #md # </figure>
 #md # ```

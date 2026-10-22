@@ -24,10 +24,16 @@
 # row in data/insp_sitrep_scanned.csv have no report date and are skipped,
 # as the laboratory scan skips them.
 #
+# A (SitRep, province) cell listed in `STALE` is left out of every block, so
+# the province has no entry that day. It is for a care paragraph that repeats
+# an earlier report's word for word, or says it carries the day before
+# forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
+# manifest drops them.
+#
 # Each block is sparse: one `[block.province]` sub-table per province with its
 # own `dates` and `values`, since the reports print the figures for different
 # provinces on different days. A province with no printed figure on a day has
-# no entry. Both blocks are printed to stdout for pasting into the manifest,
+# no entry. The three blocks are printed to stdout for pasting into the manifest,
 # as scan_province_lab.jl does for the laboratory block.
 #
 # Usage:
@@ -54,10 +60,24 @@ const KEYS = Dict(
     "Haut-Uele" => "haut_uele", "Haut-Uélé" => "haut_uele", "Tshopo" => "tshopo",
     "Bas-Uele" => "bas_uele", "Bas-Uélé" => "bas_uele",
     "Sud Ubangi" => "sud_ubangi", "Sud-Ubangi" => "sud_ubangi",
+    "Nord Ubangi" => "nord_ubangi", "Nord-Ubangi" => "nord_ubangi",
+)
+## Care paragraphs that carry an earlier report's figures forward, left out
+## of every block as stale carry-forwards. Each entry needs its reason and a
+## matching line in data/README.md.
+const STALE = Dict(
+    ## Haut-Uélé's paragraph repeats SitRep 151's in full (45 patients, 169
+    ## lits, 26,6 %), while Tableau 2 records its two deaths that day as
+    ## community deaths. Decided by @seabbs on #1141.
+    (152, "haut_uele") => "word-for-word repeat of SitRep 151",
+    ## Haut-Uélé's paragraph says the day's data did not arrive and carries
+    ## the day before forward: "les 29 patients hospitalisés de la veille
+    ## sont reportés". Flagged for @seabbs on #1141.
+    (159, "haut_uele") => "SitRep 158's 29 patients carried forward",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
-    "sud_ubangi",
+    "sud_ubangi", "nord_ubangi",
 ]
 
 ## SitRep numbers that have a report date in the hand-scanned headline CSV.
@@ -101,6 +121,7 @@ function reconcile(scan, read, dates; table_era_scan_only::Bool = false)
     for key in union(keys(scan), keys(read))
         sr, prov = key
         haskey(dates, sr) || continue
+        haskey(STALE, key) && continue
         a = get(scan, key, nothing)
         b = get(read, key, nothing)
         if table_era_scan_only && sr <= TABLE_ERA_END
@@ -235,6 +256,9 @@ function main()
         "INSP situation reports, per-province 24h admissions from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read by scripts/province_care_manifest.jl.",
         admissions
     )
+    for ((sr, prov), why) in sort!(collect(STALE); by = first)
+        println(stderr, "excluded SitRep $(sr) $(prov): $(why)")
+    end
     for (name, data) in (
             ("isolation", isolation), ("beds", beds), ("admissions", admissions),
         )

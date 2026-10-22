@@ -46,7 +46,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
-# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
+# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 20 October 2026).
 # Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
 # The distances in the importation kernel are between provincial population centres, the mean of each province's health-zone centroids weighted by WorldPop population [worldpop_2025](@cite), from the INRB-UMIE health-zone map [inrb_umie_health_zones_2026](@cite).
 #
@@ -210,7 +210,7 @@ MarkdownTable(vintage_table) #hide
 # ### Model overview
 #
 # We fit one joint model to every national data stream and the provincial tables, on a daily grid from a seeding date to the cut-off (day $n$).
-# It divides the country into four patches: Ituri, Nord-Kivu, Haut-Uele and a fourth that pools four further provinces.
+# It divides the country into eight patches, one for each province with a confirmed case: Ituri, Nord-Kivu, Haut-Uele, Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi.
 # Each patch runs its own renewal equation, with a reproduction number that is a shared weekly trend times a deviation for that patch.
 # Each data stream sees a delayed or thinned view of the same patch infections, as in the renewal models of EpiNow2 [epinow2](@cite), but here all streams are fitted together.
 
@@ -229,8 +229,8 @@ MarkdownTable(vintage_table) #hide
 
 #md # ```@raw html
 #md # <figure class="bvd-diagram">
-#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_patches.svg" alt="Schematic of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as a weekly national trend times a patch deviation. The deviations sum to zero across patches. Four patch boxes form a square: Ituri seeded with the outbreak, and Nord-Kivu, Haut-Uele and Other provinces starting empty. Double-headed arrows join every pair of patches. Each arrow carries importation in both directions. An origin sends its intensity times the kernel entry times the infections it generates that day. An equation gives each patch's infections after importation. A patch keeps what it does not export and adds the arrivals from every other patch. The patch infections sum to the national infections and onsets. The onsets in each patch feed three province compositions. Patch onsets reach the confirmed cases through the report and receipt delays, weighted by relative case ascertainment. Confirmed deaths pass through the death and receipt delays, weighted by death ascertainment and lethality. Analysed specimens split the national outbreak volume and add a share of the background. All three are scored as beta-binomial splits of each national rise."></a>
-#md # <figcaption>The patch structure of the joint model, drawn as a schematic rather than a map. The grey box is a parameter, blue boxes are latent quantities and the orange box is observed data. The dashed outline groups the coupled patch renewal. The patch labelled Other provinces pools Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi. The provincial counts of patients in isolation and of beds are split the same way but are not drawn.</figcaption>
+#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_patches.svg" alt="Schematic of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as a weekly national trend times a patch deviation. The deviations sum to zero across patches. Four patch boxes form a square: Ituri seeded with the outbreak, and Nord-Kivu, Haut-Uele and a box standing for the five further provinces, all starting empty. Double-headed arrows join every pair of patches. Each arrow carries importation in both directions. An origin sends its intensity times the kernel entry times the infections it generates that day. An equation gives each patch's infections after importation. A patch keeps what it does not export and adds the arrivals from every other patch. The patch infections sum to the national infections and onsets. The onsets in each patch feed three province compositions. Patch onsets reach the confirmed cases through the report and receipt delays, weighted by relative case ascertainment. Confirmed deaths pass through the death and receipt delays, weighted by death ascertainment and lethality. Analysed specimens split the national outbreak volume and add a share of the background. All three are scored as beta-binomial splits of each national rise."></a>
+#md # <figcaption>The patch structure of the joint model, drawn as a schematic rather than a map. The grey box is a parameter, blue boxes are latent quantities and the orange box is observed data. The dashed outline groups the coupled patch renewal. The box for the five further provinces stands for one patch each: Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi. The provincial counts of patients in isolation and of beds are split the same way but are not drawn.</figcaption>
 #md # </figure>
 #md # ```
 
@@ -550,7 +550,6 @@ MarkdownTable(vintage_table) #hide
 #
 # We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial population centres.
 # Each centre sits where the province's people live rather than at its capital.
-# A pooled province takes the population-weighted mean of its members' centres.
 # Each origin column is scaled so that the share of its transmission that leaves is the population share of the rest of the country, $1 - N_q / N$:
 #
 # ```math
