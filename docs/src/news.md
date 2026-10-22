@@ -27,7 +27,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
   The new patches take the existing per-patch priors, so no prior is added or changed.
   Their reproduction-number deviations, ascertainment and lethality are informed mostly by the priors those parameters share across patches.
-  The gravity kernel now sends each small province's exports to its own neighbours: most of Nord-Kivu's go to Sud-Kivu, and Nord-Ubangi sends the largest share of its exports to Sud-Ubangi.
+  The gravity kernel now sends each small province's exports to its own neighbours: about half of Nord-Kivu's go to Sud-Kivu, and about a third of Nord-Ubangi's go to Sud-Ubangi.
   The parameter count grows with the patch count, so fitted values change and the fits need rerunning.
   Archived release forecasts for the `other` patch are still scored against its four provinces.
   The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
