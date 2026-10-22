@@ -187,10 +187,50 @@ province_vs_observed_detail(3) #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Other provinces</summary>
+#md # <details><summary>Sud-Kivu</summary>
 #md # ```
 
 province_vs_observed_detail(4) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Tshopo</summary>
+#md # ```
+
+province_vs_observed_detail(5) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Bas-Uele</summary>
+#md # ```
+
+province_vs_observed_detail(6) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Sud-Ubangi</summary>
+#md # ```
+
+province_vs_observed_detail(7) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Nord-Ubangi</summary>
+#md # ```
+
+province_vs_observed_detail(8) #hide
 
 #md # ```@raw html
 #md # </details>

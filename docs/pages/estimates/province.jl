@@ -130,7 +130,7 @@ province_map_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Each province is shaded by its patch's posterior median, so the pooled patch shades all its provinces alike.
+#md # Each province is shaded by its posterior median.
 #md # The reproduction number at the cut-off and the relative case ascertainment are centred on one, and a province whose 90% credible interval spans one is washed out.
 #md # </figcaption>
 #md # </figure>
@@ -147,8 +147,10 @@ province_map_fig #hide
 
 ## The tables below and the pair-plot dropdowns further down name the
 ## provinces in this order.
-@assert PROVINCE_LABELS[1:N_PATCHES] ==
-    ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
+@assert PROVINCE_LABELS[1:N_PATCHES] == [
+    "Ituri", "Nord-Kivu", "Haut-Uele",
+    "Sud-Kivu", "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
+]
 province_detail_tables = [
     patch_summary_table(chn_joint, N_PATCHES; patch = p) for p in 1:N_PATCHES
 ];
@@ -181,9 +183,25 @@ province_detail_tables[2] #hide
 
 province_detail_tables[3] #hide
 
-# #### Other provinces
+# #### Sud-Kivu
 
 province_detail_tables[4] #hide
+
+# #### Tshopo
+
+province_detail_tables[5] #hide
+
+# #### Bas-Uele
+
+province_detail_tables[6] #hide
+
+# #### Sud-Ubangi
+
+province_detail_tables[7] #hide
+
+# #### Nord-Ubangi
+
+province_detail_tables[8] #hide
 
 # #### Isolation beds
 
@@ -234,7 +252,10 @@ province_infections_fig #hide
 #md # ```
 
 # The provinces are coupled by the gravity kernel in the [mixing and importation](@ref "Mixing and importation") Methods section.
-# The distances between the patches' population centres are 324 km from Ituri to Nord-Kivu, 216 km from Ituri to Haut-Uele and 390 km from Nord-Kivu to the pooled patch, so most of what leaves Nord-Kivu lands in the pooled patch.
+# The distances between the patches' population centres run from 191 km between Sud-Ubangi and Nord-Ubangi to 1 220 km between Sud-Kivu and Sud-Ubangi.
+# Ituri is 324 km from Nord-Kivu and 216 km from Haut-Uele.
+# About half of what leaves Nord-Kivu lands in Sud-Kivu, 260 km away and the second most populous of the eight.
+# Nord-Ubangi sends about a third of its exports to Sud-Ubangi, its nearest neighbour.
 
 #md # ```@raw html
 #md # <details><summary>Importation intensity and imports by province</summary>
@@ -337,14 +358,14 @@ province_rt_fig #hide
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
 #md # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
-#md # The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
+#md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
 # Its prior gives a 26% probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
-# With four patches and the pooled one carrying almost no signal, the cross-province correlation is not identified and tracks its prior.
+# With eight patches and five of them carrying little signal, the cross-province correlation is not identified and tracks its prior.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
@@ -359,6 +380,11 @@ spatial_labels = Dict(
     :province_suspected_ascertainment_sd => "Detection spread (logit)",
     :province_ascertainment_sd => "Confirmation spread",
     :importation_epsilon => "Importation intensity",
+    :importation_destination_sd => "Importation destination spread",
+    :importation_origin_destination_correlation =>
+        "Origin-destination correlation",
+    :importation_flow_sd => "Importation flow spread",
+    :importation_reciprocity => "Importation reciprocity",
     :province_cfr_sd => "Lethality spread (logit)",
     :province_death_ascertainment_sd => "Death-confirmation spread"
 )
@@ -381,7 +407,7 @@ spatial_hyper_table #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The spatial hyperparameters of the province deviations.
-#md # The correlation is between deviation innovations that sum to zero, so it leans negative, and with equal spreads each province's correlations with the other three average −1/3.
+#md # The correlation is between deviation innovations that sum to zero, so it leans negative, and with equal spreads each province's correlations with the other seven average −1/7.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -431,7 +457,7 @@ province_cfr #hide
 
 # ## Province parameters against their priors
 #
-# The pair plots below set the province parameters against their prior, drawn from the four-patch model.
+# The pair plots below set the province parameters against their prior, drawn from the province model.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
@@ -452,7 +478,9 @@ spatial_pair_fig = plot_pair(
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
         :province_suspected_ascertainment_sd, :province_ascertainment_sd,
-        :importation_epsilon, :province_cfr_sd,
+        :importation_epsilon, :importation_destination_sd,
+        :importation_origin_destination_correlation, :importation_flow_sd,
+        :importation_reciprocity, :province_cfr_sd,
         :province_death_ascertainment_sd,
     ];
     prior = prior_patch_chn, labels = spatial_labels
@@ -468,7 +496,7 @@ spatial_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
-#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, and the spreads of lethality and death confirmation.
+#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -539,10 +567,50 @@ province_pair_figs[3] #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Other provinces pair plot (prior overlaid)</summary>
+#md # <details><summary>Sud-Kivu pair plot (prior overlaid)</summary>
 #md # ```
 
 province_pair_figs[4] #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Tshopo pair plot (prior overlaid)</summary>
+#md # ```
+
+province_pair_figs[5] #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Bas-Uele pair plot (prior overlaid)</summary>
+#md # ```
+
+province_pair_figs[6] #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Sud-Ubangi pair plot (prior overlaid)</summary>
+#md # ```
+
+province_pair_figs[7] #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Nord-Ubangi pair plot (prior overlaid)</summary>
+#md # ```
+
+province_pair_figs[8] #hide
 
 #md # ```@raw html
 #md # </details>

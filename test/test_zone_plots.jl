@@ -576,7 +576,7 @@ end
     ## `p_R_above_1` with NaN for a zone below the reporting floor.
     rep = DataFrame(
         zone = ["A", "B", "C"],
-        patch = ["Ituri", "Nord-Kivu", "Other provinces"],
+        patch = ["Ituri", "Nord-Kivu", "Nord-Ubangi"],
         rt_median = [1.4, 0.9, NaN], rt_lo90 = [1.1, 0.6, NaN],
         rt_hi90 = [1.8, 1.2, NaN], p_R_above_1 = [0.95, 0.3, NaN],
         walking = [true, true, false]

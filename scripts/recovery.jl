@@ -129,6 +129,20 @@ params.max_rhat .= diagnostics.max_rhat
 params.min_ess_bulk .= diagnostics.min_ess_bulk
 params.divergences .= diagnostics.n_divergent
 CSV.write(joinpath(out_dir, "recovery_$(seed).csv"), params)
+## Which parameters carry the R-hat, worst first, and each chain's sampler
+## behaviour, so a seed that fails to converge can be traced to a
+## parameter and to a stuck chain from the artifact alone.
+chain_diagnostics = recovery_chain_diagnostics(
+    fit.chain; max_depth = joint_max_depth()
+)
+CSV.write(
+    joinpath(out_dir, "recovery_parameters_$(seed).csv"),
+    chain_diagnostics.parameters
+)
+CSV.write(
+    joinpath(out_dir, "recovery_sampler_$(seed).csv"),
+    chain_diagnostics.sampler
+)
 ## Every fifth posterior draw and a prior sample of the fitted model, one
 ## column per quantity, for the report's figures. The prior is the same for
 ## every seed, so each seed's sample adds to one pooled prior.
