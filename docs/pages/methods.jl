@@ -791,11 +791,13 @@ MarkdownTable(vintage_table) #hide
 #
 # The delay from symptom onset to a suspected case being detected and reported into surveillance.
 # We use a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the 2012 Isiro Bundibugyo virus outbreak line list [rosello2015](@cite).
-# We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty:
+# We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty.
+# Both priors are LogNormal, with the scale's median at the reanalysis estimate of 3.69 and its standard deviation of 1.20 carried to the log scale (1.20 / 3.69, about 0.32).
+# A scale near zero, which would put the report on the day of onset, then becomes steadily less likely rather than meeting a hard lower bound:
 #
 # ```math
 # \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
-# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
+# \theta_{\text{rep}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32). \tag{23}
 # ```
 #
 # We do not use the reanalysis onset-to-notification delay, a near-exponential Gamma with mean about 20 d.
@@ -811,7 +813,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
-# \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
+# \theta_{\text{oa}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
 # ```
@@ -826,7 +828,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
-# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
+# \theta_{\text{det}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32). \tag{25}
 # ```
 #
 # It drives the exports streams.
