@@ -138,16 +138,19 @@ SitReps 144 and 145 reprint the 143 figure byte for byte (the same image md5 and
 SitReps 146 and 149 (n = 6 823 and 7 136, last tick 05 October) are digitised on 724x418 and 718x411 renders and read 6 830 and 7 132 (+0.1% and -0.1%).
 SitRep 147 (n = 7 054) is not digitised, nor 148, which reprints it byte for byte: inside the incomplete-data band its 6 October reads 11, the edge of the 13 bar before it, where the bar stands at about 4 by eye.
 On onset dates more than 56 days before the report, 146 differs from the dashboard's 7 October snapshot by 0.28 cases a day and 149 from its 9 October snapshot by 1.00.
-SitReps 150 and 151 (n = 7 262 and 7 284, last tick 12 October) are not digitised.
-On its 716x399 render SitRep 150 reads 7 184 (-1.1%), inside the gap band, but its 14 September bar on a tick column reads 23 against 69 in SitRep 149 and 69 in the dashboard's 12 October snapshot, and its 29 July reads 69 against 51 in every other vintage, the dead segment doubled.
-On its 836x493 render SitRep 151's 11 October bar ends a pixel short of the 12 October tick, and the reader takes that edge for a 12 October bar of 3 where the figure draws none.
-SitReps 153 and 154 (n = 7 388 and 7 438, last tick 12 October, y step 25) are not digitised either.
-On their 817x459 and 812x447 renders they read 7 331 and 7 381 (-0.8% each) at best shift 0, but SitRep 153 has no reading for 13 and 14 May (17 and 8 in SitRep 149 and the dashboard), and SitRep 154 reads 13 and 14 May as 17 and 17 and has no reading for 5 June (20 in SitRep 153, #1148).
-SitReps 155 to 159 are not digitised.
-SitRep 155 reprints SitRep 154's figure byte for byte, and SitRep 157 reprints SitRep 156's.
-SitRep 156 is a new 827x456 render, but it prints n = 7 438 and a last tick of 12 October, the same as SitRep 154's, so it is taken as a new render of the same extract.
-SitReps 158 and 159 print n = 7 660 and a last tick of 19 October on new 828x443 and 733x392 renders, and read 7 647 and 7 657 (-0.2% and -0.0%).
-Both misread 14 May, at the red dashed first-positive-result line (4 and 18 against 8 in SitRep 149 and in the dashboard's 16 October snapshot), the failure #1148 records for SitReps 153 and 154.
+SitReps 151, 153 and 158 are digitised (#1138, #1148).
+SitRep 151 (n = 7 284, last tick 12 October, 836x493) reads 7 207 (-1.1%), SitRep 153 (n = 7 388, last tick 12 October, 817x459) reads 7 360 (-0.4%) and SitRep 158 (n = 7 660, last tick 19 October, 828x443) reads 7 651 (-0.1%).
+On settled onset dates they differ from the dashboard's 12, 15 and 19 October snapshots by 0.55, 0.34 and 0.33 cases a day.
+Reading them needed four reader changes, each with a synthetic test.
+- A short bar whose dead segment is dark enough to pass as outline in every column is read as the level run of those columns. Before this, the reader dropped the day or read the bar before it (153's 12 to 14 May, 151's 14 May and 17 July).
+- A window column that reads a bounding outline's height, where the first column past that outline reads it too, belongs to the next bar and is dropped. This removes a 4 May bar of 3 to 8 that the dashboard has at 0, in 150 and in the committed 112 and 143 to 145.
+- At the last tick, fill with no outline pixel and no outline to its right is the band's pink, not a bar (151's 12 October).
+- Under the dashed line, two agreeing soft columns outvote a middle column that reads to the alive/dead junction (158's 14 May).
+SitRep 150 (n = 7 262) is not digitised: its 29 July reads 69 against 51 in every other vintage, because the 28 July outline is drawn across two columns and the second reads two pixels off the outline, too far for the rule above.
+SitRep 152 reprints SitRep 151's figure byte for byte.
+SitRep 154 (n = 7 438) is not digitised: it reads 4 May as 5 and 11 May as 5, against 0 and 2 in the dashboard.
+SitRep 155 reprints SitRep 154's figure, SitRep 156 is a new render with SitRep 154's n and last tick, and SitRep 157 reprints SitRep 156's, so none adds an extract.
+SitRep 159 is a new 733x392 render with SitRep 158's n and last tick, so it is the same extract and is not digitised.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
