@@ -173,9 +173,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
-- The delay convolution is the `Convolution` operator of [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl), which brings its own Mooncake rule, so the hand-written rule for it is removed (#1152).
-  It matches the hand-written loop to round-off, so fitted values change only by round-off.
-  The renewal and the patch renewal keep their hand-written loops and rules, which differentiate faster under Mooncake than the package's `Recurrence` with `Depletion` (timings in #1152, tracked by EpiAware/ComposableRecurrences.jl#296).
+- The model's recurrences and convolutions are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, and the hand-written Mooncake rules they replace are removed (#1152).
+  The renewal and the patch renewal are a `Recurrence` with `Depletion` (and `Redistribute` across patches), the delay and PMF convolutions, the care flows and the health-zone pre-grid terms and window weights are `Convolution`s, and the deviation-knot walk, the onset-reporting survival, the report binning and the occupancy balance are `Recurrence`s.
+  The health-zone split is a `Recurrence` with `Allocate`.
+  Each matches the hand-written code to round-off, so fitted values change only by round-off.
+  The renewal and the patch renewal differentiate slower under Mooncake than the hand-written rules did (timings in #1152, tracked by EpiAware/ComposableRecurrences.jl#296).
+  The occupancy balance is differentiated by plain AD through `NoAdjoint`, since the package's own route gives `NaN` gradients for it (EpiAware/ComposableRecurrences.jl#325).
   ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
 - The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.

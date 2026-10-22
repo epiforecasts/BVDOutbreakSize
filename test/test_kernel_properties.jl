@@ -56,7 +56,7 @@ end
 @testitem "renewal_infections: seeds kept, geometric growth" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: renewal_infections, renewal_infections_with_state
+    using BVDOutbreakSize: renewal_infections
     seed = [1.0, 2.0, 4.0]
     ## A one-day generation interval multiplies each day by `R`.
     ## A pool so large the renewal is undepleted, exactly so as a power of two.
@@ -66,28 +66,30 @@ end
     ## Each day after the seed is `R_t` times its force.
     rng = Xoshiro(3)
     R = rand(rng, 40) .+ 0.5
-    st = renewal_infections_with_state(
-        R, pmf(rng, 12), rand(rng, 7), 2.0^900
-    )
-    @test st.infections[8:end] == R[8:end] .* st.force[8:end]
+    g = pmf(rng, 12)
+    I = renewal_infections(R, g, rand(rng, 7), 2.0^900)
+    force(t) = sum(I[t - s] * g[s] for s in 1:min(t - 1, length(g)))
+    @test I[8:end] ≈ R[8:end] .* force.(8:40)
 end
 
 @testitem "renewal_infections: depletion bounds new infections by the pool" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: renewal_infections, renewal_infections_with_state
+    using BVDOutbreakSize: renewal_infections
     rng = Xoshiro(5)
     g, seed = pmf(rng, 12), rand(rng, 7) .+ 1
     N = 500.0
     ## Each day takes `S (1 - e^{-x})` of the pool `S`, with `x = R f / N`,
     ## and leaves `S e^{-x}` for the next.
     R = rand(rng, 40) .+ 0.8
-    st = renewal_infections_with_state(R, g, seed, N)
-    x = R[8:40] .* st.force[8:40] ./ N
+    I = renewal_infections(R, g, seed, N)
+    force(t) = sum(I[t - s] * g[s] for s in 1:min(t - 1, length(g)))
+    x = R[8:40] .* force.(8:40) ./ N
     pools = (N - sum(seed)) .* exp.(-cumsum(x))
     before = [N - sum(seed); pools[1:(end - 1)]]
-    @test st.infections[8:40] ≈ before .* (1 .- exp.(-x))
-    @test st.susceptible[8:40] ≈ pools
+    @test I[8:40] ≈ before .* (1 .- exp.(-x))
+    ## Each day's infections are what leaves the pool.
+    @test N - sum(seed) .- cumsum(I[8:40]) ≈ pools
     ## New infections never exceed the pool left after the seed.
     I = renewal_infections(fill(3.0, 60), g, seed, N)
     @test all(>=(0), I)
@@ -101,14 +103,19 @@ end
 @testitem "pool_fraction: the pool left is the population less the cumulative" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: renewal_infections_with_state, pool_fraction,
-        adjusted_rt
+    using BVDOutbreakSize: renewal_infections, pool_fraction, adjusted_rt
     rng = Xoshiro(6)
     N = 800.0
     R = rand(rng, 50) .+ 1.0
-    st = renewal_infections_with_state(R, pmf(rng, 10), rand(rng, 5) .+ 1, N)
-    frac = pool_fraction(cumsum(st.infections), N)
-    @test N .* frac[5:end] ≈ st.susceptible[5:end]
+    g, seed = pmf(rng, 10), rand(rng, 5) .+ 1
+    I = renewal_infections(R, g, seed, N)
+    frac = pool_fraction(cumsum(I), N)
+    ## The pool after day `t` is the pool before it times `e^{-x_t}`, with
+    ## `x_t = R_t f_t / N`, and the seed is drawn from the pool first.
+    force(t) = sum(I[t - s] * g[s] for s in 1:min(t - 1, length(g)))
+    x = R[6:50] .* force.(6:50) ./ N
+    pools = (N - sum(seed)) .* exp.(-cumsum(x))
+    @test N .* frac[5:end] ≈ [N - sum(seed); pools]
     ## Net of depletion, each day's reproduction number uses the pool the
     ## day before, and the first day the full pool.
     @test adjusted_rt(R, frac, 2:50) ≈ R[2:50] .* frac[1:49]

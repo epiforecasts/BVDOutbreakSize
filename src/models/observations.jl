@@ -12,24 +12,29 @@ directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
 to the first vintage day (`sum(daily[1:days[1]])`). Each later increment is
 the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
-bin needs the cumulative. Day indices are clamped to the grid. Pure and
-AD-transparent. The output element type follows `daily`.
+bin needs the cumulative. Day indices are clamped to the grid and a bin
+whose end does not pass its start is zero. Each bin is the difference of
+the running total, a ComposableRecurrences `Recurrence` with kernel `[1]`
+that adds one day of `daily` at each step. The output element type follows
+`daily`.
 """
 function bin_increments(
         daily::AbstractVector,
         days::AbstractVector{<:Integer}
     )
     n = length(daily)
-    out = Vector{eltype(daily)}(undef, length(days))
-    ## Concrete zero for empty bins, dispatched on the runtime element type
-    ## so it works when the container has widened to `Vector{Any}` in predict
-    ## mode (`zero(eltype(daily))` would call `zero(::Type{Any})` and error).
-    zfill = isempty(daily) ? zero(eltype(daily)) : zero(@inbounds daily[begin])
+    ## Predict mode can widen the container to `Vector{Any}`, which the
+    ## recurrence cannot buffer, so it is narrowed to its elements' type.
+    x = isconcretetype(eltype(daily)) ? daily : map(identity, daily)
+    zfill = isempty(x) ? zero(eltype(x)) : zero(@inbounds x[begin])
+    isempty(x) && return fill(zfill, length(days))
+    total = vcat(zfill, Recurrence([true])(true; history = [zfill], add = x))
+    out = Vector{eltype(total)}(undef, length(days))
     prev = 0
     @inbounds for (i, d) in enumerate(days)
         hi = clamp(Int(d), 0, n)
         lo = clamp(prev, 0, n)
-        out[i] = hi > lo ? sum(@view daily[(lo + 1):hi]) : zfill
+        out[i] = hi > lo ? total[hi + 1] - total[lo + 1] : zfill
         prev = hi
     end
     return out
@@ -1823,6 +1828,11 @@ The two [`abscond_thinned_flow`](@ref) flows that share an abscond rate and
 a confirmation hazard, walked in one pass. The cohort survival `S(t, d)`
 depends on neither the admissions nor the stay schedule, so the two flows
 run off one recurrence. Returns `(out1, out2)`.
+
+The flows are one ComposableRecurrences `Convolution` of the two admission
+series as strata, with a cohort-indexed (`Primary`) time-varying kernel:
+column `u` holds each schedule times the survival of the cohort admitted
+on day `u`. The shorter schedule is padded with zeros.
 """
 function abscond_thinned_flows(
         adm1::AbstractVector, pmf1::AbstractVector,
@@ -1830,42 +1840,31 @@ function abscond_thinned_flows(
         κ::Real, conf_hazard::AbstractVector
     )
     n = length(adm1)
+    D = max(length(pmf1), length(pmf2))
     T = promote_type(
         eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
         typeof(κ), eltype(conf_hazard)
     )
-    out1 = zeros(T, n)
-    out2 = zeros(T, n)
-    one_T = one(T)
-    nmax1 = length(pmf1)
-    nmax2 = length(pmf2)
-    @inbounds for t in 1:n
-        a1 = adm1[t]
-        a2 = adm2[t]
-        dmax1 = min(nmax1 - 1, n - t)
-        dmax2 = min(nmax2 - 1, n - t)
-        ## Both schedules run to `dboth`; only the longer one runs past it.
-        dboth = min(dmax1, dmax2)
-        ## Admission day: the cohort is not yet in the stock the balance
-        ## charges absconds against, so it faces no abscond hazard.
-        out1[t] += a1 * pmf1[1]
-        out2[t] += a2 * pmf2[1]
-        surv = one_T
-        unconf = one_T
-        for d in 1:dboth
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            out1[t + d] += a1 * pmf1[d + 1] * surv
-            out2[t + d] += a2 * pmf2[d + 1] * surv
-        end
-        for d in (dboth + 1):max(dmax1, dmax2)
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            d <= dmax1 && (out1[t + d] += a1 * pmf1[d + 1] * surv)
-            d <= dmax2 && (out2[t + d] += a2 * pmf2[d + 1] * surv)
+    pmfs = zeros(T, 2, D)
+    pmfs[1, eachindex(pmf1)] .= pmf1
+    pmfs[2, eachindex(pmf2)] .= pmf2
+    G = zeros(T, 2, D, n)
+    @inbounds for u in 1:n
+        surv = one(T)
+        unconf = one(T)
+        for d in 0:(D - 1)
+            if d > 0
+                unconf *= one(T) - conf_hazard[min(u + d - 1, n)]
+                surv *= one(T) - κ * unconf
+            end
+            G[1, d + 1, u] = pmfs[1, d + 1] * surv
+            G[2, d + 1, u] = pmfs[2, d + 1] * surv
         end
     end
-    return out1, out2
+    flows = Convolution(TimeVarying(PerStratum(G), Primary()))(
+        permutedims(hcat(adm1, adm2))
+    )
+    return flows[1, :], flows[2, :]
 end
 
 """
@@ -1922,99 +1921,77 @@ not-yet-confirmed BVD occupancy plus the non-case rule-out occupancy, so
 `O_conf` is clamped into `[0, O_bvd]`, and the abscond denominator `O_susp(t-1)`
 is floored with `eps` so a zero suspect pool gives a zero split. Returns
 `(; demand, O_bvd, O_conf, O_susp, abscond)`, each a length-`n` vector.
+
+The balance is a ComposableRecurrences `Recurrence` with kernel `[1]` over
+the four stocks `(O_bvd, O_bg, O_conf, O_susp)` as strata, which carries
+each day's stocks to the next, and an `_OccupancyBalance` modifier, which
+applies the day's flows to them.
 """
 function accumulate_occupancy(
         A_bvd::AbstractVector, A_bg::AbstractVector,
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
     )
-    return _accumulate_occupancy(
-        Val(false), A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
+    n = length(A_bvd)
+    if n == 0
+        e = zeros(promote_type(eltype(A_bvd), typeof(κ)), 0)
+        return (; demand = e, O_bvd = e, O_conf = e, O_susp = e, abscond = e)
+    end
+    balance = _OccupancyBalance(
+        A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
     )
+    ## The stocks start empty, and the flows are in the modifier, so the
+    ## call takes no gain and `stop` sets the number of days. `NoAdjoint`
+    ## differentiates the balance by plain AD, since the package's own route
+    ## gives `NaN` gradients for this modifier
+    ## (EpiAware/ComposableRecurrences.jl#325).
+    Y = NoAdjoint(Recurrence([true]; modifiers = (balance,)))(;
+        history = zeros(4, 1), stop = n
+    )
+    O_bvd = Y[1, :]
+    O_bg = Y[2, :]
+    O_conf = Y[3, :]
+    O_susp = Y[4, :]
+    abscond = κ .* vcat(zero(eltype(Y)), O_susp[1:(end - 1)])
+    return (; demand = O_bvd .+ O_bg, O_bvd, O_conf, O_susp, abscond)
 end
 
-## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
-## Ties go to the second argument of `max` and to the bound of `clamp`,
-## lower bound first, the sides Mooncake's own rules for them take.
-const _OCC_UNCONF = 0x01
-const _OCC_DENOM = 0x02
-const _OCC_BVD = 0x04
-const _OCC_BG = 0x08
-const _OCC_CONF_X = 0x10
-const _OCC_CONF_HI = 0x20
-const _OCC_SUSP = 0x40
+## One day of the occupancy balance of `accumulate_occupancy`: the
+## previous day's stocks in `v` are overwritten with the day's.
+struct _OccupancyBalance{A, B, D, R, O, K, H}
+    A_bvd::A
+    A_bg::B
+    deaths::D
+    recover::R
+    ruleout::O
+    κ::K
+    conf_hazard::H
+end
 
-## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
-## returns the non-case stock `O_bg` and the branch flags for each day, which
-## the Mooncake rule in `src/mooncake_rules.jl` reads.
-function _accumulate_occupancy(
-        ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
-        conf_hazard
-    ) where {record}
-    n = length(A_bvd)
-    T = promote_type(
-        eltype(A_bvd), eltype(A_bg), eltype(deaths),
-        eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
+function ComposableRecurrences.forward!(
+        m::_OccupancyBalance, ::ComposableRecurrences.Step, v, s, t
     )
-    demand = Vector{T}(undef, n)
-    O_bvd = Vector{T}(undef, n)
-    O_conf = Vector{T}(undef, n)
-    O_susp = Vector{T}(undef, n)
-    abscond = Vector{T}(undef, n)
-    O_bg = record ? Vector{T}(undef, n) : nothing
-    flags = record ? Vector{UInt8}(undef, n) : nothing
-    z = zero(T)
-    Obvd_prev = z
-    Obg_prev = z
-    Oconf_prev = z
-    Osusp_prev = z
-    ## Floor for the abscond denominator so a zero suspect pool gives a zero
-    ## split rather than 0/0.
-    ε = eps(T)
-    @inbounds for t in 1:n
-        bvd_out = deaths[t] + recover[t]
-        ab = κ * Osusp_prev
-        x_u = Obvd_prev - Oconf_prev
-        unconf = max(x_u, z)
-        denom = max(Osusp_prev, ε)
-        ab_bvd = ab * (unconf / denom)
-        ab_bg = ab * (Obg_prev / denom)
-        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
-        Obvd_t = max(x_bvd, z)
-        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
-        Obg_t = max(x_bg, z)
-        Dt = Obvd_t + Obg_t
-        conf_in = conf_hazard[t] * unconf
-        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        x_conf = Oconf_prev + conf_in - bvd_out * share
+    z = zero(eltype(v))
+    ## Floor for the abscond denominator so a zero suspect pool gives a
+    ## zero split rather than 0/0.
+    ε = eps(eltype(v))
+    @inbounds Obvd, Obg, Oconf, Osusp = v[1], v[2], v[3], v[4]
+    @inbounds begin
+        bvd_out = m.deaths[t] + m.recover[t]
+        ab = m.κ * Osusp
+        unconf = max(Obvd - Oconf, z)
+        denom = max(Osusp, ε)
+        Obvd_t = max(Obvd + m.A_bvd[t] - bvd_out - ab * (unconf / denom), z)
+        Obg_t = max(Obg + m.A_bg[t] - m.ruleout[t] - ab * (Obg / denom), z)
+        share = Obvd > z ? Oconf / Obvd : z
+        x_conf = Oconf + m.conf_hazard[t] * unconf - bvd_out * share
         Oconf_t = clamp(x_conf, z, Obvd_t)
-        x_susp = Dt - Oconf_t
-        Osusp_t = max(x_susp, z)
-        demand[t] = Dt
-        O_bvd[t] = Obvd_t
-        O_conf[t] = Oconf_t
-        O_susp[t] = Osusp_t
-        abscond[t] = ab
-        if record
-            f = 0x00
-            x_u > z && (f |= _OCC_UNCONF)
-            Osusp_prev > ε && (f |= _OCC_DENOM)
-            x_bvd > z && (f |= _OCC_BVD)
-            x_bg > z && (f |= _OCC_BG)
-            if x_conf > z
-                f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
-            end
-            x_susp > z && (f |= _OCC_SUSP)
-            O_bg[t] = Obg_t
-            flags[t] = f
-        end
-        Obvd_prev = Obvd_t
-        Obg_prev = Obg_t
-        Oconf_prev = Oconf_t
-        Osusp_prev = Osusp_t
+        v[1] = Obvd_t
+        v[2] = Obg_t
+        v[3] = Oconf_t
+        v[4] = max(Obvd_t + Obg_t - Oconf_t, z)
     end
-    y = (; demand, O_bvd, O_conf, O_susp, abscond)
-    return record ? (y, O_bg, flags) : y
+    return nothing
 end
 
 """
@@ -2091,6 +2068,10 @@ proportional split's mean-field approximation: a true case that dies
 before its test returns is never counted as confirmed. Returns the
 length-`n` confirmed-in-care sub-stock. [`incare_census`](@ref) forms the
 suspect sub-stock as the demand remainder `D − O_conf`.
+
+It is a ComposableRecurrences `Convolution` of `A_bvd` with a
+cohort-indexed (`Primary`) time-varying kernel: column `u` holds
+`CDF_conf(u, u + d) S_clin(d)` over cohort age `d`.
 """
 function two_clock_confirmed(
         A_bvd::AbstractVector, conf_hazard::AbstractVector,
@@ -2098,25 +2079,16 @@ function two_clock_confirmed(
     )
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
-    O_conf = Vector{T}(undef, n)
     L = length(S_clin)
-    one_T = one(T)
-    @inbounds for t in 1:n
-        acc = zero(T)
-        ## `prod_unconf` = probability cohort `u` is still unconfirmed at day
-        ## `t`, `∏_{j=u+1}^{t}(1 − hazard_j)`, extended one factor per step as
-        ## `u` walks back from `t`. `S_clin` is zero past its support, so the
-        ## walk stops at cohort age `L - 1`.
-        prod_unconf = one_T
-        for u in t:-1:max(1, t - L + 1)
-            d = t - u
-            cdf_conf = one_T - prod_unconf
-            acc += A_bvd[u] * cdf_conf * S_clin[d + 1]
-            prod_unconf *= (one_T - conf_hazard[u])
+    K = zeros(T, L, n)
+    @inbounds for u in 1:n
+        unconf = one(T)
+        for d in 0:(L - 1)
+            d > 0 && (unconf *= one(T) - conf_hazard[min(u + d, n)])
+            K[d + 1, u] = (one(T) - unconf) * S_clin[d + 1]
         end
-        O_conf[t] = acc
     end
-    return O_conf
+    return Convolution(TimeVarying(K, Primary()))(A_bvd)
 end
 
 """
@@ -3263,46 +3235,40 @@ delay CDF's numerators alongside its denominator `table[D, k]`. Returns a
 grid, which [`onset_report_anchor_series`](@ref) and
 [`onset_report_moments`](@ref) then both read, so the reporting hazard is
 evaluated once per `(delay, onset date)` cell for the whole stream rather
-than once per use. Pure, top-level, single indexed loop (see
-[`onset_report_cdf`](@ref) for the AD-safety rationale).
+than once per use. The survival products are a ComposableRecurrences
+`Recurrence` over the delays, one stratum per onset date.
 """
 function onset_report_cdf_table(
         logit_h0::AbstractVector,
         γ::AbstractVector, grid_start::Integer, u_lo::Integer,
         u_hi::Integer
     )
-    T = promote_type(eltype(logit_h0), eltype(γ))
     nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
-    table = Matrix{T}(undef, length(logit_h0), nu)
-    ## The survival products, then their complements in place.
-    _onset_columns!(nothing, table, logit_h0, γ, grid_start, u_lo)
-    @. table = one(T) - table
-    return table
+    return 1 .- _onset_survival(logit_h0, γ, grid_start, u_lo, nu)
 end
 
-## The survival recurrence of each onset date's delay column, the one walk
-## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
-## Mooncake rule share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
-## survival product up to and including delay `j`, and, unless `H` is
-## `nothing`, `H[j + 1, k]` is that delay's hazard.
-function _onset_columns!(
-        H::Union{Nothing, AbstractMatrix}, S::AbstractMatrix,
+## The survival products of each onset date's delay column, the one walk
+## `onset_report_cdf_table` and `onset_report_expected_total` share, as a
+## `D × nu` matrix whose column `k` is onset date `u_lo + k - 1`: entry
+## `[j, k]` is the survival product up to and including delay `j - 1`. It is
+## a ComposableRecurrences `Recurrence` with kernel `[1]` over the delays,
+## one stratum per onset date, whose gain at each delay is `1 - h`.
+function _onset_survival(
         logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
-        u_lo::Integer
+        u_lo::Integer, nu::Integer
     )
+    T = promote_type(eltype(logit_h0), eltype(γ))
+    D = length(logit_h0)
+    (nu == 0 || D == 0) && return zeros(T, D, nu)
     ng = length(γ)
-    T = eltype(S)
-    @inbounds for k in axes(S, 2)
-        u = Int(u_lo) + k - 1
-        surv = one(T)
-        for j in axes(S, 1)
-            hj = logistic(logit_h0[j] + γ[clamp(u + j - grid_start, 1, ng)])
-            surv *= (one(T) - hj)
-            S[j, k] = surv
-            H === nothing || (H[j, k] = hj)
-        end
-    end
-    return nothing
+    stay = [
+        one(T) - logistic(
+            logit_h0[j] + γ[clamp(Int(u_lo) + k - 1 + j - grid_start, 1, ng)]
+        )
+            for k in 1:nu, j in 1:D
+    ]
+    survival = Recurrence([true])(stay; history = ones(T, nu, 1))
+    return permutedims(survival)
 end
 
 """
@@ -3358,8 +3324,10 @@ end
 [`onset_report_anchor`](@ref) for every onset date the delay-CDF table
 [`onset_report_cdf_table`](@ref) spans, its column `k` being onset date
 `u_lo + k - 1`. This is the form [`onset_reporting_model`](@ref) calls, off
-the table it shares with [`onset_report_moments`](@ref). Pure, top-level,
-one indexed loop over the table and no further hazard evaluation.
+the table it shares with [`onset_report_moments`](@ref), with no further
+hazard evaluation. Each onset date's window reads forward from it, so the
+series is a ComposableRecurrences `Convolution` in reversed time with a
+time-varying kernel.
 """
 function onset_report_anchor_series(
         cdf_table::AbstractMatrix,
@@ -3368,24 +3336,24 @@ function onset_report_anchor_series(
     D = size(cdf_table, 1)
     nu = size(cdf_table, 2)
     T = promote_type(eltype(cdf_table), eltype(a))
-    na = length(a)
-    out = Vector{T}(undef, nu)
-    ## `G(u, d)` shares one survival product across every `d`, and its
-    ## denominator does not depend on `d`, so the weighted sum runs off the
-    ## onset date's table column rather than rebuilding `G` per delay.
+    (nu == 0 || D == 0) && return zeros(T, nu)
+    u_hi = Int(u_lo) + nu - 1
+    ## The delay PMF of each onset date, the normalised CDF's differences.
+    G = cdf_table ./ permutedims(safe_rate.(cdf_table[D, :]))
+    g = vcat(G[1:1, :], diff(G; dims = 1))
+    ## `anchor(u) = Σ_d g(u, d) a[min(u + d, na)]` reads forward from `u`, so
+    ## it is a causal convolution in reversed time with onset date `u` at
+    ## reversed time `m + 1 - u`. The series is extended by its last value to
+    ## cover every onset date, and the days past its end take that value as
+    ## history.
+    ext = vcat(a, fill(a[end], max(u_hi - length(a), 0)))
+    m = length(ext)
+    K = zeros(eltype(g), D, m)
     @inbounds for k in 1:nu
-        u = Int(u_lo) + k - 1
-        invden = inv(safe_rate(D > 0 ? cdf_table[D, k] : zero(T)))
-        g_prev = zero(T)
-        acc = zero(T)
-        for d in 0:(D - 1)
-            g_cur = cdf_table[d + 1, k] * invden
-            acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
-            g_prev = g_cur
-        end
-        out[k] = acc
+        K[:, m + 1 - (Int(u_lo) + k - 1)] .= view(g, :, k)
     end
-    return out
+    y = Convolution(TimeVarying(K))(reverse(ext); history = fill(a[end], D - 1))
+    return reverse(y)[Int(u_lo):u_hi]
 end
 
 """
@@ -3649,8 +3617,7 @@ function onset_report_expected_total(
     D == 0 && return zero(T)
     t = Int(as_of)
     ge = max(min(t, length(onsets)), 0)
-    S = Matrix{T}(undef, D, ge)
-    _onset_columns!(nothing, S, logit_h0, γ, grid_start, 1)
+    S = _onset_survival(logit_h0, γ, grid_start, 1, ge)
     na = length(alpha)
     total = zero(T)
     @inbounds for u in 1:ge

@@ -265,6 +265,10 @@ A pre-computed `seed` of length `L < n` fills the first `L` days (see
 runs for days `L+1 … n`. Returns the length-`n` infection trajectory. The
 output element type is promoted from `Rt`, `g`, `seed` and `N`.
 
+The recursion is a ComposableRecurrences `Recurrence` over `g` with a
+hazard `Depletion` of `N`, run from day `L + 1` with the seed as its
+history. The package supplies its derivative rules.
+
 !!! note "Multi-patch analogue"
     See [`patch_infections`](@ref) for the meta-population extension
     with between-patch importation.
@@ -273,49 +277,13 @@ function renewal_infections(
         Rt::AbstractVector, g::AbstractVector,
         seed::AbstractVector, N::Real
     )
-    return renewal_infections_with_state(Rt, g, seed, N).infections
-end
-
-"""
-The renewal trajectory with the state it was built from, as
-`(; infections, force, susceptible)`: the per-day force
-`Σ_{s ≥ 1} I_{t−s} g_s` and the pool left at the end of each day, which is
-the pool after the seed on the seeded days. [`renewal_infections`](@ref)
-returns the first; the derivative rule needs the others, which it would
-otherwise have to rebuild from a copy of this loop.
-
-Each day's force is one `dot` of the most recent infections with the
-generation interval reversed, a single BLAS call on float arrays.
-"""
-function renewal_infections_with_state(
-        Rt::AbstractVector, g::AbstractVector,
-        seed::AbstractVector, N::Real
-    )
     n = length(Rt)
     L = length(seed)
-    G = length(g)
     Tp = promote_type(eltype(Rt), eltype(g), eltype(seed), typeof(float(N)))
-    I = zeros(Tp, n)
-    force = zeros(Tp, n)
-    S = zeros(Tp, n)
-    @inbounds for j in 1:min(L, n)
-        I[j] = seed[j]
-    end
-    pool = convert(Tp, _pool_after_seed(N, view(I, 1:min(L, n))))
-    @inbounds for j in 1:min(L, n)
-        S[j] = pool
-    end
-    rg = reverse(g)
-    for t in (L + 1):n
-        k = min(t - 1, G)
-        f = dot(view(rg, (G - k + 1):G), view(I, (t - k):(t - 1)))
-        force[t] = f
-        x = Rt[t] * f / N
-        I[t] = -pool * expm1(-x)
-        pool *= exp(-x)
-        S[t] = pool
-    end
-    return (; infections = I, force, susceptible = S)
+    L >= n && return convert(Vector{Tp}, seed[1:n])
+    depletion = Depletion(N; pools = (S = _pool_after_seed(N, seed),))
+    renewal = Recurrence(g; modifiers = (depletion,))
+    return renewal(Rt; history = seed, start = L + 1, prepend = true)
 end
 
 """
@@ -353,23 +321,6 @@ end
 end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
-
-## Importation intensity of origin `q` on day `t`. A scalar applies to every
-## origin and every day; a matrix carries one level per origin over time.
-@inline _eps(e::Real, q::Integer, t::Integer) = e
-@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
-
-## Renewal force of patch `p` on day `t`, `Σ_{s ≥ 1} I[p, t − s] g[s]` over
-## the lags inside the grid. Shared by `patch_infections` and its rule.
-## `@simd` lets the sum reassociate, so it can differ from a sequential sum
-## in the last bits.
-@inline function _patch_force(I::AbstractMatrix, g::AbstractVector, p, t)
-    f = zero(eltype(I))
-    @inbounds @simd for s in 1:min(t - 1, length(g))
-        f += I[p, t - s] * g[s]
-    end
-    return f
-end
 
 """
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N)
@@ -425,29 +376,17 @@ and `S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`.
 `(n_patches, n_days)` where row `p` is the daily infection trajectory for
 patch `p`. The first `L` days are copied from `seeds_matrix` and the
 remaining days are the renewal recursion with importation. `importation` is
-the matching matrix of infections each patch received from the others, the
-arrivals term alone before depletion rather than the net of arrivals and
+the matching matrix of infections each patch received from the others,
+the arrivals term alone before depletion rather than the net of arrivals and
 departures. The element type is promoted from all input types.
-AD-transparent under Mooncake.
+
+The recursion is a ComposableRecurrences `Recurrence` over `g` with two
+modifiers: `Redistribute` of the movement matrix of `K` and `epsilon`, then
+a hazard `Depletion` of each patch's pool. It runs from day `L + 1` with
+the seeds as its history, and `importation` is the trace of the
+redistribution. The package supplies the derivative rules.
 """
 function patch_infections(
-        Rt_matrix::AbstractMatrix, g::AbstractVector,
-        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
-    )
-    st = patch_infections_with_state(
-        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N
-    )
-    return (; st.infections, st.importation)
-end
-
-"""
-The [`patch_infections`](@ref) trajectories with the state they were built
-from: `susceptible`, the pool each patch has left at the end of each day
-(the pool after its seed on the seeded days), and `rate`, each day's
-depletion rate `y_{p,t} / N_p`. The derivative rule reads both.
-"""
-function patch_infections_with_state(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
         epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
@@ -460,63 +399,26 @@ function patch_infections_with_state(
         epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon),
         float(eltype(N))
     )
-    I = zeros(Tp, np, n)
-    imports = zeros(Tp, np, n)
-    S = zeros(Tp, np, n)
-    rate = zeros(Tp, np, n)
-    outflow = _patch_outflow(Tp, importation_kernel, np)
-    pool = zeros(Tp, np)
-    @inbounds for p in 1:np
-        for j in 1:min(L, n)
-            I[p, j] = seeds_matrix[p, j]
-        end
-        pool[p] = _pool_after_seed(N[p], view(I, p, 1:min(L, n)))
-        for j in 1:min(L, n)
-            S[p, j] = pool[p]
-        end
+    if L >= n
+        infections = convert(Matrix{Tp}, seeds_matrix[:, 1:n])
+        return (; infections, importation = zeros(Tp, np, n))
     end
-    gen = zeros(Tp, np)
-    @inbounds for t in (L + 1):n
-        ## What each patch generates today from its own renewal force.
-        for p in 1:np
-            gen[p] = Rt_matrix[p, t] * _patch_force(I, g, p, t)
-        end
-        ## Importation redistributes transmission rather than adding to it. A
-        ## fraction `epsilon * K[p, q]` of what `q` generates is realised in
-        ## `p` instead of at home, so `q` is debited exactly what the
-        ## destinations are credited. The intensity belongs to the origin, so
-        ## `p` is debited at its own rate and credited at each sender's.
-        for p in 1:np
-            arrivals = zero(Tp)
-            for q in 1:np
-                q == p && continue
-                arrivals += _eps(epsilon, q, t) *
-                    importation_kernel[p, q] * gen[q]
-            end
-            imports[p, t] = arrivals
-            y = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
-                arrivals
-            x = y / N[p]
-            rate[p, t] = x
-            I[p, t] = -pool[p] * expm1(-x)
-            pool[p] *= exp(-x)
-            S[p, t] = pool[p]
-        end
-    end
-    return (; infections = I, importation = imports, susceptible = S, rate)
-end
-
-## What each of the first `np` origins sends away per unit of its own
-## generated infections: the importation kernel's off-diagonal column sums
-## over those patches, constant in time. The kernel may cover more patches
-## than the model runs, so `np` comes from the caller.
-function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
-    outflow = zeros(T, np)
-    @inbounds for q in 1:np, r in 1:np
-        r == q && continue
-        outflow[q] += K[r, q]
-    end
-    return outflow
+    ## The kernel may cover more patches than the model runs.
+    K = size(importation_kernel, 1) == np ? importation_kernel :
+        importation_kernel[1:np, 1:np]
+    pool0 = [_pool_after_seed(N[p], view(seeds_matrix, p, :)) for p in 1:np]
+    modifiers = (
+        Redistribute(movement(K, epsilon)),
+        Depletion(PerStratum(N); pools = (S = PerStratum(pool0),)),
+    )
+    renewal = Recurrence(g; modifiers)
+    infections, trace = renewal(
+        Rt_matrix; history = seeds_matrix, start = L + 1, prepend = true,
+        trace = true
+    )
+    arrivals = first(trace.modifiers)
+    importation = hcat(zeros(eltype(arrivals), np, L), arrivals)
+    return (; infections, importation)
 end
 
 """
@@ -540,19 +442,13 @@ result has length `length(a) + length(b) - 1`. Its mass equals
 `sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
 build the infection→detection delay (incubation ⊕ onset-to-detection) and
 the infection→death delay (incubation ⊕ onset-to-death) for the exports
-streams from their component PMFs. Type-stable and AD-transparent.
+streams from their component PMFs. It is a ComposableRecurrences
+`Convolution` of `a` over `b` padded with `length(a) - 1` zeros.
 """
 function convolve_pmf(a::AbstractVector, b::AbstractVector)
     (isempty(a) || isempty(b)) &&
         return zeros(promote_type(eltype(a), eltype(b)), 0)
-    na = length(a)
-    nb = length(b)
-    Tp = promote_type(eltype(a), eltype(b))
-    y = zeros(Tp, na + nb - 1)
-    @inbounds for i in 1:na, j in 1:nb
-        y[i + j - 1] += a[i] * b[j]
-    end
-    return y
+    return Convolution(a)(vcat(b, zeros(eltype(b), length(a) - 1)))
 end
 
 """
