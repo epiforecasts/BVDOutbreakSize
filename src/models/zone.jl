@@ -1,5 +1,5 @@
 # Health-zone composition model, the second stage of a two-stage Markov
-# melding. Stage one is the four-patch joint fit. Stage two takes its
+# melding. Stage one is the joint province model. Stage two takes its
 # posterior as the prior on the quantity the two stages share and fits the
 # per-zone confirmed-case and death tables as a within-patch composition,
 # with no feedback to stage one.
@@ -49,6 +49,8 @@ const _ZONE_PARENT_KEYS = (
     ascertainment_sd = :province_ascertainment_sd,
     province_ascertainment = :province_ascertainment,
     province_severity = :province_cfr_relative,
+    cfr = :CFR,
+    province_cfr = :CFR_patch,
     rho = :province_composition_rho,
     rho_death = :province_death_composition_rho,
     drift_sd = :region_drift_sd,
@@ -1590,13 +1592,17 @@ a death table do not disperse alike. The two do not share one.
 
 Cases observe incidence times case-finding and deaths incidence times
 lethality, so each composition carries its own multiplier over the zones of
-a patch, [`relative_multiplier`](@ref): relative ascertainment on the cases
-and relative fatality on the deaths. Both are the province model's own
-per-province construction, log contrasts summing to zero within the group,
-partially pooled at a scale whose prior is the province posterior for the
-same scale between provinces. A composition identifies only the product of
-a multiplier and the incidence split, so the pooling is what separates
-them: as the scale shrinks the shares weight zones by incidence alone.
+a patch: relative ascertainment on the cases and relative fatality on the
+deaths. Both are the province model's own per-province construction,
+contrasts summing to zero within the group and partially pooled. The
+ascertainment is a log multiplier ([`relative_multiplier`](@ref)) whose
+scale takes its prior from the province posterior. The fatality is a logit
+shift of the province's case-fatality ratio, at the province model's
+posterior mean on the logit scale, so each zone's ratio is a probability
+and its multiplier on the deaths is the zone ratio over the province one.
+A composition identifies only the product of a multiplier and the
+incidence split, so the pooling is what separates them: as the scale
+shrinks the shares weight zones by incidence alone.
 
 Both are relative to the zone's own province. A factor common to a patch
 cancels in a within-patch composition, so the province level of each
@@ -1641,7 +1647,8 @@ n_knots)`, `share_knots_zone` `(n_zones × n_knots)`, `delta_T_zone`,
 parameters, in the order of `_ZONE_DELAY_KEYS`),
 `zone_ascertainment_national` and `zone_severity_national` (the same
 multipliers against the national average, the province model's contrast
-times the zone's own),
+times the zone's own), `zone_severity_log_odds` (the zone's logit shift
+of its province's case-fatality ratio),
 `correlation_reference_zone` (`ρ_corr`) and `correlation_length_zone`
 (`ℓ`), `parent_eta_zone` (the whitened shared draw `η`),
 `parent_patch_T_zone` (the sampled patch infections on the last grid day)
@@ -1667,7 +1674,7 @@ quantity is computed on the fitted days as without a forecast.
         zd;
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
-        severity_sd_prior = truncated(Normal(0, 0.1); lower = 0),
+        severity_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         mixing_within_prior = Beta(1, 20),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
         offset_prior = Normal(0, 1),
@@ -1709,9 +1716,10 @@ quantity is computed on the fitted days as without a forecast.
     ## Deaths per infection are taken as near-uniform across the zones of a
     ## patch, which is what lets the death composition pin the incidence
     ## split and the case composition identify ascertainment as the
-    ## residual. The prior is tight and fixed rather than inherited, the
-    ## asymmetry the province model makes between death ascertainment and
-    ## provincial lethality.
+    ## residual. The prior is tight and fixed rather than inherited. Its
+    ## scale is on the logit scale, where a shift `s` moves the log ratio by
+    ## about `(1 - CFR) s`, so 0.15 is about 0.1 on the log scale at the prior
+    ## mean ratio of 0.33, as for the provinces.
     σ_severity ~ severity_sd_prior
     z_severity ~ product_distribution(fill(offset_prior, n_contrast))
     ## Sampled only when used, or they would be prior-only dimensions.
@@ -1834,10 +1842,18 @@ quantity is computed on the fitted days as without a forecast.
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
     D = zone_binned_increments(def.death_bin, fw.infections, def.zone_pre .* w0)
-    sev = relative_multiplier(
+    ## Relative fatality on the logit scale against the province ratio, so
+    ## each zone's ratio is a probability and a zero contrast is the
+    ## province's. Deaths scale with the ratio, so the multiplier on the
+    ## shares is the zone ratio over the province one, at the province
+    ## model's posterior-mean ratio.
+    sev_logit = relative_contrast(
         z_severity, σ_severity, zd.multiplier_basis
     )
+    sev = logistic.(zd.province_cfr_logit .+ sev_logit) ./
+        logistic.(zd.province_cfr_logit)
     zone_severity_sd := σ_severity
+    zone_severity_log_odds := sev_logit
     zone_severity_relative := sev
     zone_severity_national := zd.province_severity .* sev
     @addlogprob! zone_composition_logpdf(
@@ -1999,7 +2015,9 @@ the shared quantity of [`zone_meld_block`](@ref), which deforms the
 centres and draws the delays.
 Returns `(; log_infections, g, f, death_pmf, delay_log_draws,
 origin_epsilon, import_log_odds, priors, province_ascertainment,
-province_severity)`.
+province_severity, province_cfr_logit)`, the last the mean logit of each
+province's case-fatality ratio (one national value when the chain has no
+province death split).
 """
 function zone_parent_inputs(chn)
     chn = _zone_parent_chain(chn)
@@ -2032,6 +2050,7 @@ function zone_parent_inputs(chn)
         chn, keys_.province_ascertainment
     )
     province_severity = _mean_parent_vector(chn, keys_.province_severity)
+    province_cfr_logit = _mean_parent_cfr_logit(chn)
     import_log_odds = _mean_parent_log_odds(
         chn, keys_.importation, keys_.infections
     )
@@ -2052,8 +2071,23 @@ function zone_parent_inputs(chn)
     return (;
         log_infections = logI, g, f, death_pmf, delay_log_draws,
         origin_epsilon, import_log_odds, priors,
-        province_ascertainment, province_severity,
+        province_ascertainment, province_severity, province_cfr_logit,
     )
+end
+
+## Mean over the parent's draws of the logit of each province's
+## case-fatality ratio, or of the national ratio, one value for every
+## patch, when the chain has no province death split.
+function _mean_parent_cfr_logit(chn)
+    keys_ = _ZONE_PARENT_KEYS
+    _has_key(chn, keys_.province_cfr) ||
+        return [mean(logit.(_zone_parent_draws(chn, keys_.cfr)))]
+    vs = _draw_vectors(chn, keys_.province_cfr)
+    m = zeros(Float64, length(first(vs)))
+    for v in vs
+        m .+= logit.(Float64.(v))
+    end
+    return m ./ length(vs)
 end
 
 ## One zone's cumulative series, or `nothing` when the table omits it.
@@ -2561,6 +2595,9 @@ function zone_fit_inputs(
         province_severity = _zone_province_factor(
             parent.province_severity, patch_of_zone
         ),
+        province_cfr_logit = Float64[
+            parent.province_cfr_logit[min(p, end)] for p in patch_of_zone
+        ],
         forecast,
     )
     dates = [obs.seeding + Day(d - 1) for d in days]

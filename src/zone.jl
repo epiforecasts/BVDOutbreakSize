@@ -1186,8 +1186,11 @@ Calibration of the composition per patch, in the columns of
 allocated patch total, the mean [`bias_sample`](@ref) of the observed
 count against the predictive counts of [`zone_composition_draws`](@ref)
 and the fraction of cells inside the central 50% and 90% predictive
-intervals. One row per patch and an `All zones` row. `stream` picks the
-composition, `:cases` or `:deaths`.
+intervals. One row per patch with at least one scored cell and an
+`All zones` row. A patch with no positive allocated total at any vintage
+(no zone counts reported for that stream yet) has nothing to score, so it
+has no row rather than one of `NaN`. `stream` picks the composition,
+`:cases` or `:deaths`.
 """
 function zone_composition_calibration(
         chn, inputs; stream::Symbol = :cases,
@@ -1218,11 +1221,11 @@ function zone_composition_calibration(
         (p, zs) for (p, zs) in enumerate(inputs.patch_ranges)
             if !isempty(zs)
     ]
-    rows = [row(inputs.patch_labels[p], cells(zs)) for (p, zs) in patches]
-    push!(
-        rows,
-        row("All zones", reduce(vcat, cells(zs) for (_, zs) in patches))
-    )
+    scored = [(p, cells(zs)) for (p, zs) in patches]
+    filter!(pc -> !isempty(last(pc)), scored)
+    rows = [row(inputs.patch_labels[p], cs) for (p, cs) in scored]
+    all_cells = reduce(vcat, last.(scored); init = Tuple{Int, Int}[])
+    push!(rows, row("All zones", all_cells))
     return _prettify(DataFrame(rows))
 end
 

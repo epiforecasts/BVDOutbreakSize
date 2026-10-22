@@ -56,7 +56,7 @@
 
 ### Model
 
-- Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, each well mixed, so spread inside a province is not represented.
+- Each affected province is one well-mixed patch, so spread inside a province is not represented. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their estimates are informed mostly by the priors their parameters share with the other patches.
 - There is no mobility or origin-destination data for this outbreak, so the [gravity kernel](@ref "Mixing and importation") coupling the provinces is assumed, not measured.
 - Provincial testing enters the prior, not the likelihood, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model carries one national bed capacity and demand, so it cannot represent local saturation.

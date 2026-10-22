@@ -147,6 +147,9 @@
             Symbol("deaths_state.od_state.ad.α") => fill(2.151, ndraw, 1),
             Symbol("deaths_state.od_state.ad.θ") => fill(3.906, ndraw, 1),
             :C_T => fill(sum(I_bar), ndraw, 1),
+            ## The national case-fatality ratio, the zones' fatality centre
+            ## when the parent has no province death split.
+            :CFR => fill(0.4, ndraw, 1),
             ## The province model's own between-patch movement: a per-origin
             ## intensity and the arrivals into each patch, a twentieth of
             ## the second patch's infections and none into the first.
@@ -1932,6 +1935,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone
+    using StatsFuns: logit, logistic
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1945,6 +1949,9 @@ end
             ),
             :province_cfr_relative => reshape(
                 [[0.8, 1.25] for _ in 1:4], 4, 1
+            ),
+            :CFR_patch => reshape(
+                [[0.3, 0.6], [0.2, 0.7], [0.3, 0.6], [0.2, 0.7]], 4, 1
             )
         )
     )
@@ -1958,6 +1965,12 @@ end
     @test zd.province_ascertainment[1:5] == fill(1.5, 5)
     @test zd.province_ascertainment[6:8] ≈ fill(1 / 1.5, 3)
     @test zd.province_severity[1:5] == fill(0.8, 5)
+    ## The fatality centre is each province's mean logit ratio, and the
+    ## national one for a parent without the province split.
+    @test zd.province_cfr_logit[1:5] ≈
+        fill((logit(0.3) + logit(0.2)) / 2, 5)
+    @test zd.province_cfr_logit[6:8] ≈
+        fill((logit(0.6) + logit(0.7)) / 2, 3)
     chn = sample(
         bvd_zone(zd), Prior(), 4;
         chain_type = FlexiChains.VNChain, progress = false
@@ -1966,13 +1979,19 @@ end
     nat = [collect(v) for v in vec(collect(chn[:zone_ascertainment_national]))]
     sev = [collect(v) for v in vec(collect(chn[:zone_severity_relative]))]
     sevn = [collect(v) for v in vec(collect(chn[:zone_severity_national]))]
+    lo = [collect(v) for v in vec(collect(chn[:zone_severity_log_odds]))]
+    c = logistic.(zd.province_cfr_logit)
     for i in eachindex(rel)
         @test nat[i] ≈ zd.province_ascertainment .* rel[i]
         @test sevn[i] ≈ zd.province_severity .* sev[i]
+        ## The fatality multiplier is the zone ratio, the province ratio
+        ## shifted on the logit scale, over the province ratio.
+        @test sev[i] ≈ logistic.(zd.province_cfr_logit .+ lo[i]) ./ c
         ## The within-patch contrast still has geometric mean one per patch,
         ## and the national one carries its province's level.
         for zs in inputs.patch_ranges
             @test prod(rel[i][zs])^(1 / length(zs)) ≈ 1 rtol = 1.0e-8
+            @test abs(sum(lo[i][zs])) < 1.0e-10
         end
     end
     ## The fatality scale is the model's own tight prior, not the parent's,
@@ -1985,6 +2004,7 @@ end
     ## reported multipliers agree.
     zd0 = zone_fit_inputs(syn.chain, syn.obs; kw...).model_data
     @test all(isone, zd0.province_ascertainment)
+    @test zd0.province_cfr_logit ≈ fill(logit(0.4), size(zd0.counts, 1))
     chn0 = sample(
         bvd_zone(zd0), Prior(), 2;
         chain_type = FlexiChains.VNChain, progress = false
@@ -2109,6 +2129,39 @@ end
         sum(rates) > eps() || continue
         @test shares[1, zs, v] ≈ rates ./ sum(rates)
     end
+end
+
+@testitem "zone compositions: a patch with nothing to score has no row" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_composition_calibration,
+        plot_stream_calibration
+    using Turing: sample, Prior
+    using DataFrames: nrow
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    zd = inputs.model_data
+    chn = sample(
+        bvd_zone(zd), Prior(), 6; chain_type = FlexiChains.VNChain,
+        progress = false
+    )
+    ## The second patch has reported no zone deaths at any vintage, as a
+    ## newly added patch can. Its death composition has no cell to score.
+    zs = inputs.patch_ranges[2]
+    zd.death_counts[zs, :] .= 0
+    cases = zone_composition_calibration(chn, inputs; stream = :cases)
+    deaths = zone_composition_calibration(chn, inputs; stream = :deaths)
+    @test nrow(cases) == 3
+    @test deaths.Stream == [inputs.patch_labels[1], "All zones"]
+    @test all(>(0), deaths.Vintages)
+    for col in ("Bias", "50% coverage", "90% coverage")
+        @test all(isfinite, deaths[!, col])
+    end
+    @test deaths[end, "Vintages"] == deaths[1, "Vintages"]
+    ## The tables plot together, as the in-sample zone page draws them.
+    @test plot_stream_calibration(vcat(cases, deaths)) !== nothing
 end
 
 @testitem "the forecast inputs carry the mixing to the horizon" setup = [

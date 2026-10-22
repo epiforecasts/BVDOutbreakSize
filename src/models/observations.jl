@@ -4359,6 +4359,10 @@ function _composition_totals(obs_increments::AbstractMatrix, modelled_confirmed)
     return [sum(@view obs_increments[:, i]) for i in axes(obs_increments, 2)]
 end
 
+## A probability `p` shifted by `s` on the logit scale: in (0, 1) for any
+## finite `s`, and `p` itself at `s = 0`.
+_logit_shift(p::Real, s::AbstractVector) = logistic.(logit(p) .+ s)
+
 """
 Per-province composition of the confirmed cases, from the Tableau 1
 spatial tables.
@@ -4415,16 +4419,22 @@ zones). `ρ → 0` recovers a plain Multinomial split.
   ascertainment contrast. `nothing` turns the contrast off, so the shares
   are the modelled split alone; the laboratory composition passes that.
 
-`severity_sd_prior` optionally adds a second sum-to-zero log multiplier on
-the shares, partially pooled toward equality. The death composition uses it
-for the per-province case-fatality ratio; the case composition leaves it
-`nothing` and samples nothing. A composition identifies only the product of
-the two multipliers, so their priors are what separates them.
+`severity_sd_prior` optionally adds a per-patch probability, a sum-to-zero
+contrast on the logit scale about `severity_baseline`, partially pooled
+toward it. The death composition uses it for the per-province
+case-fatality ratio about the national one, so each province's ratio lies
+in (0, 1) and a zero contrast is the national ratio. Its multiplier on the
+shares is the patch probability over the baseline. The case composition
+leaves both `nothing` and samples nothing. A composition identifies only
+the product of the two multipliers, so their priors are what separates
+them.
 
 Returns `(; shares, rho, obs_increments, province_ascertainment,
-ascertainment_sd, province_severity, severity_sd)`
+ascertainment_sd, province_severity, severity_log_odds, severity_sd)`
 where `shares[p, i]` is the modelled expected share of patch `p` at vintage
-`i`.
+`i`, `province_severity` the severity multiplier and `severity_log_odds`
+the logit contrast, so the patch probability is
+`logistic(logit(severity_baseline) + severity_log_odds[p])`.
 """
 @model function province_composition_model(
         obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
@@ -4432,6 +4442,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         ascertainment_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         severity_sd_prior = nothing,
+        severity_baseline = nothing,
         ascertainment_offset_prior = Normal(0, 1),
         basis = sum_to_zero_basis(size(modelled_confirmed, 1))
     )
@@ -4484,26 +4495,35 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     end
     ## Optional second multiplier, per-province severity. The death
     ## composition uses it for the per-province case-fatality ratio, partially
-    ## pooled toward the national value on the log scale and constrained to
+    ## pooled toward the national value on the logit scale and constrained to
     ## sum to zero, so the national ratio keeps its meaning and only the
-    ## provincial contrast lives here. The case composition passes `nothing`
-    ## and samples nothing.
+    ## provincial contrast lives here. On the logit scale each province's
+    ## ratio is a probability by construction, and `τ_sev -> 0` recovers the
+    ## common ratio. The deaths in a province scale with its ratio, so the
+    ## multiplier on the shares is that ratio over the national one. The case
+    ## composition passes `nothing` and samples nothing.
     ##
     ## A composition identifies only the product `sev_p * asc_p`, so the two
-    ## are separated by their priors and nothing else. On the death side the
-    ## case-fatality ratio takes the looser prior and death confirmation the
-    ## tight one, since near-uniform death ascertainment is the more
-    ## defensible half of the identifying assumption. Read `severity_sd`
+    ## are separated by their priors and nothing else. On the death side
+    ## [`bvd_joint`](@ref) gives both tight priors of about the same spread
+    ## on the log scale, since near-uniform death ascertainment and lethality
+    ## across provinces is the identifying assumption. Read `severity_sd`
     ## against its prior: a posterior that has not moved says the split is
     ## the prior's.
     τ_sev = 0.0
     sev = ones(np)
+    sev_logit = zeros(np)
     if severity_sd_prior !== nothing
+        severity_baseline === nothing && error(
+            "province_composition_model: a severity contrast needs the " *
+                "severity_baseline it shifts."
+        )
         τ_sev ~ severity_sd_prior
         z_sev ~ product_distribution(
             fill(ascertainment_offset_prior, np - 1)
         )
-        sev = exp.(sum_to_zero(sum_to_zero_factor(basis, τ_sev), z_sev))
+        sev_logit = sum_to_zero(sum_to_zero_factor(basis, τ_sev), z_sev)
+        sev = _logit_shift(severity_baseline, sev_logit) ./ severity_baseline
     end
     ## Expected share of each patch at each vintage.
     shares = composition_shares(asc .* sev, modelled_confirmed)
@@ -4521,6 +4541,7 @@ where `shares[p, i]` is the modelled expected share of patch `p` at vintage
     return (;
         shares, rho = ρ, obs_increments = split_state.obs_increments,
         province_ascertainment = asc, ascertainment_sd = τ_asc,
-        province_severity = sev, severity_sd = τ_sev,
+        province_severity = sev, severity_log_odds = sev_logit,
+        severity_sd = τ_sev,
     )
 end

@@ -386,7 +386,7 @@ full generation interval of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`, depleting a pool of
 `population`. The default is the summed 2019 INS resident population of the
-seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
+eight affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
 The total outbreak age is `T = m·G + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
@@ -1410,7 +1410,7 @@ as the national walk, linearly interpolated to the daily grid.
 intact, so the national streams see exactly the `Rt` process the headline
 model fits and it is the target the provinces pool toward. The provinces
 are not equally observed: Ituri carries most of the laboratory positives
-and the pooled `other` patch few. Shrinking toward a common trend lets the
+and the five smallest patches few. Shrinking toward a common trend lets the
 sparse patches borrow strength from Ituri and deviate only where the data
 insist. With `μ(t)` present the deviation covariance `Σ` is still
 free, so the cross-patch correlation is learned rather than assumed.
@@ -1455,10 +1455,10 @@ the correlation carries information the sds do not.
 ### What the data can and cannot identify here
 
 The composition of the confirmed cases identifies the contrast between
-provinces. The pooled `other` patch carries little signal. Expect `Ω` to
-be largely prior-driven and that patch's `Rt` to be pinned mostly by the
-deviation prior rather than by data, which is why `Σ` is given a proper
-shrinkage prior rather than a flat one.
+provinces. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi carry
+little signal. Expect `Ω` to be largely prior-driven and those patches'
+`Rt` to be pinned mostly by the deviation prior rather than by data, which
+is why `Σ` is given a proper shrinkage prior rather than a flat one.
 
 `σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
 province, a fixed ratio between them. It is a special case of this model rather than an

@@ -835,37 +835,16 @@ end
 ] begin
     using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
+    using Random: Xoshiro
+    using BVDOutbreakSize: load_observations, production_joint,
+        default_breakpoint
 
+    ## The headline joint scores the occupancy, bed and in-care streams.
     obs = load_observations()
     @test !isempty(obs.isolation_history.counts)
-    breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(
-        obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        treatment_confirmed_incare_history =
-            obs.treatment_confirmed_incare_history,
-        treatment_suspect_incare_history =
-            obs.treatment_suspect_incare_history,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = breakpoint,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days
-    )
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(
-        m, Prior(), 30;
+        Xoshiro(1), m, Prior(), 30;
         chain_type = FlexiChains.VNChain, progress = false
     )
     C_T = vec(Array(chn[:C_T]))

@@ -15,12 +15,15 @@ dropped when the geojson is read.
 """
 const ZONE_MAP_PROVINCES = [
     "Ituri", "Nord-Kivu", "Sud-Kivu", "Haut-Uele",
-    "Tshopo", "Bas-Uele", "Sud-Ubangi",
+    "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
 ]
 
-## Fill colours by patch index: the patch figures' three, then the pooled
-## fourth patch.
-const _ZONE_PATCH_COLOURS = [:firebrick, :steelblue, :seagreen, :darkorange]
+## Colours by patch index, one per patch, shared by the patch and zone
+## figures so a province keeps its colour across them.
+const _ZONE_PATCH_COLOURS = [
+    :firebrick, :steelblue, :seagreen, :darkorange,
+    :mediumpurple, :teal, :goldenrod, :saddlebrown,
+]
 
 """
 $(TYPEDSIGNATURES)
