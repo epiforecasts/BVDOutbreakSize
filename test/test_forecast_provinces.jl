@@ -283,6 +283,11 @@ end
         merge(state, (; occupancy_mean = fill(50.0, n))), fd, cap, 10.0
     )
     @test returned(half, rand(Xoshiro(1), half)).bed_shortfall == [0.0, 0.0]
+    ## A one-day horizon keeps one column per patch.
+    one_day = treatment_forecast_model(state, 11:11, cap, 10.0)
+    r1 = returned(one_day, rand(Xoshiro(6), one_day))
+    @test size(r1.held) == (3, 1)
+    @test r1.bed_shortfall ≈ [30.0]
     ## With no recorded capacity nothing is censored.
     nocap = treatment_forecast_model(
         state, fd, (; days = Int[], counts = Int[]), 10.0

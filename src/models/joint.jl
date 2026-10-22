@@ -121,10 +121,14 @@ end
 
 ## Each patch's share of the national occupancy mean on each day, the
 ## columns of `demand` (one row per patch) setting the shares.
+## A one-day horizon still gives a one-column matrix.
 function _held_by_patch_days(occupied::AbstractVector, demand::AbstractMatrix)
-    return reduce(
-        hcat, [_held_by_patch(occupied[j], demand[:, j]) for j in eachindex(occupied)]
-    )
+    T = promote_type(Float64, eltype(occupied), eltype(demand))
+    held = Matrix{T}(undef, size(demand, 1), length(occupied))
+    for (j, o) in enumerate(occupied)
+        held[:, j] = _held_by_patch(o, view(demand, :, j))
+    end
+    return held
 end
 
 """
