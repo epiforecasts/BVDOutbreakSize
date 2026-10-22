@@ -2248,13 +2248,10 @@ function treatment_flow_defaults()
         severity = isolation_severity_model(),
         dispersion = surveillance_dispersion_model(),
         ## SD of the flow dispersion about the stocks' on the log(1/sqrt(k))
-        ## scale: log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), 1.25). One SD
-        ## moves k by a factor e^2.5 ≈ 12, and the central 90% spans a factor
-        ## of about 61 either side of the stocks' k. Flows in the tens that
-        ## scatter 2 to 5 times their Poisson variance need k_flow =
-        ## mean/(index − 1), about 3 to 40. From a stock k of 546 that is an
-        ## offset of 1.3 to 2.6, between 1 and 2.1 SDs.
-        flow_dispersion_sd = 1.25,
+        ## scale, the log ratio of the two overdispersion CVs. log(10)/2 puts
+        ## a tenfold CV ratio at two SDs (95% within a factor of 10 either
+        ## way) and a hundredfold one at four. See `treatment_flow_model`.
+        flow_dispersion_sd = log(10) / 2,
         ## In-care fatality modifier prior: β_iso on the infection CFR.
         cfr_modifier_prior = Normal(0.0, 0.5),
         ## Small abscond / loss-to-follow-up fraction of occupancy per day.
@@ -2457,9 +2454,30 @@ day to day, while the flows are fresh daily counts in the tens, and the
 two scatter differently about their modelled means. `k_flow` is pooled
 about the stocks' `k` on the `log(1/sqrt(k))` scale, drawn centred as
 `log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), flow_dispersion_sd)` with
-`flow_dispersion_sd = 1.25` by default. The flows' own counts inform
-`k_flow` directly, so the centred draw keeps it from tracking every move
-of `k`. The two sub-stocks are scored against the Tableau 6 census
+`flow_dispersion_sd = log(10)/2 ≈ 1.15` by default. The flows' own counts
+inform `k_flow` directly, so the centred draw keeps it from tracking every
+move of `k`.
+
+The prior is set a priori, not from a fit. For a negative binomial with
+mean `μ` the coefficient of variation is `sqrt(1/μ + 1/k)`, so `1/sqrt(k)`
+is the CV the overdispersion adds beyond Poisson, and the offset
+`log(1/sqrt(k_flow)) − log(1/sqrt(k))` is the log ratio of the flows'
+extra CV to the stocks'. Zero is the shared-dispersion model, so the
+prior is centred there and nests it. The flows can plausibly be noisier.
+A day's admissions, deaths, rule-outs and absconds are read off one
+SitRep table, so a patient reported a day late, a weekend batch or a
+bulk reclassification of suspects after laboratory results moves that
+day's flow by the whole batch. The same slip moves a stock in the
+hundreds by a small fraction and is absorbed the next day. The stocks
+carry errors of their own (census basis changes, revised bed counts,
+centres missing from a report), so the direction is left open and the
+prior is symmetric. We take a CV ratio up to an order of magnitude either
+way as plausible and a hundredfold one as implausible. A Normal with SD
+`log(10)/2` puts a tenfold ratio at two SDs (about 5% of the mass beyond
+it) and a hundredfold one at four (under 1 in 10,000). This is a
+LogNormal ratio `k_flow / k` with log-scale SD `log(10)`, 95% within a
+factor of 100. The Normal's light tails carry that judgement, where a
+Student-t or Cauchy would keep a hundredfold ratio plausible. The two sub-stocks are scored against the Tableau 6 census
 breakdown (`dont confirmés` / `dont suspects`) where published, in place
 of the total on those days. An opt-in occupancy offset Δ(t) on the
 supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))

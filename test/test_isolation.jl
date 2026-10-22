@@ -453,11 +453,12 @@ end
     using Turing: logprior, returned, @varname
     using Distributions: Normal, logpdf
     using Random: MersenneTwister
-    ## log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), 1.25): centred on the
-    ## stocks' dispersion k, sampled directly. Only that term of the prior
-    ## depends on k, so the change in log prior between two values of k is
-    ## the change in that Normal's log density.
-    @test treatment_flow_defaults().flow_dispersion_sd == 1.25
+    ## log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), log(10)/2): centred on
+    ## the stocks' dispersion k, sampled directly. Only that term of the
+    ## prior depends on k, so the change in log prior between two values of
+    ## k is the change in that Normal's log density.
+    σ = treatment_flow_defaults().flow_dispersion_sd
+    @test σ ≈ log(10) / 2
     n = 40
     t = 1:n
     bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
@@ -466,15 +467,15 @@ end
     m(k) = treatment_flow_model(
         empty, bvd_reports_daily, bg_daily, 0.6, 0.4; k_external = k
     )
-    θ = rand(MersenneTwister(4), m(546.0))
+    θ = rand(MersenneTwister(4), m(300.0))
     x = θ[@varname(log_inv_sqrt_k_flow)]
-    lp(k) = logpdf(Normal(-log(k) / 2, 1.25), x)
-    @test logprior(m(546.0), θ) - logprior(m(14.0), θ) ≈ lp(546.0) - lp(14.0)
-    @test returned(m(546.0), θ).k_flow ≈ exp(-2x)
-    ## A flow k of 3 to 40 from a stock k of 546 is an offset of 1.3 to 2.6
-    ## on that scale, 1 to 2.1 prior SDs.
-    off(k) = (log(546.0) - log(k)) / 2 / 1.25
-    @test 1.0 < off(40.0) < off(3.0) < 2.1
+    lp(k) = logpdf(Normal(-log(k) / 2, σ), x)
+    @test logprior(m(300.0), θ) - logprior(m(30.0), θ) ≈ lp(300.0) - lp(30.0)
+    @test returned(m(300.0), θ).k_flow ≈ exp(-2x)
+    ## The offset is the log ratio of the flows' extra CV to the stocks'.
+    ## A tenfold ratio sits at two prior SDs and a hundredfold one at four.
+    @test log(10) / σ ≈ 2
+    @test log(100) / σ ≈ 4
 end
 
 @testitem "admission_headroom: bound above obs, never on the boundary" begin

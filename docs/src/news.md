@@ -35,9 +35,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
   At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
   A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
-  The flow dispersion is centred on the stock dispersion: log(1/√k_flow) is Normal about log(1/√k_iso) with SD 1.25, drawn directly.
-  Flows in the tens with an index of 2 to 5 need a dispersion of about 3 to 40, an offset of 1.3 to 2.6 on that scale from a stock value of 546, or 1 to 2.1 prior SDs.
   As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
+  The flow dispersion is centred on the stock dispersion, with log(1/√k_flow) Normal about log(1/√k_iso) with SD log(10)/2 and drawn directly.
+  The offset is the log ratio of the flows' extra coefficient of variation to the stocks'.
+  Its prior is set a priori, not from a fit: zero nests the shared dispersion, a tenfold ratio either way sits at two SDs and a hundredfold one at four.
+  Those fits show the problem and were not used to set the prior.
   Fitted values change.
   The flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
