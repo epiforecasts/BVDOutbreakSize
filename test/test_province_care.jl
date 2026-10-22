@@ -504,6 +504,36 @@ end
     @test background_admission_share_model([1.0], n, days)().W == ones(1, n)
 end
 
+@testitem "background admission shares on one printed day have a level and no walk" begin
+    using BVDOutbreakSize: background_admission_share_model
+    using Turing: returned, fix, @varname
+    using Random: Xoshiro
+
+    ## A single printed day gives a single knot, so the level is drawn and
+    ## the walk is not.
+    w = [0.6, 0.3, 0.1]
+    n = 40
+    m = background_admission_share_model(w, n, [25])
+    θ = rand(Xoshiro(7), m)
+    @test haskey(θ, @varname(y_bga))
+    @test !haskey(θ, @varname(σ_bga))
+    @test !haskey(θ, @varname(z_bga))
+    r = returned(m, θ)
+    @test size(r.W) == (3, n)
+    @test r.walk_sd == 0
+    @test r.level_sd > 0
+    @test all(c -> isapprox(sum(c), 1; rtol = 1.0e-12), eachcol(r.W))
+    @test all(t -> r.W[:, t] ≈ r.W[:, 1], 1:n)
+    ## A zero level gives back the background suspect shares, and a nonzero
+    ## one moves them by the same amount on every day.
+    flat = fix(m, (; y_bga = zeros(2)))
+    @test all(c -> c ≈ w, eachcol(returned(flat, rand(Xoshiro(8), flat)).W))
+    lvl = fix(m, (; y_bga = [0.5, -0.3]))
+    W = returned(lvl, rand(Xoshiro(9), lvl)).W
+    @test !(W[:, 1] ≈ w)
+    @test all(t -> W[:, t] ≈ W[:, 1], 1:n)
+end
+
 @testitem "background admission shares carry into the patch admissions and demand" begin
     using BVDOutbreakSize: _patch_admissions, _patch_demand,
         _background_stay_survival, convolve_delay
