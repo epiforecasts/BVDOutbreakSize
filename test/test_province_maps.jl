@@ -7,7 +7,7 @@
     CairoMakie.activate!(type = "png")
 
     ## Ituri holds two unit squares side by side, Nord-Kivu one below them,
-    ## Tshopo (pooled into `other`) one to the left and Haut-Uele one above.
+    ## Sud-Kivu (the fourth patch) one to the left and Haut-Uele one above.
     function write_province_geojson()
         sq(x0, y0, x1, y1) = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
         ft(zone, prov, x0, y0) = """{"type": "Feature",
@@ -17,7 +17,7 @@
         fts = join(
             (
                 ft("a", "ituri", 0, 0), ft("b", "ituri", 1, 0),
-                ft("c", "nord_kivu", 0, -1), ft("d", "tshopo", -1, 0),
+                ft("c", "nord_kivu", 0, -1), ft("d", "sud_kivu", -1, 0),
                 ft("e", "haut_uele", 0, 1),
             ), ", "
         )
@@ -25,7 +25,7 @@
         write(path, """{"type": "FeatureCollection", "features": [$fts]}""")
         return path
     end
-    provinces = ["Ituri", "Nord-Kivu", "Haut-Uele", "Tshopo"]
+    provinces = ["Ituri", "Nord-Kivu", "Haut-Uele", "Sud-Kivu"]
 end
 
 @testitem "province_map_summary gives the median and 90% interval" begin
@@ -50,7 +50,8 @@ end
 ] begin
     using BVDOutbreakSize: province_zone_values
     path = write_province_geojson()
-    ## Patches in PROVINCE_NAMES order: ituri, nord_kivu, haut_uele, other.
+    ## The first four patches in PROVINCE_NAMES order: ituri, nord_kivu,
+    ## haut_uele, sud_kivu.
     z = province_zone_values(
         [1.0, 2.0, 3.0, 4.0]; lower = [0.5, 1.5, 2.5, 3.5],
         upper = [1.5, 2.5, 3.5, 4.5], geojson = path, provinces
@@ -101,7 +102,7 @@ end
         @test length(texts) == 2
         @test sort(texts[2].text[]) == sort(provinces)
     end
-    ## Haut-Uele and Other provinces straddle one, so their zones (e, d)
+    ## Haut-Uele and Sud-Kivu straddle one, so their zones (e, d)
     ## are washed out on the R panel.
     polys = [p for p in axes[2].scene.plots if p isa Mk.Poly]
     @test length(polys) == 2

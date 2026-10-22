@@ -185,6 +185,9 @@ function zone_synthetic(;
         Symbol("deaths_state.od_state.ad.α") => fill(2.151, ndraw, 1),
         Symbol("deaths_state.od_state.ad.θ") => fill(3.906, ndraw, 1),
         :C_T => fill(sum(I_bar), ndraw, 1),
+        ## The national case-fatality ratio, the zones' fatality centre
+        ## when the parent has no province death split.
+        :CFR => fill(0.4, ndraw, 1),
         ## The province model's own between-patch movement: a per-origin
         ## intensity and the arrivals into each patch, a twentieth of the
         ## infections of every patch after the first and none into it.

@@ -323,15 +323,30 @@ const PROVINCE_STREAM_HISTORY = Dict(
 ## carries brackets, so a composed label can never collide with one.
 province_stream_label(stream, province) = string(stream, " [", province, "]")
 
+## Patches that earlier releases forecast and the model no longer has,
+## keyed and valued like `PROVINCE_MEMBERS`. Releases before every province
+## had its own patch pooled these four into `other`, so their archived
+## forecasts are scored against the same pool.
+const RETIRED_PATCH_MEMBERS = Dict(
+    "other" => ["sud_kivu", "tshopo", "bas_uele", "sud_ubangi"]
+)
+
+## Source provinces an archived patch key covers, current or retired, or
+## `nothing` for a key neither knows.
+scored_patch_members(province) = get(
+    PROVINCE_MEMBERS, province, get(RETIRED_PATCH_MEMBERS, province, nothing)
+)
+
 ## `(; stream, province)` for a composed per-province label, `nothing` for
 ## every other label. A bracketed label naming a stream the archive does not
-## split, or a patch `PROVINCE_MEMBERS` does not know, is not one of these:
-## it has no truth source and is dropped like any other unmapped label.
+## split, or a patch `scored_patch_members` does not know, is not one of
+## these: it has no truth source and is dropped like any other unmapped
+## label.
 function parse_province_stream(label)
     m = match(r"^(.*) \[([^\[\]]+)\]$", label)
     isnothing(m) && return nothing
     haskey(PROVINCE_STREAM_HISTORY, m[1]) || return nothing
-    haskey(PROVINCE_MEMBERS, m[2]) || return nothing
+    isnothing(scored_patch_members(m[2])) && return nothing
     return (; stream = String(m[1]), province = String(m[2]))
 end
 
@@ -351,7 +366,7 @@ function province_stream_history(obs, stream, province)
     empty = (; days = Int[], counts = Int[])
     hasproperty(obs, field) || return empty
     hists = getproperty(obs, field)
-    members = PROVINCE_MEMBERS[province]
+    members = scored_patch_members(province)
     all(m -> haskey(hists, m), members) || return empty
     hs = [hists[m] for m in members]
     days = hs[1].days

@@ -387,18 +387,21 @@ end
     @test !any(k -> occursin("testing_coefficient", k), ks)
 end
 
-@testitem "province case-fatality contrasts pool with a scale of 0.1" begin
+@testitem "province case-fatality contrasts pool with a logit scale of 0.15" begin
     using BVDOutbreakSize
+    using BVDOutbreakSize: _draw_vectors
     using Turing: Prior, sample
     using Random: Xoshiro
     using Statistics: median
 
-    ## The scale prior is half-normal with sd 0.1, so a typical province sits
-    ## within about ten percent of the national case-fatality ratio. Its
-    ## median is 0.0674.
+    ## The scale prior is half-normal with sd 0.15 on the logit scale, so at
+    ## the prior mean ratio of 0.33 a typical province sits within about ten
+    ## percent of the national case-fatality ratio. Its median is 0.101.
+    ## Every province ratio is a probability.
     obs = load_observations()
     m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(Xoshiro(3), m, Prior(), 400; progress = false)
     τ = vec(Array(chn[:province_cfr_sd]))
-    @test 0.05 < median(τ) < 0.09
+    @test 0.08 < median(τ) < 0.12
+    @test all(all(c -> 0 < c < 1, v) for v in _draw_vectors(chn, :CFR_patch))
 end
