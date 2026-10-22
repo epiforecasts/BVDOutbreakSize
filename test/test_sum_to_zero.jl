@@ -305,7 +305,8 @@ end
                 "province_composition_model, ascertainment and severity",
                 province_composition_model(
                     obs, modelled;
-                    severity_sd_prior = truncated(Normal(0, 0.3); lower = 0)
+                    severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+                    severity_baseline = 0.4
                 ),
             ),
         )
@@ -397,21 +398,22 @@ end
         end
     end
 
-    ## The composition multipliers on a passed basis: the log ascertainment
-    ## and the log severity are each `τ Q z`.
+    ## The composition contrasts on a passed basis: the log ascertainment
+    ## and the logit severity contrast are each `τ Q z`.
     obs = [853 21 42; 77 2 5; 3 0 0; 10 1 2]
     modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2; 9.0 1.0 1.5]
     Qr = rotated(sum_to_zero_basis(4))
     model = province_composition_model(
         obs, modelled;
-        severity_sd_prior = truncated(Normal(0, 0.3); lower = 0), basis = Qr
+        severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        severity_baseline = 0.4, basis = Qr
     )
     for seed in 1:3
         r, vi = prior_draw(model, seed)
         apply(v) = vec(matmul(Qr, reshape(v, :, 1)))
         log_asc = vi[@varname(τ_asc)] .* apply(vi[@varname(z_asc)])
         @test log.(r.province_ascertainment) ≈ log_asc rtol = 1.0e-12
-        @test log.(r.province_severity) ≈
+        @test r.severity_log_odds ≈
             vi[@varname(τ_sev)] .* apply(vi[@varname(z_sev)]) rtol = 1.0e-12
     end
 end
