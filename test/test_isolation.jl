@@ -774,15 +774,15 @@ end
     @test all(isfinite, iso)
     @test all(iso .> 0)
     ## Occupancy is on the reported scale, the demand plus the
-    ## reclassification offset, uncapped, and the shortfall is its excess
-    ## over the beds.
+    ## reclassification offset, uncapped. The shortfall is the bed demand
+    ## above the national beds.
     brk_key = only(
         filter(k -> occursin("occupancy_break", string(k)), collect(keys(chn)))
     )
     brk = vec(Array(chn[brk_key]))
     short = vec(Array(chn[:bed_shortfall_T]))
     @test all(isapprox.(iso, max.(dem .+ brk, 0.0); rtol = 1.0e-8, atol = 1.0e-6))
-    @test all(isapprox.(short, max.(iso .- cap, 0.0); atol = 1.0e-6))
+    @test all(isapprox.(short, max.(dem .- cap, 0.0); atol = 1.0e-6))
     @test all(short .>= 0)
     ## The severity skew is non-negative and admits BVD suspects at least as
     ## readily as the base (non-BVD rule-out) rate.
