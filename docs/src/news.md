@@ -22,6 +22,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at its three sites, the onset-to-report, onset-to-detection and onset-to-death delays (#1087).
+  It replaces `truncated(Normal(3.694, 1.198); lower = 0.1)`, keeping the reanalysis estimate as the median and carrying its SD to the log scale.
+  The truncated Normal cost only about 4 nats at a scale of 0.13, so one CI chain spent about 350 draws near the bound with a longer receipt delay and failed the convergence gate.
+  The LogNormal puts that region more than 50 nats below the median.
+  Fitted values change.
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
   Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
