@@ -988,8 +988,8 @@ end
 Per-province isolation beds at the cut-off, from the province occupancy and
 bed splits in [`treatment_flow_model`](@ref): one row per province with
 the beds, the latent bed demand, the occupied beds (the national
-occupancy split on the demand shares and capped at the beds), the
-utilisation and the demand above the beds, each a median with
+occupancy split on the demand shares), the utilisation and the patients
+above the beds, each a median with
 a 90% credible interval. Draws that are not finite are left out of each
 cell. Expects a chain from [`bvd_joint`](@ref) with
 more than one patch, which stores these as the vector deterministics
@@ -1024,7 +1024,7 @@ function province_bed_table(
         "Bed demand" => String[],
         "Occupied beds" => String[],
         "Utilisation (%)" => String[],
-        "Demand above beds" => String[]
+        "Patients above beds" => String[]
     )
     for p in 1:np
         push!(

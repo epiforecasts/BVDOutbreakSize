@@ -18,8 +18,9 @@
 # `bed_capacity_history` already carries that derivation. The occupancy rates
 # are reconciled like the other cells. Each bed entry is the province's
 # effective beds that day (scripts/province_effective_beds.jl): the printed
-# beds, raised to the patients held and the rate-implied beds when the
-# patients exceed them. The CSVs keep what was printed. SitReps with no
+# beds, or the rate-implied beds when the patients exceed the printed beds
+# and the rate implies more. The patients are not a bed count, so a province
+# can hold more patients than beds. The CSVs keep what was printed. SitReps with no
 # row in data/insp_sitrep_scanned.csv have no report date and are skipped,
 # as the laboratory scan skips them.
 #
@@ -211,10 +212,11 @@ function main()
         # same two reads as the occupancy block; table-era counts are the
         # scan's, since the blind read's table-era figures are implied from
         # the printed rate. Where the patients held exceed the printed beds,
-        # each value is the larger of the patients and the beds implied by
-        # the printed occupancy rate (patients / rate x 100); otherwise it is
-        # the printed beds (scripts/province_effective_beds.jl). The CSVs
-        # keep the printed counts. Fitted as a split of
+        # each value is the larger of the printed beds and the beds implied
+        # by the printed occupancy rate (patients / rate x 100); otherwise it
+        # is the printed beds (scripts/province_effective_beds.jl). A
+        # province can hold more patients than beds. The CSVs keep the
+        # printed counts. Fitted as a split of
         # the sum of the provinces present each day, over per-patch shares of
         # the national capacity walk.""",
         "INSP situation reports, per-province bed counts (lits), occupancy rates and patients in isolation from the occupation table and the care-continuity prose; scripts/scan_province_care.jl reconciled with an independent blind read, and the effective beds taken, by scripts/province_care_manifest.jl.",

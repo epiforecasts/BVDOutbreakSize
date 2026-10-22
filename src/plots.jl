@@ -3269,6 +3269,10 @@ function _composition_rho_keys(share_key::Symbol)
         :province_occupancy_split_rho,
         Symbol("treatment_state.occupancy_split_rho"),
     ]
+    share_key === :province_admissions_share && return [
+        :province_admissions_split_rho,
+        Symbol("treatment_state.admissions_split_rho"),
+    ]
     share_key === :province_capacity_share && return [
         :province_capacity_split_rho,
         Symbol("treatment_state.capacity_split_rho"),
@@ -3489,17 +3493,16 @@ Posterior predictive check on a province split scored on the provinces
 present each day ([`province_split_logpdf`](@ref)): the isolation
 occupancy (`share_key = :province_occupancy_share`, a daily share matrix),
 the beds (`share_key = :province_capacity_share`, also a daily share
-matrix; a static share vector per patch is also read) and the unscored 24h
+matrix; a static share vector per patch is also read) and the 24h
 admissions (`share_key = :province_admissions_share`). Each panel shows the
 modelled share of that province among the provinces printed that day, with
-the observed share as black points, over the days in `rows` (the long
-format from `province_care_observations`, for a scored split the rows the
-fit was given). The grey band is the
+the observed share as black points, over the days the split is scored
+(`rows`, the long format from `province_care_observations` the fit was
+given). The grey band is the
 posterior predictive interval on the observed share, the stick-breaking
 allocation at the day's printed total under the split's overdispersion, and
-the coloured ribbon the expected share alone. A split with no
-overdispersion on the chain, such as the admissions, shows the ribbon only.
-A day on which a province is absent leaves a gap. Reads like [`plot_province_composition_ppc`](@ref).
+the coloured ribbon the expected share alone. A day on which a province is
+absent leaves a gap. Reads like [`plot_province_composition_ppc`](@ref).
 """
 function plot_province_split_ppc(
         chn; share_key::Symbol, rows, seeding::Date,

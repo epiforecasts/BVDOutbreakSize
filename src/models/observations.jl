@@ -2171,29 +2171,6 @@ function _incare_census(
     return record ? (y, unconf, flags) : y
 end
 
-## Last effective beds recorded for each of `np` patches on or before day
-## `nc`, from the province bed rows (sorted by day); zero for a patch with
-## none, and for rows whose counts are to be generated. Data only.
-function _province_bed_floors(rows, np::Integer, nc::Integer)
-    floors = zeros(np)
-    (rows === nothing || rows.counts === missing) && return floors
-    for (d, p, c) in zip(rows.days, rows.patches, rows.counts)
-        d <= nc && p <= np && (floors[p] = c)
-    end
-    return floors
-end
-
-## The recorded national capacity on the last occupancy day, as a one-patch
-## floor; zero with no capacity or occupancy recorded. Data only.
-function _national_bed_floor(capacity_history, isolation_history)
-    (isempty(capacity_history.counts) || isempty(isolation_history.counts)) &&
-        return [0.0]
-    return censoring_cap(
-        isolation_history.days[end:end], isolation_history.counts[end:end],
-        capacity_history
-    )
-end
-
 ## The national `occupied`, floored at zero, shared out on the patches'
 ## `demand`, equally when there is no demand.
 function _held_by_patch(occupied, demand)
@@ -2203,21 +2180,21 @@ function _held_by_patch(occupied, demand)
 end
 
 """
-    cutoff_occupancy(occupied, demand, capacity, floors)
+    cutoff_occupancy(occupied, demand, capacity)
 
-Cut-off beds, occupancy and shortfall by patch. Each patch's beds are its
-modelled `capacity` floored at its recorded beds `floors`. The national
-`occupied`, floored at zero, is shared out on the patches' `demand`, and
-each patch's share is capped at its beds, the rest its shortfall. The
-occupancy never exceeds the beds in any patch, and patients above the beds
-are not moved to another patch.
+Beds, occupancy and patients above the beds by patch on one day. The beds
+are each patch's modelled `capacity`. The occupancy is the national
+`occupied`, the mean the reported occupancy is scored around, shared out on
+the patches' `demand`, so the patches sum to the national figure. The
+patients above the beds are the part of a patch's occupancy over its beds,
+zero where it is under them. Nothing is capped, so a patch can hold more
+patients than its modelled beds, as Nord-Kivu prints.
 """
-function cutoff_occupancy(occupied, demand, capacity, floors)
+function cutoff_occupancy(occupied, demand, capacity)
     held = _held_by_patch(occupied, demand)
-    beds = max.(capacity, floors)
     return (;
-        beds, occupancy = min.(held, beds),
-        shortfall = max.(held .- beds, zero(eltype(held))),
+        beds = capacity, occupancy = held,
+        shortfall = max.(held .- capacity, zero(eltype(held))),
     )
 end
 
@@ -2321,12 +2298,34 @@ function _patch_bvd_admissions(
 end
 
 ## Per-patch daily admissions into isolation: the patch's BVD admissions
-## `A_bvd[p, t]` plus its share `w[p]` of the national background admissions
-## `A_bg[t]`. The columns sum to the national admissions.
+## `A_bvd[p, t]` plus its share of the national background admissions
+## `A_bg[t]`, `w[p]` for a constant share or `w[p, t]` for a daily one
+## ([`background_admission_share_model`](@ref)). The columns sum to the
+## national admissions.
 function _patch_admissions(
-        A_bvd::AbstractMatrix, A_bg::AbstractVector, w::AbstractVector
+        A_bvd::AbstractMatrix, A_bg::AbstractVector, w::AbstractVecOrMat
     )
     return A_bvd .+ w .* reshape(A_bg, 1, :)
+end
+
+## Background admissions still in a bed, by patch: the national stock
+## shared by the constant shares `w`, or with daily shares `w[p, t]` each
+## patch's own background admissions through the stay survival `surv`.
+function _patch_background_stock(
+        A_bg::AbstractVector, w::AbstractVector, surv::AbstractVector
+    )
+    return w .* reshape(convolve_delay(A_bg, surv), 1, :)
+end
+function _patch_background_stock(
+        A_bg::AbstractVector, w::AbstractMatrix, surv::AbstractVector
+    )
+    np, n = size(w)
+    T = promote_type(eltype(A_bg), eltype(w), eltype(surv))
+    out = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        out[p, :] = convolve_delay(w[p, :] .* A_bg, surv)
+    end
+    return out
 end
 
 """
@@ -2334,8 +2333,9 @@ Per-patch latent bed demand for the province splits: the national demand
 `demand` shared out by each patch's approximate stock. The stock is the
 patch's BVD admissions `A_bvd` (`_patch_bvd_admissions`) through the
 clinical-stay survival
-`S_clin`, plus its share `w[p]` of the national non-BVD admissions `A_bg`
-through the rule-out stay `ruleout_pmf` and the abscond rate `κ`. The national
+`S_clin`, plus its share of the national non-BVD admissions `A_bg`
+(`w[p]`, or `w[p, t]` by day as in [`_patch_admissions`](@ref)) through the
+rule-out stay `ruleout_pmf` and the abscond rate `κ`. The national
 stock in [`treatment_flow_model`](@ref) carries the confirmation dynamics; the
 patches share them, so they cancel in the shares approximately rather than
 exactly, and the split needs the stays alone, one convolution per patch rather
@@ -2343,9 +2343,9 @@ than a copy of the flow machinery. Returns an `(n_patches × n)` matrix whose
 columns sum to `demand`; an equal split of the reports gives equal halves.
 """
 function _patch_demand(
-        A_bvd::AbstractMatrix, A_bg::AbstractVector, w::AbstractVector,
-        S_clin::AbstractVector, ruleout_pmf::AbstractVector, κ::Real,
-        demand::AbstractVector
+        A_bvd::AbstractMatrix, A_bg::AbstractVector,
+        w::AbstractVecOrMat, S_clin::AbstractVector,
+        ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
     )
     np, n = size(A_bvd)
     T = promote_type(
@@ -2353,12 +2353,13 @@ function _patch_demand(
         eltype(ruleout_pmf), typeof(κ), eltype(demand)
     )
     stock = Matrix{T}(undef, np, n)
-    bg_stock = convolve_delay(A_bg, _background_stay_survival(ruleout_pmf, κ))
+    bg_stock = _patch_background_stock(
+        A_bg, w, _background_stay_survival(ruleout_pmf, κ)
+    )
     @inbounds for p in 1:np
         O_bvd_p = convolve_delay(A_bvd[p, :], S_clin)
-        wp = w[p]
         for t in 1:n
-            stock[p, t] = O_bvd_p[t] + wp * bg_stock[t]
+            stock[p, t] = O_bvd_p[t] + bg_stock[p, t]
         end
     end
     out = Matrix{T}(undef, np, n)
@@ -2421,10 +2422,9 @@ demand staying uncapped. The occupancy likelihood is a NegativeBinomial
 around the demand, right-censored at the recorded implied-capacity series
 ([`censoring_cap`](@ref), [`censored_occupancy_model`](@ref)). The
 capacity walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries the
-implied-capacity likelihood. It is an ingredient of the beds, not the beds
-reported: the cut-off beds, occupancy and shortfall are built by patch and
-summed ([`cutoff_occupancy`](@ref)), each patch's beds its modelled
-capacity floored at its recorded beds.
+implied-capacity likelihood. The cut-off beds, occupancy and patients
+above the beds are built by patch and summed ([`cutoff_occupancy`](@ref)),
+each patch's beds its share of the walk.
 
 The daily in-care outcome flows (deaths, rule-outs, admissions,
 absconds) are each an optional NegativeBinomial stream scored against
@@ -2437,16 +2437,18 @@ absorbs a between-report measurement-basis discontinuity in the
 isolation series. Empty (the default) is a no-op.
 
 With per-patch reports (`bvd_reports_matrix`) and the province rows
-`province_isolation` and `province_capacity`, the province occupancy and
-bed counts are each scored as a split of the printed sum of the provinces
-present that day ([`province_split_model`](@ref)). The occupancy split is
-on the uncapped per-patch demand, the national demand shared out by each
-patch's stock of admissions through the stays. The bed split is on each
-patch's daily share of the national walk, centred on its cumulative
-admissions ([`patch_capacity_share_model`](@ref)). The national likelihoods
-are kept, so the splits add only the spatial signal. Each patch's modelled
-admissions are returned as `admit_patch` for the province forecast; the
-province 24h admissions are not scored.
+`province_isolation`, `province_capacity` and `province_admissions`, the
+province occupancy, bed and 24h admission counts are each scored as a split
+of the printed sum of the provinces present that day
+([`province_split_model`](@ref)). The occupancy split is on the uncapped
+per-patch demand, the national demand shared out by each patch's stock of
+admissions through the stays. The bed split is on each patch's daily share
+of the national walk, centred on its cumulative admissions
+([`patch_capacity_share_model`](@ref)). The admission split is on each
+patch's modelled admissions, its BVD admissions plus its daily share of the
+background admissions ([`background_admission_share_model`](@ref)). The
+same shares carry the background into the per-patch demand. The national
+likelihoods are kept, so the splits add only the spatial signal.
 
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
 BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
@@ -2510,12 +2512,19 @@ series for forecasting and replication.
         patch_ascertainment::AbstractVector{<:Real} = ones(
             length(background_split)
         ),
-        ## Province occupancy and bed rows, `(; days, patches, counts)` from
-        ## `province_care_observations`, or `nothing`. Scored as splits of
-        ## the printed sum of the provinces present each day.
+        ## Province occupancy, bed and 24h admission rows,
+        ## `(; days, patches, counts)` from `province_care_observations`, or
+        ## `nothing`. Scored as splits of the printed sum of the provinces
+        ## present each day.
         province_isolation = nothing,
         province_capacity = nothing,
+        province_admissions = nothing,
         patch_capacity = patch_capacity_share_model,
+        ## Daily shares of the background admissions by patch, given the
+        ## background suspect shares, the grid length and the province
+        ## admission days. Sampled only when the province admissions are
+        ## scored; otherwise the shares are `background_split`.
+        background_admission = background_admission_share_model,
         province_split_rho_prior = truncated(
             Normal(0, 0.1); lower = 0, upper = 1
         ),
@@ -2562,17 +2571,14 @@ series for forecasting and replication.
         !isempty(province_isolation.days)
     split_cap = np > 1 && province_capacity !== nothing &&
         !isempty(province_capacity.days)
-    by_patch = split_occ || split_cap
+    split_adm = np > 1 && province_admissions !== nothing &&
+        !isempty(province_admissions.days)
+    by_patch = split_occ || split_cap || split_adm
     cap_state ~ to_submodel(
         cutoff === nothing ? capacity(n; start = cap_start) :
             capacity(n; start = cap_start, cutoff)
     )
     C = cap_state.C
-    ## Recorded beds the cut-off and forecast beds are floored at: each
-    ## province's last effective beds with province rows, else the national
-    ## recorded cap on the last occupancy day.
-    bed_floors = by_patch ? _province_bed_floors(province_capacity, np, nc) :
-        _national_bed_floor(capacity_history, isolation_history)
     adm_delay_state ~ to_submodel(admission_delay)
     death_los_state ~ to_submodel(death_los)
     recovery_los_state ~ to_submodel(recovery_los)
@@ -2704,17 +2710,37 @@ series for forecasting and replication.
             bvd_reports_matrix, patch_ascertainment, p_iso_bvd, p_drc,
             adm_delay_state.pmf
         )
+        ## The background admissions are shared by a daily walk where the
+        ## province admissions are scored, so a move in a province's share
+        ## of them has a province term and need not move the national ratio
+        ## of BVD to background admissions.
+        if split_adm
+            bg_adm_state ~ to_submodel(
+                background_admission(
+                    background_split, n, Int.(province_admissions.days)
+                )
+            )
+            bg_adm_share = bg_adm_state.W
+            bg_adm_level_sd = bg_adm_state.level_sd
+            bg_adm_walk_sd = bg_adm_state.walk_sd
+        else
+            bg_adm_share = background_split
+            bg_adm_level_sd = 0.0
+            bg_adm_walk_sd = 0.0
+        end
         demand_patch = _patch_demand(
-            A_bvd_patch, A_bg, background_split, S_clin,
+            A_bvd_patch, A_bg, bg_adm_share, S_clin,
             ruleout_los_state.pmf, κ, demand
         )
-        admit_patch = _patch_admissions(A_bvd_patch, A_bg, background_split)
+        admit_patch = _patch_admissions(A_bvd_patch, A_bg, bg_adm_share)
         cap_share_state ~ to_submodel(patch_capacity(admit_patch))
         cap_shares = cap_share_state.s
         cap_pooling_sd = cap_share_state.pooling_sd
     else
         demand_patch = reshape(demand, 1, :)
         admit_patch = reshape(admit_daily, 1, :)
+        bg_adm_level_sd = 0.0
+        bg_adm_walk_sd = 0.0
         cap_shares = ones(eltype(C), 1, n)
         cap_pooling_sd = zero(eltype(C))
     end
@@ -2812,6 +2838,25 @@ series for forecasting and replication.
             )
         )
     end
+    ## Admissions are a flow, so every day is scored.
+    admissions_split_rho = 0.0
+    if split_adm
+        admissions_split_rho ~ province_split_rho_prior
+        admissions_split ~ to_submodel(
+            province_split_model(
+                merge(
+                    province_admissions,
+                    (;
+                        counts = _sim_obs(
+                            simulated, :admissions_split,
+                            province_admissions.counts
+                        ),
+                    )
+                ),
+                admit_patch, admissions_split_rho
+            )
+        )
+    end
 
     ## Split likelihoods, guarded by `split_active` so they no-op when the
     ## hazard is structurally zero.
@@ -2874,17 +2919,16 @@ series for forecasting and replication.
     )
 
     ## Cut-off reported quantities, by patch and summed to national. Each
-    ## patch's beds are its modelled capacity floored at its recorded beds.
-    ## Its occupancy is its demand share of the mean the reported occupancy
-    ## is scored around (the demand plus the reclassification offset,
-    ## floored at zero), capped at its beds; the rest is its shortfall.
-    ## Patients do not move between patches, so the national occupancy is
-    ## the sum of the capped patches. Bed demand is the latent stock.
+    ## patch's beds are its modelled capacity. Its occupancy is its demand
+    ## share of the mean the reported occupancy is scored around (the demand
+    ## plus the reclassification offset, floored at zero), and its
+    ## patients above beds the part of that over its beds. Bed demand is the
+    ## latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[nc]
     cut = cutoff_occupancy(
         isempty(occ_obs_total) ? z0 : occ_obs_total[nc],
-        demand_patch[:, nc], C_patch[:, nc], bed_floors
+        demand_patch[:, nc], C_patch[:, nc]
     )
     beds_T = sum(cut.beds)
     occ_T = sum(cut.occupancy)
@@ -2949,7 +2993,9 @@ series for forecasting and replication.
         demand_patch, admit_patch, capacity_patch = C_patch,
         capacity_series = C,
         capacity_shares = cap_shares, capacity_pooling_sd = cap_pooling_sd,
-        occupancy_split_rho, capacity_split_rho,
+        occupancy_split_rho, capacity_split_rho, admissions_split_rho,
+        background_admission_level_sd = bg_adm_level_sd,
+        background_admission_walk_sd = bg_adm_walk_sd,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,

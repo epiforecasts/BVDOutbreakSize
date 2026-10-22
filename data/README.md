@@ -51,9 +51,9 @@ Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` 
 The manifest blocks `[province_isolation_history]`, `[province_bed_capacity_history]` and `[province_admissions_history]` carry the occupancy, bed and 24h admissions series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
 Where a report distinguishes patients in normed structures from the total hospitalised (Nord-Kivu from SitRep 125), the occupancy is the total.
-Each bed entry is the province's effective beds that day, the largest of the printed beds and the patients held, and, when the patients exceed the printed beds, the beds implied by the printed occupancy rate (patients / rate x 100) (`scripts/province_effective_beds.jl`).
-A province holding more patients than its printed beds has at least that many beds in practice.
-Nord-Kivu prints rates of 119 to 143% from 15 July to 9 September, and from 16 September patients above a stale bed count (about 390 to 420 implied beds, 511 on 21 September).
+Each bed entry is the province's printed beds, or, when the patients exceed the printed beds, the larger of those and the beds implied by the printed occupancy rate (patients / rate x 100) (`scripts/province_effective_beds.jl`).
+The patients held are not a bed count, so a province can hold more patients than beds.
+Nord-Kivu prints rates of 119 to 143% from 15 July to 9 September, which give back its printed beds to within a few, and from 16 September patients above a stale bed count, where the rate implies about 390 to 420 beds (511 on 21 September).
 The CSVs keep the printed counts, and the two reads' occupancy rates are reconciled like the other cells.
 The model scores these as splits of the printed sum of the provinces present each day, alongside the national tile and national implied capacity, which are unchanged.
 From SitRep 081 the national `bed_capacity_history` is the sum of the provinces that print a bed count that day.

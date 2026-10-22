@@ -93,50 +93,6 @@ end
 _forecast_counts(daily, fd, k) = vintage_increments_model(daily[fd], missing, k)
 
 """
-    capped_stock_forecast(occupied, beds, admit, uncapped, flows)
-
-Mean path of the occupied beds by patch over the forecast days, each patch
-a stock that admits only into free beds. `occupied` is each patch's cut-off
-occupancy.
-`beds` and `admit` are its beds and modelled admissions, one row per patch
-and one column per day. `uncapped` is the national uncapped occupancy mean
-on the day before each day, and `flows` the national modelled exits, one
-row per day and one column per flow. The exits are scaled by the occupied
-beds over `uncapped`, at most 1 (1 when `uncapped` is not positive), and
-shared by occupancy. Each patch admits up to its free beds, its beds less
-its previous occupancy plus its exits. A patch above its beds after they
-fall admits no one and is drained by its exits. Returns the occupancy,
-admissions and free beds by patch and the exit scale by day.
-"""
-function capped_stock_forecast(occupied, beds, admit, uncapped, flows)
-    np, h = size(beds)
-    T = promote_type(
-        Float64, eltype(occupied), eltype(beds), eltype(admit),
-        eltype(uncapped), eltype(flows)
-    )
-    occ = Matrix{T}(undef, np, h)
-    adm = similar(occ)
-    free = similar(occ)
-    scale = Vector{T}(undef, h)
-    prev = collect(T, occupied)
-    z = zero(T)
-    for t in 1:h
-        held = sum(prev)
-        r = uncapped[t] > 0 ? min(held / uncapped[t], one(T)) : one(T)
-        scale[t] = r
-        exits = r * sum(view(flows, t, :))
-        for p in 1:np
-            ex = held > 0 ? exits * prev[p] / held : z
-            free[p, t] = beds[p, t] - prev[p] + ex
-            adm[p, t] = clamp(admit[p, t], z, max(free[p, t], z))
-            occ[p, t] = max(prev[p] + adm[p, t] - ex, z)
-        end
-        copyto!(prev, view(occ, :, t))
-    end
-    return (; occupancy = occ, admissions = adm, free, scale)
-end
-
-"""
 Future counts by patch. Each patch's count on each day is the censored
 negative binomial around its mean in `means` (one row per patch, one column
 per day) at its ceiling in `ceilings`, drawn as `province`. `obs` is their
@@ -153,66 +109,68 @@ sum over the patches, the national count.
 end
 
 """
+Future flows by patch, each patch's count on each day the negative binomial
+around its mean in `means` (one row per patch, one column per day), drawn as
+`province`. `obs` is their sum over the patches, the national count.
+"""
+@model function province_counts_model(means::AbstractMatrix, k::Real)
+    province ~ to_submodel(vintage_increments_model(vec(means), missing, k))
+    obs := vec(sum(reshape(province.increments, size(means)); dims = 1))
+    return (; obs, province = province.increments)
+end
+
+## Each patch's share of the national occupancy mean on each day, the
+## columns of `demand` (one row per patch) setting the shares.
+function _held_by_patch_days(occupied::AbstractVector, demand::AbstractMatrix)
+    return reduce(
+        hcat, [_held_by_patch(occupied[j], demand[:, j]) for j in eachindex(occupied)]
+    )
+end
+
+"""
 Future isolation and treatment counts from a fitted
 [`treatment_flow_model`](@ref) state run past the cut-off, drawn by patch
-from a stock capped at its beds ([`capped_stock_forecast`](@ref)) and summed
-to national. Each patch's beds start from its cut-off beds and move with
-its modelled capacity, so they fall when it falls. A patch left above its
-beds admits no one until its exits bring it below them. With no recorded
-capacity the stock starts from the uncapped cut-off occupancy and nothing is
-censored.
+through the likelihoods the fitted days are scored with and summed to
+national. Each patch's occupancy is its demand share of the modelled
+occupancy mean, drawn from the negative binomial censored at its beds, the
+same measurement model as the fitted occupancy. Its beds are its share of
+the capacity walk, which runs past the cut-off. Its admissions are its
+modelled admissions, drawn from the uncensored negative binomial the fitted
+admissions are scored with. The in-care deaths and rule-outs are the
+national modelled flows. The latent stock is the fitted one run forward, so
+nothing is capped. With no recorded capacity nothing is censored.
 """
 @model function treatment_forecast_model(state, fd, capacity_history, k)
     nocap = 1.0e6
     have_cap = !isempty(capacity_history.counts)
     np = size(state.admit_patch, 1)
-    beds = state.beds_patch_T .* state.capacity_patch[:, fd] ./
-        state.capacity_patch[:, first(fd) - 1]
+    beds = state.capacity_patch[:, fd]
+    held = _held_by_patch_days(state.occupancy_mean[fd], state.demand_patch[:, fd])
     ceilings = have_cap ? beds : fill(nocap, size(beds))
-    occupied = have_cap ? state.occupancy_patch_T :
-        state.occupancy_patch_T .+ state.shortfall_patch_T
-    flows = hcat(
-        state.deaths_daily[fd], state.recover_daily[fd],
-        state.ruleout_daily[fd], state.abscond_daily[fd]
-    )
-    path = capped_stock_forecast(
-        occupied, ceilings, state.admit_patch[:, fd],
-        state.occupancy_mean[fd .- 1], flows
-    )
-    forecast_isolation ~ to_submodel(
-        province_counts_model(path.occupancy, ceilings, k)
-    )
-    forecast_admissions ~ to_submodel(
-        province_counts_model(path.admissions, max.(path.free, 0.5), k)
-    )
-    incare_deaths = path.scale .* state.deaths_daily[fd]
-    ruleouts = path.scale .* state.ruleout_daily[fd]
+    forecast_isolation ~ to_submodel(province_counts_model(held, ceilings, k))
+    admit = state.admit_patch[:, fd]
+    forecast_admissions ~ to_submodel(province_counts_model(admit, k))
     forecast_incare_deaths ~ to_submodel(
-        vintage_increments_model(incare_deaths, missing, k)
+        _forecast_counts(state.deaths_daily, fd, k)
     )
     forecast_ruleouts ~ to_submodel(
-        vintage_increments_model(ruleouts, missing, k)
+        _forecast_counts(state.ruleout_daily, fd, k)
     )
+    above = max.(held .- beds, zero(eltype(held)))
     forecast_bed_demand := state.demand[fd]
     forecast_bed_capacity := vec(sum(beds; dims = 1))
-    forecast_bed_shortfall := [
-        sum(
-            cutoff_occupancy(
-                state.occupancy_mean[t], state.demand_patch[:, t],
-                beds[:, j], beds[:, j]
-            ).shortfall
-        ) for (j, t) in enumerate(fd)
-    ]
+    forecast_bed_shortfall := vec(sum(above; dims = 1))
     if np > 1
         forecast_province_beds := vec(beds)
     end
     return (;
-        isolation = vec(sum(path.occupancy; dims = 1)),
-        admissions = vec(sum(path.admissions; dims = 1)),
+        isolation = vec(sum(held; dims = 1)),
+        admissions = vec(sum(admit; dims = 1)),
         occupancy = forecast_isolation.obs,
         occupancy_draws = forecast_isolation,
         admission_draws = forecast_admissions,
-        incare_deaths, ruleouts, path, beds,
+        incare_deaths = state.deaths_daily[fd],
+        ruleouts = state.ruleout_daily[fd], held, beds,
         bed_shortfall = forecast_bed_shortfall,
     )
 end
@@ -1211,7 +1169,7 @@ across the provinces by the fitted compositions
 ([`composition_split_model`](@ref)), as `forecast_province_confirmed` and
 `forecast_province_deaths`. With province care data, the occupancy and
 admissions are drawn daily by province, as
-`forecast_isolation.province.obs` and `forecast_admissions.province.obs`,
+`forecast_isolation.province.obs` and `forecast_admissions.province.increments`,
 with the beds as `forecast_province_beds`, and each sums to the national
 forecast ([`treatment_forecast_model`](@ref)). Every quantity up to the
 cut-off, and the density there, is the fitted model's.
@@ -1275,6 +1233,7 @@ cut-off, and the density there, is the fitted model's.
         background_split = background_split_model,
         province_isolation = nothing,
         province_capacity = nothing,
+        province_admissions = nothing,
         province_death_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1317,7 +1276,8 @@ cut-off, and the density there, is the fitted model's.
             !isempty(province_days) || !isempty(province_death_days) ||
                 !isempty(province_lab_days) ||
                 _has_province_rows(province_isolation) ||
-                _has_province_rows(province_capacity)
+                _has_province_rows(province_capacity) ||
+                _has_province_rows(province_admissions)
         )
         error(
             "per-province data was supplied but n_patches = 1. The " *
@@ -1493,7 +1453,7 @@ cut-off, and the density there, is the fitted model's.
             bvd_reports_matrix,
             background_split = bg_split_state.w,
             patch_ascertainment = patch_asc,
-            province_isolation, province_capacity,
+            province_isolation, province_capacity, province_admissions,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
             deaths_history = treatment_deaths_history,
@@ -1661,11 +1621,19 @@ cut-off, and the density there, is the fitted model's.
         province_occupancy_share := treatment_state.demand_patch ./
             sum(treatment_state.demand_patch; dims = 1)
         province_occupancy_split_rho := treatment_state.occupancy_split_rho
-        ## Daily share of the national admissions by patch. It is not
-        ## scored, and the province 24h admissions are checked against it.
+        ## Daily share of the national admissions by patch, the modelled
+        ## centre of the admissions split.
         province_admissions_share := treatment_state.admit_patch ./
             sum(treatment_state.admit_patch; dims = 1)
         province_capacity_split_rho := treatment_state.capacity_split_rho
+        province_admissions_split_rho := treatment_state.admissions_split_rho
+        ## Scales of the province level and weekly walk in the background
+        ## admission shares, zero when the province admissions are not
+        ## scored.
+        province_background_admission_level_sd :=
+            treatment_state.background_admission_level_sd
+        province_background_admission_walk_sd :=
+            treatment_state.background_admission_walk_sd
     end
     C_T_patch := patch_state.C_T_patch
     ## Each province's reproduction number net of its own depletion, built

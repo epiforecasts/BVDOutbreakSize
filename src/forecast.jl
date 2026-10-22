@@ -402,7 +402,7 @@ function forecast_provinces(
     iso = daily("forecast_isolation.province.obs", x -> x[:, h])
     beds = daily("forecast_province_beds", x -> x[:, h])
     adm = daily(
-        "forecast_admissions.province.obs", x -> vec(sum(x[:, 1:h]; dims = 2))
+        "forecast_admissions.province.increments", x -> vec(sum(x[:, 1:h]; dims = 2))
     )
     nd = length(inf)
     out = DataFrame(

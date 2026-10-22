@@ -69,9 +69,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
-- Each province's occupancy is capped at its beds at the cut-off and in the forecast, where it admits up to its free beds; the national figures are the province sums (#958).
-- The provinces' 24h admissions are not fitted: only the national admissions enter the likelihood, and the province admissions are checked against the modelled admission shares (#958).
-  Fitting them as a daily split, with an overdispersion of their own, made the national $R_t$ walk scale mix poorly (#969).
+- The cut-off and forecast beds, occupancy and admissions are built by province and summed to the national figures, with nothing capped: each province's beds are its share of the capacity walk, and its forecast runs the fitted stock forward (#958).
+- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
+  Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level and a weekly random walk over the printed days, which nest the constant share at zero.
 
 ### Data
 
@@ -104,7 +104,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 149 (10 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
-- `province_admissions_history` block, sparse by province, to SitRep 149 (10 October), and province beds raised to the patients held or the rate-implied beds where the patients exceed the printed beds (#958).
+- `province_admissions_history` block, sparse by province, to SitRep 149 (10 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
 
 ### Report
 
@@ -216,9 +216,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
-- Admissions are uncensored in the fit and capped at the free beds only in the forecast (#918).
+- Admissions are uncensored in the fit and in the forecast (#918).
 - The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
-- Province beds cover the patients each report counts, so Nord-Kivu shows no spurious shortfall (#920).
+- Province occupancy is the national modelled occupancy split on the demand shares, the basis the likelihood and forecast use, so a province over its beds, as Nord-Kivu prints, shows its patients above the beds rather than a capped occupancy (#920).
 - The province point prevalence caps each province's case-fatality ratio at one, as it already capped the ascertainment and the zone ratios (#1149).
   The ratio is the national one times the province's relative fatality, which the joint model leaves unbounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
   The prevalence calculation rejected that draw and failed the province page.

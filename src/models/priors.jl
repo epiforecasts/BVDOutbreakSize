@@ -857,6 +857,134 @@ columns sum to one.
     return (; s, pooling_sd = τ_cap)
 end
 
+"""
+Per-patch shares of the national non-BVD background admissions, for the
+province admission and occupancy splits in [`treatment_flow_model`](@ref).
+Each patch's share on day `t` is its share `w_p` of the background suspects
+([`background_split_model`](@ref)) moved by a log deviation with a static
+level and a weekly random walk,
+
+```math
+W_p(t) \\propto w_p \\exp\\bigl(\\delta_p + \\eta_p(t)\\bigr),
+\\qquad \\boldsymbol{\\delta} = Q \\mathbf{y},
+\\qquad y_j \\sim \\mathrm{N}(0, \\tau_{bga}^2),
+\\qquad \\boldsymbol{\\eta}(t_k) = \\sigma_{bga} Q \\sum_{i < k} \\mathbf{z}_i,
+\\qquad z_{ij} \\sim \\mathrm{N}(0, 1),
+```
+
+normalised over the patches each day, with `τ_bga ~ N⁺(0, 1)` and
+`σ_bga ~ N⁺(0, 0.2)`. `Q` is the sum-to-zero basis
+([`sum_to_zero_basis`](@ref)), so neither the level nor the walk has a
+reference patch. The walk sits on knots every `week` days from the first to
+the last day in `days`, the days the province admissions are printed,
+starting at zero on the first and interpolated linearly
+([`interpolate_knots`](@ref)). It is held flat outside them, so it moves
+only where the printed admissions inform it. `τ_bga = σ_bga = 0` gives
+`W_p(t) = w_p`, a time-constant share of the background suspects.
+
+The background suspects are split by `w`, but who is admitted need not be.
+A province's share of the admitted background differs from its share of
+the suspects by its own admission propensity (its isolation beds, triage
+and transport), and that changes as treatment centres open. With the share
+held at `w`, any movement in a province's share of the printed admissions
+that its BVD admissions do not explain has to come from the national ratio
+of BVD to background admissions, which the national reproduction number
+sets. The level and walk give that movement a province term of its own.
+
+The level coordinates are drawn centred, on the scale `τ_bga`, as in
+[`background_split_model`](@ref), because the daily province admissions pin
+each one. The walk innovations are drawn non-centred, as in the other
+weekly walks. The half-normal scale 0.2 on `σ_bga` puts a 1.2-fold weekly
+move in a province's share well inside the prior, and a drift of about
+two-fold over twenty weeks of printed admissions.
+
+Returns `(; W, level_sd, walk_sd)`, with `W` an `(n_patches × n)` matrix
+whose columns sum to one.
+"""
+@model function background_admission_share_model(
+        w::AbstractVector{<:Real}, n::Integer,
+        days::AbstractVector{<:Integer};
+        week::Integer = 7,
+        level_sd_prior = truncated(Normal(0, 1); lower = 0),
+        walk_sd_prior = truncated(Normal(0, 0.2); lower = 0),
+        basis = sum_to_zero_basis(max(length(w), 1))
+    )
+    np = length(w)
+    if np <= 1 || isempty(days)
+        return (;
+            W = repeat(reshape(float.(w), :, 1), 1, n),
+            level_sd = 0.0, walk_sd = 0.0,
+        )
+    end
+    kd = knot_days(maximum(days); week, start = minimum(days))
+    nk = length(kd)
+    τ_bga ~ level_sd_prior
+    ## Each level coordinate is drawn centred, on the scale `τ_bga`. `eps`
+    ## floors the SD so a `τ_bga ≈ 0` draw stays a proper distribution.
+    y_bga ~ product_distribution(
+        fill(Normal(0, τ_bga + eps(typeof(float(τ_bga)))), np - 1)
+    )
+    if nk > 1
+        σ_bga ~ walk_sd_prior
+        z_bga ~ filldist(Normal(0, 1), (np - 1) * (nk - 1))
+        W = _background_admission_shares(
+            w, basis, y_bga, σ_bga .* z_bga, kd, n
+        )
+        return (; W, level_sd = τ_bga, walk_sd = σ_bga)
+    end
+    W = _background_admission_shares(
+        w, basis, y_bga, zeros(eltype(y_bga), 0), kd, n
+    )
+    return (; W, level_sd = τ_bga, walk_sd = zero(τ_bga))
+end
+
+## Daily background admission shares: column `t` is
+## `W_p(t) ∝ w_p exp(δ_p + η_p(t))`, with `δ = Q y` and `η` the walk whose
+## knot `k`, on day `kd[k]`, is `Q` times the sum of the first `k - 1`
+## columns of `steps` (`(n_patches - 1) × (n_knots - 1)`, stored
+## column-major), interpolated to the grid and flat outside the knots. Each
+## column is normalised against its largest term, so a wide deviation
+## cannot overflow.
+function _background_admission_shares(
+        w::AbstractVector{<:Real}, basis::AbstractMatrix{<:Real},
+        y::AbstractVector{<:Real}, steps::AbstractVector{<:Real},
+        kd::AbstractVector{<:Integer}, n::Integer
+    )
+    np = length(w)
+    nk = length(kd)
+    T = promote_type(Float64, eltype(w), eltype(y), eltype(steps))
+    level = basis * y
+    moves = basis * reshape(steps, np - 1, nk - 1)
+    W = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        knots = Vector{T}(undef, nk)
+        knots[1] = level[p]
+        for j in 2:nk
+            knots[j] = knots[j - 1] + moves[p, j - 1]
+        end
+        dev = interpolate_knots(knots, kd, n)
+        lw = log(w[p])
+        for t in 1:n
+            W[p, t] = lw + dev[t]
+        end
+    end
+    @inbounds for t in 1:n
+        peak = W[1, t]
+        for p in 2:np
+            peak = max(peak, W[p, t])
+        end
+        tot = zero(T)
+        for p in 1:np
+            W[p, t] = exp(W[p, t] - peak)
+            tot += W[p, t]
+        end
+        for p in 1:np
+            W[p, t] /= tot
+        end
+    end
+    return W
+end
+
 ## Daily simplex centred on cumulative admissions: column `t` is
 ## `s_p(t) ∝ (Σ_{u ≤ t} a_{p,u} + a0) exp(dev_p)`. Each column is normalised
 ## against its largest term, so a wide deviation cannot overflow.

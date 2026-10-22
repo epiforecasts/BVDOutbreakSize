@@ -236,24 +236,53 @@ end
     @test_throws ErrorException build(iso_h, cap_h; n_patches = 1)()
 end
 
-@testitem "bvd_joint: province admissions are not scored" begin
+@testitem "bvd_joint: province admissions enter as a split" begin
     using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
 
-    ## Only the national admissions enter the fit: the fit arguments carry
-    ## no province admission rows and the joint takes none.
     obs = load_observations()
-    args = patch_fit_args(obs)
-    @test !haskey(args, :province_admissions)
-    @test haskey(args, :province_isolation)
-    rows = province_care_observations(
-        obs.province_admissions_history, PROVINCE_NAMES
+    adm = obs.treatment_admissions_history
+    function build(adm_h)
+        return bvd_joint(
+            obs.n,
+            obs.exported_cases, obs.total_deaths, obs.reported_cases,
+            obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            treatment_admissions_history = adm,
+            breakpoint = obs.who_first_sitrep_days,
+            n_patches = length(PROVINCE_NAMES),
+            province_admissions = province_care_observations(
+                adm_h, PROVINCE_NAMES
+            ),
+            tmrca_days = obs.tmrca_days
+        )
+    end
+    ## Synthetic province rows on the national admission days.
+    adm_h = Dict(
+        "ituri" => (; days = adm.days, counts = round.(Int, 0.7 .* adm.counts)),
+        "nord_kivu" => (;
+            days = adm.days, counts = round.(Int, 0.3 .* adm.counts),
+        ),
     )
-    @test !isempty(rows.days)
-    @test_throws MethodError bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        n_patches = length(PROVINCE_NAMES), province_admissions = rows
+    m = build(adm_h)
+    vi = DynamicPPL.VarInfo(Xoshiro(7), m)
+    base = DynamicPPL.logjoint(m, vi)
+    @test isfinite(base)
+    @test any(contains("admissions_split_rho"), string.(keys(vi)))
+    ## Moving admissions between provinces at a fixed sum moves the density.
+    mv = round.(Int, 0.2 .* adm.counts)
+    shifted = Dict(
+        "ituri" => (; days = adm.days, counts = adm_h["ituri"].counts .- mv),
+        "nord_kivu" => (;
+            days = adm.days, counts = adm_h["nord_kivu"].counts .+ mv,
+        ),
+    )
+    @test !isapprox(
+        DynamicPPL.logjoint(build(shifted), vi), base; rtol = 1.0e-8
     )
 end
 
@@ -304,14 +333,14 @@ end
     @test nrow(df) == np
     @test names(df) == [
         "Province", "Beds", "Bed demand", "Occupied beds",
-        "Utilisation (%)", "Demand above beds",
+        "Utilisation (%)", "Patients above beds",
     ]
     @test df.Province == collect(PROVINCE_LABELS[1:np])
     ## Every cell is a median with an interval.
     @test all(contains("("), df[!, "Beds"])
-    ## Each province's occupied beds are capped at its beds, the rest its
-    ## shortfall, and the national occupancy, beds and shortfall are the
-    ## provinces' sums.
+    ## The national occupancy, beds and patients above beds are the
+    ## provinces' sums, and a province's patients above beds are its
+    ## occupancy over its beds. Nothing caps the occupancy at the beds.
     occ = BVDOutbreakSize._per_patch(chn, :province_expected_isolation, np)
     beds = BVDOutbreakSize._per_patch(chn, :province_bed_capacity, np)
     short = BVDOutbreakSize._per_patch(chn, :province_bed_shortfall, np)
@@ -319,7 +348,7 @@ end
     @test all(isapprox.(sum(beds), vec(Array(chn[:bed_capacity])); rtol = 1.0e-6))
     @test all(isapprox.(sum(short), vec(Array(chn[:bed_shortfall_T])); rtol = 1.0e-6, atol = 1.0e-8))
     for p in 1:np
-        @test all(occ[p] .<= beds[p] .* (1 + 1.0e-10))
+        @test short[p] ≈ max.(occ[p] .- beds[p], 0.0)
     end
 
     ## A single-population chain carries no per-province beds.
@@ -437,7 +466,115 @@ end
     @test patch ≈ national rtol = 1.0e-10
 end
 
-@testitem "province effective beds: printed, implied or patients held" begin
+@testitem "background admission shares nest the constant share" begin
+    using BVDOutbreakSize: background_admission_share_model, knot_days
+    using Turing: returned, fix, @varname
+    using Random: Xoshiro
+
+    w = [0.5, 0.3, 0.15, 0.05]
+    n = 80
+    days = collect(20:60)
+    m = background_admission_share_model(w, n, days)
+    θ = rand(Xoshiro(3), m)
+    r = returned(m, θ)
+    ## Daily simplex columns that move only over the printed days.
+    @test size(r.W) == (4, n)
+    @test all(c -> isapprox(sum(c), 1; rtol = 1.0e-12), eachcol(r.W))
+    @test all(>(0), r.W)
+    @test all(t -> r.W[:, t] ≈ r.W[:, 20], 1:20)
+    @test all(t -> r.W[:, t] ≈ r.W[:, 60], 60:n)
+    @test !(r.W[:, 20] ≈ r.W[:, 60])
+    @test r.level_sd > 0 && r.walk_sd > 0
+    nk = length(knot_days(60; start = 20))
+    z = θ[@varname(z_bga)]
+    @test length(z) == 3 * (nk - 1)
+    ## A zero level and zero walk give back the background suspect shares
+    ## on every day.
+    flat = fix(m, (; y_bga = zeros(3), σ_bga = 0.0, z_bga = z))
+    @test all(c -> c ≈ w, eachcol(returned(flat, rand(Xoshiro(4), flat)).W))
+    ## A level with no walk moves the shares by the same amount every day.
+    lvl = fix(
+        m, (; y_bga = [0.4, -0.2, 0.1], σ_bga = 0.0, z_bga = z)
+    )
+    W = returned(lvl, rand(Xoshiro(5), lvl)).W
+    @test all(t -> W[:, t] ≈ W[:, 1], 1:n)
+    @test !(W[:, 1] ≈ w)
+    ## No printed days, or one patch, sample nothing.
+    @test background_admission_share_model(w, n, Int[])().W == repeat(w, 1, n)
+    @test background_admission_share_model([1.0], n, days)().W == ones(1, n)
+end
+
+@testitem "background admission shares carry into the patch admissions and demand" begin
+    using BVDOutbreakSize: _patch_admissions, _patch_demand,
+        _background_stay_survival, convolve_delay
+
+    n = 30
+    A_bvd = [fill(4.0, 1, n); fill(1.0, 1, n)]
+    A_bg = fill(6.0, n)
+    w = [0.25, 0.75]
+    S = [1.0, 0.8, 0.5, 0.2]
+    f = [0.4, 0.4, 0.2]
+    κ = 0.02
+    demand = fill(50.0, n)
+    ## Constant daily shares match the vector form.
+    Wc = repeat(w, 1, n)
+    @test _patch_admissions(A_bvd, A_bg, Wc) ≈ _patch_admissions(A_bvd, A_bg, w)
+    @test _patch_demand(A_bvd, A_bg, Wc, S, f, κ, demand) ≈
+        _patch_demand(A_bvd, A_bg, w, S, f, κ, demand)
+    ## Moving background to patch 1 from day 15 moves its admissions at once
+    ## and its demand share after, through the rule-out stay.
+    Wm = copy(Wc)
+    Wm[:, 15:end] .= [0.75, 0.25]
+    adm = _patch_admissions(A_bvd, A_bg, Wm)
+    @test vec(sum(adm; dims = 1)) ≈ vec(sum(A_bvd; dims = 1)) .+ A_bg
+    @test adm[1, 15] ≈ 4.0 + 4.5
+    dm = _patch_demand(A_bvd, A_bg, Wm, S, f, κ, demand)
+    d0 = _patch_demand(A_bvd, A_bg, w, S, f, κ, demand)
+    @test vec(sum(dm; dims = 1)) ≈ demand
+    @test dm[:, 1:14] ≈ d0[:, 1:14]
+    @test dm[1, 20] > d0[1, 20]
+end
+
+@testitem "background admission shares: Mooncake gradient matches ForwardDiff" tags = [
+    :ad,
+] begin
+    using BVDOutbreakSize: background_admission_share_model,
+        province_split_model, _patch_admissions, default_adtype
+    using Turing: @model, to_submodel, DynamicPPL
+    using Distributions: Normal, truncated
+    using LogDensityProblems: logdensity_and_gradient
+    using ADTypes: AutoForwardDiff
+    import ForwardDiff
+    using Random: Xoshiro
+
+    ## The walk feeding the admissions split, as in the treatment model.
+    n = 30
+    days = collect(5:28)
+    A_bvd = [fill(4.0, 1, n); fill(1.0, 1, n); fill(0.5, 1, n)]
+    A_bg = fill(6.0, n)
+    rows = (;
+        days = repeat(days; inner = 3), patches = repeat(1:3, length(days)),
+        counts = repeat([7, 3, 2], length(days)),
+    )
+    @model function split_demo()
+        st ~ to_submodel(background_admission_share_model([0.5, 0.3, 0.2], n, days))
+        ρ ~ truncated(Normal(0, 0.1); lower = 0, upper = 1)
+        sp ~ to_submodel(province_split_model(rows, _patch_admissions(A_bvd, A_bg, st.W), ρ))
+    end
+    model = split_demo()
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(11), model), model)
+    x = collect(vi[:])
+    grad_with(adtype) = logdensity_and_gradient(
+        DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi; adtype), x
+    )
+    logp, grad = grad_with(default_adtype())
+    @test isfinite(logp)
+    @test all(isfinite, grad)
+    _, grad_fd = grad_with(AutoForwardDiff())
+    @test grad ≈ grad_fd rtol = 1.0e-6
+end
+
+@testitem "province effective beds: printed or rate-implied" begin
     using BVDOutbreakSize
     include(
         joinpath(
@@ -445,9 +582,10 @@ end
         )
     )
 
-    ## Nord-Kivu, 15 July: 171 patients at 118.8% of 141 beds. The rate
-    ## gives back the printed beds, and the patients exceed both.
-    @test effective_beds(141, 171, 118.8) == 171
+    ## Nord-Kivu, 15 July: 171 patients at 118.8% against 141 printed beds.
+    ## The rate is computed on 144 beds, and the patients are not raised
+    ## into beds, so the province is over its beds.
+    @test effective_beds(141, 171, 118.8) == 144
     ## 21 September: 338 patients at 66.2% against a stale 308.
     @test effective_beds(308, 338, 66.2) == 511
     ## A province under its printed beds keeps them, whatever its rounded
@@ -457,28 +595,16 @@ end
     ## Haut-Uélé, 6 September: a rate that disagrees with the printed beds.
     @test effective_beds(128, 68, 50.8) == 128
     ## No rate, or no patients, printed.
-    @test effective_beds(20, 24, nothing) == 24
+    @test effective_beds(20, 24, nothing) == 20
     @test effective_beds(20, nothing, nothing) == 20
 
-    ## Every recorded bed entry holds at least that day's patients.
+    ## The recorded beds are not raised to the patients: Nord-Kivu prints
+    ## more patients than beds on some recorded day.
     obs = load_observations()
-    for (name, h) in obs.province_bed_capacity_history
-        haskey(obs.province_isolation_history, name) || continue
-        iso = obs.province_isolation_history[name]
-        held = Dict(zip(iso.days, iso.counts))
-        @test all(
-            b >= get(held, d, 0) for (d, b) in zip(h.days, h.counts)
-        )
-    end
-end
-
-@testitem "the one-patch bed floor is the last recorded capacity" begin
-    using BVDOutbreakSize: _national_bed_floor
-    cap = (; days = [5, 10], counts = [300, 320])
-    iso = (; days = [4, 9], counts = [250, 280])
-    @test _national_bed_floor(cap, iso) == [320.0]
-    @test _national_bed_floor((; days = Int[], counts = Int[]), iso) == [0.0]
-    @test _national_bed_floor(cap, (; days = Int[], counts = Int[])) == [0.0]
+    h = obs.province_bed_capacity_history["nord_kivu"]
+    iso = obs.province_isolation_history["nord_kivu"]
+    held = Dict(zip(iso.days, iso.counts))
+    @test any(get(held, d, 0) > b for (d, b) in zip(h.days, h.counts))
 end
 
 @testitem "incomplete_capacity_days: a silent province's beds count" begin

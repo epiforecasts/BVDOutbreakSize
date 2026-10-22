@@ -1278,12 +1278,10 @@ cfr_prior_fig #hide
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
-# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero and capped at the cut-off beds), the cut-off bed demand (the need under unconstrained supply), the demand plus offset above the cut-off beds (the bed shortfall) and the utilisation.
-# The capacity walk is an ingredient of the beds rather than the beds reported.
-# With one patch the cut-off beds are the modelled capacity floored at the last recorded capacity.
-# With several, each province's cut-off beds are its modelled capacity floored at its last recorded effective beds, its occupancy is its demand share of the national demand plus offset capped at those beds, and the rest is its shortfall.
-# The national beds, occupancy and shortfall are the sums over the provinces.
-# Patients do not move between provinces, so the national occupancy $\sum_p \min(\cdot, B_p)$ is below $\min(\sum_p \cdot, \sum_p B_p)$ whenever a province is over its beds.
+# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero), the cut-off bed demand (the need under unconstrained supply), the occupancy above the cut-off beds (the bed shortfall) and the utilisation.
+# With several patches, each province's cut-off beds are its share of the capacity walk and its occupancy is its demand share of the national occupancy.
+# Its shortfall is its occupancy above its beds, and the national beds, occupancy and shortfall are the sums over the provinces.
+# Nothing caps a province's occupancy at its beds, so its utilisation can exceed 100%, as Nord-Kivu's printed occupancy rate does.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
@@ -1309,10 +1307,28 @@ cfr_prior_fig #hide
 # A_{p,t} = \frac{a_p \tilde A_{p,t}}{\sum_q a_q \tilde A_{q,t}} \sum_q \tilde A_{q,t}.
 # ```
 #
-# Each patch's approximate stock is these admissions through the clinical-stay survival plus its share $w_p$ of the non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+# Each patch takes a daily share $W_{p,t}$ of the non-BVD admissions.
+# It is the patch's share $w_p$ of the non-BVD suspects (defined with the province compositions below), moved by a static deviation and a weekly random walk:
 #
 # ```math
-# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + w_p\, (A_{\text{bg}} * S_{\text{ro}})_t,
+# W_{p,t} \propto w_p \exp\bigl((Q \mathbf{y}^{\text{bga}})_p + \eta_{p,t}\bigr),
+# \qquad
+# \mathbf{y}^{\text{bga}} \sim \mathrm{Normal}(0,\ \tau_{\text{bga}}^2 I_{P-1}),
+# \qquad
+# \boldsymbol{\eta}_{k} = \boldsymbol{\eta}_{k-1} + \sigma_{\text{bga}} Q \mathbf{z}_k,
+# \qquad
+# \mathbf{z}_k \sim \mathrm{Normal}(0,\ I_{P-1}),
+# ```
+#
+# normalised over the patches each day, with $\tau_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 1)$, $\sigma_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.2)$ and $Q$ the sum-to-zero basis of the Rt deviations.
+# The walk $\boldsymbol{\eta}$ is zero on the first day the province admissions are printed and has a knot $k$ every seven days to the last such day.
+# It is interpolated linearly between the knots and held flat outside them.
+# With $\tau_{\text{bga}} = \sigma_{\text{bga}} = 0$ each patch admits the share of the non-BVD suspects it reports, and without province admissions data $W_{p,t} = w_p$.
+# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Each patch's approximate stock is its BVD admissions through the clinical-stay survival plus its non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+#
+# ```math
+# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + \bigl((W_{p} A_{\text{bg}}) * S_{\text{ro}}\bigr)_t,
 # \qquad
 # S_{\text{ro}}(d) = (1 - \kappa)^d \Bigl(1 - \sum_{j \le d} f^{\text{ro}}_j\Bigr),
 # \qquad
@@ -1325,14 +1341,14 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + W_{p,u} A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
 # \qquad
 # \mathbf{y}^{\text{cap}} \sim \mathrm{Normal}(0,\ \tau_{\text{cap}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
 #
-# normalised over the patches each day, with $Q$ the sum-to-zero basis of the Rt deviations.
+# normalised over the patches each day.
 # A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
@@ -1350,12 +1366,10 @@ cfr_prior_fig #hide
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy is split on the uncapped demand, since a province can print more patients than beds.
-# The recorded province beds are the effective beds: the printed beds, or where more patients are held, the larger of the patients and the beds implied by the printed occupancy rate.
+# The recorded province beds are the printed beds, or the beds implied by the printed occupancy rate where the patients exceed the printed beds and the rate implies more.
+# Each day's 24h admissions are split the same way on each patch's modelled admissions $A_{p,t} + W_{p,t} A_{\text{bg},t}$, with their own $\rho^{\text{adm}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy split is scored weekly and the bed split on the days a count changes, since a stock reprinted daily is not a fresh draw.
-# Each patch's modelled admissions are $A_{p,t} + w_p A_{\text{bg},t}$, its BVD admissions plus its share of the background admissions.
-# Their shares move with the province deviations and also with the national ratio of BVD to background admissions, which the national reproduction number drives.
-# Only the national admissions enter the fit, and the printed province 24h admissions are not scored.
-# The modelled province admissions feed the province forecast below, and the printed ones are checked against their shares.
+# The admissions are a flow, so every day is scored.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -2412,17 +2426,12 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The occupied beds are forecast as a stock that admits only into free beds, per province with province care data and nationally otherwise.
-# Each province's beds start from its cut-off beds and move with its modelled capacity, so they fall when it falls.
-# A province left above its beds admits no one until its exits bring it below them.
-# The stock starts from the cut-off occupancy.
-# Each day's in-care deaths, recoveries, rule-outs and absconds are the modelled flows scaled by the occupied beds over the uncapped occupancy the day before, and each province loses them in proportion to its occupancy.
-# Below the beds the stock follows the fitted occupancy and the flows are unscaled.
-# Each province admits its modelled admissions up to its free beds, its beds less its previous day's occupancy plus its exits that day, so a full province admits only as many as leave.
-# The occupancy is drawn by province as a negative binomial censored at its beds, the admissions censored at its free beds, and the in-care deaths and rule-outs are the scaled flows.
-# The national counts are the sums over the provinces.
-# The fit leaves admissions uncensored, so these bounds apply to the forecast only.
-# We also report the modelled bed demand and its shortfall against the beds.
+# The occupied beds, admissions and in-care flows are the fitted treatment model run forward, so the latent stock is not capped.
+# With province care data each province's occupancy is its demand share of the modelled occupancy, and its beds are its share of the capacity walk past the cut-off.
+# Each province's occupancy is drawn from the negative binomial censored at its beds, the measurement model of the fitted occupancy.
+# Its admissions are drawn around its modelled admissions from the uncensored negative binomial the fitted admissions are scored with.
+# The in-care deaths and rule-outs are drawn nationally around the modelled flows, and the national counts are the sums over the provinces.
+# We also report the modelled bed demand and the occupancy above the beds.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
@@ -2487,8 +2496,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
-# The patients in isolation, the beds and the admissions are forecast by province as the stock above, so each adds up to the national forecast.
-# A province over its beds, such as Nord-Kivu, can then admit only as many as leave.
+# The patients in isolation, the beds and the admissions are forecast by province as above, so each adds up to the national forecast.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
