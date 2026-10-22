@@ -330,7 +330,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
-    ## Draws from the four-patch prior for the province pages. The
+    ## Draws from the province model's prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
     ## compositions are passed their observed counts: `Prior()` leaves them out

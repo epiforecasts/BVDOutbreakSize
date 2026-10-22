@@ -209,6 +209,25 @@ CONFIG = {
     # byte, with it. Inside the incomplete-data band its 6 October reads 11,
     # the edge of the 13 bar before it, where the bar stands at about 4.
     "149": ("2026-10-10", "2026-10-05"),
+    # "150" and "151" are left out (last tick 12 October). SitRep 150
+    # reads its 14 September bar, on a tick column, as 23 against 69 in
+    # SitRep 149, and doubles the dead segment of 29 July (69 against 51).
+    # SitRep 151's last bar, 11 October, ends a pixel short of the 12
+    # October tick, and the reader takes that edge for a 12 October bar of
+    # 3 where the figure draws none.
+    # "152" reprints SitRep 151's figure byte for byte and is left out
+    # with it.
+    # "153" and "154" are left out (last tick 12 October, y step 25). On
+    # their 817x459 and 812x447 renders the reader loses 13 and 14 May
+    # from SitRep 153 (17 and 8 in SitRep 149 and the dashboard), reads
+    # 13 and 14 May as 17 and 17 in SitRep 154 and drops its 5 June (20 in
+    # SitRep 153); see #1148.
+    # "155" reprints SitRep 154's figure byte for byte and "157" reprints
+    # SitRep 156's. "156" is a new 827x456 render with SitRep 154's n (7 438)
+    # and last tick (12 October), so it is left out with 154. "158" and
+    # "159" (n = 7 660, last tick 19 October, y step 25) read 14 May as 4
+    # and 18 against 8 in SitRep 149 and the dashboard, the misread of
+    # #1148, and are left out until the reader is fixed.
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.

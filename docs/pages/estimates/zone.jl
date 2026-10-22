@@ -398,7 +398,7 @@ zone_meld_rt_fig = plot_rt_zones(
     vcat(["National"], zone_inputs.patch_labels),
     vcat([N_PATCHES + 1], 1:N_PATCHES);
     patch_labels = vcat(zone_inputs.patch_labels, ["National"]),
-    patch_colours = [:firebrick, :steelblue, :seagreen, :darkorange, :black],
+    patch_colours = vcat(BVDOutbreakSize._ZONE_PATCH_COLOURS, [:black]),
     dates = grid_date.(zone_grid), as_of_date = obs.cutoff,
     top = N_PATCHES + 1, ncols = 3, unit = "patch",
     reference_rt = [m[:, zone_grid] for m in joint_stage_rt],
@@ -449,7 +449,10 @@ zone_hyper = [
                 :zone_ascertainment_sd, "Ascertainment spread σ_ascertainment",
                 "σ_ascertainment",
             ),
-            (:zone_severity_sd, "Severity spread σ_severity", "σ_severity"),
+            (
+                :zone_severity_sd, "Severity spread σ_severity (logit)",
+                "σ_severity",
+            ),
             (:mixing_within_zone, "Within-patch mixing ε_within", "ε_within"),
             (:mixing_departure_zone, "Mixing departure τ_mix", "τ_mix"),
             (:composition_rho_zone, "Case composition ρ", "ρ"),
@@ -641,13 +644,16 @@ CSV.write(
 open(joinpath(dashboard_dir, "zone_headline.md"), "w") do io
     print(io, zone_headline(zone_estimates; top = 10))
 end
-## The same frame into the release outputs.
+## The zone estimates and time series into the release outputs, so each
+## results release carries the dashboard map's zone inputs at its cut-off.
 output_dir = get(
     ENV, "BVD_OUTPUT_DIR",
     joinpath(pkgdir(BVDOutbreakSize), "output")
 )
 mkpath(output_dir)
-CSV.write(joinpath(output_dir, "zone_estimates.csv"), zone_estimates)
+for f in ("zone_estimates.csv", "zone_timeseries.csv")
+    cp(joinpath(dashboard_dir, f), joinpath(output_dir, f); force = true)
+end
 
 #md # ```@raw html
 #md # </details>
