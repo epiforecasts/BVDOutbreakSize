@@ -303,6 +303,12 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
             ## les CTE/CT pour 374 lits, soit un taux d'occupation de 88,2 %".
             "(\\d+)\\)? ?$P (?:sont )?hospitalis[ei]s? : " *
                 "(\\d+) dans les cte/ct pour (\\d+) lits",
+            ## SitRep 156: the CTE/CT count and beds as the rate's fraction,
+            ## "471 patients sont hospitalisés, ... pour un taux d'occupation
+            ## des CTE/CTde 85,1 % : (349/410)".
+            "(\\d+)\\)? ?$P (?:sont )?hospitalis[ei]s?[^;]*?" *
+                "taux d.occupation (?:global )?des cte/ct ?de " *
+                "\\d+(?:,\\d+)? %\\s*:?\\s*\\((\\d+)/(\\d+)\\)",
             "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *
                 "pris en charge en hospitalisation)[^;]*?pour (\\d+) lits",
             "atteint (\\d+) patients pour (\\d+) lits",
@@ -336,6 +342,9 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
                 "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                     "(?:hospitalis[ei]s?|en isolement|en hospitalisation)",
                 "(\\d+)\\)? ?$P (?:sont |restent |demeurent )?en isolement",
+                ## SitRep 159: "portant à 60 le nombre de patients en
+                ## isolement".
+                "portant a (\\d+) le nombre de patients en isolement",
                 ## SitRep 150 drops the verb: "Ainsi, 337 patients, soit un
                 ## taux d'occupation de 33,2 %".
                 "ainsi, (\\d+) patients?, soit un taux d.occupation",
