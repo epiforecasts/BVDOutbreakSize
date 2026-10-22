@@ -631,8 +631,6 @@ MarkdownTable(vintage_table) #hide
 # \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
 # ```
 #
-# The flow scale's prior is tighter than the destination scale's, so a pattern shared across origins is read as a destination effect.
-#
 
 #md # ```@raw html
 #md # <details><summary>Submodel: province_importation_kernel</summary>
