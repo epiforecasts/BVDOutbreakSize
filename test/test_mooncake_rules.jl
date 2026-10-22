@@ -173,9 +173,8 @@
     ## derived rather than primitive, and the speed item leaves them out.
     const PACKAGE_KERNELS = (
         convolve_delay, convolve_pmf, renewal_infections, patch_infections,
-        abscond_thinned_flows, two_clock_confirmed, onset_report_cdf_table,
-        onset_report_anchor_series, accumulate_occupancy,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
+        zone_share_renewal_kernel, zone_pre_convolution,
     )
 
     ## Every native rule with the argument types its call sites pass: float

@@ -1091,21 +1091,28 @@ $(TYPEDSIGNATURES)
 What one infection on each grid row adds to each vintage window through
 the delay PMF `f` (lag 0), as an `(nd × n_vintages)` matrix:
 `weights[k, v] = Σ_{j = starts[v]}^{stops[v]} f_{j − k}` over `j ≥ k`.
-Each column reads forward from its row, so it is a ComposableRecurrences
-`Convolution` of `f` over the window's indicator in reversed time.
+Built from the cumulative PMF, with its own reverse rule, since the model
+rebuilds it on every draw's delays.
 """
 function zone_window_weights(
         f::AbstractVector, starts::AbstractVector{<:Integer},
         stops::AbstractVector{<:Integer}, nd::Integer
     )
-    nv = length(starts)
-    (nv == 0 || nd == 0) && return zeros(eltype(f), nd, nv)
-    windows = [
-        starts[v] <= nd + 1 - j <= stops[v] ? one(eltype(f)) :
-            zero(eltype(f))
-            for v in 1:nv, j in 1:nd
-    ]
-    return permutedims(reverse(Convolution(f)(windows); dims = 2))
+    L = length(f)
+    ## `cf[m + 1]` is the mass of lags `0 … m`.
+    cf = cumsum(f)
+    weights = zeros(eltype(cf), nd, length(starts))
+    @inbounds for v in eachindex(starts)
+        a, b = starts[v], stops[v]
+        a <= b || continue
+        for k in max(1, a - L + 1):b
+            hi = cf[min(b - k, L - 1) + 1]
+            lo = a - 1 - k < 0 ? zero(eltype(cf)) :
+                cf[min(a - 1 - k, L - 1) + 1]
+            weights[k, v] = hi - lo
+        end
+    end
+    return weights
 end
 
 """
