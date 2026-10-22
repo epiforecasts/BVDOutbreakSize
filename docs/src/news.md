@@ -125,6 +125,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   Inside the pink incomplete-data band a day whose columns disagree reads the level run of columns centred nearest it, so 30 September and 1 October read 23 and 7 rather than 31 and 15.
   A rebuild changes seven earlier cells in the band, after which none of their dates falls between consecutive vintages: 7 September in SitReps 118 to 120 (17, 26 and 24 to 9, 14 and 17), 129's 18 September (13 to 5) and 19 September in 130 to 132 (16, 16 and 27 to 2, 2 and 10).
   On onset dates more than 56 days before the report, SitRep 143 differs from the dashboard's 2 October snapshot by 0.38 cases a day and at most 5 (`scripts/compare_onset_sources.py`).
+- The tick-column re-read above now also fires when the two bounding outlines differ in height.
+  A day on a tick is read again, without the gridline skip, when every column's skipped run falls more than two counts short of its own unskipped run and that unskipped run reaches either outline (#1138).
+  SitReps 150 and 151 still stay out of the onset curve.
+  SitRep 150's 29 July reads 69 against 51 from day-grid drift rather than a tick-column break, and SitRep 151's larger render reads a phantom bar of 3 on 12 October, a day on which the figure draws no bar.
 - The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
   It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
   On the 23 September data, built both ways, the counts and the old chart reading agree on every row.

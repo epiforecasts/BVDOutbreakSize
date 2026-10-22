@@ -39,7 +39,11 @@
 #     show a bar nor leave it empty, or that reads below the two equal
 #     outline columns around it beside a washed tick column, is read again
 #     without the tick-column skip, which washed fill on a tick column can
-#     break. The run's top is
+#     break; so is a day on a tick whose every column's skipped run falls
+#     more than two counts short of its unskipped run, when the unskipped
+#     run reaches one of the two bounding outlines (which, unlike the equal
+#     pair above, can differ, since they belong to whichever bars stand
+#     either side). The run's top is
 #     its highest pixel darker than an anti-alias, which is the bar's
 #     outline; chroma-washed
 #     fill inside the run is crossed on the way up. The bar height is the
@@ -932,8 +936,21 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
             x -> hread[x] == 0 && hp[x] > 2 * ppc &&
                 any(t -> abs(x - t) <= 1, xs), cols
         )
+        # a day on a tick whose skipped run falls more than two counts short
+        # of its unskipped run in every column, where the unskipped run
+        # reaches one of the bounding outlines, broke on a gridline row too;
+        # its outlines need not match, unlike the paired case above, because
+        # the neighbouring bar they belong to can be any height
+        edges = [h[x] for x in bounds if 1 <= x <= W && isborder[x]]
+        broken = bar isa Tuple && !isempty(edges) &&
+            all(
+            x -> any(t -> abs(x - t) <= 1, xs) && h1[x] - hread[x] > 2 * ppc,
+            cols
+        ) &&
+            any(e -> abs(e - maximum(h1[cols])) <= 1, edges)
         if bar === nothing || (bar isa Tuple && maximum(hread[cols]) <= 1) ||
-                (bar isa Tuple && paired && washed && bar[1] < h[bounds[1]] - 1)
+                (bar isa Tuple && paired && washed && bar[1] < h[bounds[1]] - 1) ||
+                broken
             bar = bar_height(h1, hp1, nr1, cols, cx, ppc)
             edge = [
                 h[x] for x in (first(cols) - 1, last(cols) + 1)
