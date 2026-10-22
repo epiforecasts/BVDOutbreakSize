@@ -854,6 +854,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     barmin, barmax = minimum(nz), maximum(nz)
     inband = band_columns(R, G, B, white, hp, y0, yt[1])
     rows = Tuple{Date, Int, Int}[]
+    prev = (0, 0)                         # the window the day before read
     for off in (7 * ks[1] - 7):3
         # anchor on the nearest chain tick at or before the day
         j = findlast(k -> 7 * k <= off, ks)
@@ -889,13 +890,32 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
             br === nothing || (hi = min(hi, c + br - 1))
         end
         cols = [x for x in lo:hi if !border[x]]
-        if isempty(cols) && best !== nothing
-            # the clipped window holds only outline columns (two adjacent
-            # outlines on the day's centre): read the nearest outline pair
-            lo, hi = best[2] + 1, best[3] - 1
-            cols = [x for x in lo:hi if !border[x]]
+        if isempty(cols)
+            # the clipped window holds only outline columns. Two adjacent
+            # outlines on the day's centre leave the nearest outline pair to
+            # read. But a short bar whose dead segment is dark enough to pass
+            # as outline, or one under the dashed line, leaves only outline
+            # columns too, and the nearest pair is then the day before's bar
+            # or none fits; such a bar is the level run of dark, saturated,
+            # undashed columns through the window
+            shade = [
+                x for x in lo:hi if nd[x] >= max(0.25 * h[x], 6) &&
+                    ns[x] >= 0.1 * h[x] && nb[x] < 3
+            ]
+            run = isempty(shade) ? nothing : nearest_plateau(hread, shade, cx)
+            if best !== nothing && (best[2] + 1, best[3] - 1) != prev
+                lo, hi = best[2] + 1, best[3] - 1
+                cols = [x for x in lo:hi if !border[x]]
+            elseif run !== nothing
+                lo, hi = run
+                cols = collect(lo:hi)
+            end
         end
+        prev = (lo, hi)
+        # soft columns are kept when the rest of the window shows no outline
+        # at all (a washed column beside a dark dead segment)
         interior = [x for x in cols if !soft[x]]
+        any(x -> hread[x] > 0, interior) || (interior = Int[])
         isempty(interior) || (cols = interior)
         isempty(cols) && continue
         bar = bar_height(hread, hp, nread, cols, cx, ppc)

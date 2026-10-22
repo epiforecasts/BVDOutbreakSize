@@ -864,6 +864,7 @@ def digitize_windows(im, last_tick_date, y_step=20):
     inband = _band_columns(im, white, hp, y0, yt[0])
     rows = []
     windows = {}
+    prev = (0, 0)                         # the window the day before read
     for off in range(7 * ks[0] - 7, 4):
         # anchor on the nearest chain tick at or before the day
         cx = day_column(cal, off)
@@ -902,12 +903,31 @@ def digitize_windows(im, last_tick_date, y_step=20):
             if right:
                 hi = min(hi, right[0] - 1)
         cols = [x for x in range(lo, hi + 1) if not border[x]]
-        if not cols and best is not None:
-            # the clipped window holds only outline columns (two adjacent
-            # outlines on the day's centre): read the nearest outline pair
-            lo, hi = best[1] + 1, best[2] - 1
-            cols = [x for x in range(lo, hi + 1) if not border[x]]
-        cols = [x for x in cols if not soft[x]] or cols
+        if not cols:
+            # the clipped window holds only outline columns. Two adjacent
+            # outlines on the day's centre leave the nearest outline pair to
+            # read. But a short bar whose dead segment is dark enough to pass
+            # as outline, or one under the dashed line, leaves only outline
+            # columns too, and the nearest pair is then the day before's bar
+            # or none fits; such a bar is the level run of dark, saturated,
+            # undashed columns through the window
+            shade = [x for x in range(lo, hi + 1)
+                     if nd[x] >= max(0.25 * h[x], 6)
+                     and ns[x] >= 0.1 * h[x] and nb[x] < 3]
+            run = _nearest_plateau(hread, shade, cx) if shade else None
+            if best is not None and (best[1] + 1, best[2] - 1) != prev:
+                lo, hi = best[1] + 1, best[2] - 1
+                cols = [x for x in range(lo, hi + 1) if not border[x]]
+            elif run is not None:
+                lo, hi = run
+                cols = list(range(lo, hi + 1))
+        prev = (lo, hi)
+        # soft columns are kept when the rest of the window shows no outline
+        # at all (a washed column beside a dark dead segment)
+        interior = [x for x in cols if not soft[x]]
+        if not any(hread[x] > 0 for x in interior):
+            interior = []
+        cols = interior or cols
         if not cols:
             continue
         bar = _bar_height(hread, hp, nread, cols, cx, ppc)
