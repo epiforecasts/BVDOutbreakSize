@@ -35,7 +35,8 @@ end
 @testitem "bvd_joint: a zero detection spread is the model without it" setup = [
     ProvinceDetectionJoint,
 ] begin
-    z = [0.8, -1.3, 0.4]
+    ## One coordinate per sum-to-zero direction.
+    z = collect(range(-1.3, 0.8; length = length(PROVINCE_NAMES) - 1))
     ## Without the province care splits the detection enters only through
     ## the national suspected cases and the case and laboratory
     ## compositions, where a common probability is `p_drc`, so the density
@@ -86,12 +87,15 @@ end
     using BVDOutbreakSize: _draw_vectors, _draws
     using Turing: sample, Prior
     using StatsFuns: logit
+    using Statistics: std
     import FlexiChains
     chn = sample(
         Xoshiro(13), detection_joint(), Prior(), 5;
         chain_type = FlexiChains.VNChain, progress = false
     )
     p_drc = vec(_draws(chn, :p_drc))
+    national = vec(_draws(chn, :p_drc_national))
+    log_sd = vec(_draws(chn, :province_ascertainment_log_sd))
     p = _draw_vectors(chn, :province_suspected_ascertainment)
     conf = _draw_vectors(chn, :province_confirmation_relative)
     asc = _draw_vectors(chn, :province_ascertainment)
@@ -105,5 +109,8 @@ end
         ## centred on the log scale.
         @test sum(log, asc[i]) ≈ 0 atol = 1.0e-10
         @test asc[i] ./ asc[i][1] ≈ (p[i] .* conf[i]) ./ (p[i][1] * conf[i][1])
+        ## The national rate is an onset-weighted mean of the provinces'.
+        @test minimum(p[i]) - 1.0e-12 <= national[i] <= maximum(p[i]) + 1.0e-12
+        @test log_sd[i] ≈ std(log.(asc[i]))
     end
 end

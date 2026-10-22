@@ -1169,6 +1169,7 @@ cfr_prior_fig #hide
 # ```
 #
 # in every stream below that reads the BVD suspected cases, and $p_{\text{DRC}}$ is the logit-scale centre of the patch probabilities.
+# The national reporting fraction we report is the patch probabilities weighted by their onsets to the cut-off, which differs from $p_{\text{DRC}}$ when the probabilities spread.
 #
 # The per-vintage increments are scored with a NegBinomial sharing the
 # dispersion $k$:
@@ -2005,7 +2006,7 @@ cfr_prior_fig #hide
 #
 # where $\tau_d$ is the suspected-case detection spread, $\tau_a$ is the case composition's confirmation spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
 # A logit shift of $\tau_d$ moves the log detection probability by about $(1 - p_{\text{DRC}})\, \tau_d$.
-# At the prior centre of $0.75$ and $\tau_d = 0.5$ a typical province therefore detects within about 13 percent of the national rate.
+# At the prior centre of $0.75$ and $\tau_d = 0.5$ a typical province therefore detects within about 13 percent of $p_{\text{DRC}}$.
 # A logit shift of $\tau_\kappa$ moves the log case-fatality ratio by about $(1 - \mathrm{CFR})\, \tau_\kappa$.
 # At the prior mean ratio of $0.33$ and $\tau_\kappa = 0.15$ a typical province therefore sits within about ten percent of the national case-fatality ratio, the spread we give the death ascertainment.
 #

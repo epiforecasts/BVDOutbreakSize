@@ -1335,6 +1335,12 @@ density there, is the fitted model's.
     case_onsets = by_detection ?
         transpose(patch_state.onsets_matrix) * detection_state.relative :
         onsets
+    ## The national suspected-case ascertainment the fit implies: `p_drc`
+    ## is the centre of the logit contrast rather than the national rate,
+    ## which is the patch probabilities weighted by their onsets to the
+    ## cut-off. It is `p_drc` when the detection is off.
+    p_drc_national := by_detection ?
+        p_drc * sum(upto(case_onsets, n)) / sum(upto(onsets, n)) : p_drc
 
     bg_onset = isempty(reported_history.days) ? 1 :
         clamp(Int(reported_history.days[1]) - background_onset_lead, 1, n)
@@ -1397,12 +1403,14 @@ density there, is the fitted model's.
     province_background_split_sd := bg_split_state.pooling_sd
 
     ## The anchor stops at the cut-off, so a longer grid leaves the fitted
-    ## ascertainment where it was.
+    ## ascertainment where it was. The curve reads the detection-weighted
+    ## onsets, which the anchor's `p_drc` scales as it does in the
+    ## suspected and confirmed streams.
     onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
         upto(confirmed_state.p_pos_grid, n)
     onset_report_state ~ to_submodel(
         onset_report(
-            onset_curve_history, onsets;
+            onset_curve_history, case_onsets;
             anchor = onset_anchor_daily,
             detection_day = onset_detection_day(export_case_days)
         )
@@ -1463,6 +1471,12 @@ density there, is the fitted model's.
             province_suspected_ascertainment_sd := detection_state.sd
             province_confirmation_relative :=
                 composition_state.province_ascertainment
+            ## The spread of the log relative case ascertainment between
+            ## the patches, detection and confirmation together. With a
+            ## sum-to-zero contrast of scale `τ` its expected square is
+            ## `τ²`, so it is on the confirmation spread's scale and the
+            ## zone stage centres its own spread on it.
+            province_ascertainment_log_sd := std(log.(province_ascertainment))
         end
     end
 
@@ -1483,7 +1497,7 @@ density there, is the fitted model's.
     bvd_reports_matrix = n_patches > 1 ?
         _patch_reports(detected_onsets_matrix, cases_state.report_pmf) :
         nothing
-    care_asc = by_detection ? ones(n_patches) : patch_asc
+    care_asc = by_detection ? one.(patch_asc) : patch_asc
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,

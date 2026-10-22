@@ -209,7 +209,9 @@ that joint draw shifted on the logit scale by the log of the zone's
 relative ascertainment, so both lie in (0, 1). The ascertainment contrast
 is fitted to confirmed cases, so this assumes suspected-case detection
 varies between the zones of a province with their confirmed-case
-ascertainment. Returns the states of [`patch_prevalence`](@ref).
+ascertainment. The zone stage has no occupancy split to separate the two,
+and holding the province's detection would assume the zones differ only in
+confirmation instead. Returns the states of [`patch_prevalence`](@ref).
 """
 function zone_prevalence(
         zone_chn, inputs, joint_chn;
