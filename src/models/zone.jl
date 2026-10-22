@@ -974,12 +974,17 @@ function zone_share_renewal_kernel(
         )
     end
     days = t0:last_day
-    patch_of = zeros(Int, nz)
+    ## `member[p, z]` is one when zone `z` is in patch `p`, so `member' * x`
+    ## gives each zone its patch's row of `x` and `member' * (member * x)`
+    ## each zone its patch's sum over its zones.
+    member = zeros(length(patch_ranges), nz)
     for (p, zs) in enumerate(patch_ranges)
-        patch_of[zs] .= p
+        member[p, zs] .= 1
     end
+    zone_rows(x) = permutedims(member) * x
+    patch_sums(x) = zone_rows(member * x)
     gain = exp.(permutedims(δ_daily))
-    pre = w0 .* view(force_pre, patch_of, days)
+    pre = w0 .* zone_rows(force_pre[:, days])
     ## `Allocate` takes non-empty groups only; a patch with no zones has
     ## nothing to split (EpiAware/ComposableRecurrences.jl#326).
     held = findall(!isempty, patch_ranges)
@@ -1003,17 +1008,16 @@ function zone_share_renewal_kernel(
     forces = Convolution(vcat(false, g))(Iz) .+ pre
     floor_ = eps(eltype(Iz))
     shares = if on
-        Iz ./ max.(view(I_bar, patch_of, days), floor_)
+        Iz ./ max.(zone_rows(I_bar[:, days]), floor_)
     else
         u = gain .* forces
-        u ./ max.(_group_sums(u, patch_ranges, patch_of), floor_)
+        u ./ max.(patch_sums(u), floor_)
     end
     imports = if on
         ## The trace holds the spilled force and then the import pattern.
         h = first(last(run).modifiers)[(nz + 1):(2nz), :]
-        arrivals = mix.import_fraction[patch_of, days] .*
-            view(I_bar, patch_of, days)
-        arrivals .* h ./ max.(_group_sums(h, patch_ranges, patch_of), floor_)
+        arrivals = zone_rows(mix.import_fraction[:, days] .* I_bar[:, days])
+        arrivals .* h ./ max.(patch_sums(h), floor_)
     else
         zero(Iz)
     end
@@ -1021,19 +1025,6 @@ function zone_share_renewal_kernel(
         shares = permutedims(shares), forces = permutedims(forces),
         infections = permutedims(Iz), imports = permutedims(imports),
     )
-end
-
-## Each zone's row of `x` replaced by the sum over its patch's zones.
-function _group_sums(
-        x::AbstractMatrix, patch_ranges::AbstractVector{<:UnitRange},
-        patch_of::AbstractVector{<:Integer}
-    )
-    sums = reduce(
-        vcat,
-        [sum(view(x, zs, :); dims = 1) for zs in patch_ranges];
-        init = zeros(eltype(x), 0, size(x, 2))
-    )
-    return sums[patch_of, :]
 end
 
 """
