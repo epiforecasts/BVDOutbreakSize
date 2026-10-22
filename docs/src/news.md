@@ -91,6 +91,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
+- The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
+  The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
+  The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
+  SitReps 150 and 154 stay out, and #1154 gives the reasons.
 - Nord-Ubangi is the eighth source province (#1147).
   Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
   Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
