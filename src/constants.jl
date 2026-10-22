@@ -197,13 +197,13 @@ const ITURI_POPULATION = 4_392_200
 
 Every province the situation reports carry a per-province row for, in the
 order they first appear. These key the per-province blocks of
-`data/observations.toml`. They are not the model's patches: see
-[`PROVINCE_NAMES`](@ref) for those and [`PROVINCE_MEMBERS`](@ref) for how
-the two relate.
+`data/observations.toml`. Each is one of the model's patches, which
+[`PROVINCE_NAMES`](@ref) puts in patch order; [`PROVINCE_MEMBERS`](@ref)
+maps a patch to the provinces it covers.
 """
 const PROVINCE_SOURCE_NAMES = [
     "ituri", "nord_kivu", "sud_kivu",
-    "haut_uele", "tshopo", "bas_uele", "sud_ubangi",
+    "haut_uele", "tshopo", "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 
 """
@@ -214,9 +214,9 @@ order. 2019 figures from the Democratic Republic of the Congo's Institut
 National de la Statistique, *Annuaire statistique RDC 2020* (March 2021),
 as tabulated at
 <https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
-(accessed 15 September 2026).
+(accessed 20 October 2026).
 
-One source for all seven rather than the best figure for each, so
+One source for all eight rather than the best figure for each, so
 consistency between provinces matters more than the accuracy of any one of
 them. The relative sizes enter the importation kernel and centre the
 province background share. The absolute sizes are the pools the renewal depletes
@@ -225,7 +225,7 @@ bound the outbreak.
 """
 const PROVINCE_SOURCE_POPULATIONS = [
     4_008_000, 7_574_000, 6_565_000,
-    2_046_000, 2_582_000, 1_250_000, 2_755_000,
+    2_046_000, 2_582_000, 1_250_000, 2_755_000, 1_425_000,
 ]
 
 """
@@ -258,6 +258,7 @@ const PROVINCE_SOURCE_CENTRES = [
     (0.6072, 24.8468),    # Tshopo, 23 zones
     (3.3937, 25.1094),    # Bas-Uele, 11 zones
     (3.0653, 19.4528),    # Sud-Ubangi, 16 zones
+    (3.8889, 20.9641),    # Nord-Ubangi, 11 zones
 ]
 
 """
@@ -269,13 +270,19 @@ the Uganda export propensities in [`province_export_pressure_model`](@ref).
 The per-patch reproduction-number deviations in [`patch_rt_model`](@ref)
 sum to zero, so no patch is their reference.
 
-Ituri, Nord-Kivu and Haut-Uele carry enough confirmed cases to be patches
-in their own right. The rest hold a few dozen between them and are pooled
-into `other`. Giving each of those its own reproduction number and
-ascertainment would sample dimensions nothing informs, and their
-estimates would be the deviation prior read back.
+Every affected province is its own patch, so a newly affected province
+gets its own population, centre and importation link rather than joining
+a pool. The three provinces with the most confirmed cases come first,
+then the rest in the order of [`PROVINCE_SOURCE_NAMES`](@ref). Sud-Kivu,
+Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold a few dozen confirmed
+cases between them, so their reproduction-number deviations, ascertainment
+and lethality are informed mostly by the priors those parameters share
+across patches.
 """
-const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
+const PROVINCE_NAMES = [
+    "ituri", "nord_kivu", "haut_uele",
+    "sud_kivu", "tshopo", "bas_uele", "sud_ubangi", "nord_ubangi",
+]
 
 """
     PROVINCE_LABELS
@@ -285,72 +292,48 @@ rows and figure panels.
 """
 const PROVINCE_LABELS = [
     "Ituri", "Nord-Kivu", "Haut-Uele",
-    "Other provinces",
+    "Sud-Kivu", "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
 ]
 
 """
     PROVINCE_MEMBERS
 
-Which source provinces each patch pools, keyed by [`PROVINCE_NAMES`](@ref)
+Which source provinces each patch covers, keyed by [`PROVINCE_NAMES`](@ref)
 and valued in [`PROVINCE_SOURCE_NAMES`](@ref). Every source province belongs
 to exactly one patch, so the patches partition the national totals and the
-composition likelihoods stay conditional on them.
+composition likelihoods stay conditional on them. Each patch is one
+province, so each entry holds its own key.
 """
-const PROVINCE_MEMBERS = Dict(
-    "ituri" => ["ituri"],
-    "nord_kivu" => ["nord_kivu"],
-    "haut_uele" => ["haut_uele"],
-    "other" => ["sud_kivu", "tshopo", "bas_uele", "sud_ubangi"]
-)
+const PROVINCE_MEMBERS = Dict(name => [name] for name in PROVINCE_NAMES)
 
-## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
-## once so the pooled population and centre below, and the pooled increments
-## in `province_increment_matrix`, all read the same membership.
-const _PROVINCE_MEMBER_IDX = [
-    [
+## Index of each patch's province in `PROVINCE_SOURCE_NAMES`, built once so
+## the population and centre below read the same mapping.
+const _PROVINCE_SOURCE_IDX = [
+    only(
         findfirst(==(m), PROVINCE_SOURCE_NAMES)
             for m in PROVINCE_MEMBERS[name]
-    ] for name in PROVINCE_NAMES
+    ) for name in PROVINCE_NAMES
 ]
 
 """
     PROVINCE_POPULATIONS
 
-Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, summed
-over the provinces it pools, from the 2019 INS figures in
-[`PROVINCE_SOURCE_POPULATIONS`](@ref). Used to weight the between-province
-importation kernel, to centre the province background and bed-capacity
-shares, and as each patch's susceptible pool in the renewal.
+Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, from
+the 2019 INS figures in [`PROVINCE_SOURCE_POPULATIONS`](@ref). Used to
+weight the between-province importation kernel, to centre the province
+background and bed-capacity shares, and as each patch's susceptible pool in
+the renewal.
 """
-const PROVINCE_POPULATIONS = [
-    sum(PROVINCE_SOURCE_POPULATIONS[idx])
-        for idx in _PROVINCE_MEMBER_IDX
-]
+const PROVINCE_POPULATIONS = PROVINCE_SOURCE_POPULATIONS[_PROVINCE_SOURCE_IDX]
 
 """
     PROVINCE_CENTRES
 
 Representative point of each patch, in [`PROVINCE_NAMES`](@ref) order, as
-`(latitude, longitude)` in decimal degrees north and east. A patch holding
-one province takes its centre from [`PROVINCE_SOURCE_CENTRES`](@ref); a
-pooled patch takes the mean of its members' centres weighted by
-[`PROVINCE_SOURCE_POPULATIONS`](@ref), the populations the kernel reads.
+`(latitude, longitude)` in decimal degrees north and east, from
+[`PROVINCE_SOURCE_CENTRES`](@ref).
 """
-const PROVINCE_CENTRES = [
-    (
-        sum(
-            PROVINCE_SOURCE_POPULATIONS[i] *
-                PROVINCE_SOURCE_CENTRES[i][1]
-                for i in idx
-        ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
-        sum(
-            PROVINCE_SOURCE_POPULATIONS[i] *
-                PROVINCE_SOURCE_CENTRES[i][2]
-                for i in idx
-        ) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
-    )
-        for idx in _PROVINCE_MEMBER_IDX
-]
+const PROVINCE_CENTRES = PROVINCE_SOURCE_CENTRES[_PROVINCE_SOURCE_IDX]
 
 """
     PROVINCE_DISTANCE_DECAY

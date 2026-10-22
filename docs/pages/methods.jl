@@ -46,7 +46,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
-# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 15 September 2026).
+# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 20 October 2026).
 # Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
 # The distances in the importation kernel are between provincial population centres, the mean of each province's health-zone centroids weighted by WorldPop population [worldpop_2025](@cite), from the INRB-UMIE health-zone map [inrb_umie_health_zones_2026](@cite).
 #
@@ -210,7 +210,7 @@ MarkdownTable(vintage_table) #hide
 # ### Model overview
 #
 # We fit one joint model to every national data stream and the provincial tables, on a daily grid from a seeding date to the cut-off (day $n$).
-# It divides the country into four patches: Ituri, Nord-Kivu, Haut-Uele and a fourth that pools four further provinces.
+# It divides the country into eight patches, one for each province with a confirmed case: Ituri, Nord-Kivu, Haut-Uele, Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi.
 # Each patch runs its own renewal equation, with a reproduction number that is a shared weekly trend times a deviation for that patch.
 # Each data stream sees a delayed or thinned view of the same patch infections, as in the renewal models of EpiNow2 [epinow2](@cite), but here all streams are fitted together.
 
@@ -229,8 +229,8 @@ MarkdownTable(vintage_table) #hide
 
 #md # ```@raw html
 #md # <figure class="bvd-diagram">
-#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_patches.svg" alt="Schematic of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as a weekly national trend times a patch deviation. The deviations sum to zero across patches. Four patch boxes form a square: Ituri seeded with the outbreak, and Nord-Kivu, Haut-Uele and Other provinces starting empty. Double-headed arrows join every pair of patches. Each arrow carries importation in both directions. An origin sends its intensity times the kernel entry times the infections it generates that day. An equation gives each patch's infections after importation. A patch keeps what it does not export and adds the arrivals from every other patch. The patch infections sum to the national infections and onsets. The onsets in each patch feed three province compositions. Patch onsets reach the confirmed cases through the report and receipt delays, weighted by relative case ascertainment. Confirmed deaths pass through the death and receipt delays, weighted by death ascertainment and lethality. Analysed specimens split the national outbreak volume and add a share of the background. All three are scored as beta-binomial splits of each national rise."></a>
-#md # <figcaption>The patch structure of the joint model, drawn as a schematic rather than a map. The grey box is a parameter, blue boxes are latent quantities and the orange box is observed data. The dashed outline groups the coupled patch renewal. The patch labelled Other provinces pools Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi. The provincial counts of patients in isolation and of beds are split the same way but are not drawn.</figcaption>
+#md # <a href="diagrams/joint_patches.svg" target="_blank" rel="noopener"><img src="/diagrams/joint_patches.svg" alt="Schematic of the patch structure of the joint model. A box at the top gives the reproduction number of each patch as a weekly national trend times a patch deviation. The deviations sum to zero across patches. Four patch boxes form a square: Ituri seeded with the outbreak, and Nord-Kivu, Haut-Uele and a box standing for the five further provinces, all starting empty. Double-headed arrows join every pair of patches. Each arrow carries importation in both directions. An origin sends its intensity times the kernel entry times the infections it generates that day. An equation gives each patch's infections after importation. A patch keeps what it does not export and adds the arrivals from every other patch. The patch infections sum to the national infections and onsets. The onsets in each patch feed three province compositions. Patch onsets reach the confirmed cases through the report and receipt delays, weighted by relative case ascertainment. Confirmed deaths pass through the death and receipt delays, weighted by death ascertainment and lethality. Analysed specimens split the national outbreak volume and add a share of the background. All three are scored as beta-binomial splits of each national rise."></a>
+#md # <figcaption>The patch structure of the joint model, drawn as a schematic rather than a map. The grey box is a parameter, blue boxes are latent quantities and the orange box is observed data. The dashed outline groups the coupled patch renewal. The box for the five further provinces stands for one patch each: Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi. The provincial counts of patients in isolation and of beds are split the same way but are not drawn.</figcaption>
 #md # </figure>
 #md # ```
 
@@ -550,7 +550,6 @@ MarkdownTable(vintage_table) #hide
 #
 # We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial population centres.
 # Each centre sits where the province's people live rather than at its capital.
-# A pooled province takes the population-weighted mean of its members' centres.
 # Each origin column is scaled so that the share of its transmission that leaves is the population share of the rest of the country, $1 - N_q / N$:
 #
 # ```math
@@ -1953,16 +1952,19 @@ cfr_prior_fig #hide
 # The modelled per-patch confirmed increments carry each patch's onsets through the same onset-to-confirmation delay as the national confirmed stream — the onset-to-report delay $f_{\text{rep}}$ convolved with the report-to-receipt delay $f_{\text{rec}}$ — and the assay sensitivity $s$, binned to the vintage days.
 # The death increments use the onset-to-death delay convolved with the same receipt delay.
 # Write those modelled increments $\lambda_{p,i}$ for patch $p$ at vintage $i$.
-# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$:
+# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$, the patch case-fatality ratio $\mathrm{CFR}_p$ over the national one:
 #
 # ```math
 # \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
 #     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
 # \log a_p = \tau_a (Q \mathbf{z}^{a})_p, \qquad
-# \log \kappa_p = \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
+# \kappa_p = \frac{\mathrm{CFR}_p}{\mathrm{CFR}}, \qquad
+# \mathrm{logit}\, \mathrm{CFR}_p = \mathrm{logit}\, \mathrm{CFR} + \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6), so both log multipliers sum to zero across patches.
+# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6).
+# The log ascertainment multipliers and the logit case-fatality contrasts each sum to zero across patches.
+# Each patch case-fatality ratio therefore lies between zero and one, and $\tau_\kappa = 0$ gives every patch the national ratio.
 #
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
@@ -1980,12 +1982,13 @@ cfr_prior_fig #hide
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
-# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.1),
+# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.15),
 # ```
 #
 # where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
 # The case composition carries no severity term.
-# At $\tau_\kappa = 0.1$ a typical province sits within about ten percent of the national case-fatality ratio.
+# A logit shift of $\tau_\kappa$ moves the log case-fatality ratio by about $(1 - \mathrm{CFR})\, \tau_\kappa$.
+# At the prior mean ratio of $0.33$ and $\tau_\kappa = 0.15$ a typical province therefore sits within about ten percent of the national case-fatality ratio, the spread we give the death ascertainment.
 #
 # The two compositions identify different things.
 # A patch's confirmed case share is the product of its incidence and its case-finding, and a composition sees only the product.
@@ -2346,21 +2349,25 @@ cfr_prior_fig #hide
 # \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{65}
 # ```
 #
-# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built as in the [province compositions](@ref methods-province-compositions):
+# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built on sum-to-zero bases as in the [province compositions](@ref methods-province-compositions):
 #
 # ```math
 # a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
 # \qquad
-# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr),
+# \theta_z = \frac{\mathrm{CFR}_z}{\bar{\mathrm{CFR}}_p},
+# \qquad
+# \mathrm{logit}\, \mathrm{CFR}_z = \mathrm{logit}\, \bar{\mathrm{CFR}}_p + \sigma_\theta (Q_p \mathbf{z}^\theta_p)_z,
 # \qquad
 # \mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1}). \tag{66}
 # ```
 #
-# Both are relative to the zone's own province, because a factor common to a patch cancels within it.
+# Here $\bar{\mathrm{CFR}}_p$ is the province case-fatality ratio at the joint posterior mean on the logit scale, so each zone case-fatality ratio $\mathrm{CFR}_z$ lies between zero and one.
+# Both multipliers are relative to the zone's own province, because a factor common to a patch cancels within it.
 # We report their product with the province multipliers as each zone's ascertainment and fatality against the national average.
 #
 # Two compositions carry three unknowns per zone, so one has to be pinned.
-# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.1)$, which assumes that deaths per infection vary little between the zones of a patch.
+# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.15)$, which assumes that deaths per infection vary little between the zones of a patch.
+# As for the provinces, this is about $0.1$ on the log scale at the prior mean case-fatality ratio of $0.33$.
 # The death composition then sets the split of incidence and the case composition gives ascertainment as the residual.
 # Zones differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
 #
@@ -2679,6 +2686,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
 # The province ascertainment is the national one times the province's relative ascertainment.
 # We rescale it so that the provinces keep the national rate when weighted by their expected confirmed cases on the cut-off day, the weights the joint model uses to split the national suspected cases.
+# The joint model uses the relative ascertainment only to split national counts, so nothing bounds the product at one, and we cap it at one.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
@@ -2689,7 +2697,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
 # It estimates each zone's ascertainment and fatality relative to its province.
-# A zone's case-fatality ratio is its province's from joint draw $j$ times the zone's contrast.
+# A zone's case-fatality ratio is its province's from joint draw $j$ shifted on the logit scale by the zone's contrast.
 # A zone's ascertainment is its province's times the zone's contrast, rescaled as for the provinces so that the province's zones keep the province's rate.
 # The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province as confirmed-case detection does.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.

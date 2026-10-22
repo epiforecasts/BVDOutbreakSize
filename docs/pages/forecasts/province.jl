@@ -115,7 +115,7 @@ province_forecast_map #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Each province is shaded by its patch's forecast, so the pooled patch shades all its provinces alike.
+#md # Each province is shaded by its forecast.
 #md # The reproduction number is centred on one, and a province whose 90% predictive interval spans one is washed out.
 #md # </figcaption>
 #md # </figure>
@@ -154,8 +154,10 @@ forecast_province_fig(p) = plot_province_forecast_detail(
     observed = forecast_province_observed(p)
 )
 ## The province blocks below are written out one per patch.
-@assert N_PATCHES == 4 && PROVINCE_LABELS[1:4] ==
-    ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
+@assert N_PATCHES == 8 && PROVINCE_LABELS[1:8] == [
+    "Ituri", "Nord-Kivu", "Haut-Uele",
+    "Sud-Kivu", "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
+]
 ## Cases and deaths come from separate tables, so each stream's observed
 ## week is stated on its own.
 function forecast_province_recent_week(r, stream)
@@ -193,11 +195,25 @@ forecast_province_fig(2) #hide
 
 forecast_province_fig(3) #hide
 
-# ### Other provinces
-#
-# The other provinces are pooled into one patch, so their forecast is for the pool.
+# ### Sud-Kivu
 
 forecast_province_fig(4) #hide
+
+# ### Tshopo
+
+forecast_province_fig(5) #hide
+
+# ### Bas-Uele
+
+forecast_province_fig(6) #hide
+
+# ### Sud-Ubangi
+
+forecast_province_fig(7) #hide
+
+# ### Nord-Ubangi
+
+forecast_province_fig(8) #hide
 
 # ## Past forecasts against what was observed
 
@@ -399,6 +415,19 @@ CSV.write(
         cols = :union
     )
 );
+## The same three tables into the release outputs, so each results release
+## carries the dashboard map's province and national inputs at its cut-off.
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+for f in (
+        "province_estimates.csv", "national_estimates.csv",
+        "province_timeseries.csv",
+    )
+    cp(joinpath(province_map_dir, f), joinpath(output_dir, f); force = true)
+end
 
 #md # ```@raw html
 #md # </details>

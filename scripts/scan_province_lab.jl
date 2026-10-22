@@ -62,20 +62,20 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 ## A bullet names its province then a colon. The names are matched on the
 ## folded text, so the hyphen/space and accent variants all collapse here.
 const ENTRY = Regex(
     "^[^0-9a-z]*(ituri|nord[ -]?kivu|sud[ -]?kivu|" *
         "haut[ -]?uele|tshopo|bas[ -]?uele|" *
-        "sud[ -]?ubangi)\\s*:+"
+        "sud[ -]?ubangi|nord[ -]?ubangi)\\s*:+"
 )
 const KEYS = Dict(
     "ituri" => "ituri", "nordkivu" => "nord_kivu",
     "sudkivu" => "sud_kivu", "hautuele" => "haut_uele",
     "tshopo" => "tshopo", "basuele" => "bas_uele",
-    "sudubangi" => "sud_ubangi"
+    "sudubangi" => "sud_ubangi", "nordubangi" => "nord_ubangi"
 )
 ## Folded spellings of each province, to spot a sentence that has moved on
 ## to another province.
@@ -85,7 +85,8 @@ const NAMES = Dict(
     "sud kivu" => "sud_kivu", "haut-uele" => "haut_uele",
     "haut uele" => "haut_uele", "tshopo" => "tshopo",
     "bas-uele" => "bas_uele", "bas uele" => "bas_uele",
-    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi"
+    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi",
+    "nord-ubangi" => "nord_ubangi", "nord ubangi" => "nord_ubangi"
 )
 
 ## A batch of samples goes by several names. "echantillons" is misspelt
@@ -98,6 +99,12 @@ const POSITIVES = Regex.(
     [
         "n ?= ?(\\d+)",
         "(\\d+) ?nouveaux? resultats? positifs?",
+        ## SitReps 153 and 154's Tshopo bullets count the positives as
+        ## cases: "7 nouveau cas confirme (6 vivants et 1 deces) sur 16
+        ## echantillons recus et analyses". Only directly against a sample
+        ## count: the 079-081 Ituri bullets name new cases and then add
+        ## the day's positive re-samplings, so their positives are larger.
+        "(\\d+) ?nouveaux? cas confirmes? (?:\\([^)]*\\) )?sur \\d+",
         "dont (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
         "parmi lesquels (\\d+) ?(?:sont )?(?:revenus? )?positifs?",
         "soit (\\d+) ?positifs?",
@@ -121,7 +128,9 @@ const SPLIT_LABS = Regex(
 const ANALYSED = Regex.(
     [
         "dont (\\d+) (?:[a-z]+ ){0,2}?(?:ont ete |sont )?(?:analys|test)",
-        "sur (?:les )?(\\d+) (?:nouveaux? )?(?:ech[ae]nt[a-z]*|swabs?)",
+        ## SitRep 150's Nord-Kivu bullet runs the count into the noun:
+        ## "sur 132échantillons reçus et analysés".
+        "sur (?:les )?(\\d+) ?(?:nouveaux? )?(?:ech[ae]nt[a-z]*|swabs?)",
         ## SitRep 147's Bas-Uele bullet drops the noun: "sur 33 recus et
         ## analyses".
         "sur (?:les )?(\\d+) recus et (?:analys|test)",

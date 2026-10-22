@@ -1222,7 +1222,7 @@ density there, is the fitted model's.
         death_ascertainment_sd_prior = truncated(
             Normal(0, 0.1); lower = 0
         ),
-        province_cfr_sd_prior = truncated(Normal(0, 0.1); lower = 0),
+        province_cfr_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         export_pressure = province_export_pressure_model,
         exports = exports_model,
         deaths = deaths_model,
@@ -1516,24 +1516,32 @@ density there, is the fitted model's.
         modelled_deaths_prov = _patch_death_increments(
             patch_state.onsets_matrix, death_kernel, province_death_days
         )
+        ## The case-fatality contrast is on the logit scale, where a shift
+        ## `s` moves the log ratio by about `(1 - CFR) s`. A spread of 0.15
+        ## is about 0.1 on the log scale at the prior mean ratio of 0.33,
+        ## the death ascertainment's spread.
         death_composition_state ~ to_submodel(
             death_composition(
                 province_death_increments,
                 modelled_deaths_prov;
                 ascertainment_sd_prior = death_ascertainment_sd_prior,
-                severity_sd_prior = province_cfr_sd_prior
+                severity_sd_prior = province_cfr_sd_prior,
+                severity_baseline = deaths_state.CFR
             )
         )
         province_death_shares := death_composition_state.shares
         province_death_composition_rho := death_composition_state.rho
         province_death_ascertainment := death_composition_state.province_ascertainment
         province_death_ascertainment_sd := death_composition_state.ascertainment_sd
-        ## Per-province case-fatality ratio, the national ratio times that
-        ## province's sum-to-zero contrast, so the provinces are reported on
-        ## the same scale as the national quantity they pool toward.
+        ## Per-province case-fatality ratio, the national ratio shifted by
+        ## that province's sum-to-zero contrast on the logit scale, so each
+        ## lies in (0, 1) and the provinces are reported on the same scale as
+        ## the national quantity they pool toward. The relative fatality is
+        ## that ratio over the national one.
         province_cfr_relative := death_composition_state.province_severity
-        CFR_patch := deaths_state.CFR .*
-            death_composition_state.province_severity
+        CFR_patch := _logit_shift(
+            deaths_state.CFR, death_composition_state.severity_log_odds
+        )
         province_cfr_sd := death_composition_state.severity_sd
     end
 

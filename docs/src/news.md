@@ -22,6 +22,17 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
+  SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
+  Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
+  The new patches take the existing per-patch priors, so no prior is added or changed.
+  Their reproduction-number deviations, ascertainment and lethality are informed mostly by the priors those parameters share across patches.
+  The gravity kernel now sends each small province's exports to its own neighbours: about half of Nord-Kivu's go to Sud-Kivu, and about a third of Nord-Ubangi's go to Sud-Ubangi.
+  The parameter count grows with the patch count, so fitted values change and the fits need rerunning.
+  Archived release forecasts for the `other` patch are still scored against its four provinces.
+  The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
+  The zone composition calibration leaves out a patch with no zone counts to score for a stream, rather than giving it an empty row that broke the calibration plot.
+
 - The importation kernel's log flows have a multivariate normal prior whose mean is the log gravity kernel, so gravity is the prior and each flow's log deviation is the data's departure from it (#1030).
   The covariance is a destination effect correlated with each province's origin deviation plus a double-centred flow term whose correlation matrix ties each flow to its reverse, and each origin's export total is held.
   The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
@@ -76,15 +87,42 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
+- Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
+  It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
+  The province point prevalence rejected that draw and failed the province page.
+  The death composition's severity multiplier is now the province ratio over the national one, and a zero contrast still gives every province the national ratio.
+  The contrast's half-normal scale is 0.15 on the logit scale, which at the prior mean ratio of 0.33 is about the previous 0.1 on the log scale.
+  The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
+  The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
+  Fitted values change and the joint and zone fits need refitting.
 
 ### Data
 
-- The model cut-off advances to SitRep 149, 10 October (#1128).
+- Nord-Ubangi is the eighth source province (#1147).
+  Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
+  Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
+  The province, laboratory and zone blocks carry zero `nord_ubangi` series to SitRep 154, since no report before SitRep 155 names the province, and the zone blocks carry Wapinda at zero.
+  `data/health_zones.csv` gains Wapinda and the zone map gains Nord-Ubangi's 11 zones, 178 in all.
+  The scanners and `scripts/build_health_zones.py` recognise the province.
+
+- The model cut-off advances to SitRep 159, 20 October (#1128, #1137, #1141).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
   SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitReps 147 and 149 print no Ituri alerts, so their suspect totals are partial and the suspected stream leaves out 8 and 10 October.
   The care scanner reads the care section where SitRep 146 renumbers it under PCI/EDS, and the laboratory scanner reads two misspellings of `échantillons` and a bullet with no sample noun.
   The onset curve adds SitReps 146 and 149; SitRep 147 stays out, and 148 with it as a reprint, because the reader takes the edge of a taller neighbour for its faded 6 October bar.
+  SitRep 150 prints a Tableau 1 total of 9 065 against 9 066 in its own Tableau 2 and prose, so the confirmed and province series take the Tableau 2 figures, and its header misprints the report date as 12 October.
+  The care scanner reads a patient count printed before its split or with no verb, and the laboratory scanner reads a count run into its noun.
+  The onset curve does not add SitReps 150 and 151: the reader misreads a tick-column bar and a dead segment in 150 and takes the edge of 151's last bar for a 12 October bar the figure does not draw.
+  SitRep 152 reprints SitRep 151's onset figure, so it stays out with it.
+  The onset curve does not add SitReps 153 and 154 either, because on their larger renders the reader misplaces the bars around 14 May and drops 5 June from 154.
+  The laboratory scanner reads positives worded as new confirmed cases against a sample count, and the care scanner reads a wrapped line that opens on a bracket, which also fills Sud-Kivu's 17 patients and 25 beds on 12 September.
+  SitRep 155 (16 October) reports Nord-Ubangi's first 2 cases and 1 death, in Wapinda, and SitRep 158 its third case.
+  SitRep 155's isolation tile repeats SitRep 154's while Nord-Kivu prints no count, so the isolation stream leaves out 16 October.
+  From SitRep 156 Nord-Kivu prints its beds only as the fraction behind its CTE/CT occupancy rate, which gives 410 beds, and the care scanner reads that form.
+  SitRep 159's Haut-Uélé care paragraph carries the day before forward, so the province care blocks leave it out, as for SitRep 152.
+  The onset curve adds none of SitReps 155 to 159: 155 and 157 reprint earlier figures, 156 redraws SitRep 154's extract, and 158 and 159 misread 14 May as SitReps 153 and 154 do.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 7, 8, 9, 12, 15, 16 and 19 October.
   Fitted values change with the new data.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
@@ -105,7 +143,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 138 stays out, because its render loses the outline between the 15 and 16 June bars and 16 June reads 40 against 28 to 29 elsewhere.
 - The onset reader reads the 14 May bar under the first-positive-result line from its outline, and the SitRep downloader fills reports the media listing lacks through their insp.cd posts (#1032, #1019).
 - The province and health-zone blocks fill 1 July (SitRep 048) from the INRB-UMIE mirror, and the province blocks fill 26 July (SitRep 073) from its Tableau 2 zone rows; 16 June and 10 July stay out because the mirror does not reconcile with the national totals.
-- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 149 (10 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
+- `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 154 (15 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 
@@ -141,6 +179,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
   On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.
+- The map's summary menu shows only for the metrics with a 90% interval rather than sitting greyed out, and the Options control is hidden on the province layer when it has nothing to hold (#1078).
 - The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
   The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#1073).
 - The methods score the confirmed positives as a beta-binomial with its intra-window correlation and prior, as the model does, not as a binomial (#1073).
@@ -168,6 +207,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   This also gives a keyboard route to every area.
   Show national zooms back out to the whole map.
 - In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
+- The dashboard map has a compare menu beside its data date that sets an earlier cut-off's estimates beside the current ones: under each figure in the detail column, dashed in its reproduction number and weekly charts, and in the tooltips (#1114).
+  The map keeps the current shading, and the menu shows only when the build carries an archive of earlier cut-offs.
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the tail effective sample size (#1051).
@@ -187,6 +228,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
+- Each release carries all five tables the dashboard map reads, adding the zone time series and the province and national estimates and time series to the zone estimates it already carried (#1114).
+  `scripts/archive_dashboard.jl` collects them from the newest release of each of the last 14 data cut-offs, and the deploy from `main` stages them under `zone_map/archive/` with an index, leaving them out of pull request previews and `site.zip`.
+  Releases from before this change do not carry the tables and are left out.
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
