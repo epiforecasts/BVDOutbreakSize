@@ -196,10 +196,12 @@ end
     lab = obs["province_lab_daily_history"]
     nat = obs["tests_analysed_daily_history"]
     national = Dict(zip(nat["dates"], nat["values"]))
-    provinces = (
-        "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-        "bas_uele", "sud_ubangi",
-    )
+    ## Every province the block carries, so a new province is checked too.
+    provinces = [
+        chop(k; tail = length("_analysed"))
+            for k in keys(lab) if endswith(k, "_analysed")
+    ]
+    @test "nord_ubangi" in provinces
 
     ## The per-province analysed counts are an exact partition of the
     ## national series, which is what admits a vintage into this block.
