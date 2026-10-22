@@ -559,6 +559,18 @@ MarkdownTable(vintage_table) #hide
 # \qquad K_{q,q} = 0. \tag{14}
 # ```
 #
+# Ituri and Nord-Kivu are the only origins with mobility data.
+# Their columns take the split of Flowminder's subscriber cohorts' days away from home over 18 May to 8 June 2026, at the same total:
+#
+# ```math
+# K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr) m_{p,q}, \qquad q \in \{\text{Ituri},\ \text{Nord-Kivu}\},
+# ```
+#
+# with $m_{p,q}$ the share of cohort $q$'s days away from home spent in patch $p$.
+# The cohorts are subscribers present in the outbreak zones in 4 to 17 May: Bunia, Mongbwalu, Nyankunde and Rwampara in Ituri, and Beni, Butembo and Katwa in Nord-Kivu.
+# They describe travel from those clusters in late May and early June, not travel from the whole province over the outbreak.
+# Days outside the modelled provinces are dropped: 13% of the Ituri cohort's and 5% of the Nord-Kivu cohort's, mostly Kinshasa.
+#
 # The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
 #
 # ```math
@@ -578,8 +590,8 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
-# Gravity is the prior mean of the flows between provinces, and the data move each flow away from it.
-# We collect the log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, into one vector and give it a multivariate normal prior centred on the log gravity kernel:
+# The kernel of Equation (14), with the Flowminder columns, is the prior mean of the flows between provinces, and the data move each flow away from it.
+# We collect the log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, into one vector and give it a multivariate normal prior centred on the log kernel:
 #
 # ```math
 # \operatorname{vec}(\ell) \sim \mathrm{MvNormal}\bigl(\operatorname{vec}(\log K),\ \Sigma\bigr),
@@ -587,8 +599,8 @@ MarkdownTable(vintage_table) #hide
 # \Sigma = \sigma_{\text{dest}}^2\, C_{\text{dest}} + \sigma_{\text{flow}}^2\, R(\rho_{\text{flow}}).
 # ```
 #
-# The deviation $W$ is the departure from gravity that the data support.
-# The renewal uses the flows with each origin's column rescaled to its gravity total, so the outflow and $\varepsilon$ keep their meaning:
+# The deviation $W$ is the departure from that kernel that the data support.
+# The renewal uses the flows with each origin's column rescaled to its total in Equation (14), so the outflow and $\varepsilon$ keep their meaning:
 #
 # ```math
 # K'_{p,q} = e^{\ell_{p,q}} \frac{\sum_{r} K_{r,q}}{\sum_{r \ne q} e^{\ell_{r,q}}},
@@ -625,8 +637,8 @@ MarkdownTable(vintage_table) #hide
 # We use priors of
 #
 # ```math
-# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \sigma_{\text{dest}} \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \sigma_{\text{flow}} \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
 # \tfrac{1}{2}(\rho_{\text{od}} + 1) \sim \mathrm{Beta}(2,\ 2), \qquad
 # \tfrac{1}{2}(\rho_{\text{flow}} + 1) \sim \mathrm{Beta}(2,\ 2).
 # ```
@@ -2382,7 +2394,7 @@ cfr_prior_fig #hide
 # We approximate the joint posterior of the generation-interval and delay parameters by a normal on the log scale, as we do for the patch infections.
 # The zone tables can update these parameters, as they can the patch infections.
 # The sampled import fraction leaves out the joint model's change in intensity at detection.
-# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no mobility data to check it against.
+# We assume the gravity form, with its decay and destination weights fitted to the zone counts, describes movement between zones, with no zone-level mobility data in the model.
 # Straight-line distance stands in for the roads, the lake and the international border that carry movement.
 # The zones that take innovations depend on the data and can differ between cut-offs.
 

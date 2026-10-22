@@ -26,6 +26,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   The covariance is a destination effect correlated with each province's origin deviation plus a double-centred flow term whose correlation matrix ties each flow to its reverse, and each origin's export total is held.
   The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
   Fitted values change.
+- Ituri's and Nord-Kivu's importation kernel columns follow Flowminder's outbreak-cluster subscriber cohorts in place of gravity, with tighter destination and flow deviation priors (#1027).
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
   The decay's `LogNormal(0, 1)` prior has its median at the fixed inverse-distance decay it replaces.
   Fitted values change.

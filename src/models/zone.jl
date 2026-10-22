@@ -857,7 +857,9 @@ end
 
 ## Posterior mean over draws of the province model's weighted kernel
 ## ([`destination_weighted_kernel`](@ref)) from its per-draw log weights,
-## `vec` of an `n × n` matrix; empty for a chain without them.
+## `vec` of an `n × n` matrix; empty for a chain without them. The log
+## weights are deviations from the province model's default kernel
+## ([`mobility_importation_kernel`](@ref)), so they weight that kernel.
 function _mean_parent_kernel(chn, key::Symbol)
     _has_key(chn, key) || return zeros(0, 0)
     ws = _draw_vectors(chn, key)
@@ -866,7 +868,7 @@ function _mean_parent_kernel(chn, key::Symbol)
     np^2 == length(first(ws)) || throw(
         DimensionMismatch("$key: $(length(first(ws))) entries is not square.")
     )
-    K = province_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    K = mobility_importation_kernel(PROVINCE_POPULATIONS[1:np])
     acc = zeros(np, np)
     for w in ws
         acc .+= destination_weighted_kernel(K, reshape(Float64.(w), np, np))
@@ -2150,7 +2152,7 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
-[`province_importation_kernel`](@ref) weighted by its fitted per-flow
+[`mobility_importation_kernel`](@ref) weighted by its fitted per-flow
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
 the same origin intensity, which is what keeps one movement from being
@@ -2743,7 +2745,7 @@ function _zone_mixing_or_nothing(
     length(parent.import_log_odds) == np * n || return nothing
     pops = Float64[r.population for r in rows]
     coords = [(r.lat, r.lon) for r in rows]
-    kernel = province_importation_kernel(
+    kernel = mobility_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
     if !isempty(parent.flow_kernel)
