@@ -21,7 +21,9 @@ latent. The difference between a composer and the latent baseline is the
 cost that stream's likelihood adds, which is what guides optimisation.
 `bvd_joint` itself is a scenario only on request ([`scenarios`](@ref)): its
 gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, too
-slow for an unattended run.
+slow for an unattended run. The health-zone model `bvd_zone` is one on
+request too, on synthetic zone inputs about the size of the real ones from
+`test/zone_fixtures.jl`.
 
 The latent inputs each submodel needs (daily onsets, the suspected-case
 background and testing fraction) are prior draws taken once at a fixed
@@ -37,10 +39,14 @@ using BVDOutbreakSize: BVDOutbreakSize, default_adtype, enzyme_adtype,
     onset_reporting_model, province_composition_model,
     exports_only_model, deaths_only_model,
     cases_only_model, confirmed_only_model,
-    treatment_only_model, onsets_only_model, bvd_joint
+    treatment_only_model, onsets_only_model, bvd_joint, bvd_zone,
+    zone_fit_inputs
 using LogDensityProblems: logdensity_and_gradient
 using Random: seed!
 using Turing: DynamicPPL, returned
+
+include(joinpath(@__DIR__, "zone_fixtures.jl"))
+using .ZoneFixtures: zone_synthetic, zone_metadata
 
 export Scenario, scenarios, backends, linked_point, gradient_is_finite,
     enzyme_broken_scenarios, enzyme_skip_scenarios, MIN_SCENARIOS
@@ -51,7 +57,8 @@ to draw its unconstrained evaluation point.
 
 `group` is one of `"Submodel"` (an observation submodel on a fixed latent
 draw), `"Latent"` (the shared infection and onset process), `"Composer"`
-(a single-stream composer) or `"Joint"` (the full `bvd_joint`).
+(a single-stream composer), `"Joint"` (the full `bvd_joint`) or `"Zone"`
+(the health-zone `bvd_zone`).
 """
 struct Scenario
     name::String
@@ -221,15 +228,38 @@ const PROVINCE_MODELLED = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
 const PATCH_KERNEL_OFF = zeros(3, 3)
 const PATCH_KERNEL_ON = [0.0 0.0 0.0; 1.0e-4 0.0 0.0; 1.0e-5 0.0 0.0]
 
+## The synthetic health-zone shape: 60 zones over the 4 patches, 150 days
+## and 95 daily vintages, about the size of the real zone fit.
+const ZONE_SHAPE = (;
+    zones_per_patch = [30, 15, 10, 5], n = 150, first_vintage = 56, step = 1,
+)
+
 """
-    scenarios(; n = N, joint = false)
+    zone_model_data()
+
+`bvd_zone` inputs from the synthetic zone dataset at `ZONE_SHAPE`, with
+the zone metadata given so that mixing and the zone correlation are on.
+"""
+function zone_model_data()
+    syn = zone_synthetic(; ZONE_SHAPE...)
+    inputs = zone_fit_inputs(
+        syn.chain, syn.obs; zones = zone_metadata(syn),
+        patch_names = syn.patch_names,
+        patch_labels = uppercase.(syn.patch_names)
+    )
+    return inputs.model_data
+end
+
+"""
+    scenarios(; n = N, joint = false, zone = false)
 
 Every scenario, in group order: the shared latent process, the observation
 submodels on a fixed latent draw, then the single-stream composers. Pass
-`joint = true` to append the full `bvd_joint`, which is excluded by default
-for the compile cost given in the module docstring.
+`joint = true` to append the full `bvd_joint` and `zone = true` to append
+the health-zone `bvd_zone` ([`zone_model_data`](@ref)). Both are excluded
+by default for their compile cost.
 """
-function scenarios(; n::Integer = N, joint::Bool = false)
+function scenarios(; n::Integer = N, joint::Bool = false, zone::Bool = false)
     lat = latent_draw(; n = n)
     onsets = lat.onsets
     infections = lat.infection_state.infections
@@ -416,6 +446,9 @@ function scenarios(; n::Integer = N, joint::Bool = false)
             "bvd_joint", "Joint",
             bvd_joint(n, 2, 3, 5, 1, 4, 10; breakpoint = 14), SEED
         )
+    )
+    zone && push!(
+        out, Scenario("bvd_zone", "Zone", bvd_zone(zone_model_data()), SEED)
     )
     return out
 end
