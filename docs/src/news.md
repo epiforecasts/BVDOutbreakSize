@@ -72,6 +72,14 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The cut-off and forecast beds, occupancy and admissions are built by province and summed to the national figures, with nothing capped: each province's beds are its share of the capacity walk, and its forecast runs the fitted stock forward (#958).
 - The provinces' 24h admissions are fitted as a split of the national admissions (#958).
   Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level and a weekly random walk over the printed days, which nest the constant share at zero.
+- Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
+  It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
+  The province point prevalence rejected that draw and failed the province page.
+  The death composition's severity multiplier is now the province ratio over the national one, and a zero contrast still gives every province the national ratio.
+  The contrast's half-normal scale is 0.15 on the logit scale, which at the prior mean ratio of 0.33 is about the previous 0.1 on the log scale.
+  The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
+  The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
+  Fitted values change and the joint and zone fits need refitting.
 
 ### Data
 
@@ -219,9 +227,6 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Admissions are uncensored in the fit and in the forecast (#918).
 - The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
 - Province occupancy is the national modelled occupancy split on the demand shares, the basis the likelihood and forecast use, so a province over its beds, as Nord-Kivu prints, shows its patients above the beds rather than a capped occupancy (#920).
-- The province point prevalence caps each province's case-fatality ratio at one, as it already capped the ascertainment and the zone ratios (#1149).
-  The ratio is the national one times the province's relative fatality, which the joint model leaves unbounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
-  The prevalence calculation rejected that draw and failed the province page.
 
 ## v2.2.0
 

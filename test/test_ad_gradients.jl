@@ -54,6 +54,7 @@ end
     using LogDensityProblems: logdensity_and_gradient
     using Random: seed!
     using BVDOutbreakSize: province_composition_model, default_adtype
+    using Distributions: truncated, Normal
 
     ## The stick-breaking BetaBinomial composition is the likelihood the
     ## spatial data enter through, so its gradient has to exist.
@@ -66,15 +67,26 @@ end
     seed!(20260518)
     obs = [853 21 42; 77 2 5; 3 0 0]
     modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
-    model = province_composition_model(obs, modelled)
-    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
-    x0 = collect(vi[:])
-    ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    ## The death composition adds the logit severity contrast about the
+    ## national case-fatality ratio.
+    models = (
+        province_composition_model(obs, modelled),
+        province_composition_model(
+            obs, modelled;
+            severity_sd_prior = truncated(Normal(0, 0.15); lower = 0),
+            severity_baseline = 0.4
+        ),
     )
-    logp, grad = logdensity_and_gradient(ldf, x0)
-    @test isfinite(logp)
-    @test length(grad) == length(x0)
-    @test all(isfinite, grad)
-    @test any(!iszero, grad)
+    for model in models
+        vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+        x0 = collect(vi[:])
+        ldf = DynamicPPL.LogDensityFunction(
+            model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+        )
+        logp, grad = logdensity_and_gradient(ldf, x0)
+        @test isfinite(logp)
+        @test length(grad) == length(x0)
+        @test all(isfinite, grad)
+        @test any(!iszero, grad)
+    end
 end
