@@ -1672,7 +1672,7 @@ The default is each patch's 2019 INS resident population
 ### Importation
 
 The default `importation_kernel` is [`mobility_importation_kernel`](@ref):
-Ituri's and Nord-Kivu's exports split as the May travel of Flowminder's
+Ituri's and Nord-Kivu's exports split as the late-May travel of Flowminder's
 outbreak-cluster cohorts does, and the other origins' by the gravity kernel
 of [`province_importation_kernel`](@ref). The provinces are coupled and the
 intensity `ε` is sampled. `ε` is weakly identified against the

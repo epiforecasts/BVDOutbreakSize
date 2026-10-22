@@ -857,7 +857,9 @@ end
 
 ## Posterior mean over draws of the province model's weighted kernel
 ## ([`destination_weighted_kernel`](@ref)) from its per-draw log weights,
-## `vec` of an `n × n` matrix; empty for a chain without them.
+## `vec` of an `n × n` matrix; empty for a chain without them. The log
+## weights are deviations from the province model's default kernel
+## ([`mobility_importation_kernel`](@ref)), so they weight that kernel.
 function _mean_parent_kernel(chn, key::Symbol)
     _has_key(chn, key) || return zeros(0, 0)
     ws = _draw_vectors(chn, key)
@@ -866,7 +868,7 @@ function _mean_parent_kernel(chn, key::Symbol)
     np^2 == length(first(ws)) || throw(
         DimensionMismatch("$key: $(length(first(ws))) entries is not square.")
     )
-    K = province_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    K = mobility_importation_kernel(PROVINCE_POPULATIONS[1:np])
     acc = zeros(np, np)
     for w in ws
         acc .+= destination_weighted_kernel(K, reshape(Float64.(w), np, np))

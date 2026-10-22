@@ -1257,7 +1257,8 @@ end
     ## cancels and the blocks are the unweighted ones.
     @test tilted([0.0, 0.4, -0.7, 0.0]).between ≈ mix.between
     ## The parent kernel is the posterior mean of the weighted kernels over
-    ## draws, not the kernel at the mean log weight.
+    ## draws, not the kernel at the mean log weight, and the log weights
+    ## weight the province model's mobility-centred kernel, not gravity.
     Ws = [
         [0.0 1.5 -0.4; 2.0 0.0 0.3; -1.0 0.2 0.0],
         [0.0 -1.2 0.8; -0.5 0.0 1.1; 0.9 -0.7 0.0],
@@ -1266,11 +1267,13 @@ end
     ]
     chain3 = copy(syn.chain)
     chain3[:importation_flow_effect] = reshape(vec.(Ws), 4, 1)
-    K3p = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    K3p = mobility_importation_kernel(PROVINCE_POPULATIONS[1:3])
     mean_kernel = sum(destination_weighted_kernel(K3p, W) for W in Ws) ./ 4
     got = BVDOutbreakSize._mean_parent_kernel(chain3, :importation_flow_effect)
     @test got ≈ mean_kernel
     @test !(got ≈ destination_weighted_kernel(K3p, sum(Ws) ./ 4))
+    K3g = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    @test !(got ≈ sum(destination_weighted_kernel(K3g, W) for W in Ws) ./ 4)
     ## With three patches a non-zero weighting changes the between block,
     ## and its column over a destination patch's zones is the weighted
     ## kernel's entry.

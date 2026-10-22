@@ -568,7 +568,7 @@ MarkdownTable(vintage_table) #hide
 #
 # with $m_{p,q}$ the share of cohort $q$'s days away from home spent in patch $p$.
 # The cohorts are subscribers present in the outbreak zones in 4 to 17 May: Bunia, Mongbwalu, Nyankunde and Rwampara in Ituri, and Beni, Butembo and Katwa in Nord-Kivu.
-# They describe May travel from those clusters, not travel from the whole province over the outbreak.
+# They describe travel from those clusters in late May and early June, not travel from the whole province over the outbreak.
 # Days outside the modelled provinces are dropped: 13% of the Ituri cohort's and 5% of the Nord-Kivu cohort's, mostly Kinshasa.
 #
 # The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
