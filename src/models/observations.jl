@@ -2450,10 +2450,12 @@ background admissions ([`background_admission_share_model`](@ref)). The
 same shares carry the background into the per-patch demand. The national
 likelihoods are kept, so the splits add only the spatial signal.
 
-Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
-BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
-sub-stock prevalences and their stay means, the in-care fraction and the daily
-series for forecasting and replication.
+Exposes the cut-off occupancy, the bed demand, the shortfall (the bed
+demand above the national beds), each patch's occupancy above its own beds,
+the utilisation (the modelled occupancy mean over the beds, uncapped, so it
+can exceed one), the BVD share of demand, `CFR_iso` and `β_iso`, the
+length-of-stay, the two sub-stock prevalences and their stay means, the
+in-care fraction and the daily series for forecasting and replication.
 """
 @model function treatment_flow_model(
         isolation_history,
@@ -2717,7 +2719,8 @@ series for forecasting and replication.
         if split_adm
             bg_adm_state ~ to_submodel(
                 background_admission(
-                    background_split, n, Int.(province_admissions.days)
+                    background_split, n, Int.(province_admissions.days);
+                    patches = Int.(province_admissions.patches)
                 )
             )
             bg_adm_share = bg_adm_state.W
@@ -2725,8 +2728,8 @@ series for forecasting and replication.
             bg_adm_walk_sd = bg_adm_state.walk_sd
         else
             bg_adm_share = background_split
-            bg_adm_level_sd = 0.0
-            bg_adm_walk_sd = 0.0
+            bg_adm_level_sd = zero(eltype(C))
+            bg_adm_walk_sd = zero(eltype(C))
         end
         demand_patch = _patch_demand(
             A_bvd_patch, A_bg, bg_adm_share, S_clin,
@@ -2739,8 +2742,8 @@ series for forecasting and replication.
     else
         demand_patch = reshape(demand, 1, :)
         admit_patch = reshape(admit_daily, 1, :)
-        bg_adm_level_sd = 0.0
-        bg_adm_walk_sd = 0.0
+        bg_adm_level_sd = zero(eltype(C))
+        bg_adm_walk_sd = zero(eltype(C))
         cap_shares = ones(eltype(C), 1, n)
         cap_pooling_sd = zero(eltype(C))
     end
@@ -2953,7 +2956,11 @@ series for forecasting and replication.
     expected_admissions := admissions_T
     expected_incare_deaths := incare_deaths_T
     expected_ruleouts := ruleouts_T
-    shortfall_T = safe_rate(sum(cut.shortfall))
+    ## The national shortfall is the bed demand above the national beds. The
+    ## patches' occupancy above their own beds (`cut.shortfall`) is reported
+    ## by patch, not summed into this figure: a patch over its beds counts
+    ## there even when another has beds free.
+    shortfall_T = safe_rate(max(dem_T - beds_T, z0))
     bed_shortfall := shortfall_T
     bed_utilisation := isolation_T / safe_rate(beds_T)
     isolation_severity := sev_state.δ_iso

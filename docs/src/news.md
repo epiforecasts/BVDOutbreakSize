@@ -88,8 +88,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
 - The cut-off and forecast beds, occupancy and admissions are built by province and summed to the national figures, with nothing capped: each province's beds are its share of the capacity walk, and its forecast runs the fitted stock forward (#958).
+  The forecast draws the national occupancy and admissions from the national negative binomial and splits each across the provinces by the fitted split and its overdispersion, so the national forecast keeps the fitted spread.
+  The national bed shortfall is the bed demand above the national beds; each province's patients above its own beds are reported by province.
 - The provinces' 24h admissions are fitted as a split of the national admissions (#958).
-  Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level and a weekly random walk over the printed days, which nest the constant share at zero.
+  Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level (scale `Normal⁺(0, 0.5)`) and a weekly random walk over the printed days, which nest the constant share at zero.
+  A province that never prints admissions keeps its share of the non-BVD suspects.
 - Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
   It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
   The province point prevalence rejected that draw and failed the province page.

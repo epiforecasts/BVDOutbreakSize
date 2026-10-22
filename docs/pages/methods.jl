@@ -1330,10 +1330,14 @@ cfr_prior_fig #hide
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
-# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero), the cut-off bed demand (the need under unconstrained supply), the occupancy above the cut-off beds (the bed shortfall) and the utilisation.
+# Bed demand is the uncapped diagnostic.
+# The model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero) and the cut-off bed demand (the need under unconstrained supply).
+# It also exposes the bed shortfall (the bed demand above the national beds) and the utilisation (the modelled occupancy over the beds).
+# The modelled occupancy is not capped at the beds, so the utilisation is modelled need against beds and can exceed 100%.
 # With several patches, each province's cut-off beds are its share of the capacity walk and its occupancy is its demand share of the national occupancy.
-# Its shortfall is its occupancy above its beds, and the national beds, occupancy and shortfall are the sums over the provinces.
-# Nothing caps a province's occupancy at its beds, so its utilisation can exceed 100%, as Nord-Kivu's printed occupancy rate does.
+# The national beds and occupancy are the sums over the provinces.
+# A province's patients above its beds are its occupancy above its own beds, as Nord-Kivu's printed occupancy rate above 100% shows.
+# Summed over the provinces these can exceed the national shortfall, since one province can be over its beds while another has beds free.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
@@ -1365,14 +1369,17 @@ cfr_prior_fig #hide
 # ```math
 # W_{p,t} \propto w_p \exp\bigl((Q \mathbf{y}^{\text{bga}})_p + \eta_{p,t}\bigr),
 # \qquad
-# \mathbf{y}^{\text{bga}} \sim \mathrm{Normal}(0,\ \tau_{\text{bga}}^2 I_{P-1}),
+# \mathbf{y}^{\text{bga}} \sim \mathrm{Normal}(0,\ \tau_{\text{bga}}^2 I_{M-1}),
 # \qquad
 # \boldsymbol{\eta}_{k} = \boldsymbol{\eta}_{k-1} + \sigma_{\text{bga}} Q \mathbf{z}_k,
 # \qquad
-# \mathbf{z}_k \sim \mathrm{Normal}(0,\ I_{P-1}),
+# \mathbf{z}_k \sim \mathrm{Normal}(0,\ I_{M-1}),
 # ```
 #
-# normalised over the patches each day, with $\tau_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 1)$, $\sigma_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.2)$ and $Q$ the sum-to-zero basis of the Rt deviations.
+# normalised over the patches each day, with $\tau_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.5)$ and $\sigma_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.2)$.
+# Here $Q$ is the sum-to-zero basis over the $M$ provinces that print admissions, with zero rows for the provinces that never do.
+# Those provinces keep their share of the non-BVD suspects up to the daily normalisation, since no data inform their deviation.
+# We assume a province admits between half and twice the national share of its non-BVD suspects, and the level prior keeps two SDs of a deviation within twofold at its median scale.
 # The walk $\boldsymbol{\eta}$ is zero on the first day the province admissions are printed and has a knot $k$ every seven days to the last such day.
 # It is interpolated linearly between the knots and held flat outside them.
 # With $\tau_{\text{bga}} = \sigma_{\text{bga}} = 0$ each patch admits the share of the non-BVD suspects it reports, and without province admissions data $W_{p,t} = w_p$.
@@ -2499,11 +2506,13 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
 # The occupied beds, admissions and in-care flows are the fitted treatment model run forward, so the latent stock is not capped.
-# With province care data each province's occupancy is its demand share of the modelled occupancy, and its beds are its share of the capacity walk past the cut-off.
-# Each province's occupancy is drawn from the negative binomial censored at its beds, the measurement model of the fitted occupancy.
-# Its admissions are drawn around its modelled admissions from the uncensored negative binomial the fitted admissions are scored with.
-# The in-care deaths and rule-outs are drawn nationally around the modelled flows, and the national counts are the sums over the provinces.
-# We also report the modelled bed demand and the occupancy above the beds.
+# Each future count is drawn through the measurement model its fitted days are scored with.
+# The national occupancy is drawn from the negative binomial censored at the national beds, and the national admissions from the uncensored negative binomial.
+# With province care data each national draw is split across the provinces by the fitted province split, on the provinces' demand for the occupancy and on their modelled admissions for the admissions.
+# Each split carries its fitted overdispersion, so the provinces add up to the national forecast and the national spread is the fitted one.
+# Each province's beds are its share of the capacity walk past the cut-off.
+# The in-care deaths and rule-outs are drawn nationally around the modelled flows.
+# We also report the modelled bed demand and its excess over the national beds.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").

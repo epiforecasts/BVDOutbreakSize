@@ -204,17 +204,15 @@ end
     @test "isolation_level" in names(fc) && "bed_capacity" in names(fc)
     @test "admissions_new" in names(fc)
     national = _draw_vectors(pp, Symbol("forecast_admissions.obs"))
-    province = _draw_vectors(pp, Symbol("forecast_admissions.province.increments"))
+    province = _draw_vectors(pp, Symbol("forecast_admissions.province"))
     for d in 1:nd
         rows = fc.draw .== d
         ## The provinces' patients in isolation add up to the national
         ## occupancy forecast on the same day, and their beds to the
-        ## national beds. Each province's reported occupancy is censored at
-        ## its beds, as the fitted occupancy is.
+        ## national beds.
         @test round(Int, sum(fc.isolation_level[rows])) ==
             nat.isolation_level[d]
         @test sum(fc.bed_capacity[rows]) ≈ capacity[d][7]
-        @test all(fc.isolation_level[rows] .<= fc.bed_capacity[rows])
         ## The provinces' admissions add up to the national admissions on
         ## every day.
         @test vec(sum(reshape(province[d], NP, :); dims = 1)) ≈ national[d]
@@ -248,6 +246,7 @@ end
         capacity_patch, deaths_daily = flow, recover_daily = flow,
         ruleout_daily = flow, abscond_daily = flow, demand = fill(100.0, n),
         admit_daily = vec(sum(admit_patch; dims = 1)),
+        occupancy_split_rho = 0.05, admissions_split_rho = 0.05,
     )
     cap = (; days = [5, 10], counts = [100, 100])
     m = treatment_forecast_model(state, fd, cap, 10.0)
@@ -261,15 +260,18 @@ end
         @test r.admissions ≈ fill(46.0, 2)
         @test r.isolation ≈ fill(100.0, 2)
         ## Drawn occupancy and admissions sum over the provinces to the
-        ## national counts. The occupancy is censored at the beds, as the
-        ## fitted occupancy is; the admissions are not censored.
+        ## national counts. The national occupancy is censored at the
+        ## national beds, as the fitted occupancy is; the admissions are not
+        ## censored.
         for d in (r.occupancy_draws, r.admission_draws)
             prov = reshape(d.province, 3, :)
-            @test vec(sum(prov; dims = 1)) ≈ d.obs
+            @test vec(sum(prov; dims = 1)) == round.(Int, d.obs)
         end
-        @test all(reshape(r.occupancy_draws.province, 3, :) .<= r.beds)
-        ## Patch 1's 60 stand 30 above its 30 beds.
-        @test r.bed_shortfall ≈ [30.0, 30.0]
+        @test all(r.occupancy_draws.obs .<= vec(sum(r.beds; dims = 1)))
+        ## Patch 1's 60 stand 30 above its 30 beds, while the national
+        ## demand of 100 fills the national 100 beds with none short.
+        @test r.province_shortfall ≈ [fill(30.0, 1, 2); zeros(2, 2)]
+        @test r.bed_shortfall ≈ [0.0, 0.0]
     end
     ## Admissions are not held below any free beds: a patch over its beds
     ## still draws around its modelled admissions.
@@ -282,12 +284,19 @@ end
     half = treatment_forecast_model(
         merge(state, (; occupancy_mean = fill(50.0, n))), fd, cap, 10.0
     )
-    @test returned(half, rand(Xoshiro(1), half)).bed_shortfall == [0.0, 0.0]
+    @test returned(half, rand(Xoshiro(1), half)).province_shortfall ==
+        zeros(3, 2)
+    ## National demand above the national beds is the national shortfall.
+    over_demand = treatment_forecast_model(
+        merge(state, (; demand = fill(130.0, n))), fd, cap, 10.0
+    )
+    @test returned(over_demand, rand(Xoshiro(2), over_demand)).bed_shortfall ≈
+        [30.0, 30.0]
     ## A one-day horizon keeps one column per patch.
     one_day = treatment_forecast_model(state, 11:11, cap, 10.0)
     r1 = returned(one_day, rand(Xoshiro(6), one_day))
     @test size(r1.held) == (3, 1)
-    @test r1.bed_shortfall ≈ [30.0]
+    @test r1.province_shortfall ≈ reshape([30.0, 0.0, 0.0], 3, 1)
     ## With no recorded capacity nothing is censored.
     nocap = treatment_forecast_model(
         state, fd, (; days = Int[], counts = Int[]), 10.0
@@ -301,4 +310,46 @@ end
         ) for s in 1:20
     ]
     @test any(over)
+end
+
+@testitem "the province forecast keeps the fitted national spread" begin
+    using BVDOutbreakSize: treatment_forecast_model
+    using Turing: returned
+    using Random: Xoshiro
+    using Statistics: mean, var
+
+    ## The fit scores the national occupancy and admissions as one negative
+    ## binomial each and the provinces as a split of them, so the forecast's
+    ## national counts carry the national NB variance μ + μ²/k, not the
+    ## smaller variance of a sum of independent province draws.
+    n = 3
+    fd = 3:3
+    k = 20.0
+    μ = 700.0
+    level = [0.6, 0.2, 0.2]
+    patch = reshape(μ .* level, 3, 1) .* ones(1, n)
+    flow = fill(1.0, n)
+    state = (;
+        occupancy_mean = fill(μ, n), admit_patch = patch,
+        demand_patch = patch, capacity_patch = fill(1.0e5, 3, n),
+        deaths_daily = flow, recover_daily = flow, ruleout_daily = flow,
+        abscond_daily = flow, demand = fill(μ, n), admit_daily = fill(μ, n),
+        occupancy_split_rho = 0.05, admissions_split_rho = 0.05,
+    )
+    m = treatment_forecast_model(state, fd, (; days = Int[], counts = Int[]), k)
+    rng = Xoshiro(20261022)
+    draws = [returned(m, rand(rng, m)) for _ in 1:4000]
+    nb_var = μ + μ^2 / k
+    indep_var = μ + sum((μ .* level) .^ 2) / k
+    for field in (:occupancy_draws, :admission_draws)
+        nat = [only(getfield(d, field).obs) for d in draws]
+        @test mean(nat) ≈ μ rtol = 0.02
+        @test var(nat) ≈ nb_var rtol = 0.1
+        @test var(nat) > 1.5 * indep_var
+        ## The split follows the fitted shares and adds up to the national
+        ## count.
+        prov = reduce(hcat, [getfield(d, field).province for d in draws])
+        @test vec(sum(prov; dims = 1)) == round.(Int, nat)
+        @test vec(mean(prov; dims = 2)) ./ mean(nat) ≈ level rtol = 0.03
+    end
 end

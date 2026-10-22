@@ -105,10 +105,9 @@ ascertainment, and each stream's own likelihood. Columns:
   supplied.
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the horizon.
 - `:isolation_level`: the reported isolation occupancy on the last day,
-  the sum over the patches of the occupancy censored at each patch's beds
+  the national occupancy censored at the national beds
   ([`treatment_forecast_model`](@ref)). `:bed_demand` is the modelled
-  demand that day and `:bed_shortfall` its excess over the beds, summed
-  over the patches.
+  demand that day and `:bed_shortfall` its excess over the national beds.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the daily
   isolation flows on the last day.
 - `:recovered_cum`, `:recovered_new`: recovered among confirmed. The
@@ -399,10 +398,10 @@ function forecast_provinces(
         )
         return [f(reshape(x, n_patches, :)) for x in v]
     end
-    iso = daily("forecast_isolation.province.obs", x -> x[:, h])
+    iso = daily("forecast_isolation.province", x -> x[:, h])
     beds = daily("forecast_province_beds", x -> x[:, h])
     adm = daily(
-        "forecast_admissions.province.increments", x -> vec(sum(x[:, 1:h]; dims = 2))
+        "forecast_admissions.province", x -> vec(sum(x[:, 1:h]; dims = 2))
     )
     nd = length(inf)
     out = DataFrame(

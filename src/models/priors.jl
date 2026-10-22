@@ -872,15 +872,17 @@ W_p(t) \\propto w_p \\exp\\bigl(\\delta_p + \\eta_p(t)\\bigr),
 \\qquad z_{ij} \\sim \\mathrm{N}(0, 1),
 ```
 
-normalised over the patches each day, with `τ_bga ~ N⁺(0, 1)` and
+normalised over the patches each day, with `τ_bga ~ N⁺(0, 0.5)` and
 `σ_bga ~ N⁺(0, 0.2)`. `Q` is the sum-to-zero basis
-([`sum_to_zero_basis`](@ref)), so neither the level nor the walk has a
-reference patch. The walk sits on knots every `week` days from the first to
-the last day in `days`, the days the province admissions are printed,
-starting at zero on the first and interpolated linearly
-([`interpolate_knots`](@ref)). It is held flat outside them, so it moves
-only where the printed admissions inform it. `τ_bga = σ_bga = 0` gives
-`W_p(t) = w_p`, a time-constant share of the background suspects.
+([`sum_to_zero_basis`](@ref)) over the patches in `patches`, the ones that
+print admissions, so neither the level nor the walk has a reference patch.
+A patch that never prints admissions has no deviation, `δ_p = η_p = 0`.
+The walk sits on knots every `week` days from the first to the last day in
+`days`, the days the province admissions are printed, starting at zero on
+the first and interpolated linearly ([`interpolate_knots`](@ref)). It is
+held flat outside them, so it moves only where the printed admissions
+inform it. `τ_bga = σ_bga = 0` gives `W_p(t) = w_p`, a time-constant share
+of the background suspects.
 
 The background suspects are split by `w`, but who is admitted need not be.
 A province's share of the admitted background differs from its share of
@@ -891,12 +893,28 @@ that its BVD admissions do not explain has to come from the national ratio
 of BVD to background admissions, which the national reproduction number
 sets. The level and walk give that movement a province term of its own.
 
-The level coordinates are drawn centred, on the scale `τ_bga`, as in
-[`background_split_model`](@ref), because the daily province admissions pin
-each one. The walk innovations are drawn non-centred, as in the other
-weekly walks. The half-normal scale 0.2 on `σ_bga` puts a 1.2-fold weekly
-move in a province's share well inside the prior, and a drift of about
-two-fold over twenty weeks of printed admissions.
+The deviations are the province admission propensities for non-BVD
+suspects relative to the national one, so their prior is set by how far
+those can differ before any data are seen. A province admitting half or
+twice the national share of its background suspects is plausible, one
+admitting a fifth or five times as many is not, since every province
+isolates suspects under the same case definition and protocol. The level
+scale `τ_bga ~ N⁺(0, 0.5)` puts most of its prior mass below 0.5, where
+two SDs of a deviation is within 2.7-fold, and its median, 0.34, keeps two
+SDs within twofold.
+
+A province that never prints admissions has no data on its propensity, so
+it is held at its background suspect share rather than given a deviation
+that only the prior would set. Its share then moves only through the
+normalisation, as the printing provinces' shares move, and the model nests
+the constant share there exactly. Every sampled coordinate is a contrast
+among the printing provinces, which their daily admissions pin, so the
+level coordinates are drawn centred, on the scale `τ_bga`, as in
+[`background_split_model`](@ref). The walk innovations are drawn
+non-centred, as in the other weekly walks. At `σ_bga = 0.2`, one SD of its
+half-normal prior, a one-SD weekly step moves a province's share about
+1.2-fold and twenty weeks drift it about 2.4-fold. At the prior median,
+0.13, twenty weeks drift it about 1.8-fold.
 
 Returns `(; W, level_sd, walk_sd)`, with `W` an `(n_patches × n)` matrix
 whose columns sum to one.
@@ -904,13 +922,15 @@ whose columns sum to one.
 @model function background_admission_share_model(
         w::AbstractVector{<:Real}, n::Integer,
         days::AbstractVector{<:Integer};
+        patches::AbstractVector{<:Integer} = eachindex(w),
         week::Integer = 7,
-        level_sd_prior = truncated(Normal(0, 1); lower = 0),
+        level_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         walk_sd_prior = truncated(Normal(0, 0.2); lower = 0),
-        basis = sum_to_zero_basis(max(length(w), 1))
+        basis = _embedded_sum_to_zero_basis(length(w), patches)
     )
     np = length(w)
-    if np <= 1 || isempty(days)
+    nb = size(basis, 2)
+    if np <= 1 || isempty(days) || nb == 0
         return (;
             W = repeat(reshape(float.(w), :, 1), 1, n),
             level_sd = 0.0, walk_sd = 0.0,
@@ -922,11 +942,11 @@ whose columns sum to one.
     ## Each level coordinate is drawn centred, on the scale `τ_bga`. `eps`
     ## floors the SD so a `τ_bga ≈ 0` draw stays a proper distribution.
     y_bga ~ product_distribution(
-        fill(Normal(0, τ_bga + eps(typeof(float(τ_bga)))), np - 1)
+        fill(Normal(0, τ_bga + eps(typeof(float(τ_bga)))), nb)
     )
     if nk > 1
         σ_bga ~ walk_sd_prior
-        z_bga ~ filldist(Normal(0, 1), (np - 1) * (nk - 1))
+        z_bga ~ filldist(Normal(0, 1), nb * (nk - 1))
         W = _background_admission_shares(
             w, basis, y_bga, σ_bga .* z_bga, kd, n
         )
@@ -936,6 +956,17 @@ whose columns sum to one.
         w, basis, y_bga, zeros(eltype(y_bga), 0), kd, n
     )
     return (; W, level_sd = τ_bga, walk_sd = zero(τ_bga))
+end
+
+## The sum-to-zero basis over the patches in `patches`, embedded in `np`
+## rows, with zero rows for the other patches: `np × (m − 1)` for `m`
+## distinct patches, `np × 0` for fewer than two.
+function _embedded_sum_to_zero_basis(np::Integer, patches)
+    obs = sort!(unique(Int.(patches)))
+    m = length(obs)
+    B = zeros(np, max(m - 1, 0))
+    m > 1 && (B[obs, :] = sum_to_zero_basis(m))
+    return B
 end
 
 ## Daily background admission shares: column `t` is
@@ -954,7 +985,7 @@ function _background_admission_shares(
     nk = length(kd)
     T = promote_type(Float64, eltype(w), eltype(y), eltype(steps))
     level = basis * y
-    moves = basis * reshape(steps, np - 1, nk - 1)
+    moves = basis * reshape(steps, size(basis, 2), nk - 1)
     W = Matrix{T}(undef, np, n)
     @inbounds for p in 1:np
         knots = Vector{T}(undef, nk)

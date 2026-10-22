@@ -322,15 +322,23 @@ end
     @test df.Province == collect(PROVINCE_LABELS[1:np])
     ## Every cell is a median with an interval.
     @test all(contains("("), df[!, "Beds"])
-    ## The national occupancy, beds and patients above beds are the
-    ## provinces' sums, and a province's patients above beds are its
-    ## occupancy over its beds. Nothing caps the occupancy at the beds.
+    ## The national occupancy and beds are the provinces' sums, and a
+    ## province's patients above beds are its occupancy over its beds.
+    ## Nothing caps the occupancy at the beds. The national shortfall is
+    ## the bed demand above the national beds.
     occ = BVDOutbreakSize._per_patch(chn, :province_expected_isolation, np)
     beds = BVDOutbreakSize._per_patch(chn, :province_bed_capacity, np)
     short = BVDOutbreakSize._per_patch(chn, :province_bed_shortfall, np)
-    @test all(isapprox.(sum(occ), vec(Array(chn[:expected_isolation_T])); rtol = 1.0e-6))
+    @test all(isapprox.(sum(occ), vec(Array(chn[:expected_isolation_T])); rtol = 1.0e-6, atol = 1.0e-8))
     @test all(isapprox.(sum(beds), vec(Array(chn[:bed_capacity])); rtol = 1.0e-6))
-    @test all(isapprox.(sum(short), vec(Array(chn[:bed_shortfall_T])); rtol = 1.0e-6, atol = 1.0e-8))
+    demand = vec(Array(chn[:expected_bed_demand_T]))
+    national_short = vec(Array(chn[:bed_shortfall_T]))
+    @test all(
+        isapprox.(
+            national_short, max.(demand .- sum(beds), 0.0);
+            rtol = 1.0e-6, atol = 1.0e-8
+        )
+    )
     for p in 1:np
         @test short[p] ≈ max.(occ[p] .- beds[p], 0.0)
     end
@@ -486,6 +494,36 @@ end
     ## No printed days, or one patch, sample nothing.
     @test background_admission_share_model(w, n, Int[])().W == repeat(w, 1, n)
     @test background_admission_share_model([1.0], n, days)().W == ones(1, n)
+end
+
+@testitem "background admission shares hold provinces without admissions" begin
+    using BVDOutbreakSize: background_admission_share_model, knot_days
+    using Turing: returned, fix, @varname
+    using Random: Xoshiro
+
+    ## Only patches 1 and 2 print admissions, so the deviations are one
+    ## contrast between them, and patches 3 and 4 keep the ratio of their
+    ## background suspect shares on every day.
+    w = [0.5, 0.3, 0.15, 0.05]
+    n = 80
+    days = collect(20:60)
+    m = background_admission_share_model(w, n, days; patches = [1, 2, 1, 2])
+    θ = rand(Xoshiro(13), m)
+    nk = length(knot_days(60; start = 20))
+    @test length(θ[@varname(y_bga)]) == 1
+    @test length(θ[@varname(z_bga)]) == nk - 1
+    W = returned(m, θ).W
+    @test all(c -> isapprox(sum(c), 1; rtol = 1.0e-12), eachcol(W))
+    @test all(t -> W[3, t] / W[4, t] ≈ w[3] / w[4], 1:n)
+    ## The printing patches move against each other.
+    @test !(W[1, 30] / W[2, 30] ≈ w[1] / w[2])
+    ## A zero level and walk give back the background suspect shares.
+    flat = fix(m, (; y_bga = [0.0], σ_bga = 0.0, z_bga = θ[@varname(z_bga)]))
+    @test all(c -> c ≈ w, eachcol(returned(flat, rand(Xoshiro(14), flat)).W))
+    ## One printing patch carries no contrast, so nothing is sampled.
+    one_patch = background_admission_share_model(w, n, days; patches = [2])
+    @test isempty(keys(rand(Xoshiro(15), one_patch)))
+    @test one_patch().W == repeat(w, 1, n)
 end
 
 @testitem "background admission shares on one printed day have a level and no walk" begin

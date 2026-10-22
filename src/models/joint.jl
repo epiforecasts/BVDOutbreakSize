@@ -92,31 +92,70 @@ end
 ## The counts are `missing`, so `predict` draws them.
 _forecast_counts(daily, fd, k) = vintage_increments_model(daily[fd], missing, k)
 
-"""
-Future counts by patch. Each patch's count on each day is the censored
-negative binomial around its mean in `means` (one row per patch, one column
-per day) at its ceiling in `ceilings`, drawn as `province`. `obs` is their
-sum over the patches, the national count.
-"""
-@model function province_counts_model(
-        means::AbstractMatrix, ceilings::AbstractMatrix, k::Real
-    )
-    province ~ to_submodel(
-        censored_occupancy_model(vec(means), vec(ceilings), missing, k)
-    )
-    obs := vec(sum(reshape(province.obs, size(means)); dims = 1))
-    return (; obs, province = province.obs, ceilings)
+## Each column of `level` (one row per patch, one column per day) as shares
+## of its day, even where a day's levels sum to zero.
+function _column_shares(level::AbstractMatrix)
+    T = float(eltype(level))
+    shares = Matrix{T}(undef, size(level))
+    for j in axes(level, 2)
+        shares[:, j] = _held_by_patch(one(T), view(level, :, j))
+    end
+    return shares
+end
+
+## The province split of a national forecast: the national `obs` split
+## across the patches at the column shares of `level` by
+## [`composition_split_model`](@ref) with overdispersion `rho`, the
+## stick-breaking BetaBinomial the fitted province split is scored with. A
+## censored draw at its ceiling need not be whole, so it is rounded first.
+## One patch takes the whole national count.
+@model function _forecast_split_model(obs, level::AbstractMatrix, rho::Real)
+    totals = round.(Int, obs)
+    if size(level, 1) == 1
+        counts = reshape(totals, 1, :)
+    else
+        split ~ to_submodel(
+            composition_split_model(missing, _column_shares(level), totals, rho)
+        )
+        counts = split.obs_increments
+    end
+    return Int.(counts)
 end
 
 """
-Future flows by patch, each patch's count on each day the negative binomial
-around its mean in `means` (one row per patch, one column per day), drawn as
-`province`. `obs` is their sum over the patches, the national count.
+Future occupancy by patch, drawn through the likelihoods the fitted days are
+scored with. The national count `obs` on each day is the negative binomial
+around the national mean in `means`, censored at `ceilings`, as the
+national occupancy is scored. It is split across the patches at their
+shares of `level` (one row per patch, one column per day) with the fitted
+split overdispersion `rho` ([`_forecast_split_model`](@ref)), as the
+province occupancy is scored. `province` holds the patch counts, one column
+per day stored column-major, and sums to `obs` on every day.
 """
-@model function province_counts_model(means::AbstractMatrix, k::Real)
-    province ~ to_submodel(vintage_increments_model(vec(means), missing, k))
-    obs := vec(sum(reshape(province.increments, size(means)); dims = 1))
-    return (; obs, province = province.increments)
+@model function province_counts_model(
+        means::AbstractVector, ceilings::AbstractVector,
+        level::AbstractMatrix, k::Real, rho::Real,
+        obs::Union{Missing, AbstractVector{<:Integer}} = missing
+    )
+    obs ~ censored(NegBinomialVector(k, means); upper = ceilings)
+    counts ~ to_submodel(_forecast_split_model(obs, level, rho))
+    province := vec(counts)
+    return (; obs, province = vec(counts), ceilings)
+end
+
+"""
+Future flows by patch, drawn as [`province_counts_model`](@ref) draws the
+occupancy but with the national count uncensored, as the national flow is
+scored.
+"""
+@model function province_counts_model(
+        means::AbstractVector, level::AbstractMatrix, k::Real, rho::Real,
+        obs::Union{Missing, AbstractVector{<:Integer}} = missing
+    )
+    obs ~ NegBinomialVector(k, means)
+    counts ~ to_submodel(_forecast_split_model(obs, level, rho))
+    province := vec(counts)
+    return (; obs, province = vec(counts))
 end
 
 ## Each patch's share of the national occupancy mean on each day, the
@@ -133,49 +172,69 @@ end
 
 """
 Future isolation and treatment counts from a fitted
-[`treatment_flow_model`](@ref) state run past the cut-off, drawn by patch
-through the likelihoods the fitted days are scored with and summed to
-national. Each patch's occupancy is its demand share of the modelled
-occupancy mean, drawn from the negative binomial censored at its beds, the
-same measurement model as the fitted occupancy. Its beds are its share of
-the capacity walk, which runs past the cut-off. Its admissions are its
-modelled admissions, drawn from the uncensored negative binomial the fitted
-admissions are scored with. The in-care deaths and rule-outs are the
-national modelled flows. The latent stock is the fitted one run forward, so
-nothing is capped. With no recorded capacity nothing is censored.
+[`treatment_flow_model`](@ref) state run past the cut-off, drawn through
+the likelihoods the fitted days are scored with
+([`province_counts_model`](@ref)). The national occupancy is the negative
+binomial around the modelled occupancy mean, censored at the national beds,
+and is split across the patches on their demand with the fitted occupancy
+split overdispersion. Nothing caps a patch's occupancy at its own beds, as
+nothing does in the fitted split. The national admissions are the
+uncensored negative binomial around the modelled admissions, split on the
+patch admissions with the fitted admission split overdispersion. Each
+patch's beds are its share of the capacity walk, which runs past the
+cut-off. The in-care deaths and rule-outs are the national modelled flows.
+The latent stock is the fitted one run forward. With no recorded capacity
+nothing is censored.
+
+The national bed shortfall is the bed demand above the national beds, as at
+the cut-off. Each patch's occupancy mean above its own beds is returned as
+`province_shortfall`. Its sum over the patches can exceed the national
+shortfall, since a patch over its beds counts even when another has beds
+free.
 """
 @model function treatment_forecast_model(state, fd, capacity_history, k)
     nocap = 1.0e6
     have_cap = !isempty(capacity_history.counts)
     np = size(state.admit_patch, 1)
     beds = state.capacity_patch[:, fd]
-    held = _held_by_patch_days(state.occupancy_mean[fd], state.demand_patch[:, fd])
-    ceilings = have_cap ? beds : fill(nocap, size(beds))
-    forecast_isolation ~ to_submodel(province_counts_model(held, ceilings, k))
+    capacity = vec(sum(beds; dims = 1))
+    occupancy = state.occupancy_mean[fd]
+    demand_patch = state.demand_patch[:, fd]
+    held = _held_by_patch_days(occupancy, demand_patch)
+    ceilings = have_cap ? capacity : fill(nocap, length(fd))
+    forecast_isolation ~ to_submodel(
+        province_counts_model(
+            occupancy, ceilings, demand_patch, k, state.occupancy_split_rho
+        )
+    )
     admit = state.admit_patch[:, fd]
-    forecast_admissions ~ to_submodel(province_counts_model(admit, k))
+    admissions = state.admit_daily[fd]
+    forecast_admissions ~ to_submodel(
+        province_counts_model(admissions, admit, k, state.admissions_split_rho)
+    )
     forecast_incare_deaths ~ to_submodel(
         _forecast_counts(state.deaths_daily, fd, k)
     )
     forecast_ruleouts ~ to_submodel(
         _forecast_counts(state.ruleout_daily, fd, k)
     )
+    demand = state.demand[fd]
     above = max.(held .- beds, zero(eltype(held)))
-    forecast_bed_demand := state.demand[fd]
-    forecast_bed_capacity := vec(sum(beds; dims = 1))
-    forecast_bed_shortfall := vec(sum(above; dims = 1))
+    forecast_bed_demand := demand
+    forecast_bed_capacity := capacity
+    forecast_bed_shortfall := max.(demand .- capacity, zero(eltype(demand)))
     if np > 1
         forecast_province_beds := vec(beds)
     end
     return (;
-        isolation = vec(sum(held; dims = 1)),
-        admissions = vec(sum(admit; dims = 1)),
+        isolation = vec(sum(held; dims = 1)), admissions,
         occupancy = forecast_isolation.obs,
         occupancy_draws = forecast_isolation,
         admission_draws = forecast_admissions,
         incare_deaths = state.deaths_daily[fd],
         ruleouts = state.ruleout_daily[fd], held, beds,
         bed_shortfall = forecast_bed_shortfall,
+        province_shortfall = above,
     )
 end
 
@@ -1173,10 +1232,10 @@ data, each future week's national confirmed cases and deaths are split
 across the provinces by the fitted compositions
 ([`composition_split_model`](@ref)), as `forecast_province_confirmed` and
 `forecast_province_deaths`. With province care data, the occupancy and
-admissions are drawn daily by province, as
-`forecast_isolation.province.obs` and `forecast_admissions.province.increments`,
-with the beds as `forecast_province_beds`, and each sums to the national
-forecast ([`treatment_forecast_model`](@ref)). Every quantity up to the
+admissions are drawn daily as national counts split by province with the
+fitted splits, as `forecast_isolation.province` and
+`forecast_admissions.province`, with the beds as `forecast_province_beds`,
+and each sums to the national forecast ([`treatment_forecast_model`](@ref)). Every quantity up to the
 cut-off, and the density there, is the fitted model's.
 """
 @model function bvd_joint(
