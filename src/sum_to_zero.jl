@@ -308,30 +308,22 @@ function sum_to_zero_knots(
         F_level::AbstractMatrix, F_drift::AbstractMatrix,
         z_level::AbstractVector, Z::AbstractMatrix, φ::Real
     )
-    T = promote_type(
-        eltype(F_level), eltype(F_drift), eltype(z_level), eltype(Z),
-        typeof(φ)
-    )
-    knots = zeros(T, size(F_level, 1), size(Z, 2) + 1)
     lvl = sum_to_zero(F_level, z_level)
-    @inbounds for i in eachindex(lvl)
-        knots[i, 1] = lvl[i]
-    end
-    return sum_to_zero_ar1!(knots, F_drift, Z, φ, 1)
+    return hcat(lvl, sum_to_zero_ar1(lvl, F_drift, Z, φ))
 end
 
 """
-Fill knots `k0 + 1, …, k0 + m` of `knots` by the AR(1) of
-[`sum_to_zero_knots`](@ref) from knot `k0`, with the `m` columns of `Z` as
-the innovation draws through the loading `F`.
+The `m` knots after `start` of the AR(1) of [`sum_to_zero_knots`](@ref),
+with the `m` columns of `Z` as the innovation draws through the loading
+`F`. It is a ComposableRecurrences `Recurrence` with kernel `[φ]`, `start`
+as its history and the innovations `F Z` added at each knot.
 """
-function sum_to_zero_ar1!(
-        knots::AbstractMatrix, F::AbstractMatrix, Z::AbstractMatrix,
-        φ::Real, k0::Integer
+function sum_to_zero_ar1(
+        start::AbstractVector, F::AbstractMatrix, Z::AbstractMatrix, φ::Real
     )
-    innovations = F * Z
-    @inbounds for j in axes(Z, 2), i in axes(knots, 1)
-        knots[i, k0 + j] = φ * knots[i, k0 + j - 1] + innovations[i, j]
-    end
-    return knots
+    T = promote_type(eltype(start), eltype(F), eltype(Z), typeof(φ))
+    size(Z, 2) == 0 && return zeros(T, length(start), 0)
+    return Recurrence([φ])(
+        true; history = reshape(start, :, 1), add = F * Z
+    )
 end

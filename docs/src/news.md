@@ -221,6 +221,18 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The model's recurrences and convolutions are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, and the hand-written Mooncake rules they replace are removed (#1152).
+  The renewal and the patch renewal are a `Recurrence` with `Depletion` (and `Redistribute` across patches), the delay and PMF convolutions, the care flows and the health-zone pre-grid terms are `Convolution`s, and the deviation-knot walk is a `Recurrence`.
+  The occupancy balance is a `Depletion` with three pools and share and count flows, its discharge split read off the previous day's pools through `Recent`.
+  The health-zone split is a `Recurrence` with `Allocate`.
+  Each matches the hand-written code to round-off, so fitted values change only by round-off.
+  The report binning, the onset-reporting tables and the health-zone window weights keep their own code and rules: a running sum, a running product and sums that read forward in time gain nothing from the package and were slower through it (EpiAware/ComposableRecurrences.jl#339).
+  Several kernels differentiate slower under Mooncake than the hand-written rules did (timings in #1152).
+  The care flows build their time-varying kernels element by element (EpiAware/ComposableRecurrences.jl#329), the patch renewal is still behind its rule (EpiAware/ComposableRecurrences.jl#296), small calls carry a fixed overhead (EpiAware/ComposableRecurrences.jl#330), and the PMF convolution pads its input with zeros (EpiAware/ComposableRecurrences.jl#336).
+  The occupancy balance reads the previous day's pools through a coupled `Recent`, which allocates at every step (EpiAware/ComposableRecurrences.jl#338).
+  A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
+  ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
+- The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
 - The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
   Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).

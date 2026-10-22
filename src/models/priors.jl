@@ -1608,11 +1608,11 @@ and `Rt_matrix` covers the horizon.
         z_drift_future ~ product_distribution(
             fill(region_offset_prior, nd * nf)
         )
-        Tf = promote_type(eltype(δ_knots), eltype(z_drift_future))
-        knots_all = zeros(Tf, n_patches, nb + nf)
-        knots_all[:, 1:nb] .= δ_knots
-        sum_to_zero_ar1!(
-            knots_all, F_drift, reshape(z_drift_future, nd, nf), φ, nb
+        knots_all = hcat(
+            δ_knots,
+            sum_to_zero_ar1(
+                δ_knots[:, nb], F_drift, reshape(z_drift_future, nd, nf), φ
+            )
         )
         days_all = vcat(days, fdays)
     else

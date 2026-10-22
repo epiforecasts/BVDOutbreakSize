@@ -1823,6 +1823,11 @@ The two [`abscond_thinned_flow`](@ref) flows that share an abscond rate and
 a confirmation hazard, walked in one pass. The cohort survival `S(t, d)`
 depends on neither the admissions nor the stay schedule, so the two flows
 run off one recurrence. Returns `(out1, out2)`.
+
+The flows are one ComposableRecurrences `Convolution` of the two admission
+series as strata, with a cohort-indexed (`Primary`) time-varying kernel:
+column `u` holds each schedule times the survival of the cohort admitted
+on day `u`. The shorter schedule is padded with zeros.
 """
 function abscond_thinned_flows(
         adm1::AbstractVector, pmf1::AbstractVector,
@@ -1830,42 +1835,31 @@ function abscond_thinned_flows(
         κ::Real, conf_hazard::AbstractVector
     )
     n = length(adm1)
+    D = max(length(pmf1), length(pmf2))
     T = promote_type(
         eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
         typeof(κ), eltype(conf_hazard)
     )
-    out1 = zeros(T, n)
-    out2 = zeros(T, n)
-    one_T = one(T)
-    nmax1 = length(pmf1)
-    nmax2 = length(pmf2)
-    @inbounds for t in 1:n
-        a1 = adm1[t]
-        a2 = adm2[t]
-        dmax1 = min(nmax1 - 1, n - t)
-        dmax2 = min(nmax2 - 1, n - t)
-        ## Both schedules run to `dboth`; only the longer one runs past it.
-        dboth = min(dmax1, dmax2)
-        ## Admission day: the cohort is not yet in the stock the balance
-        ## charges absconds against, so it faces no abscond hazard.
-        out1[t] += a1 * pmf1[1]
-        out2[t] += a2 * pmf2[1]
-        surv = one_T
-        unconf = one_T
-        for d in 1:dboth
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            out1[t + d] += a1 * pmf1[d + 1] * surv
-            out2[t + d] += a2 * pmf2[d + 1] * surv
-        end
-        for d in (dboth + 1):max(dmax1, dmax2)
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            d <= dmax1 && (out1[t + d] += a1 * pmf1[d + 1] * surv)
-            d <= dmax2 && (out2[t + d] += a2 * pmf2[d + 1] * surv)
+    pmfs = zeros(T, 2, D)
+    pmfs[1, eachindex(pmf1)] .= pmf1
+    pmfs[2, eachindex(pmf2)] .= pmf2
+    G = zeros(T, 2, D, n)
+    @inbounds for u in 1:n
+        surv = one(T)
+        unconf = one(T)
+        for d in 0:(D - 1)
+            if d > 0
+                unconf *= one(T) - conf_hazard[min(u + d - 1, n)]
+                surv *= one(T) - κ * unconf
+            end
+            G[1, d + 1, u] = pmfs[1, d + 1] * surv
+            G[2, d + 1, u] = pmfs[2, d + 1] * surv
         end
     end
-    return out1, out2
+    flows = Convolution(TimeVarying(PerStratum(G), Primary()))(
+        permutedims(hcat(adm1, adm2))
+    )
+    return flows[1, :], flows[2, :]
 end
 
 """
@@ -1922,99 +1916,101 @@ not-yet-confirmed BVD occupancy plus the non-case rule-out occupancy, so
 `O_conf` is clamped into `[0, O_bvd]`, and the abscond denominator `O_susp(t-1)`
 is floored with `eps` so a zero suspect pool gives a zero split. Returns
 `(; demand, O_bvd, O_conf, O_susp, abscond)`, each a length-`n` vector.
+
+The balance is a ComposableRecurrences `Recurrence` with kernel `[1]`, which
+carries each day's stocks to the next, and a `Depletion` with three pools and
+no draw, which applies the day's flows to them. The pools are the unconfirmed
+true cases `O_bvd − O_conf`, the confirmed true cases `O_conf` and the
+non-case stock `O_bg`, so `O_bvd` and `O_susp` are sums of pools. Confirmation
+and absconding are share flows on the previous day's pools, and admissions,
+rule-outs and the BVD discharges are counts capped by what a pool holds. The
+discharges split between the two true-case pools by the previous day's
+confirmed share, read through `Recent`, and a pool's overshoot below zero is
+charged to the other one, as the clamps above do. A `Clamp` floors the
+unconfirmed pool at zero when its confirmation and abscond shares pass one.
 """
 function accumulate_occupancy(
         A_bvd::AbstractVector, A_bg::AbstractVector,
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
     )
-    return _accumulate_occupancy(
-        Val(false), A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
-    )
-end
-
-## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
-## Ties go to the second argument of `max` and to the bound of `clamp`,
-## lower bound first, the sides Mooncake's own rules for them take.
-const _OCC_UNCONF = 0x01
-const _OCC_DENOM = 0x02
-const _OCC_BVD = 0x04
-const _OCC_BG = 0x08
-const _OCC_CONF_X = 0x10
-const _OCC_CONF_HI = 0x20
-const _OCC_SUSP = 0x40
-
-## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
-## returns the non-case stock `O_bg` and the branch flags for each day, which
-## the Mooncake rule in `src/mooncake_rules.jl` reads.
-function _accumulate_occupancy(
-        ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
-        conf_hazard
-    ) where {record}
     n = length(A_bvd)
     T = promote_type(
         eltype(A_bvd), eltype(A_bg), eltype(deaths),
         eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
     )
-    demand = Vector{T}(undef, n)
-    O_bvd = Vector{T}(undef, n)
-    O_conf = Vector{T}(undef, n)
-    O_susp = Vector{T}(undef, n)
-    abscond = Vector{T}(undef, n)
-    O_bg = record ? Vector{T}(undef, n) : nothing
-    flags = record ? Vector{UInt8}(undef, n) : nothing
-    z = zero(T)
-    Obvd_prev = z
-    Obg_prev = z
-    Oconf_prev = z
-    Osusp_prev = z
-    ## Floor for the abscond denominator so a zero suspect pool gives a zero
-    ## split rather than 0/0.
-    ε = eps(T)
-    @inbounds for t in 1:n
-        bvd_out = deaths[t] + recover[t]
-        ab = κ * Osusp_prev
-        x_u = Obvd_prev - Oconf_prev
-        unconf = max(x_u, z)
-        denom = max(Osusp_prev, ε)
-        ab_bvd = ab * (unconf / denom)
-        ab_bg = ab * (Obg_prev / denom)
-        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
-        Obvd_t = max(x_bvd, z)
-        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
-        Obg_t = max(x_bg, z)
-        Dt = Obvd_t + Obg_t
-        conf_in = conf_hazard[t] * unconf
-        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        x_conf = Oconf_prev + conf_in - bvd_out * share
-        Oconf_t = clamp(x_conf, z, Obvd_t)
-        x_susp = Dt - Oconf_t
-        Osusp_t = max(x_susp, z)
-        demand[t] = Dt
-        O_bvd[t] = Obvd_t
-        O_conf[t] = Oconf_t
-        O_susp[t] = Osusp_t
-        abscond[t] = ab
-        if record
-            f = 0x00
-            x_u > z && (f |= _OCC_UNCONF)
-            Osusp_prev > ε && (f |= _OCC_DENOM)
-            x_bvd > z && (f |= _OCC_BVD)
-            x_bg > z && (f |= _OCC_BG)
-            if x_conf > z
-                f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
-            end
-            x_susp > z && (f |= _OCC_SUSP)
-            O_bg[t] = Obg_t
-            flags[t] = f
-        end
-        Obvd_prev = Obvd_t
-        Obg_prev = Obg_t
-        Oconf_prev = Oconf_t
-        Osusp_prev = Osusp_t
+    if n == 0
+        e = zeros(T, 0)
+        return (; demand = e, O_bvd = e, O_conf = e, O_susp = e, abscond = e)
     end
-    y = (; demand, O_bvd, O_conf, O_susp, abscond)
-    return record ? (y, O_bg, flags) : y
+    bvd_out = TimeVarying(deaths .+ recover)
+    adm = TimeVarying(A_bvd)
+    hz = TimeVarying(conf_hazard)
+    ## Yesterday's unconfirmed and confirmed pools, read at the one group.
+    unconf = Recent(1)
+    conf = Recent(1; coupling = [0.0 1.0 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0])
+    args = (bvd_out, unconf, conf, adm, hz, κ)
+    flows = Depletion(;
+        pools = (:unconf, :conf, :bg), form = nothing,
+        flows = (
+            ## The hazard is a rate times a borrowed hazard, so it can pass
+            ## one; as a `Derived` its share is not checked against one.
+            Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
+            Flow(:unconf => 0, κ; form = Share()),
+            Flow(:bg => 0, κ; form = Share()),
+            Flow(0 => :unconf, adm; form = Truncate()),
+            Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
+            Flow(
+                :unconf => 0, Derived(_unconf_discharges, args...);
+                form = Truncate()
+            ),
+            Flow(
+                :conf => 0, Derived(_conf_discharges, args...);
+                form = Truncate()
+            ),
+            Flow(:bg => 0, TimeVarying(ruleout); form = Truncate()),
+        )
+    )
+    ## The stocks start empty and every inflow is a flow, so the call takes
+    ## no gain and `stop` sets the number of days. The clamp floors the
+    ## unconfirmed pool when its shares pass one.
+    floor_ = ComposableRecurrences.Clamp(zero(T), T(Inf))
+    Y = Recurrence([true]; modifiers = (flows, floor_))(;
+        history = zeros(T, 3, 1), stop = n
+    )
+    O_conf = Y[2, :]
+    O_bvd = Y[1, :] .+ O_conf
+    O_bg = Y[3, :]
+    O_susp = Y[1, :] .+ O_bg
+    abscond = κ .* vcat(zero(eltype(Y)), O_susp[1:(end - 1)])
+    return (; demand = O_bvd .+ O_bg, O_bvd, O_conf, O_susp, abscond)
+end
+
+## The confirmed share of the day's BVD discharges `b`, off the previous
+## day's unconfirmed and confirmed pools `u` and `c`. The pools are never
+## negative, so the test asks whether `u + c > 0`. It is asked of `abs2`,
+## whose derivative at zero is zero, because a dual number breaks a tie at
+## zero by its derivative and would divide 0 by 0.
+function _conf_share_of(b, u, c)
+    s = u + c
+    return abs2(s) > zero(s) ? b * (c / s) : zero(b * s)
+end
+
+## What each true-case pool keeps after its flows and its share `o` of the
+## discharges, before any overshoot moves to the other pool.
+_unconf_left(u, A, h, κ, o) = u * (1 - κ - h) + A - o
+_conf_left(u, c, h, o) = c + h * u - o
+
+## The discharge count of each true-case pool: its share of the discharges,
+## plus the other pool's overshoot below zero, so that the total true-case
+## stock rather than each pool takes the floor.
+function _unconf_discharges(b, u, c, A, h, κ)
+    oc = _conf_share_of(b, u, c)
+    return (b - oc) + max(-_conf_left(u, c, h, oc), zero(oc))
+end
+function _conf_discharges(b, u, c, A, h, κ)
+    oc = _conf_share_of(b, u, c)
+    return oc + max(-_unconf_left(u, A, h, κ, b - oc), zero(oc))
 end
 
 """
@@ -2091,6 +2087,10 @@ proportional split's mean-field approximation: a true case that dies
 before its test returns is never counted as confirmed. Returns the
 length-`n` confirmed-in-care sub-stock. [`incare_census`](@ref) forms the
 suspect sub-stock as the demand remainder `D − O_conf`.
+
+It is a ComposableRecurrences `Convolution` of `A_bvd` with a
+cohort-indexed (`Primary`) time-varying kernel: column `u` holds
+`CDF_conf(u, u + d) S_clin(d)` over cohort age `d`.
 """
 function two_clock_confirmed(
         A_bvd::AbstractVector, conf_hazard::AbstractVector,
@@ -2098,25 +2098,16 @@ function two_clock_confirmed(
     )
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
-    O_conf = Vector{T}(undef, n)
     L = length(S_clin)
-    one_T = one(T)
-    @inbounds for t in 1:n
-        acc = zero(T)
-        ## `prod_unconf` = probability cohort `u` is still unconfirmed at day
-        ## `t`, `∏_{j=u+1}^{t}(1 − hazard_j)`, extended one factor per step as
-        ## `u` walks back from `t`. `S_clin` is zero past its support, so the
-        ## walk stops at cohort age `L - 1`.
-        prod_unconf = one_T
-        for u in t:-1:max(1, t - L + 1)
-            d = t - u
-            cdf_conf = one_T - prod_unconf
-            acc += A_bvd[u] * cdf_conf * S_clin[d + 1]
-            prod_unconf *= (one_T - conf_hazard[u])
+    K = zeros(T, L, n)
+    @inbounds for u in 1:n
+        unconf = one(T)
+        for d in 0:(L - 1)
+            d > 0 && (unconf *= one(T) - conf_hazard[min(u + d, n)])
+            K[d + 1, u] = (one(T) - unconf) * S_clin[d + 1]
         end
-        O_conf[t] = acc
     end
-    return O_conf
+    return Convolution(TimeVarying(K, Primary()))(A_bvd)
 end
 
 """

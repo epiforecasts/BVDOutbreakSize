@@ -2,7 +2,8 @@
 # observation kernels in `models/observations.jl`. Each is a loop over a
 # daily grid or an observation vector, so left to the backend every
 # iteration's intermediates go on the tape; these replace that with a
-# closed-form adjoint of the same shape as the forward loop.
+# closed-form adjoint of the same shape as the forward loop. The kernels
+# that are ComposableRecurrences operators bring their own rules.
 #
 # Differentiable arguments are restricted to `Array{<:IEEEFloat}` and
 # `IEEEFloat` scalars, plus a view of one into such an array where a call
@@ -13,7 +14,7 @@
 # `task benchmark-rules` times both arms; if the gap has closed after a
 # backend upgrade, delete this file rather than maintain it.
 
-using Mooncake: CoDual, NoFData, NoRData, primal, tangent, zero_fcodual
+using Mooncake: CoDual, NoFData, NoRData, primal, tangent
 using SpecialFunctions: digamma
 
 ## An array argument a rule accepts: a float array, or a view into one (a
@@ -30,39 +31,10 @@ end
 
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
-    Tuple{typeof(convolve_delay), _FloatVec, _FloatVec},
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(convolve_pmf), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
     Tuple{
         typeof(interpolate_knots), _FloatVec, Array{<:Integer}, Integer,
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(renewal_infections), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-        Mooncake.IEEEFloat,
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(patch_infections), Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
-        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Mooncake.IEEEFloat},
-    },
-)
-
 ## Data-only helpers: lookups over the observation grid and the recorded
 ## histories, with no sampled quantity among their arguments. They pass no
 ## derivative, so the backend need not tape them.
@@ -74,65 +46,6 @@ Mooncake.@zero_derivative(
 )
 ## Work that reaches only reported quantities (see `_detached`).
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(convolve_delay)},
-        x::CoDual{<:_FloatVec}, delay::CoDual{<:_FloatVec}
-    )
-    xp = primal(x)
-    dp = primal(delay)
-    x̄ = _tangent_array(x)
-    d̄ = _tangent_array(delay)
-    y = convolve_delay(xp, dp)
-    ȳ = zero(y)
-    function convolve_delay_pullback!!(::NoRData)
-        ## The forward adds `w[d] · x[1:n−d+1]` to `y[d:n]` for each lag, so
-        ## the pullback is the matching correlation, one lag at a time:
-        ##
-        ##     x̄[1:n−d+1] += w[d] · ȳ[d:n]
-        ##     w̄[d]       += ȳ[d:n] · x[1:n−d+1]
-        ##
-        ## `x̄` gathers into a contiguous buffer first, since `x` may be a
-        ## strided matrix row.
-        n = length(xp)
-        Δx = zeros(eltype(x̄), n)
-        for d in 1:min(length(dp), n)
-            ȳd = view(ȳ, d:n)
-            axpy!(dp[d], ȳd, view(Δx, 1:(n - d + 1)))
-            d̄[d] += dot(ȳd, view(xp, 1:(n - d + 1)))
-        end
-        x̄ .+= Δx
-        return NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), convolve_delay_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(convolve_pmf)},
-        a::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        b::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    ap = primal(a)
-    bp = primal(b)
-    ā = tangent(a)
-    b̄ = tangent(b)
-    y = convolve_pmf(ap, bp)
-    ȳ = zero(y)
-    function convolve_pmf_pullback!!(::NoRData)
-        ## `y[j:j+na−1]` holds `b[j] · a` for each `j`, so
-        ##
-        ##     ā    += b[j] · ȳ[j:j+na−1]
-        ##     b̄[j] += ȳ[j:j+na−1] · a
-        na = length(ap)
-        for j in eachindex(bp)
-            ȳj = view(ȳ, j:(j + na - 1))
-            axpy!(bp[j], ȳj, ā)
-            b̄[j] += dot(ȳj, ap)
-        end
-        return NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), convolve_pmf_pullback!!
-end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(interpolate_knots)},
@@ -163,68 +76,6 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(out, ō), interpolate_knots_pullback!!
-end
-
-## Per day, with `S⁻` the pool before it and `x = R f / N`,
-##
-##     I = S⁻ (1 − e^{−x}),    S = S⁻ e^{−x},
-##
-## so walking back `x̄ = e^{−x} S⁻ (Ī − S̄)` and the pool before the day
-## collects `S̄⁻ = Ī (1 − e^{−x}) + S̄ e^{−x}`. The pool after the seed is
-## `N − Σ seed`, which hands its adjoint to `N` and, negated, to each seed.
-## The scalar `N` has no fdata, so its cotangent goes back as rdata.
-function Mooncake.rrule!!(
-        ::CoDual{typeof(renewal_infections)},
-        Rt::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        g::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        seed::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        N::CoDual{<:Mooncake.IEEEFloat}
-    )
-    Rtp = primal(Rt)
-    gp = primal(g)
-    seedp = primal(seed)
-    Np = primal(N)
-    R̄ = tangent(Rt)
-    ḡ = tangent(g)
-    s̄ = tangent(seed)
-    n = length(Rtp)
-    L = length(seedp)
-    ## The forward pass is the model's own, which also hands back the
-    ## per-day force and pool the pullback needs, so the recursion is
-    ## defined once.
-    st = renewal_infections_with_state(Rtp, gp, seedp, Np)
-    I, force, S = st.infections, st.force, st.susceptible
-    Ī = zero(I)
-    function renewal_infections_pullback!!(::NoRData)
-        ## Sequential recursion, so the walk runs backwards: each day's
-        ## adjoint must land on the lagged infections before those days
-        ## are read. `Ī` is Mooncake's buffer, so accumulate into a copy.
-        acc = copy(Ī)
-        S̄ = zero(Np)
-        N̄ = zero(Np)
-        @inbounds for t in n:-1:(L + 1)
-            x = Rtp[t] * force[t] / Np
-            e = exp(-x)
-            x̄ = e * S[t - 1] * (acc[t] - S̄)
-            S̄ = -acc[t] * expm1(-x) + S̄ * e
-            R̄[t] += x̄ * force[t] / Np
-            N̄ -= x̄ * x / Np
-            f̄ = x̄ * Rtp[t] / Np
-            kmax = min(t - 1, length(gp))
-            for s in 1:kmax
-                acc[t - s] += f̄ * gp[s]
-                ḡ[s] += f̄ * I[t - s]
-            end
-        end
-        m = min(L, n)
-        live = Np - sum(view(seedp, 1:m)) > zero(Np)
-        live && (N̄ += S̄)
-        @inbounds for j in 1:m
-            s̄[j] += acc[j] - (live ? S̄ : zero(Np))
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), N̄
-    end
-    return CoDual(I, Ī), renewal_infections_pullback!!
 end
 
 Mooncake.@is_primitive(
@@ -271,15 +122,6 @@ Mooncake.@is_primitive(
         Mooncake.IEEEFloat,
     },
 )
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(abscond_thinned_flows), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
-        Array{<:Mooncake.IEEEFloat},
-    },
-)
 
 ## `y[i] = pmf[i] · s^(i−1)` with `s = 1 − κ`. The scalar `κ` has no fdata,
 ## so its cotangent goes back as rdata.
@@ -311,102 +153,6 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), abscond_thinned_pullback!!
 end
 
-## Adjoint of the confirmation-stopped abscond thinning. Per cohort `t` the
-## forward walk is
-##
-##     u[d] = u[d−1] · (1 − h[t+d−1]),    s[d] = s[d−1] · (1 − κ u[d])
-##     outk[t+d] += admk[t] · pmfk[d+1] · s[d]
-##
-## The pullback recomputes `u` and `s` for one cohort into scratch buffers,
-## then walks the cohort backwards carrying `s̄` and `ū`.
-function Mooncake.rrule!!(
-        ::CoDual{typeof(abscond_thinned_flows)},
-        adm1::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        pmf1::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        adm2::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        pmf2::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        κ::CoDual{<:Mooncake.IEEEFloat},
-        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    a1p, p1p = primal(adm1), primal(pmf1)
-    a2p, p2p = primal(adm2), primal(pmf2)
-    κp = primal(κ)
-    hp = primal(conf_hazard)
-    ## `abscond_thinned_flow` passes the same arrays twice, so these tangents
-    ## can alias: the pullback only ever adds into them.
-    ā1, p̄1 = tangent(adm1), tangent(pmf1)
-    ā2, p̄2 = tangent(adm2), tangent(pmf2)
-    h̄ = tangent(conf_hazard)
-    y1, y2 = abscond_thinned_flows(a1p, p1p, a2p, p2p, κp, hp)
-    ȳ1 = zero(y1)
-    ȳ2 = zero(y2)
-    function abscond_thinned_flows_pullback!!(::NoRData)
-        n = length(a1p)
-        nmax1 = length(p1p)
-        nmax2 = length(p2p)
-        T = eltype(y1)
-        one_T = one(T)
-        u = Vector{T}(undef, max(nmax1, nmax2))
-        s = similar(u)
-        κ̄ = zero(T)
-        @inbounds for t in 1:n
-            a1 = a1p[t]
-            a2 = a2p[t]
-            dmax1 = min(nmax1 - 1, n - t)
-            dmax2 = min(nmax2 - 1, n - t)
-            dm = max(dmax1, dmax2)
-            ## `u[d+1]`, `s[d+1]` hold the survivals at cohort age `d`.
-            ā1[t] += ȳ1[t] * p1p[1]
-            ā2[t] += ȳ2[t] * p2p[1]
-            p̄1[1] += ȳ1[t] * a1
-            p̄2[1] += ȳ2[t] * a2
-            u[1] = one_T
-            s[1] = one_T
-            for d in 1:dm
-                u[d + 1] = u[d] * (one_T - hp[t + d - 1])
-                s[d + 1] = s[d] * (one_T - κp * u[d + 1])
-            end
-            ūc = zero(T)
-            s̄c = zero(T)
-            for d in dm:-1:1
-                sd = s[d + 1]
-                if d <= dmax1
-                    g = ȳ1[t + d]
-                    ā1[t] += g * p1p[d + 1] * sd
-                    p̄1[d + 1] += g * a1 * sd
-                    s̄c += g * a1 * p1p[d + 1]
-                end
-                if d <= dmax2
-                    g = ȳ2[t + d]
-                    ā2[t] += g * p2p[d + 1] * sd
-                    p̄2[d + 1] += g * a2 * sd
-                    s̄c += g * a2 * p2p[d + 1]
-                end
-                ## s[d] = s[d−1] · (1 − κ u[d])
-                ud = u[d + 1]
-                sprev = s[d]
-                κ̄ -= s̄c * sprev * ud
-                ūc -= s̄c * sprev * κp
-                s̄c *= one_T - κp * ud
-                ## u[d] = u[d−1] · (1 − h[t+d−1])
-                hd = hp[t + d - 1]
-                h̄[t + d - 1] -= ūc * u[d]
-                ūc *= one_T - hd
-            end
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
-            oftype(κp, κ̄), NoRData()
-    end
-    return CoDual((y1, y2), (ȳ1, ȳ2)), abscond_thinned_flows_pullback!!
-end
-
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(two_clock_confirmed), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-    },
-)
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
@@ -414,58 +160,6 @@ Mooncake.@is_primitive(
         Array{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
     },
 )
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(two_clock_confirmed)},
-        A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        S_clin::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    Ap = primal(A_bvd)
-    hp = primal(conf_hazard)
-    Sp = primal(S_clin)
-    Ā = tangent(A_bvd)
-    h̄ = tangent(conf_hazard)
-    S̄ = tangent(S_clin)
-    O = two_clock_confirmed(Ap, hp, Sp)
-    Ō = zero(O)
-    function two_clock_confirmed_pullback!!(::NoRData)
-        n = length(Ap)
-        L = length(Sp)
-        one_T = one(eltype(O))
-        ## Day `t` walks cohorts `u = t, t-1, …` with the unconfirmed
-        ## product `p` extended by `(1 − h[u])` after each is scored:
-        ##
-        ##     O[t] += A[u] · (1 − p) · S[t−u+1],   p ← p · (1 − h[u])
-        ##
-        ## The pullback replays each day's products into `p_at`, then walks
-        ## the cohorts back in the opposite order carrying the adjoint of
-        ## `p`, so no factor is divided out.
-        p_at = Vector{eltype(O)}(undef, L)
-        @inbounds for t in 1:n
-            g = Ō[t]
-            iszero(g) && continue
-            umin = max(1, t - L + 1)
-            p = one_T
-            for u in t:-1:umin
-                p_at[t - u + 1] = p
-                p *= (one_T - hp[u])
-            end
-            p̄ = zero(one_T)
-            for u in umin:t
-                d = t - u
-                pk = p_at[d + 1]
-                s = Sp[d + 1]
-                h̄[u] -= p̄ * pk
-                Ā[u] += g * (one_T - pk) * s
-                S̄[d + 1] += g * Ap[u] * (one_T - pk)
-                p̄ = p̄ * (one_T - hp[u]) - g * Ap[u] * s
-            end
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(O, Ō), two_clock_confirmed_pullback!!
-end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(clinical_stay_survival)},
@@ -506,129 +200,6 @@ function Mooncake.rrule!!(
     return CoDual(S, S̄), clinical_stay_survival_pullback!!
 end
 
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(accumulate_occupancy), Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-        Array{<:Mooncake.IEEEFloat}, Array{<:Mooncake.IEEEFloat},
-        Mooncake.IEEEFloat, Array{<:Mooncake.IEEEFloat},
-    },
-)
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(accumulate_occupancy)},
-        A_bvd::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        A_bg::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        deaths::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        recover::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        ruleout::CoDual{<:Array{<:Mooncake.IEEEFloat}},
-        κ::CoDual{<:Mooncake.IEEEFloat},
-        conf_hazard::CoDual{<:Array{<:Mooncake.IEEEFloat}}
-    )
-    κp = primal(κ)
-    hp = primal(conf_hazard)
-    dp = primal(deaths)
-    rp = primal(recover)
-    Āb = tangent(A_bvd)
-    Āg = tangent(A_bg)
-    d̄ = tangent(deaths)
-    r̄ = tangent(recover)
-    ō = tangent(ruleout)
-    h̄ = tangent(conf_hazard)
-    y, O_bg, flags = _accumulate_occupancy(
-        Val(true), primal(A_bvd), primal(A_bg), dp, rp, primal(ruleout), κp,
-        hp
-    )
-    ȳ = map(zero, y)
-    function accumulate_occupancy_pullback!!(::NoRData)
-        Tf = eltype(y.demand)
-        z = zero(Tf)
-        ε = eps(Tf)
-        κ̄ = zero(Tf)
-        ## Adjoints of the day-`t` stocks, carried back from day `t + 1`.
-        cb = z
-        cg = z
-        cc = z
-        cs = z
-        @inbounds for t in length(flags):-1:1
-            f = flags[t]
-            Pb = t > 1 ? y.O_bvd[t - 1] : z
-            Pg = t > 1 ? O_bg[t - 1] : z
-            Pc = t > 1 ? y.O_conf[t - 1] : z
-            Ps = t > 1 ? y.O_susp[t - 1] : z
-            bvd_out = dp[t] + rp[t]
-            ab = κp * Ps
-            unconf = f & _OCC_UNCONF != 0 ? Pb - Pc : z
-            denom = f & _OCC_DENOM != 0 ? Ps : ε
-            share = Pb > z ? Pc / Pb : z
-            gOb = ȳ.O_bvd[t] + cb
-            gOg = cg
-            gOc = ȳ.O_conf[t] + cc
-            gOs = ȳ.O_susp[t] + cs
-            gD = ȳ.demand[t]
-            gab = ȳ.abscond[t]
-            ## `O_susp = max(D − O_conf, 0)`
-            if f & _OCC_SUSP != 0
-                gD += gOs
-                gOc -= gOs
-            end
-            ## `O_conf = clamp(x_conf, 0, O_bvd)`
-            gx_c = z
-            if f & _OCC_CONF_X != 0
-                gx_c = gOc
-            elseif f & _OCC_CONF_HI != 0
-                gOb += gOc
-            end
-            nb = z
-            nc = gx_c
-            gbo = -gx_c * share
-            if Pb > z
-                gshare = -gx_c * bvd_out
-                nc += gshare / Pb
-                nb -= gshare * share / Pb
-            end
-            h̄[t] += gx_c * unconf
-            gu = gx_c * hp[t]
-            ## `D = O_bvd + O_bg`, each `max(x, 0)` of its balance
-            gOb += gD
-            gOg += gD
-            gx_b = f & _OCC_BVD != 0 ? gOb : z
-            gx_g = f & _OCC_BG != 0 ? gOg : z
-            nb += gx_b
-            Āb[t] += gx_b
-            gbo -= gx_b
-            ng = gx_g
-            Āg[t] += gx_g
-            ō[t] -= gx_g
-            ## Abscond split `ab · (unconf / denom)` and `ab · (O_bg / denom)`
-            qu = unconf / denom
-            qg = Pg / denom
-            gab -= gx_b * qu + gx_g * qg
-            gqu = -gx_b * ab
-            gqg = -gx_g * ab
-            gu += gqu / denom
-            ng += gqg / denom
-            gden = -(gqu * qu + gqg * qg) / denom
-            ns = f & _OCC_DENOM != 0 ? gden : z
-            if f & _OCC_UNCONF != 0
-                nb += gu
-                nc -= gu
-            end
-            κ̄ += gab * Ps
-            ns += gab * κp
-            d̄[t] += gbo
-            r̄[t] += gbo
-            cb = nb
-            cg = ng
-            cc = nc
-            cs = ns
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
-            NoRData(), convert(typeof(κp), κ̄), NoRData()
-    end
-    return CoDual(y, ȳ), accumulate_occupancy_pullback!!
-end
 
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
@@ -891,109 +462,6 @@ function Mooncake.rrule!!(
     return out, onset_report_moments_pullback!!
 end
 
-function Mooncake.rrule!!(
-        ::CoDual{typeof(patch_infections)},
-        Rt::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        g::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
-        seeds::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        K::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        ε::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        N::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
-    )
-    Rp = primal(Rt)
-    gp = primal(g)
-    Kp = primal(K)
-    εp = primal(ε)
-    Np = primal(N)
-    seedsp = primal(seeds)
-    R̄ = tangent(Rt)
-    ḡ = tangent(g)
-    s̄ = tangent(seeds)
-    K̄ = tangent(K)
-    ε̄ = tangent(ε)
-    N̄ = tangent(N)
-    np, n = size(Rp)
-    L = size(seedsp, 2)
-    st = patch_infections_with_state(Rp, gp, seedsp, Kp, εp, Np)
-    y = (; st.infections, st.importation)
-    out = Mooncake.zero_fcodual(y)
-    Ī = tangent(out).infections
-    Ā = tangent(out).importation
-    I, S, rate = st.infections, st.susceptible, st.rate
-    function patch_infections_pullback!!(::NoRData)
-        Tf = eltype(I)
-        outflow = _patch_outflow(Tf, Kp, np)
-        ## Each day's force and generated infections are rebuilt from the
-        ## forward infections rather than stored. The walk runs backwards so
-        ## a day's adjoint is complete before it is pushed onto earlier days,
-        ## and it accumulates into a copy since `Ī` is Mooncake's buffer.
-        acc = copy(Ī)
-        force = zeros(Tf, np)
-        gen = zeros(Tf, np)
-        ḡen = zeros(Tf, np)
-        ōut = zeros(Tf, np)
-        ȳ = zeros(Tf, np)
-        S̄ = zeros(Tf, np)
-        @inbounds for t in n:-1:(L + 1)
-            kmax = min(t - 1, length(gp))
-            for p in 1:np
-                f = _patch_force(I, gp, p, t)
-                force[p] = f
-                gen[p] = Rp[p, t] * f
-                ḡen[p] = zero(Tf)
-            end
-            ## Depletion, as in the single-patch rule, on the rate
-            ## `x = y / N[p]` with `y` the force after the transfer.
-            for p in 1:np
-                x = rate[p, t]
-                e = exp(-x)
-                x̄ = e * S[p, t - 1] * (acc[p, t] - S̄[p])
-                S̄[p] = -acc[p, t] * expm1(-x) + S̄[p] * e
-                ȳ[p] = x̄ / Np[p]
-                N̄[p] -= x̄ * x / Np[p]
-            end
-            ## y[p] = (1 - ε[p, t] outflow[p]) gen[p] + arrivals[p], and
-            ## the importation output is arrivals[p] alone.
-            for p in 1:np
-                a = ȳ[p]
-                ā = a + Ā[p, t]
-                ḡen[p] += a * (one(Tf) - εp[p, t] * outflow[p])
-                ε̄[p, t] -= a * outflow[p] * gen[p]
-                ōut[p] -= a * εp[p, t] * gen[p]
-                for q in 1:np
-                    q == p && continue
-                    ε̄[q, t] += ā * Kp[p, q] * gen[q]
-                    K̄[p, q] += ā * εp[q, t] * gen[q]
-                    ḡen[q] += ā * εp[q, t] * Kp[p, q]
-                end
-            end
-            for p in 1:np
-                R̄[p, t] += ḡen[p] * force[p]
-                f̄ = ḡen[p] * Rp[p, t]
-                for s in 1:kmax
-                    acc[p, t - s] += f̄ * gp[s]
-                    ḡ[s] += f̄ * I[p, t - s]
-                end
-            end
-        end
-        @inbounds for q in 1:np, r in 1:np
-            r == q && continue
-            K̄[r, q] += ōut[q]
-        end
-        ## Each pool after the seed is `N[p] − Σ seeds[p, :]`.
-        m = min(L, n)
-        @inbounds for p in 1:np
-            live = Np[p] - sum(view(seedsp, p, 1:m)) > zero(Tf)
-            live && (N̄[p] += S̄[p])
-            for j in 1:m
-                s̄[p, j] += acc[p, j] - (live ? S̄[p] : zero(Tf))
-            end
-        end
-        return ntuple(_ -> NoRData(), 7)
-    end
-    return out, patch_infections_pullback!!
-end
-
 # Log densities of the vector observation distributions in
 # `models/observation_distributions.jl`. Each rule takes the distribution
 # itself: the tangent of an array field is read from the distribution's
@@ -1201,16 +669,8 @@ function Mooncake.rrule!!(
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end
 
-## The health-zone delay terms the model rebuilds on every draw's
-## generation interval and delays: the pre-`t0` part of a convolution, and
-## the window weights from the cumulative PMF.
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_pre_convolution), Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Mooncake.IEEEFloat}, Integer, Integer,
-    },
-)
+## The health-zone window weights the model rebuilds on every draw's
+## delays, from the cumulative PMF.
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
@@ -1218,39 +678,6 @@ Mooncake.@is_primitive(
         Vector{<:Integer}, Vector{<:Integer}, Integer,
     },
 )
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_pre_convolution)},
-        I_bar::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        w::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
-        t0::CoDual{<:Integer}, first_lag::CoDual{<:Integer}
-    )
-    Ip, wp = primal(I_bar), primal(w)
-    t0p, lag = primal(t0), primal(first_lag)
-    Ī, w̄ = tangent(I_bar), tangent(w)
-    y = zone_pre_convolution(Ip, wp, t0p, lag)
-    ȳ = zero(y)
-    function zone_pre_convolution_pullback!!(::NoRData)
-        ## `y[p, t] += w[i] · I[p, t − s]` for each valid lag, so
-        ##
-        ##     w̄[i]          += ȳ[p, t] · I[p, t − s]
-        ##     Ī[p, t − s]   += ȳ[p, t] · w[i]
-        np, n = size(Ip)
-        L = length(wp)
-        @inbounds for t in 1:n
-            lo = max(lag, t - t0p + 1)
-            hi = min(L - 1 + lag, t - 1)
-            for s in lo:hi, p in 1:np
-
-                i = s - lag + 1
-                w̄[i] += ȳ[p, t] * Ip[p, t - s]
-                Ī[p, t - s] += ȳ[p, t] * wp[i]
-            end
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), zone_pre_convolution_pullback!!
-end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(zone_window_weights)},
@@ -1284,256 +711,4 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), zone_window_weights_pullback!!
-end
-
-## The health-zone renewal is a coupled loop: every zone's own force first,
-## then a mixing step that reads the zones of the other patches on the same
-## day. It cannot call `renewal_infections`, so it carries its own rule.
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_share_renewal_kernel), Array{<:Mooncake.IEEEFloat, 2},
-        Array{<:Mooncake.IEEEFloat, 1}, Array{<:Mooncake.IEEEFloat, 2},
-        Array{<:Mooncake.IEEEFloat, 1}, Vector{<:UnitRange}, Integer,
-        Array{<:Mooncake.IEEEFloat, 2}, NamedTuple,
-        Array{<:Mooncake.IEEEFloat, 1},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_share_renewal_kernel), Array{<:Mooncake.IEEEFloat, 2},
-        Array{<:Mooncake.IEEEFloat, 1}, Array{<:Mooncake.IEEEFloat, 2},
-        Array{<:Mooncake.IEEEFloat, 1}, Vector{<:UnitRange}, Integer,
-        Array{<:Mooncake.IEEEFloat, 2}, Nothing, Nothing,
-    },
-)
-
-## Adjoint of `zone_share_renewal_with_state`, walking the days backwards so
-## each day's force adjoint lands on the lagged infections before those days
-## are read. `st` is the forward state, `ȳ` the output cotangent and the
-## remaining arguments the argument tangents and primals.
-function _zone_share_renewal_adjoint!(
-        ȳ, st, Ī_bar, ḡ, δ̄, w̄0, f̄_pre, m̄ix, ε̄,
-        I_bar, g, δ_daily, w0, patch_ranges, t0, force_pre, mix, ε
-    )
-    nd, nz = size(δ_daily)
-    on = mix !== nothing && ε !== nothing
-    Tp = eltype(st.infections)
-    floor_ = eps(Tp)
-    L = length(g)
-    ## Each day's infections feed the later days' force, so the infection
-    ## adjoint grows as the walk goes back. `ȳ.infections` is Mooncake's
-    ## buffer, so it accumulates into a copy.
-    acc = copy(ȳ.infections)
-    E = exp.(δ_daily)
-    ū = zeros(Tp, nz)
-    v̄ = zeros(Tp, nz)
-    h̄ = zeros(Tp, nz)
-    ēu = zeros(Tp, nz)
-    w̄u = zeros(Tp, nz)
-    ## The daily mixed-force and import-pattern adjoints, kept so each
-    ## mixing block takes one product after the walk rather than a rank-one
-    ## update a day.
-    nrow = on ? nd : 0
-    V̄ = zeros(Tp, nrow, nz)
-    H̄ = zeros(Tp, nrow, nz)
-    @inbounds for j in nd:-1:1
-        t = t0 + j - 1
-        fill!(ū, zero(Tp))
-        if !on
-            ## `W = u / Σu`, so each zone's share adjoint feeds back into
-            ## every zone of its patch through the denominator.
-            for p in eachindex(patch_ranges)
-                zs = patch_ranges[p]
-                isempty(zs) && continue
-                raw = st.patch_total[p, j]
-                tot = max(raw, floor_)
-                Ip = I_bar[p, t]
-                pooled = zero(Tp)
-                for z in zs
-                    Ī = acc[j, z]
-                    W̄ = ȳ.shares[j, z] + Ip * Ī
-                    Ī_bar[p, t] += Ī * st.shares[j, z]
-                    ū[z] += W̄ / tot
-                    pooled += W̄ * st.u[j, z]
-                end
-                if raw > floor_
-                    pooled /= tot * tot
-                    for z in zs
-                        ū[z] -= pooled
-                    end
-                end
-            end
-        else
-            fill!(v̄, zero(Tp))
-            fill!(h̄, zero(Tp))
-            ## `I = c_p v + M_p h / Σh`, with the carry `c_p` and both
-            ## denominators pooling over the patch, so a zone's adjoint
-            ## reaches every zone of its patch. Where the import pattern is
-            ## empty the arrivals follow the mixed force instead.
-            for p in eachindex(patch_ranges)
-                zs = patch_ranges[p]
-                isempty(zs) && continue
-                Ip = I_bar[p, t]
-                frac = mix.import_fraction[p, t]
-                Mp = frac * Ip
-                raw = st.patch_total[p, j]
-                sv = max(raw, floor_)
-                sh = st.share_total[p, j]
-                cp = (Ip - Mp) / sv
-                Ibar_floor = max(Ip, floor_)
-                c̄p = zero(Tp)
-                M̄p = zero(Tp)
-                s̄v = zero(Tp)
-                s̄h = zero(Tp)
-                for z in zs
-                    Ī = acc[j, z]
-                    W̄ = ȳ.shares[j, z]
-                    Ī += W̄ / Ibar_floor
-                    if Ip > floor_
-                        Ī_bar[p, t] -=
-                            W̄ * st.infections[j, z] / (Ibar_floor * Ibar_floor)
-                    end
-                    c̄p += Ī * st.v[j, z]
-                    v̄[z] += Ī * cp
-                    īmp = ȳ.imports[j, z] + Ī
-                    if sh > floor_
-                        M̄p += īmp * st.h[j, z] / sh
-                        h̄[z] += īmp * Mp / sh
-                        s̄h -= īmp * Mp * st.h[j, z] / (sh * sh)
-                    else
-                        M̄p += īmp * st.v[j, z] / sv
-                        v̄[z] += īmp * Mp / sv
-                        s̄v -= īmp * Mp * st.v[j, z] / (sv * sv)
-                    end
-                end
-                Ī_bar[p, t] += c̄p / sv
-                M̄p -= c̄p / sv
-                s̄v -= c̄p * (Ip - Mp) / (sv * sv)
-                Ī_bar[p, t] += M̄p * frac
-                m̄ix.import_fraction[p, t] += M̄p * Ip
-                if raw > floor_
-                    for z in zs
-                        v̄[z] += s̄v
-                    end
-                end
-                for z in zs
-                    h̄[z] += s̄h
-                end
-            end
-            ## `v = (1 − ε) u + within (ε u)` and `h = between (w u)`, so the
-            ## two blocks transpose into the force adjoint and pick up an
-            ## outer product of their own, taken after the walk.
-            for z in 1:nz
-                ε̄[z] -= v̄[z] * st.u[j, z]
-                ū[z] += v̄[z] * (one(Tp) - ε[z])
-                V̄[j, z] = v̄[z]
-                H̄[j, z] = h̄[z]
-            end
-            mul!(ēu, transpose(mix.within), v̄)
-            mul!(w̄u, transpose(mix.between), h̄)
-            for z in 1:nz
-                uz = st.u[j, z]
-                ε̄[z] += ēu[z] * uz
-                ū[z] += ēu[z] * ε[z]
-                m̄ix.origin_weight[z] += w̄u[z] * uz
-                ū[z] += w̄u[z] * mix.origin_weight[z]
-            end
-        end
-        ## `u = e^δ Λ` and `Λ` is the pre-`t0` term plus the lagged
-        ## infections through the generation interval.
-        smax = min(L, j - 1)
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            fp = force_pre[p, t]
-            pre = zero(Tp)
-            for z in zs
-                Λ̄ = ȳ.forces[j, z] + ū[z] * E[j, z]
-                δ̄[j, z] += ū[z] * st.u[j, z]
-                w̄0[z] += Λ̄ * fp
-                pre += Λ̄ * w0[z]
-                for s in 1:smax
-                    acc[j - s, z] += Λ̄ * g[s]
-                    ḡ[s] += Λ̄ * st.infections[j - s, z]
-                end
-            end
-            f̄_pre[p, t] += pre
-        end
-    end
-    if on
-        ## `Σ_j v̄_j (ε u_j)'` and `Σ_j h̄_j (w u_j)'`: each block's outer
-        ## product over the whole grid.
-        mul!(
-            m̄ix.within, transpose(V̄), st.u .* transpose(ε),
-            one(Tp), one(Tp)
-        )
-        mul!(
-            m̄ix.between, transpose(H̄),
-            st.u .* transpose(mix.origin_weight), one(Tp), one(Tp)
-        )
-    end
-    return nothing
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_share_renewal_kernel)},
-        I_bar::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        g::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
-        δ_daily::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        w0::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
-        patch_ranges::CoDual{<:Vector{<:UnitRange}},
-        t0::CoDual{<:Integer},
-        force_pre::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        mix::CoDual{<:NamedTuple},
-        ε::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}}
-    )
-    st = zone_share_renewal_with_state(
-        primal(I_bar), primal(g), primal(δ_daily), primal(w0),
-        primal(patch_ranges), primal(t0), primal(force_pre),
-        primal(mix), primal(ε)
-    )
-    out = zero_fcodual((; st.shares, st.forces, st.infections, st.imports))
-    ȳ = tangent(out)
-    function zone_share_renewal_pullback!!(::NoRData)
-        _zone_share_renewal_adjoint!(
-            ȳ, st, tangent(I_bar), tangent(g), tangent(δ_daily),
-            tangent(w0), tangent(force_pre), tangent(mix), tangent(ε),
-            primal(I_bar), primal(g), primal(δ_daily), primal(w0),
-            primal(patch_ranges), primal(t0), primal(force_pre),
-            primal(mix), primal(ε)
-        )
-        return ntuple(_ -> NoRData(), 10)
-    end
-    return out, zone_share_renewal_pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_share_renewal_kernel)},
-        I_bar::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        g::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
-        δ_daily::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        w0::CoDual{<:Array{<:Mooncake.IEEEFloat, 1}},
-        patch_ranges::CoDual{<:Vector{<:UnitRange}},
-        t0::CoDual{<:Integer},
-        force_pre::CoDual{<:Array{<:Mooncake.IEEEFloat, 2}},
-        ::CoDual{Nothing}, ::CoDual{Nothing}
-    )
-    st = zone_share_renewal_with_state(
-        primal(I_bar), primal(g), primal(δ_daily), primal(w0),
-        primal(patch_ranges), primal(t0), primal(force_pre), nothing, nothing
-    )
-    out = zero_fcodual((; st.shares, st.forces, st.infections, st.imports))
-    ȳ = tangent(out)
-    function zone_share_renewal_pullback!!(::NoRData)
-        _zone_share_renewal_adjoint!(
-            ȳ, st, tangent(I_bar), tangent(g), tangent(δ_daily),
-            tangent(w0), tangent(force_pre), nothing, nothing,
-            primal(I_bar), primal(g), primal(δ_daily), primal(w0),
-            primal(patch_ranges), primal(t0), primal(force_pre),
-            nothing, nothing
-        )
-        return ntuple(_ -> NoRData(), 10)
-    end
-    return out, zone_share_renewal_pullback!!
 end
