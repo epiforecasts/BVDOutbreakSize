@@ -377,7 +377,7 @@ spatial_labels = Dict(
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
     :province_ascertainment_sd => "Ascertainment spread",
     :importation_epsilon => "Importation intensity",
-    :province_cfr_sd => "Lethality spread",
+    :province_cfr_sd => "Lethality spread (logit)",
     :province_death_ascertainment_sd => "Death-confirmation spread"
 )
 spatial_hyper_table = summary_table(
