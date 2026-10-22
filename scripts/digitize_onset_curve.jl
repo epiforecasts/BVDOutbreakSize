@@ -237,6 +237,12 @@ const CONFIG = [
     # from SitRep 153 (17 and 8 in SitRep 149 and the dashboard), reads
     # 13 and 14 May as 17 and 17 in SitRep 154 and drops its 5 June (20 in
     # SitRep 153); see #1148.
+    # "155" reprints SitRep 154's figure byte for byte and "157" reprints
+    # SitRep 156's. "156" is a new 827x456 render with SitRep 154's n (7 438)
+    # and last tick (12 October), so it is left out with 154. "158" and
+    # "159" (n = 7 660, last tick 19 October, y step 25) read 14 May as 4
+    # and 18 against 8 in SitRep 149 and the dashboard, the misread of
+    # #1148, and are left out until the reader is fixed.
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
