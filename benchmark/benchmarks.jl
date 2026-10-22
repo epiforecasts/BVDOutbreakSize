@@ -8,8 +8,8 @@
 #       the denominator the AD numbers are read against.
 #   "AD gradients" — the gradient of that same log-density, per component
 #       per backend, keyed `["AD gradients"][group][component][backend]`.
-#   "Zone kernels" — the health-zone model's inner kernels, with
-#       `BVD_BENCH_ZONE=true` only.
+#   "Zone kernels" — the health-zone model's inner kernels, unless
+#       `BVD_BENCH_ZONE=false`.
 #
 # The components come from `test/ad_fixtures.jl`, which
 # `test/test_ad_gradients.jl` includes too, so the surface the tests assert
@@ -54,9 +54,9 @@ const BENCH_JOINT = lowercase(get(ENV, "BVD_BENCH_JOINT", "false")) == "true"
 
 # The health-zone `bvd_zone` on a synthetic dataset about the size of the
 # real zone fit, and its kernels on the same inputs (`src/zone_kernels.jl`).
-# Off by default and not set by the benchmark workflow, so a CI run costs
-# what it did before.
-const BENCH_ZONE = lowercase(get(ENV, "BVD_BENCH_ZONE", "false")) == "true"
+# On by default, so every benchmark run, the workflow's included, times
+# the zone model. `BVD_BENCH_ZONE=false` leaves it out of a local run.
+const BENCH_ZONE = lowercase(get(ENV, "BVD_BENCH_ZONE", "true")) != "false"
 
 const SCENARIOS = ADFixtures.scenarios(; joint = BENCH_JOINT, zone = BENCH_ZONE)
 const BACKENDS = ADFixtures.backends()

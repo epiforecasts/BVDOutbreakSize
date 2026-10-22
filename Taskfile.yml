@@ -167,8 +167,8 @@ tasks:
       backend. Set BVD_BENCH_JOINT=true to add the full bvd_joint, which
       costs ~18 min of cold compile on its own, and BVD_BENCH_ENZYME=true
       to add the Enzyme backend, which did not finish inside a 90 minute
-      CI job. Set BVD_BENCH_ZONE=true to add the health-zone model and its
-      kernels.
+      CI job. The health-zone model and its kernels run by default;
+      BVD_BENCH_ZONE=false leaves them out.
     cmds:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
       - julia --project=benchmark benchmark/run.jl {{.CLI_ARGS}}

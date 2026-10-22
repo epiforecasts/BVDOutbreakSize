@@ -92,7 +92,7 @@ end
 end
 
 ## The health-zone scenario the benchmark suite times with
-## `BVD_BENCH_ZONE=true`. It is not in the default list, so it is asserted
+## by default. It is not in the default scenario list, so it is asserted
 ## here, at the size it is timed at and with mixing and the zone
 ## correlation on.
 @testitem "AD gradient: the zone benchmark scenario differentiates (Mooncake)" tags = [
