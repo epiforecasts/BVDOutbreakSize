@@ -198,6 +198,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - `BVD_BENCH_ZONE=true` adds the health-zone model and its kernels to the benchmark suite, on a synthetic zone dataset of 60 zones, 4 patches, 150 days and 95 vintages (#996).
   It is off by default, so the benchmark workflow's run is unchanged.
   The zone tests and the benchmark build that dataset from one shared fixture.
+  The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
 
 ### Fixed
 

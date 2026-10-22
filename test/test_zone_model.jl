@@ -1202,6 +1202,73 @@ end
     )
 end
 
+@testitem "bvd_zone: each draw's terms are the model's own" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, _zone_draw_terms, zone_correlation_factors
+    using Turing: sample, Prior
+    import FlexiChains
+
+    ## With and without the zone metadata, so the mixing and the zone
+    ## correlation are each off and then on.
+    syn = zone_synthetic()
+    for zones in (nothing, zone_metadata(syn))
+        zd = zone_inputs(syn; zones).model_data
+        on = !isempty(zd.zone_distances)
+        mix_on = zd.mixing !== nothing
+        @test on == mix_on == (zones !== nothing)
+        K = length(zd.knots)
+        chn = sample(
+            bvd_zone(zd), Prior(), 4; chain_type = FlexiChains.VNChain,
+            progress = false
+        )
+        draws(q) = vec(collect(chn[q]))
+        for i in 1:4
+            θ = (;
+                z_w = draws(:z_w)[i], σ_level = draws(:σ_level)[i],
+                z_level = draws(:z_level)[i],
+                δ_halflife = draws(:δ_halflife)[i], σ_δ = draws(:σ_δ)[i],
+                z_drift = draws(:z_drift)[i],
+                ρ_corr = on ? draws(:ρ_corr)[i] : nothing,
+                ε_within = mix_on ? draws(:ε_within)[i] : nothing,
+                τ_mix = mix_on ? draws(:τ_mix)[i] : nothing,
+                z_mix = mix_on ? draws(:z_mix)[i] : nothing,
+            )
+            t = _zone_draw_terms(zd, θ, K)
+            ## The model stores what the helper returns, to the bit.
+            @test vec(t.δ_knots) == draws(:delta_knots_zone)[i]
+            @test t.w0 == draws(:share_start_zone)[i]
+            ## Each term from its definition.
+            φ = exp2(-zd.week / θ.δ_halflife)
+            if on
+                @test t.ℓ == draws(:correlation_length_zone)[i]
+                @test t.ℓ ≈ -zd.correlation_distance / log(θ.ρ_corr)
+                lf = zone_correlation_factors(zd.zone_distances, t.ℓ)
+                df = zone_correlation_factors(zd.zone_walk_distances, t.ℓ)
+            else
+                @test t.ℓ === nothing
+                lf = df = Matrix{Float64}[]
+            end
+            @test t.knot_args[5] == φ
+            @test t.δ_knots == deviation_knots(
+                θ.z_level, θ.z_drift, θ.σ_level, θ.σ_δ, φ, zd.patch_ranges,
+                lf, df, zd.walking, K
+            )
+            @test t.w0 == zone_initial_shares(
+                θ.z_w, zd.patch_ranges, zd.share_scale
+            )
+            if mix_on
+                @test t.ε == draws(:mixing_epsilon_zone)[i]
+                x = log(θ.ε_within / (1 - θ.ε_within)) .+
+                    θ.τ_mix .* (θ.z_mix .- sum(θ.z_mix) / length(θ.z_mix))
+                @test t.ε ≈ 1 ./ (1 .+ exp.(-x)) rtol = 1.0e-12
+            else
+                @test t.ε === nothing
+            end
+        end
+    end
+end
+
 @testitem "bvd_zone: the sampled dimension and the optional blocks" setup = [
     ZoneSynthetic,
 ] begin

@@ -1360,7 +1360,9 @@ expected reports ([`zone_binned_increments`](@ref)). `def` is the patch
 trajectory, generation interval and delays the draw's shared quantity
 implies ([`zone_deformation`](@ref)); its default is the cut, the province
 model's posterior mean. Called by the model and, per draw, by the render.
-Returns `(; shares, forces, infections, imports, increments)`.
+Returns `(; shares, forces, infections, imports, increments, δ_daily,
+pre)`, the last two the daily deviations and each zone's pre-`t0` term at
+its initial share, which the renewal and the binning read.
 """
 function zone_forward(
         zd, δ_knots::AbstractMatrix, w0::AbstractVector,
@@ -1373,10 +1375,12 @@ function zone_forward(
         def.I_bar, def.g, δ_daily, w0, zd.patch_ranges,
         zd.t0, def.force_pre; mix, ε
     )
-    increments = zone_binned_increments(
-        def.report_bin, st.infections, def.zone_pre .* w0
+    pre = def.zone_pre .* w0
+    increments = zone_binned_increments(def.report_bin, st.infections, pre)
+    return (;
+        st.shares, st.forces, st.infections, st.imports, increments,
+        δ_daily, pre,
     )
-    return (; st.shares, st.forces, st.infections, st.imports, increments)
 end
 
 ## Cumulative zone infections to the last grid day: the pre-`t0` patch
@@ -1423,6 +1427,40 @@ end
 ## dispersion `ρ`, with `ρ` and `1 − ρ` floored at machine epsilon so a
 ## proposal at either end of `[0, 1]` gives a finite, positive `κ`.
 _zone_kappa(ρ::Real) = safe_rate(one(ρ) - ρ) / safe_rate(ρ)
+
+## The terms of one draw that the share renewal and the deviations are built
+## from, given the sampled values `θ`: the fields `z_w`, `σ_level`,
+## `z_level`, `δ_halflife`, `σ_δ`, `z_drift` (the innovations of all
+## `n_knots` knots, future ones included), `ρ_corr` (`nothing` with the
+## zone correlation off) and `ε_within`, `τ_mix`, `z_mix` (each `nothing`
+## with mixing off). Returns `(; ℓ, knot_args, δ_knots, w0, ε)`: the
+## correlation length (`nothing` with the correlation off), the arguments
+## of [`deviation_knots`](@ref) and its knots `(n_zones × n_knots)`, the
+## initial shares and the per-zone mixing fractions, the shared level moved
+## on the logit scale by `τ_mix` times the centred `z_mix` (`nothing` with
+## mixing off). `bvd_zone` and the zone kernel benchmarks both build their
+## draw from it.
+function _zone_draw_terms(zd, θ::NamedTuple, n_knots::Integer)
+    ℓ = θ.ρ_corr === nothing ? nothing :
+        -zd.correlation_distance / log(safe_rate(θ.ρ_corr))
+    level_factors = ℓ === nothing ? Matrix{Float64}[] :
+        zone_correlation_factors(zd.zone_distances, ℓ)
+    drift_factors = ℓ === nothing ? Matrix{Float64}[] :
+        zone_correlation_factors(zd.zone_walk_distances, ℓ)
+    w0 = zone_initial_shares(θ.z_w, zd.patch_ranges, zd.share_scale)
+    φ = exp2(-zd.week / θ.δ_halflife)
+    knot_args = (
+        θ.z_level, θ.z_drift, θ.σ_level, θ.σ_δ, φ, zd.patch_ranges,
+        level_factors, drift_factors, zd.walking, n_knots,
+    )
+    δ_knots = deviation_knots(knot_args...)
+    ε = θ.ε_within === nothing ? nothing :
+        logistic.(
+            logit(θ.ε_within) .+
+            θ.τ_mix .* (θ.z_mix .- sum(θ.z_mix) / length(θ.z_mix))
+        )
+    return (; ℓ, knot_args, δ_knots, w0, ε)
+end
 
 ## Shares at the knot days as an `(n_zones × n_knots)` matrix.
 function _zone_shares_at_knots(
@@ -1729,11 +1767,8 @@ quantity is computed on the fitted days as without a forecast.
         ε_within ~ mixing_within_prior
         τ_mix ~ mixing_departure_prior
         z_mix ~ product_distribution(fill(offset_prior, nz))
-        ε_mix = logistic.(
-            logit(ε_within) .+ τ_mix .* (z_mix .- sum(z_mix) / nz)
-        )
     else
-        ε_mix = nothing
+        ε_within = τ_mix = z_mix = nothing
     end
     ## The shared quantity, whitened, as the docstring's "shared quantity"
     ## section describes it.
@@ -1785,20 +1820,11 @@ quantity is computed on the fitted days as without a forecast.
     ## taken from the province model's own learned correlation between its
     ## patches at the distance between their population centres.
     on = !isempty(zd.zone_distances)
-    level_factors = Matrix{Float64}[]
-    drift_factors = Matrix{Float64}[]
     if on
         ρ_corr ~ Beta(pp.correlation[1], pp.correlation[2])
-        ℓ_corr = -zd.correlation_distance / log(safe_rate(ρ_corr))
-        correlation_reference_zone := ρ_corr
-        correlation_length_zone := ℓ_corr
-        level_factors = zone_correlation_factors(zd.zone_distances, ℓ_corr)
-        drift_factors = zone_correlation_factors(
-            zd.zone_walk_distances, ℓ_corr
-        )
+    else
+        ρ_corr = nothing
     end
-    w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
-    φ = exp2(-zd.week / δ_halflife)
     ## The province model's deviation construction
     ## ([`deviation_knots`](@ref)), with one group per patch and the zones of
     ## a patch as its units.
@@ -1811,12 +1837,19 @@ quantity is computed on the fitted days as without a forecast.
     else
         z_drift_all = z_drift
     end
-    δ_knots_all = deviation_knots(
-        z_level, z_drift_all, σ_level, σ_δ, φ, zd.patch_ranges,
-        level_factors, drift_factors, zd.walking, K + Kf
+    terms = _zone_draw_terms(
+        zd, (;
+            z_w, σ_level, z_level, δ_halflife, σ_δ, z_drift = z_drift_all,
+            ρ_corr, ε_within, τ_mix, z_mix,
+        ), K + Kf
     )
-    δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
-    fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
+    if on
+        correlation_reference_zone := ρ_corr
+        correlation_length_zone := terms.ℓ
+    end
+    w0, ε_mix = terms.w0, terms.ε
+    δ_knots = H == 0 ? terms.δ_knots : terms.δ_knots[:, 1:K]
+    fw = zone_forward(zx, terms.δ_knots, w0, ε_mix, def)
     asc = relative_multiplier(
         z_ascertainment, σ_ascertainment, zd.multiplier_basis
     )
@@ -1833,7 +1866,7 @@ quantity is computed on the fitted days as without a forecast.
     )
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
-    D = zone_binned_increments(def.death_bin, fw.infections, def.zone_pre .* w0)
+    D = zone_binned_increments(def.death_bin, fw.infections, fw.pre)
     sev = relative_multiplier(
         z_severity, σ_severity, zd.multiplier_basis
     )
@@ -1860,7 +1893,7 @@ quantity is computed on the fitted days as without a forecast.
                 zd, zf, fw, zone_binned_increments(
                     delays === nothing ? zf.report_future :
                         delays.report_future,
-                    fw.infections, def.zone_pre .* w0
+                    fw.infections, fw.pre
                 ), asc, ρ, nd
             ), false
         )
