@@ -213,25 +213,21 @@ CONFIG = {
     # byte, with it. Inside the incomplete-data band its 6 October reads 11,
     # the edge of the 13 bar before it, where the bar stands at about 4.
     "149": ("2026-10-10", "2026-10-05"),
-    # "150" and "151" are left out (last tick 12 October). SitRep 150
-    # reads its 14 September bar, on a tick column, as 23 against 69 in
-    # SitRep 149, and doubles the dead segment of 29 July (69 against 51).
-    # SitRep 151's last bar, 11 October, ends a pixel short of the 12
-    # October tick, and the reader takes that edge for a 12 October bar of
-    # 3 where the figure draws none.
-    # "152" reprints SitRep 151's figure byte for byte and is left out
-    # with it.
-    # "153" and "154" are left out (last tick 12 October, y step 25). On
-    # their 817x459 and 812x447 renders the reader loses 13 and 14 May
-    # from SitRep 153 (17 and 8 in SitRep 149 and the dashboard), reads
-    # 13 and 14 May as 17 and 17 in SitRep 154 and drops its 5 June (20 in
-    # SitRep 153); see #1148.
-    # "155" reprints SitRep 154's figure byte for byte and "157" reprints
-    # SitRep 156's. "156" is a new 827x456 render with SitRep 154's n (7 438)
-    # and last tick (12 October), so it is left out with 154. "158" and
-    # "159" (n = 7 660, last tick 19 October, y step 25) read 14 May as 4
-    # and 18 against 8 in SitRep 149 and the dashboard, the misread of
-    # #1148, and are left out until the reader is fixed.
+    # "150" is left out (last tick 12 October). It doubles the dead
+    # segment of 29 July (69 against 51 in SitRep 149 and the dashboard):
+    # the 28 July outline is drawn across two columns, and the second reads
+    # two pixels off the outline, too far for the rule that drops such a
+    # column.
+    "151": ("2026-10-12", "2026-10-12"),
+    # "152" reprints SitRep 151's figure byte for byte.
+    "153": ("2026-10-14", "2026-10-12"),
+    # "154" is left out. It reads 4 May as 5 and 11 May as 5 against 0
+    # and 2 in the dashboard. "155" reprints its figure byte for byte, and
+    # "156" is a new render with its n (7 438) and last tick (12 October),
+    # so it is the same 15 October extract; "157" reprints "156".
+    "158": ("2026-10-19", "2026-10-19"),
+    # "159" is a new render with SitRep 158's n (7 660) and last tick (19
+    # October), so it is the same extract and is left out.
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -297,6 +293,9 @@ Y_AXIS_STEP = {
     "145": 25,
     "146": 25,
     "149": 25,
+    "151": 25,
+    "153": 25,
+    "158": 25,
 }
 
 
@@ -854,7 +853,8 @@ def digitize_windows(im, last_tick_date, y_step=20):
     white = (lo_px >= 228) & (hi_px - lo_px <= 25)
     hread = h.copy()
     nread = nr.copy()
-    for x in np.flatnonzero(_dash_columns(crimson, white, hp, y0)):
+    isdash = _dash_columns(crimson, white, hp, y0)
+    for x in np.flatnonzero(isdash):
         hd, nd_x = _dash_bar(page, neutral, darkpx, crimson, y0, x, yt)
         if not hd > 2 * ppc:
             continue
@@ -927,8 +927,42 @@ def digitize_windows(im, last_tick_date, y_step=20):
         interior = [x for x in cols if not soft[x]]
         if not any(hread[x] > 0 for x in interior):
             interior = []
+        # under the dashed line a lone column read to its outline can land
+        # on the alive/dead junction; when two soft dash columns beside it
+        # agree on their outline, the window reads them as well
+        if interior and all(isdash[x] for x in interior):
+            sd = [x for x in cols if soft[x] and isdash[x] and hread[x] > 0]
+            if _two_agree(hread, sd):
+                interior = cols
         cols = interior or cols
         if not cols:
+            continue
+        # an outline drawn across two columns can leave a second column that
+        # is not soft but still reads the outline's height. Where the first
+        # non-outline column on the outline's far side reads that height too,
+        # height and outline belong to the neighbouring bar; when no two
+        # columns of the window agree, such a column is dropped if another
+        # is left
+        if len(cols) >= 2 and not _two_agree(hread, cols):
+            def spill(x, s):
+                y = x + s
+                if not (1 <= y <= W and border[y]):
+                    return False
+                z = y + s
+                while 1 <= z <= W and border[z]:
+                    z += s
+                return (1 <= z <= W
+                        and abs(int(hread[x]) - int(h[y])) <= 1
+                        and abs(int(hread[z]) - int(h[y])) <= 1)
+            kept = [x for x in cols if not (spill(x, -1) or spill(x, 1))]
+            cols = kept or cols
+        # on and past the last tick, fill with no outline pixel in any
+        # column, even without the gridline skip, and no dark outline to its
+        # right is the pink band darkened beside the last bar's outline, not
+        # a bar
+        if (off >= 0 and all(hread[x] == 0 and h1[x] == 0 for x in cols)
+                and not any(outline[x] for x in
+                            range(cols[-1] + 1, min(W, c + reach) + 1))):
             continue
         bar = _bar_height(hread, hp, nread, cols, cx, ppc)
         # past the last tick a window can take in a column of the faded bar
