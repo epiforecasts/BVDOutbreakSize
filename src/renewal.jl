@@ -826,13 +826,20 @@ function relative_multiplier(
 end
 
 function relative_multiplier(z::AbstractVector, σ::Real, Q::AbstractMatrix)
+    return exp.(relative_contrast(z, σ, Q))
+end
+
+## The log multipliers of `relative_multiplier`, `σ Q z`, summing to zero
+## within each group. `bvd_zone` takes its relative fatality on the logit
+## scale from these.
+function relative_contrast(z::AbstractVector, σ::Real, Q::AbstractMatrix)
     length(z) == size(Q, 2) || throw(
         DimensionMismatch(
             "relative_multiplier: $(length(z)) draws for " *
                 "$(size(Q, 2)) contrasts"
         )
     )
-    return exp.(σ .* (Q * z))
+    return σ .* (Q * z)
 end
 
 """

@@ -17,7 +17,7 @@
 #    Sud Ubangi                   0                1       1    100,0%    1/16
 #    Total                       87            7 200   3 475     48,3%  62/167
 #
-# The table grew from three provinces in four columns to seven provinces in
+# The table grew from three provinces in four columns to eight provinces in
 # six, and the column order has changed at least once (the new-cases column
 # moved from last to first). So the parse is layout-independent: on a
 # province row it finds the first field after the province name holding a
@@ -60,7 +60,11 @@
 # missing the national totals that the table's own printed Total row hits.
 # There the report's arithmetic is at fault rather than the parse, and the
 # vintage is reported and left out; SitRep 073 of 26 July is the only one so
-# far, its Haut-Uélé row one case short of its own Total.
+# far, its Haut-Uélé row one case short of its own Total. The same holds for
+# a table whose rows and printed Total agree with each other but miss the
+# national totals the report's other tables carry: SitRep 150 of 11 October
+# prints Haut-Uélé 382 and a Total of 9 065, where its Tableau 2 and its
+# prose give 383 and 9 066.
 #
 # Requires `pdftotext` (poppler-utils) and the sitrep PDFs
 # (`task download-sitreps`).
@@ -82,7 +86,7 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 ## Keyed on the folded name with every separator collapsed to one space, so
 ## "Bas Uélé", "Bas-Uélé" and "BAS UELE" all land on the same province.
@@ -90,7 +94,7 @@ const NAMES = Dict(
     "ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas uele" => "bas_uele",
-    "sud ubangi" => "sud_ubangi"
+    "sud ubangi" => "sud_ubangi", "nord ubangi" => "nord_ubangi"
 )
 
 fold(s) = lowercase(Base.Unicode.normalize(String(s); stripmark = true))
@@ -189,7 +193,14 @@ function scan_tableau1(text::AbstractString)
             ## next non-empty line, and every field is data.
             nxt = findfirst(l -> !isempty(strip(l)), lines[(i + 1):end])
             nxt === nothing && continue
-            name = get(NAMES, canon(lines[i + nxt]), nothing)
+            below = lines[i + nxt]
+            ## The Total row is displaced the same way from SitRep 150, its
+            ## figures above a line reading "Total" and the zone count.
+            if canon(first(split(strip(below), r"\s{2,}"))) == "total"
+                total === nothing && (total = parse_row(parts, 1))
+                continue
+            end
+            name = get(NAMES, canon(below), nothing)
             start = 1
         end
         name === nothing && continue
@@ -284,6 +295,7 @@ function main()
     ## that misses is a mis-parse and stops the script.
     keep = String[]
     internal = String[]
+    external = String[]
     bad = String[]
     for d in checkable
         nat = (natc[d], natd[d])
@@ -292,6 +304,8 @@ function main()
             push!(keep, d)
         elseif totals[d] == nat
             push!(internal, d)
+        elseif totals[d] == rows
+            push!(external, d)
         else
             push!(bad, d)
         end
@@ -343,6 +357,20 @@ function main()
             @printf(
                 "  %11s sitrep %3d rows %d/%d, printed Total %d/%d\n",
                 d, srs[d], cases(g), deaths(g), t[1], t[2]
+            )
+        end
+    end
+    if !isempty(external)
+        println(
+            "\nDates whose Tableau 1 rows match its own printed Total but " *
+                "miss the national totals the report's other tables " *
+                "carry (not emitted):"
+        )
+        for d in external
+            g = scanned[d]
+            @printf(
+                "  %11s sitrep %3d rows %d/%d, national %d/%d\n",
+                d, srs[d], cases(g), deaths(g), natc[d], natd[d]
             )
         end
     end

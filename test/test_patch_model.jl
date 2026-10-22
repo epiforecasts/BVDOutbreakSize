@@ -1203,12 +1203,17 @@ end
     dt = sum(deaths.increments; dims = 2)
     nk_case_share = ct[2] / sum(ct)
     nk_death_share = dt[2] / sum(dt)
-    @test 0.12 < nk_case_share < 0.22          ## ~16%
-    @test 0.16 < nk_death_share < 0.28         ## ~22%
+    ## Nord-Kivu has carried a rising share of new confirmed cases since
+    ## July, so its cumulative share has drifted up from ~16% to ~22% by
+    ## SitRep 159. The bands catch a misassigned province column, not a
+    ## trend, so they sit clear of the drift.
+    @test 0.12 < nk_case_share < 0.26          ## ~22%
+    @test 0.16 < nk_death_share < 0.28         ## ~26%
     ## The gap that does the work. It has narrowed as the series lengthened,
-    ## from roughly 1.6 when the province data stopped in July to 1.3 now, so
-    ## the deaths identify ascertainment less sharply than they did. Pinned
-    ## loosely enough to track that and tightly enough to catch it vanishing.
+    ## from roughly 1.6 when the province data stopped in July to 1.16 at
+    ## SitRep 159, so the deaths identify ascertainment less sharply than they
+    ## did. Pinned loosely enough to track that and tightly enough to catch it
+    ## vanishing.
     @test nk_death_share > 1.15 * nk_case_share
 end
 
@@ -1552,34 +1557,48 @@ end
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
 end
 
-@testitem "province composition: the severity multiplier should be sum-to-zero" begin
+@testitem "province composition: the severity contrast is sum-to-zero on the logit scale" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: sample, Prior
     using Turing.DynamicPPL: returned
     using Distributions: truncated, Normal
+    using StatsFuns: logit
 
-    ## The death composition carries a second per-province multiplier for
-    ## lethality. It must be sum-to-zero on the log scale, so the national
-    ## case-fatality ratio it multiplies keeps its meaning, and it must
-    ## actually move the shares.
+    ## The death composition carries a second per-province contrast for
+    ## lethality, on the logit scale about the national case-fatality
+    ## ratio. It sums to zero, so the national ratio keeps its meaning, its
+    ## multiplier is the province ratio over the national one, and it
+    ## moves the shares.
     modelled = [10.0 12.0; 4.0 5.0; 1.0 1.0]
     obs = [8 9; 3 4; 1 1]
+    cfr = 0.4
     m = province_composition_model(
         obs, modelled;
-        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0)
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        severity_baseline = cfr
     )
     rets = vec(returned(m, sample(m, Prior(), 200; progress = false)))
-    @test all(abs(sum(log.(r.province_severity))) < 1.0e-10 for r in rets)
+    @test all(abs(sum(r.severity_log_odds)) < 1.0e-10 for r in rets)
+    @test all(
+        logit.(cfr .* r.province_severity) ≈ logit(cfr) .+ r.severity_log_odds
+            for r in rets
+    )
     @test all(all(≈(1.0), sum(r.shares; dims = 1)) for r in rets)
     ## Spread away from zero on at least some draws, so the multiplier is a
     ## live parameter rather than pinned at one.
     @test maximum(maximum(abs.(log.(r.province_severity))) for r in rets) > 0.01
+    ## A contrast needs the ratio it shifts.
+    @test_throws ErrorException province_composition_model(
+        obs, modelled;
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0)
+    )()
 
     ## Without the prior it is not sampled and the shares are the
     ## ascertainment-only ones, so the case composition gains no dimension.
     m0 = province_composition_model(obs, modelled)
     rets0 = vec(returned(m0, sample(m0, Prior(), 50; progress = false)))
     @test all(all(==(1.0), r.province_severity) for r in rets0)
+    @test all(all(iszero, r.severity_log_odds) for r in rets0)
     @test all(iszero(r.severity_sd) for r in rets0)
 end
 
@@ -1775,8 +1794,7 @@ end
         PROVINCE_MEMBERS, PROVINCE_POPULATIONS,
         PROVINCE_CENTRES, PROVINCE_SOURCE_NAMES,
         PROVINCE_SOURCE_POPULATIONS,
-        PROVINCE_SOURCE_CENTRES,
-        province_increment_matrix
+        PROVINCE_SOURCE_CENTRES
 
     ## Every province the reports carry belongs to exactly one patch. If one
     ## were dropped the patches would no longer sum to the national totals and
@@ -1786,38 +1804,46 @@ end
     @test sort(covered) == sort(PROVINCE_SOURCE_NAMES)
     @test length(covered) == length(unique(covered))
     @test length(PROVINCE_LABELS) == length(PROVINCE_NAMES)
+    @test length(PROVINCE_SOURCE_POPULATIONS) ==
+        length(PROVINCE_SOURCE_CENTRES) == length(PROVINCE_SOURCE_NAMES)
 
-    ## A pooled patch takes the summed population of its members and the
-    ## population-weighted mean of their centres, so its point sits among
-    ## them rather than on any one.
-    @test sum(PROVINCE_POPULATIONS) == sum(PROVINCE_SOURCE_POPULATIONS)
-    other = findfirst(==("other"), PROVINCE_NAMES)
-    idx = [
-        findfirst(==(m), PROVINCE_SOURCE_NAMES)
-            for m in PROVINCE_MEMBERS["other"]
-    ]
-    @test PROVINCE_POPULATIONS[other] == sum(PROVINCE_SOURCE_POPULATIONS[idx])
-    lats = [PROVINCE_SOURCE_CENTRES[i][1] for i in idx]
-    @test minimum(lats) < PROVINCE_CENTRES[other][1] < maximum(lats)
-    ## A patch holding one province keeps that province's centre exactly.
-    @test PROVINCE_CENTRES[1] == PROVINCE_SOURCE_CENTRES[1]
+    ## Every affected province is its own patch, the primary first, and
+    ## carries its own population and centre.
+    @test PROVINCE_NAMES[1] == "ituri"
+    @test all(PROVINCE_MEMBERS[n] == [n] for n in PROVINCE_NAMES)
+    for (p, name) in enumerate(PROVINCE_NAMES)
+        i = findfirst(==(name), PROVINCE_SOURCE_NAMES)
+        @test PROVINCE_POPULATIONS[p] == PROVINCE_SOURCE_POPULATIONS[i]
+        @test PROVINCE_CENTRES[p] == PROVINCE_SOURCE_CENTRES[i]
+    end
 
-    ## Pooling happens on the cumulative counts before differencing, so a
-    ## member revised down cannot be clamped away while another member rises.
-    hist = Dict(
-        "sud_kivu" => (; days = [1, 2, 3], counts = [5, 9, 7]),
-        "tshopo" => (; days = [1, 2, 3], counts = [1, 2, 6]),
-        "bas_uele" => (; days = [1, 2, 3], counts = [0, 0, 1]),
-        "sud_ubangi" => (; days = [1, 2, 3], counts = [0, 0, 0]),
-        "ituri" => (; days = [1, 2, 3], counts = [10, 20, 30]),
-        "nord_kivu" => (; days = [1, 2, 3], counts = [2, 4, 6]),
-        "haut_uele" => (; days = [1, 2, 3], counts = [0, 1, 2])
+    ## Nord-Ubangi: INS 2019 population and the WorldPop-weighted centre of
+    ## its 11 zones, the eighth patch.
+    nu = findfirst(==("nord_ubangi"), PROVINCE_NAMES)
+    @test nu == 8
+    @test PROVINCE_LABELS[nu] == "Nord-Ubangi"
+    @test PROVINCE_POPULATIONS[nu] == 1_425_000
+    @test PROVINCE_CENTRES[nu] == (3.8889, 20.9641)
+end
+
+@testitem "the manifest carries every patch's province blocks" begin
+    using BVDOutbreakSize: load_observations, PROVINCE_NAMES,
+        province_increment_matrix, province_lab_increment_matrix
+
+    ## A patch whose province has no series in a block empties that block's
+    ## increments, which drops its composition likelihood without an error.
+    obs = load_observations()
+    np = length(PROVINCE_NAMES)
+    for h in (obs.province_confirmed_history, obs.province_death_history)
+        m = province_increment_matrix(h, PROVINCE_NAMES, np)
+        @test !isempty(m.days)
+        @test size(m.increments, 1) == np
+    end
+    lab = province_lab_increment_matrix(
+        obs.province_lab_daily_history, PROVINCE_NAMES, np
     )
-    m = province_increment_matrix(hist, PROVINCE_NAMES, length(PROVINCE_NAMES))
-    ## Pooled cumulative is 6, 11, 14, so the increments are 6, 5, 3. Per
-    ## member they would have been 6, 5, and (-2 + 4 + 1) clamped to 5.
-    @test m.increments[other, :] == [6, 5, 3]
-    @test all(>=(0), m.increments)
+    @test !isempty(lab.days)
+    @test size(lab.increments, 1) == np
 end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin
