@@ -244,6 +244,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The gradient keeps the coverage job running the renewal and knot-interpolation rules, which the AD job tests but does not report coverage for.
   In the `coverage` job of run 38192361183 the five items took 486 s of the 70-minute run, 169 s of it the seeding fit.
   Run together locally with the province case-fatality item, which now reuses the same compiled model, the six take 437 s rather than 729 s.
+- Each parameter-recovery seed uploads its per-parameter diagnostics ranked by R-hat and its per-chain sampler table, and the recovery report's per-seed table gives each chain's step size and the three parameters with the highest R-hat (#1088).
+  An unconverged seed can then be traced to a parameter and to a stuck chain from the artifact.
+  Fitted values do not change.
 
 ### Fixed
 
