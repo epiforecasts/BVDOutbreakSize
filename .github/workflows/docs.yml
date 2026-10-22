@@ -76,7 +76,7 @@ jobs:
           # scanners or the backfill driver used to rebuild the whole report
           # for a site identical to the one on `main`.
           patterns: >-
-            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
+            ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|archive_dashboard)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
   # Resolve and precompile the single shared environment once, list the fit
   # ids by group, and pin the manifest. On main and tag builds the two
@@ -549,6 +549,24 @@ jobs:
           # re-running the job; a silent substitution is not detectable from
           # the page at all.
           julia --project=docs scripts/score_releases.jl
+      # The dashboard map's tables from past releases, one per data cut-off,
+      # for the combine job to stage under zone_map/archive/. Only for the
+      # deploy from `main`, so pull request previews stay small. Best-effort:
+      # on any failure the map shows the current build alone.
+      - name: Archive past dashboard tables
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          julia --project=docs scripts/archive_dashboard.jl logs/dashboard_archive ||
+            echo "dashboard archive failed; the map shows the current build only"
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-archive
+          path: logs/dashboard_archive
+          if-no-files-found: ignore
+          retention-days: 3
       # Every CSV under data/, not just the ones this step rewrites: a new
       # output would otherwise be left behind silently. The render restores
       # them over its own checkout, so an untouched file is replaced by an
@@ -1101,6 +1119,16 @@ jobs:
           pattern: render-*
           merge-multiple: true
           path: .
+      # Written by the `overlays` job, which `combine` follows through the
+      # renders, on a push to `main` only. Absent when that step failed,
+      # which leaves the map without its past vintages.
+      - name: Collect the dashboard archive
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: dashboard-archive
+          path: logs/dashboard_archive
       # The preprint is served at /paper/: files under docs/src/public/ are
       # copied as they are, so it is in neither the nav, the sidebar nor the
       # local search. The README and the About page link to it.
@@ -1213,6 +1241,9 @@ jobs:
           rm -rf "$stage"
           mkdir -p "$stage/BVDOutbreakSize/$(dirname "$base")"
           cp -r docs/build/1 "$stage/BVDOutbreakSize/$base"
+          # The dashboard archive is the past releases' own tables, which
+          # each of those releases already carries.
+          rm -rf "$stage/BVDOutbreakSize/$base/zone_map/archive"
           printf '%s\n' \
             "Run \`python3 -m http.server\` in this folder and open" \
             "http://localhost:8000/BVDOutbreakSize/$base/" \

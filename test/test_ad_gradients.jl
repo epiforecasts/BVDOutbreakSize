@@ -54,6 +54,7 @@ end
     using LogDensityProblems: logdensity_and_gradient
     using Random: seed!
     using BVDOutbreakSize: province_composition_model, default_adtype
+    using Distributions: truncated, Normal
 
     ## The stick-breaking BetaBinomial composition is the likelihood the
     ## spatial data enter through, so its gradient has to exist.
@@ -66,15 +67,55 @@ end
     seed!(20260518)
     obs = [853 21 42; 77 2 5; 3 0 0]
     modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
-    model = province_composition_model(obs, modelled)
-    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
-    x0 = collect(vi[:])
-    ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    ## The death composition adds the logit severity contrast about the
+    ## national case-fatality ratio.
+    models = (
+        province_composition_model(obs, modelled),
+        province_composition_model(
+            obs, modelled;
+            severity_sd_prior = truncated(Normal(0, 0.15); lower = 0),
+            severity_baseline = 0.4
+        ),
     )
-    logp, grad = logdensity_and_gradient(ldf, x0)
+    for model in models
+        vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+        x0 = collect(vi[:])
+        ldf = DynamicPPL.LogDensityFunction(
+            model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+        )
+        logp, grad = logdensity_and_gradient(ldf, x0)
+        @test isfinite(logp)
+        @test length(grad) == length(x0)
+        @test all(isfinite, grad)
+        @test any(!iszero, grad)
+    end
+end
+
+## The health-zone scenario the benchmark suite times with
+## by default. It is not in the default scenario list, so it is asserted
+## here, at the size it is timed at and with mixing and the zone
+## correlation on.
+@testitem "AD gradient: the zone benchmark scenario differentiates (Mooncake)" tags = [
+    :ad,
+] begin
+    using LogDensityProblems: logdensity_and_gradient
+    using BVDOutbreakSize: default_adtype
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+
+    scen = only(
+        filter(s -> s.group == "Zone", ADFixtures.scenarios(; zone = true))
+    )
+    @test !any(s -> s.group == "Zone", ADFixtures.scenarios())
+    zd = scen.model.args.zd
+    @test size(zd.counts) == (60, 95)
+    @test length(zd.patch_ranges) == 4
+    @test zd.n == 150
+    @test zd.mixing !== nothing
+    @test !isempty(zd.zone_distances)
+    ldf, x = ADFixtures.log_density_function(scen, default_adtype())
+    logp, grad = logdensity_and_gradient(ldf, x)
     @test isfinite(logp)
-    @test length(grad) == length(x0)
+    @test length(grad) == length(x)
     @test all(isfinite, grad)
     @test any(!iszero, grad)
 end

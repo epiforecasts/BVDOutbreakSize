@@ -124,9 +124,11 @@ end
 
 @testitem "infection_model: two-phase renewal-start seeding" tags = [:slow] begin
     using Statistics: mean, std
-    using Turing: @model, to_submodel
+    using Turing: @model, to_submodel, sample, Prior, DynamicPPL
     import FlexiChains
-    using BVDOutbreakSize: infection_model, nuts_sample
+    using Random: Xoshiro
+    using LogDensityProblems: logdensity_and_gradient
+    using BVDOutbreakSize: infection_model, default_adtype
 
     n = 101
     renewal_start = 38   # genetic-TMRCA day + renewal-start lead
@@ -143,7 +145,12 @@ end
         return st
     end
 
-    chn = nuts_sample(_wrap(); samples = 200, chains = 2, progress = false)
+    ## Nothing is observed, so the posterior is the prior and independent
+    ## prior draws check the same identities a NUTS fit would.
+    chn = sample(
+        Xoshiro(1), _wrap(), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
     T = vec(Array(chn[:T]))
     C_T = vec(Array(chn[:C_T]))
     sa = vec(Array(chn[:sa]))
@@ -165,6 +172,18 @@ end
     ## `exp(r·m·G)`, so the origin date and the seed share one growth rate.
     @test all(sa .> 0)
     @test all(isapprox.(sa, exp.(r0 .* (T .- τ_obs)); rtol = 1.0e-6))
+
+    ## A fit differentiates the seeded renewal in the linked space, through
+    ## the renewal and knot-interpolation rules, so one gradient does too.
+    model = _wrap()
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(2), model), model)
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, collect(vi[:]))
+    @test isfinite(logp)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
 end
 
 @testitem "infection_model: rt_walk_start holds Rt flat before the walk" begin
