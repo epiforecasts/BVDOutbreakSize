@@ -254,7 +254,8 @@ province_infections_fig #hide
 # The provinces are coupled by the gravity kernel in the [mixing and importation](@ref "Mixing and importation") Methods section.
 # The distances between the patches' population centres run from 191 km between Sud-Ubangi and Nord-Ubangi to 1 220 km between Sud-Kivu and Sud-Ubangi.
 # Ituri is 324 km from Nord-Kivu and 216 km from Haut-Uele.
-# Most of what leaves Nord-Kivu lands in Sud-Kivu, 260 km away and the second most populous of the eight, and Nord-Ubangi sends the largest share of its exports to Sud-Ubangi.
+# About half of what leaves Nord-Kivu lands in Sud-Kivu, 260 km away and the second most populous of the eight.
+# Nord-Ubangi sends about a third of its exports to Sud-Ubangi, its nearest neighbour.
 
 #md # ```@raw html
 #md # <details><summary>Importation intensity and imports by province</summary>
