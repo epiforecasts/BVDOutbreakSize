@@ -74,7 +74,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province point prevalence rejected that draw and failed the province page.
   The death composition's severity multiplier is now the province ratio over the national one, and a zero contrast still gives every province the national ratio.
   The contrast's half-normal scale is 0.15 on the logit scale, which at the prior mean ratio of 0.33 is about the previous 0.1 on the log scale.
-  Fitted values change and the fits need refitting.
+  The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
+  The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
+  Fitted values change and the joint and zone fits need refitting.
 
 ### Data
 

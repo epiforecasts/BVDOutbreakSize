@@ -221,10 +221,9 @@ end
 # zone's relative ascertainment `asc[j]`, rescaled within the province by the
 # weights `w[j]`, the zones' expected confirmations on the cut-off day,
 # as [`_patch_ascertainment`](@ref) rescales the provinces. The case-fatality
-# ratio is the province's times the zone's relative fatality `sev[j]`, the
-# multiplier the zone stage fits the within-province deaths with. That
-# multiplier is not bounded, so the zone ratio is capped at one, as the
-# ascertainment is.
+# ratio is the province's from the joint draw shifted on the logit scale by
+# the zone's contrast `sev[j]`, as the zone stage builds it, so it lies in
+# (0, 1).
 function _zone_prevalence_parameters(joint, θ, asc, sev, w, patch_of)
     at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
     own = (
@@ -241,7 +240,7 @@ function _zone_prevalence_parameters(joint, θ, asc, sev, w, patch_of)
             )
         end
         cfr = [
-            min(p.cfr[min(patch_of[a], end)] * sev[j][a], 1.0)
+            logistic(logit(p.cfr[min(patch_of[a], end)]) + sev[j][a])
                 for a in eachindex(patch_of)
         ]
         merge(p, NamedTuple{own}(map(k -> θ[j][at(k)], own)), (; ascertainment, cfr))
@@ -257,12 +256,12 @@ zone stage does not estimate the recovery stay, so zone draw `j` takes it
 from draw `j` of `joint_chn`, the joint the zone stage was fitted from,
 cycling when the zone chain is longer. It estimates ascertainment and
 fatality only relative to the zone's province
-(`zone_ascertainment_relative`, `zone_severity_relative`). A zone's
-case-fatality ratio is its province's from that joint draw times the zone's
-contrast. Its suspected-case ascertainment is the province's times the
-zone's contrast, rescaled so that the province's zones, weighted by their
-expected confirmations on the cut-off day, keep the province's rate. Both are capped at
-one. The ascertainment contrast is fitted to confirmed cases, so this assumes
+(`zone_ascertainment_relative`, `zone_severity_log_odds`). A zone's
+case-fatality ratio is its province's from that joint draw shifted by the
+zone's logit contrast. Its suspected-case ascertainment is the province's
+times the zone's contrast, rescaled so that the province's zones, weighted
+by their expected confirmations on the cut-off day, keep the province's
+rate, and capped at one. The ascertainment contrast is fitted to confirmed cases, so this assumes
 suspected-case detection varies between the zones of a province as
 confirmed-case detection does. Returns the states of
 [`patch_prevalence`](@ref).
@@ -281,7 +280,7 @@ function zone_prevalence(
     params = _zone_prevalence_parameters(
         _prevalence_parameters(joint_chn, horizon), θ,
         _draw_vectors(zone_chn, :zone_ascertainment_relative),
-        _draw_vectors(zone_chn, :zone_severity_relative), w,
+        _draw_vectors(zone_chn, :zone_severity_log_odds), w,
         inputs.patch_of_zone
     )
     return _prevalence_draws(

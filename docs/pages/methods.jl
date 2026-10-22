@@ -2285,21 +2285,25 @@ cfr_prior_fig #hide
 # \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{65}
 # ```
 #
-# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, both log multipliers on sum-to-zero bases as for the ascertainment in the [province compositions](@ref methods-province-compositions):
+# with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built on sum-to-zero bases as in the [province compositions](@ref methods-province-compositions):
 #
 # ```math
 # a_z = \exp\bigl(\sigma_a (Q_p \mathbf{z}^a_p)_z\bigr),
 # \qquad
-# \theta_z = \exp\bigl(\sigma_\theta (Q_p \mathbf{z}^\theta_p)_z\bigr),
+# \theta_z = \frac{\mathrm{CFR}_z}{\bar{\mathrm{CFR}}_p},
+# \qquad
+# \mathrm{logit}\, \mathrm{CFR}_z = \mathrm{logit}\, \bar{\mathrm{CFR}}_p + \sigma_\theta (Q_p \mathbf{z}^\theta_p)_z,
 # \qquad
 # \mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1}). \tag{66}
 # ```
 #
-# Both are relative to the zone's own province, because a factor common to a patch cancels within it.
+# Here $\bar{\mathrm{CFR}}_p$ is the province case-fatality ratio at the joint posterior mean on the logit scale, so each zone case-fatality ratio $\mathrm{CFR}_z$ lies between zero and one.
+# Both multipliers are relative to the zone's own province, because a factor common to a patch cancels within it.
 # We report their product with the province multipliers as each zone's ascertainment and fatality against the national average.
 #
 # Two compositions carry three unknowns per zone, so one has to be pinned.
-# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.1)$, which assumes that deaths per infection vary little between the zones of a patch.
+# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.15)$, which assumes that deaths per infection vary little between the zones of a patch.
+# As for the provinces, this is about $0.1$ on the log scale at the prior mean case-fatality ratio of $0.33$.
 # The death composition then sets the split of incidence and the case composition gives ascertainment as the residual.
 # Zones differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
 #
@@ -2629,7 +2633,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
 # It estimates each zone's ascertainment and fatality relative to its province.
-# A zone's case-fatality ratio is its province's from joint draw $j$ times the zone's contrast, capped at one.
+# A zone's case-fatality ratio is its province's from joint draw $j$ shifted on the logit scale by the zone's contrast.
 # A zone's ascertainment is its province's times the zone's contrast, rescaled as for the provinces so that the province's zones keep the province's rate.
 # The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province as confirmed-case detection does.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.

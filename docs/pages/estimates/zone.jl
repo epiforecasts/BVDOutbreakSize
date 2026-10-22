@@ -449,7 +449,10 @@ zone_hyper = [
                 :zone_ascertainment_sd, "Ascertainment spread σ_ascertainment",
                 "σ_ascertainment",
             ),
-            (:zone_severity_sd, "Severity spread σ_severity", "σ_severity"),
+            (
+                :zone_severity_sd, "Severity spread σ_severity (logit)",
+                "σ_severity",
+            ),
             (:mixing_within_zone, "Within-patch mixing ε_within", "ε_within"),
             (:mixing_departure_zone, "Mixing departure τ_mix", "τ_mix"),
             (:composition_rho_zone, "Case composition ρ", "ρ"),
