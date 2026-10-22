@@ -1203,12 +1203,17 @@ end
     dt = sum(deaths.increments; dims = 2)
     nk_case_share = ct[2] / sum(ct)
     nk_death_share = dt[2] / sum(dt)
-    @test 0.12 < nk_case_share < 0.22          ## ~16%
-    @test 0.16 < nk_death_share < 0.28         ## ~22%
+    ## Nord-Kivu has carried a rising share of new confirmed cases since
+    ## July, so its cumulative share has drifted up from ~16% to ~22% by
+    ## SitRep 159. The bands catch a misassigned province column, not a
+    ## trend, so they sit clear of the drift.
+    @test 0.12 < nk_case_share < 0.26          ## ~22%
+    @test 0.16 < nk_death_share < 0.28         ## ~26%
     ## The gap that does the work. It has narrowed as the series lengthened,
-    ## from roughly 1.6 when the province data stopped in July to 1.3 now, so
-    ## the deaths identify ascertainment less sharply than they did. Pinned
-    ## loosely enough to track that and tightly enough to catch it vanishing.
+    ## from roughly 1.6 when the province data stopped in July to 1.16 at
+    ## SitRep 159, so the deaths identify ascertainment less sharply than they
+    ## did. Pinned loosely enough to track that and tightly enough to catch it
+    ## vanishing.
     @test nk_death_share > 1.15 * nk_case_share
 end
 
