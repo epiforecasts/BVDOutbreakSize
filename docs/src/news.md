@@ -32,6 +32,14 @@ A major version: the report gains a health-zone level below the provinces, with 
   Archived release forecasts for the `other` patch are still scored against its four provinces.
   The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
   The zone composition calibration leaves out a patch with no zone counts to score for a stream, rather than giving it an empty row that broke the calibration plot.
+
+- The importation kernel's log flows have a multivariate normal prior whose mean is the log gravity kernel, so gravity is the prior and each flow's log deviation is the data's departure from it (#1030).
+  The covariance is a destination effect correlated with each province's origin deviation plus a double-centred flow term whose correlation matrix ties each flow to its reverse, and each origin's export total is held.
+  The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
+  Fitted values change.
+- The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
+  The decay's `LogNormal(0, 1)` prior has its median at the fixed inverse-distance decay it replaces.
+  Fitted values change.
 - The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
   At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
   A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
@@ -253,6 +261,13 @@ A major version: the report gains a health-zone level below the provinces, with 
   The gradient keeps the coverage job running the renewal and knot-interpolation rules, which the AD job tests but does not report coverage for.
   In the `coverage` job of run 38192361183 the five items took 486 s of the 70-minute run, 169 s of it the seeding fit.
   Run together locally with the province case-fatality item, which now reuses the same compiled model, the six take 437 s rather than 729 s.
+- Each parameter-recovery seed uploads its per-parameter diagnostics ranked by R-hat and its per-chain sampler table, and the recovery report's per-seed table gives each chain's step size and the three parameters with the highest R-hat (#1088).
+  An unconverged seed can then be traced to a parameter and to a stuck chain from the artifact.
+  Fitted values do not change.
+- The benchmark suite times the health-zone model and its kernels, on a synthetic zone dataset of 60 zones, 4 patches, 150 days and 95 vintages (#996).
+  They run by default, the benchmark workflow's run included, and `BVD_BENCH_ZONE=false` leaves them out of a local run.
+  The zone tests and the benchmark build that dataset from one shared fixture.
+  The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
 
 ### Fixed
 

@@ -781,6 +781,7 @@ end
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
+        flow_basis::NamedTuple,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     fkw = forecast === nothing ? (;) : (; forecast)
@@ -788,7 +789,7 @@ end
         patch_infection(
             n, n_patches;
             breakpoint, rt_start, rt_walk_start,
-            importation_kernel, fkw...
+            importation_kernel, flow_basis, fkw...
         ), false
     )
     ## Summed over the patches with one matrix-vector product.
@@ -1166,6 +1167,8 @@ density there, is the fitted model's.
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]
         ),
+        ## Built with the model rather than in the differentiated body.
+        importation_flow_basis::NamedTuple = flow_pair_basis(n_patches),
         confirmed_deaths::Union{Missing, Integer} = missing,
         recovered_cases::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),
@@ -1273,7 +1276,8 @@ density there, is the fitted model's.
     latent ~ to_submodel(
         _patch_latent(
             n, n_patches, breakpoint, patch_infection;
-            rt_start, rt_walk_start, importation_kernel, forecast
+            rt_start, rt_walk_start, importation_kernel,
+            flow_basis = importation_flow_basis, forecast
         ), false
     )
     patch_state = latent.patch_state
