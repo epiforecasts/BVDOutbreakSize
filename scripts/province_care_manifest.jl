@@ -20,8 +20,8 @@
 #
 # A (SitRep, province) cell listed in `STALE` is left out of both blocks, so
 # the province has no entry that day. It is for a care paragraph that repeats
-# an earlier report's word for word, which is a carried-forward reporting gap
-# and not a fresh figure. Both CSVs keep the printed values; only the
+# an earlier report's word for word, or says it carries the day before
+# forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
 # manifest drops them.
 #
 # Each block is sparse: one `[block.province]` sub-table per province with its
@@ -54,14 +54,18 @@ const KEYS = Dict(
     "Sud Ubangi" => "sud_ubangi", "Sud-Ubangi" => "sud_ubangi",
     "Nord Ubangi" => "nord_ubangi", "Nord-Ubangi" => "nord_ubangi",
 )
-## Care paragraphs that repeat an earlier report word for word, left out of
-## both blocks as stale carry-forwards. Each entry needs its reason and a
+## Care paragraphs that carry an earlier report's figures forward, left out
+## of both blocks as stale carry-forwards. Each entry needs its reason and a
 ## matching line in data/README.md.
 const STALE = Dict(
     ## Haut-Uélé's paragraph repeats SitRep 151's in full (45 patients, 169
     ## lits, 26,6 %), while Tableau 2 records its two deaths that day as
     ## community deaths. Decided by @seabbs on #1141.
     (152, "haut_uele") => "word-for-word repeat of SitRep 151",
+    ## Haut-Uélé's paragraph says the day's data did not arrive and carries
+    ## the day before forward: "les 29 patients hospitalisés de la veille
+    ## sont reportés". Flagged for @seabbs on #1141.
+    (159, "haut_uele") => "SitRep 158's 29 patients carried forward",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",

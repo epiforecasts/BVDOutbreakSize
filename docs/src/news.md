@@ -88,9 +88,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
   The province, laboratory and zone blocks carry zero `nord_ubangi` series to SitRep 154, since no report before SitRep 155 names the province, and the zone blocks carry Wapinda at zero.
   `data/health_zones.csv` gains Wapinda and the zone map gains Nord-Ubangi's 11 zones, 178 in all.
-  The scanners and `scripts/build_health_zones.py` recognise the province, so the SitRep 155 onward values can be added in a data run.
+  The scanners and `scripts/build_health_zones.py` recognise the province.
 
-- The model cut-off advances to SitRep 154, 15 October (#1128, #1137, #1141).
+- The model cut-off advances to SitRep 159, 20 October (#1128, #1137, #1141).
   SitRep 142 (3 October) is not published on insp.cd, so every stream steps from 2 to 4 October.
   SitRep 145 prints no care section, so 6 October has a national isolation count and no province split.
   SitReps 147 and 149 print no Ituri alerts, so their suspect totals are partial and the suspected stream leaves out 8 and 10 October.
@@ -102,8 +102,12 @@ A major version: the report gains a health-zone level below the provinces, with 
   SitRep 152 reprints SitRep 151's onset figure, so it stays out with it.
   The onset curve does not add SitReps 153 and 154 either, because on their larger renders the reader misplaces the bars around 14 May and drops 5 June from 154.
   The laboratory scanner reads positives worded as new confirmed cases against a sample count, and the care scanner reads a wrapped line that opens on a bracket, which also fills Sud-Kivu's 17 patients and 25 beds on 12 September.
-  SitRep 155 (16 October) is not added, because it brings an eighth province, Nord-Ubangi, that the province and health-zone blocks have no key for.
-  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 7, 8, 9, 12, 15 and 16 October.
+  SitRep 155 (16 October) reports Nord-Ubangi's first 2 cases and 1 death, in Wapinda, and SitRep 158 its third case.
+  SitRep 155's isolation tile repeats SitRep 154's while Nord-Kivu prints no count, so the isolation stream leaves out 16 October.
+  From SitRep 156 Nord-Kivu prints its beds only as the fraction behind its CTE/CT occupancy rate, which gives 410 beds, and the care scanner reads that form.
+  SitRep 159's Haut-Uélé care paragraph carries the day before forward, so the province care blocks leave it out, as for SitRep 152.
+  The onset curve adds none of SitReps 155 to 159: 155 and 157 reprint earlier figures, 156 redraws SitRep 154's extract, and 158 and 159 misread 14 May as SitReps 153 and 154 do.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 7, 8, 9, 12, 15, 16 and 19 October.
   Fitted values change with the new data.
   SitRep 135's figure is by notification date rather than onset date, so the onset curve does not add it (#644).
   SitRep 136's onset figure is added, after a reader fix that stops it dropping bars on tick columns (#1018), and SitRep 137 reprints it.
