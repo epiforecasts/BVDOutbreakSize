@@ -2034,9 +2034,10 @@ end
 
 @testitem "destination_weighted_kernel: moves the split, not the volume" begin
     using BVDOutbreakSize: destination_weighted_kernel,
-        province_importation_kernel
+        province_importation_kernel, PROVINCE_POPULATIONS
 
-    K = province_importation_kernel()
+    ## The weights below are written for four provinces.
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:4])
     np = size(K, 1)
     ## No weighting is the kernel itself.
     @test destination_weighted_kernel(K, zeros(np)) ≈ K
@@ -2275,9 +2276,10 @@ end
 
 @testitem "destination_weighted_kernel: finite at extreme weights" begin
     using BVDOutbreakSize: destination_weighted_kernel,
-        province_importation_kernel
+        province_importation_kernel, PROVINCE_POPULATIONS
 
-    K = province_importation_kernel()
+    ## The weights below are written for four provinces.
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:4])
     np = size(K, 1)
     for scale in (50.0, 800.0)
         W = scale .* [0.0 -1.0 0.5 1.0; 1.0 0.0 -0.5 0.2; -0.3 0.8 0.0 -1.0; 0.4 -0.2 1.0 0.0]
