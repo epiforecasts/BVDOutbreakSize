@@ -1557,34 +1557,48 @@ end
     @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
 end
 
-@testitem "province composition: the severity multiplier should be sum-to-zero" begin
+@testitem "province composition: the severity contrast is sum-to-zero on the logit scale" begin
     using BVDOutbreakSize: province_composition_model
     using Turing: sample, Prior
     using Turing.DynamicPPL: returned
     using Distributions: truncated, Normal
+    using StatsFuns: logit
 
-    ## The death composition carries a second per-province multiplier for
-    ## lethality. It must be sum-to-zero on the log scale, so the national
-    ## case-fatality ratio it multiplies keeps its meaning, and it must
-    ## actually move the shares.
+    ## The death composition carries a second per-province contrast for
+    ## lethality, on the logit scale about the national case-fatality
+    ## ratio. It sums to zero, so the national ratio keeps its meaning, its
+    ## multiplier is the province ratio over the national one, and it
+    ## moves the shares.
     modelled = [10.0 12.0; 4.0 5.0; 1.0 1.0]
     obs = [8 9; 3 4; 1 1]
+    cfr = 0.4
     m = province_composition_model(
         obs, modelled;
-        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0)
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        severity_baseline = cfr
     )
     rets = vec(returned(m, sample(m, Prior(), 200; progress = false)))
-    @test all(abs(sum(log.(r.province_severity))) < 1.0e-10 for r in rets)
+    @test all(abs(sum(r.severity_log_odds)) < 1.0e-10 for r in rets)
+    @test all(
+        logit.(cfr .* r.province_severity) ≈ logit(cfr) .+ r.severity_log_odds
+            for r in rets
+    )
     @test all(all(≈(1.0), sum(r.shares; dims = 1)) for r in rets)
     ## Spread away from zero on at least some draws, so the multiplier is a
     ## live parameter rather than pinned at one.
     @test maximum(maximum(abs.(log.(r.province_severity))) for r in rets) > 0.01
+    ## A contrast needs the ratio it shifts.
+    @test_throws ErrorException province_composition_model(
+        obs, modelled;
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0)
+    )()
 
     ## Without the prior it is not sampled and the shares are the
     ## ascertainment-only ones, so the case composition gains no dimension.
     m0 = province_composition_model(obs, modelled)
     rets0 = vec(returned(m0, sample(m0, Prior(), 50; progress = false)))
     @test all(all(==(1.0), r.province_severity) for r in rets0)
+    @test all(all(iszero, r.severity_log_odds) for r in rets0)
     @test all(iszero(r.severity_sd) for r in rets0)
 end
 
