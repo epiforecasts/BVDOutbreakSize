@@ -758,12 +758,14 @@ onset_ppc_by_date_fig #hide
 correlation_fig = plot_correlation_heatmap(
     chn_joint,
     [
-        :C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
+        :C_T, :R_T, :T, :CFR, :p_drc_national, :p_uganda, :lambda_bg,
+        :tau_test,
         :expected_reports_T, :expected_deaths_T, :expected_confirmed_T,
     ];
     labels = Dict(
         :C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
-        :CFR => raw"\mathrm{CFR}", :p_drc => raw"p_\mathrm{drc}",
+        :CFR => raw"\mathrm{CFR}",
+        :p_drc_national => raw"p_\mathrm{drc,\ national}",
         :p_uganda => raw"p_\mathrm{ug}", :lambda_bg => raw"\lambda_\mathrm{bg}",
         :tau_test => raw"\tau_\mathrm{test}",
         :expected_reports_T => raw"\mathrm{susp.\ cases}",

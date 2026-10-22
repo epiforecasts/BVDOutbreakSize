@@ -610,7 +610,7 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(
     chn_joint,
     [
-        :p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
+        :p_drc_national, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test,
         :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
@@ -641,6 +641,7 @@ surveillance_summary #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Reporting fractions for the DRC and Uganda, stream dispersions, laboratory, isolation and recovery parameters, and the expected counts at the cut-off.
+#md # The DRC reporting fraction is the province detection probabilities weighted by their onsets to the cut-off.
 #md # </figcaption>
 #md # </figure>
 #md # </details>
@@ -669,6 +670,7 @@ surveillance_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the main surveillance parameters, with the prior overlaid.
+#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities rather than the national reporting fraction.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -979,7 +981,7 @@ joint_summary = summary_table(
     chn_joint,
     [
         :r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
-        :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
+        :p_drc_national, :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         Symbol("exports_state.travel_state.daily_travellers"),
     ]; digits = 2
 )
@@ -1016,6 +1018,7 @@ posterior_draws = DataFrame(
     R_T = vec(Array(chn_joint[:R_T])),
     CFR = vec(Array(chn_joint[:CFR])),
     p_drc = vec(Array(chn_joint[:p_drc])),
+    p_drc_national = vec(Array(chn_joint[:p_drc_national])),
     p_uganda = vec(Array(chn_joint[:p_uganda])),
     C_T = vec(Array(chn_joint[:C_T])),
     cumulative_onsets_T = cumulative_onsets_T,

@@ -197,7 +197,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     patch_infections,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
-    province_export_pressure_model,
+    province_export_pressure_model, province_suspected_ascertainment_model,
     province_composition_model, composition_shares, composition_split_model,
     # health-zone model
     bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,

@@ -951,6 +951,9 @@ function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
     return out
 end
 
+## A positive vector over its geometric mean, so its logs sum to zero.
+_geomean_relative(x::AbstractVector) = x ./ exp(mean(log.(x)))
+
 ## Province rows are `nothing` or a `(; days, patches, counts)` tuple.
 _has_province_rows(rows) = rows !== nothing && !isempty(rows.days)
 
@@ -974,11 +977,11 @@ Modelled per-patch analysed-specimen volume summed over the laboratory
 bins (`lab_bins[i]` is the bin of printed day `lab_days[i]`), up to
 the national factors the composition normalises away. `carried` is each
 patch's onsets through the onset-to-confirmation kernel (report ⊕ receipt,
-[`_patch_carried`](@ref)); the national BVD volume `p_drc` times the
-patch sum is split by ascertainment-weighted incidence (`asc`, the case
-composition's relative ascertainment), so the BVD-to-background proportion
-stays the national one, and joined by the patch's share `w[p]` of the
-non-BVD
+[`_patch_carried`](@ref)), weighted in [`bvd_joint`](@ref) by the patch's
+relative suspected-case detection. The national BVD volume `p_drc` times
+the patch sum is split by `asc .* carried` (`asc` the case composition's
+confirmation contrast), so the BVD-to-background proportion stays the
+national one, and joined by the patch's share `w[p]` of the non-BVD
 background carried to receipt (`bg_carried`). Summed over the patches this
 is the national suspect pipeline [`confirmed_cases_model`](@ref) scales
 into the analysed volume, so the shares are exact. `lab_days` are grid day
@@ -1111,14 +1114,29 @@ identifies the incidence split, since the case-fatality ratio and the
 death-confirmation probability are national, and the case composition then
 identifies the relative case ascertainment as the residual.
 
+With the case composition on, the relative case ascertainment is split
+into suspected-case detection and confirmation. Each patch detects a BVD
+onset as a suspected case with its own probability, a sum-to-zero logit
+contrast about `p_drc` ([`province_suspected_ascertainment_model`](@ref),
+injected as `suspected_ascertainment`). The national BVD suspected cases
+are the sum of each patch's onsets through the onset-to-report delay times
+its probability, so the suspected-case stream, the laboratory volume and
+positivity, and the isolation flows all read that sum. The case
+composition's own sum-to-zero log contrast is then the confirmation
+contrast, which carries the provincial differences in testing. The
+detection and the confirmation enter the case and laboratory
+compositions only as a product, so their priors separate them, helped by
+the province occupancy splits, which carry the detection alone. A zero
+detection spread gives every patch `p_drc`. `nothing` turns the split off.
+
 A third composition scores the per-province analysed-specimen volume
 conditional on the national total in each laboratory bin. The modelled
 split is each patch's BVD suspects (its onsets through the
 onset-to-confirmation kernel, thinned by `p_drc`) plus its share of the
 non-BVD background, the share a partially pooled simplex
 ([`background_split_model`](@ref)) carries and this term identifies.
-The BVD suspects carry the case composition's
-relative ascertainment, so the two compositions agree on how many of a
+The BVD suspects carry the patch's detection and the case composition's
+confirmation contrast, so the two compositions agree on how many of a
 patch's cases reach the laboratory. Pass `province_lab_increments` with
 `province_lab_days` and `province_lab_bins`, built by
 [`province_lab_increment_matrix`](@ref), which sums the printed days into
@@ -1201,6 +1219,7 @@ density there, is the fitted model's.
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
         composition = province_composition_model,
+        suspected_ascertainment = province_suspected_ascertainment_model,
         province_increments::Union{
             Missing, AbstractMatrix{<:Integer},
         } = missing,
@@ -1296,6 +1315,33 @@ density there, is the fitted model's.
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
+    ## Suspected-case detection by patch, partially pooled about `p_drc` on
+    ## the logit scale. Sampled with the case composition, whose
+    ## relative ascertainment it splits into detection and confirmation.
+    ## The national BVD suspected cases are each patch's onsets weighted by
+    ## its detection over `p_drc` and then scaled by `p_drc`, so every
+    ## stream that reads `p_drc` times the BVD reports reads the per-patch
+    ## sum. `nothing` leaves the national `p_drc` on every patch.
+    by_detection = suspected_ascertainment !== nothing &&
+        !isempty(province_days)
+    if by_detection
+        detection_state ~ to_submodel(
+            suspected_ascertainment(n_patches, p_drc)
+        )
+    end
+    detected_onsets_matrix = by_detection ?
+        detection_state.relative .* patch_state.onsets_matrix :
+        patch_state.onsets_matrix
+    case_onsets = by_detection ?
+        transpose(patch_state.onsets_matrix) * detection_state.relative :
+        onsets
+    ## The national suspected-case ascertainment the fit implies: `p_drc`
+    ## is the centre of the logit contrast rather than the national rate,
+    ## which is the patch probabilities weighted by their onsets to the
+    ## cut-off. It is `p_drc` when the detection is off.
+    p_drc_national := by_detection ?
+        p_drc * sum(upto(case_onsets, n)) / sum(upto(onsets, n)) : p_drc
+
     bg_onset = isempty(reported_history.days) ? 1 :
         clamp(Int(reported_history.days[1]) - background_onset_lead, 1, n)
 
@@ -1322,7 +1368,7 @@ density there, is the fitted model's.
     ## laboratory pipeline.
     cases_state ~ to_submodel(
         cases(
-            reported_history, reported_cases, onsets, k_cases, p_drc;
+            reported_history, reported_cases, case_onsets, k_cases, p_drc;
             suspected_daily_history, background_re = case_bg_re, ckw...,
             _sim_kw(simulated_data, :cases_state)...
         )
@@ -1357,12 +1403,14 @@ density there, is the fitted model's.
     province_background_split_sd := bg_split_state.pooling_sd
 
     ## The anchor stops at the cut-off, so a longer grid leaves the fitted
-    ## ascertainment where it was.
+    ## ascertainment where it was. The curve reads the detection-weighted
+    ## onsets, which the anchor's `p_drc` scales as it does in the
+    ## suspected and confirmed streams.
     onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
         upto(confirmed_state.p_pos_grid, n)
     onset_report_state ~ to_submodel(
         onset_report(
-            onset_curve_history, onsets;
+            onset_curve_history, case_onsets;
             anchor = onset_anchor_daily,
             detection_day = onset_detection_day(export_case_days)
         )
@@ -1384,13 +1432,14 @@ density there, is the fitted model's.
     )
 
     ## The confirmed and laboratory compositions both carry the patch
-    ## onsets through the onset-to-confirmation kernel, once here.
+    ## onsets, weighted by their relative detection, through the
+    ## onset-to-confirmation kernel, once here.
     if !isempty(province_days) || !isempty(province_lab_days)
         confirmed_kernel = convolve_pmf(
             cases_state.report_pmf, confirmed_state.receipt_pmf
         )
         confirmed_carried = _patch_carried(
-            patch_state.onsets_matrix, confirmed_kernel
+            detected_onsets_matrix, confirmed_kernel
         )
     end
 
@@ -1404,35 +1453,58 @@ density there, is the fitted model's.
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
         ## Relative province case ascertainment, the probability an
-        ## infection there becomes a confirmed case, partially pooled and
-        ## sum-to-zero on the log scale. On its own the case composition
-        ## identifies only the product of ascertainment and incidence. The
-        ## death composition below separates them.
-        province_ascertainment := composition_state.province_ascertainment
+        ## infection there becomes a confirmed case, on the log scale
+        ## relative to the geometric mean. It is the suspected-case detection
+        ## times the composition's sum-to-zero confirmation contrast, which
+        ## carries the provincial differences in testing. On its own the
+        ## case composition identifies only the product of ascertainment and
+        ## incidence. The death composition below separates them.
+        province_ascertainment := by_detection ?
+            _geomean_relative(
+                detection_state.relative .*
+                composition_state.province_ascertainment
+            ) : composition_state.province_ascertainment
+        ## The confirmation contrast's spread.
         province_ascertainment_sd := composition_state.ascertainment_sd
+        if by_detection
+            province_suspected_ascertainment := detection_state.ascertainment
+            province_suspected_ascertainment_sd := detection_state.sd
+            province_confirmation_relative :=
+                composition_state.province_ascertainment
+            ## The spread of the log relative case ascertainment between
+            ## the patches, detection and confirmation together. With a
+            ## sum-to-zero contrast of scale `τ` its expected square is
+            ## `τ²`, so it is on the confirmation spread's scale and the
+            ## zone stage centres its own spread on it.
+            province_ascertainment_log_sd := std(log.(province_ascertainment))
+        end
     end
 
-    ## Relative case ascertainment by patch, shared by every stream that is
-    ## driven by reported suspects: the laboratory composition and the
-    ## per-patch bed demand split the national BVD volume by
-    ## ascertainment-weighted incidence. Ones when the case composition is
-    ## not scored.
+    ## The confirmation contrast by patch, which with the detection already
+    ## in `confirmed_carried` splits the national BVD volume between the
+    ## patches' laboratories. Without the detection contrast it is the whole
+    ## relative case ascertainment, and the per-patch bed demand splits on
+    ## it too. Ones when the case composition is not scored.
     patch_asc = isempty(province_days) ? ones(n_patches) :
         composition_state.province_ascertainment
 
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
-    ## Per-patch BVD reports for the province occupancy split, the rows
-    ## summing to the national series the flows are built on.
+    ## Per-patch BVD reports for the province occupancy split, each weighted
+    ## by the patch's relative detection, the rows summing to the national
+    ## series the flows are built on. A detected suspect is admitted before
+    ## testing, so the occupancy split does not carry the confirmation
+    ## contrast.
     bvd_reports_matrix = n_patches > 1 ?
-        _patch_reports(patch_state.onsets_matrix, cases_state.report_pmf) :
+        _patch_reports(detected_onsets_matrix, cases_state.report_pmf) :
         nothing
+    care_asc = by_detection ? one.(patch_asc) : patch_asc
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,
             cases_state.bg_daily, p_drc, deaths_state.CFR;
             bvd_reports_matrix,
             background_split = bg_split_state.w,
-            patch_ascertainment = patch_asc,
+            patch_ascertainment = care_asc,
             province_isolation, province_capacity,
             capacity_history = bed_capacity_history,
             admissions_history = treatment_admissions_history,
